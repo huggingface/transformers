@@ -873,9 +873,8 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
 
         return plan_from_length, plan_num_rand_blocks
 
-    @staticmethod
     def _bigbird_block_rand_mask(
-        from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx=-1
+        self, from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx=-1
     ):
         """
         Create adjacency list of random attention.
@@ -898,6 +897,9 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
             raise ValueError("Error the number of blocks needs to be same!")
 
         rand_attn = np.zeros((from_seq_length // from_block_size - 2, num_rand_blocks), dtype=np.int32)
+        # During inference (eval) no randomness
+        if not self.training:
+            return rand_attn
         middle_seq = np.arange(1, to_seq_length // to_block_size - 1, dtype=np.int32)
         last = to_seq_length // to_block_size - 1
         if last_idx > (2 * to_block_size):
@@ -981,11 +983,17 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         plan_block_length = np.array(plan_from_length) // from_block_size
         # till when to follow plan
         max_plan_idx = plan_from_length.index(from_seq_length)
+
         # Random Attention adjacency list
         rand_attn = [
             np.zeros((num_blocks, np.sum(plan_num_rand_blocks[: max_plan_idx + 1])), dtype=np.int32)
             for i in range(num_heads)
         ]
+        # During inference (eval) no randomness
+        if not self.training:
+            for nh in range(num_heads):
+                rand_attn[nh] = rand_attn[nh][global_block_top : num_blocks - global_block_bottom, :]
+            return rand_attn
 
         # We will go iteratively over the plan blocks and pick random number of
         # Attention blocks from the legally allowed blocks

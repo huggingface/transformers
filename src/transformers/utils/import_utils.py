@@ -74,6 +74,7 @@ _coloredlogs_available = _is_package_available("coloredlogs")
 _datasets_available = _is_package_available("datasets")
 _decord_available = importlib.util.find_spec("decord") is not None
 _detectron2_available = _is_package_available("detectron2")
+_diffusers_available = _is_package_available("diffusers")
 _faiss_available = _is_package_available("faiss") or _is_package_available("faiss-cpu")
 _ftfy_available = _is_package_available("ftfy")
 _ipex_available, _ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
@@ -84,6 +85,8 @@ _librosa_available = _is_package_available("librosa")
 _natten_available = _is_package_available("natten")
 _ninja_available = _is_package_available("ninja")
 _onnx_available = _is_package_available("onnx")
+_openai_available = _is_package_available("openai")
+_opencv_available = importlib.util.find_spec("cv2") is not None
 _optimum_available = _is_package_available("optimum")
 _optimumneuron_available = _optimum_available and _is_package_available("optimum.neuron")
 _pandas_available = _is_package_available("pandas")
@@ -340,6 +343,14 @@ def is_tf2onnx_available():
 
 def is_onnx_available():
     return _onnx_available
+
+
+def is_openai_available():
+    return _openai_available
+
+
+def is_opencv_available():
+    return _opencv_available
 
 
 def is_flax_available():
@@ -651,6 +662,10 @@ def is_ccl_available():
 
 def is_decord_available():
     return _decord_available
+
+
+def is_diffusers_available():
+    return _diffusers_available
 
 
 def is_sudachi_available():
