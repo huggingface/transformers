@@ -230,6 +230,14 @@ _import_structure = {
         "CLIPTokenizer",
         "CLIPVisionConfig",
     ],
+    "models.imagebind": [
+        "IMAGEBIND_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ImageBindConfig",
+        "ImageBindProcessor",
+        "ImageBindTextConfig",
+        "ImageBindTokenizer",
+        "ImageBindVisionConfig",
+    ],
     "models.clipseg": [
         "CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPSegConfig",
@@ -742,6 +750,7 @@ else:
     _import_structure["models.bloom"].append("BloomTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
+    _import_structure["models.imagebind"].append("ImageBindTokenizerFast")
     _import_structure["models.codegen"].append("CodeGenTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.cpm"].append("CpmTokenizerFast")
@@ -866,6 +875,7 @@ else:
     _import_structure["models.bridgetower"].append("BridgeTowerImageProcessor")
     _import_structure["models.chinese_clip"].extend(["ChineseCLIPFeatureExtractor", "ChineseCLIPImageProcessor"])
     _import_structure["models.clip"].extend(["CLIPFeatureExtractor", "CLIPImageProcessor"])
+    _import_structure["models.imagebind"].extend(["ImageBindFeatureExtractor", "ImageBindImageProcessor"])
     _import_structure["models.conditional_detr"].extend(
         ["ConditionalDetrFeatureExtractor", "ConditionalDetrImageProcessor"]
     )
@@ -1290,6 +1300,17 @@ else:
             "CLIPTextModelWithProjection",
             "CLIPVisionModel",
             "CLIPVisionModelWithProjection",
+        ]
+    )
+    _import_structure["models.imagebind"].extend(
+        [
+            "IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ImageBindModel",
+            "ImageBindPreTrainedModel",
+            "ImageBindTextModel",
+            "ImageBindTextModelWithProjection",
+            "ImageBindVisionModel",
+            "ImageBindVisionModelWithProjection",
         ]
     )
     _import_structure["models.clipseg"].extend(
@@ -3998,6 +4019,14 @@ if TYPE_CHECKING:
         CLIPTokenizer,
         CLIPVisionConfig,
     )
+    from .models.imagebind import (
+        IMAGEBIND_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ImageBindConfig,
+        ImageBindProcessor,
+        ImageBindTextConfig,
+        ImageBindTokenizer,
+        ImageBindVisionConfig,
+    )
     from .models.clipseg import (
         CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPSegConfig,
@@ -4467,6 +4496,7 @@ if TYPE_CHECKING:
         from .models.bloom import BloomTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast
+        from .models.imagebind import ImageBindTokenizerFast
         from .models.codegen import CodeGenTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.cpm import CpmTokenizerFast
@@ -4564,6 +4594,7 @@ if TYPE_CHECKING:
         from .models.bridgetower import BridgeTowerImageProcessor
         from .models.chinese_clip import ChineseCLIPFeatureExtractor, ChineseCLIPImageProcessor
         from .models.clip import CLIPFeatureExtractor, CLIPImageProcessor
+        from .models.imagebind import ImageBindFeatureExtractor, ImageBindImageProcessor
         from .models.conditional_detr import ConditionalDetrFeatureExtractor, ConditionalDetrImageProcessor
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
         from .models.deformable_detr import DeformableDetrFeatureExtractor, DeformableDetrImageProcessor
@@ -4929,6 +4960,15 @@ if TYPE_CHECKING:
             CLIPTextModelWithProjection,
             CLIPVisionModel,
             CLIPVisionModelWithProjection,
+        )
+        from .models.imagebind import (
+            IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ImageBindModel,
+            ImageBindPreTrainedModel,
+            ImageBindTextModel,
+            ImageBindTextModelWithProjection,
+            ImageBindVisionModel,
+            ImageBindVisionModelWithProjection,
         )
         from .models.clipseg import (
             CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST,

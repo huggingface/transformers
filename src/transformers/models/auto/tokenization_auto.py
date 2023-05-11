@@ -112,6 +112,13 @@ else:
                 ),
             ),
             (
+                "imagebind",
+                (
+                    "ImageBindTokenizer",
+                    "ImageBindTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
                 "clipseg",
                 (
                     "CLIPTokenizer",
