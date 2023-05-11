@@ -93,7 +93,7 @@ class Wav2Vec2FeatureExtractionTester(unittest.TestCase):
         return speech_inputs
 
 
-class t(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = Wav2Vec2FeatureExtractor
 
     def setUp(self):
