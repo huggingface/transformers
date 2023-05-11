@@ -36,11 +36,6 @@ RUN python3 -m pip install --no-cache-dir -U tensorflow==2.12
 RUN python3 -m pip install --no-cache-dir -U tensorflow_probability
 RUN python3 -m pip uninstall -y flax jax
 
-# To include the change in this commit https://github.com/onnx/tensorflow-onnx/commit/ddca3a5eb2d912f20fe7e0568dd1a3013aee9fa3
-# Otherwise, we get tf2onnx==1.8 (caused by `flatbuffers` version),  and some tests fail with `ValueError: from_keras requires input_signature`.
-# TODO: remove this line once the conflict is resolved in these libraries.
-RUN python3 -m pip install --no-cache-dir git+https://github.com/onnx/tensorflow-onnx.git@ddca3a5eb2d912f20fe7e0568dd1a3013aee9fa3
-
 RUN python3 -m pip install --no-cache-dir intel_extension_for_pytorch==$INTEL_TORCH_EXT+cpu -f https://software.intel.com/ipex-whl-stable
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/facebookresearch/detectron2.git pytesseract
