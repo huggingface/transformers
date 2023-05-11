@@ -454,6 +454,11 @@ doc_test_job = CircleCIJob(
             "name": "Get files to test",
             "command": command,
         },
+        {
+            "name": "List files beings changed: pr_documentation_tests.txt",
+            "command":
+                "cat pr_documentation_tests.txt"
+        },
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",  # noqa
     pytest_options={"-doctest-modules": None, "doctest-glob": "*.mdx", "dist": "loadfile", "rvsA": None},
