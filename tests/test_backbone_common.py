@@ -18,10 +18,7 @@ import inspect
 
 from transformers.testing_utils import require_torch, torch_device
 from transformers.utils.import_utils import is_torch_available
-
-
-if is_torch_available():
-    from transformers.modeling_utils import BackboneType
+from transformers.utils.backbone_utils import BackboneType
 
 
 @require_torch
