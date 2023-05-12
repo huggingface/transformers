@@ -1117,6 +1117,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         for key, spec in self.input_signature.items():
             # 2 is the most correct arbitrary size. I will not be taking questions
             dummies[key] = tf.ones(shape=[dim if dim is not None else 2 for dim in spec.shape], dtype=spec.dtype)
+            if key == "token_type_ids":
+                # Some models have token_type_ids but with a vocab_size of 1
+                dummies[key] = tf.zeros_like(dummies[key])
         if self.config.add_cross_attention and "encoder_hidden_states" in inspect.signature(self.call).parameters:
             if "encoder_hidden_states" not in dummies:
                 if self.main_input_name == "input_ids":
