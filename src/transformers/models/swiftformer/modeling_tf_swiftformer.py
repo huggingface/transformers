@@ -63,7 +63,7 @@ SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class SwiftFormerPatchEmbedding(tf.keras.layers.Layer):
+class TFSwiftFormerPatchEmbedding(tf.keras.layers.Layer):
     """
     Patch Embedding Layer constructed of two 2D convolutional layers.
 
@@ -90,6 +90,7 @@ class SwiftFormerPatchEmbedding(tf.keras.layers.Layer):
         return self.patch_embedding(x, training=training)
 
 
+# TODO
 # Copied from transformers.models.beit.modeling_beit.drop_path
 def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     """
@@ -111,6 +112,7 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
+# TODO
 # Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Swiftformer
 class SwiftFormerDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
@@ -126,7 +128,7 @@ class SwiftFormerDropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-class SwiftFormerEmbeddings(nn.Module):
+class TFSwiftFormerEmbeddings(tf.keras.layers.Layer):
     """
     Embeddings layer consisting of a single 2D convolutional and batch normalization layer.
 
@@ -143,19 +145,18 @@ class SwiftFormerEmbeddings(nn.Module):
         padding = config.down_pad
         embed_dims = config.embed_dims
 
-        in_chans = embed_dims[index]
         embed_dim = embed_dims[index + 1]
 
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         stride = stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
         padding = padding if isinstance(padding, collections.abc.Iterable) else (padding, padding)
 
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=stride, padding=padding)
-        self.norm = nn.BatchNorm2d(embed_dim, eps=config.batch_norm_eps)
+        self.proj = tf.keras.layers.Conv2D(embed_dim, kernel_size=patch_size, strides=stride, padding=padding)
+        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9) # FIXME: is this the correct momentum?
 
-    def forward(self, x):
+    def call(self, x: tf.Tensor, training: bool = False):
         x = self.proj(x)
-        x = self.norm(x)
+        x = self.norm(x, training=training)
         return x
 
 
