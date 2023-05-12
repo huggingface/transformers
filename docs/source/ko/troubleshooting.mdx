@@ -16,56 +16,56 @@ limitations under the License.
 
 # 문제 해결[[troubleshoot]]
 
-Sometimes errors occur, but we are here to help! This guide covers some of the most common issues we've seen and how you can resolve them. However, this guide isn't meant to be a comprehensive collection of every 🤗 Transformers issue. For more help with troubleshooting your issue, try:
+가끔 오류가 발생하지만 우리는 도와드릴 준비가 되어 있습니다! 이 가이드는 우리가 보았던 가장 일반적인 문제들 중 일부와 해결 방법을 다룹니다. 그러나 이 가이드는 모든 🤗 트랜스포머 문제의 포괄적인 컬렉션을 제공하려는 것은 아닙니다. 문제 해결에 대한 자세한 도움말은 다음을 시도해보세요.
 
 <Youtube id="S2EEG3JIt2A"/>
 
-1. Asking for help on the [forums](https://discuss.huggingface.co/). There are specific categories you can post your question to, like [Beginners](https://discuss.huggingface.co/c/beginners/5) or [🤗 Transformers](https://discuss.huggingface.co/c/transformers/9). Make sure you write a good descriptive forum post with some reproducible code to maximize the likelihood that your problem is solved!
+1. [포럼](https://discuss.huggingface.co/)에서 도움을 요청합니다. [초보자](https://discuss.huggingface.co/c/beginners/5) 또는 [🤗 트랜스포머](https://discuss.huggingface.co/c/transformers/9)와 같은 특정 카테고리에 질문을 게시할 수 있습니다. 문제가 해결되는 가능성을 극대화하려면 재현 가능한 코드와 함께 좋은 기술적인 글을 작성하는 것이 중요합니다!
 
 <Youtube id="_PAli-V4wj0"/>
 
-2. Create an [Issue](https://github.com/huggingface/transformers/issues/new/choose) on the 🤗 Transformers repository if it is a bug related to the library. Try to include as much information describing the bug as possible to help us better figure out what's wrong and how we can fix it.
+2. 라이브러리와 관련된 버그인 경우 🤗 Transformers 저장소에 [이슈](https://github.com/huggingface/transformers/issues/new/choose)를 작성합니다. 버그를 더 잘 이해하고 수정하는 데 도움이 될 수 있는 가능한 한 많은 정보를 포함하도록 노력해보세요.
 
-3. Check the [Migration](migration) guide if you use an older version of 🤗 Transformers since some important changes have been introduced between versions.
+3. 버전 간 중요한 변경 사항이 소개되었으므로 오래된 버전의 🤗 트랜스포머를 사용하는 경우 [마이그레이션](migration) 가이드를 확인하십시오.
 
-For more details about troubleshooting and getting help, take a look at [Chapter 8](https://huggingface.co/course/chapter8/1?fw=pt) of the Hugging Face course.
+자세한 내용은 허깅 페이스 코스의 [8장](https://huggingface.co/course/chapter8/1?fw=pt)를 참조하십시오.
 
 
-## Firewalled environments
+## 방화벽으로 보호된 환경[[firewalled-environments]]
 
-Some GPU instances on cloud and intranet setups are firewalled to external connections, resulting in a connection error. When your script attempts to download model weights or datasets, the download will hang and then timeout with the following message:
+클라우드와 기업 네트워크 환경에서 일관적으로 외부 연결에 대한 방화벽이 구성되어 있어 모델 가중치 또는 데이터 집합을 다운로드하기 위해 스크립트를 실행하면 다운로드가 중단되고 다음 메시지와 함께 시간 초과됩니다:
 
 ```
 ValueError: Connection error, and we cannot find the requested files in the cached path.
 Please try again or make sure your Internet connection is on.
 ```
 
-In this case, you should try to run 🤗 Transformers on [offline mode](installation#offline-mode) to avoid the connection error.
+이 경우, 연결 오류를 피하기 위해 🤗 Transformers를 [오프라인 모드](installation#offline-mode)로 실행해보는 것이 좋습니다.
 
-## CUDA out of memory
+## CUDA 메모리 부족[[cuda-out-of-memory]]
 
-Training large models with millions of parameters can be challenging without the appropriate hardware. A common error you may encounter when the GPU runs out of memory is:
+수백만 개의 매개변수를 가진 대형 모델을 학습하는 것은 적절한 하드웨어가 없으면 어려울 수 있습니다. GPU가 메모리를 모두 사용하면 발생하는 일반적인 오류는 다음과 같습니다:
 
 ```
 CUDA out of memory. Tried to allocate 256.00 MiB (GPU 0; 11.17 GiB total capacity; 9.70 GiB already allocated; 179.81 MiB free; 9.85 GiB reserved in total by PyTorch)
 ```
 
-Here are some potential solutions you can try to lessen memory use:
+메모리 사용량을 줄이기 위해 시도할 수 있는 몇 가지 해결책:
 
-- Reduce the [`per_device_train_batch_size`](main_classes/trainer#transformers.TrainingArguments.per_device_train_batch_size) value in [`TrainingArguments`].
-- Try using [`gradient_accumulation_steps`](main_classes/trainer#transformers.TrainingArguments.gradient_accumulation_steps) in [`TrainingArguments`] to effectively increase overall batch size.
+- [`TrainingArguments`]의 [`per_device_train_batch_size`](main_classes/trainer#transformers.TrainingArguments.per_device_train_batch_size) 값을 줄입니다.
+- [`TrainingArguments`]의 [`gradient_accumulation_steps`](main_classes/trainer#transformers.TrainingArguments.gradient_accumulation_steps)를 사용하여 전반적인 배치 크기를 효과적으로 증가시킬 수 있습니다.
 
 <Tip>
 
-Refer to the Performance [guide](performance) for more details about memory-saving techniques.
+메모리 절약 기술에 대한 자세한 내용은 성능 [가이드](performance)를 참조하세요.
 
 </Tip>
 
-## Unable to load a saved TensorFlow model
+## 저장된 TensorFlow 모델을 로드할 수 없습니다[[unable-to-load-a-saved-uensorFlow-model]]
 
-TensorFlow's [model.save](https://www.tensorflow.org/tutorials/keras/save_and_load#save_the_entire_model) method will save the entire model - architecture, weights, training configuration - in a single file. However, when you load the model file again, you may run into an error because 🤗 Transformers may not load all the TensorFlow-related objects in the model file. To avoid issues with saving and loading TensorFlow models, we recommend you:
+텐서플로우의 [model.save] 메서드는 모델 구조, 가중치, 훈련 구성을 하나의 파일에 저장합니다. 그러나 모델 파일을 다시 로드할 때, 🤗 Transformers가 모델 파일 내 모든 텐서플로우 관련 객체를 로드하지 못해 오류가 발생할 수 있습니다. 텐서플로우 모델 저장 및 로드 문제를 방지하려면 다음을 권장합니다:
 
-- Save the model weights as a `h5` file extension with [`model.save_weights`](https://www.tensorflow.org/tutorials/keras/save_and_load#save_the_entire_model) and then reload the model with [`~TFPreTrainedModel.from_pretrained`]:
+- 모델 가중치를 `h5` 파일 확장자로 [`model.save_weights`]로 저장하고 [`~TFPreTrainedModel.from_pretrained`]으로 모델을 다시 로드합니다:
 
 ```py
 >>> from transformers import TFPreTrainedModel
@@ -75,7 +75,7 @@ TensorFlow's [model.save](https://www.tensorflow.org/tutorials/keras/save_and_lo
 >>> model = TFPreTrainedModel.from_pretrained("some_folder")
 ```
 
-- Save the model with [`~TFPretrainedModel.save_pretrained`] and load it again with [`~TFPreTrainedModel.from_pretrained`]:
+- 모델을 [`~TFPretrainedModel.save_pretrained`]로 저장하고 [`~TFPreTrainedModel.from_pretrained`]로 다시 로드합니다:
 
 ```py
 >>> from transformers import TFPreTrainedModel
@@ -84,29 +84,29 @@ TensorFlow's [model.save](https://www.tensorflow.org/tutorials/keras/save_and_lo
 >>> model = TFPreTrainedModel.from_pretrained("path_to/model")
 ```
 
-## ImportError
+## ImportError[[importerror]]
 
-Another common error you may encounter, especially if it is a newly released model, is `ImportError`:
+특히 최신 모델인 경우 만나게 되는 공통적인 오류 중 하나는 `ImportError`입니다:
 
 ```
 ImportError: cannot import name 'ImageGPTImageProcessor' from 'transformers' (unknown location)
 ```
 
-For these error types, check to make sure you have the latest version of 🤗 Transformers installed to access the most recent models:
+이러한 오류 유형의 경우 가장 최근 모델에 액세스하려면 🤗 Transformers의 최신 버전이 설치되어 있는지 확인하십시오:
 
 ```bash
 pip install transformers --upgrade
 ```
 
-## CUDA error: device-side assert triggered
+## CUDA error: device-side assert triggered[[cuda-error-deviceside-assert-triggered]]
 
-Sometimes you may run into a generic CUDA error about an error in the device code.
+때로는 기기 코드에서 오류가 발생하면 일반적인 CUDA 오류가 발생할 수 있습니다.
 
 ```
 RuntimeError: CUDA error: device-side assert triggered
 ```
 
-You should try to run the code on a CPU first to get a more descriptive error message. Add the following environment variable to the beginning of your code to switch to a CPU:
+더 자세한 오류 메시지를 얻으려면 먼저 코드를 CPU에서 실행해보십시오. 다음 환경 변수를 코드의 시작 부분에 추가하여 CPU로 전환하십시오:
 
 ```py
 >>> import os
@@ -114,7 +114,7 @@ You should try to run the code on a CPU first to get a more descriptive error me
 >>> os.environ["CUDA_VISIBLE_DEVICES"] = ""
 ```
 
-Another option is to get a better traceback from the GPU. Add the following environment variable to the beginning of your code to get the traceback to point to the source of the error:
+GPU에서 더 나은 traceback를 얻는 다른 옵션은 다음을 코드의 시작 부분에 추가하여 traceback가 오류의 원본을 가리키도록하는 것입니다:
 
 ```py
 >>> import os
@@ -122,9 +122,9 @@ Another option is to get a better traceback from the GPU. Add the following envi
 >>> os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 ```
 
-## Incorrect output when padding tokens aren't masked
+## Incorrect output when padding tokens aren't masked[[incorrect-output-when-padding-tokens-arent-masked]]
 
-In some cases, the output `hidden_state` may be incorrect if the `input_ids` include padding tokens. To demonstrate, load a model and tokenizer. You can access a model's `pad_token_id` to see its value. The `pad_token_id` may be `None` for some models, but you can always manually set it.
+패딩 토큰이 마스크 처리되지 않은 경우 일부에서는 `hidden_state` 출력이 정확하지 않을 수 있습니다. 모델과 토크나이저를 로드하면 모델의 `pad_token_id` 값을 확인할 수 있습니다. 일부 모델의 경우 `pad_token_id`가 `None`이 될 수 있지만 수동으로 설정할 수 있습니다.
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -135,7 +135,7 @@ In some cases, the output `hidden_state` may be incorrect if the `input_ids` inc
 0
 ```
 
-The following example shows the output without masking the padding tokens:
+패딩 토큰을 마스크 처리하지 않은 경우의 출력을 보여주는 다음 예시:
 
 ```py
 >>> input_ids = torch.tensor([[7592, 2057, 2097, 2393, 9611, 2115], [7592, 0, 0, 0, 0, 0]])
@@ -145,7 +145,7 @@ tensor([[ 0.0082, -0.2307],
         [ 0.1317, -0.1683]], grad_fn=<AddmmBackward0>)
 ```
 
-Here is the actual output of the second sequence:
+두 번째 시퀀스의 실제 출력은 다음과 같습니다:
 
 ```py
 >>> input_ids = torch.tensor([[7592]])
@@ -154,7 +154,7 @@ Here is the actual output of the second sequence:
 tensor([[-0.1008, -0.4061]], grad_fn=<AddmmBackward0>)
 ```
 
-Most of the time, you should provide an `attention_mask` to your model to ignore the padding tokens to avoid this silent error. Now the output of the second sequence matches its actual output:
+대부분의 경우 모델에 `attention_mask`를 제공하여 패딩 토큰을 무시하도록하여 이러한 은행 오류를 피해야 합니다. 이제 두 번째 시퀀스의 출력이 실제 출력과 일치합니다:
 
 <Tip>
 
@@ -170,19 +170,19 @@ tensor([[ 0.0082, -0.2307],
         [-0.1008, -0.4061]], grad_fn=<AddmmBackward0>)
 ```
 
-🤗 Transformers doesn't automatically create an `attention_mask` to mask a padding token if it is provided because:
+🤗 Transformers는 다음과 같은 이유로 제공된 경우 패딩 토큰을 마스크 처리하기 위해 자동으로 `attention_mask`를 생성하지 않습니다:
 
-- Some models don't have a padding token.
-- For some use-cases, users want a model to attend to a padding token.
+- 일부 모델에는 패딩 토큰이 없습니다.
+- 일부 사용 사례에서는 모델이 패딩 토큰에 관심을 두도록 원하는 경우가 있습니다.
 
-## ValueError: Unrecognized configuration class XYZ for this kind of AutoModel
+## ValueError: Unrecognized configuration class XYZ for this kind of AutoModel[[incorrect-output-when-padding-tokens-arent-masked]]
 
-Generally, we recommend using the [`AutoModel`] class to load pretrained instances of models. This class
-can automatically infer and load the correct architecture from a given checkpoint based on the configuration. If you see
-this `ValueError` when loading a model from a checkpoint, this means the Auto class couldn't find a mapping from
-the configuration in the given checkpoint to the kind of model you are trying to load. Most commonly, this happens when a
-checkpoint doesn't support a given task.
-For instance, you'll see this error in the following example because there is no GPT2 for question answering:
+일반적으로 우리는 사전 훈련 된 모델의 인스턴스를로드하는 데 [`AutoModel`] 클래스를 사용하는 것을 권장합니다. 
+이 클래스는 구성에 따라 주어진 체크 포인트에서 올바른 아키텍처를 자동으로 추론하고 로드할 수 있습니다. 
+모델을 체크 포인트에서로드 할 때이 `ValueError`가 나타나면 
+이 의미는 Auto 클래스가 구성을 모델의 종류로부터 매핑을 찾을 수 없기 때문입니다. 
+주로 이 일이 발생하는 경우는 체크 포인트가 주어진 작업을 지원하지 않을 때입니다.
+예를 들어, 질문에 대한 답변을위한 GPT2가 없기 때문에 다음 예에서이 오류가 발생합니다:
 
 ```py
 >>> from transformers import AutoProcessor, AutoModelForQuestionAnswering
