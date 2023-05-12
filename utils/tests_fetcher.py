@@ -225,10 +225,23 @@ def get_diff_for_py_and_mdx_files(repo, base_commit, commits):
     for commit in commits:
         for diff_obj in commit.diff(base_commit):
             # We always add new python files
-            if diff_obj.change_type in ["A", "M", "R"] and (
-                diff_obj.b_path.endswith(".py") or diff_obj.b_path.endswith(".mdx")
-            ):
+            if diff_obj.change_type in ["A"] and (diff_obj.b_path.endswith(".py") or diff_obj.b_path.endswith(".mdx")):
                 code_diff.append(diff_obj.b_path)
+            # Now for modified files
+            elif (
+                diff_obj.change_type in ["M", "R"]
+                and diff_obj.b_path.endswith(".py")
+                or diff_obj.b_path.endswith(".mdx")
+            ):
+                # In case of renames, we'll look at the tests using both the old and new name.
+                if diff_obj.a_path != diff_obj.b_path:
+                    code_diff.extend([diff_obj.a_path, diff_obj.b_path])
+                else:
+                    # Otherwise, we check modifications are in code and not docstrings.
+                    if diff_is_docstring_only(repo, commit, diff_obj.b_path):
+                        print(f"Ignoring diff in {diff_obj.b_path} as it only concerns docstrings or comments.")
+                    else:
+                        code_diff.append(diff_obj.a_path)
 
     return code_diff
 
