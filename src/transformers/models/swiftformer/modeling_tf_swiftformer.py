@@ -28,7 +28,6 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2CLS
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     ImageClassifierOutputWithNoAttention,
@@ -112,7 +111,6 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
-# TODO
 # Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Swiftformer
 class SwiftFormerDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
@@ -160,7 +158,7 @@ class TFSwiftFormerEmbeddings(tf.keras.layers.Layer):
         return x
 
 
-class SwiftFormerConvEncoder(nn.Module):
+class TFSwiftFormerConvEncoder(tf.keras.layers.Layer):
     """
     `SwiftFormerConvEncoder` with 3*3 and 1*1 convolutions.
 
@@ -173,18 +171,28 @@ class SwiftFormerConvEncoder(nn.Module):
         super().__init__()
         hidden_dim = int(config.mlp_ratio * dim)
 
-        self.depth_wise_conv = nn.Conv2d(dim, dim, kernel_size=3, padding=1, groups=dim)
-        self.norm = nn.BatchNorm2d(dim, eps=config.batch_norm_eps)
-        self.point_wise_conv1 = nn.Conv2d(dim, hidden_dim, kernel_size=1)
-        self.act = nn.GELU()
-        self.point_wise_conv2 = nn.Conv2d(hidden_dim, dim, kernel_size=1)
-        self.drop_path = nn.Identity()
-        self.layer_scale = nn.Parameter(torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True)
+        self.dim = dim
+        self.depth_wise_conv = tf.keras.layers.Conv2D(dim, kernel_size=3, padding=1, groups=dim)
+        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9) # FIXME
+        self.point_wise_conv1 = tf.keras.layers.Conv2D(hidden_dim, kernel_size=1)
+        self.act = get_tf_activation("gelu")
+        self.point_wise_conv2 = tf.keras.layers.Conv2D(dim, kernel_size=1)
+        self.drop_path = tf.keras.layers.Identity() # FIXME: is this supposed to be like this?
 
-    def forward(self, x):
+    def build(self, input_shape: tf.TensorShape):
+        self.layer_scale = self.add_weight(
+            shape=(self.dim), # TODO: check this
+            initializer="ones",
+            trainable=True,
+            name="layer_scale",
+        )
+
+        super().build(input_shape)
+
+    def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         input = x
         x = self.depth_wise_conv(x)
-        x = self.norm(x)
+        x = self.norm(x, training=training)
         x = self.point_wise_conv1(x)
         x = self.act(x)
         x = self.point_wise_conv2(x)
@@ -221,7 +229,7 @@ class TFSwiftFormerMlp(nn.Module):
         return x
 
 
-class SwiftFormerEfficientAdditiveAttention(nn.Module):
+class TFSwiftFormerEfficientAdditiveAttention(nn.Module):
     """
     Efficient Additive Attention module for SwiftFormer.
 
@@ -261,7 +269,7 @@ class SwiftFormerEfficientAdditiveAttention(nn.Module):
         return out
 
 
-class SwiftFormerLocalRepresentation(nn.Module):
+class tfSwiftFormerLocalRepresentation(nn.Module):
     """
     Local Representation module for SwiftFormer that is implemented by 3*3 depth-wise and point-wise convolutions.
 
