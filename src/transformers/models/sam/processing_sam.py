@@ -207,7 +207,7 @@ class SamProcessor(ProcessorMixin):
             if isinstance(input_points, torch.Tensor):
                 input_points = input_points.numpy().tolist()
 
-            if not isinstance(input_points, list) and not isinstance(input_points[0], list):
+            if not isinstance(input_points, list) or not isinstance(input_points[0], list):
                 raise ValueError("Input points must be a list of list of floating integers.")
             input_points = [np.array(input_point) for input_point in input_points]
         else:
@@ -217,7 +217,7 @@ class SamProcessor(ProcessorMixin):
             if isinstance(input_labels, torch.Tensor):
                 input_labels = input_labels.numpy().tolist()
 
-            if not isinstance(input_labels, list) and not isinstance(input_labels[0], list):
+            if not isinstance(input_labels, list) or not isinstance(input_labels[0], list):
                 raise ValueError("Input labels must be a list of list integers.")
             input_labels = [np.array(label) for label in input_labels]
         else:
@@ -229,8 +229,8 @@ class SamProcessor(ProcessorMixin):
 
             if (
                 not isinstance(input_boxes, list)
-                and not isinstance(input_boxes[0], list)
-                and not isinstance(input_boxes[0][0], list)
+                or not isinstance(input_boxes[0], list)
+                or not isinstance(input_boxes[0][0], list)
             ):
                 raise ValueError("Input boxes must be a list of list of list of floating integers.")
             input_boxes = [np.array(box).astype(np.float32) for box in input_boxes]
