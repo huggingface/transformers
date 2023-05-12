@@ -157,6 +157,6 @@ class FocalNetConfig(BackboneConfigMixin, PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.encoder_stride = encoder_stride
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.depths) + 1)]
-        self.out_features, self.out_indices = get_aligned_output_features_output_indices(
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
