@@ -248,7 +248,7 @@ class Agent:
                 Whether to just return code and not evaluate it.
             remote (`bool`, *optional*, defaults to `False`):
                 Whether or not to use remote tools (inference endpoints) instead of local ones.
-            kwargs:
+            kwargs (additional keyword arguments, *optional*):
                 Any keyword argument to send to the agent when evaluating the code.
 
         Example:
@@ -298,7 +298,7 @@ class Agent:
                 Whether to just return code and not evaluate it.
             remote (`bool`, *optional*, defaults to `False`):
                 Whether or not to use remote tools (inference endpoints) instead of local ones.
-            kwargs:
+            kwargs (additional keyword arguments, *optional*):
                 Any keyword argument to send to the agent when evaluating the code.
 
         Example:
