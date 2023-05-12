@@ -78,7 +78,7 @@ def _align_output_features_output_indices(
         out_indices = [len(stage_names) - 1]
         out_features = [stage_names[-1]]
     elif out_indices is None and out_features is not None:
-        out_indices = [stage_names.index(layer) for layer in stage_names if layer in out_features]
+        out_indices = [stage_names.index(layer) for layer in out_features]
     elif out_features is None and out_indices is not None:
         out_features = [stage_names[idx] for idx in out_indices]
     return out_features, out_indices
