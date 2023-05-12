@@ -72,6 +72,7 @@ from .utils import (
     get_cached_models,
     get_file_from_repo,
     get_full_repo_name,
+    get_torch_version,
     has_file,
     http_user_agent,
     is_apex_available,
@@ -125,5 +126,4 @@ from .utils import (
     to_numpy,
     to_py_obj,
     torch_only_method,
-    torch_version,
 )
