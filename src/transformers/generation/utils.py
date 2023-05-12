@@ -1307,8 +1307,11 @@ class GenerationMixin:
 
         # decoder-only models should use left-padding for generation
         if not self.config.is_encoder_decoder:
+            # If `input_ids` was given, check if the last id in any sequence is `pad_token_id`
+            # Note: If using, `inputs_embeds` this check does not work, because we want to be more hands-off.
             if (
                 generation_config.pad_token_id is not None
+                and len(inputs_tensor.shape) == 2
                 and torch.sum(inputs_tensor[:, -1] == generation_config.pad_token_id) > 0
             ):
                 logger.warning(
