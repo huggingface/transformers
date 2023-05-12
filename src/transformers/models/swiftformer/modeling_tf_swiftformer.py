@@ -181,10 +181,10 @@ class TFSwiftFormerConvEncoder(tf.keras.layers.Layer):
 
     def build(self, input_shape: tf.TensorShape):
         self.layer_scale = self.add_weight(
+            name="layer_scale",
             shape=(self.dim), # TODO: check this
             initializer="ones",
             trainable=True,
-            name="layer_scale",
         )
 
         super().build(input_shape)
@@ -229,7 +229,7 @@ class TFSwiftFormerMlp(nn.Module):
         return x
 
 
-class TFSwiftFormerEfficientAdditiveAttention(nn.Module):
+class TFSwiftFormerEfficientAdditiveAttention(tf.keras.layers.Layer):
     """
     Efficient Additive Attention module for SwiftFormer.
 
@@ -241,15 +241,26 @@ class TFSwiftFormerEfficientAdditiveAttention(nn.Module):
     def __init__(self, config: SwiftFormerConfig, dim: int = 512):
         super().__init__()
 
-        self.to_query = nn.Linear(dim, dim)
-        self.to_key = nn.Linear(dim, dim)
+        self.dim = dim
 
-        self.w_g = nn.Parameter(torch.randn(dim, 1))
+        self.to_query = tf.keras.layers.Dense(dim)
+        self.to_key = tf.keras.layers.Dense(dim)
+
         self.scale_factor = dim**-0.5
-        self.proj = nn.Linear(dim, dim)
-        self.final = nn.Linear(dim, dim)
+        self.proj = tf.keras.layers.Dense(dim)
+        self.final = tf.keras.layers.Dense(dim)
 
-    def forward(self, x):
+    def build(self, input_shape: tf.TensorShape):
+        self.w_g = self.add_weight(
+            name="w_g",
+            shape=(self.dim, 1),
+            initializer=tf.keras.initializers.RandomNormal(mean=0, stddev=1),
+            trainable=True,
+        )
+
+        super().build(input_shape)
+
+    def call(self, x: tf.Tensor) -> tf.Tensor:
         query = self.to_query(x)
         key = self.to_key(x)
 
@@ -260,7 +271,7 @@ class TFSwiftFormerEfficientAdditiveAttention(nn.Module):
         scaled_query_weight = query_weight * self.scale_factor
         scaled_query_weight = scaled_query_weight.softmax(dim=-1)
 
-        global_queries = torch.sum(scaled_query_weight * query, dim=1)
+        global_queries = tf.math.reduce_sum(scaled_query_weight * query, dim=1)
         global_queries = global_queries.unsqueeze(1).repeat(1, key.shape[1], 1)
 
         out = self.proj(global_queries * key) + query
@@ -269,7 +280,7 @@ class TFSwiftFormerEfficientAdditiveAttention(nn.Module):
         return out
 
 
-class tfSwiftFormerLocalRepresentation(nn.Module):
+class TFSwiftFormerLocalRepresentation(tf.keras.layers.Layer):
     """
     Local Representation module for SwiftFormer that is implemented by 3*3 depth-wise and point-wise convolutions.
 
@@ -281,22 +292,33 @@ class tfSwiftFormerLocalRepresentation(nn.Module):
     def __init__(self, config: SwiftFormerConfig, dim: int):
         super().__init__()
 
-        self.depth_wise_conv = nn.Conv2d(dim, dim, kernel_size=3, padding=1, groups=dim)
-        self.norm = nn.BatchNorm2d(dim, eps=config.batch_norm_eps)
-        self.point_wise_conv1 = nn.Conv2d(dim, dim, kernel_size=1)
-        self.act = nn.GELU()
-        self.point_wise_conv2 = nn.Conv2d(dim, dim, kernel_size=1)
-        self.drop_path = nn.Identity()
-        self.layer_scale = nn.Parameter(torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True)
+        self.dim = dim
 
-    def forward(self, x):
+        self.depth_wise_conv = tf.keras.layers.Conv2D(dim, kernel_size=3, padding=1, groups=dim)
+        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9) # FIXME: momentum
+        self.point_wise_conv1 = tf.keras.layers.Conv2D(dim, kernel_size=1)
+        self.act = get_tf_activation("gelu")
+        self.point_wise_conv2 = tf.keras.layers.Conv2D(dim, kernel_size=1)
+        self.drop_path = tf.keras.layers.Identity() # FIXME: is this correct?
+
+    def build(self, input_shape):
+        self.layer_scale = self.add_weight(
+            name="layer_scale",
+            shape=(self.dim), # FIXME: check this
+            initializer="ones"
+            trainable=True
+        )
+
+        super().build(input_shape)
+
+    def forward(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         input = x
         x = self.depth_wise_conv(x)
-        x = self.norm(x)
+        x = self.norm(x, training=training)
         x = self.point_wise_conv1(x)
         x = self.act(x)
         x = self.point_wise_conv2(x)
-        x = input + self.drop_path(self.layer_scale * x)
+        x = input + self.drop_path(self.layer_scale * x, training=training)
         return x
 
 
