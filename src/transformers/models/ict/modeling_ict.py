@@ -57,7 +57,7 @@ ICT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all ICT models at https://huggingface.co/models?filter=ict
 ]
 
-
+# Modified from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->ICT
 class IctEmbeddings(nn.Module):
     """
     Construct the embeddings. Optionally, also the mask token.
@@ -285,7 +285,7 @@ class IctPretrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value: bool = False) -> None:
-        if isinstance(module, (IctTransformerModel, IctGuidedUpsampler)):
+        if isinstance(module, (IctEncoder, IctTransformerModel, IctGuidedUpsampler)):
             module.gradient_checkpointing = value
 
 
@@ -420,6 +420,7 @@ class IctInpaintGenerator(nn.Module):
         x = (torch.tanh(x) + 1) / 2
 
         return x
+
 
 class VGG19(torch.nn.Module):
     def __init__(self):
@@ -651,6 +652,10 @@ class IctGuidedUpsampler(IctPretrainedModel):
         super().__init__(config)
 
         self.generator = IctInpaintGenerator(config)
+        self.adversarial_loss = IctAdversarialLoss()
+        self.l1_loss = nn.L1Loss()
+        self.perceptual_loss = IctPerceptualLoss()
+        self.style_loss = IctStyleLoss()
         self.output_height = config.output_height
         self.output_width = config.output_width
 
@@ -681,10 +686,10 @@ class IctGuidedUpsampler(IctPretrainedModel):
         edges = torch.stack([self.resize(edge, self.output_height, self.output_width) for edge in edges])
         masks = torch.stack([self.resize(mask, self.output_height, self.output_width) for mask in masks]).unsqueeze(-1)
         images_masked = (images * (1 - masks).float()) + masks
-        images_masked = images_masked.permute(0, 3, 1, 2)
-        edges = edges.permute(0, 3, 1, 2)
+
         inputs = torch.cat((images_masked, edges), dim=1)
         outputs = self.generator(inputs)
+
         return outputs
 
 
