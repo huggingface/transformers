@@ -25,7 +25,6 @@ import warnings
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 import torch
-from packaging import version
 from torch import nn
 from torch.fx import Graph, GraphModule, Proxy, Tracer
 from torch.fx._compatibility import compatibility
@@ -54,8 +53,13 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
-from ..utils import ENV_VARS_TRUE_VALUES, TORCH_FX_REQUIRED_VERSION, is_peft_available, is_torch_fx_available
-from ..utils.versions import importlib_metadata
+from ..utils import (
+    ENV_VARS_TRUE_VALUES,
+    TORCH_FX_REQUIRED_VERSION,
+    get_torch_version,
+    is_peft_available,
+    is_torch_fx_available,
+)
 
 
 if is_peft_available():
@@ -737,9 +741,8 @@ class HFTracer(Tracer):
         super().__init__(autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions)
 
         if not is_torch_fx_available():
-            torch_version = version.parse(importlib_metadata.version("torch"))
             raise ImportError(
-                f"Found an incompatible version of torch. Found version {torch_version}, but only version "
+                f"Found an incompatible version of torch. Found version {get_torch_version()}, but only version "
                 f"{TORCH_FX_REQUIRED_VERSION} is supported."
             )
 
@@ -1207,6 +1210,7 @@ def symbolic_trace(
     model: PreTrainedModel,
     input_names: Optional[List[str]] = None,
     disable_check: bool = False,
+    tracer_cls: Type[HFTracer] = HFTracer,
 ) -> GraphModule:
     """
     Performs symbolic tracing on the model.
@@ -1218,6 +1222,8 @@ def symbolic_trace(
             The names of the inputs of the traced model. If unset, model.dummy_inputs.keys() are used instead.
         disable_check (`bool`, *optional*, defaults to `False`):
             If `True`, no check is done before trying to trace the model, this is mostly usesul for debugging purposes.
+        tracer_cls (`Type[HFTracer]`, *optional*, defaults to `HFTracer`):
+            The tracer class to use for instantiating the tracer. If unset, `HFTracer` is used instead.
 
     Returns:
         `torch.fx.GraphModule`: A GraphModule constructed by recording operations seen while tracing the model.
@@ -1240,7 +1246,7 @@ def symbolic_trace(
         check_if_model_is_supported(model)
 
     # Tracing.
-    tracer = HFTracer()
+    tracer = tracer_cls()
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
 
