@@ -43,7 +43,6 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
-    DUMMY_INPUTS,
     ContextManagers,
     add_code_sample_docstrings,
     add_end_docstrings,
@@ -486,31 +485,13 @@ class TFBartPretrainedModel(TFPreTrainedModel):
     base_model_prefix = "model"
 
     @property
-    def dummy_inputs(self):
-        pad_token = 1
-        input_ids = tf.convert_to_tensor(DUMMY_INPUTS, dtype=tf.int32)
-        decoder_input_ids = tf.convert_to_tensor(DUMMY_INPUTS, dtype=tf.int32)
-        dummy_inputs = {
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": tf.cast(input_ids != pad_token, tf.int32),
-            "input_ids": input_ids,
+    def input_signature(self):
+        return {
+            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+            "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
         }
-        return dummy_inputs
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
 
 
 BART_START_DOCSTRING = r"""
@@ -1461,16 +1442,6 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
     BART_START_DOCSTRING,
 )
 class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassificationLoss):
-    @property
-    def dummy_inputs(self):
-        pad_token = self.config.pad_token_id
-        input_ids = tf.constant([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]])
-        dummy_inputs = {
-            "attention_mask": tf.cast(tf.math.not_equal(input_ids, (pad_token)), dtype=tf.int32),
-            "input_ids": input_ids,
-        }
-        return dummy_inputs
-
     def __init__(self, config: BartConfig, load_weight_prefix=None, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model = TFBartMainLayer(config, load_weight_prefix=load_weight_prefix, name="model")

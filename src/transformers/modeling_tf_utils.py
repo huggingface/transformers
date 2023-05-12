@@ -1260,30 +1260,24 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         Prepare the output of the saved model. Can be overridden if specific serving modifications are required.
         """
-        config_variables = {
-            "hidden_states": "output_hidden_states",
-            "encoder_hidden_states": "output_hidden_states",
-            "decoder_hidden_states": "output_hidden_states",
-            "attentions": "output_attentions",
-            "encoder_attentions": "output_attentions",
-            "decoder_attentions": "output_attentions",
-            "past_key_values": "use_cache",
-        }
         if isinstance(output, ModelOutput):
-            for key, config_var in config_variables.items():
-                if key in output:
-                    if not getattr(self.config, config_var, False):
-                        output[key] = None
-                    elif output[key] is not None:
-                        try:
-                            output[key] = tf.convert_to_tensor(output[key])
-                        except ValueError:
-                            pass  # Layers may not have the same dimensions
-                if "cross_attentions" in output:
-                    if not (self.config.output_attentions and self.config.add_cross_attention):
-                        output["cross_attentions"] = None
-                    if output["cross_attentions"] is not None:
-                        output["cross_attentions"] = tf.convert_to_tensor(output["cross_attentions"])
+            for key in output.keys():
+                if key.endswith("hidden_states") and not getattr(self.config, "output_hidden_states", False):
+                    output[key] = None
+                elif key.endswith("attentions") and not getattr(self.config, "output_attentions", False):
+                    output[key] = None
+                elif key == "past_key_values" and not getattr(self.config, "use_cache", False):
+                    output[key] = None
+                elif key == "cross_attentions" and not (
+                    getattr(self.config, "output_attentions", False)
+                    and getattr(self.config, "add_cross_attention", False)
+                ):
+                    output[key] = None
+                if output[key] is not None:
+                    try:
+                        output[key] = tf.convert_to_tensor(output[key])
+                    except ValueError:
+                        pass  # Layers may not have the same dimensions
         return output
 
     def can_generate(self) -> bool:

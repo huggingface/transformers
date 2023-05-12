@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -1157,14 +1157,12 @@ class TFHubertPreTrainedModel(TFPreTrainedModel):
     main_input_name = "input_values"
 
     @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        pad_token = 0.0
-        input_values = tf.convert_to_tensor(np.random.rand(1, 16000), tf.float32)
-        dummy_inputs = {
-            "input_values": input_values,
-            "attention_mask": tf.cast(tf.not_equal(input_values, pad_token), tf.float32),
+    def input_signature(self):
+        return {
+            "input_values": tf.TensorSpec((None, 16000), tf.float32, name="input_values"),
+            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
         }
-        return dummy_inputs
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1172,20 +1170,6 @@ class TFHubertPreTrainedModel(TFPreTrainedModel):
             f"\n{self.__class__.__name__} has backpropagation operations that are NOT supported on CPU. If you wish "
             "to train/fine-tine this model, you need a GPU or a TPU"
         )
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(input_values=inputs, training=False)
-
-        return self.serving_output(output)
 
 
 HUBERT_START_DOCSTRING = r"""
@@ -1359,13 +1343,6 @@ class TFHubertModel(TFHubertPreTrainedModel):
 
         return outputs
 
-    def serving_output(self, output):
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        return TFBaseModelOutput(
-            last_hidden_state=output.last_hidden_state, hidden_states=hidden_states, attentions=attentions
-        )
-
 
 @add_start_docstrings(
     """TFHubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
@@ -1518,8 +1495,3 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def serving_output(self, output: TFCausalLMOutput) -> TFCausalLMOutput:
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        return TFCausalLMOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)

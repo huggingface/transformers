@@ -28,7 +28,6 @@ from ...activations_tf import get_tf_activation
 
 # Public API
 from ...file_utils import (
-    DUMMY_INPUTS,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -621,27 +620,13 @@ class TFXGLMPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "model"
 
     @property
-    def dummy_inputs(self):
-        pad_token = 1
-        input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
-        dummy_inputs = {
-            "input_ids": input_ids,
-            "attention_mask": tf.cast(input_ids != pad_token, tf.int32),
+    def input_signature(self):
+        return {
+            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+            "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
         }
-        return dummy_inputs
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
 
 
 XGLM_START_DOCSTRING = r"""
@@ -821,24 +806,6 @@ class TFXGLMModel(TFXGLMPreTrainedModel):
 
         return outputs
 
-    def serving_output(self, output):
-        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        cross_attns = (
-            tf.convert_to_tensor(output.cross_attentions)
-            if self.config.output_attentions and self.config.add_cross_attention
-            else None
-        )
-
-        return TFBaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=output.hidden_states,
-            past_key_values=pkv,
-            hidden_states=hs,
-            attentions=attns,
-            cross_attentions=cross_attns,
-        )
-
 
 @add_start_docstrings(
     """
@@ -970,23 +937,4 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
-        )
-
-    def serving_output(self, output):
-        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        cross_attns = (
-            tf.convert_to_tensor(output.cross_attentions)
-            if self.config.output_attentions and self.config.add_cross_attention
-            else None
-        )
-
-        return TFCausalLMOutputWithCrossAttentions(
-            loss=output.loss,
-            logits=output.logits,
-            past_key_values=pkv,
-            hidden_states=hs,
-            attentions=attns,
-            cross_attentions=cross_attns,
         )

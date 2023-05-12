@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -32,7 +32,6 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import check_embeddings_within_bounds, stable_softmax
 from ...utils import (
-    DUMMY_INPUTS,
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -648,49 +647,6 @@ class TFBlipVisionModel(TFBlipPreTrainedModel):
         self.encoder = TFBlipEncoder(config, name="encoder")
         self.post_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="post_layernorm")
 
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(len(DUMMY_INPUTS), 3, self.config.image_size, self.config.image_size), dtype=tf.float32
-        )
-        return {"pixel_values": VISION_DUMMY_INPUTS}
-
-    @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
-        ]
-    )
-    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
-    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutputWithPooling(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            hidden_states=hs,
-            attentions=attns,
-        )
-
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=BlipVisionConfig)
@@ -881,52 +837,6 @@ class TFBlipModel(TFBlipPreTrainedModel):
 
         self.blip = TFBlipMainLayer(config, name="blip")
 
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(len(DUMMY_INPUTS), 3, self.config.vision_config.image_size, self.config.vision_config.image_size),
-            dtype=tf.float32,
-        )
-        return {
-            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32),
-            "pixel_values": VISION_DUMMY_INPUTS,
-        }
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBlipOutput:
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
-    def serving_output(self, output: TFBlipOutput) -> TFBlipOutput:
-        return TFBlipOutput(
-            logits_per_image=output.logits_per_image,
-            logits_per_text=output.logits_per_text,
-            text_embeds=output.text_embeds,
-            image_embeds=output.image_embeds,
-        )
-
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BLIP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBlipOutput, config_class=BlipConfig)
@@ -1081,48 +991,6 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         return self.vision_model.embeddings.patch_embedding
-
-    @property
-    def dummy_inputs(self):
-        input_ids = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(len(DUMMY_INPUTS), 3, self.config.vision_config.image_size, self.config.vision_config.image_size),
-            dtype=tf.float32,
-        )
-        return {"input_ids": input_ids, "pixel_values": VISION_DUMMY_INPUTS}
-
-    @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-            }
-        ]
-    )
-    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
-    def serving_output(
-        self, output: TFBlipForConditionalGenerationModelOutput
-    ) -> TFBlipForConditionalGenerationModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBlipForConditionalGenerationModelOutput(
-            last_hidden_state=output.last_hidden_state,
-            image_embeds=output.image_embeds,
-            hidden_states=hs,
-            attentions=attns,
-        )
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
@@ -1297,45 +1165,29 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         return self.vision_model.embeddings.patch_embedding
 
-    @property
-    def dummy_inputs(self):
-        input_ids = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(len(DUMMY_INPUTS), 3, self.config.vision_config.image_size, self.config.vision_config.image_size),
-            dtype=tf.float32,
+    # Adapted from transformers.models.t5.modeling_tf_t5.TFT5PreTrainedModel._shift_right
+    def _shift_right(self, input_ids):
+        decoder_start_token_id = self.decoder_start_token_id
+        pad_token_id = self.decoder_pad_token_id
+
+        if decoder_start_token_id is None or pad_token_id is None:
+            raise ValueError("decoder_start_token_id and pad_token_id must be defined!")
+
+        start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
+        start_tokens = tf.cast(start_tokens, input_ids.dtype)  # Ensure compatible dtypes for concatenation
+        shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
+
+        # replace possible -100 values in labels by `pad_token_id`
+        shifted_input_ids = tf.where(
+            shifted_input_ids == -100,
+            tf.cast(tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids.dtype),
+            shifted_input_ids,
         )
-        return {"input_ids": input_ids, "pixel_values": VISION_DUMMY_INPUTS, "decoder_input_ids": input_ids}
 
-    @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-            }
-        ]
-    )
-    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
-        """
-        Method used for serving the model.
+        # "Verify that `labels` has only positive values and -100"
+        tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0, dtype=shifted_input_ids.dtype))
 
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
-    def serving_output(self, output: TFBlipTextVisionModelOutput) -> TFBlipTextVisionModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBlipTextVisionModelOutput(
-            image_embeds=output.image_embeds,
-            last_hidden_state=output.last_hidden_state,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return shifted_input_ids
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
@@ -1578,47 +1430,6 @@ class TFBlipForImageTextRetrieval(TFBlipPreTrainedModel):
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         return self.vision_model.embeddings.patch_embedding
-
-    @property
-    def dummy_inputs(self):
-        input_ids = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(len(DUMMY_INPUTS), 3, self.config.vision_config.image_size, self.config.vision_config.image_size),
-            dtype=tf.float32,
-        )
-        return {"input_ids": input_ids, "pixel_values": VISION_DUMMY_INPUTS}
-
-    @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-            }
-        ]
-    )
-    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
-    def serving_output(self, output: TFBlipImageTextMatchingModelOutput) -> TFBlipImageTextMatchingModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBlipImageTextMatchingModelOutput(
-            itm_score=output.itm_score,
-            last_hidden_state=hs,
-            hidden_states=output.hidden_states,
-            attentions=attns,
-            question_embeds=output.question_embeds,
-        )
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
