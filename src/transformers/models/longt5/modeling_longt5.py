@@ -451,9 +451,10 @@ class LongT5Attention(nn.Module):
         real_seq_length = seq_length
 
         if past_key_value is not None:
-            assert (
-                len(past_key_value) == 2
-            ), f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
+            if len(past_key_value) != 2:
+                raise ValueError(
+                    f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
+                )
             real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
 
         key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
@@ -1349,10 +1350,11 @@ class LongT5PreTrainedModel(PreTrainedModel):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
 
-        assert decoder_start_token_id is not None, (
-            "self.model.config.decoder_start_token_id has to be defined. In LongT5 it is usually set to the pad_token_id."
-            " See LongT5 docs for more information"
-        )
+        if decoder_start_token_id is None:
+            raise ValueError(
+                "self.model.config.decoder_start_token_id has to be defined. In LongT5 it is usually set to the pad_token_id."
+                "See LongT5 docs for more information."
+            )
 
         # shift inputs to the right
         if is_torch_fx_proxy(input_ids):
@@ -1364,7 +1366,8 @@ class LongT5PreTrainedModel(PreTrainedModel):
             shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
             shifted_input_ids[..., 0] = decoder_start_token_id
 
-        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+        if pad_token_id is None:
+            raise ValueError("self.model.config.pad_token_id has to be defined.")
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
