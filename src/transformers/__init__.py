@@ -464,6 +464,7 @@ _import_structure = {
     ],
     "models.splinter": ["SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SplinterConfig", "SplinterTokenizer"],
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
+    "models.swiftformer": ["SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwiftFormerConfig"],
     "models.swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
     "models.swin2sr": ["SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swin2SRConfig"],
     "models.swinv2": ["SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swinv2Config"],
@@ -2463,6 +2464,14 @@ else:
             "SqueezeBertPreTrainedModel",
         ]
     )
+    _import_structure["models.swiftformer"].extend(
+        [
+            "SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SwiftFormerForImageClassification",
+            "SwiftFormerModel",
+            "SwiftFormerPreTrainedModel",
+        ]
+    )
     _import_structure["models.swin"].extend(
         [
             "SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4221,6 +4230,7 @@ if TYPE_CHECKING:
     )
     from .models.splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig, SplinterTokenizer
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
+    from .models.swiftformer import SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SwiftFormerConfig
     from .models.swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
     from .models.swin2sr import SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP, Swin2SRConfig
     from .models.swinv2 import SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Swinv2Config
@@ -5875,6 +5885,12 @@ if TYPE_CHECKING:
             SqueezeBertModel,
             SqueezeBertModule,
             SqueezeBertPreTrainedModel,
+        )
+        from .models.swiftformer import (
+            SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SwiftFormerForImageClassification,
+            SwiftFormerModel,
+            SwiftFormerPreTrainedModel,
         )
         from .models.swin import (
             SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
