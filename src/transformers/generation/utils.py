@@ -4300,8 +4300,7 @@ class GenerationMixin:
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
 
             # 2. Use the original model to obtain the next token logits given the candidate sequence. We obtain
-            # `candidate_length + 1` relevant logits from this process: in the event that all candidates are correct,
-            # we use this forward pass to also pick the subsequent logits in the original model.
+            # `candidate_length + 1` relevant logits from this process (see step 7 on why the +1)
 
             # 2.1. Run a forward pass on the candidate sequence
             if "past_key_values" in model_kwargs:
@@ -4348,17 +4347,19 @@ class GenerationMixin:
                 for i in range(candidate_length):
                     new_logits[:, i, :] = logits_warper(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
 
-            # 3. Obtain the next tokens from the original model logits.
+            # 3. Obtain the next tokens from the original model logits. If `do_sample` is True, use multinomial
+            # sampling, otherwise use argmax.
             if do_sample:
                 probs = new_logits[:, -candidate_length - 1 :, :].softmax(dim=-1)
-                selected_tokens = torch.multinomial(probs[0, :, :], num_samples=1).squeeze(1)[None, :]
+                sampled_tokens = torch.multinomial(probs[0, :, :], num_samples=1).squeeze(1)[None, :]
+                next_tokens = sampled_tokens[:, :-1]
             else:
-                selected_tokens = new_logits[:, -candidate_length - 1 :, :].argmax(dim=-1)
+                next_tokens = new_logits[:, -candidate_length - 1 : -1, :].argmax(dim=-1)
 
             # 4. Compare the argmax from the original model logits with the assistant forecasted tokens. We can keep
             # the assistant forecasted tokens until the first mismatch, or until the max length is reached.
             candidate_new_tokens = candidate_input_ids[:, -candidate_length:]
-            n_matches = ((~(candidate_new_tokens == selected_tokens[:, :-1])).cumsum(dim=-1) < 1).sum()
+            n_matches = ((~(candidate_new_tokens == next_tokens)).cumsum(dim=-1) < 1).sum()
 
             # 5. Update variables according to the number of matching assistant tokens. Remember: the token generated
             # by the model after the last candidate match is also valid, as it is generated from a correct sequence.
@@ -4393,6 +4394,18 @@ class GenerationMixin:
                 assistant_model.max_assistant_tokens = max(1.0, assistant_model.max_assistant_tokens - 1.0)
 
             # Assistant: main logic end
+            # 7. Use the set of logits after the last matching assistant token to obtain the next token. Note that,
+            # because of this step, assisted generation search reduces to a normal greedy search/sample if there is no
+            # match.
+            if do_sample:
+                probs = probs[:, n_matches, :]
+                next_tokens = sampled_tokens[:, n_matches]
+            else:
+                next_tokens = torch.argmax(next_token_scores, dim=-1)
+
+            # Assistant: main logic end; Compared to greedy search/sample, the following (redundant) blocks were
+            # removed below: (1) model input preparation; (2) model forward pass; (3) score preparation; (4) model
+            # cache update.
 
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
@@ -4406,18 +4419,19 @@ class GenerationMixin:
                 if "past_key_values" not in model_kwargs:
                     added_len = new_cur_len
                 else:
-                    added_len = n_matches + 1
+                    last_matching_idx = n_matches
 
                 if output_attentions:
                     if self.config.is_encoder_decoder:
                         cross_attentions = _split_model_outputs(
-                            cross_attentions, outputs.cross_attentions, cur_len, added_len
+                            cross_attentions, outputs.cross_attentions, cur_len, last_matching_idx
                         )
                         decoder_attentions = _split_model_outputs(
                             decoder_attentions,
                             outputs.decoder_attentions,
                             cur_len,
                             added_len,
+                            last_matching_idx,
                             is_decoder_attention=True,
                         )
                     else:
@@ -4426,6 +4440,7 @@ class GenerationMixin:
                             outputs.attentions,
                             cur_len,
                             added_len,
+                            last_matching_idx,
                             is_decoder_attention=True,
                         )
                 if output_hidden_states:
@@ -4436,6 +4451,11 @@ class GenerationMixin:
                     else:
                         decoder_hidden_states = _split_model_outputs(
                             decoder_hidden_states, outputs.hidden_states, cur_len, added_len
+                            decoder_hidden_states, outputs.decoder_hidden_states, cur_len, last_matching_idx
+                        )
+                    else:
+                        decoder_hidden_states = _split_model_outputs(
+                            decoder_hidden_states, outputs.hidden_states, cur_len, last_matching_idx
                         )
 
             model_kwargs = self._update_model_kwargs_for_generation(
@@ -4529,7 +4549,7 @@ def _crop_past_key_values(model, past_key_values, maximum_length):
     return past_key_values
 
 
-def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_attention=False):
+def _split_model_outputs(outputs, new_outputs, previous_cur_len, last_matching_idx, is_decoder_attention=False):
     """
     Given the (decoder/cross attentions)/(decoder hidden states) for multiple generated tokens, splits it into a tuple
     where each member corresponds to a single generated token.
@@ -4550,6 +4570,7 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
         new_tuple = ()
         for layer in new_outputs:
             last_dim_size = cur_len + i if is_decoder_attention else layer.shape[-1]
+
             new_tuple += (layer[..., i : i + 1, :last_dim_size],)
         outputs += (new_tuple,)
     return outputs
