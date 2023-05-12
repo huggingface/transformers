@@ -1,0 +1,132 @@
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# Running tools on inference endpoints
+
+<Tip>
+
+This document is about running tools on inference endpoints so that agents may use these tools remotely. 
+If you do not know what tools and agents are in the context of transformers, we recommend you read the
+[Transformers Agents](transformers_agents) page first.
+
+</Tip>
+
+Agents are designed to use tools in order to respond to a natural language query. They are setup so as to load tools
+locally and use them directly in the runtime they're at.
+
+However, some of these tools can be heavy; tools that handle images, long text, or audio signals may need a 
+significant amount of memory in order to perform inference. Tools that generate images through a diffusion
+process, may require significant compute in order to perform the multiple steps they need; but end users
+may not benefit from the powerful setups required to use them.
+
+This is why we have support for **remote** tools: these have an API that can be called from the runtime, offloading
+the processing to the remote API. In this guide we'll explore how to set up an inference endpoint for a given tool
+to leverage it with the agents.
+
+Inference endpoints are one solution to handle remote tools; but they're not the only one. We integrate with
+[`gradio_tools`](custom_tools#leveraging-gradiotools) that also offers remote tools, and we'll continue adding 
+guides to other alternatives for remote tools.
+
+## Inference Endpoints
+
+
+[Inference Endpoints](https://huggingface.co/inference-endpoints) is a paid Hugging Face solution to easily deploy
+Transformers and Diffusers models on a fully-managed infrastructure. It has default deployment options for
+transformers and diffusers, but given that we're using a specific type of object here, tools, we'll set up a custom
+handler to get it to work.
+
+<Tip warning={true}>
+
+Inference Endpoints are a paid hosting service by Hugging Face, which needs to have an organization setup with 
+billing enabled.
+
+</Tip>
+
+Tools are Spaces by default in Transformers. When calling `push_to_hub` on a tool, you're effectively pushing
+the code to a Space on the Hugging Face Hub under a namespace that you own. There are many tools living on the
+[`huggingface-tools` namespace](https://huggingface.co/huggingface-tools); having them be Spaces by default means
+that users can play around with the tool directly in the browser.
+
+However, Inference Endpoints only work with **model** repositories. We'll therefore have to create a model
+repository to act as a proxy for the Space. That model repository will contain the `handler.py` file to serve
+our tool through an inference endpoint.
+
+For demonstration purposes, we'll consider that you already have a tool handy that you'd like to use remotely. If
+you'd like to setup your custom tool, we recommend reading the [Custom Tool](custom_tools#leveraging-gradiotools) 
+guide.
+
+We'll try and deploy the `huggingface-tools/text-to-video` tool to an inference endpoint. We have it available as 
+a gradio Space [here](https://huggingface.co/huggingface-tools/text-to-video).
+
+### Setting up the repository
+
+We'll start by creating a model repository that will serve as a serving point for this tool.
+It can be public or private; for the sake of this tutorial we'll keep this one public, but having it set to
+private doesn't interfere with the inference endpoint setup.
+
+The repository is created and is available [here](https://huggingface.co/huggingface-tools/text-to-video).
+In it, you'll see there is a custom handler file, called 
+[`handler.py`](https://huggingface.co/huggingface-tools/text-to-video/blob/main/handler.py), as well as a traditional
+requirements file called 
+[`requirements.txt`](https://huggingface.co/huggingface-tools/text-to-video/blob/main/requirements.txt).
+
+#### Handler file
+
+The handler file exposes an `EndpointHandler`, which serves as the link between the requests you'll be doing to the
+remote tool and the tool itself. It should:
+
+- Instantiate the tool in its initialization method
+- Have a `__call__` method which will take the serialized input and return the computed result.
+
+For text-to-text tools, the handler file is very simple; it looks like the following:
+
+```python
+from transformers.tools import load_tool
+
+
+class EndpointHandler:
+    def __init__(self, path=""):
+        self.tool = load_tool("huggingface-tools/text-to-video")
+        self.tool.setup()
+
+    def __call__(self, data):
+        inputs = data.pop("inputs", data)
+        return self.tool(**inputs)
+```
+
+However, it is different if handling different data types as it will need to serialize this data type. 
+This guide will be completed to include different serialization for text, image, audio and video.
+
+#### Requirement file
+
+The requirement file needs to specify all requirements necessary to run the tool. The basic dependencies are the 
+following:
+
+```text
+transformers>=4.29.0
+accelerate
+```
+
+but you may need to include any and all other dependencies needed by your tool
+
+### Spinning up an endpoint
+
+Once we're done creating the repository, we can go ahead and create our first endpoint. Head over to
+[the Inference Endpoints UI](https://ui.endpoints.huggingface.co/endpoints) and create your first endpoint.
+
+If the repository is setup correctly, it should spin up directly without issue.
+
+In case you encounter a "Failed" deployment, we recommend checking out 
+[this guide](https://huggingface.co/docs/inference-endpoints/guides/logs) on checking out the logs of an inference
+endpoint.
+
+TODO add images
