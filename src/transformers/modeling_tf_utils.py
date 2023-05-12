@@ -1113,18 +1113,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        input_sig = self.input_signature
-        if not all(tensor_spec.shape[0] is None for tensor_spec in self.input_signature.values()):
-            raise ValueError("The first dimension of the input tensors should be None.")
-        dummies = {
-            key: tf.keras.Input(shape=tensor.shape[1:], dtype=tensor.dtype, name=key)
-            for key, tensor in input_sig.items()
-        }
+        dummies = {}
+        for key, spec in self.input_signature.items():
+            # 2 is the most correct arbitrary size. I will not be taking questions
+            dummies[key] = tf.ones(shape=[dim if dim is not None else 2 for dim in spec.shape], dtype=spec.dtype)
         if self.config.add_cross_attention and "encoder_hidden_states" in inspect.signature(self.call).parameters:
             if "encoder_hidden_states" not in dummies:
                 if self.main_input_name == "input_ids":
                     dummies["encoder_hidden_states"] = tf.keras.Input(
-                        shape=(None, self.config.hidden_size), dtype=tf.float32, name="encoder_hidden_states"
+                        shape=(2, self.config.hidden_size), dtype=tf.float32, name="encoder_hidden_states"
                     )
                 else:
                     raise NotImplementedError(
@@ -1280,6 +1277,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                             output[key] = tf.convert_to_tensor(output[key])
                         except ValueError:
                             pass  # Layers may not have the same dimensions
+                if "cross_attentions" in output:
+                    if not (self.config.output_attentions and self.config.add_cross_attention):
+                        output["cross_attentions"] = None
+                    if output["cross_attentions"] is not None:
+                        output["cross_attentions"] = tf.convert_to_tensor(output["cross_attentions"])
         return output
 
     def can_generate(self) -> bool:
