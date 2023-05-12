@@ -1131,8 +1131,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     f"Could not fully infer input tensor shape; dummy inputs or serving sig must be defined manually for {self.__class__.__name__}"
                 )
             rng = np.random.default_rng(42)
-            VISION_DUMMY_INPUTS = rng.random(image_shape).astype(np.float32)
-            dummy_inputs["pixel_values"] = tf.constant(VISION_DUMMY_INPUTS, dtype=tf.float32)
+            vision_dummy_inputs = rng.random(image_shape).astype(np.float32)
+            dummy_inputs["pixel_values"] = tf.constant(vision_dummy_inputs, dtype=tf.float32)
         else:
             raise NotImplementedError(
                 f"Could not fully infer input shapes, dummy inputs must be defined manually for {self.__class__.__name__}"
@@ -1159,7 +1159,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         self.name_or_path = config.name_or_path
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
         if not hasattr(self, "serving"):  # Don't overwrite existing serving signatures
-            self.serving = tf.function(self.eager_serving, input_signature=self.get_serving_input_signature())
+            self.serving = tf.function(self.eager_serving, input_signature=self.input_signature)
         # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
         self._set_save_spec(self.serving.input_signature[0])
 
@@ -1224,7 +1224,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         return self.serving_output(output)
 
-    def get_serving_input_signature(self) -> List[Dict[str, tf.TensorSpec]]:
+    @property
+    def input_signature(self) -> List[Dict[str, tf.TensorSpec]]:
+        """
+        This property should return a dict mapping input names to tf.TensorSpec objects, representing the expected
+        shape and dtype for model inputs. It is used for both serving and for generating the dummy inputs used to build
+        the model.
+        """
         model_inputs = list(dict(inspect.signature(self.call).parameters).keys())
         sig = {}
         if self.__class__.__name__.endswith("ForMultipleChoice"):
@@ -1243,9 +1249,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 vision_config = self.config
             if hasattr(vision_config, "num_channels"):
                 pixel_values_shape[1] = vision_config.num_channels
+            else:
+                raise NotImplementedError(
+                    "Could not infer number of channels from config, please override input_signature to specify input shapes."
+                )
             if hasattr(vision_config, "image_size"):
                 pixel_values_shape[2] = pixel_values_shape[3] = vision_config.image_size
+            else:
+                raise NotImplementedError(
+                    "Could not infer input image shape from config, please override input_signature to specify input shapes."
+                )
             sig["pixel_values"] = tf.TensorSpec(pixel_values_shape, tf.float32, name="pixel_values")
+        if "input_features" in model_inputs:
+            raise NotImplementedError("Audio models need a manually defined input_signature")
         return [sig]
 
     def serving_output(self, output):
@@ -1254,7 +1270,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         config_variables = {
             "hidden_states": "output_hidden_states",
+            "encoder_hidden_states": "output_hidden_states",
+            "decoder_hidden_states": "output_hidden_states",
             "attentions": "output_attentions",
+            "encoder_attentions": "output_attentions",
+            "decoder_attentions": "output_attentions",
             "past_key_values": "use_cache",
         }
         if isinstance(output, ModelOutput):
