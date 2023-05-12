@@ -117,7 +117,7 @@ class CircleCIJob:
         if self.command_timeout:
             test_command = f"timeout {self.command_timeout} "
         test_command += f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
-        
+
         if self.parallelism == 1:
             if self.tests_to_run is None:
                 test_command += " << pipeline.parameters.tests_to_run >>"
@@ -443,7 +443,7 @@ doc_test_job = CircleCIJob(
     "pr_documentation_tests",
     additional_env={"TRANSFORMERS_VERBOSITY": "error", "DATASETS_VERBOSITY": "error", "SKIP_CUDA_DOCTEST": "1"},
     install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
+        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time ffmpeg",
         "pip install --upgrade pip",
         "pip install -e .[dev]",
         "pip install git+https://github.com/huggingface/accelerate",
