@@ -257,6 +257,7 @@ class SamProcessorEquivalenceTest(unittest.TestCase):
 
         self.assertTrue(np.all(tf_masks[0].numpy() == pt_masks[0].numpy()))
 
+    @is_pt_tf_cross_test
     def test_image_processor_equivalence(self):
         image_processor = self.get_image_processor()
 
