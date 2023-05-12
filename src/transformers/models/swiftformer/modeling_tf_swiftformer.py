@@ -12,11 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SwiftFormer model."""
+""" TensorFlow SwiftFormer model."""
 
 
 import collections.abc
 from typing import Optional, Tuple, Union
+
+
+import tensorflow as tf
+
+from ...activations_tf import get_tf_activation
 
 import torch
 import torch.utils.checkpoint
@@ -58,7 +63,7 @@ SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class SwiftFormerPatchEmbedding(nn.Module):
+class SwiftFormerPatchEmbedding(tf.keras.layers.Layer):
     """
     Patch Embedding Layer constructed of two 2D convolutional layers.
 
@@ -70,19 +75,19 @@ class SwiftFormerPatchEmbedding(nn.Module):
     def __init__(self, config: SwiftFormerConfig):
         super().__init__()
 
-        in_chs = config.num_channels
         out_chs = config.embed_dims[0]
-        self.patch_embedding = nn.Sequential(
-            nn.Conv2d(in_chs, out_chs // 2, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(out_chs // 2, eps=config.batch_norm_eps),
-            nn.ReLU(),
-            nn.Conv2d(out_chs // 2, out_chs, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(out_chs, eps=config.batch_norm_eps),
-            nn.ReLU(),
-        )
+        self.patch_embedding = tf.keras.Sequential([
+            tf.keras.layers.Conv2D(out_chs // 2, kernel_size=3, strides=2, padding=1),
+            tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9), # FIXME: is this the equivalent momentum?
+            get_tf_activation("relu"),
+            tf.keras.layers.Conv2D(out_chs, kernel_size=2, strides=2, padding=1),
+            tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9), # FIXME: is this the equivalent momentum?
+            get_tf_activation("relu"),
+        ])
 
-    def forward(self, x):
-        return self.patch_embedding(x)
+
+    def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
+        return self.patch_embedding(x, training=training)
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
