@@ -1117,13 +1117,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         dummy_inputs = {}
 
-        serving_sig = self.get_serving_input_signature()
-        if self.main_input_name == "input_ids" and serving_sig[0]["input_ids"].shape.rank == 2:
+        input_sig = self.input_signature
+        if self.main_input_name == "input_ids" and input_sig["input_ids"].shape.rank == 2:
             dummy_inputs["input_ids"] = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
-        elif self.main_input_name == "input_ids" and serving_sig[0]["input_ids"].shape.rank == 3:
+        elif self.main_input_name == "input_ids" and input_sig["input_ids"].shape.rank == 3:
             dummy_inputs["input_ids"] = tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32)
         elif self.main_input_name == "pixel_values":
-            image_shape = serving_sig[0]["pixel_values"].shape.as_list()
+            image_shape = input_sig["pixel_values"].shape.as_list()
             if image_shape[0] is None:
                 image_shape[0] = 3  # matches DUMMY_INPUTS
             if None in image_shape[1:]:
@@ -1159,7 +1159,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         self.name_or_path = config.name_or_path
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
         if not hasattr(self, "serving"):  # Don't overwrite existing serving signatures
-            self.serving = tf.function(self.eager_serving, input_signature=self.input_signature)
+            self.serving = tf.function(self.eager_serving, input_signature=[self.input_signature])
         # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
         self._set_save_spec(self.serving.input_signature[0])
 
@@ -1225,7 +1225,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         return self.serving_output(output)
 
     @property
-    def input_signature(self) -> List[Dict[str, tf.TensorSpec]]:
+    def input_signature(self) -> Dict[str, tf.TensorSpec]:
         """
         This property should return a dict mapping input names to tf.TensorSpec objects, representing the expected
         shape and dtype for model inputs. It is used for both serving and for generating the dummy inputs used to build
@@ -1262,7 +1262,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             sig["pixel_values"] = tf.TensorSpec(pixel_values_shape, tf.float32, name="pixel_values")
         if "input_features" in model_inputs:
             raise NotImplementedError("Audio models need a manually defined input_signature")
-        return [sig]
+        return sig
 
     def serving_output(self, output):
         """
