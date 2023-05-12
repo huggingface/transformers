@@ -70,7 +70,7 @@ class SwiftFormerPatchEmbedding(nn.Module):
     def __init__(self, config: SwiftFormerConfig):
         super().__init__()
 
-        in_chs = config.input_channels
+        in_chs = config.num_channels
         out_chs = config.embed_dims[0]
         self.patch_embedding = nn.Sequential(
             nn.Conv2d(in_chs, out_chs // 2, kernel_size=3, stride=2, padding=1),

@@ -43,7 +43,7 @@ class SwiftFormerConfig(PretrainedConfig):
 
 
     Args:
-        input_channels (`int`, *optional*, defaults to 3):
+        num_channels (`int`, *optional*, defaults to 3):
             The number of input channels
         depths (`List[int]`, *optional*, defaults to `[3, 3, 6, 4]`):
             Depth of each stage
@@ -89,7 +89,7 @@ class SwiftFormerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        input_channels=3,
+        num_channels=3,
         depths=[3, 3, 6, 4],
         embed_dims=[48, 56, 112, 220],
         mlp_ratio=4,
@@ -105,7 +105,7 @@ class SwiftFormerConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.input_channels = input_channels
+        self.num_channels = num_channels
         self.depths = depths
         self.embed_dims = embed_dims
         self.mlp_ratio = mlp_ratio
