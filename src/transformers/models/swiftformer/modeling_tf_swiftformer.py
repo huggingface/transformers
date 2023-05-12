@@ -29,10 +29,10 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_outputs import (
-    BaseModelOutputWithNoAttention,
+    TFBaseModelOutputWithNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_tf_utils import TFPreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -420,7 +420,7 @@ class TFSwiftFormerStage(tf.keras.layers.Layer):
         return input
 
 
-class SwiftFormerEncoder(nn.Module):
+class TFSwiftFormerEncoder(tf.keras.layers.Layer):
     def __init__(self, config: SwiftFormerConfig) -> None:
         super().__init__()
         self.config = config
@@ -430,25 +430,24 @@ class SwiftFormerEncoder(nn.Module):
         layer_depths = config.depths
 
         # Transformer model
-        network = []
+        self.network = []
         for i in range(len(layer_depths)):
-            stage = SwiftFormerStage(config=config, index=i)
-            network.append(stage)
+            stage = TFSwiftFormerStage(config=config, index=i)
+            self.network.append(stage)
             if i >= len(layer_depths) - 1:
                 break
             if downsamples[i] or embed_dims[i] != embed_dims[i + 1]:
                 # downsampling between two stages
-                network.append(SwiftFormerEmbeddings(config, index=i))
-        self.network = nn.ModuleList(network)
+                self.network.append(TFSwiftFormerEmbeddings(config, index=i))
 
         self.gradient_checkpointing = False
 
-    def forward(
+    def call(
         self,
-        hidden_states: torch.Tensor,
+        hidden_states: tf.Tensor,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
+    ) -> Union[tuple, TFBaseModelOutputWithNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -464,13 +463,13 @@ class SwiftFormerEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return BaseModelOutputWithNoAttention(
+        return TFBaseModelOutputWithNoAttention(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
         )
 
 
-class SwiftFormerPreTrainedModel(PreTrainedModel):
+class SwiftFormerPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -491,8 +490,8 @@ class SwiftFormerPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bias, 0)
             nn.init.constant_(module.weight, 1.0)
 
-    def _set_gradient_checkpointing(self, module: SwiftFormerEncoder, value: bool = False) -> None:
-        if isinstance(module, SwiftFormerEncoder):
+    def _set_gradient_checkpointing(self, module: TFSwiftFormerEncoder, value: bool = False) -> None:
+        if isinstance(module, TFSwiftFormerEncoder):
             module.gradient_checkpointing = value
 
 
@@ -531,7 +530,7 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
         self.config = config
 
         self.patch_embed = SwiftFormerPatchEmbedding(config)
-        self.encoder = SwiftFormerEncoder(config)
+        self.encoder = TFSwiftFormerEncoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -539,7 +538,7 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
     @add_start_docstrings_to_model_forward(SWIFTFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithNoAttention,
+        output_type=TFBaseModelOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -549,7 +548,7 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
+    ) -> Union[Tuple, TFBaseModelOutputWithNoAttention]:
         r""" """
 
         output_hidden_states = (
@@ -570,7 +569,7 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
         if not return_dict:
             return tuple(v for v in encoder_outputs if v is not None)
 
-        return BaseModelOutputWithNoAttention(
+        return TFBaseModelOutputWithNoAttention(
             last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
         )
