@@ -1245,6 +1245,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 )
             if hasattr(vision_config, "image_size"):
                 pixel_values_shape[2] = pixel_values_shape[3] = vision_config.image_size
+            elif hasattr(vision_config, "input_size"):
+                pixel_values_shape[2] = pixel_values_shape[3] = vision_config.input_size
             else:
                 raise NotImplementedError(
                     "Could not infer input image shape from config, please override input_signature to specify input shapes."
