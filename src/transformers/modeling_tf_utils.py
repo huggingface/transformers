@@ -1120,19 +1120,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             key: tf.keras.Input(shape=tensor.shape[1:], dtype=tensor.dtype, name=key)
             for key, tensor in input_sig.items()
         }
-        if self.config.add_cross_attention:
-            if (
-                "encoder_hidden_states" not in dummies
-                and "encoder_hidden_states" in inspect.signature(self.call).parameters
-                and self.main_input_name == "input_ids"
-            ):
-                dummies["encoder_hidden_states"] = tf.keras.Input(
-                    shape=(None, self.config.hidden_size), dtype=tf.float32, name="encoder_hidden_states"
-                )
-            else:
-                raise NotImplementedError(
-                    "Model has cross-attention but we couldn't infer the shape for the encoder hidden states. Please manually override dummy_inputs!"
-                )
+        if self.config.add_cross_attention and "encoder_hidden_states" in inspect.signature(self.call).parameters:
+            if "encoder_hidden_states" not in dummies:
+                if self.main_input_name == "input_ids":
+                    dummies["encoder_hidden_states"] = tf.keras.Input(
+                        shape=(None, self.config.hidden_size), dtype=tf.float32, name="encoder_hidden_states"
+                    )
+                else:
+                    raise NotImplementedError(
+                        "Model has cross-attention but we couldn't infer the shape for the encoder hidden states. Please manually override dummy_inputs!"
+                    )
         return dummies
 
     @property
