@@ -42,8 +42,6 @@ from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, TFGenerationMixin
 from .tf_utils import expand_1d, load_attributes_from_hdf5_group, save_attributes_to_hdf5_group, shape_list
 from .utils import (
-    DUMMY_INPUTS,
-    MULTIPLE_CHOICE_DUMMY_INPUTS,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
     TF2_WEIGHTS_INDEX_NAME,
@@ -1115,29 +1113,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        dummy_inputs = {}
-
         input_sig = self.input_signature
-        if self.main_input_name == "input_ids" and input_sig["input_ids"].shape.rank == 2:
-            dummy_inputs["input_ids"] = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
-        elif self.main_input_name == "input_ids" and input_sig["input_ids"].shape.rank == 3:
-            dummy_inputs["input_ids"] = tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32)
-        elif self.main_input_name == "pixel_values":
-            image_shape = input_sig["pixel_values"].shape.as_list()
-            if image_shape[0] is None:
-                image_shape[0] = 3  # matches DUMMY_INPUTS
-            if None in image_shape[1:]:
-                raise NotImplementedError(
-                    f"Could not fully infer input tensor shape; dummy inputs or serving sig must be defined manually for {self.__class__.__name__}"
-                )
-            rng = np.random.default_rng(42)
-            vision_dummy_inputs = rng.random(image_shape).astype(np.float32)
-            dummy_inputs["pixel_values"] = tf.constant(vision_dummy_inputs, dtype=tf.float32)
-        else:
-            raise NotImplementedError(
-                f"Could not fully infer input shapes, dummy inputs must be defined manually for {self.__class__.__name__}"
-            )
-        return dummy_inputs
+        return {
+            key: tf.keras.Input(shape=tensor.shape[1:], dtype=tensor.dtype, name=key)
+            for key, tensor in input_sig.items()
+        }
 
     @property
     def framework(self) -> str:
