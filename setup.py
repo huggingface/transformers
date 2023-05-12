@@ -275,7 +275,6 @@ else:
     extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax")
 
 extras["tokenizers"] = deps_list("tokenizers")
-extras["safetensors"] = deps_list("safetensors")
 extras["ftfy"] = deps_list("ftfy")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
 extras["onnx"] = deps_list("onnxconverter-common", "tf2onnx") + extras["onnxruntime"]
