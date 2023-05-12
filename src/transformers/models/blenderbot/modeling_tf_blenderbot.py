@@ -463,6 +463,7 @@ class TFBlenderbotPreTrainedModel(TFPreTrainedModel):
     config_class = BlenderbotConfig
     base_model_prefix = "model"
 
+    @property
     def input_signature(self):
         return {
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
