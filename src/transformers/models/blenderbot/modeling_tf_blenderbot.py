@@ -34,7 +34,6 @@ from ...modeling_tf_outputs import (
 
 # Public API
 from ...modeling_tf_utils import (
-    DUMMY_INPUTS,
     TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
     keras_serializable,
@@ -42,6 +41,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
+    DUMMY_INPUTS,
     ContextManagers,
     add_code_sample_docstrings,
     add_end_docstrings,

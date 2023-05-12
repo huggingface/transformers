@@ -27,7 +27,6 @@ from ...modeling_tf_outputs import (
     TFCausalLMOutputWithCrossAttentions,
 )
 from ...modeling_tf_utils import (
-    DUMMY_INPUTS,
     TFPreTrainedModel,
     get_initializer,
     get_tf_activation,

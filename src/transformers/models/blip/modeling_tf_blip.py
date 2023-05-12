@@ -23,7 +23,6 @@ import tensorflow as tf
 
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling
 from ...modeling_tf_utils import (
-    DUMMY_INPUTS,
     TFPreTrainedModel,
     get_initializer,
     get_tf_activation,
@@ -33,6 +32,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import check_embeddings_within_bounds, stable_softmax
 from ...utils import (
+    DUMMY_INPUTS,
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
