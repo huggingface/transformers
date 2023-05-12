@@ -154,7 +154,7 @@ class TFSwiftFormerEmbeddings(tf.keras.layers.Layer):
         self.proj = tf.keras.layers.Conv2D(embed_dim, kernel_size=patch_size, strides=stride, padding=padding)
         self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9) # FIXME: is this the correct momentum?
 
-    def call(self, x: tf.Tensor, training: bool = False):
+    def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         x = self.proj(x)
         x = self.norm(x, training=training)
         return x
@@ -192,7 +192,7 @@ class SwiftFormerConvEncoder(nn.Module):
         return x
 
 
-class SwiftFormerMlp(nn.Module):
+class TFSwiftFormerMlp(nn.Module):
     """
     MLP layer with 1*1 convolutions.
 
@@ -204,20 +204,20 @@ class SwiftFormerMlp(nn.Module):
     def __init__(self, config: SwiftFormerConfig, in_features: int):
         super().__init__()
         hidden_features = int(in_features * config.mlp_ratio)
-        self.norm1 = nn.BatchNorm2d(in_features, eps=config.batch_norm_eps)
-        self.fc1 = nn.Conv2d(in_features, hidden_features, 1)
-        act_layer = ACT2CLS[config.hidden_act]
+        self.norm1 = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9) # FIXME: is this the correct momentum?
+        self.fc1 = tf.keras.layers.Conv2D(hidden_features, 1)
+        act_layer = get_tf_activation(config.hidden_act)
         self.act = act_layer()
-        self.fc2 = nn.Conv2d(hidden_features, in_features, 1)
-        self.drop = nn.Dropout(p=0.0)
+        self.fc2 = tf.keras.layers.Conv2D(in_features, 1)
+        self.drop = tf.keras.layers.Dropout(rate=0.0) # FIXME: is this supposed to be 0?
 
-    def forward(self, x):
-        x = self.norm1(x)
+    def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
+        x = self.norm1(x, training=training)
         x = self.fc1(x)
         x = self.act(x)
-        x = self.drop(x)
+        x = self.drop(x, training=training)
         x = self.fc2(x)
-        x = self.drop(x)
+        x = self.drop(x, training=training)
         return x
 
 
