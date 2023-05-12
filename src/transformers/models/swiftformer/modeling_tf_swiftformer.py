@@ -16,17 +16,12 @@
 
 
 import collections.abc
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, Dict
 
 
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-
-import torch
-import torch.utils.checkpoint
-from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_outputs import (
     TFBaseModelOutputWithNoAttention,
@@ -469,7 +464,7 @@ class TFSwiftFormerEncoder(tf.keras.layers.Layer):
         )
 
 
-class SwiftFormerPreTrainedModel(TFPreTrainedModel):
+class TFSwiftFormerPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -478,23 +473,41 @@ class SwiftFormerPreTrainedModel(TFPreTrainedModel):
     config_class = SwiftFormerConfig
     base_model_prefix = "swiftformer"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
-        """Initialize the weights"""
-        if isinstance(module, (nn.Conv2d, nn.Linear)):
-            nn.init.trunc_normal_(module.weight, std=0.02)
-            if module.bias is not None:
-                nn.init.constant_(module.bias, 0)
-        elif isinstance(module, (nn.LayerNorm)):
-            nn.init.constant_(module.bias, 0)
-            nn.init.constant_(module.weight, 1.0)
+    @property
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        """
+        Dummy inputs to build the network.
 
-    def _set_gradient_checkpointing(self, module: TFSwiftFormerEncoder, value: bool = False) -> None:
-        if isinstance(module, TFSwiftFormerEncoder):
-            module.gradient_checkpointing = value
+        Returns:
+            `Dict[str, tf.Tensor]`: The dummy inputs.
+        """
+        VISION_DUMMY_INPUTS = tf.random.uniform(
+            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size),
+            dtype=tf.float32,
+        )
+        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
+
+    @tf.function(
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+        return self.serving_output(output)
 
 
+# FIXME: change to tensorflow doc
 SWIFTFORMER_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
