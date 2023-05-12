@@ -387,7 +387,7 @@ class TFSwiftFormerEncoderBlock(tf.keras.layers.Layer):
         return x
 
 
-class SwiftFormerStage(nn.Module):
+class TFSwiftFormerStage(tf.keras.layers.Layer):
     """
     A Swiftformer stage consisting of a series of `SwiftFormerConvEncoder` blocks and a final
     `SwiftFormerEncoderBlock`.
@@ -404,20 +404,19 @@ class SwiftFormerStage(nn.Module):
         dim = config.embed_dims[index]
         depth = layer_depths[index]
 
-        blocks = []
+        self.blocks = []
         for block_idx in range(depth):
             block_dpr = config.drop_path_rate * (block_idx + sum(layer_depths[:index])) / (sum(layer_depths) - 1)
 
             if depth - block_idx <= 1:
-                blocks.append(SwiftFormerEncoderBlock(config, dim=dim, drop_path=block_dpr))
+                self.blocks.append(TFSwiftFormerEncoderBlock(config, dim=dim, drop_path=block_dpr))
             else:
-                blocks.append(SwiftFormerConvEncoder(config, dim=dim))
+                self.blocks.append(TFSwiftFormerConvEncoder(config, dim=dim))
 
-        self.blocks = nn.ModuleList(blocks)
 
-    def forward(self, input):
+    def call(self, input: tf.Tensor, training: bool = False) -> tf.Tensor:
         for block in self.blocks:
-            input = block(input)
+            input = block(input, training=training)
         return input
 
 
