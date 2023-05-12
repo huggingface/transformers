@@ -21,15 +21,49 @@
     title: 🤗 Accelerate로 분산 학습 구성하기
   - local: model_sharing
     title: 만든 모델 공유하기
-  title: 튜토리얼
 - sections:
   - sections:
+    title: 모델 공유하기
+  - local: in_translation
+    title: (번역중) Share a model
+  title: (번역중) 튜토리얼
+- sections:
+  - sections:
+    - local: create_a_model
+      title: 맞춤형 아키텍처 만들기
+    - local: custom_models
+      title: 사용자 정의 모델 공유하기
+    - local: run_scripts
+      title: 스크립트로 학습하기
+    - local: sagemaker
+      title: Amazon SageMaker에서 학습 실행하기
+    - local: in_translation
+      title: (번역중) Converting from TensorFlow checkpoints
+    - local: serialization
+      title: ONNX로 내보내기
+    - local: torchscript
+      title: TorchScript로 내보내기
+    - local: in_translation
+      title: (번역중) Export to TorchScript
+    - local: in_translation
+      title: (번역중) Troubleshoot
+    title: (번역중) 일반적인 사용방법
+  - sections:
+    - local: in_translation
+      title: (번역중) Use tokenizers from 🤗 Tokenizers
+    - local: multilingual
+      title: 다국어 모델 추론하기
+    - local: in_translation
+      title: (번역중) Text generation strategies
+    - sections:
       - local: tasks/sequence_classification
         title: 텍스트 분류
       - local: tasks/token_classification
         title: 토큰 분류
       - local: tasks/question_answering
         title: 질의 응답(Question Answering)
+      - local: in_translation
+        title: (번역중) Question answering
       - local: in_translation
         title: (번역중) Causal language modeling
       - local: tasks/masked_language_modeling
