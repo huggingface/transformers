@@ -23,9 +23,9 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 
-from ...modeling_outputs import (
+from ...modeling_tf_outputs import (
     TFBaseModelOutputWithNoAttention,
-    ImageClassifierOutputWithNoAttention,
+    TFImageClassifierOutputWithNoAttention,
 )
 from ...modeling_tf_utils import TFPreTrainedModel
 from ...utils import (
@@ -66,31 +66,25 @@ class TFSwiftFormerPatchEmbedding(tf.keras.layers.Layer):
     Output: tensor of shape `[batch_size, out_channels, height/4, width/4]`
     """
 
-    def __init__(self, config: SwiftFormerConfig):
-        super().__init__()
+    def __init__(self, config: SwiftFormerConfig, **kwargs):
+        super().__init__(**kwargs)
 
         out_chs = config.embed_dims[0]
-        self.patch_embedding = tf.keras.Sequential(
-            [
-                tf.keras.layers.Conv2D(out_chs // 2, kernel_size=3, strides=2, padding=1),
-                tf.keras.layers.BatchNormalization(
-                    epsilon=config.batch_norm_eps, momentum=0.9
-                ),  # FIXME: is this the equivalent momentum?
-                get_tf_activation("relu"),
-                tf.keras.layers.Conv2D(out_chs, kernel_size=2, strides=2, padding=1),
-                tf.keras.layers.BatchNormalization(
-                    epsilon=config.batch_norm_eps, momentum=0.9
-                ),  # FIXME: is this the equivalent momentum?
-                get_tf_activation("relu"),
-            ]
-        )
+        self.patch_embedding = tf.keras.Sequential([
+            tf.keras.layers.Conv2D(out_chs // 2, kernel_size=3, strides=2, padding=1),
+            tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9), # FIXME: is this the equivalent momentum?
+            get_tf_activation("relu"),
+            tf.keras.layers.Conv2D(out_chs, kernel_size=2, strides=2, padding=1),
+            tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9), # FIXME: is this the equivalent momentum?
+            get_tf_activation("relu"),
+        ], name="path_embeddings")
+
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         return self.patch_embedding(x, training=training)
 
 
-# TODO
-# Copied from transformers.models.beit.modeling_beit.drop_path
+# TODO: I think this is available in the KerasCV package, should we use that?
 def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
@@ -105,21 +99,21 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
         return input
     keep_prob = 1 - drop_prob
     shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    random_tensor = keep_prob + tf.rand(shape, dtype=input.dtype, device=input.device)
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
 
 
 # Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Swiftformer
-class SwiftFormerDropPath(nn.Module):
+class TFSwiftFormerDropPath(tf.keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
-        super().__init__()
+    def __init__(self, drop_prob: Optional[float] = None, **kwargs) -> None:
+        super().__init__(**kwargs)
         self.drop_prob = drop_prob
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
@@ -135,8 +129,8 @@ class TFSwiftFormerEmbeddings(tf.keras.layers.Layer):
     Output: tensor of shape `[batch_size, channels, height/stride, width/stride]`
     """
 
-    def __init__(self, config: SwiftFormerConfig, index: int):
-        super().__init__()
+    def __init__(self, config: SwiftFormerConfig, index: int, **kwargs):
+        super().__init__(**kwargs)
 
         patch_size = config.down_patch_size
         stride = config.down_stride
@@ -149,10 +143,8 @@ class TFSwiftFormerEmbeddings(tf.keras.layers.Layer):
         stride = stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
         padding = padding if isinstance(padding, collections.abc.Iterable) else (padding, padding)
 
-        self.proj = tf.keras.layers.Conv2D(embed_dim, kernel_size=patch_size, strides=stride, padding=padding)
-        self.norm = tf.keras.layers.BatchNormalization(
-            epsilon=config.batch_norm_eps, momentum=0.9
-        )  # FIXME: is this the correct momentum?
+        self.proj = tf.keras.layers.Conv2D(embed_dim, kernel_size=patch_size, strides=stride, padding=padding, name="proj")
+        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm") # FIXME: is this the correct momentum?
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         x = self.proj(x)
@@ -169,22 +161,22 @@ class TFSwiftFormerConvEncoder(tf.keras.layers.Layer):
     Output: tensor of shape `[batch_size, channels, height, width]`
     """
 
-    def __init__(self, config: SwiftFormerConfig, dim: int):
-        super().__init__()
+    def __init__(self, config: SwiftFormerConfig, dim: int, **kwargs):
+        super().__init__(**kwargs)
         hidden_dim = int(config.mlp_ratio * dim)
 
         self.dim = dim
-        self.depth_wise_conv = tf.keras.layers.Conv2D(dim, kernel_size=3, padding=1, groups=dim)
-        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9)  # FIXME
-        self.point_wise_conv1 = tf.keras.layers.Conv2D(hidden_dim, kernel_size=1)
+        self.depth_wise_conv = tf.keras.layers.Conv2D(dim, kernel_size=3, padding=1, groups=dim, name="depth_wise_conv")
+        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm") # FIXME
+        self.point_wise_conv1 = tf.keras.layers.Conv2D(hidden_dim, kernel_size=1, name="point_wise_conv1")
         self.act = get_tf_activation("gelu")
-        self.point_wise_conv2 = tf.keras.layers.Conv2D(dim, kernel_size=1)
-        self.drop_path = tf.keras.layers.Identity()  # FIXME: is this supposed to be like this?
+        self.point_wise_conv2 = tf.keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv2")
+        self.drop_path = tf.keras.layers.Identity(name="drop_path") # FIXME: is this supposed to be like this?
 
     def build(self, input_shape: tf.TensorShape):
         self.layer_scale = self.add_weight(
             name="layer_scale",
-            shape=(self.dim),  # TODO: check this
+            shape=(self.dim), # TODO: check this
             initializer="ones",
             trainable=True,
         )
@@ -202,7 +194,7 @@ class TFSwiftFormerConvEncoder(tf.keras.layers.Layer):
         return x
 
 
-class TFSwiftFormerMlp(nn.Module):
+class TFSwiftFormerMlp(tf.keras.layers.Layer):
     """
     MLP layer with 1*1 convolutions.
 
@@ -211,17 +203,16 @@ class TFSwiftFormerMlp(nn.Module):
     Output: tensor of shape `[batch_size, channels, height, width]`
     """
 
-    def __init__(self, config: SwiftFormerConfig, in_features: int):
-        super().__init__()
+    def __init__(self, config: SwiftFormerConfig, in_features: int, **kwargs):
+        super().__init__(**kwargs)
+
         hidden_features = int(in_features * config.mlp_ratio)
-        self.norm1 = tf.keras.layers.BatchNormalization(
-            epsilon=config.batch_norm_eps, momentum=0.9
-        )  # FIXME: is this the correct momentum?
-        self.fc1 = tf.keras.layers.Conv2D(hidden_features, 1)
+        self.norm1 = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm1") # FIXME: is this the correct momentum?
+        self.fc1 = tf.keras.layers.Conv2D(hidden_features, 1, name="fc1")
         act_layer = get_tf_activation(config.hidden_act)
         self.act = act_layer()
-        self.fc2 = tf.keras.layers.Conv2D(in_features, 1)
-        self.drop = tf.keras.layers.Dropout(rate=0.0)  # FIXME: is this supposed to be 0?
+        self.fc2 = tf.keras.layers.Conv2D(in_features, 1, name="fc2")
+        self.drop = tf.keras.layers.Dropout(rate=0.0) # FIXME: is this supposed to be 0?
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         x = self.norm1(x, training=training)
@@ -242,17 +233,17 @@ class TFSwiftFormerEfficientAdditiveAttention(tf.keras.layers.Layer):
     Output: tensor of shape `[batch_size, channels, height, width]`
     """
 
-    def __init__(self, config: SwiftFormerConfig, dim: int = 512):
-        super().__init__()
+    def __init__(self, config: SwiftFormerConfig, dim: int = 512, **kwargs):
+        super().__init__(**kwargs)
 
         self.dim = dim
 
-        self.to_query = tf.keras.layers.Dense(dim)
-        self.to_key = tf.keras.layers.Dense(dim)
+        self.to_query = tf.keras.layers.Dense(dim, name="to_query")
+        self.to_key = tf.keras.layers.Dense(dim, name="to_key")
 
         self.scale_factor = dim**-0.5
-        self.proj = tf.keras.layers.Dense(dim)
-        self.final = tf.keras.layers.Dense(dim)
+        self.proj = tf.keras.layers.Dense(dim, name="proj")
+        self.final = tf.keras.layers.Dense(dim, name="final")
 
     def build(self, input_shape: tf.TensorShape):
         self.w_g = self.add_weight(
@@ -268,8 +259,8 @@ class TFSwiftFormerEfficientAdditiveAttention(tf.keras.layers.Layer):
         query = self.to_query(x)
         key = self.to_key(x)
 
-        query = torch.nn.functional.normalize(query, dim=-1)
-        key = torch.nn.functional.normalize(key, dim=-1)
+        query = torch.nn.functional.normalize(query, dim=-1) # TODO
+        key = torch.nn.functional.normalize(key, dim=-1) # TODO
 
         query_weight = query @ self.w_g
         scaled_query_weight = query_weight * self.scale_factor
@@ -293,22 +284,22 @@ class TFSwiftFormerLocalRepresentation(tf.keras.layers.Layer):
     Output: tensor of shape `[batch_size, channels, height, width]`
     """
 
-    def __init__(self, config: SwiftFormerConfig, dim: int):
-        super().__init__()
+    def __init__(self, config: SwiftFormerConfig, dim: int, **kwargs):
+        super().__init__(**kwargs)
 
         self.dim = dim
 
-        self.depth_wise_conv = tf.keras.layers.Conv2D(dim, kernel_size=3, padding=1, groups=dim)
-        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9)  # FIXME: momentum
-        self.point_wise_conv1 = tf.keras.layers.Conv2D(dim, kernel_size=1)
+        self.depth_wise_conv = tf.keras.layers.Conv2D(dim, kernel_size=3, padding=1, groups=dim, name="depth_wise_conv")
+        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm") # FIXME: momentum
+        self.point_wise_conv1 = tf.keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv1")
         self.act = get_tf_activation("gelu")
-        self.point_wise_conv2 = tf.keras.layers.Conv2D(dim, kernel_size=1)
-        self.drop_path = tf.keras.layers.Identity()  # FIXME: is this correct?
+        self.point_wise_conv2 = tf.keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv2")
+        self.drop_path = tf.keras.layers.Identity(name="drop_path") # FIXME: is this correct?
 
     def build(self, input_shape):
         self.layer_scale = self.add_weight(
             name="layer_scale",
-            shape=(self.dim),  # FIXME: check this
+            shape=(self.dim), # FIXME: check this
             initializer="ones",
             trainable=True,
         )
@@ -336,16 +327,16 @@ class TFSwiftFormerEncoderBlock(tf.keras.layers.Layer):
     Output: tensor of shape `[batch_size, channels,height, width]`
     """
 
-    def __init__(self, config: SwiftFormerConfig, dim: int, drop_path: float = 0.0) -> None:
-        super().__init__()
+    def __init__(self, config: SwiftFormerConfig, dim: int, drop_path: float = 0.0, **kwargs):
+        super().__init__(**kwargs)
 
         layer_scale_init_value = config.layer_scale_init_value
         use_layer_scale = config.use_layer_scale
 
-        self.local_representation = TFSwiftFormerLocalRepresentation(config, dim=dim)
-        self.attn = TFSwiftFormerEfficientAdditiveAttention(config, dim=dim)
-        self.linear = TFSwiftFormerMlp(config, in_features=dim)
-        self.drop_path = SwiftFormerDropPath(drop_path) if drop_path > 0.0 else tf.keras.layers.Identity()
+        self.local_representation = TFSwiftFormerLocalRepresentation(config, dim=dim, name="local_representation")
+        self.attn = TFSwiftFormerEfficientAdditiveAttention(config, dim=dim, name="attn")
+        self.linear = TFSwiftFormerMlp(config, in_features=dim, name="linear")
+        self.drop_path = TFSwiftFormerDropPath(drop_path) if drop_path > 0.0 else tf.keras.layers.Identity()
         self.use_layer_scale = use_layer_scale
         if use_layer_scale:
             self.dim = dim
@@ -354,13 +345,13 @@ class TFSwiftFormerEncoderBlock(tf.keras.layers.Layer):
     def build(self, input_shape: tf.TensorShape):
         self.layer_scale_1 = self.add_weight(
             name="layer_scale_1",
-            shape=(self.dim),  # FIXME
+            shape=(self.dim), # FIXME
             initializer=tf.keras.initializers.constant(self.layer_scale_init_value),
             trainable=True,
         )
         self.layer_scale_2 = self.add_weight(
             name="layer_scale_2",
-            shape=(self.dim),  # FIXME
+            shape=(self.dim), # FIXME
             initializer=tf.keras.initializers.constant(self.layer_scale_init_value),
             trainable=True,
         )
@@ -376,7 +367,7 @@ class TFSwiftFormerEncoderBlock(tf.keras.layers.Layer):
                 * self.attn(x.permute(0, 2, 3, 1).reshape(batch_size, height * width, channels))
                 .reshape(batch_size, height, width, channels)
                 .permute(0, 3, 1, 2),
-                training=training,
+                training=training
             )
             x = x + self.drop_path(self.layer_scale_2 * self.linear(x), training=training)
 
@@ -385,7 +376,7 @@ class TFSwiftFormerEncoderBlock(tf.keras.layers.Layer):
                 self.attn(x.permute(0, 2, 3, 1).reshape(batch_size, height * width, channels))
                 .reshape(batch_size, height, width, channels)
                 .permute(0, 3, 1, 2),
-                training=training,
+                training=training
             )
             x = x + self.drop_path(self.linear(x), training=training)
         return x
@@ -401,8 +392,8 @@ class TFSwiftFormerStage(tf.keras.layers.Layer):
     Output: tensor in shape `[batch_size, channels, height, width]`
     """
 
-    def __init__(self, config: SwiftFormerConfig, index: int) -> None:
-        super().__init__()
+    def __init__(self, config: SwiftFormerConfig, index: int, **kwargs) -> None:
+        super().__init__(**kwargs)
 
         layer_depths = config.depths
         dim = config.embed_dims[index]
@@ -413,9 +404,11 @@ class TFSwiftFormerStage(tf.keras.layers.Layer):
             block_dpr = config.drop_path_rate * (block_idx + sum(layer_depths[:index])) / (sum(layer_depths) - 1)
 
             if depth - block_idx <= 1:
+                # FIXME: no names?
                 self.blocks.append(TFSwiftFormerEncoderBlock(config, dim=dim, drop_path=block_dpr))
             else:
                 self.blocks.append(TFSwiftFormerConvEncoder(config, dim=dim))
+
 
     def call(self, input: tf.Tensor, training: bool = False) -> tf.Tensor:
         for block in self.blocks:
@@ -424,8 +417,8 @@ class TFSwiftFormerStage(tf.keras.layers.Layer):
 
 
 class TFSwiftFormerEncoder(tf.keras.layers.Layer):
-    def __init__(self, config: SwiftFormerConfig) -> None:
-        super().__init__()
+    def __init__(self, config: SwiftFormerConfig, **kwargs) -> None:
+        super().__init__(**kwargs)
         self.config = config
 
         embed_dims = config.embed_dims
@@ -546,12 +539,12 @@ SWIFTFORMER_INPUTS_DOCSTRING = r"""
     SWIFTFORMER_START_DOCSTRING,
 )
 class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
-    def __init__(self, config: SwiftFormerConfig):
-        super().__init__(config)
+    def __init__(self, config: SwiftFormerConfig, **kwargs):
+        super().__init__(config, **kwargs)
         self.config = config
 
-        self.patch_embed = TFSwiftFormerPatchEmbedding(config)
-        self.encoder = TFSwiftFormerEncoder(config)
+        self.patch_embed = TFSwiftFormerPatchEmbedding(config, name="patch_embed")
+        self.encoder = TFSwiftFormerEncoder(config, name="encoder")
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -569,6 +562,7 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
         pixel_values: Optional[tf.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        training: bool = False
     ) -> Union[Tuple, TFBaseModelOutputWithNoAttention]:
         r""" """
 
@@ -580,11 +574,12 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        embedding_output = self.patch_embed(pixel_values)
+        embedding_output = self.patch_embed(pixel_values, training=training)
         encoder_outputs = self.encoder(
             embedding_output,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         if not return_dict:
@@ -598,23 +593,21 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
 
 @add_start_docstrings(
     """
-    SwiftFormer Model transformer with an image classification head on top (e.g. for ImageNet).
+    TFSwiftFormer Model transformer with an image classification head on top (e.g. for ImageNet).
     """,
     SWIFTFORMER_START_DOCSTRING,
 )
-class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
-    def __init__(self, config: SwiftFormerConfig) -> None:
-        super().__init__(config)
-
-        embed_dims = config.embed_dims
+class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
+    def __init__(self, config: SwiftFormerConfig, **kwargs) -> None:
+        super().__init__(config, **kwargs)
 
         self.num_labels = config.num_labels
-        self.swiftformer = SwiftFormerModel(config)
+        self.swiftformer = TFSwiftFormerModel(config)
 
         # Classifier head
-        self.norm = nn.BatchNorm2d(embed_dims[-1], eps=config.batch_norm_eps)
-        self.head = nn.Linear(embed_dims[-1], self.num_labels) if self.num_labels > 0 else nn.Identity()
-        self.dist_head = nn.Linear(embed_dims[-1], self.num_labels) if self.num_labels > 0 else nn.Identity()
+        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9) # FIXME
+        self.head = tf.keras.layers.Dense(self.num_labels) if self.num_labels > 0 else tf.keras.layers.Identity()
+        self.dist_head = tf.keras.layers.Dense(self.num_labels) if self.num_labels > 0 else tf.keras.layers.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -622,17 +615,18 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
     @add_start_docstrings_to_model_forward(SWIFTFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutputWithNoAttention,
+        output_type=TFImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        pixel_values: Optional[tf.Tensor] = None,
+        labels: Optional[tf.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
+        training: bool = False,
+    ) -> Union[tuple, TFImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -646,12 +640,13 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
             pixel_values,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         sequence_output = outputs.last_hidden_state if return_dict else outputs[0]
 
         # run classification head
-        sequence_output = self.norm(sequence_output)
+        sequence_output = self.norm(sequence_output, training=training)
         sequence_output = sequence_output.flatten(2).mean(-1)
         cls_out = self.head(sequence_output)
         distillation_out = self.dist_head(sequence_output)
@@ -663,29 +658,29 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (labels.dtype == tf.int64 or labels.dtype == tf.int32): # FIXME: is this it?
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
 
             if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
+                loss_fct = tf.keras.losses.MSE
                 if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                    loss = loss_fct(labels.squeeze(), logits.squeeze()))
                 else:
-                    loss = loss_fct(logits, labels)
+                    loss = loss_fct(labels, logits)
             elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                loss_fct = tf.keras.losses.CategoricalCrossentropy
+                loss = loss_fct(labels.view(-1), logits.view(-1, self.num_labels), from_logits=False)
             elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+                loss_fct = tf.keras.losses.CategoricalCrossentropy
+                loss = loss_fct(labels, logits, from_logits=True) # FIXME: should we use from_logits in multi_label_classification?
 
         if not return_dict:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutputWithNoAttention(
+        return TFImageClassifierOutputWithNoAttention(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
