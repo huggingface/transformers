@@ -486,7 +486,7 @@ class EfficientFormerEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (layer_output[0],)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(v for v in [layer_output[0], all_hidden_states, all_self_attentions] if v is not None)
 
         return BaseModelOutput(
             last_hidden_state=layer_output[0],
