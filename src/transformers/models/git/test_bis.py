@@ -1,6 +1,8 @@
-from transformers import AutoProcessor, AutoModelForCausalLM
 import requests
 from PIL import Image
+
+from transformers import AutoModelForCausalLM, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("microsoft/git-base-coco")
 model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-coco")

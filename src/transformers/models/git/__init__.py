@@ -34,7 +34,6 @@ else:
         "GitModel",
         "GitPreTrainedModel",
         "GitVisionModel",
-        "GitForVision2Seq",
     ]
 
 if TYPE_CHECKING:
@@ -53,7 +52,6 @@ if TYPE_CHECKING:
             GitModel,
             GitPreTrainedModel,
             GitVisionModel,
-            GitForVision2Seq,
         )
 
 else:

@@ -1556,11 +1556,3 @@ class GitForCausalLM(GitPreTrainedModel):
         for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
-
-
-class GitForVision2Seq(GitForCausalLM):
-    main_input_name = "input_ids"
-
-    def forward(self, pixel_values: torch.Tensor, **kwargs,
-    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithPast]:
-        return super().forward(pixel_values=pixel_values, **kwargs)
