@@ -15,14 +15,14 @@
 
 """Tokenization classes for SciBart."""
 import os
-from contextlib import contextmanager
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
-from transformers.tokenization_utils import AddedToken, BatchEncoding, PreTrainedTokenizer
+from transformers.tokenization_utils import AddedToken, PreTrainedTokenizer
 from transformers.utils import logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -110,7 +110,7 @@ class SciBartTokenizer(PreTrainedTokenizer):
         self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + self.fairseq_offset
 
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
-        self._additional_special_tokens = list()
+        self._additional_special_tokens = []
 
         if additional_special_tokens is not None:
             # Only add those special tokens if they are not already there.
