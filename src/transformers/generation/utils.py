@@ -753,6 +753,8 @@ class GenerationMixin:
         model_kwargs["past_key_values"] = self._extract_past_from_model_output(
             outputs, standardize_cache_format=standardize_cache_format
         )
+        if getattr(outputs, "state", None) is not None:
+            model_kwargs["state"] = outputs.state
 
         # update token_type_ids with last value
         if "token_type_ids" in model_kwargs:
@@ -1305,8 +1307,11 @@ class GenerationMixin:
 
         # decoder-only models should use left-padding for generation
         if not self.config.is_encoder_decoder:
+            # If `input_ids` was given, check if the last id in any sequence is `pad_token_id`
+            # Note: If using, `inputs_embeds` this check does not work, because we want to be more hands-off.
             if (
                 generation_config.pad_token_id is not None
+                and len(inputs_tensor.shape) == 2
                 and torch.sum(inputs_tensor[:, -1] == generation_config.pad_token_id) > 0
             ):
                 logger.warning(
@@ -4221,6 +4226,9 @@ class GenerationMixin:
         # keep track of which sequences are already finished
         unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
 
+        # other auxiliary variables
+        max_len = stopping_criteria[0].max_length
+
         this_peer_finished = False  # used by synced_gpus only
         while True:
             if synced_gpus:
@@ -4235,7 +4243,7 @@ class GenerationMixin:
 
             # Assistant: main logic start
             cur_len = input_ids.shape[-1]
-            max_len = stopping_criteria[0].max_length
+            assistant_kv_indexing = 0 if "bloom" not in assistant_model.__class__.__name__.lower() else 1
 
             #  1. Forecast next N tokens using the assistant model. This `for` block can be replaced with a
             # `.generate()` call if we decide to add `past_key_values` as a possible output of generate, as we
@@ -4244,7 +4252,7 @@ class GenerationMixin:
             for _ in range(int(assistant_model.max_assistant_tokens)):
                 # 1.1. use the assistant model to obtain the next candidate logits
                 if "assistant_past_key_values" in model_kwargs:
-                    prev_seq_len = model_kwargs["assistant_past_key_values"][0][0].shape[2]
+                    prev_seq_len = model_kwargs["assistant_past_key_values"][0][assistant_kv_indexing].shape[-2]
                     # `new_token_len` can be 1 or 2 (next token in assistant + last token picked by the larger model)
                     new_token_len = candidate_input_ids.shape[1] - prev_seq_len
                     assist_inputs = candidate_input_ids[:, -new_token_len:]
@@ -4505,6 +4513,13 @@ def _crop_past_key_values(model, past_key_values, maximum_length):
                 )
             )
         past_key_values = tuple(new_past)
+    elif "gptbigcode" in model.__class__.__name__.lower():  # gptbigcode is too
+        if model.config.multi_query:
+            for idx in range(len(past_key_values)):
+                past_key_values[idx] = past_key_values[idx][:, :maximum_length, :]
+        else:
+            for idx in range(len(past_key_values)):
+                past_key_values[idx] = past_key_values[idx][:, :, :maximum_length, :]
     else:
         for idx in range(len(past_key_values)):
             new_past.append(

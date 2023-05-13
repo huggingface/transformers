@@ -216,6 +216,79 @@ def get_modified_python_files(diff_with_last_commit=False):
         return get_diff(repo, repo.head.commit, parent_commits)
 
 
+def get_diff_for_py_and_mdx_files(repo, base_commit, commits):
+    """
+    Get's the diff between one or several commits and the head of the repository.
+    """
+    print("\n### DIFF ###\n")
+    code_diff = []
+    for commit in commits:
+        for diff_obj in commit.diff(base_commit):
+            # We always add new python files
+            if diff_obj.change_type in ["A"] and (diff_obj.b_path.endswith(".py") or diff_obj.b_path.endswith(".mdx")):
+                code_diff.append(diff_obj.b_path)
+            # Now for modified files
+            elif (
+                diff_obj.change_type in ["M", "R"]
+                and diff_obj.b_path.endswith(".py")
+                or diff_obj.b_path.endswith(".mdx")
+            ):
+                # In case of renames, we'll look at the tests using both the old and new name.
+                if diff_obj.a_path != diff_obj.b_path:
+                    code_diff.extend([diff_obj.a_path, diff_obj.b_path])
+                else:
+                    # Otherwise, we check modifications are in code and not docstrings.
+                    if diff_is_docstring_only(repo, commit, diff_obj.b_path):
+                        print(f"Ignoring diff in {diff_obj.b_path} as it only concerns docstrings or comments.")
+                    else:
+                        code_diff.append(diff_obj.a_path)
+
+    return code_diff
+
+
+def get_modified_python_and_mdx_files(diff_with_last_commit=False):
+    """
+    Return a list of python and mdx files that have been modified between:
+
+    - the current head and the main branch if `diff_with_last_commit=False` (default)
+    - the current head and its parent commit otherwise.
+    """
+    repo = Repo(PATH_TO_REPO)
+
+    if not diff_with_last_commit:
+        print(f"main is at {repo.refs.main.commit}")
+        print(f"Current head is at {repo.head.commit}")
+
+        branching_commits = repo.merge_base(repo.refs.main, repo.head)
+        for commit in branching_commits:
+            print(f"Branching commit: {commit}")
+        return get_diff_for_py_and_mdx_files(repo, repo.head.commit, branching_commits)
+    else:
+        print(f"main is at {repo.head.commit}")
+        parent_commits = repo.head.commit.parents
+        for commit in parent_commits:
+            print(f"Parent commit: {commit}")
+        return get_diff_for_py_and_mdx_files(repo, repo.head.commit, parent_commits)
+
+
+def get_doctest_files(diff_with_last_commit=False):
+    """
+    Return a list of python and mdx files that have been modified between:
+
+    - the current head and the main branch if `diff_with_last_commit=False` (default)
+    - the current head and its parent commit otherwise.
+    """
+    test_files_to_run = get_modified_python_and_mdx_files(diff_with_last_commit)
+    with open("utils/documentation_tests.txt") as fp:
+        documentation_tests = set(fp.read().strip().split("\n"))
+    # So far we don't have 100% coverage for doctest. This line will be removed once we achieve 100%.
+    test_files_to_run = [x for x in test_files_to_run if x in documentation_tests]
+    # Make sure we did not end up with a test file that was removed
+    test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
+
+    return test_files_to_run
+
+
 # (:?^|\n) -> Non-catching group for the beginning of the doc or a new line.
 # \s*from\s+(\.+\S+)\s+import\s+([^\n]+) -> Line only contains from .xxx import yyy and we catch .xxx and yyy
 # (?=\n) -> Look-ahead to a new line. We can't just put \n here or using find_all on this re will only catch every
