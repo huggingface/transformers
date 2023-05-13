@@ -38,12 +38,15 @@ else:
     _import_structure["modeling_mplug_owl"] = [
         "MPLUG_OWL_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MplugOwlForConditionalGeneration",
+        "MplugOwlVisualAbstractorModel",
+        "MplugOwlPreTrainedModel",
         "MplugOwlModel",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_mplug_owl import MPLUG_OWL_PRETRAINED_CONFIG_ARCHIVE_MAP, MplugOwlConfig
+    from .processing_mplug_owl import MplugOwlImageProcessor, MplugOwlProcessor
     from .tokenization_mplug_owl import MplugOwlTokenizer
 
     try:
@@ -63,6 +66,7 @@ if TYPE_CHECKING:
             MplugOwlForConditionalGeneration,
             MplugOwlModel,
             MplugOwlPreTrainedModel,
+            MplugOwlVisualAbstractorModel,
         )
 
 

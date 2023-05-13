@@ -60,6 +60,9 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "MplugOwlEncoder",  # Building part of bigger (tested) model.
     "MplugOwlDecoder",  # Building part of bigger (tested) model.
     "MplugOwlDecoderWrapper",  # Building part of bigger (tested) model.
+    "MplugOwlModel",
+    "MplugOwlVisionModel",
+    "MplugOwlVisualAbstractorModel",
     "NllbMoeDecoder",
     "NllbMoeEncoder",
     "LlamaDecoder",  # Building part of bigger (tested) model.
@@ -192,6 +195,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
     "MplugOwlEncoder",
     "MplugOwlDecoder",
+    "MplugOwlVisionModel",
+    "MplugOwlVisualAbstractorModel",
     "MplugOwlDecoderWrapper",
     "AlignTextModel",
     "AlignVisionModel",

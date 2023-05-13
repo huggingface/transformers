@@ -129,6 +129,7 @@ from . import (
     mobilenet_v1,
     mobilenet_v2,
     mobilevit,
+    mplug_owl,
     mpnet,
     mt5,
     mvp,

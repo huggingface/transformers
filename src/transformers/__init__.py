@@ -2070,14 +2070,7 @@ else:
             "MobileViTPreTrainedModel",
         ]
     )
-    _import_structure["models.mplug_owl"].extend(
-        [
-            "MPLUG_OWL_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MplugOwlForConditionalGeneration",
-            "MplugOwlModel",
-            "MplugOwlPreTrainedModel",
-        ]
-    )
+
     _import_structure["models.mplug_owl"].extend(
         [
             "MPLUG_OWL_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4186,7 +4179,6 @@ if TYPE_CHECKING:
         MplugOwlTokenizer,
         MplugOwlVisionConfig,
         MplugOwlVisualAbstractorConfig,
-        MplugOwlVisualAbstractorModel,
     )
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
@@ -4633,6 +4625,7 @@ if TYPE_CHECKING:
         from .models.mobilenet_v1 import MobileNetV1FeatureExtractor, MobileNetV1ImageProcessor
         from .models.mobilenet_v2 import MobileNetV2FeatureExtractor, MobileNetV2ImageProcessor
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
+        from .models.mplug_owl import MplugOwlImageProcessor, MplugOwlProcessor
         from .models.oneformer import OneFormerImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor

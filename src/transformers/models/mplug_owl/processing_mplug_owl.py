@@ -12,6 +12,19 @@ media_token = ({"image": ("<image>", 65)},)
 
 
 class MplugOwlProcessor(ProcessorMixin):
+    r"""
+    Constructs a mPLUG-Owl processor which wraps a mPLUG-Owl image processor and an mPLUG-Owl tokenizer into a single
+    processor.
+
+    [`MplugOwlProcessor`] offers all the functionalities of [`MplugOwlImageProcessor`] and [`AutoTokenizer`]. See the
+    docstring of [`~MplugOwlProcessor.__call__`] and [`~MplugOwlProcessor.decode`] for more information.
+
+    Args:
+        image_processor (`MplugOwlImageProcessor`):
+            An instance of [`MplugOwlImageProcessor`]. The image processor is a required input.
+        tokenizer (`AutoTokenizer`):
+            An instance of ['MplugOwlTokenizer`]. The tokenizer is a required input.
+    """
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "MplugOwlImageProcessor"
     tokenizer_class = "MplugOwlTokenizer"
@@ -63,6 +76,9 @@ class MplugOwlProcessor(ProcessorMixin):
 
 
 class MplugOwlImageProcessor(CLIPImageProcessor):
+    r"""
+    A warp of CLIPImageProcessor
+    """
     pass
 
 
