@@ -49,7 +49,7 @@ class SciBartTokenizer(PreTrainedTokenizer):
     Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
     [SentencePiece](https://github.com/google/sentencepiece).
     The tokenization method is `<bos> <tokens> <eos>`
-    
+
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
@@ -64,24 +64,21 @@ class SciBartTokenizer(PreTrainedTokenizer):
     suffix_tokens: List[int] = [3]
 
     def __init__(
-            self,
-            vocab_file,
-            bos_token="<s>",
-            eos_token="</s>",
-            sep_token="</s>",
-            cls_token="<s>",
-            unk_token="<unk>",
-            pad_token="<pad>",
-            mask_token="<mask>",
-            sp_model_kwargs: Optional[Dict[str, Any]] = None,
-            additional_special_tokens=None,
-            **kwargs
+        self,
+        vocab_file,
+        bos_token="<s>",
+        eos_token="</s>",
+        sep_token="</s>",
+        cls_token="<s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        mask_token="<mask>",
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        additional_special_tokens=None,
+        **kwargs,
     ):
-
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) \
-            if isinstance(mask_token, str) \
-            else mask_token
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
@@ -97,7 +94,7 @@ class SciBartTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
- 
+
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
@@ -111,7 +108,6 @@ class SciBartTokenizer(PreTrainedTokenizer):
 
         self.sp_model_size = len(self.sp_model)
         self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + self.fairseq_offset
-        
 
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
         self._additional_special_tokens = list()
@@ -132,10 +128,7 @@ class SciBartTokenizer(PreTrainedTokenizer):
         return vocab
 
     def get_special_tokens_mask(
-            self,
-            token_ids_0: List[int],
-            token_ids_1: Optional[List[int]] = None,
-            already_has_special_tokens: bool = False
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -163,7 +156,7 @@ class SciBartTokenizer(PreTrainedTokenizer):
         return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
     def create_token_type_ids_from_sequences(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. mBART does not
@@ -185,7 +178,7 @@ class SciBartTokenizer(PreTrainedTokenizer):
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
     def build_inputs_with_special_tokens(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
