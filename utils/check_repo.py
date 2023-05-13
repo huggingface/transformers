@@ -57,6 +57,9 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "MplugOwlEncoder",  # Building part of bigger (tested) model.
+    "MplugOwlDecoder",  # Building part of bigger (tested) model.
+    "MplugOwlDecoderWrapper",  # Building part of bigger (tested) model.
     "NllbMoeDecoder",
     "NllbMoeEncoder",
     "LlamaDecoder",  # Building part of bigger (tested) model.
@@ -187,6 +190,9 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "MplugOwlEncoder",
+    "MplugOwlDecoder",
+    "MplugOwlDecoderWrapper",
     "AlignTextModel",
     "AlignVisionModel",
     "ClapTextModel",
