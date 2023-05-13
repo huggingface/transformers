@@ -790,6 +790,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
+        ("git", "GitForCausalLM"),
         ("vilt", "ViltForQuestionAnswering"),
     ]
 )

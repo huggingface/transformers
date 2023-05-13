@@ -1,6 +1,7 @@
+import copy
 from typing import Union
 
-from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
+from ..utils import ExplicitEnum, add_end_docstrings, is_torch_available, is_vision_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
@@ -13,6 +14,11 @@ if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING
 
 logger = logging.get_logger(__name__)
+
+
+class ModelType(ExplicitEnum):
+    CLASSIFIER = "classifier"
+    GENERATIVE = "generative"
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
@@ -55,15 +61,22 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         super().__init__(*args, **kwargs)
         self.check_model_type(MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING)
 
-    def _sanitize_parameters(self, top_k=None, padding=None, truncation=None, **kwargs):
-        preprocess_params, postprocess_params = {}, {}
+        if self.model.config.__class__.__name__ in ["GitConfig"]:
+            self.model_type = ModelType.GENERATIVE
+        elif self.model.config.__class__.__name__ in ["ViltConfig"]:
+            self.model_type = ModelType.CLASSIFIER
+
+    def _sanitize_parameters(self, top_k=None, padding=None, truncation=None, **generate_kwargs):
+        preprocess_params, forward_params, postprocess_params = {}, {}, {}
         if padding is not None:
             preprocess_params["padding"] = padding
         if truncation is not None:
             preprocess_params["truncation"] = truncation
         if top_k is not None:
             postprocess_params["top_k"] = top_k
-        return preprocess_params, {}, postprocess_params
+            forward_params["top_k"] = top_k
+        forward_params.update(generate_kwargs)
+        return preprocess_params, forward_params, postprocess_params
 
     def __call__(self, image: Union["Image.Image", str], question: str = None, **kwargs):
         r"""
@@ -118,20 +131,56 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         model_inputs.update(image_features)
         return model_inputs
 
-    def _forward(self, model_inputs):
-        model_outputs = self.model(**model_inputs)
+    def _forward(self, model_inputs, top_k=5, **generate_kwargs):
+        if self.model_type == ModelType.GENERATIVE:
+            generate_kwargs = copy.deepcopy(generate_kwargs)
+            generate_kwargs["return_dict_in_generate"] = True
+            generate_kwargs["output_scores"] = True
+            if "num_beams" in generate_kwargs:
+                if top_k > generate_kwargs["num_beams"]:
+                    pass  # raise
+            elif top_k > 1:
+                generate_kwargs["num_beams"] = top_k
+            else:
+                # activate beam search with two beam to compute scores
+                generate_kwargs["num_beams"] = 2
+            generate_kwargs["num_return_sequences"] = top_k
+            if "max_new_tokens" not in generate_kwargs:
+                # defaulting max_new_tokens to 100
+                generate_kwargs["max_new_tokens"] = 100
+            generate_outputs = self.model.generate(**model_inputs, **generate_kwargs)
+            model_outputs = {
+                "sequences_scores": generate_outputs.sequences_scores.reshape(
+                    (model_inputs["input_ids"].shape[0], top_k)
+                ),
+                "sequences": generate_outputs.sequences.reshape((model_inputs["input_ids"].shape[0], top_k, -1)),
+            }
+        elif self.model_type == ModelType.CLASSIFIER:
+            model_outputs = self.model(**model_inputs)
         return model_outputs
 
     def postprocess(self, model_outputs, top_k=5):
         if top_k > self.model.config.num_labels:
             top_k = self.model.config.num_labels
-
         if self.framework == "pt":
-            probs = model_outputs.logits.sigmoid()[0]
-            scores, ids = probs.topk(top_k)
+            if self.model_type == ModelType.CLASSIFIER:
+                probs = model_outputs.logits.sigmoid()[0]
+                scores, ids = probs.topk(top_k)
+                ids = ids.tolist()
+                answers = [self.model.config.id2label[_id] for _id in ids]
+            elif self.model_type == ModelType.GENERATIVE:
+                scores = model_outputs["sequences_scores"][0]
+                decoded_outputs = self.tokenizer.batch_decode(model_outputs["sequences"][0], skip_special_tokens=False)
+                answers = [self.postprocess_git_output_single(o) for o in decoded_outputs]
         else:
             raise ValueError(f"Unsupported framework: {self.framework}")
-
         scores = scores.tolist()
-        ids = ids.tolist()
-        return [{"score": score, "answer": self.model.config.id2label[_id]} for score, _id in zip(scores, ids)]
+        return [{"score": score, "answer": answer} for score, answer in zip(scores, answers)]
+
+    def postprocess_git_output_single(self, decoded_output: str) -> str:
+        r"""
+        Transforms a single output of GIT model into an answer.
+
+        For example: "[CLS] what color is the bus? [SEP] blue [SEP]" returns "blue"
+        """
+        return decoded_output.split(self.tokenizer.sep_token)[1][1:-1]

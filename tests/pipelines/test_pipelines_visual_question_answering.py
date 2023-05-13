@@ -45,7 +45,9 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor):
-        vqa_pipeline = pipeline("visual-question-answering", model="hf-internal-testing/tiny-vilt-random-vqa")
+        vqa_pipeline = pipeline(
+            "visual-question-answering", model=model, tokenizer=tokenizer, image_processor=processor
+        )
         examples = [
             {
                 "image": Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
@@ -69,8 +71,24 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         )
 
     @require_torch
-    def test_small_model_pt(self):
+    def test_small_vilt_model_pt(self):
         vqa_pipeline = pipeline("visual-question-answering", model="hf-internal-testing/tiny-vilt-random-vqa")
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        question = "How many cats are there?"
+
+        outputs = vqa_pipeline(image=image, question="How many cats are there?", top_k=2)
+        self.assertEqual(
+            outputs, [{"score": ANY(float), "answer": ANY(str)}, {"score": ANY(float), "answer": ANY(str)}]
+        )
+
+        outputs = vqa_pipeline({"image": image, "question": question}, top_k=2)
+        self.assertEqual(
+            outputs, [{"score": ANY(float), "answer": ANY(str)}, {"score": ANY(float), "answer": ANY(str)}]
+        )
+
+    @require_torch
+    def test_small_git_model_pt(self):
+        vqa_pipeline = pipeline("visual-question-answering", model="hf-internal-testing/tiny-random-GitForCausalLM")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         question = "How many cats are there?"
 
@@ -86,7 +104,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
-    def test_large_model_pt(self):
+    def test_large_vilt_model_pt(self):
         vqa_pipeline = pipeline("visual-question-answering", model="dandelin/vilt-b32-finetuned-vqa")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         question = "How many cats are there?"
@@ -107,6 +125,34 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [[{"score": 0.8799, "answer": "2"}, {"score": 0.296, "answer": "1"}]] * 2,
+        )
+
+    @slow
+    @require_torch
+    def test_large_git_model_pt(self):
+        vqa_pipeline = pipeline("visual-question-answering", model="microsoft/git-base-textvqa")
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        question = "How many cats are there?"
+
+        outputs = vqa_pipeline(image=image, question=question, top_k=2)
+
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [{"score": -0.1655, "answer": "2"}, {"score": -0.2595, "answer": "3"}],
+        )
+
+        outputs = vqa_pipeline({"image": image, "question": question}, top_k=2)
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [{"score": -0.1655, "answer": "2"}, {"score": -0.2595, "answer": "3"}],
+        )
+
+        outputs = vqa_pipeline(
+            [{"image": image, "question": question}, {"image": image, "question": question}], top_k=2
+        )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [[{"score": -0.1655, "answer": "2"}, {"score": -0.2595, "answer": "3"}]] * 2,
         )
 
     @require_tf

@@ -32,7 +32,12 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, GitForCausalLM, GitModel, GitVisionModel
+    from transformers import (
+        MODEL_FOR_CAUSAL_LM_MAPPING,
+        GitForCausalLM,
+        GitModel,
+        GitVisionModel,
+    )
     from transformers.models.git.modeling_git import GIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -383,7 +388,13 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     all_model_classes = (GitModel, GitForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GitForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": GitModel, "text-generation": GitForCausalLM} if is_torch_available() else {}
+        {
+            "feature-extraction": GitModel,
+            "text-generation": GitForCausalLM,
+            "visual-question-answering": GitForCausalLM,
+        }
+        if is_torch_available()
+        else {}
     )
     fx_compatible = False
     test_torchscript = False
