@@ -149,7 +149,7 @@ def tokenize_prompts(
     return {
         "input_ids": prompts_tokens_cuda_long_tensor,
         "attention_mask": attention_mask,
-        "prompt_length": prompts_length_cuda_long_tensor,
+        # "prompt_length": prompts_length_cuda_long_tensor,
     }
 
 
