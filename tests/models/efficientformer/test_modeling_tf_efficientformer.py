@@ -20,17 +20,13 @@ import unittest
 import numpy as np
 
 from transformers import EfficientFormerConfig
-from transformers.testing_utils import require_tf, require_vision, slow
-from transformers.utils import cached_property, is_tf_available, is_torch_available, is_vision_available
-from transformers.utils.generic import ModelOutput
+from transformers.testing_utils import is_pt_tf_cross_test, require_tf, require_vision, slow
+from transformers.utils import cached_property, is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
-if is_torch_available():
-    import torch
 
 if is_tf_available():
     import tensorflow as tf
@@ -275,98 +271,9 @@ class TFEfficientFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @is_pt_tf_cross_test
     def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=0.1, name="outputs", attributes=None):
-        """Check the outputs from PyTorch and TensorFlow models are close enough. Checks are done in a recursive way.
-        In EfficientFormer there seem to be quite a bit of variability in the meta3d layer,
-        after layer scaling and drop path. Setting high tol against flakiness.
-
-        Args:
-            model_class: The class of the model that is currently testing. For example, `TFBertModel`,
-                TFBertForMaskedLM`, `TFBertForSequenceClassification`, etc. Mainly used for providing more informative
-                error messages.
-            name (`str`): The name of the output. For example, `output.hidden_states`, `output.attentions`, etc.
-            attributes (`Tuple[str]`): The names of the output's element if the output is a tuple/list with each element
-                being a named field in the output.
-        """
-
-        self.assertEqual(type(name), str)
-        if attributes is not None:
-            self.assertEqual(type(attributes), tuple, f"{name}: The argument `attributes` should be a `tuple`")
-
-        # Allow `ModelOutput` (e.g. `CLIPOutput` has `text_model_output` and `vision_model_output`).
-        if isinstance(tf_outputs, ModelOutput):
-            self.assertTrue(
-                isinstance(pt_outputs, ModelOutput),
-                f"{name}: `pt_outputs` should an instance of `ModelOutput` when `tf_outputs` is",
-            )
-
-            # Don't copy this block to model specific test file!
-            # TODO: remove this method and this line after issues are fixed
-            tf_outputs, pt_outputs = self._postprocessing_to_ignore_test_cases(tf_outputs, pt_outputs, model_class)
-
-            tf_keys = [k for k, v in tf_outputs.items() if v is not None]
-            pt_keys = [k for k, v in pt_outputs.items() if v is not None]
-
-            self.assertEqual(tf_keys, pt_keys, f"{name}: Output keys differ between TF and PyTorch")
-
-            # convert to the case of `tuple`
-            # appending each key to the current (string) `names`
-            attributes = tuple([f"{name}.{k}" for k in tf_keys])
-            self.check_pt_tf_outputs(
-                tf_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, tol=tol, name=name, attributes=attributes
-            )
-
-        # Allow `list` (e.g. `TransfoXLModelOutput.mems` is a list of tensors.)
-        elif type(tf_outputs) in [tuple, list]:
-            self.assertEqual(type(tf_outputs), type(pt_outputs), f"{name}: Output types differ between TF and PyTorch")
-            self.assertEqual(len(tf_outputs), len(pt_outputs), f"{name}: Output lengths differ between TF and PyTorch")
-
-            if attributes is not None:
-                # case 1: each output has assigned name (e.g. a tuple form of a `ModelOutput`)
-                self.assertEqual(
-                    len(attributes),
-                    len(tf_outputs),
-                    f"{name}: The tuple `names` should have the same length as `tf_outputs`",
-                )
-            else:
-                # case 2: each output has no assigned name (e.g. hidden states of each layer) -> add an index to `names`
-                attributes = tuple([f"{name}_{idx}" for idx in range(len(tf_outputs))])
-
-            for tf_output, pt_output, attr in zip(tf_outputs, pt_outputs, attributes):
-                self.check_pt_tf_outputs(tf_output, pt_output, model_class, tol=tol, name=attr)
-
-        elif isinstance(tf_outputs, tf.Tensor):
-            self.assertTrue(
-                isinstance(pt_outputs, torch.Tensor), f"{name}: `pt_outputs` should a tensor when `tf_outputs` is"
-            )
-
-            tf_outputs = tf_outputs.numpy()
-            pt_outputs = pt_outputs.detach().to("cpu").numpy()
-
-            self.assertEqual(
-                tf_outputs.shape, pt_outputs.shape, f"{name}: Output shapes differ between TF and PyTorch"
-            )
-
-            # deal with NumPy's scalars to make replacing nan values by 0 work.
-            if np.isscalar(tf_outputs):
-                tf_outputs = np.array([tf_outputs])
-                pt_outputs = np.array([pt_outputs])
-
-            tf_nans = np.isnan(tf_outputs)
-            pt_nans = np.isnan(pt_outputs)
-
-            pt_outputs[tf_nans] = 0
-            tf_outputs[tf_nans] = 0
-            pt_outputs[pt_nans] = 0
-            tf_outputs[pt_nans] = 0
-
-            max_diff = np.amax(np.abs(tf_outputs - pt_outputs))
-            self.assertLessEqual(max_diff, tol, f"{name}: Difference between torch and tf is {max_diff} (>= {tol}).")
-        else:
-            raise ValueError(
-                "`tf_outputs` should be an instance of `tf.Tensor`, a `tuple`, or an instance of `tf.Tensor`. Got"
-                f" {type(tf_outputs)} instead."
-            )
+        super().check_pt_tf_outputs(tf_outputs=tf_outputs, pt_outputs=pt_outputs, model_class=model_class, tol=tol)
 
     @unittest.skip(reason="EfficientFormer does not implement masked image modeling yet")
     def test_for_masked_image_modeling(self):
