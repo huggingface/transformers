@@ -114,10 +114,7 @@ class ImageToTextPipeline(Pipeline):
         #  parse inputs. In the Tensorflow version, `generate` raises an error if we don't use `input_ids` whereas
         #  the PyTorch version matches it with `self.model.main_input_name` or `self.model.encoder.main_input_name`
         #  in the `_prepare_model_inputs` method.
-        print("Main input name:", self.model.main_input_name)
         inputs = model_inputs.pop(self.model.main_input_name)
-        print("Inputs before generate:", inputs)
-        print("Model inputs before generate:", model_inputs)
         model_outputs = self.model.generate(inputs, **model_inputs, **generate_kwargs)
         return model_outputs
 

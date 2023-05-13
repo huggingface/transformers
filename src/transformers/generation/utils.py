@@ -504,11 +504,6 @@ class GenerationMixin:
         """
         This function extracts the model-specific `inputs` for generation.
         """
-        print("Inputs:", inputs)
-        print("Model kwargs:")
-        print("Bos token id:", bos_token_id)
-        # for k,v in inputs.items():
-        #     print(k,v.shape)
         # 1. retrieve all kwargs that are non-None or non-model input related.
         # some encoder-decoder models have different names for model and encoder
         if (
@@ -1267,7 +1262,6 @@ class GenerationMixin:
             generation_config = self.generation_config
 
         generation_config = copy.deepcopy(generation_config)
-        print("Kwargs:", kwargs)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
         generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
@@ -1343,8 +1337,6 @@ class GenerationMixin:
                 device=inputs_tensor.device,
             )
         else:
-            print("model_input_name", model_input_name)
-            print("Inputs_tensor:", inputs_tensor.shape)
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
 
         if streamer is not None:
