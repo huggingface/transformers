@@ -1047,6 +1047,9 @@ class PerSamVisionEncoder(nn.Module):
         if self.pos_embed is not None:
             hidden_states = hidden_states + self.pos_embed
 
+        print("Shape of embeddings before layers:", hidden_states.shape)
+        print("First values of embeddings before layers:", hidden_states[0, :3, :3])
+
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -1077,7 +1080,13 @@ class PerSamVisionEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
+        print("Shape of embeddings after layers:", hidden_states.shape)
+        print("First values of embeddings after layers:", hidden_states[0, :3, :3])
+
         hidden_states = self.neck(hidden_states)
+
+        print("Shape of embeddings after neck:", hidden_states.shape)
+        print("First values of embeddings after neck:", hidden_states[0, :3, :3])
 
         if not return_dict:
             outputs = (hidden_states,)
