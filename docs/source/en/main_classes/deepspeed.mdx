@@ -1700,7 +1700,7 @@ checkpoint), then you can finish the training by first saving the final model ex
 from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
 
 checkpoint_dir = os.path.join(trainer.args.output_dir, "checkpoint-final")
-trainer.model_wrapped.save_checkpoint(checkpoint_dir)
+trainer.deepspeed.save_checkpoint(checkpoint_dir)
 fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
 ```
 

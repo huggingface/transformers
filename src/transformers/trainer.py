@@ -1748,24 +1748,13 @@ class Trainer:
         if model is not self.model:
             self.model_wrapped = model
 
+        # backward compatibility
+        if self.is_deepspeed_enabled:
+            self.deepspeed = self.model_wrapped
+
         # deepspeed ckpt loading
         if resume_from_checkpoint is not None and self.is_deepspeed_enabled:
             deepspeed_load_checkpoint(self.model_wrapped, resume_from_checkpoint)
-
-        # prepare using `accelerator` prepare
-        if use_accelerator_prepare:
-            model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
-                self.model, self.optimizer, self.lr_scheduler
-            )
-        self.accelerator.print(f"{model=}\n{self.optimizer=}\n{self.lr_scheduler=}")
-        self.accelerator.print(f"{model.forward=}")
-
-        if getattr(self.accelerator.state, "fsdp_plugin", None) is not None:
-            self.model = model
-
-        # for the rest of this function `model` is the outside model, whether it was wrapped or not
-        if model is not self.model:
-            self.model_wrapped = model
 
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
@@ -3123,7 +3112,7 @@ class Trainer:
         if self.is_deepspeed_enabled and self.model_wrapped is self.model:
             _, _ = deepspeed_init(self, num_training_steps=0, inference=True)
             model = self.accelerator.prepare(self.model)
-            self.model_wrapped = model
+            self.model_wrapped = self.deepspeed = model
 
         model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
@@ -3713,7 +3702,7 @@ class Trainer:
         if self.is_deepspeed_enabled and self.model_wrapped is self.model:
             _, _ = deepspeed_init(self, num_training_steps=0, inference=True)
             model = self.accelerator.prepare(self.model)
-            self.model_wrapped = model
+            self.model_wrapped = self.deepspeed = model
 
         model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
