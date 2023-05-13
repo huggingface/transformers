@@ -147,6 +147,26 @@ class ImageToTextPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
+    def test_generation_blip(self):
+        pipe = pipeline("image-to-text", model="Salesforce/blip-image-captioning-base")
+        url = "https://huggingface.co/datasets/sayakpaul/sample-datasets/resolve/main/pokemon.png"
+        image = Image.open(requests.get(url, stream=True).raw)
+
+        outputs = pipe(image)
+        self.assertEqual(outputs, [{"generated_text": "a pink pokemon pokemon with a blue shirt and a blue shirt"}])
+
+    @slow
+    @require_torch
+    def test_generation_git(self):
+        pipe = pipeline("image-to-text", model="microsoft/git-base-coco")
+        url = "https://huggingface.co/datasets/sayakpaul/sample-datasets/resolve/main/pokemon.png"
+        image = Image.open(requests.get(url, stream=True).raw)
+
+        outputs = pipe(image)
+        self.assertEqual(outputs, [{"generated_text": "a cartoon of a purple character."}])
+
+    @slow
+    @require_torch
     def test_conditional_generation_blip(self):
         pipe = pipeline("image-to-text", model="Salesforce/blip-image-captioning-base")
         url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
