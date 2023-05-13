@@ -1197,10 +1197,10 @@ PERSAM_INPUTS_DOCSTRING = r"""
     " optional 2D location and bounding boxes.",
     PERSAM_START_DOCSTRING,
 )
-# Copied from transformers.models.sam.modeling_sam.SamModel with SAM->PERSAM,Sam->PerSam,sam->persam
 class PerSamModel(PerSamPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"prompt_encoder.shared_embedding.positional_embedding"]
 
+    # Copied from transformers.models.sam.modeling_sam.SamModel.__init__ with SAM->PERSAM,Sam->PerSam,sam->persam
     def __init__(self, config) -> None:
         super().__init__(config)
         self.shared_image_embedding = PerSamPositionalEmbedding(config.vision_config)
@@ -1211,9 +1211,11 @@ class PerSamModel(PerSamPreTrainedModel):
 
         self.post_init()
 
+    # Copied from transformers.models.sam.modeling_sam.SamModel.get_input_embeddings
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()
 
+    # Copied from transformers.models.sam.modeling_sam.SamModel.get_image_wide_positional_embeddings
     def get_image_wide_positional_embeddings(self):
         size = self.config.prompt_encoder_config.image_embedding_size
         target_device = self.shared_image_embedding.positional_embedding.device
@@ -1228,6 +1230,7 @@ class PerSamModel(PerSamPreTrainedModel):
         return positional_embedding.permute(2, 0, 1).unsqueeze(0)  # channel x height x width
 
     @torch.no_grad()
+    # Copied from transformers.models.sam.modeling_sam.SamModel.get_image_embeddings
     def get_image_embeddings(
         self,
         pixel_values,
@@ -1259,6 +1262,7 @@ class PerSamModel(PerSamPreTrainedModel):
         return image_embeddings
 
     @torch.no_grad()
+    # Copied from transformers.models.sam.modeling_sam.SamModel.get_prompt_embeddings
     def get_prompt_embeddings(
         self,
         input_points: Optional[torch.FloatTensor] = None,
@@ -1301,6 +1305,8 @@ class PerSamModel(PerSamPreTrainedModel):
         input_masks: Optional[torch.LongTensor] = None,
         image_embeddings: Optional[torch.FloatTensor] = None,
         multimask_output: bool = True,
+        attn_sim: Optional[torch.FloatTensor] = None,
+        target_embedding: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict=None,
@@ -1410,6 +1416,8 @@ class PerSamModel(PerSamPreTrainedModel):
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=multimask_output,
+            attn_sim=attn_sim,
+            target_embedding=target_embedding,
             output_attentions=output_attentions,
         )
 
