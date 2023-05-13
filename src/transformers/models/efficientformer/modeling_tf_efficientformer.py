@@ -451,7 +451,6 @@ class TFEfficientFormerMeta3D(tf.keras.layers.Layer):
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
-        layer_output = attention_output
         if self.config.use_layer_scale:
             layer_output = hidden_states + self.drop_path(
                 tf.expand_dims(tf.expand_dims(self.layer_scale_1, 0), 0) * attention_output,
@@ -656,8 +655,8 @@ class TFEfficientFormerEncoder(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         output_hidden_states: bool = None,
         output_attentions: bool = None,
-        return_dict: bool = False,
-        training: bool = False,
+        return_dict: bool = None,
+        training: bool = None,
     ) -> TFBaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -680,7 +679,7 @@ class TFEfficientFormerEncoder(tf.keras.layers.Layer):
             all_hidden_states = all_hidden_states + (layer_output[0],)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(v for v in [layer_output[0], all_hidden_states, all_self_attentions] if v is not None)
 
         return TFBaseModelOutput(
             last_hidden_state=layer_output[0],
