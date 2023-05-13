@@ -173,6 +173,7 @@ from . import (
     speecht5,
     splinter,
     squeezebert,
+    swiftformer,
     swin,
     swin2sr,
     swinv2,

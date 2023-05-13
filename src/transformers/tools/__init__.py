@@ -38,7 +38,6 @@ else:
     _import_structure["image_captioning"] = ["ImageCaptioningTool"]
     _import_structure["image_question_answering"] = ["ImageQuestionAnsweringTool"]
     _import_structure["image_segmentation"] = ["ImageSegmentationTool"]
-    _import_structure["language_identifier"] = ["LanguageIdentificationTool"]
     _import_structure["speech_to_text"] = ["SpeechToTextTool"]
     _import_structure["text_classification"] = ["TextClassificationTool"]
     _import_structure["text_question_answering"] = ["TextQuestionAnsweringTool"]
@@ -60,7 +59,6 @@ if TYPE_CHECKING:
         from .image_captioning import ImageCaptioningTool
         from .image_question_answering import ImageQuestionAnsweringTool
         from .image_segmentation import ImageSegmentationTool
-        from .language_identifier import LanguageIdentificationTool
         from .speech_to_text import SpeechToTextTool
         from .text_classification import TextClassificationTool
         from .text_question_answering import TextQuestionAnsweringTool
