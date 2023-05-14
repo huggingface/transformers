@@ -242,6 +242,14 @@ class PerSamAttention(nn.Module):
         key = self._separate_heads(key, self.num_attention_heads)
         value = self._separate_heads(value, self.num_attention_heads)
 
+        if print_values:
+            print("Shape of queries:", query.shape)
+            print("First values of queries:", query[0,0,:3,:3])
+            print("First values of keys:", key[0,0,:3,:3])
+            print("First values of values:", value[0,0,:3,:3])
+
+            print("Mean value of attn_sim:", torch.mean(attn_sim))
+
         # PerSamAttention
         _, _, _, c_per_head = query.shape
         attn = query @ key.permute(0, 1, 3, 2)  # batch_size * point_batch_size  x N_heads x N_tokens x N_tokens
