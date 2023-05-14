@@ -27,7 +27,7 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutputWithNoAttention,
     TFImageClassifierOutputWithNoAttention,
 )
-from ...modeling_tf_utils import TFPreTrainedModel
+from ...modeling_tf_utils import TFPreTrainedModel, keras_serializable
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -51,7 +51,7 @@ _IMAGE_CLASS_CHECKPOINT = "MBZUAI/swiftformer-xs"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
+TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "MBZUAI/swiftformer-xs",
     # See all SwiftFormer models at https://huggingface.co/models?filter=swiftformer
 ]
@@ -102,7 +102,7 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     argument.
     """
     if drop_prob == 0.0 or not training:
-        return input
+        return input # FIXME: shouldn't this be x?
     keep_prob = 1 - drop_prob
     shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
     random_tensor = keep_prob + tf.rand(shape, dtype=input.dtype, device=input.device)
@@ -111,7 +111,6 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Swiftformer
 class TFSwiftFormerDropPath(tf.keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
@@ -120,10 +119,7 @@ class TFSwiftFormerDropPath(tf.keras.layers.Layer):
         self.drop_prob = drop_prob
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return drop_path(hidden_states, self.drop_prob, training)
 
 
 class TFSwiftFormerEmbeddings(tf.keras.layers.Layer):
@@ -553,11 +549,8 @@ SWIFTFORMER_INPUTS_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings(
-    "The bare TFSwiftFormer Model transformer outputting raw hidden-states without any specific head on top.",
-    SWIFTFORMER_START_DOCSTRING,
-)
-class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
+@keras_serializable
+class TFSwiftFormerMainLayer(TFSwiftFormerPreTrainedModel):
     def __init__(self, config: SwiftFormerConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.config = config
@@ -621,7 +614,7 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         super().__init__(config, **kwargs)
 
         self.num_labels = config.num_labels
-        self.swiftformer = TFSwiftFormerModel(config)
+        self.swiftformer = TFSwiftFormerMainLayer(config)
 
         # Classifier head
         self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9)  # FIXME
