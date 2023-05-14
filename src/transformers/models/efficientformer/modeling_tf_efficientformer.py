@@ -653,10 +653,10 @@ class TFEfficientFormerEncoder(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        output_hidden_states: bool = None,
-        output_attentions: bool = None,
-        return_dict: bool = None,
-        training: bool = None,
+        output_hidden_states: bool,
+        output_attentions: bool,
+        return_dict: bool,
+        training: bool = False,
     ) -> TFBaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -707,7 +707,7 @@ class TFEfficientFormerMainLayer(tf.keras.layers.Layer):
         output_attentions: Optional[tf.Tensor] = None,
         output_hidden_states: Optional[tf.Tensor] = None,
         return_dict: Optional[bool] = None,
-        training: Optional[bool] = None,
+        training: bool = False,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor, ...]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
