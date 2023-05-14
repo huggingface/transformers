@@ -644,6 +644,8 @@ class PerSamMaskEmbedding(nn.Module):
         self.layer_norm2 = PerSamLayerNorm(self.mask_input_channels * 4, config.layer_norm_eps)
 
     def forward(self, masks):
+        print("Shape of masks before embedding:", masks.shape)
+
         hidden_states = self.conv1(masks)
         hidden_states = self.layer_norm1(hidden_states)
         hidden_states = self.activation(hidden_states)
@@ -652,6 +654,10 @@ class PerSamMaskEmbedding(nn.Module):
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.activation(hidden_states)
         dense_embeddings = self.conv3(hidden_states)
+
+        print("Shape of mask embedding:", dense_embeddings.shape)
+
+
         return dense_embeddings
 
 
