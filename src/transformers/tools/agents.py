@@ -499,7 +499,7 @@ class AzureOpenAiAgent(Agent):
             api_base = os.environ.get("OPENAI_API_BASE", None)
         if api_base is None:
             raise ValueError(
-                "You need an openai base url to use `OpenAIAgent`." 
+                "You need an Azure OpenAI base url to use `AzureOpenAIAgent`." 
                 "If you have one, set it in your env with `os.environ['OPENAI_API_BASE'] = https://<deployment>.openai.azure.com/"
             )
         else:
