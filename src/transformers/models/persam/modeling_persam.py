@@ -397,6 +397,7 @@ class PerSamTwoWayTransformer(nn.Module):
 
             if idx == 0:
                 print("Queries before layer 0", queries.shape)
+                print("First values of queries before layer 0", queries[0, 0, :3, :3])
 
             queries, keys, attention_outputs = layer(
                 queries=queries,
@@ -409,6 +410,7 @@ class PerSamTwoWayTransformer(nn.Module):
 
             if idx == 0:
                 print("Queries after layer 0", queries.shape)
+                print("First values of queries after layer 0", queries[0, 0, :3, :3])
 
             if output_attentions:
                 all_attentions = all_attentions + (attention_outputs,)
