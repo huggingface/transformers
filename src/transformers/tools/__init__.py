@@ -46,7 +46,7 @@ else:
     _import_structure["translation"] = ["TranslationTool"]
 
 if TYPE_CHECKING:
-        from .agents import Agent, HfAgent, OpenAiAgent, AzureOpenAiAgent
+    from .agents import Agent, HfAgent, OpenAiAgent, AzureOpenAiAgent
     from .base import PipelineTool, RemoteTool, Tool, launch_gradio_demo, load_tool
 
     try:
