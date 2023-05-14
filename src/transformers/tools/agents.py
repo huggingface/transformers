@@ -464,7 +464,7 @@ class AzureOpenAiAgent(Agent):
     ```py
     from transformers import AzureOpenAiAgent
 
-    agent = OpenAiAgent(deployment_id="text-davinci-003", api_key=xxx, api_base="https://<deployment>.openai.azure.com/", api_version="2023-03-15-preview", is_chat_model=False)
+    agent = AzureOpenAiAgent(deployment_id="text-davinci-003", api_key=xxx, api_base="https://<deployment>.openai.azure.com/", api_version="2023-03-15-preview", is_chat_model=False)
     agent.run("Is the following `text` (in Spanish) positive or negative?", text="¡Este es un API muy agradable!")
     ```
     """
