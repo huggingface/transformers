@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch SwiftFormer model. """
+""" Testing suite for the TensorFlow SwiftFormer model. """
 
 
 import copy
@@ -26,19 +26,18 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import cached_property, is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-if is_torch_available():
-    import torch
-    from torch import nn
+if is_tf_available():
+    import tensorflow as tf
 
-    from transformers import SwiftFormerForImageClassification, SwiftFormerModel
-    from transformers.models.swiftformer.modeling_swiftformer import SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import TFSwiftFormerForImageClassification, TFSwiftFormerModel
+    from transformers.models.swiftformer.modeling_tf_swiftformer import TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -47,7 +46,7 @@ if is_vision_available():
     from transformers import ViTImageProcessor
 
 
-class SwiftFormerModelTester:
+class TFSwiftFormerModelTester:
     def __init__(
         self,
         parent,
@@ -103,23 +102,20 @@ class SwiftFormerModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = SwiftFormerModel(config=config)
+        model = TFSwiftFormerModel(config=config)
         model.to(torch_device)
-        model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.embed_dims[-1], 7, 7))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
-        model = SwiftFormerForImageClassification(config)
+        model = TFSwiftFormerForImageClassification(config)
         model.to(torch_device)
-        model.eval()
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-        model = SwiftFormerForImageClassification(config)
+        model = TFSwiftFormerForImageClassification(config)
         model.to(torch_device)
-        model.eval()
 
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         result = model(pixel_values)
@@ -132,17 +128,17 @@ class SwiftFormerModelTester:
 
 
 @require_torch
-class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as SwiftFormer does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (SwiftFormerModel, SwiftFormerForImageClassification) if is_torch_available() else ()
+    all_model_classes = (TFSwiftFormerModel, TFSwiftFormerForImageClassification) if is_tf_available() else ()
 
     pipeline_model_mapping = (
-        {"feature-extraction": SwiftFormerModel, "image-classification": SwiftFormerForImageClassification}
-        if is_torch_available()
+        {"feature-extraction": TFSwiftFormerModel, "image-classification": TFSwiftFormerForImageClassification}
+        if is_tf_available()
         else {}
     )
 
@@ -153,7 +149,7 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = SwiftFormerModelTester(self)
+        self.model_tester = TFSwiftFormerModelTester(self)
         self.config_tester = ConfigTester(
             self,
             config_class=SwiftFormerConfig,
@@ -200,8 +196,8 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SwiftFormerModel.from_pretrained(model_name)
+        for model_name in TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFSwiftFormerModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
     @unittest.skip(reason="SwiftFormer does not output attentions")
@@ -212,10 +208,8 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
             model.to(torch_device)
-            model.eval()
 
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             hidden_states = outputs.hidden_states
 
@@ -227,7 +221,7 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             for i in range(len(hidden_states)):
                 self.assertEqual(
                     hidden_states[i].shape,
-                    torch.Size(
+                    tf.TensorShape(
                         [
                             self.model_tester.batch_size,
                             self.model_tester.embed_dims[i // 2],
@@ -285,23 +279,22 @@ def prepare_img():
 class SwiftFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return ViTImageProcessor.from_pretrained("MBZUAI/swiftformer-xs") if is_vision_available() else None
+        return ViTImageProcessor.from_pretrained("MBZUAI/swiftformer-xs", from_pt=True) if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = SwiftFormerForImageClassification.from_pretrained("MBZUAI/swiftformer-xs").to(torch_device)
+        model = TFSwiftFormerForImageClassification.from_pretrained("MBZUAI/swiftformer-xs", from_pt=True).to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
+        outputs = model(**inputs)
 
         # verify the logits
-        expected_shape = torch.Size((1, 1000))
+        expected_shape = tf.TensorShape((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([[-2.1703e00, 2.1107e00, -2.0811e00]])
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        expected_slice = tf.constant([[-2.1703e00, 2.1107e00, -2.0811e00]])
+        tf.debugging.assert_near(outputs.logits[0, :3], expected_slice, atol=1e-4)
