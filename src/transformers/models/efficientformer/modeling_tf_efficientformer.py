@@ -130,7 +130,7 @@ class TFEfficientFormerSelfAttention(tf.keras.layers.Layer):
         self.qkv = tf.keras.layers.Dense(
             units=hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="qkv"
         )
-        self.projection = tf.keras.layers.Dense(units=dim, name="projection")
+        self.projection = tf.keras.layers.Dense(units=dim, kernel_initializer=get_initializer(config.initializer_range), name="projection")
         self.resolution = resolution
 
     def build(self, input_shape: tf.TensorShape) -> None:
