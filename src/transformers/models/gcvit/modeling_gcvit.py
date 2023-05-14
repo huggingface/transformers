@@ -572,7 +572,6 @@ class GCViTGlobalSelfAttention(nn.Module):
         relative_position_index = relative_coords.sum(-1)
         self.register_buffer("relative_position_index", relative_position_index, persistent=False)
 
-        self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=False)
         self.value = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
 
@@ -591,11 +590,15 @@ class GCViTGlobalSelfAttention(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         batch_size, dim, num_channels = hidden_states.shape
-        mixed_query_layer = self.query(hidden_states)
+        batch_size_q_global = q_global.shape[0]
+
+        head_dim = torch.div(num_channels, self.num_attention_heads, rounding_mode='floor')
+        batch_dim_q_global = torch.div(batch_size, batch_size_q_global, rounding_mode='floor')
+        q_global = q_global.repeat(1, batch_dim_q_global, 1, 1, 1)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        query_layer =  q_global.reshape(batch_size, self.num_attention_heads, dim, head_dim)
 
         # cosine attention
         # Take the dot product between "query" and "key" to get the raw attention scores.
@@ -713,7 +716,6 @@ class GCViTWindowAttentionGlobal(nn.Module):
             window_size=window_size
             if isinstance(window_size, collections.abc.Iterable)
             else (window_size, window_size)
-            # q_global=q_global,
         )
         self.output = GCViTSelfOutput(config, dim)
         self.pruned_heads = set()
@@ -739,12 +741,12 @@ class GCViTWindowAttentionGlobal(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        q_global: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
+        output_attentions: Optional[bool] = False
     ) -> Tuple[torch.Tensor]:
-        # q_global = 
-        self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions, q_global)
+        self_outputs = self.self(hidden_states, q_global, attention_mask, head_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -780,7 +782,7 @@ class GCViTOutput(nn.Module):
 
 
 class GCViTLayer(nn.Module):
-    def __init__(self, config, dim, input_resolution, num_heads, attention, stage_norm, window_size):
+    def __init__(self, config, dim, num_heads, window_size, attention, layer_scale, input_resolution):
         super().__init__()
         self.window_size = window_size
         self.input_resolution = input_resolution
@@ -800,17 +802,13 @@ class GCViTLayer(nn.Module):
         self.output = GCViTOutput(config, dim)
 
         self.layer_scale = False
-        if config.layer_scale is not None and type(config.layer_scale) in [int, float]:
+        if layer_scale is not None and type(layer_scale) in [int, float]:
             self.layer_scale = True
-            self.gamma1 = nn.Parameter(config.layer_scale * torch.ones(dim), requires_grad=True)
-            self.gamma2 = nn.Parameter(config.layer_scale * torch.ones(dim), requires_grad=True)
+            self.gamma1 = nn.Parameter(layer_scale * torch.ones(dim), requires_grad=True)
+            self.gamma2 = nn.Parameter(layer_scale * torch.ones(dim), requires_grad=True)
         else:
             self.gamma1 = 1.0
             self.gamma2 = 1.0
-        inp_w = torch.div(input_resolution[0], self.window_size, rounding_mode='floor')
-        inp_h = torch.div(input_resolution[1], self.window_size, rounding_mode='floor')
-
-        self.num_windows = int(inp_w * inp_h)
 
     def forward(
         self,
@@ -842,7 +840,7 @@ class GCViTLayer(nn.Module):
 
 class GCViTStage(nn.Module):
     def __init__(
-        self, config, dim, input_resolution, depth, num_heads, drop_path, downsample, stage_norm, window_size=0
+        self, config, dim, num_heads, window_size, depth, drop_path, downsample, input_resolution, image_resolution
     ):
         super().__init__()
         self.config = config
@@ -852,23 +850,22 @@ class GCViTStage(nn.Module):
                 GCViTLayer(
                     config=config,
                     dim=dim,
-                    input_resolution=input_resolution,
                     num_heads=num_heads,
+                    window_size=window_size,
                     attention=GCViTWindowAttention  if (i % 2 == 0) else GCViTWindowAttentionGlobal,
-                    stage_norm=stage_norm,
-                    window_size=window_size
+                    layer_scale=config.layer_scale,
+                    input_resolution=input_resolution,
                 )
                 for i in range(depth)
             ]
         )
 
         # Reduce patch size layer
-        if downsample is not None:
-            self.downsample = GCViTReducePatchSize(dim=dim, norm_layer=nn.LayerNorm)
-        else:
-            self.downsample = None
-        
-    # Copied from transformers.models.swin.modeling_swin.SwinStage.forward
+        self.downsample= None if not downsample else GCViTReducePatchSize(dim=dim, norm_layer=nn.LayerNorm)
+
+        self.q_global_gen = GCViTGlobalQueryGen(dim, input_resolution, image_resolution, window_size, num_heads)
+
+    
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -880,7 +877,7 @@ class GCViTStage(nn.Module):
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
             layer_head_mask = head_mask[i] if head_mask is not None else None
-
+            # aquí entra a cada uno de los forward de cada GCViTLayer
             layer_outputs = layer_module(
                 hidden_states, input_dimensions, layer_head_mask, output_attentions, always_partition
             )
@@ -962,6 +959,7 @@ class GCViTGlobalQueryGen(nn.Module):
         self.dim_head = torch.div(dim, self.num_heads, rounding_mode='floor')
 
     def forward(self, x):
+        x = x.permute(0, 3, 1, 2) # B C H W
         x = self.to_q_global(x).permute(0, 2, 3, 1)
         B = x.shape[0]
         x = x.reshape(B, 1, self.N, self.num_heads, self.dim_head).permute(0, 1, 3, 2, 4)
@@ -981,15 +979,13 @@ class GCViTEncoder(nn.Module):
                 GCViTStage(
                     config=config,
                     dim=int(config.embed_dim * 2**(max(i_layer - 1, 0))),
-                    # feat_size=(feat_size[0] // 2**(max(i_layer - 1, 0)), feat_size[1] // 2**(max(i_layer - 1, 0))),
-                    input_resolution=(self.image_size[0] // (2**i_layer), self.image_size[1] // (2**i_layer)),
-                    depth=config.depths[i_layer],
                     num_heads=config.num_heads[i_layer],
-                    drop_path=dpr[i_layer],
-                    downsample= i_layer != 0,
-                    stage_norm= i_layer == self.num_layers - 1,
-                    # GCViTReducePatchSize if (i_layer == 0) else None,
                     window_size=config.window_size[i_layer],
+                    depth=config.depths[i_layer],
+                    drop_path=dpr[i_layer],
+                    downsample=(i_layer < self.num_layers - 1),
+                    input_resolution=int(2 ** (-2 - i_layer) * config.image_size),
+                    image_resolution=config.image_size
                 )
                 
                 for i_layer in range(self.num_layers)
