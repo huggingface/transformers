@@ -303,6 +303,7 @@ class PerSamTwoWayAttentionBlock(nn.Module):
         key_point_embedding: Tensor,
         attn_sim: Tensor,
         output_attentions: bool = False,
+        print_values: bool = False,
     ):
         # Self attention block
         if self.skip_first_layer_pe:
@@ -313,6 +314,9 @@ class PerSamTwoWayAttentionBlock(nn.Module):
             queries = queries + attn_out
         queries = self.layer_norm1(queries)
 
+        if print_values:
+            print("Queries before cross-attention: ", queries[0,0,:3,:3])
+
         # Cross attention block, tokens attending to image embedding
         query = queries + query_point_embedding
         key = keys + key_point_embedding
@@ -321,6 +325,9 @@ class PerSamTwoWayAttentionBlock(nn.Module):
         queries = queries + attn_out
 
         queries = self.layer_norm2(queries)
+
+        if print_values:
+            print("Queries after cross-attention: ", queries[0,0,:3,:3])
 
         # MLP block
         mlp_out = self.mlp(queries)
@@ -406,6 +413,7 @@ class PerSamTwoWayTransformer(nn.Module):
                 key_point_embedding=image_positional_embeddings,
                 attn_sim=attn_sim,
                 output_attentions=output_attentions,
+                print_values=idx == 0,
             )
 
             if idx == 0:
