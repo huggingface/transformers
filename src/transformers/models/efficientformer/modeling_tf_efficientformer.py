@@ -97,7 +97,9 @@ class TFEfficientFormerPatchEmbeddings(tf.keras.layers.Layer):
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-
+        # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
+        # So change the input format from `NCHW` to `NHWC`.
+        # shape = (batch_size, in_height, in_width, in_channels=num_channels)
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
         embeddings = self.projection(self.padding(pixel_values))
         embeddings = self.norm(embeddings, training=training)
@@ -130,7 +132,9 @@ class TFEfficientFormerSelfAttention(tf.keras.layers.Layer):
         self.qkv = tf.keras.layers.Dense(
             units=hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="qkv"
         )
-        self.projection = tf.keras.layers.Dense(units=dim, kernel_initializer=get_initializer(config.initializer_range), name="projection")
+        self.projection = tf.keras.layers.Dense(
+            units=dim, kernel_initializer=get_initializer(config.initializer_range), name="projection"
+        )
         self.resolution = resolution
 
     def build(self, input_shape: tf.TensorShape) -> None:
@@ -221,6 +225,7 @@ class TFEfficientFormerConvStem(tf.keras.layers.Layer):
         self.convolution1 = tf.keras.layers.Conv2D(
             filters=out_channels // 2, kernel_size=3, strides=2, padding="valid", name="convolution1"
         )
+        # Use same default momentum and epsilon as PyTorch equivalent for BatchNormalization
         self.batchnorm_before = tf.keras.layers.BatchNormalization(
             axis=-1, epsilon=1e-05, momentum=0.9, name="batchnorm_before"
         )
@@ -232,6 +237,7 @@ class TFEfficientFormerConvStem(tf.keras.layers.Layer):
             padding="valid",
             name="convolution2",
         )
+        # Use same default momentum and epsilon as PyTorch equivalent for BatchNormalization
         self.batchnorm_after = tf.keras.layers.BatchNormalization(
             axis=-1, epsilon=1e-05, momentum=0.9, name="batchnorm_after"
         )
@@ -242,7 +248,6 @@ class TFEfficientFormerConvStem(tf.keras.layers.Layer):
         # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
         # shape = (batch_size, in_height, in_width, in_channels=num_channels)
-
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
         features = self.batchnorm_before(self.convolution1(self.padding(pixel_values)), training=training)
         features = self.activation(features)
@@ -261,6 +266,10 @@ class TFEfficientFormerPooling(tf.keras.layers.Layer):
         self.pool = tf.keras.layers.AveragePooling2D(pool_size=pool_size, strides=1, padding="same")
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
+        # When running on CPU, `tf.keras.layers.AveragePooling2D` with "same" padding
+        # doesn't support `NCHW` == (batch, channel, height, width) format to arrive at
+        # the equivalent pooled tensor that PyTorch AvgPool2D(count_include_pad=False) does.
+        # So change the input format from `NCHW` to `NHWC`, avgpool, and then change back.
         output = tf.transpose(hidden_states, perm=(0, 2, 3, 1))
         output = self.pool(output)
         output = tf.transpose(output, perm=(0, 3, 1, 2))
@@ -333,14 +342,19 @@ class TFEfficientFormerConvMlp(tf.keras.layers.Layer):
 
         self.dropout = tf.keras.layers.Dropout(rate=drop)
 
+        # Use same default momentum and epsilon as PyTorch equivalent for BatchNormalization
         self.batchnorm_before = tf.keras.layers.BatchNormalization(
             axis=-1, epsilon=1e-05, momentum=0.9, name="batchnorm_before"
         )
+        # Use same default momentum and epsilon as PyTorch equivalent for BatchNormalization
         self.batchnorm_after = tf.keras.layers.BatchNormalization(
             axis=-1, epsilon=1e-05, momentum=0.9, name="batchnorm_after"
         )
 
     def call(self, hidden_state: tf.Tensor, training: bool = False) -> tf.Tensor:
+        # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
+        # So change the input format from `NCHW` to `NHWC`.
+        # shape = (batch_size, in_height, in_width, in_channels=num_channels)
         hidden_state = tf.transpose(hidden_state, perm=(0, 2, 3, 1))
         hidden_state = self.convolution1(hidden_state)
 
@@ -443,7 +457,6 @@ class TFEfficientFormerMeta3D(tf.keras.layers.Layer):
     def call(
         self, hidden_states: tf.Tensor, output_attentions: bool = False, training: bool = False
     ) -> Tuple[tf.Tensor]:
-
         self_attention_outputs = self.token_mixer(
             hidden_states=self.layernorm1(hidden_states, training=training),
             output_attentions=output_attentions,
@@ -491,7 +504,7 @@ class TFEfficientFormerMeta3DLayers(tf.keras.layers.Layer):
         self, hidden_states: tf.Tensor, output_attentions: bool = False, training: bool = False
     ) -> Tuple[tf.Tensor]:
         all_attention_outputs = () if output_attentions else None
-     
+
         for i, layer_module in enumerate(self.blocks):
             if isinstance(hidden_states, tuple):
                 hidden_states = hidden_states[0]
@@ -859,8 +872,8 @@ class TFEfficientFormerModel(TFEfficientFormerPreTrainedModel):
 
 @add_start_docstrings(
     """
-    EfficientFormer Model transformer with an image classification head on top (a linear layer on top of the final
-    hidden state of the [CLS] token) e.g. for ImageNet.
+    EfficientFormer Model transformer with an image classification head on top of pooled last hidden state, e.g. for
+    ImageNet.
     """,
     EFFICIENTFORMER_START_DOCSTRING,
 )

@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 
 from transformers import EfficientFormerConfig
-from transformers.testing_utils import is_pt_tf_cross_test, require_tf, require_vision, slow
+from transformers.testing_utils import require_tf, require_vision, slow
 from transformers.utils import cached_property, is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -270,10 +270,6 @@ class TFEfficientFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @is_pt_tf_cross_test
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=0.1, name="outputs", attributes=None):
-        super().check_pt_tf_outputs(tf_outputs=tf_outputs, pt_outputs=pt_outputs, model_class=model_class, tol=tol)
 
     @unittest.skip(reason="EfficientFormer does not implement masked image modeling yet")
     def test_for_masked_image_modeling(self):
