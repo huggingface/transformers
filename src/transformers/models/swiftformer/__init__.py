@@ -17,6 +17,7 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_torch_available,
+    is_tf_available,
 )
 
 
@@ -41,6 +42,19 @@ else:
         "SwiftFormerPreTrainedModel",
     ]
 
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_bert"] = [
+        "TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFSwiftFormerForImageClassification",
+        "TFSwiftFormerModel",
+        "TFSwiftFormerPreTrainedModel",
+    ]
+
 if TYPE_CHECKING:
     from .configuration_swiftformer import (
         SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -59,6 +73,18 @@ if TYPE_CHECKING:
             SwiftFormerForImageClassification,
             SwiftFormerModel,
             SwiftFormerPreTrainedModel,
+        )
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_swiftformer import (
+            TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSwiftFormerForImageClassification,
+            TFSwiftFormerModel,
+            TFSwiftFormerPreTrainedModel,
         )
 
 else:
