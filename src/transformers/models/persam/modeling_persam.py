@@ -250,6 +250,7 @@ class PerSamAttention(nn.Module):
 
         if print_values:
             print("Shape of attn before adding attn_sim: ", attn.shape)
+            print("First values of attn after adding attn_sim: ", attn[0,0,:3,:3])
 
         if attn_sim is not None:
             attn = attn + attn_sim
@@ -257,6 +258,7 @@ class PerSamAttention(nn.Module):
 
         if print_values:
             print("Shape of attn after adding attn_sim: ", attn.shape)
+            print("First values of attn after adding attn_sim: ", attn[0,0,:3,:3])
 
         # Get output
         out = attn @ value
