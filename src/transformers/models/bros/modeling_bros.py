@@ -15,8 +15,6 @@
 """ PyTorch Bros model. """
 
 
-
-
 import math
 from dataclasses import dataclass
 import os
@@ -85,14 +83,10 @@ class PositionalEmbedding1D(nn.Module):
 
         if len(seq_size) == 2:
             b1, b2 = seq_size
-            sinusoid_inp = pos_seq.view(b1, b2, 1) * self.inv_freq.view(
-                1, 1, self.demb // 2
-            )
+            sinusoid_inp = pos_seq.view(b1, b2, 1) * self.inv_freq.view(1, 1, self.demb // 2)
         elif len(seq_size) == 3:
             b1, b2, b3 = seq_size
-            sinusoid_inp = pos_seq.view(b1, b2, b3, 1) * self.inv_freq.view(
-                1, 1, 1, self.demb // 2
-            )
+            sinusoid_inp = pos_seq.view(b1, b2, b3, 1) * self.inv_freq.view(1, 1, 1, self.demb // 2)
         else:
             raise ValueError(f"Invalid seq_size={len(seq_size)}")
 
@@ -131,27 +125,17 @@ class BrosEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(
-            config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id
-        )
-        self.position_embeddings = nn.Embedding(
-            config.max_position_embeddings, config.hidden_size
-        )
-        self.token_type_embeddings = nn.Embedding(
-            config.type_vocab_size, config.hidden_size
-        )
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
+        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.position_embedding_type = getattr(
-            config, "position_embedding_type", "absolute"
-        )
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1))
-        )
+        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
         if version.parse(torch.__version__) > version.parse("1.6.0"):
             self.register_buffer(
                 "token_type_ids",
@@ -172,12 +156,8 @@ class BrosEmbeddings(nn.Module):
         else:
             raise ValueError(f"Unknown config.pe_type={config.pe_type}")
 
-        self.bbox_sinusoid_emb = PositionalEmbedding2D(
-            dim_bbox_sinusoid_emb, dim_bbox=8
-        )
-        self.bbox_projection = nn.Linear(
-            dim_bbox_sinusoid_emb, dim_bbox_projection, bias=False
-        )
+        self.bbox_sinusoid_emb = PositionalEmbedding2D(dim_bbox_sinusoid_emb, dim_bbox=8)
+        self.bbox_projection = nn.Linear(dim_bbox_sinusoid_emb, dim_bbox_projection, bias=False)
 
     def forward(
         self,
@@ -195,9 +175,7 @@ class BrosEmbeddings(nn.Module):
         seq_length = input_shape[1]
 
         if position_ids is None:
-            position_ids = self.position_ids[
-                :, past_key_values_length : seq_length + past_key_values_length
-            ]
+            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
         # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
         # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
@@ -205,14 +183,10 @@ class BrosEmbeddings(nn.Module):
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 buffered_token_type_ids = self.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(
-                    input_shape[0], seq_length
-                )
+                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
                 token_type_ids = buffered_token_type_ids_expanded
             else:
-                token_type_ids = torch.zeros(
-                    input_shape, dtype=torch.long, device=self.position_ids.device
-                )
+                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -247,9 +221,7 @@ class BrosEmbeddings(nn.Module):
 class BrosSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
-            config, "embedding_size"
-        ):
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
@@ -264,17 +236,10 @@ class BrosSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = getattr(
-            config, "position_embedding_type", "absolute"
-        )
-        if (
-            self.position_embedding_type == "relative_key"
-            or self.position_embedding_type == "relative_key_query"
-        ):
+        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(
-                2 * config.max_position_embeddings - 1, self.attention_head_size
-            )
+            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
         self.is_decoder = config.is_decoder
 
@@ -339,42 +304,21 @@ class BrosSelfAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        if (
-            self.position_embedding_type == "relative_key"
-            or self.position_embedding_type == "relative_key_query"
-        ):
+        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             seq_length = hidden_states.size()[1]
-            position_ids_l = torch.arange(
-                seq_length, dtype=torch.long, device=hidden_states.device
-            ).view(-1, 1)
-            position_ids_r = torch.arange(
-                seq_length, dtype=torch.long, device=hidden_states.device
-            ).view(1, -1)
+            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
             distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(
-                distance + self.max_position_embeddings - 1
-            )
-            positional_embedding = positional_embedding.to(
-                dtype=query_layer.dtype
-            )  # fp16 compatibility
+            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
+            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
             if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum(
-                    "bhld,lrd->bhlr", query_layer, positional_embedding
-                )
+                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
                 attention_scores = attention_scores + relative_position_scores
             elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum(
-                    "bhld,lrd->bhlr", query_layer, positional_embedding
-                )
-                relative_position_scores_key = torch.einsum(
-                    "bhrd,lrd->bhlr", key_layer, positional_embedding
-                )
-                attention_scores = (
-                    attention_scores
-                    + relative_position_scores_query
-                    + relative_position_scores_key
-                )
+                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
+                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
         # bbox positional encoding
         batch_size, n_head, seq_length, d_head = query_layer.shape
@@ -386,19 +330,13 @@ class BrosSelfAttention(nn.Module):
             head_q_pos = head_q_pos.permute([1, 2, 0, 3])
             head_k_pos = head_k_pos.permute([1, 2, 0, 3])
 
-            bbox_pos_scores_1 = torch.einsum(
-                "bnid,bnjd->bnij", (torch.mul(query_layer, head_q_pos), head_k_pos)
-            )
-            bbox_pos_scores_2 = torch.einsum(
-                "bnid,bnjd->bnij", (head_q_pos, head_k_pos)
-            )
+            bbox_pos_scores_1 = torch.einsum("bnid,bnjd->bnij", (torch.mul(query_layer, head_q_pos), head_k_pos))
+            bbox_pos_scores_2 = torch.einsum("bnid,bnjd->bnij", (head_q_pos, head_k_pos))
             bbox_pos_scores = bbox_pos_scores_1 + bbox_pos_scores_2
         elif self.pe_type == "crel":
             bbox_pos_emb = bbox_pos_emb.view(seq_length, seq_length, batch_size, d_head)
             bbox_pos_emb = bbox_pos_emb.permute([2, 0, 1, 3])
-            bbox_pos_scores = torch.einsum(
-                "bnid,bijd->bnij", (query_layer, bbox_pos_emb)
-            )
+            bbox_pos_scores = torch.einsum("bnid,bijd->bnij", (query_layer, bbox_pos_emb))
         else:
             raise ValueError(f"Unknown self.pe_type={self.pe_type}")
 
@@ -426,9 +364,7 @@ class BrosSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (
-            (context_layer, attention_probs) if output_attentions else (context_layer,)
-        )
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         if self.is_decoder:
             outputs = outputs + (past_key_value,)
@@ -474,9 +410,7 @@ class BrosAttention(nn.Module):
 
         # Update hyper params and store pruned heads
         self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = (
-            self.self.attention_head_size * self.self.num_attention_heads
-        )
+        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
@@ -501,9 +435,7 @@ class BrosAttention(nn.Module):
             bbox_pos_emb=bbox_pos_emb,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[
-            1:
-        ]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
 
@@ -545,9 +477,7 @@ class BrosLayer(nn.Module):
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
-            assert (
-                self.is_decoder
-            ), f"{self} should be used as a decoder model if cross attention is added"
+            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
             self.crossattention = BrosAttention(config)
         self.intermediate = BrosIntermediate(config)
         self.output = BrosOutput(config)
@@ -564,9 +494,7 @@ class BrosLayer(nn.Module):
         bbox_pos_emb=None,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = (
-            past_key_value[:2] if past_key_value is not None else None
-        )
+        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
@@ -582,9 +510,7 @@ class BrosLayer(nn.Module):
             outputs = self_attention_outputs[1:-1]
             present_key_value = self_attention_outputs[-1]
         else:
-            outputs = self_attention_outputs[
-                1:
-            ]  # add self attentions if we output attention weights
+            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
@@ -593,9 +519,7 @@ class BrosLayer(nn.Module):
             ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = (
-                past_key_value[-2:] if past_key_value is not None else None
-            )
+            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
@@ -606,9 +530,7 @@ class BrosLayer(nn.Module):
                 output_attentions,
             )
             attention_output = cross_attention_outputs[0]
-            outputs = (
-                outputs + cross_attention_outputs[1:-1]
-            )  # add cross attentions if we output attention weights
+            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
 
             # add cross-attn cache to positions 3,4 of present_key_value tuple
             cross_attn_present_key_value = cross_attention_outputs[-1]
@@ -638,9 +560,7 @@ class BrosEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList(
-            [BrosLayer(config) for _ in range(config.num_hidden_layers)]
-        )
+        self.layer = nn.ModuleList([BrosLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(
         self,
@@ -658,9 +578,7 @@ class BrosEncoder(nn.Module):
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = (
-            () if output_attentions and self.config.add_cross_attention else None
-        )
+        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
@@ -994,9 +912,7 @@ class BrosModel(BrosPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(
-        BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length")
-    )
+    @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1040,19 +956,11 @@ class BrosModel(BrosPreTrainedModel):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
             decoding (see :obj:`past_key_values`).
         """
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -1060,9 +968,7 @@ class BrosModel(BrosPreTrainedModel):
             use_cache = False
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time"
-            )
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
@@ -1074,9 +980,7 @@ class BrosModel(BrosPreTrainedModel):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # past_key_values_length
-        past_key_values_length = (
-            past_key_values[0][0].shape[2] if past_key_values is not None else 0
-        )
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=device)
@@ -1084,20 +988,14 @@ class BrosModel(BrosPreTrainedModel):
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):
                 buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(
-                    batch_size, seq_length
-                )
+                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
                 token_type_ids = buffered_token_type_ids_expanded
             else:
-                token_type_ids = torch.zeros(
-                    input_shape, dtype=torch.long, device=device
-                )
+                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            attention_mask, input_shape, device
-        )
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -1110,9 +1008,7 @@ class BrosModel(BrosPreTrainedModel):
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(
-                encoder_attention_mask
-            )
+            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
 
@@ -1132,9 +1028,7 @@ class BrosModel(BrosPreTrainedModel):
         )
 
         scaled_bbox = bbox * self.config.bbox_scale
-        bbox_pos_emb = self.embeddings.calc_bbox_pos_emb(
-            scaled_bbox, self.config.pe_type
-        )
+        bbox_pos_emb = self.embeddings.calc_bbox_pos_emb(scaled_bbox, self.config.pe_type)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -1150,9 +1044,7 @@ class BrosModel(BrosPreTrainedModel):
             bbox_pos_emb=bbox_pos_emb,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = (
-            self.pooler(sequence_output) if self.pooler is not None else None
-        )
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -1189,12 +1081,8 @@ class BrosForPreTraining(BrosPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(
-        BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length")
-    )
-    @replace_return_docstrings(
-        output_type=BrosForPreTrainingOutput, config_class=_CONFIG_FOR_DOC
-    )
+    @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=BrosForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1239,9 +1127,7 @@ class BrosForPreTraining(BrosPreTrainedModel):
             >>> prediction_logits = outputs.prediction_logits
             >>> seq_relationship_logits = outputs.seq_relationship_logits
         """
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bros(
             input_ids,
@@ -1256,19 +1142,13 @@ class BrosForPreTraining(BrosPreTrainedModel):
         )
 
         sequence_output, pooled_output = outputs[:2]
-        prediction_scores, seq_relationship_score = self.cls(
-            sequence_output, pooled_output
-        )
+        prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
 
         total_loss = None
         if labels is not None and next_sentence_label is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(
-                prediction_scores.view(-1, self.config.vocab_size), labels.view(-1)
-            )
-            next_sentence_loss = loss_fct(
-                seq_relationship_score.view(-1, 2), next_sentence_label.view(-1)
-            )
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
             total_loss = masked_lm_loss + next_sentence_loss
 
         if not return_dict:
@@ -1297,9 +1177,7 @@ class BrosLMHeadModel(BrosPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning(
-                "If you want to use `BrosLMHeadModel` as a standalone, add `is_decoder=True.`"
-            )
+            logger.warning("If you want to use `BrosLMHeadModel` as a standalone, add `is_decoder=True.`")
 
         self.bros = BrosModel(config, add_pooling_layer=False)
         self.cls = BrosOnlyMLMHead(config)
@@ -1312,12 +1190,8 @@ class BrosLMHeadModel(BrosPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(
-        BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length")
-    )
-    @replace_return_docstrings(
-        output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC
-    )
+    @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1376,9 +1250,7 @@ class BrosLMHeadModel(BrosPreTrainedModel):
 
             >>> prediction_logits = outputs.logits
         """
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
             use_cache = False
 
@@ -1425,9 +1297,7 @@ class BrosLMHeadModel(BrosPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self, input_ids, past=None, attention_mask=None, **model_kwargs
-    ):
+    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
@@ -1446,17 +1316,11 @@ class BrosLMHeadModel(BrosPreTrainedModel):
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
         for layer_past in past:
-            reordered_past += (
-                tuple(
-                    past_state.index_select(0, beam_idx) for past_state in layer_past
-                ),
-            )
+            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 
 
-@add_start_docstrings(
-    """Bert Model with a `language modeling` head on top. """, BROS_START_DOCSTRING
-)
+@add_start_docstrings("""Bert Model with a `language modeling` head on top. """, BROS_START_DOCSTRING)
 class BrosForMaskedLM(BrosPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1482,9 +1346,7 @@ class BrosForMaskedLM(BrosPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(
-        BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length")
-    )
+    @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1513,9 +1375,7 @@ class BrosForMaskedLM(BrosPreTrainedModel):
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         """
 
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bros(
             input_ids,
@@ -1537,15 +1397,11 @@ class BrosForMaskedLM(BrosPreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
-            masked_lm_loss = loss_fct(
-                prediction_scores.view(-1, self.config.vocab_size), labels.view(-1)
-            )
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
-            return (
-                ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-            )
+            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -1554,16 +1410,12 @@ class BrosForMaskedLM(BrosPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self, input_ids, attention_mask=None, **model_kwargs
-    ):
+    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         effective_batch_size = input_shape[0]
 
         #  add a dummy token
-        assert (
-            self.config.pad_token_id is not None
-        ), "The PAD token should be defined for generation"
+        assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
         attention_mask = torch.cat(
             [attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))],
             dim=-1,
@@ -1594,18 +1446,14 @@ class BrosForSequenceClassification(BrosPreTrainedModel):
 
         self.bros = BrosModel(config)
         classifier_dropout = (
-            config.classifier_dropout
-            if config.classifier_dropout is not None
-            else config.hidden_dropout_prob
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(
-        BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length")
-    )
+    @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1631,9 +1479,7 @@ class BrosForSequenceClassification(BrosPreTrainedModel):
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bros(
             input_ids,
@@ -1657,9 +1503,7 @@ class BrosForSequenceClassification(BrosPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (
-                    labels.dtype == torch.long or labels.dtype == torch.int
-                ):
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -1704,15 +1548,15 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.bros = BrosModel(config, add_pooling_layer=False)
-        classifier_dropout = config.classifier_dropout if hasattr(config, 'classifier_dropout') else config.hidden_dropout_prob
+        classifier_dropout = (
+            config.classifier_dropout if hasattr(config, "classifier_dropout") else config.hidden_dropout_prob
+        )
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(
-        BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length")
-    )
+    @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1738,9 +1582,7 @@ class BrosForTokenClassification(BrosPreTrainedModel):
             Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
             1]``.
         """
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bros(
             input_ids,
