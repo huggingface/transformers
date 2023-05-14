@@ -147,14 +147,8 @@ class BrosEmbeddings(nn.Module):
                 persistent=False,
             )
 
-        if config.pe_type == "pdpdq_ws":
-            dim_bbox_sinusoid_emb = config.hidden_size
-            dim_bbox_projection = config.hidden_size
-        elif config.pe_type == "crel":
-            dim_bbox_sinusoid_emb = config.hidden_size // 4
-            dim_bbox_projection = config.hidden_size // config.num_attention_heads
-        else:
-            raise ValueError(f"Unknown config.pe_type={config.pe_type}")
+        dim_bbox_sinusoid_emb = config.hidden_size // 4
+        dim_bbox_projection = config.hidden_size // config.num_attention_heads
 
         self.bbox_sinusoid_emb = PositionalEmbedding2D(dim_bbox_sinusoid_emb, dim_bbox=8)
         self.bbox_projection = nn.Linear(dim_bbox_sinusoid_emb, dim_bbox_projection, bias=False)
@@ -200,18 +194,10 @@ class BrosEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings
 
-    def calc_bbox_pos_emb(self, bbox, pe_type):
+    def calc_bbox_pos_emb(self, bbox):
         # bbox_t: [seq_length, batch_size, dim_bbox]
         bbox_t = bbox.transpose(0, 1)
-
-        if pe_type == "pdpdq_ws":
-            bbox_pos = bbox_t
-        elif pe_type == "crel":
-            # bbox_pos: [seq_length, seq_length, batch_size, dim_bbox]
-            bbox_pos = bbox_t[None, :, :, :] - bbox_t[:, None, :, :]
-        else:
-            raise ValueError(f"Unknown pe_type={pe_type}")
-
+        bbox_pos = bbox_t[None, :, :, :] - bbox_t[:, None, :, :]
         bbox_pos_emb = self.bbox_sinusoid_emb(bbox_pos)
         bbox_pos_emb = self.bbox_projection(bbox_pos_emb)
 
@@ -242,8 +228,6 @@ class BrosSelfAttention(nn.Module):
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
         self.is_decoder = config.is_decoder
-
-        self.pe_type = config.pe_type
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (
@@ -322,23 +306,9 @@ class BrosSelfAttention(nn.Module):
 
         # bbox positional encoding
         batch_size, n_head, seq_length, d_head = query_layer.shape
-        if self.pe_type == "pdpdq_ws":
-            head_q_pos = self.query(bbox_pos_emb)
-            head_k_pos = self.key(bbox_pos_emb)
-            head_q_pos = head_q_pos.view(seq_length, batch_size, n_head, d_head)
-            head_k_pos = head_k_pos.view(seq_length, batch_size, n_head, d_head)
-            head_q_pos = head_q_pos.permute([1, 2, 0, 3])
-            head_k_pos = head_k_pos.permute([1, 2, 0, 3])
-
-            bbox_pos_scores_1 = torch.einsum("bnid,bnjd->bnij", (torch.mul(query_layer, head_q_pos), head_k_pos))
-            bbox_pos_scores_2 = torch.einsum("bnid,bnjd->bnij", (head_q_pos, head_k_pos))
-            bbox_pos_scores = bbox_pos_scores_1 + bbox_pos_scores_2
-        elif self.pe_type == "crel":
-            bbox_pos_emb = bbox_pos_emb.view(seq_length, seq_length, batch_size, d_head)
-            bbox_pos_emb = bbox_pos_emb.permute([2, 0, 1, 3])
-            bbox_pos_scores = torch.einsum("bnid,bijd->bnij", (query_layer, bbox_pos_emb))
-        else:
-            raise ValueError(f"Unknown self.pe_type={self.pe_type}")
+        bbox_pos_emb = bbox_pos_emb.view(seq_length, seq_length, batch_size, d_head)
+        bbox_pos_emb = bbox_pos_emb.permute([2, 0, 1, 3])
+        bbox_pos_scores = torch.einsum("bnid,bijd->bnij", (query_layer, bbox_pos_emb))
 
         attention_scores = attention_scores + bbox_pos_scores
 
@@ -1028,7 +998,7 @@ class BrosModel(BrosPreTrainedModel):
         )
 
         scaled_bbox = bbox * self.config.bbox_scale
-        bbox_pos_emb = self.embeddings.calc_bbox_pos_emb(scaled_bbox, self.config.pe_type)
+        bbox_pos_emb = self.embeddings.calc_bbox_pos_emb(scaled_bbox)
 
         encoder_outputs = self.encoder(
             embedding_output,
