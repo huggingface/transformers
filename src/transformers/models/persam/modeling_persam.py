@@ -248,7 +248,8 @@ class PerSamAttention(nn.Module):
             print("First values of keys:", key[0,0,:3,:3])
             print("First values of values:", value[0,0,:3,:3])
 
-            print("Mean value of attn_sim:", torch.mean(attn_sim))
+            if attn_sim is not None:
+                print("Mean value of attn_sim:", torch.mean(attn_sim))
 
         # PerSamAttention
         _, _, _, c_per_head = query.shape
