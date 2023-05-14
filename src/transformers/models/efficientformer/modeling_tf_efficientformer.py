@@ -698,7 +698,7 @@ class TFEfficientFormerMainLayer(tf.keras.layers.Layer):
 
         self.patch_embed = TFEfficientFormerConvStem(config, config.hidden_sizes[0], name="patch_embed")
         self.encoder = TFEfficientFormerEncoder(config, name="encoder")
-        self.layernorm = tf.keras.layers.LayerNormalization(axis=2, epsilon=config.layer_norm_eps, name="layernorm")
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
 
     @unpack_inputs
     def call(
