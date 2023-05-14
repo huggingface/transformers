@@ -1411,7 +1411,9 @@ class PerSamModel(PerSamPreTrainedModel):
         )
 
         print("Shape of sparse_embeddings:", sparse_embeddings.shape)
+        print("First values of sparse embeddings:", sparse_embeddings[0, 0, :3, :3])
         print("Shape of dense_embeddings:", dense_embeddings.shape)
+        print("First values of dense embeddings:", dense_embeddings[0, 0, :3, :3])
 
         low_res_masks, iou_predictions, mask_decoder_attentions = self.mask_decoder(
             image_embeddings=image_embeddings,
