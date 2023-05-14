@@ -27,7 +27,11 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutputWithNoAttention,
     TFImageClassifierOutputWithNoAttention,
 )
-from ...modeling_tf_utils import TFPreTrainedModel, keras_serializable
+from ...modeling_tf_utils import (
+    TFPreTrainedModel,
+    keras_serializable,
+    unpack_inputs,
+)
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -102,7 +106,7 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     argument.
     """
     if drop_prob == 0.0 or not training:
-        return input # FIXME: shouldn't this be x?
+        return input  # FIXME: shouldn't this be x?
     keep_prob = 1 - drop_prob
     shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
     random_tensor = keep_prob + tf.rand(shape, dtype=input.dtype, device=input.device)
@@ -600,6 +604,68 @@ class TFSwiftFormerMainLayer(TFSwiftFormerPreTrainedModel):
         return TFBaseModelOutputWithNoAttention(
             last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
+        )
+
+
+@add_start_docstrings(
+    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
+    SWIFTFORMER_START_DOCSTRING,
+)
+class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
+    def __init__(self, config: SwiftFormerConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.swiftofrmer = TFSwiftFormerMainLayer(config, name="swiftformer")
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(SWIFTFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TFBaseModelOutputWithNoAttention,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(
+        self,
+        pixel_values: Optional[tf.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
+    ) -> Union[TFBaseModelOutputWithNoAttention, Tuple[tf.Tensor]]:
+        # TODO: docstring
+        r"""
+        encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
+        encoder_attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
+            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`). Set to `False` during training, `True` during generation
+        """
+        outputs = self.swiftofrmer(
+            pixel_values=pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+        return outputs
+
+    def serving_output(self, output: TFBaseModelOutputWithNoAttention) -> TFBaseModelOutputWithNoAttention:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+
+        return TFBaseModelOutputWithNoAttention(
+            last_hidden_state=output.last_hidden_state,
+            hidden_states=hs,
         )
 
 
