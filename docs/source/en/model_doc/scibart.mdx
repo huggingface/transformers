@@ -24,9 +24,12 @@ Example of using SciBart:
 >>> from transformers import Bart, AutoTokenizer
 
 >>> from transformers import BartForConditionalGeneration, AutoTokenizer
->>> tokenizer = AutoTokenizer.from_pretrained('uclanlp/scibart-large')
->>> model = BartForConditionalGeneration.from_pretrained('uclanlp/scibart-large')
->>> tokenizer.batch_decode(model.generate(**tokenizer('This is an example of a <mask> computer.', return_tensors='pt')))
+
+>>> tokenizer = AutoTokenizer.from_pretrained("uclanlp/scibart-large")
+>>> model = BartForConditionalGeneration.from_pretrained("uclanlp/scibart-large")
+>>> tokenizer.batch_decode(
+...     model.generate(**tokenizer("This is an example of a <mask> computer.", return_tensors="pt"))
+... )
 ['<s><s> This is an example of a small, low-cost, low power computer.</s>']
 ```
 

@@ -45,10 +45,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class SciBartTokenizer(PreTrainedTokenizer):
     """
-    Construct an SciBART tokenizer.
-    Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
-    [SentencePiece](https://github.com/google/sentencepiece).
-    The tokenization method is `<bos> <tokens> <eos>`
+    Construct an SciBART tokenizer. Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
+    [SentencePiece](https://github.com/google/sentencepiece). The tokenization method is `<bos> <tokens> <eos>`
 
     Args:
         vocab_file (`str`):
@@ -131,9 +129,9 @@ class SciBartTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
+        Args:
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
-        Args:
             token_ids_0 (`List[int]`):
                 List of IDs.
             token_ids_1 (`List[int]`, *optional*):
@@ -159,9 +157,9 @@ class SciBartTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
+        Args:
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. mBART does not
         make use of token type ids, therefore a list of zeros is returned.
-        Args:
             token_ids_0 (`List[int]`):
                 List of IDs.
             token_ids_1 (`List[int]`, *optional*):
