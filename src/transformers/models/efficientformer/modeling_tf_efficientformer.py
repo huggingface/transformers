@@ -836,7 +836,7 @@ class TFEfficientFormerModel(TFEfficientFormerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: Optional[bool] = None,
+        training: bool = False,
     ) -> Union[Tuple, TFBaseModelOutput]:
         outputs = self.efficientformer(
             pixel_values=pixel_values,
@@ -891,7 +891,7 @@ class TFEfficientFormerForImageClassification(TFEfficientFormerPreTrainedModel, 
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: Optional[bool] = None,
+        training: bool = False,
     ) -> Union[tf.Tensor, TFImageClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1006,7 +1006,7 @@ class TFEfficientFormerForImageClassificationWithTeacher(TFEfficientFormerPreTra
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: Optional[bool] = None,
+        training: bool = False,
     ) -> Union[tuple, TFEfficientFormerForImageClassificationWithTeacherOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
