@@ -391,9 +391,13 @@ class PerSamTwoWayTransformer(nn.Module):
         keys = image_embeddings
 
         # Apply transformer blocks and final layernorm
-        for layer in self.layers:
+        for idx, layer in enumerate(self.layers):
             if target_embedding is not None:
                 queries += target_embedding
+
+            if idx == 0:
+                print("Queries before layer 0", queries.shape)
+
             queries, keys, attention_outputs = layer(
                 queries=queries,
                 keys=keys,
@@ -402,6 +406,9 @@ class PerSamTwoWayTransformer(nn.Module):
                 attn_sim=attn_sim,
                 output_attentions=output_attentions,
             )
+
+            if idx == 0:
+                print("Queries after layer 0", queries.shape)
 
             if output_attentions:
                 all_attentions = all_attentions + (attention_outputs,)
