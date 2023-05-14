@@ -247,8 +247,8 @@ class Pop2PianoLayerFF(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.t5.modeling_t5.T5Attention with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoAttention(nn.Module):
-    # Copied from transformers.models.t5.modeling_t5.T5Attention.__init__ with T5->Pop2Piano,t5->pop2piano
     def __init__(self, config: Pop2PianoConfig, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -272,7 +272,6 @@ class Pop2PianoAttention(nn.Module):
         self.pruned_heads = set()
         self.gradient_checkpointing = False
 
-    # Copied from transformers.models.t5.modeling_t5.T5Attention.prune_heads with T5->Pop2Piano,t5->pop2piano
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
@@ -290,7 +289,6 @@ class Pop2PianoAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     @staticmethod
-    # Copied from transformers.models.t5.modeling_t5.T5Attention._relative_position_bucket with T5->Pop2Piano,t5->pop2piano
     def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
         """
         Adapted from Mesh Tensorflow:
@@ -338,7 +336,6 @@ class Pop2PianoAttention(nn.Module):
         relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
         return relative_buckets
 
-    # Copied from transformers.models.t5.modeling_t5.T5Attention.compute_bias with T5->Pop2Piano,t5->pop2piano
     def compute_bias(self, query_length, key_length, device=None):
         """Compute binned relative position bias"""
         if device is None:
