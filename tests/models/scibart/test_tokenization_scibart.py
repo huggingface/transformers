@@ -14,9 +14,10 @@
 
 
 import os
+import shutil
 import unittest
 
-from transformers.models.scibart.tokenization_scibart import VOCAB_FILES_NAMES, SciBartTokenizer
+from transformers.models.scibart.tokenization_scibart import SciBartTokenizer
 from transformers.testing_utils import get_tests_dir
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -34,29 +35,39 @@ class SciBartTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         vocab = ["▁This", "▁is", "▁a", "▁t", "est"]
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
+        dict(zip(vocab, range(len(vocab))))
         self.special_tokens_map = {"unk_token": "<unk>"}
 
         tokenizer = SciBartTokenizer(SAMPLE_VOCAB, **self.special_tokens_map)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(os.path.join(self.tmpdirname, "scibart_tokenizer"))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
-        return SciBartTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_input_output_texts(self, tokenizer):
-        input_text = "This is a là test"
-        output_text = "This is a<unk><unk> test"
-        return input_text, output_text
+        return SciBartTokenizer.from_pretrained(os.path.join(self.tmpdirname, "scibart_tokenizer"), **kwargs)
 
     def test_full_tokenizer(self):
-        tokenizer = SciBartTokenizer(SAMPLE_VOCAB, **self.special_tokens_map)
-        
-        text = "This is a là test"
-        bpe_tokens = "▁This ▁is ▁a ▁l à ▁t est".split()
+        tokenizer = SciBartTokenizer.from_pretrained("uclanlp/scibart-base")
+
+        text = "This paper proposes an <mask> for keyphrase generation."
+        bpe_tokens = [
+            "▁This",
+            "▁paper",
+            "▁proposes",
+            "▁an",
+            "<mask>",
+            "▁for",
+            "▁key",
+            "ph",
+            "rase",
+            "▁generation",
+            ".",
+        ]
         tokens = tokenizer.tokenize(text)
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens + [tokenizer.unk_token]
-        input_bpe_tokens = [4, 5, 6, 3, 3, 7, 8, 3]
+        input_bpe_tokens = [330, 521, 5703, 91, 30001, 72, 1840, 190, 15681, 2740, 29912, 0]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
