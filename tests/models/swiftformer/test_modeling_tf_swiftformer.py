@@ -21,7 +21,7 @@ import unittest
 
 from transformers import PretrainedConfig, SwiftFormerConfig
 from transformers.testing_utils import (
-    require_torch,
+    require_tf,
     require_vision,
     slow,
     torch_device,
@@ -127,7 +127,7 @@ class TFSwiftFormerModelTester:
         return config, inputs_dict
 
 
-@require_torch
+@require_tf
 class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as SwiftFormer does not use input_ids, inputs_embeds,
@@ -274,7 +274,7 @@ def prepare_img():
     return image
 
 
-@require_torch
+@require_tf
 @require_vision
 class SwiftFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
