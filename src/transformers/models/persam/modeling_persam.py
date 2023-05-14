@@ -230,7 +230,7 @@ class PerSamAttention(nn.Module):
         hidden_states = hidden_states.transpose(1, 2)
         return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, attn_sim: Tensor = None) -> Tensor:
+    def forward(self, query: Tensor, key: Tensor, value: Tensor, attn_sim: Tensor = None, print_values = False) -> Tensor:
         # Input projections
         query = self.q_proj(query)
         key = self.k_proj(key)
@@ -248,9 +248,15 @@ class PerSamAttention(nn.Module):
         attn = attn / math.sqrt(c_per_head)
         attn = torch.softmax(attn, dim=-1)
 
+        if print_values:
+            print("Shape of attn before adding attn_sim: ", attn.shape)
+
         if attn_sim is not None:
             attn = attn + attn_sim
             attn = torch.softmax(attn, dim=-1)
+
+        if print_values:
+            print("Shape of attn after adding attn_sim: ", attn.shape)
 
         # Get output
         out = attn @ value
@@ -321,7 +327,7 @@ class PerSamTwoWayAttentionBlock(nn.Module):
         query = queries + query_point_embedding
         key = keys + key_point_embedding
 
-        attn_out = self.cross_attn_token_to_image(query=query, key=key, value=keys, attn_sim=attn_sim)
+        attn_out = self.cross_attn_token_to_image(query=query, key=key, value=keys, attn_sim=attn_sim, print_values=print_values)
         queries = queries + attn_out
 
         queries = self.layer_norm2(queries)
