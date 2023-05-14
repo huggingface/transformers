@@ -978,13 +978,10 @@ else:
     _import_structure["models.bros"].extend(
         [
             "BROS_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "BrosForMaskedLM",
-            "BrosForPreTraining",
+            "BrosPreTrainedModel",
+            "BrosModel",
             "BrosForSequenceClassification",
             "BrosForTokenClassification",
-            "BrosModel",
-            "BrosLMHeadModel",
-            "BrosPreTrainedModel",
         ]
     )
     _import_structure["models.albert"].extend(
@@ -4704,13 +4701,10 @@ if TYPE_CHECKING:
 
         from .models.bros import (
             BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BrosForMaskedLM,
-            BrosForPreTraining,
+            BrosPreTrainedModel,
+            BrosModel,
             BrosForSequenceClassification,
             BrosForTokenClassification,
-            BrosLMHeadModel,
-            BrosModel,
-            BrosPreTrainedModel,
         )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

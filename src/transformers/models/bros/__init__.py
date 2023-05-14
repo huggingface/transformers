@@ -40,13 +40,10 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_bros"] = [
         "BROS_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "BrosForMaskedLM",
-        "BrosForPreTraining",
+        "BrosPreTrainedModel",
+        "BrosModel",
         "BrosForSequenceClassification",
         "BrosForTokenClassification",
-        "BrosModel",
-        "BrosLMHeadModel",
-        "BrosPreTrainedModel",
     ]
 
 
@@ -72,13 +69,10 @@ if TYPE_CHECKING:
     else:
         from .modeling_bros import (
             BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BrosForMaskedLM,
-            BrosForPreTraining,
+            BrosPreTrainedModel,
+            BrosModel,
             BrosForSequenceClassification,
             BrosForTokenClassification,
-            BrosLMHeadModel,
-            BrosModel,
-            BrosPreTrainedModel,
         )
 
 
