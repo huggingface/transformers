@@ -979,15 +979,12 @@ else:
         [
             "BROS_PRETRAINED_MODEL_ARCHIVE_LIST",
             "BrosForMaskedLM",
-            "BrosForCausalLM",
-            "BrosForMultipleChoice",
-            "BrosForQuestionAnswering",
+            "BrosForPreTraining",
             "BrosForSequenceClassification",
             "BrosForTokenClassification",
-            "BrosLayer",
             "BrosModel",
+            "BrosLMHeadModel",
             "BrosPreTrainedModel",
-            "load_tf_weights_in_bros",
         ]
     )
     _import_structure["models.albert"].extend(
@@ -4708,15 +4705,12 @@ if TYPE_CHECKING:
         from .models.bros import (
             BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
             BrosForMaskedLM,
-            BrosForCausalLM,
-            BrosForMultipleChoice,
-            BrosForQuestionAnswering,
+            BrosForPreTraining,
             BrosForSequenceClassification,
             BrosForTokenClassification,
-            BrosLayer,
+            BrosLMHeadModel,
             BrosModel,
             BrosPreTrainedModel,
-            load_tf_weights_in_bros,
         )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

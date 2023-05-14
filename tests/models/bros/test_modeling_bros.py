@@ -30,13 +30,13 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        BrosForCausalLM,
         BrosForMaskedLM,
-        BrosForMultipleChoice,
-        BrosForQuestionAnswering,
+        BrosForPreTraining,
         BrosForSequenceClassification,
         BrosForTokenClassification,
         BrosModel,
+        BrosLMHeadModel,
+        BrosPreTrainedModel,
     )
     from transformers.models.bros.modeling_bros import (
         BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -364,18 +364,18 @@ class BrosModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            BrosModel,
             BrosForMaskedLM,
-            BrosForCausalLM,
-            BrosForMultipleChoice,
-            BrosForQuestionAnswering,
+            BrosForPreTraining,
             BrosForSequenceClassification,
             BrosForTokenClassification,
+            BrosModel,
+            BrosLMHeadModel,
+            BrosPreTrainedModel,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (BrosForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (BrosLMHeadModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = BrosModelTester(self)
