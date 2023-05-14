@@ -301,8 +301,10 @@ class EfficientFormerMeta3D(nn.Module):
             attention_ratio=config.attention_ratio,
             resolution=config.resolution,
         )
-        self.layernorm1 = nn.LayerNorm(dim)
-        self.layernorm2 = nn.LayerNorm(dim)
+
+        self.layernorm1 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
+        self.layernorm2 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
+
         mlp_hidden_dim = int(dim * config.mlp_expansion_ratio)
         self.mlp = EfficientFormerDenseMlp(config, in_features=dim, hidden_features=mlp_hidden_dim)
 
@@ -346,16 +348,20 @@ class EfficientFormerMeta3DLayers(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor]:
         all_attention_outputs = () if output_attentions else None
+
         for layer_module in self.blocks:
             if isinstance(hidden_states, tuple):
                 hidden_states = hidden_states[0]
 
             hidden_states = layer_module(hidden_states, output_attentions)
+
             if output_attentions:
                 all_attention_outputs = all_attention_outputs + (hidden_states[1],)
+
         if output_attentions:
             outputs = (hidden_states[0],) + all_attention_outputs
             return outputs
+
         return hidden_states
 
 
@@ -479,6 +485,7 @@ class EfficientFormerEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
         layer_output = self.last_stage(hidden_states, output_attentions=output_attentions)
+
         if output_attentions:
             all_self_attentions = all_self_attentions + layer_output[1:]
 

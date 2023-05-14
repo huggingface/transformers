@@ -443,11 +443,13 @@ class TFEfficientFormerMeta3D(tf.keras.layers.Layer):
     def call(
         self, hidden_states: tf.Tensor, output_attentions: bool = False, training: bool = False
     ) -> Tuple[tf.Tensor]:
+
         self_attention_outputs = self.token_mixer(
             hidden_states=self.layernorm1(hidden_states, training=training),
             output_attentions=output_attentions,
             training=training,
         )
+
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
@@ -489,7 +491,7 @@ class TFEfficientFormerMeta3DLayers(tf.keras.layers.Layer):
         self, hidden_states: tf.Tensor, output_attentions: bool = False, training: bool = False
     ) -> Tuple[tf.Tensor]:
         all_attention_outputs = () if output_attentions else None
-
+     
         for i, layer_module in enumerate(self.blocks):
             if isinstance(hidden_states, tuple):
                 hidden_states = hidden_states[0]
