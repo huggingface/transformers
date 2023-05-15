@@ -28,8 +28,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_bark"] = [
         "BARK_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "BarkForCausalLM",
-        "BarkModel",
+        "BarkForTTS",
         "BarkPreTrainedModel",
     ]
 
@@ -44,8 +43,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_bark import (
             BARK_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BarkForCausalLM,
-            BarkModel,
+            BarkForTTS,
             BarkPreTrainedModel,
         )
 
