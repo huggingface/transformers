@@ -1,5 +1,6 @@
 import os
 import unittest
+from packaging import version
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from unittest import TestCase
@@ -321,7 +322,7 @@ class OnnxExportTestCaseV2(TestCase):
         if is_torch_available():
             from transformers.utils import get_torch_version
 
-            if get_torch_version() < onnx_config.torch_onnx_minimum_version:
+            if version.parse(get_torch_version()) < onnx_config.torch_onnx_minimum_version:
                 pytest.skip(
                     "Skipping due to incompatible PyTorch version. Minimum required is"
                     f" {onnx_config.torch_onnx_minimum_version}, got: {get_torch_version()}"
@@ -364,7 +365,7 @@ class OnnxExportTestCaseV2(TestCase):
         if is_torch_available():
             from transformers.utils import get_torch_version
 
-            if get_torch_version() < onnx_config.torch_onnx_minimum_version:
+            if version.parse(get_torch_version()) < onnx_config.torch_onnx_minimum_version:
                 pytest.skip(
                     "Skipping due to incompatible PyTorch version. Minimum required is"
                     f" {onnx_config.torch_onnx_minimum_version}, got: {get_torch_version()}"
