@@ -64,6 +64,9 @@ def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_tok
     shifted_input_ids = shifted_input_ids.at[:, 1:].set(input_ids[:, :-1])
     shifted_input_ids = shifted_input_ids.at[:, 0].set(decoder_start_token_id)
 
+    shifted_input_ids = jnp.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
+    return shifted_input_ids
+
 
 def _pad_to_multiple(x: jnp.ndarray, block_len: int, axis: int, pad_value: int = 0) -> jnp.ndarray:
     """Pad an array so that a sequence length will be a multiple of `block_len`"""
