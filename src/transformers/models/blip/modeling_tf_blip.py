@@ -1189,6 +1189,12 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
 
         return shifted_input_ids
 
+    @property
+    def input_signature(self):
+        base_sig = super().input_signature
+        base_sig["decoder_input_ids"] = base_sig["input_ids"]
+        return base_sig
+
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBlipTextVisionModelOutput, config_class=BlipVisionConfig)
@@ -1241,7 +1247,7 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
         ```"""
         if labels is None and decoder_input_ids is None:
             raise ValueError(
-                "Either `decoder_input_ids` or `labels` should be passed when calling `forward` with"
+                "Either `decoder_input_ids` or `labels` should be passed when calling"
                 " `TFBlipForQuestionAnswering`. if you are training the model make sure that `labels` is passed, if you"
                 " are using the model for inference make sure that `decoder_input_ids` is passed or call `generate`"
             )
