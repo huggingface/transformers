@@ -753,6 +753,8 @@ class GenerationMixin:
         model_kwargs["past_key_values"] = self._extract_past_from_model_output(
             outputs, standardize_cache_format=standardize_cache_format
         )
+        if getattr(outputs, "state", None) is not None:
+            model_kwargs["state"] = outputs.state
 
         # update token_type_ids with last value
         if "token_type_ids" in model_kwargs:
@@ -1305,8 +1307,11 @@ class GenerationMixin:
 
         # decoder-only models should use left-padding for generation
         if not self.config.is_encoder_decoder:
+            # If `input_ids` was given, check if the last id in any sequence is `pad_token_id`
+            # Note: If using, `inputs_embeds` this check does not work, because we want to be more hands-off.
             if (
                 generation_config.pad_token_id is not None
+                and len(inputs_tensor.shape) == 2
                 and torch.sum(inputs_tensor[:, -1] == generation_config.pad_token_id) > 0
             ):
                 logger.warning(
