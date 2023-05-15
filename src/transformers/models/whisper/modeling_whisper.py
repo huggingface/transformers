@@ -1738,7 +1738,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         if return_token_timestamps:
             kwargs["output_attentions"] = True
-            kwargs["output_scores"] = True
             kwargs["return_dict_in_generate"] = True
 
         outputs = super().generate(
@@ -1793,29 +1792,17 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         map each output token to a position in the input audio.
 
         Returns:
-            Dictionary containing the following:
-            - **sequences**: tensors with the predicted token_ids
-            - **timestamps**: `(start time, end time)` tuple for each predicted token
-            - **probabilities**: tensor with the probability for each token in `sequences`
+            Dictionary containing the following tensors:
+            - **sequences**: the predicted token_ids
+            - **timestamps**: timestamp in seconds for each predicted token
         """
-        # Strip off the first token; we have no attentions or scores for this token.
-        predicted_ids = generate_outputs.sequences[:, 1:]
-
-        # Get the probability for each predicted token.
-        scores = torch.cat([x.unsqueeze(0) for x in generate_outputs.scores], dim=0)
-        scores = scores.permute([1, 0, 2])
-        probabilities = scores.softmax(dim=-1)
-        token_probs = torch.gather(probabilities, 2, predicted_ids.unsqueeze(2)).squeeze(2)
-
-        # There is no score for the first token, so set this to 1.0.
-        ones = torch.ones((predicted_ids.shape[0], 1))
-        token_probs = torch.cat([ones, token_probs], dim=-1)
-
         # Create a list with `decoder_layers` elements, each a tensor of shape
         # (batch size, attention_heads, output length, input length).
         cross_attentions = []
         for i in range(self.config.decoder_layers):
             cross_attentions.append(torch.cat([x[i] for x in generate_outputs.cross_attentions], dim=2))
+
+        #batch_size = generate_outputs.sequences.shape[0]
 
         # Select specific cross-attention layers and heads. This is a tensor
         # of shape (batch size, num selected, output length, input length).
@@ -1831,7 +1818,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         matrix = weights.mean(dim=1)
 
         # Perform dynamic time warping on each element of the batch.
-        timestamps = torch.zeros_like(token_probs)
+        timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)
         for b in range(matrix.shape[0]):
             text_indices, time_indices = dtw(-matrix[b].double().cpu().numpy())
 
@@ -1845,7 +1832,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         result = {
             "sequences": generate_outputs.sequences,
             "timestamps": timestamps,
-            "probabilities": token_probs,
         }
         return result
 
