@@ -17,7 +17,10 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_bark": ["BARK_PRETRAINED_CONFIG_ARCHIVE_MAP", "BarkConfig", "BarkOnnxConfig"],
+    "configuration_bark": [
+        "BARK_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BarkConfig",
+    ],
 }
 
 try:
@@ -28,12 +31,12 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_bark"] = [
         "BARK_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "BarkForTTS",
+        "BarkForTextToSpeech",
         "BarkPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_bark import BARK_PRETRAINED_CONFIG_ARCHIVE_MAP, BarkConfig, BarkOnnxConfig
+    from .configuration_bark import BARK_PRETRAINED_CONFIG_ARCHIVE_MAP, BarkConfig
 
     try:
         if not is_torch_available():
@@ -43,7 +46,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_bark import (
             BARK_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BarkForTTS,
+            BarkForTextToSpeech,
             BarkPreTrainedModel,
         )
 

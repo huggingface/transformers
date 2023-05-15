@@ -38,10 +38,14 @@ class BarkConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 10048):
-            Vocabulary size of the Bark model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`BarkModel`]. Vocabulary size of the model. Defines the different tokens
+        input_vocab_size (`int`, *optional*, defaults to 10048):
+            Input vocabulary size of the Bark model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`BarkModel`]. Defines the different tokens
             that can be represented by the *inputs_ids* passed to the forward method of [`BarkModel`].
+        output_vocab_size (`int`, *optional*, defaults to 10048):
+            Output vocabulary size of the Bark model. Defines the number of different tokens that can be represented by the
+            output obtained when calling [`BarkModel`]. Defines the different tokens
+            that can be represented by the *logits* returned by the forward method of [`BarkModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_layers (`int`, *optional*, defaults to 12):
@@ -67,6 +71,8 @@ class BarkConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether the model should return the last key/values attentions (not used by all models). Only relevant if
             `config.is_decoder=True`.
+        use_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in the projection layers in the transformer block.
         num_codebooks (`int`, *optional*, defaults to 8):
             Number of codebooks (or quantizers) used to reconstruct the waveform.
 
@@ -103,6 +109,7 @@ class BarkConfig(PretrainedConfig):
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         use_cache=True,
+        use_bias=True,
         num_codebooks=8,
         bos_token_id=50256,
         eos_token_id=50256,
@@ -121,6 +128,7 @@ class BarkConfig(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
         self.use_cache = use_cache
+        self.use_bias = use_bias
         self.num_codebooks = num_codebooks
 
         self.bos_token_id = bos_token_id

@@ -14,34 +14,35 @@
 # limitations under the License.
 
 import argparse
-import re
 
 import torch
 from bark.generation import load_model
 
-from transformers import BarkConfig, BarkForTTS
+from transformers.models.bark import BarkConfig, BarkForTextToSpeech
+
 
 @torch.no_grad()
 def convert_bark_checkpoint(use_gpu=False, use_small=True, pytorch_dump_folder_path=None):
     transformers_config = BarkConfig()
 
-    text_model_tokenizer = load_model(use_gpu=use_gpu, use_small=use_small, model_type="text")
-    text_model = text_model_tokenizer["model"]
-    text_state_dict = text_model.state_dict
-    tokenizer = text_model_tokenizer["tokenizer"]
+    text_model = load_model(use_gpu=use_gpu, use_small=use_small, model_type="text")
+    tokenizer = text_model["tokenizer"]
+    text_model = text_model["model"]
+    text_state_dict = text_model.state_dict()
 
-    coarse_model = load_model(use_gpu=use_gpu, use_small=use_small, model_type="coarse")["model"]
-    coarse_model_state_dict = coarse_model.state_dict
+    coarse_model = load_model(use_gpu=use_gpu, use_small=use_small, model_type="coarse")
+    coarse_model_state_dict = coarse_model.state_dict()
 
-    fine_model = load_model(use_gpu=use_gpu, use_small=use_small, model_type="fine")["model"]
-    fine_model_state_dict = fine_model.state_dict
+    fine_model = load_model(use_gpu=use_gpu, use_small=use_small, model_type="fine")
+    fine_model_state_dict = fine_model.state_dict()
 
-    model = BarkForTTS(transformers_config)
+    model = BarkForTextToSpeech(transformers_config)
     model.text_model.load_state_dict(text_state_dict)
     model.coarse_model.load_state_dict(coarse_model_state_dict)
     model.fine_model.load_state_dict(fine_model_state_dict)
 
-    #tokenizer.save_pretrained(pytorch_dump_folder_path)
+    # tokenizer.save_pretrained(pytorch_dump_folder_path)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

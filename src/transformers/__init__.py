@@ -1060,8 +1060,7 @@ else:
     _import_structure["models.bark"].extend(
         [
             "BARK_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "BarkForTTS"
-            "BarkPreTrainedModel",
+            "BarkForTextToSpeech" "BarkPreTrainedModel",
         ]
     )
     _import_structure["models.bart"].extend(
@@ -4690,7 +4689,7 @@ if TYPE_CHECKING:
         )
         from .models.bark import (
             BARK_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BarkForTTS,
+            BarkForTextToSpeech,
             BarkPreTrainedModel,
         )
         from .models.bart import (

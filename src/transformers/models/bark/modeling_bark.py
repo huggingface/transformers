@@ -71,8 +71,8 @@ class BarkAttention(nn.Module):
                 f" {self.num_heads})."
             )
 
-        self.qkv_proj = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=True)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        self.qkv_proj = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=config.use_bias)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_bias)
 
         self.causal = causal
 
@@ -88,10 +88,10 @@ class BarkAttention(nn.Module):
             query: [batch_size, num_heads, seq_length, head_dim] key: [batch_size, num_heads, seq_length, head_dim]
             value: [batch_size, num_heads, seq_length, head_dim]
         """
-        batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
-        fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads, 3, self.head_dim)
-        fused_qkv = fused_qkv.transpose(1, 2).contiguous()
-        return fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :]
+        batch_size, seq_length, _ = fused_qkv.shape
+        fused_qkv = fused_qkv.view(batch_size, seq_length, 3, self.num_heads, self.head_dim)
+        fused_qkv = fused_qkv.transpose(1, 3).contiguous()
+        return fused_qkv[..., 0, :, :], fused_qkv[..., 1, :, :], fused_qkv[..., 2, :, :]
 
     def _merge_heads(self, tensor, num_heads, attn_head_size):
         """
@@ -179,8 +179,8 @@ class BarkMLP(nn.Module):
     def __init__(self, intermediate_size, config):  # in MLP: intermediate_size= 4 * hidden_size
         super().__init__()
         embed_dim = config.hidden_size
-        self.c_fc = nn.Linear(embed_dim, intermediate_size)
-        self.c_proj = nn.Linear(intermediate_size, embed_dim)
+        self.c_fc = nn.Linear(embed_dim, intermediate_size, bias=config.use_bias)
+        self.c_proj = nn.Linear(intermediate_size, embed_dim, bias=config.use_bias)
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(float(config.resid_dropout))
 
@@ -192,14 +192,26 @@ class BarkMLP(nn.Module):
         return hidden_states
 
 
+class LayerNorm(nn.Module):
+    """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
+
+    def __init__(self, ndim: int, bias: bool = True, eps: float = 1e-5):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(ndim))
+        self.bias = nn.Parameter(torch.zeros(ndim)) if bias else None
+        self.eps = eps
+
+    def forward(self, input):
+        return torch.nn.functional.layer_norm(input, self.weight.shape, self.weight, self.bias, self.eps)
+
 class BarkBlock(nn.Module):
     def __init__(self, config, causal):
         super().__init__()
         hidden_size = config.hidden_size
         inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * hidden_size
-        self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.ln_1 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon, bias=config.use_bias)
         self.attn = BarkAttention(config, causal)
-        self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.ln_2 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon, bias=config.use_bias)
         self.mlp = BarkMLP(inner_dim, config)
 
     def forward(
@@ -264,12 +276,9 @@ class BarkPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (BarkCoarseModel, BarkFineModel)):
+        if isinstance(module, (BarkCausalModel, BarkNonCausalModel)):
             module.gradient_checkpointing = value
 
 
@@ -350,16 +359,16 @@ BARK_INPUTS_DOCSTRING = r"""
     "The bare Bark Coarse Model transformer outputting raw hidden-states without any specific head on top.",
     BARK_START_DOCSTRING,
 )
-class BarkCoarseModel(BarkPreTrainedModel):
+class BarkCausalModel(BarkPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
-        self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
+        self.wte = nn.Embedding(config.input_vocab_size, self.embed_dim)
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
         self.drop = nn.Dropout(float(config.embed_dropout))
         self.h = nn.ModuleList([BarkBlock(config, causal=True) for _ in range(config.num_layers)])
-        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon, bias=config.use_bias)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -531,7 +540,7 @@ class BarkCoarseModel(BarkPreTrainedModel):
     """,
     BARK_START_DOCSTRING,
 )
-class BarkCoarseModelForConditionalGeneration(BarkPreTrainedModel):
+class BarkCausalModelForConditionalGeneration(BarkPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"h\.\d+\.attn\.masked_bias",
         r"lm_head.weight",
@@ -541,8 +550,8 @@ class BarkCoarseModelForConditionalGeneration(BarkPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.transformer = BarkCoarseModel(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.transformer = BarkCausalModel(config)
+        self.lm_head = nn.Linear(config.hidden_size, config.output_vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -600,8 +609,8 @@ class BarkCoarseModelForConditionalGeneration(BarkPreTrainedModel):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
-            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
-            are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.output_vocab_size]` All labels set to `-100`
+            are ignored (masked), the loss is only computed for labels in `[0, ..., config.output_vocab_size]`
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -664,18 +673,18 @@ class BarkCoarseModelForConditionalGeneration(BarkPreTrainedModel):
     "The bare Bark Fine Model transformer outputting raw hidden-states without any specific head on top.",
     BARK_START_DOCSTRING,
 )
-class BarkFineModel(BarkPreTrainedModel):
+class BarkNonCausalModel(BarkPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
         self.wtes = nn.ModuleList(
-            [nn.Embedding(config.vocab_size, self.embed_dim) for _ in range(config.num_codebooks)]
+            [nn.Embedding(config.input_vocab_size, self.embed_dim) for _ in range(config.num_codebooks)]
         )
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
         self.drop = nn.Dropout(float(config.embed_dropout))
         self.h = nn.ModuleList([BarkBlock(config, causal=False) for _ in range(config.num_layers)])
-        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon, bias=config.use_bias)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -824,7 +833,7 @@ class BarkFineModel(BarkPreTrainedModel):
     """,
     BARK_START_DOCSTRING,
 )
-class BarkFineModelWithLMHead(BarkPreTrainedModel):
+class BarkFineModel(BarkPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"h\.\d+\.attn\.masked_bias",
         r"lm_head.weight",
@@ -834,9 +843,9 @@ class BarkFineModelWithLMHead(BarkPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.transformer = BarkFineModel(config)
+        self.transformer = BarkNonCausalModel(config)
         self.lm_heads = nn.ModuleList(
-            [nn.Linear(config.hidden_size, config.vocab_size, bias=False) for _ in range(1, config.num_codebooks)]
+            [nn.Linear(config.hidden_size, config.output_vocab_size, bias=False) for _ in range(1, config.num_codebooks)]
         )
 
         for i in range(1, config.num_codebooks):
@@ -868,8 +877,8 @@ class BarkFineModelWithLMHead(BarkPreTrainedModel):
         codebook_idx (`int`): The codebook index to predict. labels (`torch.LongTensor` of shape `(batch_size,
         sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
-            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
-            are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.output_vocab_size]` All labels set to `-100`
+            are ignored (masked), the loss is only computed for labels in `[0, ..., config.output_vocab_size]`
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -916,44 +925,18 @@ class BarkFineModelWithLMHead(BarkPreTrainedModel):
         )
 
 
-class BarkForTTS(BarkPreTrainedModel):
+@add_start_docstrings(
+    """
+    The Bark Model with the three required for text-to-speech: text model, coarse model and fine model.
+    """,
+    BARK_START_DOCSTRING,
+)
+class BarkForTextToSpeech(BarkPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.text_model = BarkCoarseModelForConditionalGeneration(config)
-        self.coarse_model = BarkCoarseModelForConditionalGeneration(config)
-        self.fine_model = BarkFineModelWithLMHead(config)
+        self.text_model = BarkCausalModelForConditionalGeneration(config)
+        self.coarse_model = BarkCausalModelForConditionalGeneration(config)
+        self.fine_model = BarkFineModel(config)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @add_start_docstrings_to_model_forward(BARK_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPast]:
-        self.coarse_model(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
