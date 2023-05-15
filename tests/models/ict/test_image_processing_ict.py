@@ -256,7 +256,7 @@ class IctImageProcessorIntegrationTest(unittest.TestCase):
         self.assertIsInstance(encoding.pixel_values, torch.LongTensor)
         self.assertEqual(encoding.pixel_values.shape, (1, 1024))
 
-        expected_slice = [291, 145, 48]
+        expected_slice = [306, 191, 191]
         self.assertEqual(encoding.pixel_values[0, :3].tolist(), expected_slice)
 
         # test batched
@@ -265,5 +265,5 @@ class IctImageProcessorIntegrationTest(unittest.TestCase):
         self.assertIsInstance(encoding.pixel_values, torch.LongTensor)
         self.assertEqual(encoding.pixel_values.shape, (2, 1024))
 
-        expected_slice = [228, 315, 375]
+        expected_slice = [303, 13, 13]
         self.assertEqual(encoding.pixel_values[1, -3:].tolist(), expected_slice)

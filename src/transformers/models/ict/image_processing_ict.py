@@ -18,6 +18,7 @@
 from typing import Dict, List, Optional, Union
 
 import numpy as np
+import torch
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
@@ -51,13 +52,13 @@ class IctImageProcessor(BaseImageProcessor):
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
+        do_rescale (`bool`, *optional*, defaults to `False`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
             parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`)::
+        do_normalize (`bool`, *optional*, defaults to `False`)::
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
@@ -81,9 +82,9 @@ class IctImageProcessor(BaseImageProcessor):
         do_resize: bool = True,
         size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
-        do_rescale: bool = True,
+        do_rescale: bool = False,
         rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = True,
+        do_normalize: bool = False,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_color_quantize: bool = True,
@@ -203,10 +204,10 @@ class IctImageProcessor(BaseImageProcessor):
             corresponds to the index of clusters.
         """
 
-        image = np.array(image).reshape((-1, 3))
-        image = image.astype(np.float32)
         # Copied from https://github.com/raywzy/ICT/blob/59dd12d374d47cdf0dce90923017ca3657e6aa0b/Transformer/inference.py#L98
+        image = torch.from_numpy(image).view(-1, 3).float()
         image = ((image[:, None, :] - clusters[None, :, :]) ** 2).sum(-1).argmin(1)
+        image = image.numpy()
         return image
 
     def preprocess(
@@ -310,9 +311,8 @@ class IctImageProcessor(BaseImageProcessor):
         if do_normalize:
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
 
-        # Copied from transformers.models.imagegpt.image_processing_imagegpt.preprocess
         if do_color_quantize:
-            images = [to_channel_dimension_format(image, ChannelDimension.FIRST) for image in images]
+            images = [to_channel_dimension_format(image, ChannelDimension.LAST) for image in images]
             # flatten images to (batch_size, height * width)
             images = [self.color_quantize(image=image, clusters=clusters) for image in images]
         else:

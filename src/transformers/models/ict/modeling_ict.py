@@ -28,7 +28,6 @@ from PIL import Image
 from torch import nn
 
 from ...activations import ACT2FN
-from ...image_utils import ImageInput, make_list_of_images, to_numpy_array
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedImageModelingOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
@@ -96,7 +95,7 @@ class IctEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->ICT
+# Modified from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->ICT
 class IctSelfAttention(nn.Module):
     def __init__(self, config: IctConfig) -> None:
         super().__init__()
@@ -291,7 +290,7 @@ class IctPretrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->ICT,ViT->ICT
+# Modified from transformers.models.vit.modeling_vit.ViTModel with VIT->ICT,ViT->ICT
 class IctTransformerModel(IctPretrainedModel):
     config_class = IctConfig
     main_input_name = "pixel_values"
@@ -741,6 +740,7 @@ class IctModel(IctPretrainedModel):
         self.config = config
         self.transformer = IctTransformerModel(config, use_mask_token=use_mask_token)
         self.guided_upsampler = IctGuidedUpsampler(config)
+        self.clusters = config.clusters
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -753,7 +753,6 @@ class IctModel(IctPretrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor],
-        original_images: ImageInput,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         clusters: Optional[np.ndarray] = None,
         output_attentions: Optional[bool] = None,
@@ -778,14 +777,15 @@ class IctModel(IctPretrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> pixel_values = image_processor(image, return_tensors="pt").pixel_values
-        >>> clusters = image_processor.clusters
 
         >>> # create random boolean mask of shape (batch_size, num_patches)
         >>> bool_masked_pos = torch.randint(low=0, high=2, size=(pixel_values.shape[0], pixel_values.shape[1])).bool()
 
-        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos, clusters=clusters)
+        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        clusters = clusters if clusters is not None else self.config.clusters
+
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -806,8 +806,6 @@ class IctModel(IctPretrainedModel):
         clusters = torch.from_numpy(clusters)
         recovered_pixel_values = [clusters[pixel_values[i]].view(height, width, 3) for i in range(batch_size)]
 
-        images = make_list_of_images(original_images)
-        images = [torch.from_numpy(to_numpy_array(image).astype(np.float32)) for image in images]
         reshaped_bool_masked_pos = [
             bool_masked_pos.reshape(height, width) if bool_masked_pos is not None
             # Handle without boolean mask
@@ -815,7 +813,9 @@ class IctModel(IctPretrainedModel):
             for _ in range(batch_size)
         ]
 
-        reconstructed_pixel_values = self.guided_upsampler(images, recovered_pixel_values, reshaped_bool_masked_pos)
+        reconstructed_pixel_values = self.guided_upsampler(
+            pixel_values, recovered_pixel_values, reshaped_bool_masked_pos
+        )
 
         loss = None
         if bool_masked_pos is not None:

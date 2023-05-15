@@ -15,6 +15,7 @@
 # limitations under the License.
 """ ICT model configuration"""
 
+import numpy as np
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -75,6 +76,9 @@ class IctConfig(PretrainedConfig):
             The height of the final image.
         output_width (`int`, *optional*, defaults to 256):
             The width of the final image.
+        clusters (`np.ndarray`, *optional*, defaults to `None`):
+            Clusters used to quantize the image of shape `(n_clusters, 3)`. Provide the same `clusters` used for
+            `IctImageProcessor`.
 
     Example:
 
@@ -111,6 +115,7 @@ class IctConfig(PretrainedConfig):
         qkv_bias=False,
         output_height=256,
         output_width=256,
+        clusters=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -132,3 +137,4 @@ class IctConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.output_height = output_height
         self.output_width = output_width
+        self.clusters = np.array(clusters) if clusters is not None else None
