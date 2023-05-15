@@ -23,7 +23,7 @@ import os
 import tempfile
 from typing import Any, Dict, List, Optional, Union
 
-from huggingface_hub import upload_folder, create_repo, hf_hub_download, metadata_update
+from huggingface_hub import create_repo, hf_hub_download, metadata_update, upload_folder
 from huggingface_hub.utils import RepositoryNotFoundError, build_hf_headers, get_session
 
 from ..dynamic_module_utils import custom_object_save, get_class_from_dynamic_module, get_imports
