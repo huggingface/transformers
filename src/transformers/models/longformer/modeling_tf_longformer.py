@@ -2412,6 +2412,14 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
+    @property
+    def input_signature(self):
+        return {
+            "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+            "global_attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="global_attention_mask"),
+        }
+
     @unpack_inputs
     @add_start_docstrings_to_model_forward(
         LONGFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
