@@ -1114,7 +1114,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         dummies = {}
-        for key, spec in self.input_signature.items():
+        sig = self._prune_signature(self.input_signature)
+        for key, spec in sig.items():
             # 3 is the most correct arbitrary size. I will not be taking questions
             dummies[key] = tf.ones(shape=[dim if dim is not None else 3 for dim in spec.shape], dtype=spec.dtype)
             if key == "token_type_ids":
@@ -1152,7 +1153,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         self.name_or_path = config.name_or_path
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
         if not hasattr(self, "serving"):  # Don't overwrite existing serving signatures
-            self.serving = tf.function(self.eager_serving, input_signature=[self.input_signature])
+            self.serving = tf.function(
+                self.eager_serving, input_signature=[self._prune_signature(self.input_signature)]
+            )
         # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
         self._set_save_spec(self.serving.input_signature[0])
 
