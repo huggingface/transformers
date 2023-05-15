@@ -1,12 +1,12 @@
 import os
 import unittest
-from packaging import version
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from unittest import TestCase
 from unittest.mock import patch
 
 import pytest
+from packaging import version
 from parameterized import parameterized
 
 from transformers import AutoConfig, PreTrainedTokenizerBase, is_tf_available, is_torch_available
