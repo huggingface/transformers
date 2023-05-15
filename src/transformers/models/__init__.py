@@ -85,6 +85,7 @@ from . import (
     gpt2,
     gpt_bigcode,
     gpt_neo,
+    bark,
     gpt_neox,
     gpt_neox_japanese,
     gpt_sw3,
