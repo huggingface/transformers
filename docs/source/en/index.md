@@ -137,6 +137,7 @@ The documentation is organized into five sections:
 1. **[GroupViT](model_doc/groupvit)** (from UCSD, NVIDIA) released with the paper [GroupViT: Semantic Segmentation Emerges from Text Supervision](https://arxiv.org/abs/2202.11094) by Jiarui Xu, Shalini De Mello, Sifei Liu, Wonmin Byeon, Thomas Breuel, Jan Kautz, Xiaolong Wang.
 1. **[Hubert](model_doc/hubert)** (from Facebook) released with the paper [HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden Units](https://arxiv.org/abs/2106.07447) by Wei-Ning Hsu, Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia, Ruslan Salakhutdinov, Abdelrahman Mohamed.
 1. **[I-BERT](model_doc/ibert)** (from Berkeley) released with the paper [I-BERT: Integer-only BERT Quantization](https://arxiv.org/abs/2101.01321) by Sehoon Kim, Amir Gholami, Zhewei Yao, Michael W. Mahoney, Kurt Keutzer.
+1. **[Image Completion Transformer](model_doc/ict)** (from City University of Hong Kong and Microsoft Cloud + AI) released with the paper [High-Fidelity Pluralistic Image Completion with Transformers](https://arxiv.org/abs/2103.14031) by Ziyu Wan, Jingbo Zhang, Dongdong Chen, Jing Liao.
 1. **[ImageGPT](model_doc/imagegpt)** (from OpenAI) released with the paper [Generative Pretraining from Pixels](https://openai.com/blog/image-gpt/) by Mark Chen, Alec Radford, Rewon Child, Jeffrey Wu, Heewoo Jun, David Luan, Ilya Sutskever.
 1. **[Informer](model_doc/informer)** (from Beihang University, UC Berkeley, Rutgers University, SEDD Company) released with the paper [Informer: Beyond Efficient Transformer for Long Sequence Time-Series Forecasting](https://arxiv.org/abs/2012.07436) by Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, and Wancai Zhang.
 1. **[InstructBLIP](model_doc/instructblip)** (from Salesforce) released with the paper [InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning](https://arxiv.org/abs/2305.06500) by Wenliang Dai, Junnan Li, Dongxu Li, Anthony Meng Huat Tiong, Junqi Zhao, Weisheng Wang, Boyang Li, Pascale Fung, Steven Hoi.
@@ -348,6 +349,7 @@ Flax), PyTorch, and/or TensorFlow.
 |           GroupViT            |       ❌       |       ❌       |       ✅        |         ✅         |      ❌      |
 |            Hubert             |       ❌       |       ❌       |       ✅        |         ✅         |      ❌      |
 |            I-BERT             |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
+|              ICT              |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |           ImageGPT            |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |           Informer            |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |         InstructBLIP          |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |

@@ -69,7 +69,7 @@ class IctEmbeddings(nn.Module):
 
         self.token_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
         self.position_embedding = nn.Parameter(torch.zeros(1, config.image_size, config.hidden_size))
-        self.dropout = nn.Dropout(config.residual_dropout_prob)
+        self.dropout = nn.Dropout(config.embedding_dropout_prob)
 
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
 
@@ -258,7 +258,7 @@ class IctEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->ICT,vit->ict
+# Modified from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->ICT,vit->ict
 class IctPretrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
