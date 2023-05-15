@@ -36,6 +36,7 @@ from .versions import importlib_metadata
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
+# TODO: This doesn't work for all packages (`bs4`, `faiss`, etc.) Talk to Sylvain to see how to do with it better.
 def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[Tuple[bool, str], bool]:
     # Check we're not importing a "pkg_name" directory somewhere but the actual library by trying to grab the version
     package_exists = importlib.util.find_spec(pkg_name) is not None
@@ -69,12 +70,23 @@ TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
-_bs4_available = _is_package_available("bs4")
+# `importlib_metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
+_bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
 _datasets_available = _is_package_available("datasets")
 _decord_available = importlib.util.find_spec("decord") is not None
 _detectron2_available = _is_package_available("detectron2")
-_faiss_available = _is_package_available("faiss") or _is_package_available("faiss-cpu")
+# We need to check both `faiss` and `faiss-cpu`.
+_faiss_available = importlib.util.find_spec("faiss") is not None
+try:
+    _faiss_version = importlib_metadata.version("faiss")
+    logger.debug(f"Successfully imported faiss version {_faiss_version}")
+except importlib_metadata.PackageNotFoundError:
+    try:
+        _faiss_version = importlib_metadata.version("faiss-cpu")
+        logger.debug(f"Successfully imported faiss version {_faiss_version}")
+    except importlib_metadata.PackageNotFoundError:
+        _faiss_available = False
 _ftfy_available = _is_package_available("ftfy")
 _ipex_available, _ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
 _jieba_available = _is_package_available("jieba")
