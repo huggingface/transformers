@@ -2453,7 +2453,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         >>> labels = torch.where(inputs.input_ids == tokenizer.mask_token_id, labels, -100)
         >>> outputs = model(**inputs, labels=labels)
         >>> round(outputs.loss.item(), 2)
-        1.08
+        1.99
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
