@@ -1831,18 +1831,16 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         matrix = weights.mean(dim=1)
 
         # Perform dynamic time warping on each element of the batch.
-        timestamps = []
+        timestamps = torch.zeros_like(token_probs)
         for b in range(matrix.shape[0]):
             text_indices, time_indices = dtw(-matrix[b].double().cpu().numpy())
 
             jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
             jump_times = time_indices[jumps] * time_precision
 
-            start_times = jump_times[:-1]
-            end_times = jump_times[1:]
-
-            timings = list(zip(start_times, end_times))
-            timestamps.append([(0, 0)] + timings + [(None, None)])
+            # Set timestamp of starting token to 0.
+            jump_times = torch.cat([torch.zeros(1), torch.tensor(jump_times)])
+            timestamps[b] = jump_times
 
         result = {
             "sequences": generate_outputs.sequences,
