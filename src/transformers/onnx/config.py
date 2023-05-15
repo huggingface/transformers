@@ -234,7 +234,7 @@ class OnnxConfig(ABC):
         if is_torch_available():
             from transformers.utils import get_torch_version
 
-            return get_torch_version() >= self.torch_onnx_minimum_version
+            return version.parse(get_torch_version()) >= self.torch_onnx_minimum_version
         else:
             return False
 
