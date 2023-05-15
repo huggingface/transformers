@@ -449,7 +449,8 @@ class _BaseAutoModelClass:
                 **kwargs,
             )
 
-            # pass torch_dtype=auto to the class's from_pretrained if torch_dtype=auto was passed here torch_dtype wasn't in the config object
+            # pass torch_dtype=auto to the class's from_pretrained if torch_dtype=auto was passed
+            # here torch_dtype wasn't in the config object
             if kwargs.get("torch_dtype", None) is None and kwargs_copy.get("torch_dtype", None) == "auto":
                 kwargs["torch_dtype"] = kwargs_copy["torch_dtype"]
 
