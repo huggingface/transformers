@@ -50,20 +50,14 @@ BARK_PRETRAINED_MODEL_ARCHIVE_LIST = [
 _CHECKPOINT_FOR_DOC = "sanchit-gandhi/bark"
 
 
-class BarkSelfAttention(nn.Module):
-    def __init__(self, config, attention_type):
+class BarkCausalAttention(nn.Module):
+    def __init__(self, config):
         super().__init__()
 
         max_positions = config.max_position_embeddings
         bias = torch.tril(torch.ones((max_positions, max_positions), dtype=bool)).view(
             1, 1, max_positions, max_positions
         )
-
-        # local causal self attention is a sliding window where each token can only attend to the previous
-        # window_size tokens. This is implemented by updating the causal mask such that for each token
-        # all other tokens are masked except the previous window_size tokens.
-        if attention_type == "local":
-            bias = torch.bitwise_xor(bias, torch.tril(bias, -config.window_size))
 
         self.register_buffer("bias", bias)
         self.register_buffer("masked_bias", torch.tensor(-1e9))
@@ -80,18 +74,26 @@ class BarkSelfAttention(nn.Module):
                 f" {self.num_heads})."
             )
 
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.qkv_proj = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=True)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
 
-    def _split_heads(self, tensor, num_heads, attn_head_size):
+    def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Splits hidden_size dim into attn_head_size and num_heads
+        Split the last dimension into (num_heads, head_dim) without making any copies, results share same memory
+        storage as `fused_qkv`
+
+        Args:
+            fused_qkv (`torch.tensor`, *required*): [batch_size, seq_length, num_heads * 3 * head_dim]
+
+        Returns:
+            query: [batch_size, num_heads, seq_length, head_dim]
+            key: [batch_size, num_heads, seq_length, head_dim]
+            value: [batch_size, num_heads, seq_length, head_dim]
         """
-        new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
-        tensor = tensor.view(new_shape)
-        return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
+        batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
+        fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads, 3, self.head_dim)
+        fused_qkv = fused_qkv.transpose(1, 2).contiguous()
+        return fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :]
 
     def _merge_heads(self, tensor, num_heads, attn_head_size):
         """
@@ -103,10 +105,10 @@ class BarkSelfAttention(nn.Module):
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         # Keep the attention weights computation in fp32 to avoid overflow issues
-        query = query.to(torch.float32)
-        key = key.to(torch.float32)
+        #query = query.to(torch.float32)
+        #key = key.to(torch.float32)
 
-        attn_weights = torch.matmul(query, key.transpose(-1, -2))
+        attn_weights = torch.matmul(query, key.transpose(-1, -2)) / (self.head_dim ** 0.5)
 
         query_length, key_length = query.size(-2), key.size(-2)
         causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
@@ -141,13 +143,8 @@ class BarkSelfAttention(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
-        query = self.q_proj(hidden_states)
-        key = self.k_proj(hidden_states)
-        value = self.v_proj(hidden_states)
-
-        query = self._split_heads(query, self.num_heads, self.head_dim)
-        key = self._split_heads(key, self.num_heads, self.head_dim)
-        value = self._split_heads(value, self.num_heads, self.head_dim)
+        fused_qkv = self.qkv_proj(hidden_states)
+        query, key, value = self._split_heads(fused_qkv)
 
         if layer_past is not None:
             past_key = layer_past[0]
@@ -160,6 +157,7 @@ class BarkSelfAttention(nn.Module):
         else:
             present = None
 
+        # TODO(SG): flash attn
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
@@ -171,40 +169,6 @@ class BarkSelfAttention(nn.Module):
             outputs += (attn_weights,)
 
         return outputs  # a, present, (attentions)
-
-
-class BarkAttention(nn.Module):
-    def __init__(self, config, layer_id=0):
-        super().__init__()
-        self.layer_id = layer_id
-        self.attention_layers = config.attention_layers
-        self.attention_type = self.attention_layers[layer_id]
-
-        if self.attention_type in ["global", "local"]:
-            self.attention = BarkSelfAttention(config, self.attention_type)
-        else:
-            raise NotImplementedError(
-                "Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: "
-                f"{config.attention_layers}. Select attn layer types from ['global', 'local'] only."
-            )
-
-    def forward(
-        self,
-        hidden_states,
-        layer_past=None,
-        attention_mask=None,
-        head_mask=None,
-        use_cache=False,
-        output_attentions=False,
-    ):
-        return self.attention(
-            hidden_states,
-            attention_mask=attention_mask,
-            layer_past=layer_past,
-            head_mask=head_mask,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-        )
 
 
 class BarkMLP(nn.Module):
@@ -225,12 +189,12 @@ class BarkMLP(nn.Module):
 
 
 class BarkBlock(nn.Module):
-    def __init__(self, config, layer_id):
+    def __init__(self, config):
         super().__init__()
         hidden_size = config.hidden_size
         inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * hidden_size
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.attn = BarkAttention(config, layer_id)
+        self.attn = BarkCausalAttention(config)
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.mlp = BarkMLP(inner_dim, config)
 
@@ -289,8 +253,6 @@ class BarkPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear,)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -400,7 +362,7 @@ class BarkModel(BarkPreTrainedModel):
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
         self.drop = nn.Dropout(float(config.embed_dropout))
-        self.h = nn.ModuleList([BarkBlock(config, layer_id=i) for i in range(config.num_layers)])
+        self.h = nn.ModuleList([BarkBlock(config) for _ in range(config.num_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.gradient_checkpointing = False
@@ -674,6 +636,7 @@ class BarkForCausalLM(BarkPreTrainedModel):
         )
         hidden_states = transformer_outputs[0]
 
+        # TODO(SG): inference time mini optimisation?
         lm_logits = self.lm_head(hidden_states)
 
         loss = None

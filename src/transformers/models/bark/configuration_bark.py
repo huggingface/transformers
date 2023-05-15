@@ -43,21 +43,17 @@ class BarkConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50257):
+        vocab_size (`int`, *optional*, defaults to 10048):
             Vocabulary size of the Bark model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`BarkModel`]. Vocabulary size of the model. Defines the different
             tokens that can be represented by the *inputs_ids* passed to the forward method of [`BarkModel`].
-        attention_types (`List`, *optional*, defaults to `[[["global", "local"], 12]]`):
-            The type of attention for each layer in a `List` of the following format `[[["attention_type"],
-            num_layerss]]` e.g. for a 24 layer model `[[["global"], 24]]` or `[[["global", "local"], 12]]` Choose the
-            value of `attention_type` from `["global", "local"]`
-        hidden_size (`int`, *optional*, defaults to 2048):
+        hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        num_layers (`int`, *optional*, defaults to 24):
+        num_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_heads (`int`, *optional*, defaults to 16):
+        num_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 8192):
+        intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         activation_function (`str` or `function`, *optional*, defaults to `"gelu_new"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -66,17 +62,15 @@ class BarkConfig(PretrainedConfig):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
+        max_position_embeddings (`int`, *optional*, defaults to 1024):
+            The maximum sequence length that this model might ever be used with. Typically, set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`BarkModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            Whether the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
 
     Example:
@@ -99,14 +93,12 @@ class BarkConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50257,
-        max_position_embeddings=2048,
-        hidden_size=2048,
-        num_layers=24,
-        attention_types=[[["global", "local"], 12]],
-        num_heads=16,
+        vocab_size=10048,
+        max_position_embeddings=1024,
+        hidden_size=768,
+        num_layers=12,
+        num_heads=12,
         intermediate_size=None,
-        window_size=256,
         activation_function="gelu_new",
         resid_dropout=0.0,
         embed_dropout=0.0,
@@ -124,7 +116,6 @@ class BarkConfig(PretrainedConfig):
         self.num_layers = num_layers
         self.num_heads = num_heads
         self.intermediate_size = intermediate_size
-        self.window_size = window_size
         self.activation_function = activation_function
         self.resid_dropout = resid_dropout
         self.embed_dropout = embed_dropout
@@ -136,127 +127,4 @@ class BarkConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
-        self.attention_types = attention_types
-        self.attention_layers = self.expand_attention_types_params(attention_types)
-
-        if len(self.attention_layers) != self.num_layers:
-            raise ValueError(
-                "Configuration for convolutional module is incorrect. "
-                "It is required that `len(config.attention_layers)` == `config.num_layers` "
-                f"but is `len(config.attention_layers) = {len(self.attention_layers)}`, "
-                f"`config.num_layers = {self.num_layers}`. "
-                "`config.attention_layers` is prepared using `config.attention_types`. "
-                "Please verify the value of `config.attention_types` argument."
-            )
-
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-
-    @staticmethod
-    def expand_attention_types_params(attention_types):
-        attentions = []
-        for item in attention_types:
-            for _ in range(item[1]):
-                attentions.extend(item[0])
-        return attentions
-
-
-def custom_unfold(input, dimension, size, step):
-    """Custom torch.Tensor.unfold implementation to enable the export to ONNX."""
-    import torch
-
-    shape = input.size()
-    rank = len(shape)
-    sizedim = shape[dimension]
-
-    low_indices = torch.arange(0, sizedim, step)
-    min_length = torch.div(sizedim - size, step, rounding_mode="floor") + 1
-    indices = torch.arange(size) + low_indices[:min_length][:, None]
-
-    s = [slice(None)] * rank
-    s[dimension] = indices
-    sliced = input[s]
-
-    perm = list(range(0, rank + 1))
-    perm.append(perm.pop(dimension + 1))
-
-    return sliced.permute(perm)
-
-
-def custom_get_block_length_and_num_blocks(seq_length, window_size):
-    """
-    Custom implementation for BarkAttentionMixin._get_block_length_and_num_blocks to enable the export to ONNX as
-    original implementation uses Python variables and control flow.
-    """
-    import torch
-
-    candidates = torch.arange(1, window_size)
-    remainders = torch.remainder(seq_length, candidates)
-    divisor_indices = remainders == 0
-    divisors = candidates[divisor_indices]
-    largest_divisor = torch.max(divisors)
-    return largest_divisor, torch.div(seq_length, largest_divisor, rounding_mode="floor")
-
-
-class BarkOnnxConfig(OnnxConfigWithPast):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = OrderedDict({"input_ids": {0: "batch", 1: "sequence"}})
-        if self.use_past:
-            self.fill_with_past_key_values_(common_inputs, direction="inputs")
-            common_inputs["attention_mask"] = {0: "batch", 1: "past_sequence + sequence"}
-        else:
-            common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
-
-        return common_inputs
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self._config.num_heads
-
-    def generate_dummy_inputs(
-        self,
-        tokenizer: PreTrainedTokenizer,
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-        framework: Optional[TensorType] = None,
-    ) -> Mapping[str, Any]:
-        common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
-        )
-
-        # We need to order the input in the way they appears in the forward()
-        ordered_inputs = OrderedDict({"input_ids": common_inputs["input_ids"]})
-
-        # Need to add the past_keys
-        if self.use_past:
-            if not is_torch_available():
-                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
-            else:
-                import torch
-
-                batch, seqlen = common_inputs["input_ids"].shape
-                # Not using the same length for past_key_values
-                past_key_values_length = seqlen + 2
-                past_shape = (
-                    batch,
-                    self.num_attention_heads,
-                    past_key_values_length,
-                    self._config.hidden_size // self.num_attention_heads,
-                )
-                ordered_inputs["past_key_values"] = [
-                    (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(self.num_layers)
-                ]
-
-        ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
-        if self.use_past:
-            mask_dtype = ordered_inputs["attention_mask"].dtype
-            ordered_inputs["attention_mask"] = torch.cat(
-                [ordered_inputs["attention_mask"], torch.ones(batch, past_key_values_length, dtype=mask_dtype)], dim=1
-            )
-
-        return ordered_inputs
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 13
