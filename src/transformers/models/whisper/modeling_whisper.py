@@ -1792,9 +1792,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         map each output token to a position in the input audio.
 
         Returns:
-            Dictionary containing the following tensors:
-            - **sequences**: the predicted token_ids
-            - **timestamps**: timestamp in seconds for each predicted token
+            tensor containing the timestamps in seconds for each predicted token
         """
         # Create a list with `decoder_layers` elements, each a tensor of shape
         # (batch size, attention_heads, output length, input length).
