@@ -1797,6 +1797,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         """
         predicted_ids = generate_outputs.sequences[:, 1:]
         mask = predicted_ids < self.config.eos_token_id
+        # mask = mask | ~mask  # HACK for testing!
 
         # Create a list with `decoder_layers` elements, each a tensor of shape
         # (batch size, attention_heads, output length, input length).
@@ -1809,13 +1810,13 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         for batch_idx in range(timestamps.shape[0]):
             # Strip out any special tokens, including timestamp tokens.
-            stripped_attentions = []
+            masked_attentions = []
             for i in range(len(cross_attentions)):
-                stripped_attentions.append(cross_attentions[i][batch_idx, :, mask[batch_idx], :])
+                masked_attentions.append(cross_attentions[i][batch_idx, :, mask[batch_idx], :])
 
             # Select specific cross-attention layers and heads. This is a tensor
             # of shape (num selected, output length, input length).
-            weights = torch.stack([stripped_attentions[l][h] for l, h in self.config.alignment_heads])
+            weights = torch.stack([masked_attentions[l][h] for l, h in self.config.alignment_heads])
 
             # Normalize and smoothen the weights.
             std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
