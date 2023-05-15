@@ -1754,7 +1754,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             if getattr(generation_config, "task", None) == "translate":
                 warnings.warn("Word-level timestamps may not be reliable for task 'translate'.")
 
-            outputs = self._extract_token_timestamps(outputs)
+            outputs["timestamps"] = self._extract_token_timestamps(outputs)
 
         return outputs
 
@@ -1829,11 +1829,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             jump_times = torch.cat([torch.zeros(1), torch.tensor(jump_times)])
             timestamps[b] = jump_times
 
-        result = {
-            "sequences": generate_outputs.sequences,
-            "timestamps": timestamps,
-        }
-        return result
+        return timestamps
 
 
 @add_start_docstrings(
