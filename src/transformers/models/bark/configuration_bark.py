@@ -14,12 +14,8 @@
 # limitations under the License.
 """ Bark model configuration"""
 
-from collections import OrderedDict
-from typing import Any, Mapping, Optional
 
-from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfigWithPast
 from ...utils import logging
 
 
@@ -30,12 +26,11 @@ BARK_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class BarkConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`BarkModel`]. It is used to instantiate a GPT
-    Neo model according to the specified arguments, defining the model architecture. Instantiating a configuration with
-    the defaults will yield a similar configuration to that of the Bark
+    This is the configuration class to store the configuration of a [`BarkModel`]. It is used to instantiate a GPT Neo
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the Bark
     [sanchit-gandhi/bark](https://huggingface.co/sanchit-gandhi/bark) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -45,8 +40,8 @@ class BarkConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 10048):
             Vocabulary size of the Bark model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`BarkModel`]. Vocabulary size of the model. Defines the different
-            tokens that can be represented by the *inputs_ids* passed to the forward method of [`BarkModel`].
+            `inputs_ids` passed when calling [`BarkModel`]. Vocabulary size of the model. Defines the different tokens
+            that can be represented by the *inputs_ids* passed to the forward method of [`BarkModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_layers (`int`, *optional*, defaults to 12):
@@ -70,8 +65,10 @@ class BarkConfig(PretrainedConfig):
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
-            Whether the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
+            Whether the model should return the last key/values attentions (not used by all models). Only relevant if
+            `config.is_decoder=True`.
+        num_codebooks (`int`, *optional*, defaults to 8):
+            Number of codebooks (or quantizers) used to reconstruct the waveform.
 
     Example:
 
@@ -106,6 +103,7 @@ class BarkConfig(PretrainedConfig):
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         use_cache=True,
+        num_codebooks=8,
         bos_token_id=50256,
         eos_token_id=50256,
         **kwargs,
@@ -123,6 +121,7 @@ class BarkConfig(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
         self.use_cache = use_cache
+        self.num_codebooks = num_codebooks
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

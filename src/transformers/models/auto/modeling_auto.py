@@ -32,6 +32,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("align", "AlignModel"),
         ("altclip", "AltCLIPModel"),
         ("audio-spectrogram-transformer", "ASTModel"),
+        ("bark", "BarkModel"),
         ("bart", "BartModel"),
         ("beit", "BeitModel"),
         ("bert", "BertModel"),
@@ -92,7 +93,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("gpt2", "GPT2Model"),
         ("gpt_bigcode", "GPTBigCodeModel"),
         ("gpt_neo", "GPTNeoModel"),
-        ("bark", "BarkModel"),
         ("gpt_neox", "GPTNeoXModel"),
         ("gpt_neox_japanese", "GPTNeoXJapaneseModel"),
         ("gptj", "GPTJModel"),
@@ -272,6 +272,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
         ("albert", "AlbertForMaskedLM"),
+        ("bark", "BarkForCausalLM"),
         ("bart", "BartForConditionalGeneration"),
         ("bert", "BertForMaskedLM"),
         ("big_bird", "BigBirdForMaskedLM"),
@@ -300,7 +301,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("gpt2", "GPT2LMHeadModel"),
         ("gpt_bigcode", "GPTBigCodeForCausalLM"),
         ("gpt_neo", "GPTNeoForCausalLM"),
-        ("bark", "BarkForCausalLM"),
         ("gpt_neox", "GPTNeoXForCausalLM"),
         ("gpt_neox_japanese", "GPTNeoXJapaneseForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -351,6 +351,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("bark", "BarkForCausalLM"),
         ("bart", "BartForCausalLM"),
         ("bert", "BertLMHeadModel"),
         ("bert-generation", "BertGenerationDecoder"),
@@ -372,7 +373,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gpt2", "GPT2LMHeadModel"),
         ("gpt_bigcode", "GPTBigCodeForCausalLM"),
         ("gpt_neo", "GPTNeoForCausalLM"),
-        ("bark", "BarkForCausalLM"),
         ("gpt_neox", "GPTNeoXForCausalLM"),
         ("gpt_neox_japanese", "GPTNeoXJapaneseForCausalLM"),
         ("gptj", "GPTJForCausalLM"),

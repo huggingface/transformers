@@ -155,6 +155,7 @@ _import_structure = {
         "AutoProcessor",
         "AutoTokenizer",
     ],
+    "models.bark": ["BARK_PRETRAINED_CONFIG_ARCHIVE_MAP", "BarkConfig"],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
     "models.bartpho": [],
@@ -301,7 +302,6 @@ _import_structure = {
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_bigcode": ["GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTBigCodeConfig"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
-    "models.bark": ["BARK_PRETRAINED_CONFIG_ARCHIVE_MAP", "BarkConfig"],
     "models.gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig"],
     "models.gpt_neox_japanese": ["GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXJapaneseConfig"],
     "models.gpt_sw3": [],
@@ -1057,6 +1057,14 @@ else:
             "AutoModelWithLMHead",
         ]
     )
+    _import_structure["models.bark"].extend(
+        [
+            "BARK_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BarkForCausalLM",
+            "BarkModel",
+            "BarkPreTrainedModel",
+        ]
+    )
     _import_structure["models.bart"].extend(
         [
             "BART_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1670,14 +1678,6 @@ else:
             "GPTNeoModel",
             "GPTNeoPreTrainedModel",
             "load_tf_weights_in_gpt_neo",
-        ]
-    )
-    _import_structure["models.bark"].extend(
-        [
-            "BARK_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "BarkForCausalLM",
-            "BarkModel",
-            "BarkPreTrainedModel",
         ]
     )
     _import_structure["models.gpt_neox"].extend(
@@ -3878,6 +3878,7 @@ if TYPE_CHECKING:
         AutoProcessor,
         AutoTokenizer,
     )
+    from .models.bark import BARK_PRETRAINED_CONFIG_ARCHIVE_MAP, BarkConfig
     from .models.bart import BartConfig, BartTokenizer
     from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
     from .models.bert import (
@@ -4015,7 +4016,6 @@ if TYPE_CHECKING:
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_bigcode import GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTBigCodeConfig
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
-    from .models.bark import BARK_PRETRAINED_CONFIG_ARCHIVE_MAP, BarkConfig
     from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
     from .models.gpt_neox_japanese import GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXJapaneseConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
@@ -4689,6 +4689,12 @@ if TYPE_CHECKING:
             AutoModelForZeroShotObjectDetection,
             AutoModelWithLMHead,
         )
+        from .models.bark import (
+            BARK_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BarkForCausalLM,
+            BarkModel,
+            BarkPreTrainedModel,
+        )
         from .models.bart import (
             BART_PRETRAINED_MODEL_ARCHIVE_LIST,
             BartForCausalLM,
@@ -5187,12 +5193,6 @@ if TYPE_CHECKING:
             GPTNeoModel,
             GPTNeoPreTrainedModel,
             load_tf_weights_in_gpt_neo,
-        )
-        from .models.bark import (
-            BARK_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BarkForCausalLM,
-            BarkModel,
-            BarkPreTrainedModel,
         )
         from .models.gpt_neox import (
             GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST,

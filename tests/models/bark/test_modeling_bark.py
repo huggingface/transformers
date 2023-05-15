@@ -32,10 +32,10 @@ if is_torch_available():
 
     from transformers import (
         BARK_PRETRAINED_MODEL_ARCHIVE_LIST,
-        BarkTokenizer,
         BarkForCausalLM,
         BarkForSequenceClassification,
         BarkModel,
+        BarkTokenizer,
     )
 
 
@@ -373,9 +373,7 @@ class BarkModelTester:
 
 @require_torch
 class BarkModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (BarkModel, BarkForCausalLM, BarkForSequenceClassification) if is_torch_available() else ()
-    )
+    all_model_classes = (BarkModel, BarkForCausalLM, BarkForSequenceClassification) if is_torch_available() else ()
     all_generative_model_classes = (BarkForCausalLM,) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False

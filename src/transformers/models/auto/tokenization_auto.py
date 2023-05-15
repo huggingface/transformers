@@ -59,6 +59,7 @@ else:
                 ),
             ),
             ("align", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            ("bark", ("BarkTokenizer", "BarkTokenizerFast" if is_tokenizers_available() else None)),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
             (
                 "barthez",
@@ -159,7 +160,6 @@ else:
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gpt_bigcode", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gpt_neo", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
-            ("bark", ("BarkTokenizer", "BarkTokenizerFast" if is_tokenizers_available() else None)),
             ("gpt_neox", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("gpt_neox_japanese", ("GPTNeoXJapaneseTokenizer", None)),
             ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),

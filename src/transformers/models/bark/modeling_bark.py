@@ -15,21 +15,18 @@
 """ PyTorch Bark model."""
 
 
-import os
 from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
+    BaseModelOutput,
     BaseModelOutputWithPast,
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
     CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
@@ -50,8 +47,8 @@ BARK_PRETRAINED_MODEL_ARCHIVE_LIST = [
 _CHECKPOINT_FOR_DOC = "sanchit-gandhi/bark"
 
 
-class BarkCausalAttention(nn.Module):
-    def __init__(self, config):
+class BarkAttention(nn.Module):
+    def __init__(self, config, causal):
         super().__init__()
 
         max_positions = config.max_position_embeddings
@@ -77,6 +74,8 @@ class BarkCausalAttention(nn.Module):
         self.qkv_proj = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=True)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
 
+        self.causal = causal
+
     def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Split the last dimension into (num_heads, head_dim) without making any copies, results share same memory
@@ -86,8 +85,7 @@ class BarkCausalAttention(nn.Module):
             fused_qkv (`torch.tensor`, *required*): [batch_size, seq_length, num_heads * 3 * head_dim]
 
         Returns:
-            query: [batch_size, num_heads, seq_length, head_dim]
-            key: [batch_size, num_heads, seq_length, head_dim]
+            query: [batch_size, num_heads, seq_length, head_dim] key: [batch_size, num_heads, seq_length, head_dim]
             value: [batch_size, num_heads, seq_length, head_dim]
         """
         batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
@@ -103,20 +101,21 @@ class BarkCausalAttention(nn.Module):
         new_shape = tensor.size()[:-2] + (num_heads * attn_head_size,)
         return tensor.view(new_shape)
 
-    def _attn(self, query, key, value, attention_mask=None, head_mask=None):
-        # Keep the attention weights computation in fp32 to avoid overflow issues
-        #query = query.to(torch.float32)
-        #key = key.to(torch.float32)
+    def _attn(self, query, key, value, causal, attention_mask=None, head_mask=None):
+        # TODO(SG): keep the attention weights computation in fp32 to avoid overflow issues?
+        # query = query.to(torch.float32)
+        # key = key.to(torch.float32)
 
-        attn_weights = torch.matmul(query, key.transpose(-1, -2)) / (self.head_dim ** 0.5)
+        attn_weights = torch.matmul(query, key.transpose(-1, -2)) / (self.head_dim**0.5)
 
-        query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
-        mask_value = torch.finfo(attn_weights.dtype).min
-        # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
-        # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-        mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
-        attn_weights = torch.where(causal_mask, attn_weights, mask_value)
+        if causal:
+            query_length, key_length = query.size(-2), key.size(-2)
+            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
+            mask_value = torch.finfo(attn_weights.dtype).min
+            # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
+            # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
+            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
             # Apply the attention mask
@@ -146,19 +145,24 @@ class BarkCausalAttention(nn.Module):
         fused_qkv = self.qkv_proj(hidden_states)
         query, key, value = self._split_heads(fused_qkv)
 
-        if layer_past is not None:
-            past_key = layer_past[0]
-            past_value = layer_past[1]
-            key = torch.cat((past_key, key), dim=-2)
-            value = torch.cat((past_value, value), dim=-2)
+        if self.causal:
+            if layer_past is not None:
+                past_key = layer_past[0]
+                past_value = layer_past[1]
+                key = torch.cat((past_key, key), dim=-2)
+                value = torch.cat((past_value, value), dim=-2)
 
-        if use_cache is True:
-            present = (key, value)
+            if use_cache is True:
+                present = (key, value)
+            else:
+                present = None
         else:
             present = None
 
         # TODO(SG): flash attn
-        attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+        attn_output, attn_weights = self._attn(
+            query, key, value, causal=self.causal, attention_mask=attention_mask, head_mask=head_mask
+        )
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
         attn_output = self.out_proj(attn_output)
@@ -168,7 +172,7 @@ class BarkCausalAttention(nn.Module):
         if output_attentions:
             outputs += (attn_weights,)
 
-        return outputs  # a, present, (attentions)
+        return outputs
 
 
 class BarkMLP(nn.Module):
@@ -189,12 +193,12 @@ class BarkMLP(nn.Module):
 
 
 class BarkBlock(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, causal):
         super().__init__()
         hidden_size = config.hidden_size
         inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * hidden_size
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.attn = BarkCausalAttention(config)
+        self.attn = BarkAttention(config, causal)
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.mlp = BarkMLP(inner_dim, config)
 
@@ -265,7 +269,7 @@ class BarkPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BarkModel):
+        if isinstance(module, (BarkCoarseModel, BarkFineModel)):
             module.gradient_checkpointing = value
 
 
@@ -310,14 +314,6 @@ BARK_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
@@ -351,10 +347,10 @@ BARK_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Bark Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare Bark Coarse Model transformer outputting raw hidden-states without any specific head on top.",
     BARK_START_DOCSTRING,
 )
-class BarkModel(BarkPreTrainedModel):
+class BarkCoarseModel(BarkPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -362,7 +358,7 @@ class BarkModel(BarkPreTrainedModel):
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
         self.drop = nn.Dropout(float(config.embed_dropout))
-        self.h = nn.ModuleList([BarkBlock(config) for _ in range(config.num_layers)])
+        self.h = nn.ModuleList([BarkBlock(config, causal=True) for _ in range(config.num_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.gradient_checkpointing = False
@@ -378,7 +374,7 @@ class BarkModel(BarkPreTrainedModel):
     @add_start_docstrings_to_model_forward(BARK_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
+        output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -386,7 +382,6 @@ class BarkModel(BarkPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -394,7 +389,7 @@ class BarkModel(BarkPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -416,8 +411,6 @@ class BarkModel(BarkPreTrainedModel):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        if token_type_ids is not None:
-            token_type_ids = token_type_ids.view(-1, input_shape[-1])
         if position_ids is not None:
             position_ids = position_ids.view(-1, input_shape[-1])
 
@@ -461,10 +454,6 @@ class BarkModel(BarkPreTrainedModel):
             inputs_embeds = self.wte(input_ids)
         position_embeds = self.wpe(position_ids)
         hidden_states = inputs_embeds + position_embeds
-
-        if token_type_ids is not None:
-            token_type_embeds = self.wte(token_type_ids)
-            hidden_states = hidden_states + token_type_embeds
 
         hidden_states = self.drop(hidden_states)
 
@@ -537,12 +526,12 @@ class BarkModel(BarkPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The Bark Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    The Bark Coarse Model transformer with a language modeling head on top (linear layer with weights tied to the input
     embeddings).
     """,
     BARK_START_DOCSTRING,
 )
-class BarkForCausalLM(BarkPreTrainedModel):
+class BarkCoarseModelForConditionalGeneration(BarkPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"h\.\d+\.attn\.masked_bias",
         r"lm_head.weight",
@@ -552,7 +541,7 @@ class BarkForCausalLM(BarkPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.transformer = BarkModel(config)
+        self.transformer = BarkCoarseModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
@@ -565,12 +554,9 @@ class BarkForCausalLM(BarkPreTrainedModel):
         self.lm_head = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
-        token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values:
             input_ids = input_ids[:, -1].unsqueeze(-1)
-            if token_type_ids is not None:
-                token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
 
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
@@ -589,13 +575,12 @@ class BarkForCausalLM(BarkPreTrainedModel):
             "use_cache": kwargs.get("use_cache"),
             "position_ids": position_ids,
             "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
         }
 
     @add_start_docstrings_to_model_forward(BARK_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutputWithCrossAttentions,
+        output_type=CausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -603,7 +588,6 @@ class BarkForCausalLM(BarkPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -612,7 +596,7 @@ class BarkForCausalLM(BarkPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
+    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
@@ -625,7 +609,6 @@ class BarkForCausalLM(BarkPreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -636,26 +619,19 @@ class BarkForCausalLM(BarkPreTrainedModel):
         )
         hidden_states = transformer_outputs[0]
 
-        # TODO(SG): inference time mini optimisation?
-        lm_logits = self.lm_head(hidden_states)
+        # only forward the lm_head on the very last position
+        lm_logits = self.lm_head(hidden_states[:, -1, :])
+        lm_logits = lm_logits.unsqueeze(1)
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
             labels = labels.to(lm_logits.device)
-            # Compute loss in fp32 to match with mesh-tf version
-            # https://github.com/EleutherAI/gpt-neo/blob/89ce74164da2fb16179106f54e2269b5da8db333/models/gpt2/gpt2.py#L179
-            lm_logits = lm_logits.to(torch.float32)
-
             # Shift so that tokens < n predict n
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-
-            lm_logits = lm_logits.to(hidden_states.dtype)
-            loss = loss.to(hidden_states.dtype)
 
         if not return_dict:
             output = (lm_logits,) + transformer_outputs[1:]
@@ -681,4 +657,260 @@ class BarkForCausalLM(BarkPreTrainedModel):
         return tuple(
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
             for layer_past in past_key_values
+        )
+
+
+@add_start_docstrings(
+    "The bare Bark Fine Model transformer outputting raw hidden-states without any specific head on top.",
+    BARK_START_DOCSTRING,
+)
+class BarkFineModel(BarkPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.embed_dim = config.hidden_size
+        self.wtes = nn.ModuleList(
+            [nn.Embedding(config.vocab_size, self.embed_dim) for _ in range(config.num_codebooks)]
+        )
+        self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
+        self.drop = nn.Dropout(float(config.embed_dropout))
+        self.h = nn.ModuleList([BarkBlock(config, causal=False) for _ in range(config.num_layers)])
+        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+
+        self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(BARK_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=BaseModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        codebook_idx: int,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutput]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+            input_ids = input_ids.view(-1, input_shape[-1])
+            batch_size = input_ids.shape[0]
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+            batch_size = inputs_embeds.shape[0]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if position_ids is not None:
+            position_ids = position_ids.view(-1, input_shape[-1])
+
+        if position_ids is None:
+            position_ids = torch.arange(0, input_shape[-1], dtype=torch.long, device=device)
+            position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
+
+        # Attention mask.
+        if attention_mask is not None:
+            if batch_size <= 0:
+                raise ValueError("batch_size has to be defined and > 0")
+            attention_mask = attention_mask.view(batch_size, -1)
+            # We create a 3D attention mask from a 2D tensor mask.
+            # Sizes are [batch_size, 1, 1, to_seq_length]
+            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
+            # this attention mask is more simple than the triangular masking of causal attention
+            # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
+            attention_mask = attention_mask[:, None, None, :]
+
+            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+            # masked positions, this operation will create a tensor which is 0.0 for
+            # positions we want to attend and the dtype's smallest value for masked positions.
+            # Since we are adding it to the raw scores before the softmax, this is
+            # effectively the same as removing these entirely.
+            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
+
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x num_heads x N x N
+        # head_mask has shape n_layer x batch x num_heads x N x N
+        head_mask = self.get_head_mask(head_mask, self.config.num_layers)
+
+        if inputs_embeds is None:
+            inputs_embeds = [wte(input_ids[:, :, i].unsqueeze(-1)) for i, wte in enumerate(self.h.wtes)]
+            inputs_embeds = torch.cat(inputs_embeds, dim=-1)
+
+        inputs_embeds = inputs_embeds[..., : codebook_idx + 1].sum(dim=-1)
+
+        position_embeds = self.wpe(position_ids)
+        hidden_states = inputs_embeds + position_embeds
+
+        hidden_states = self.drop(hidden_states)
+
+        output_shape = input_shape + (hidden_states.size(-1),)
+
+        all_self_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
+        for i, block in enumerate(self.h):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            if self.gradient_checkpointing and self.training:
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        # None for past_key_value
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
+                outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(block),
+                    hidden_states,
+                    None,
+                    attention_mask,
+                    head_mask[i],
+                )
+            else:
+                outputs = block(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    head_mask=head_mask[i],
+                    output_attentions=output_attentions,
+                )
+
+            hidden_states = outputs[0]
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (outputs[1],)
+
+        hidden_states = self.ln_f(hidden_states)
+
+        hidden_states = hidden_states.view(output_shape)
+        # Add last hidden state
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    The Bark Fine Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    embeddings).
+    """,
+    BARK_START_DOCSTRING,
+)
+class BarkFineModelWithLMHead(BarkPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+        r"h\.\d+\.attn\.masked_bias",
+        r"lm_head.weight",
+        r"h\.\d+\.attn\.attention\.bias",
+    ]
+    _keys_to_ignore_on_save = [r"lm_head.weight"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.transformer = BarkFineModel(config)
+        self.lm_heads = nn.ModuleList(
+            [nn.Linear(config.hidden_size, config.vocab_size, bias=False) for _ in range(1, config.num_codebooks)]
+        )
+
+        for i in range(1, config.num_codebooks):
+            self.transformer.wtes[i].weight = self.lm_heads[i - 1].weight
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(BARK_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=CausalLMOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        codebook_idx: int,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithPast]:
+        r"""
+        codebook_idx (`int`): The codebook index to predict. labels (`torch.LongTensor` of shape `(batch_size,
+        sequence_length)`, *optional*):
+            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
+            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
+            are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if codebook_idx < 0 or codebook_idx > self.config.num_codebooks:
+            raise ValueError(
+                f"Cannot predict codebook {codebook_idx}, codebook should be between 1 and {self.config.num_codebooks}."
+            )
+
+        transformer_outputs = self.transformer(
+            codebook_idx,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = transformer_outputs[0]
+
+        lm_logits = self.lm_heads[codebook_idx - 1](hidden_states)
+
+        loss = None
+        if labels is not None:
+            labels = labels.to(lm_logits.device)
+            # Shift so that tokens < n predict n
+            shift_logits = lm_logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            # Flatten the tokens
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+
+        if not return_dict:
+            output = (lm_logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=lm_logits,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
         )
