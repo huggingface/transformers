@@ -19,7 +19,7 @@ specific language governing permissions and limitations under the License.
 자동 음성 인식(Automatic Speech Recognition, ASR)은 음성 신호를 텍스트로 변환하여 음성 입력 시퀀스를 텍스트 출력에 매핑합니다. 
 Siri와 Alexa와 같은 가상 어시스턴트는 ASR 모델을 사용하여 일상적으로 사용자를 돕고 있으며, 회의 중 라이브 캡션 및 메모 작성과 같은 유용한 사용자 친화적 응용 프로그램도 많이 있습니다.
 
-이 가이드에서 소개할 내용은 아래와 같습니다.
+이 가이드에서 소개할 내용은 아래와 같습니다:
 
 1. [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) 데이터 세트에서 [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base)를 미세 조정하여 오디오를 텍스트로 변환합니다.
 2. 미세 조정한 모델을 추론에 사용합니다.
@@ -49,7 +49,7 @@ Hugging Face 계정에 로그인하면 모델을 업로드하고 커뮤니티에
 >>> notebook_login()
 ```
 
-## Load MInDS-14 dataset[[load-minds-14-dataset]]
+## MInDS-14 데이터 세트 가져오기[[load-minds-14-dataset]]
 
 먼저, 🤗 Datasets 라이브러리에서 [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) 데이터 세트의 일부분을 가져오세요. 
 이렇게 하면 전체 데이터 세트에 대한 훈련에 시간을 들이기 전에 모든 것이 작동하는지 실험하고 검증할 수 있습니다.
@@ -60,13 +60,13 @@ Hugging Face 계정에 로그인하면 모델을 업로드하고 커뮤니티에
 >>> minds = load_dataset("PolyAI/minds14", name="en-US", split="train[:100]")
 ```
 
-[`~Dataset.train_test_split`] 메소드를 사용하여 데이터 세트의 `train` 분할을 훈련 세트와 테스트 세트로 나누세요:
+[`~Dataset.train_test_split`] 메소드를 사용하여 데이터 세트의 `train`을 훈련 세트와 테스트 세트로 나누세요:
 
 ```py
 >>> minds = minds.train_test_split(test_size=0.2)
 ```
 
-그런 다음 데이터 세트를 확인해보세요:
+그리고 데이터 세트를 확인하세요:
 
 ```py
 >>> minds
@@ -115,7 +115,7 @@ DatasetDict({
 >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base")
 ```
 
-MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로(이 정보는 [데이터 세트 카드](https://huggingface.co/datasets/PolyAI/minds14)에서 확인할 수 있습니다), 사전 훈련된 Wav2Vec2 모델을 사용하려면 데이터 세트를 16000kHz로 리샘플링해야 합니다:
+MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로([데이터 세트 카드](https://huggingface.co/datasets/PolyAI/minds14)에서 확인), 사전 훈련된 Wav2Vec2 모델을 사용하려면 데이터 세트를 16000kHz로 리샘플링해야 합니다:
 
 ```py
 >>> minds = minds.cast_column("audio", Audio(sampling_rate=16_000))
@@ -157,7 +157,7 @@ MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로(이 정보�
 >>> encoded_minds = minds.map(prepare_dataset, remove_columns=minds.column_names["train"], num_proc=4)
 ```
 
-🤗 Transformers에는 자동 음성 인식용 데이터 콜레이터가 없으므로 예제 배치를 생성하려면 [`DataCollatorWithPadding`]을 조정해야 합니다. 데이터 콜레이터는 이렇게 하면 텍스트와 레이블을 배치에서 가장 긴 요소의 길이에 동적으로 패딩하여 길이를 균일하게 합니다. `tokenizer` 함수에서 `padding=True`를 설정하여 텍스트를 패딩할 수 있지만, 동적 패딩이 더 효율적입니다.
+🤗 Transformers에는 자동 음성 인식용 데이터 콜레이터가 없으므로 예제 배치를 생성하려면 [`DataCollatorWithPadding`]을 조정해야 합니다. 이렇게 하면 데이터 콜레이터는 텍스트와 레이블을 배치에서 가장 긴 요소의 길이에 동적으로 패딩하여 길이를 균일하게 합니다. `tokenizer` 함수에서 `padding=True`를 설정하여 텍스트를 패딩할 수 있지만, 동적 패딩이 더 효율적입니다.
 
 다른 데이터 콜레이터와 달리 이 특정 데이터 콜레이터는 `input_values`와 `labels`에 대해 다른 패딩 방법을 적용해야 합니다.
 
@@ -183,7 +183,7 @@ MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로(이 정보�
 
 ...         labels_batch = self.processor.pad(labels=label_features, padding=self.padding, return_tensors="pt")
 
-...         # 패딩에 대해 손실을 적용하지 않도록 -100로 대체합니다
+...         # 패딩에 대해 손실을 적용하지 않도록 -100으로 대체합니다
 ...         labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
 
 ...         batch["labels"] = labels
@@ -201,7 +201,7 @@ MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로(이 정보�
 
 훈련 중에 평가 지표를 포함하면 모델의 성능을 평가하는 데 도움이 되는 경우가 많습니다. 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) 라이브러리를 사용하면 평가 방법을 빠르게 불러올 수 있습니다. 
 이 작업에서는 [단어 오류율(Word Error Rate, WER)](https://huggingface.co/spaces/evaluate-metric/wer) 평가 지표를 가져옵니다.
-(평가 지표를 불러오고 계산하는 방법은 🤗 Evaluate [둘러보기](https://huggingface.co/docs/evaluate/a_quick_tour)를 참조하세요.)
+(평가 지표를 불러오고 계산하는 방법은 🤗 Evaluate [둘러보기](https://huggingface.co/docs/evaluate/a_quick_tour)를 참조하세요):
 
 ```py
 >>> import evaluate
@@ -241,7 +241,7 @@ MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로(이 정보�
 
 </Tip>
 
-이제 모델 훈련을 시작할 준비가 되었습니다! [`AutoModelForCTC`]로 Wav2Vec2를 가져오세요. `ctc_loss_reduction` 매개변수로 CTC 손실에 적용할 축소(reduction) 방법을 지정하세요. 기본 합계 대신 평균을 사용하는 것이 더 좋은 경우가 많습니다:
+이제 모델 훈련을 시작할 준비가 되었습니다! [`AutoModelForCTC`]로 Wav2Vec2를 가져오세요. `ctc_loss_reduction` 매개변수로 CTC 손실에 적용할 축소(reduction) 방법을 지정하세요. 기본값인 합계 대신 평균을 사용하는 것이 더 좋은 경우가 많습니다:
 
 ```py
 >>> from transformers import AutoModelForCTC, TrainingArguments, Trainer
@@ -304,15 +304,15 @@ MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로(이 정보�
 
 <Tip>
 
-자동 음성 인식을 위해 모델을 미세 조정하는 더 자세한 예제는 영어 자동 음성 인식을 위한 [블로그 포스트](https://huggingface.co/blog/fine-tune-wav2vec2-english)과 다국어 자동 음성 인식을 위한 [포스트](https://huggingface.co/blog/fine-tune-xlsr-wav2vec2)를 참조하세요.
+자동 음성 인식을 위해 모델을 미세 조정하는 더 자세한 예제는 영어 자동 음성 인식을 위한 [블로그 포스트](https://huggingface.co/blog/fine-tune-wav2vec2-english)와 다국어 자동 음성 인식을 위한 [포스트](https://huggingface.co/blog/fine-tune-xlsr-wav2vec2)를 참조하세요.
 
 </Tip>
 
 ## 추론하기[[inference]]
 
-좋아요, 이제 모델을 파인튜닝했으니 추론에 사용할 수 있습니다!
+좋아요, 이제 모델을 미세 조정했으니 추론에 사용할 수 있습니다!
 
-추론에 사용할 오디오 파일을 가져오세요. 필요한 경우 오디오 파일의 샘플링 비율을 모델의 샘플링 비율에 맞게 리샘플링하는 것을 잊지 마세요!
+추론에 사용할 오디오 파일을 가져오세요. 필요한 경우 오디오 파일의 샘플링 비율을 모델의 샘플링 레이트에 맞게 리샘플링하는 것을 잊지 마세요!
 
 ```py
 >>> from datasets import load_dataset, Audio
@@ -335,7 +335,7 @@ MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로(이 정보�
 
 <Tip>
 
-텍스트로 변환된 결과가 꽤 괜찮지만 더 좋을 수도 있습니다! 더 나은 결과를 얻으려면 더 많은 예제로 모델을 세밀하게 조정하세요!
+텍스트로 변환된 결과가 꽤 괜찮지만 더 좋을 수도 있습니다! 더 나은 결과를 얻으려면 더 많은 예제로 모델을 미세 조정하세요!
 
 </Tip>
 
