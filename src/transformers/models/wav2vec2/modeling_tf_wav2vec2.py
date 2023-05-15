@@ -1191,6 +1191,13 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
             "attention_mask": tf.TensorSpec((None, None), tf.float32, name="attention_mask"),
         }
 
+    @property
+    def dummy_inputs(self):
+        return {
+            "input_values": tf.random.uniform(shape=(1, 16000), dtype=tf.float32),
+            "attention_mask": tf.ones(shape=(1, 16000), dtype=tf.float32),
+        }
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         logger.warning(
