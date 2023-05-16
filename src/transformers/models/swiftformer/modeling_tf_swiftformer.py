@@ -286,9 +286,9 @@ class TFSwiftFormerEfficientAdditiveAttention(tf.keras.layers.Layer):
 
         query_weight = query @ self.w_g
         scaled_query_weight = query_weight * self.scale_factor
-        scaled_query_weight = scaled_query_weight.softmax(dim=-1)
+        scaled_query_weight = tf.nn.softmax(scaled_query_weight, axis=-1)
 
-        global_queries = tf.math.reduce_sum(scaled_query_weight * query, dim=1)
+        global_queries = tf.math.reduce_sum(scaled_query_weight * query, axis=1)
         global_queries = global_queries.unsqueeze(1).repeat(1, key.shape[1], 1)
 
         out = self.proj(global_queries * key) + query
