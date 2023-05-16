@@ -198,7 +198,7 @@ class Agent:
     def __init__(self, chat_prompt_template=None, run_prompt_template=None, additional_tools=None):
         _setup_default_tools()
 
-        self.chat_prompt_template = CHAT_MESSAGE_PROMPT if chat_prompt_template is None else chat_prompt_template
+        self.chat_prompt_template = CHAT_PROMPT_TEMPLATE if chat_prompt_template is None else chat_prompt_template
         self.run_prompt_template = RUN_PROMPT_TEMPLATE if run_prompt_template is None else run_prompt_template
         self._toolbox = HUGGINGFACE_DEFAULT_TOOLS.copy()
         if additional_tools is not None:
@@ -229,7 +229,7 @@ class Agent:
         description = "\n".join([f"- {name}: {tool.description}" for name, tool in self.toolbox.items()])
         if chat_mode:
             if self.chat_history is None:
-                prompt = CHAT_PROMPT_TEMPLATE.replace("<<all_tools>>", description)
+                prompt = self.chat_prompt_template.replace("<<all_tools>>", description)
             else:
                 prompt = self.chat_history
             prompt += CHAT_MESSAGE_PROMPT.replace("<<task>>", task)
