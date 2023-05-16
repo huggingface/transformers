@@ -2920,6 +2920,10 @@ class ModelUtilsTest(TestCasePlus):
         model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype="auto")
         self.assertEqual(model.dtype, torch.float16)
 
+        # 3. now retest that AutoModel behaves the same wrt torch_dtype="auto" as T5ForConditionalGeneration
+        model = AutoModel.from_pretrained(model_path, torch_dtype="auto")
+        self.assertEqual(model.dtype, torch.float16)
+
         # test fp16 save_pretrained, loaded with the explicit fp16
         model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)

@@ -435,19 +435,24 @@ class _BaseAutoModelClass:
         ]
         hub_kwargs = {name: kwargs.pop(name) for name in hub_kwargs_names if name in kwargs}
         if not isinstance(config, PretrainedConfig):
-            kwargs_copy = copy.deepcopy(kwargs)
+            kwargs_orig = copy.deepcopy(kwargs)
             # ensure not to pollute the config object with torch_dtype="auto" - since it's
             # meaningless in the context of the config object - torch.dtype values are acceptable
-            if kwargs_copy.get("torch_dtype", None) == "auto":
-                _ = kwargs_copy.pop("torch_dtype")
+            if kwargs.get("torch_dtype", None) == "auto":
+                _ = kwargs.pop("torch_dtype")
 
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path,
                 return_unused_kwargs=True,
                 trust_remote_code=trust_remote_code,
                 **hub_kwargs,
-                **kwargs_copy,
+                **kwargs,
             )
+
+            # if torch_dtype=auto was passed here, ensure to pass it on
+            if kwargs_orig.get("torch_dtype", None) == "auto":
+                kwargs["torch_dtype"] = "auto"
+
         if hasattr(config, "auto_map") and cls.__name__ in config.auto_map:
             if not trust_remote_code:
                 raise ValueError(
