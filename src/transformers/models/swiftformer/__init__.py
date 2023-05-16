@@ -48,7 +48,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_tf_bert"] = [
+    _import_structure["modeling_tf_swiftformer"] = [
         "TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFSwiftFormerForImageClassification",
         "TFSwiftFormerModel",
