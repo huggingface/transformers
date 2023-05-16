@@ -1669,7 +1669,7 @@ class GenerationTesterMixin:
                 or getattr(config, "num_decoder_layers", None)
                 or config.num_hidden_layers
             )
-            num_attention_heads = getattr(config, "decoder_attention_heads", config.num_attention_heads) 
+            num_attention_heads = getattr(config, "decoder_attention_heads", config.num_attention_heads)
             embed_dim = getattr(config, "d_model", config.hidden_size)
             per_head_embed_dim = embed_dim // num_attention_heads
 
