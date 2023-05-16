@@ -383,17 +383,13 @@ class TFSwiftFormerEncoderBlock(tf.keras.layers.Layer):
     def call(self, x: tf.Tensor, training: bool = False):
         x = self.local_representation(x, training=training)
         batch_size, channels, height, width = x.shape
+        res = self.attn(tf.reshape(tf.transpose(x, perm=(0, 2, 3, 1)), (batch_size, height * width, channels)))
+        res = tf.reshape(res, (batch_size, height, width, channels))
+        res = tf.tranpose(res, perm=(0, 3, 1, 2))
         if self.use_layer_scale:
-            res = self.attn(tf.reshape(tf.transpose(x, perm=(0, 2, 3, 1)), (batch_size, height * width, channels)))
-            res = tf.reshape(res, (batch_size, height, width, channels))
-            res = tf.tranpose(res, perm=(0, 3, 1, 2))
-            x = x + self.drop_path(res, training=training)
+            x = x + self.drop_path(self.layer_scale_1 * res, training=training)
             x = x + self.drop_path(self.layer_scale_2 * self.linear(x), training=training)
-
         else:
-            res = self.attn(tf.reshape(tf.transpose(x, perm=(0, 2, 3, 1)), (batch_size, height * width, channels)))
-            res = tf.reshape(res, batch_size, height, width, channels)
-            res = tf.tranpose(res, perm=(0, 3, 1, 2))
             x = x + self.drop_path(res, training=training)
             x = x + self.drop_path(self.linear(x), training=training)
         return x
