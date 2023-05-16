@@ -527,9 +527,8 @@ def create_circleci_config(folder=None):
         with open(f_path, "w") as fp:
             fp.write(" ".join(extended_tests_to_run))
 
-    example_file = os.path.join(folder, "examples_test_list.txt")
-    if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
-        jobs.extend(EXAMPLES_TESTS)
+
+    jobs.extend(EXAMPLES_TESTS)
 
     repo_util_file = os.path.join(folder, "test_repo_utils.txt")
 
