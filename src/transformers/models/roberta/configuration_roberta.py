@@ -105,7 +105,7 @@ class RobertaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=30522,
+        vocab_size=50265,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
