@@ -80,12 +80,12 @@ class TFSwiftFormerPatchEmbedding(tf.keras.layers.Layer):
                 tf.keras.layers.BatchNormalization(
                     epsilon=config.batch_norm_eps, momentum=0.9
                 ),  # FIXME: is this the equivalent momentum?
-                get_tf_activation("relu"),
+                tf.keras.layers.Activation("relu"),
                 tf.keras.layers.Conv2D(out_chs, kernel_size=2, strides=2, padding=(1, 1)),
                 tf.keras.layers.BatchNormalization(
                     epsilon=config.batch_norm_eps, momentum=0.9
                 ),  # FIXME: is this the equivalent momentum?
-                get_tf_activation("relu"),
+                tf.keras.layers.Activation("relu"),
             ],
             name="path_embeddings",
         )
