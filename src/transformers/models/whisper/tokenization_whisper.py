@@ -931,6 +931,8 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
             if not return_language:
                 chunk.pop("language")
         optional = {"chunks": chunks}
+        if return_timestamps == "word":
+            optional["word_timestamps"] = ["TODO"]   # TODO: this should override `"chunks"` !
     else:
         optional = {}
     return full_text, optional
