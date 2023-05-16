@@ -1284,10 +1284,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     and getattr(self.config, "add_cross_attention", False)
                 ):
                     output[key] = None
-                if output[key] is not None:
+                if isinstance(output[key], (tuple, list)):
                     try:
                         output[key] = tf.convert_to_tensor(output[key])
-                    except ValueError:
+                    except (ValueError, tf.errors.InvalidArgumentError):
                         pass  # Layers may not have the same dimensions
         return output
 
