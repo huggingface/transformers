@@ -690,6 +690,14 @@ def infer_tests_to_run(
 
         create_json_map(test_files_to_run, json_output_file)
 
+    doctest_list = get_doctest_files()
+
+    print(f"\n### DOCTEST TO RUN ###\n{_print_list(doctest_list)}")
+    if len(doctest_list) > 0:
+        doctest_file = Path(output_file).parent / "doctest_list.txt"
+        with open(doctest_file, "w", encoding="utf-8") as f:
+            f.write(" ".join(doctest_list))
+
 
 def filter_tests(output_file, filters):
     """
