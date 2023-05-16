@@ -754,7 +754,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         predictions = model.generate(**inputs)
 
         self.assertEqual(
-            processor.decode(predictions[0], skip_special_tokens=True), "A picture of a stop sign that says yes."
+            processor.decode(predictions[0], skip_special_tokens=True), "A picture of a stop sign that says yes"
         )
 
         self.assertEqual(
