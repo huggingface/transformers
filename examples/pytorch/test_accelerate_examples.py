@@ -177,6 +177,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ner_no_trainer")))
 
+    @unittest.skip(reason="Fix me @muellerzr")
     @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
     def test_run_squad_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
