@@ -1,7 +1,7 @@
 import copy
 import math
 from dataclasses import dataclass
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -390,13 +390,13 @@ class Beit3MultiheadAttention(nn.Module):
 
     def forward(
         self,
-        query,
-        key,
-        value,
-        incremental_state=None,
-        key_padding_mask=None,
-        attn_mask=None,
-        relative_pos=None,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        incremental_state: Dict = None,
+        key_padding_mask: torch.Tensor = None,
+        attn_mask: torch.Tensor = None,
+        relative_pos: torch.Tensor = None,
     ):
         batch_size, target_length, embed_dim = query.size()
 
