@@ -279,9 +279,11 @@ def dtw(x: np.ndarray):
     trace[0, :] = 2
     trace[:, 0] = 1
 
-    result = []
+    text_indices = []
+    time_indices = []
     while i > 0 or j > 0:
-        result.append((i - 1, j - 1))
+        text_indices.append(i - 1)
+        time_indices.append(j - 1)
         if trace[i, j] == 0:
             i -= 1
             j -= 1
@@ -292,8 +294,9 @@ def dtw(x: np.ndarray):
         else:
             raise ValueError("Unexpected trace[i, j]")
 
-    result = np.array(result)
-    return result[::-1, :].T
+    text_indices = np.array(text_indices)[::-1]
+    time_indices = np.array(time_indices)[::-1]
+    return text_indices, time_indices
 
 
 class WhisperPositionalEmbedding(nn.Embedding):
