@@ -744,11 +744,11 @@ class TFSamPromptEncoder(tf.keras.layers.Layer):
         Embeds different types of prompts, returning both sparse and dense embeddings.
 
         Args:
-            points (`tf.Tensor`, **optional**):
+            points (`tf.Tensor`, *optional*):
                 point coordinates and labels to embed.
-            boxes (`tf.Tensor`, **optional**):
+            boxes (`tf.Tensor`, *optional*):
                 boxes to embed
-            masks (`tf.Tensor`, **optional**):
+            masks (`tf.Tensor`, *optional*):
                 masks to embed
         """
         sparse_embeddings = None

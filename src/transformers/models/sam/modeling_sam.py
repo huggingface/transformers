@@ -475,7 +475,7 @@ class SamMaskDecoder(nn.Module):
                 the embeddings of the mask inputs
             multimask_output (bool):
                 Whether to return multiple masks or a single mask.
-            output_attentions (bool, **optional**):
+            output_attentions (bool, *optional*):
                 Whether or not to return the attentions tensors of all attention layers.
         """
         batch_size, num_channels, height, width = image_embeddings.shape
@@ -667,11 +667,11 @@ class SamPromptEncoder(nn.Module):
         Embeds different types of prompts, returning both sparse and dense embeddings.
 
         Args:
-            points (`torch.Tensor`, **optional**):
+            points (`torch.Tensor`, *optional*):
                 point coordinates and labels to embed.
-            boxes (`torch.Tensor`, **optional**):
+            boxes (`torch.Tensor`, *optional*):
                 boxes to embed
-            masks (`torch.Tensor`, **optional**):
+            masks (`torch.Tensor`, *optional*):
                 masks to embed
         """
         sparse_embeddings = None
