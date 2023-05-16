@@ -152,9 +152,7 @@ class TFSwiftFormerEmbeddings(tf.keras.layers.Layer):
         padding = padding if isinstance(padding, collections.abc.Iterable) else (padding, padding)
 
         self.pad = tf.keras.layers.ZeroPadding2D(padding=padding)
-        self.proj = tf.keras.layers.Conv2D(
-            embed_dim, kernel_size=patch_size, strides=stride, name="proj"
-        )
+        self.proj = tf.keras.layers.Conv2D(embed_dim, kernel_size=patch_size, strides=stride, name="proj")
         self.norm = tf.keras.layers.BatchNormalization(
             epsilon=config.batch_norm_eps, momentum=0.9, name="norm"
         )  # FIXME: is this the correct momentum?
@@ -181,9 +179,7 @@ class TFSwiftFormerConvEncoder(tf.keras.layers.Layer):
 
         self.dim = dim
         self.pad = tf.keras.layers.ZeroPadding2D(padding=(1, 1))
-        self.depth_wise_conv = tf.keras.layers.Conv2D(
-            dim, kernel_size=3, groups=dim, name="depth_wise_conv"
-        )
+        self.depth_wise_conv = tf.keras.layers.Conv2D(dim, kernel_size=3, groups=dim, name="depth_wise_conv")
         self.norm = tf.keras.layers.BatchNormalization(
             epsilon=config.batch_norm_eps, momentum=0.9, name="norm"
         )  # FIXME
@@ -312,9 +308,7 @@ class TFSwiftFormerLocalRepresentation(tf.keras.layers.Layer):
         self.dim = dim
 
         self.pad = tf.keras.layers.ZeroPadding2D(padding=(1, 1))
-        self.depth_wise_conv = tf.keras.layers.Conv2D(
-            dim, kernel_size=3, groups=dim, name="depth_wise_conv"
-        )
+        self.depth_wise_conv = tf.keras.layers.Conv2D(dim, kernel_size=3, groups=dim, name="depth_wise_conv")
         self.norm = tf.keras.layers.BatchNormalization(
             epsilon=config.batch_norm_eps, momentum=0.9, name="norm"
         )  # FIXME: momentum
@@ -390,22 +384,17 @@ class TFSwiftFormerEncoderBlock(tf.keras.layers.Layer):
         x = self.local_representation(x, training=training)
         batch_size, channels, height, width = x.shape
         if self.use_layer_scale:
-            x = x + self.drop_path(
-                self.layer_scale_1
-                * self.attn(tf.reshape(tf.transpose(x, perm=(0, 2, 3, 1)), (batch_size, height * width, channels)))
-                .reshape(batch_size, height, width, channels)
-                .permute(0, 3, 1, 2),
-                training=training,
-            )
+            res = self.attn(tf.reshape(tf.transpose(x, perm=(0, 2, 3, 1)), (batch_size, height * width, channels)))
+            res = tf.reshape(res, (batch_size, height, width, channels))
+            res = tf.tranpose(res, perm=(0, 3, 1, 2))
+            x = x + self.drop_path(res, training=training)
             x = x + self.drop_path(self.layer_scale_2 * self.linear(x), training=training)
 
         else:
-            x = x + self.drop_path(
-                self.attn(tf.reshape(tf.transpose(x, perm=(0, 2, 3, 1)), (batch_size, height * width, channels)))
-                .reshape(batch_size, height, width, channels)
-                .permute(0, 3, 1, 2),
-                training=training,
-            )
+            res = self.attn(tf.reshape(tf.transpose(x, perm=(0, 2, 3, 1)), (batch_size, height * width, channels)))
+            res = tf.reshape(res, batch_size, height, width, channels)
+            res = tf.tranpose(res, perm=(0, 3, 1, 2))
+            x = x + self.drop_path(res, training=training)
             x = x + self.drop_path(self.linear(x), training=training)
         return x
 
