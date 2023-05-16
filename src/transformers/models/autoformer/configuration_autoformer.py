@@ -42,7 +42,7 @@ class AutoformerConfig(PretrainedConfig):
         prediction_length (`int`):
             The prediction length for the decoder. In other words, the prediction horizon of the model.
         context_length (`int`, *optional*, defaults to `prediction_length`):
-            The context length for the encoder. If `None`, the context length will be the same as the
+            The context length for the encoder. If unset, the context length will be the same as the
             `prediction_length`.
         distribution_output (`string`, *optional*, defaults to `"student_t"`):
             The distribution emission head for the model. Could be either "student_t", "normal" or "negative_binomial".
