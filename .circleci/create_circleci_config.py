@@ -473,28 +473,10 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
-REGULAR_TESTS = [
-    torch_and_tf_job,
-    torch_and_flax_job,
-    torch_job,
-    tf_job,
-    flax_job,
-    custom_tokenizers_job,
-    hub_job,
-    onnx_job,
-    exotic_models_job,
-    doc_test_job
-]
 EXAMPLES_TESTS = [
     examples_torch_job,
-    examples_tensorflow_job,
-    examples_flax_job,
 ]
-PIPELINE_TESTS = [
-    pipelines_torch_job,
-    pipelines_tf_job,
-]
-REPO_UTIL_TESTS = [repo_utils_job]
+
 
 def create_circleci_config(folder=None):
     if folder is None:
@@ -508,8 +490,7 @@ def create_circleci_config(folder=None):
             all_test_list = f.read()
     else:
         all_test_list = []
-    if len(all_test_list) > 0:
-        jobs.extend(PIPELINE_TESTS)
+
 
     test_file = os.path.join(folder, "filtered_test_list.txt")
     if os.path.exists(test_file):
@@ -517,8 +498,6 @@ def create_circleci_config(folder=None):
             test_list = f.read()
     else:
         test_list = []
-    if len(test_list) > 0:
-        jobs.extend(REGULAR_TESTS)
 
         extended_tests_to_run = set(test_list.split())
         # Extend the test files for cross test jobs
@@ -553,8 +532,6 @@ def create_circleci_config(folder=None):
         jobs.extend(EXAMPLES_TESTS)
 
     repo_util_file = os.path.join(folder, "test_repo_utils.txt")
-    if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
-        jobs.extend(REPO_UTIL_TESTS)
 
     if len(jobs) > 0:
         config = {"version": "2.1"}

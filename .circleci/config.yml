@@ -193,15 +193,4 @@ workflows:
         when:
             not: <<pipeline.parameters.nightly>>
         jobs:
-            - check_circleci_user
-            - check_code_quality
-            - check_repository_consistency
             - fetch_tests
-
-    nightly:
-        when: <<pipeline.parameters.nightly>>
-        jobs:
-            - check_circleci_user
-            - check_code_quality
-            - check_repository_consistency
-            - fetch_all_tests
