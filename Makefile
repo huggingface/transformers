@@ -111,3 +111,10 @@ post-release:
 
 post-patch:
 	python utils/release.py --post_release --patch
+
+build-release:
+	rm -rf dist
+	rm -rf build
+	python setup.py bdist_wheel
+	python setup.py sdist
+	python utils/check_build.py
