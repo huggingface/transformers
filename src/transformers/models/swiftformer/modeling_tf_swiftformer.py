@@ -281,8 +281,8 @@ class TFSwiftFormerEfficientAdditiveAttention(tf.keras.layers.Layer):
         query = self.to_query(x)
         key = self.to_key(x)
 
-        query = torch.nn.functional.normalize(query, dim=-1)  # TODO
-        key = torch.nn.functional.normalize(key, dim=-1)  # TODO
+        query = tf.math.l2_normalize(query, dim=-1)
+        key = tf.math.l2_normalize(key, dim=-1)
 
         query_weight = query @ self.w_g
         scaled_query_weight = query_weight * self.scale_factor
@@ -392,7 +392,7 @@ class TFSwiftFormerEncoderBlock(tf.keras.layers.Layer):
         if self.use_layer_scale:
             x = x + self.drop_path(
                 self.layer_scale_1
-                * self.attn(x.permute(0, 2, 3, 1).reshape(batch_size, height * width, channels))
+                * self.attn(tf.reshape(tf.transpose(x, perm=(0, 2, 3, 1)), (batch_size, height * width, channels)))
                 .reshape(batch_size, height, width, channels)
                 .permute(0, 3, 1, 2),
                 training=training,
@@ -401,7 +401,7 @@ class TFSwiftFormerEncoderBlock(tf.keras.layers.Layer):
 
         else:
             x = x + self.drop_path(
-                self.attn(x.permute(0, 2, 3, 1).reshape(batch_size, height * width, channels))
+                self.attn(tf.reshape(tf.transpose(x, perm=(0, 2, 3, 1)), (batch_size, height * width, channels)))
                 .reshape(batch_size, height, width, channels)
                 .permute(0, 3, 1, 2),
                 training=training,
