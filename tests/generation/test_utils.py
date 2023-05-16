@@ -1669,8 +1669,8 @@ class GenerationTesterMixin:
                 or getattr(config, "num_decoder_layers", None)
                 or config.num_hidden_layers
             )
-            num_attention_heads = getattr(config, "decoder_attention_heads", None) or config.num_attention_heads
-            embed_dim = getattr(config, "d_model", None) or config.hidden_size
+            num_attention_heads = getattr(config, "decoder_attention_heads", config.num_attention_heads) 
+            embed_dim = getattr(config, "d_model", config.hidden_size)
             per_head_embed_dim = embed_dim // num_attention_heads
 
             past_kv = outputs["past_key_values"]
@@ -1689,7 +1689,7 @@ class GenerationTesterMixin:
                     self.assertEqual(
                         past_kv[i][1].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
                     )
-                    # The sequence length for the encoder K V depends on the model. Since it is not maniputaled in
+                    # The sequence length for the encoder K V depends on the model. Since it is not manipulated in
                     # autoregressive generation, I'm keeping the test general and not checking the 3rd dim
                     self.assertEqual(
                         (past_kv[i][2].shape[0], past_kv[i][2].shape[1], past_kv[i][2].shape[3]),
