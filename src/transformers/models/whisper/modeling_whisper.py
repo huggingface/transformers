@@ -1469,7 +1469,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         task=None,
         language=None,
         is_multilingual=None,
-        prompt_ids: Optional[Union[torch.Tensor, np.ndarray]] = None,
+        prompt_ids: Optional[torch.Tensor] = None,
         **kwargs,
     ):
         """
@@ -1527,7 +1527,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 find all the possible language tokens in the `model.generation_config.lang_to_id` dictionary.
             is_multilingual (`bool`, *optional*):
                 Whether or not the model is multilingual.
-            prompt_ids (`Optional[Union[torch.Tensor, np.ndarray]]`, *optional*):
+            prompt_ids (`torch.Tensor`, *optional*):
                 Rank-1 tensor of token IDs created by passing text to [`~WhisperProcessor.get_prompt_ids`] that is
                 provided as a prompt to each chunk. This can be used to provide or "prompt-engineer" a context for
                 transcription, e.g. custom vocabularies or proper nouns to make it more likely to predict those words
