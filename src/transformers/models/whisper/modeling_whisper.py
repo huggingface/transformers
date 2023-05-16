@@ -1792,51 +1792,35 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         map each output token to a position in the input audio.
 
         Returns:
-            tensor containing the timestamps in seconds for each predicted token; for special tokens the timestamp is
-            set to -1.0
+            tensor containing the timestamps in seconds for each predicted token
         """
-        predicted_ids = generate_outputs.sequences[:, 1:]
-        mask = predicted_ids < self.config.eos_token_id
-        # mask = mask | ~mask  # HACK for testing!
-
         # Create a list with `decoder_layers` elements, each a tensor of shape
         # (batch size, attention_heads, output length, input length).
         cross_attentions = []
         for i in range(self.config.decoder_layers):
             cross_attentions.append(torch.cat([x[i] for x in generate_outputs.cross_attentions], dim=2))
 
-        # Timestamps for special tokens are set to -1.0.
-        timestamps = torch.ones_like(generate_outputs.sequences, dtype=torch.float32) * -1.0
+        # Select specific cross-attention layers and heads. This is a tensor
+        # of shape (batch size, num selected, output length, input length).
+        weights = torch.stack([cross_attentions[l][:, h] for l, h in self.config.alignment_heads])
+        weights = weights.permute([1, 0, 2, 3])
 
+        # Normalize and smoothen the weights.
+        std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
+        weights = (weights - mean) / std
+        weights = median_filter(weights, 7)
+
+        # Average the different cross-attention heads.
+        matrix = weights.mean(dim=1)
+
+        timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)
+
+        # Perform dynamic time warping on each element of the batch.
         for batch_idx in range(timestamps.shape[0]):
-            # Strip out any special tokens, including timestamp tokens.
-            masked_attentions = []
-            for i in range(len(cross_attentions)):
-                masked_attentions.append(cross_attentions[i][batch_idx, :, mask[batch_idx], :])
-
-            # Select specific cross-attention layers and heads. This is a tensor
-            # of shape (num selected, output length, input length).
-            weights = torch.stack([masked_attentions[l][h] for l, h in self.config.alignment_heads])
-
-            # Normalize and smoothen the weights.
-            std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
-            weights = (weights - mean) / std
-            weights = median_filter(weights, 7)
-
-            # Average the different cross-attention heads.
-            matrix = weights.mean(dim=0)
-
-            # Perform dynamic time warping on each element of the batch.
-            text_indices, time_indices = dtw(-matrix.double().cpu().numpy())
+            text_indices, time_indices = dtw(-matrix[batch_idx].double().cpu().numpy())
             jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
             jump_times = time_indices[jumps] * time_precision
-
-            # Associate the timestamps with the tokens.
-            j = 0
-            for i in range(1, timestamps.shape[1]):
-                if mask[batch_idx, i - 1]:
-                    timestamps[batch_idx, i] = jump_times[j]
-                    j += 1
+            timestamps[batch_idx, 1:] = torch.tensor(jump_times)
 
         return timestamps
 
