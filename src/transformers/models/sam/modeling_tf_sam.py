@@ -255,9 +255,7 @@ class TFSamAttention(tf.keras.layers.Layer):
 
 
 class TFSamTwoWayAttentionBlock(tf.keras.layers.Layer):
-    def __init__(
-        self, config, attention_downsample_rate: int = 2, skip_first_layer_pe: bool = False, **kwargs
-    ):
+    def __init__(self, config, attention_downsample_rate: int = 2, skip_first_layer_pe: bool = False, **kwargs):
         """
         A transformer block with four layers:
             (1) self-attention of sparse inputs (2) cross attention of sparse inputs -> dense inputs (3) mlp block on
