@@ -76,12 +76,12 @@ class TFSwiftFormerPatchEmbedding(tf.keras.layers.Layer):
         out_chs = config.embed_dims[0]
         self.patch_embedding = tf.keras.Sequential(
             [
-                tf.keras.layers.Conv2D(out_chs // 2, kernel_size=3, strides=2, padding=1),
+                tf.keras.layers.Conv2D(out_chs // 2, kernel_size=3, strides=2, padding=(1, 1)),
                 tf.keras.layers.BatchNormalization(
                     epsilon=config.batch_norm_eps, momentum=0.9
                 ),  # FIXME: is this the equivalent momentum?
                 get_tf_activation("relu"),
-                tf.keras.layers.Conv2D(out_chs, kernel_size=2, strides=2, padding=1),
+                tf.keras.layers.Conv2D(out_chs, kernel_size=2, strides=2, padding=(1, 1)),
                 tf.keras.layers.BatchNormalization(
                     epsilon=config.batch_norm_eps, momentum=0.9
                 ),  # FIXME: is this the equivalent momentum?
@@ -177,7 +177,7 @@ class TFSwiftFormerConvEncoder(tf.keras.layers.Layer):
 
         self.dim = dim
         self.depth_wise_conv = tf.keras.layers.Conv2D(
-            dim, kernel_size=3, padding=1, groups=dim, name="depth_wise_conv"
+            dim, kernel_size=3, padding=(1, 1), groups=dim, name="depth_wise_conv"
         )
         self.norm = tf.keras.layers.BatchNormalization(
             epsilon=config.batch_norm_eps, momentum=0.9, name="norm"
@@ -306,7 +306,7 @@ class TFSwiftFormerLocalRepresentation(tf.keras.layers.Layer):
         self.dim = dim
 
         self.depth_wise_conv = tf.keras.layers.Conv2D(
-            dim, kernel_size=3, padding=1, groups=dim, name="depth_wise_conv"
+            dim, kernel_size=3, padding=(1, 1), groups=dim, name="depth_wise_conv"
         )
         self.norm = tf.keras.layers.BatchNormalization(
             epsilon=config.batch_norm_eps, momentum=0.9, name="norm"
@@ -565,14 +565,6 @@ class TFSwiftFormerMainLayer(TFSwiftFormerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(SWIFTFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFBaseModelOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
     def call(
         self,
         pixel_values: Optional[tf.Tensor] = None,
@@ -608,7 +600,7 @@ class TFSwiftFormerMainLayer(TFSwiftFormerPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare SwiftFormer Model transformer outputting raw hidden-states without any specific head on top.",
     SWIFTFORMER_START_DOCSTRING,
 )
 class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
