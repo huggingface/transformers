@@ -74,7 +74,7 @@ class TFSwiftFormerModelTester:
         self.embed_dims = embed_dims
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor([self.batch_size, self.image_size, self.image_size, self.num_channels])
 
         labels = None
         if self.use_labels:
