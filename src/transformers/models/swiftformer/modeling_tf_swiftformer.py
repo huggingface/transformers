@@ -554,16 +554,15 @@ SWIFTFORMER_INPUTS_DOCSTRING = r"""
 
 
 @keras_serializable
-class TFSwiftFormerMainLayer(TFSwiftFormerPreTrainedModel):
+class TFSwiftFormerMainLayer(tf.keras.layers.Layer):
+    config_class = SwiftFormerConfig  # FIXME: why is this used (copied from modeling_tf_bert)
+
     def __init__(self, config: SwiftFormerConfig, **kwargs):
-        super().__init__(config, **kwargs)
+        super().__init__(**kwargs)
         self.config = config
 
         self.patch_embed = TFSwiftFormerPatchEmbedding(config, name="patch_embed")
         self.encoder = TFSwiftFormerEncoder(config, name="encoder")
-
-        # Initialize weights and apply final processing
-        self.post_init()
 
     def call(
         self,
@@ -678,9 +677,6 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9)  # FIXME
         self.head = tf.keras.layers.Dense(self.num_labels) if self.num_labels > 0 else tf.keras.layers.Identity()
         self.dist_head = tf.keras.layers.Dense(self.num_labels) if self.num_labels > 0 else tf.keras.layers.Identity()
-
-        # Initialize weights and apply final processing
-        self.post_init()
 
     @add_start_docstrings_to_model_forward(SWIFTFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
