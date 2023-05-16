@@ -250,7 +250,7 @@ def median_filter(inputs: torch.Tensor, filter_width: int) -> torch.Tensor:
 
 def dtw(x: np.ndarray):
     """
-    Dynamic time warping. Used by word-level timestamps.
+    Dynamic time warping. Used to generate token-level timestamps.
     """
     N, M = x.shape
     cost = np.ones((N + 1, M + 1), dtype=np.float32) * np.inf
