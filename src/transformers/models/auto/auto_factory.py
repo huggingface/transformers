@@ -451,7 +451,7 @@ class _BaseAutoModelClass:
 
             # if torch_dtype=auto was passed here, ensure to pass it on
             if kwargs_orig.get("torch_dtype", None) == "auto":
-                kwargs["torch_dtype"] = kwargs_orig["torch_dtype"]
+                kwargs["torch_dtype"] = "auto"
 
         if hasattr(config, "auto_map") and cls.__name__ in config.auto_map:
             if not trust_remote_code:
