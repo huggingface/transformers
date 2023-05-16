@@ -1752,12 +1752,12 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         if return_token_timestamps:
             if getattr(generation_config, "task", None) == "translate":
-                warnings.warn("Word-level timestamps may not be reliable for task 'translate'.")
+                warnings.warn("Token-level timestamps may not be reliable for task 'translate'.")
 
             if hasattr(self.config, "alignment_heads"):
                 outputs["token_timestamps"] = self._extract_token_timestamps(outputs)
             else:
-                warnings.warn("Model configuration has no `alignment_heads`, word-level timestamps not available.")
+                warnings.warn("Model configuration has no `alignment_heads`, token-level timestamps not available.")
 
         return outputs
 
