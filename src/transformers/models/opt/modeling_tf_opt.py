@@ -646,7 +646,7 @@ class TFOPTDecoder(tf.keras.layers.Layer):
         if attention_mask is None:
             attention_mask = tf.ones(inputs_embeds.shape[:2], dtype=tf.bool)
         else:
-            tf.debugging.assert_less_equal(
+            tf.debugging.assert_equal(
                 attention_mask.shape[1],
                 past_key_values_length + input_shape[1],
                 message=(
