@@ -76,12 +76,14 @@ class TFSwiftFormerPatchEmbedding(tf.keras.layers.Layer):
         out_chs = config.embed_dims[0]
         self.patch_embedding = tf.keras.Sequential(
             [
-                tf.keras.layers.Conv2D(out_chs // 2, kernel_size=3, strides=2, padding=(1, 1)),
+                tf.keras.layers.ZeroPadding2D(padding=(1, 1)),
+                tf.keras.layers.Conv2D(out_chs // 2, kernel_size=3, strides=2),
                 tf.keras.layers.BatchNormalization(
                     epsilon=config.batch_norm_eps, momentum=0.9
                 ),  # FIXME: is this the equivalent momentum?
                 tf.keras.layers.Activation("relu"),
-                tf.keras.layers.Conv2D(out_chs, kernel_size=2, strides=2, padding=(1, 1)),
+                tf.keras.layers.ZeroPadding2D(padding=(1, 1)),
+                tf.keras.layers.Conv2D(out_chs, kernel_size=2, strides=2),
                 tf.keras.layers.BatchNormalization(
                     epsilon=config.batch_norm_eps, momentum=0.9
                 ),  # FIXME: is this the equivalent momentum?
@@ -149,14 +151,16 @@ class TFSwiftFormerEmbeddings(tf.keras.layers.Layer):
         stride = stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
         padding = padding if isinstance(padding, collections.abc.Iterable) else (padding, padding)
 
+        self.pad = tf.keras.layers.ZeroPadding2D(padding=padding)
         self.proj = tf.keras.layers.Conv2D(
-            embed_dim, kernel_size=patch_size, strides=stride, padding=padding, name="proj"
+            embed_dim, kernel_size=patch_size, strides=stride, name="proj"
         )
         self.norm = tf.keras.layers.BatchNormalization(
             epsilon=config.batch_norm_eps, momentum=0.9, name="norm"
         )  # FIXME: is this the correct momentum?
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
+        x = self.pad(x)
         x = self.proj(x)
         x = self.norm(x, training=training)
         return x
@@ -176,8 +180,9 @@ class TFSwiftFormerConvEncoder(tf.keras.layers.Layer):
         hidden_dim = int(config.mlp_ratio * dim)
 
         self.dim = dim
+        self.pad = tf.keras.layers.ZeroPadding2D(padding=(1, 1))
         self.depth_wise_conv = tf.keras.layers.Conv2D(
-            dim, kernel_size=3, padding=(1, 1), groups=dim, name="depth_wise_conv"
+            dim, kernel_size=3, groups=dim, name="depth_wise_conv"
         )
         self.norm = tf.keras.layers.BatchNormalization(
             epsilon=config.batch_norm_eps, momentum=0.9, name="norm"
@@ -199,6 +204,7 @@ class TFSwiftFormerConvEncoder(tf.keras.layers.Layer):
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         input = x
+        x = self.pad(x)
         x = self.depth_wise_conv(x)
         x = self.norm(x, training=training)
         x = self.point_wise_conv1(x)
@@ -305,8 +311,9 @@ class TFSwiftFormerLocalRepresentation(tf.keras.layers.Layer):
 
         self.dim = dim
 
+        self.pad = tf.keras.layers.ZeroPadding2D(padding=(1, 1))
         self.depth_wise_conv = tf.keras.layers.Conv2D(
-            dim, kernel_size=3, padding=(1, 1), groups=dim, name="depth_wise_conv"
+            dim, kernel_size=3, groups=dim, name="depth_wise_conv"
         )
         self.norm = tf.keras.layers.BatchNormalization(
             epsilon=config.batch_norm_eps, momentum=0.9, name="norm"
@@ -328,6 +335,7 @@ class TFSwiftFormerLocalRepresentation(tf.keras.layers.Layer):
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         input = x
+        x = self.pad(x)
         x = self.depth_wise_conv(x)
         x = self.norm(x, training=training)
         x = self.point_wise_conv1(x)
