@@ -38,14 +38,9 @@ To create the package for pypi.
 7. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
 
-   Clean up your build and dist folders (to avoid re-uploading oldies):
-   rm -rf dist
-   rm -rf build
+   Run `make build-release`. This will build the release and do some sanity checks for you. If this ends with an error
+   message, you need to fix things before going further.
 
-   For the wheel, run: "python setup.py bdist_wheel" in the top level directory.
-   (this will build a wheel for the python version you use to build it).
-
-   For the sources, run: "python setup.py sdist"
    You should now have a /dist directory with both .whl and .tar.gz source versions.
 
 8. Check that everything looks correct by uploading the package to the pypi test server:
