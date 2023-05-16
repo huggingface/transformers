@@ -195,7 +195,7 @@ class TFSamAttention(tf.keras.layers.Layer):
     values.
     """
 
-    def __init__(self, config, downsample_rate=None, **kwargs) -> None:
+    def __init__(self, config, downsample_rate=None, **kwargs):
         super().__init__(**kwargs)
         self.hidden_size = config.hidden_size
 
@@ -785,7 +785,7 @@ class TFSamPromptEncoder(tf.keras.layers.Layer):
 class TFSamVisionAttention(tf.keras.layers.Layer):
     """Multi-head Attention block with relative position embeddings."""
 
-    def __init__(self, config, window_size, **kwargs) -> None:
+    def __init__(self, config, window_size, **kwargs):
         super().__init__(**kwargs)
         input_size = (
             (config.image_size // config.patch_size, config.image_size // config.patch_size)
@@ -938,7 +938,7 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
 
 
 class TFSamVisionLayer(tf.keras.layers.Layer):
-    def __init__(self, config, window_size, **kwargs) -> None:
+    def __init__(self, config, window_size, **kwargs):
         super().__init__(**kwargs)
         self.layer_norm1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1")
         self.attn = TFSamVisionAttention(config, window_size, name="attn")
@@ -1271,7 +1271,7 @@ SAM_INPUTS_DOCSTRING = r"""
 class TFSamModel(TFSamPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"prompt_encoder.shared_embedding.positional_embedding"]
 
-    def __init__(self, config, **kwargs) -> None:
+    def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
         self.shared_image_embedding = TFSamPositionalEmbedding(config.vision_config, name="shared_image_embedding")
 
