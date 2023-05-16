@@ -448,7 +448,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         raw_image = prepare_image()
-        input_boxes = [[650, 900, 1000, 1250]]
+        input_boxes = [[[650, 900, 1000, 1250]]]
         input_points = [[[820, 1080]]]
 
         inputs = processor(images=raw_image, input_boxes=input_boxes, input_points=input_points, return_tensors="tf")
@@ -501,7 +501,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         raw_image = prepare_image()
-        input_boxes = [[620, 900, 1000, 1255]]
+        input_boxes = [[[620, 900, 1000, 1255]]]
         input_points = [[[820, 1080]]]
         labels = [[0]]
 
