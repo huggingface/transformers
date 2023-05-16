@@ -190,7 +190,6 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --seed=42
             --max_train_steps=10
             --num_warmup_steps=2
-            --num_beams=6
             --learning_rate=2e-4
             --per_device_train_batch_size=2
             --per_device_eval_batch_size=1
