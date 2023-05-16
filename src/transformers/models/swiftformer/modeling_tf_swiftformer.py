@@ -226,7 +226,7 @@ class TFSwiftFormerMlp(tf.keras.layers.Layer):
         )  # FIXME: is this the correct momentum?
         self.fc1 = tf.keras.layers.Conv2D(hidden_features, 1, name="fc1")
         act_layer = get_tf_activation(config.hidden_act)
-        self.act = act_layer()
+        self.act = act_layer
         self.fc2 = tf.keras.layers.Conv2D(in_features, 1, name="fc2")
         self.drop = tf.keras.layers.Dropout(rate=0.0)  # FIXME: is this supposed to be 0?
 
