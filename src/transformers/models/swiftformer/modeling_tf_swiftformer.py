@@ -447,7 +447,7 @@ class TFSwiftFormerEncoder(tf.keras.layers.Layer):
         # Transformer model
         self.network = []
         for i in range(len(layer_depths)):
-            stage = TFSwiftFormerStage(config=config, index=i)
+            stage = TFSwiftFormerStage(config, index=i)
             self.network.append(stage)
             if i >= len(layer_depths) - 1:
                 break
