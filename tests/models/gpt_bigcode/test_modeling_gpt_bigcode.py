@@ -475,6 +475,10 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_disk_offload(self):
         pass
 
+    @unittest.skip("BigCodeGPT has a non-standard KV cache format.")
+    def test_past_key_values_format(self):
+        pass
+
     def test_gpt_bigcode_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt_bigcode_model(*config_and_inputs)
