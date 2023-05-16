@@ -578,7 +578,7 @@ def download_url(url, proxies=None):
         " that this is not compatible with the caching system (your file will be downloaded at each execution) or"
         " multiple processes (each process will download the file in a different temporary file)."
     )
-    tmp_file = tempfile.mktemp()
+    tmp_file = tempfile.mkstemp()[1]
     with open(tmp_file, "wb") as f:
         http_get(url, f, proxies=proxies)
     return tmp_file
