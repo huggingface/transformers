@@ -19,7 +19,8 @@ can vary as the APIs or underlying models are prone to change.
 
 </Tip>
 
-Transformers version v4.29.0, building on the concept of *tools* and *agents*.
+Transformers version v4.29.0, building on the concept of *tools* and *agents*. You can play with in
+[this colab](https://colab.research.google.com/drive/1c7MHD-T1forUPGcC_jlwsIptOzpG3hSj).
 
 In short, it provides a natural language API on top of transformers: we define a set of curated tools and design an 
 agent to interpret natural language and to use these tools. It is extensible by design; we curated some relevant tools, 
@@ -60,10 +61,29 @@ agent.run(
 ## Quickstart
 
 Before being able to use `agent.run`, you will need to instantiate an agent, which is a large language model (LLM). 
-We recommend using the [bigcode/starcoder](https://huggingface.co/bigcode/starcoder) checkpoint as it works very well 
-for the task at hand and is open-source, but please find other examples below.
+We provide support for openAI models as well as opensource alternatives from BigCode and OpenAssistant. The openAI
+models perform better (but require you to have an openAI API key, so cannot be used for free); Hugging Face is
+providing free access to endpoints for BigCode and OpenAssistant models.
 
-Start by logging in to have access to the Inference API:
+To start with, please install the `agents` extras in order to install all default dependencies.
+```bash
+pip install transformers[agents]
+```
+
+To use openAI models, you instantiate an [`OpenAiAgent`] after installing the `openai` dependency:
+
+```bash
+pip install openai
+```
+
+
+```py
+from transformers import OpenAiAgent
+
+agent = OpenAiAgent(model="text-davinci-003", api_key="<your_api_key>")
+```
+
+To use BigCode or OpenAssistant, start by logging in to have access to the Inference API:
 
 ```py
 from huggingface_hub import login
@@ -76,17 +96,22 @@ Then, instantiate the agent
 ```py
 from transformers import HfAgent
 
+# Starcoder
 agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
+# StarcoderBase
+# agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoderbase")
+# OpenAssistant
+# agent = HfAgent(url_endpoint="https://api-inference.huggingface.co/models/OpenAssistant/oasst-sft-4-pythia-12b-epoch-3.5")
 ```
 
-This is using the inference API that Hugging Face provides for free at the moment if you have your inference
+This is using the inference API that Hugging Face provides for free at the moment. If you have your own inference
 endpoint for this model (or another one) you can replace the URL above with your URL endpoint.
 
 <Tip>
 
-We're showcasing StarCoder as the default in the documentation as the model is free to use and performs admirably well
-on simple tasks. However, the checkpoint doesn't hold up when handling more complex prompts. If you're facing such an
-issue, we recommend trying out the OpenAI model which, while sadly not open-source, performs better at this given time.
+StarCoder and OpenAssistant are free to use and perform admirably well on simple tasks. However, the checkpoints
+don't hold up when handling more complex prompts. If you're facing such an issue, we recommend trying out the OpenAI
+model which, while sadly not open-source, performs better at this given time.
 
 </Tip>
 
@@ -97,7 +122,7 @@ You're now good to go! Let's dive into the two APIs that you now have at your di
 The single execution method is when using the [`~Agent.run`] method of the agent:
 
 ```py
-agent.run("Draw me a picture of rivers and lakes")
+agent.run("Draw me a picture of rivers and lakes.")
 ```
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes.png" width=200>
@@ -107,7 +132,7 @@ can perform one or several tasks in the same instruction (though the more comple
 the agent is to fail).
 
 ```py
-agent.chat("Draw me a picture of the sea then transform the picture to add an island.")
+agent.run("Draw me a picture of the sea then transform the picture to add an island")
 ```
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/sea_and_island.png" width=200>
@@ -118,15 +143,16 @@ agent.chat("Draw me a picture of the sea then transform the picture to add an is
 Every [`~Agent.run`] operation is independent, so you can run it several times in a row with different tasks.
 
 Note that your `agent` is just a large-language model, so small variations in your prompt might yield completely
-different results. It's important to explain as clearly as possible the task you want to perform.
+different results. It's important to explain as clearly as possible the task you want to perform. We go more in-depth
+on how to write good prompts [here](custom_tools#writing-good-user-inputs).
 
 If you'd like to keep a state across executions or to pass non-text objects to the agent, you can do so by specifying
 variables that you would like the agent to use. For example, you could generate the first image of rivers and lakes, 
 and ask the model to update that picture to add an island by doing the following:
 
 ```python
-picture = agent.run("Draw me a picture of rivers and lakes")
-updated_picture = agent.chat("Take that `picture` and add an island to it", picture=picture)
+picture = agent.run("Generate a picture of rivers and lakes.")
+updated_picture = agent.run("Transform the image in `picture` to add an island to it.", picture=picture)
 ```
 
 <Tip>
@@ -155,7 +181,7 @@ agent.run("Draw me a picture of the `prompt`", prompt="a capybara swimming in th
 The agent also has a chat-based approach, using the [`~Agent.chat`] method:
 
 ```py
-agent.chat("Draw me a picture of rivers and lakes")
+agent.chat("Generate a picture of rivers and lakes")
 ```
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes.png" width=200> 
@@ -196,6 +222,8 @@ agent.chat("Draw me a picture of rivers and lakes", remote=True)
 ```
 
 ### What's happening here? What are tools, and what are agents?
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/diagram.png">
 
 #### Agents
 
@@ -238,16 +266,16 @@ with the code generated by the agent.
 We identify a set of tools that can empower such agents. Here is an updated list of the tools we have integrated 
 in `transformers`:
 
-- **Document question answering**: given a document (such as a PDF) in image format, answer a question on this document ([Donut](../model_doc/donut))
-- **Text question answering**: given a long text and a question, answer the question in the text ([Flan-T5](../model_doc/flan-t5))
-- **Unconditional image captioning**: Caption the image! ([BLIP](../model_doc/blip))
-- **Image question answering**: given an image, answer a question on this image ([VILT](../model_doc/vilt))
-- **Image segmentation**: given an image and a prompt, output the segmentation mask of that prompt ([CLIPSeg](../model_doc/clipseg))
-- **Speech to text**: given an audio recording of a person talking, transcribe the speech into text ([Whisper](../model_doc/whisper))
-- **Text to speech**: convert text to speech ([SpeechT5](../model_doc/speecht5))
-- **Zero-shot text classification**: given a text and a list of labels, identify to which label the text corresponds the most ([BART](../model_doc/bart))
-- **Text summarization**: summarize a long text in one or a few sentences ([BART](../model_doc/bart))
-- **Translation**: translate the text into a given language ([NLLB](../model_doc/nllb))
+- **Document question answering**: given a document (such as a PDF) in image format, answer a question on this document ([Donut](./model_doc/donut))
+- **Text question answering**: given a long text and a question, answer the question in the text ([Flan-T5](./model_doc/flan-t5))
+- **Unconditional image captioning**: Caption the image! ([BLIP](./model_doc/blip))
+- **Image question answering**: given an image, answer a question on this image ([VILT](./model_doc/vilt))
+- **Image segmentation**: given an image and a prompt, output the segmentation mask of that prompt ([CLIPSeg](./model_doc/clipseg))
+- **Speech to text**: given an audio recording of a person talking, transcribe the speech into text ([Whisper](./model_doc/whisper))
+- **Text to speech**: convert text to speech ([SpeechT5](./model_doc/speecht5))
+- **Zero-shot text classification**: given a text and a list of labels, identify to which label the text corresponds the most ([BART](./model_doc/bart))
+- **Text summarization**: summarize a long text in one or a few sentences ([BART](./model_doc/bart))
+- **Translation**: translate the text into a given language ([NLLB](./model_doc/nllb))
 
 These tools have an integration in transformers, and can be used manually as well, for example:
 
@@ -265,44 +293,19 @@ the ability to quickly create and share custom tools.
 
 By pushing the code of a tool to a Hugging Face Space or a model repository, you're then able to leverage the tool 
 directly with the agent. We've added a few 
-**transformers-agnostic** tools to the `huggingface-tools` organization:
+**transformers-agnostic** tools to the [`huggingface-tools` organization](https://huggingface.co/huggingface-tools):
 
 - **Text downloader**: to download a text from a web URL
 - **Text to image**: generate an image according to a prompt, leveraging stable diffusion
 - **Image transformation**: modify an image given an initial image and a prompt, leveraging instruct pix2pix stable diffusion
+- **Text to video**: generate a small video according to a prompt, leveraging damo-vilab
 
 The text-to-image tool we have been using since the beginning is a remote tool that lives in 
 [*huggingface-tools/text-to-image*](https://huggingface.co/spaces/huggingface-tools/text-to-image)! We will
 continue releasing such tools on this and other organizations, to further supercharge this implementation.
 
-The agents have by default access to tools that reside on `huggingface-tools`.
+The agents have by default access to tools that reside on [`huggingface-tools`](https://huggingface.co/huggingface-tools).
 We explain how to you can write and share your tools as well as leverage any custom tool that resides on the Hub in [following guide](custom_tools).
-
-### Leveraging different agents
-
-We showcase here how to use the [bigcode/starcoder](https://huggingface.co/bigcode/starcoder) model as an LLM, but 
-it isn't the only model available. We also support the OpenAssistant model and OpenAI's davinci models (3.5 and 4).
-
-We're planning on supporting local language models in an ulterior version.
-
-The tools defined in this implementation are agnostic to the agent used; we are showcasing the agents that work with 
-our prompts below, but the tools can also be used with Langchain, Minichain, or any other Agent-based library.
-
-#### Example code for the OpenAssistant model
-
-```py
-from transformers import HfAgent
-
-agent = HfAgent(url_endpoint="https://OpenAssistant/oasst-sft-1-pythia-12b", token="<HF_TOKEN>")
-```
-
-#### Example code for OpenAI models
-
-```py
-from transformers import OpenAiAgent
-
-agent = OpenAiAgent(model="text-davinci-003", api_key="<API_KEY>")
-```
 
 ### Code generation
 

@@ -679,7 +679,7 @@ class RwkvModel(RwkvPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return (hidden_states, state, all_hidden_states, all_self_attentions)
+            return tuple(x for x in [hidden_states, state, all_hidden_states, all_self_attentions] if x is not None)
 
         return RwkvOutput(
             last_hidden_state=hidden_states,

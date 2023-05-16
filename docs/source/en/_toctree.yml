@@ -102,7 +102,7 @@
     - local: community
       title: Community resources
     - local: custom_tools
-      title: Custom Tools
+      title: Custom Tools and Prompts
     - local: troubleshooting
       title: Troubleshoot
   title: Developer guides
@@ -502,6 +502,8 @@
         title: ResNet
       - local: model_doc/segformer
         title: SegFormer
+      - local: model_doc/swiftformer
+        title: SwiftFormer
       - local: model_doc/swin
         title: Swin Transformer
       - local: model_doc/swinv2

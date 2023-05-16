@@ -198,7 +198,7 @@ class Agent:
     def __init__(self, chat_prompt_template=None, run_prompt_template=None, additional_tools=None):
         _setup_default_tools()
 
-        self.chat_prompt_template = CHAT_MESSAGE_PROMPT if chat_prompt_template is None else chat_prompt_template
+        self.chat_prompt_template = CHAT_PROMPT_TEMPLATE if chat_prompt_template is None else chat_prompt_template
         self.run_prompt_template = RUN_PROMPT_TEMPLATE if run_prompt_template is None else run_prompt_template
         self._toolbox = HUGGINGFACE_DEFAULT_TOOLS.copy()
         if additional_tools is not None:
@@ -229,7 +229,7 @@ class Agent:
         description = "\n".join([f"- {name}: {tool.description}" for name, tool in self.toolbox.items()])
         if chat_mode:
             if self.chat_history is None:
-                prompt = CHAT_PROMPT_TEMPLATE.replace("<<all_tools>>", description)
+                prompt = self.chat_prompt_template.replace("<<all_tools>>", description)
             else:
                 prompt = self.chat_history
             prompt += CHAT_MESSAGE_PROMPT.replace("<<task>>", task)
@@ -248,7 +248,7 @@ class Agent:
                 Whether to just return code and not evaluate it.
             remote (`bool`, *optional*, defaults to `False`):
                 Whether or not to use remote tools (inference endpoints) instead of local ones.
-            kwargs:
+            kwargs (additional keyword arguments, *optional*):
                 Any keyword argument to send to the agent when evaluating the code.
 
         Example:
@@ -264,7 +264,7 @@ class Agent:
         """
         prompt = self.format_prompt(task, chat_mode=True)
         result = self.generate_one(prompt, stop=["Human:", "====="])
-        self.chat_history = prompt + result + "\n"
+        self.chat_history = prompt + result.strip() + "\n"
         explanation, code = clean_code_for_chat(result)
 
         print(f"==Explanation from the agent==\n{explanation}")
@@ -298,7 +298,7 @@ class Agent:
                 Whether to just return code and not evaluate it.
             remote (`bool`, *optional*, defaults to `False`):
                 Whether or not to use remote tools (inference endpoints) instead of local ones.
-            kwargs:
+            kwargs (additional keyword arguments, *optional*):
                 Any keyword argument to send to the agent when evaluating the code.
 
         Example:

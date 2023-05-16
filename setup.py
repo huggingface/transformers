@@ -112,6 +112,7 @@ _deps = [
     "datasets!=2.5.0",
     "decord==0.6.0",
     "deepspeed>=0.8.3",
+    "diffusers",
     "dill<0.3.5",
     "evaluate>=0.2.0",
     "fairscale>0.3",
@@ -123,7 +124,7 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.11.0,<1.0",
+    "huggingface-hub>=0.14.1,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -140,16 +141,17 @@ _deps = [
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
+    "opencv-python",
     "optuna",
     "optax>=0.0.8,<=0.1.4",
     "packaging>=20.0",
     "parameterized",
     "phonemizer",
-    "protobuf<=3.20.2",
+    "protobuf<=3.20.3",
     "psutil",
     "pyyaml>=5.1",
     "pydantic",
-    "pytest",
+    "pytest>=7.2.0",
     "pytest-timeout",
     "pytest-xdist",
     "python>=3.7.0",
@@ -410,6 +412,10 @@ extras["torchhub"] = deps_list(
     "torch",
     "tokenizers",
     "tqdm",
+)
+
+extras["agents"] = deps_list(
+    "diffusers", "accelerate", "datasets", "torch", "sentencepiece", "opencv-python", "Pillow"
 )
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
