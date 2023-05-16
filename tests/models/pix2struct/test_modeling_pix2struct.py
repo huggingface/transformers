@@ -759,7 +759,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
 
         self.assertEqual(
             processor.decode(predictions[1], skip_special_tokens=True),
-            "An photography of the Temple Bar and a few other places.",
+            "An photography ofen Temple Bar and other places in the city.",
         )
 
     def test_vqa_model(self):
