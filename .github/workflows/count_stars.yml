@@ -26,4 +26,4 @@ jobs:
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
         shell: bash
         run: |
-          python count_stars.py
+          python -u count_stars.py
