@@ -563,8 +563,6 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
 
         hypotheses_batch = model.generate(**inputs)
 
-
-
         EXPECTED_LEP = (
             "we study the rare decays @xmath0 ( @xmath1 ) at the gigaz option of the international linear collider "
             "( ilc ).<n> we calculate the branching ratios of @xmath2 in the two higgs doublet model ( 2hdm ), the "
