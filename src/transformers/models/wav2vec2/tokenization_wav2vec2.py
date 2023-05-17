@@ -817,7 +817,8 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         Args:
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrayr or a list of list of float values.
+                values, a list of numpy array or a list of list of float values. Must be mono channel audio, not stereo,
+                i.e. single float per timestep.
         """
 
         is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
