@@ -3422,6 +3422,37 @@ class FalconPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class FastSpeech2ConformerWithHifiGan(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class FastSpeech2ConformerHifiGan(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class FastSpeech2ConformerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class FastSpeech2ConformerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
