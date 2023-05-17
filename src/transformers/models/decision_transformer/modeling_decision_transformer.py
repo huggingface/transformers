@@ -35,6 +35,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.versions import is_torch_version
 from .configuration_decision_transformer import DecisionTransformerConfig
 
 
@@ -643,15 +644,27 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
 
                     return custom_forward
 
-                outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
-                    hidden_states,
-                    None,
-                    attention_mask,
-                    head_mask[i],
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(block),
+                        hidden_states,
+                        None,
+                        attention_mask,
+                        head_mask[i],
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                        use_reentrant=False,
+                    )
+                else:
+                    outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(block),
+                        hidden_states,
+                        None,
+                        attention_mask,
+                        head_mask[i],
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                    )
             else:
                 outputs = block(
                     hidden_states,

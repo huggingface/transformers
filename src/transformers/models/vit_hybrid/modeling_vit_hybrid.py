@@ -29,6 +29,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Ima
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.versions import is_torch_version
 from ..auto import AutoBackbone
 from .configuration_vit_hybrid import ViTHybridConfig
 
@@ -422,11 +423,16 @@ class ViTHybridEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    layer_head_mask,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module), hidden_states, layer_head_mask, use_reentrant=False
+                    )
+                else:
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module),
+                        hidden_states,
+                        layer_head_mask,
+                    )
             else:
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
 

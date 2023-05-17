@@ -41,6 +41,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.versions import is_torch_version
 from .configuration_mobilevit import MobileViTConfig
 
 
@@ -633,10 +634,15 @@ class MobileViTEncoder(nn.Module):
 
                     return custom_forward
 
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    hidden_states = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module), hidden_states, use_reentrant=False
+                    )
+                else:
+                    hidden_states = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module),
+                        hidden_states,
+                    )
             else:
                 hidden_states = layer_module(hidden_states)
 

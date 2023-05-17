@@ -37,6 +37,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ...utils.versions import is_torch_version
 from ..detr import DetrConfig
 from .configuration_maskformer import MaskFormerConfig
 from .configuration_maskformer_swin import MaskFormerSwinConfig
@@ -779,14 +780,25 @@ class DetrDecoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
-                    hidden_states,
-                    combined_attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    None,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(decoder_layer),
+                        hidden_states,
+                        combined_attention_mask,
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                        None,
+                        use_reentrant=False,
+                    )
+                else:
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(decoder_layer),
+                        hidden_states,
+                        combined_attention_mask,
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                        None,
+                    )
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,

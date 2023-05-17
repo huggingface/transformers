@@ -28,6 +28,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.versions import is_torch_version
 from .configuration_timesformer import TimesformerConfig
 
 
@@ -446,10 +447,15 @@ class TimesformerEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module), hidden_states, use_reentrant=False
+                    )
+                else:
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module),
+                        hidden_states,
+                    )
             else:
                 layer_outputs = layer_module(hidden_states, output_attentions)
 

@@ -35,6 +35,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from ...pytorch_utils import find_pruneable_heads_and_indices, is_torch_greater_or_equal_than_1_10, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.versions import is_torch_version
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
 
 
@@ -816,14 +817,25 @@ class BridgeTowerTextEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module),
+                        hidden_states,
+                        attention_mask,
+                        layer_head_mask,
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                        use_reentrant=False,
+                    )
+                else:
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module),
+                        hidden_states,
+                        attention_mask,
+                        layer_head_mask,
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                    )
             else:
                 layer_outputs = layer_module(
                     hidden_states,

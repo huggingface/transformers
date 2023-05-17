@@ -25,6 +25,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.versions import is_torch_version
 from .configuration_codegen import CodeGenConfig
 
 
@@ -548,14 +549,25 @@ class CodeGenModel(CodeGenPreTrainedModel):
 
                     return custom_forward
 
-                outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
-                    hidden_states,
-                    None,
-                    attention_mask,
-                    position_ids,
-                    head_mask[i],
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(block),
+                        hidden_states,
+                        None,
+                        attention_mask,
+                        position_ids,
+                        head_mask[i],
+                        use_reentrant=False,
+                    )
+                else:
+                    outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(block),
+                        hidden_states,
+                        None,
+                        attention_mask,
+                        position_ids,
+                        head_mask[i],
+                    )
             else:
                 outputs = block(
                     hidden_states=hidden_states,

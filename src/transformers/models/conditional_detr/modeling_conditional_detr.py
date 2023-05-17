@@ -37,6 +37,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ...utils.versions import is_torch_version
 from ..auto import AutoBackbone
 from .configuration_conditional_detr import ConditionalDetrConfig
 
@@ -1396,18 +1397,33 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
-                    hidden_states,
-                    combined_attention_mask,
-                    position_embeddings,
-                    query_position_embeddings,
-                    query_sine_embed,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    None,
-                    None,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(decoder_layer),
+                        hidden_states,
+                        combined_attention_mask,
+                        position_embeddings,
+                        query_position_embeddings,
+                        query_sine_embed,
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                        None,
+                        None,
+                        use_reentrant=False,
+                    )
+                else:
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(decoder_layer),
+                        hidden_states,
+                        combined_attention_mask,
+                        position_embeddings,
+                        query_position_embeddings,
+                        query_sine_embed,
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                        None,
+                        None,
+                    )
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,

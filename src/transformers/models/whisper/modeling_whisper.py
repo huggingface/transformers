@@ -35,6 +35,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.versions import is_torch_version
 from .configuration_whisper import WhisperConfig
 from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
 
@@ -848,12 +849,21 @@ class WhisperEncoder(WhisperPreTrainedModel):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
-                        hidden_states,
-                        None,
-                        (head_mask[idx] if head_mask is not None else None),
-                    )
+                    if is_torch_version(">=", "1.11.0"):
+                        layer_outputs = torch.utils.checkpoint.checkpoint(
+                            create_custom_forward(encoder_layer),
+                            hidden_states,
+                            None,
+                            (head_mask[idx] if head_mask is not None else None),
+                            use_reentrant=False,
+                        )
+                    else:
+                        layer_outputs = torch.utils.checkpoint.checkpoint(
+                            create_custom_forward(encoder_layer),
+                            hidden_states,
+                            None,
+                            (head_mask[idx] if head_mask is not None else None),
+                        )
                 else:
                     layer_outputs = encoder_layer(
                         hidden_states,
@@ -1080,16 +1090,29 @@ class WhisperDecoder(WhisperPreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    None,  # encoder attention mask
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,  # past_key_value
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(decoder_layer),
+                        hidden_states,
+                        attention_mask,
+                        encoder_hidden_states,
+                        None,  # encoder attention mask
+                        head_mask[idx] if head_mask is not None else None,
+                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
+                        None,  # past_key_value
+                        use_reentrant=False,
+                    )
+                else:
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(decoder_layer),
+                        hidden_states,
+                        attention_mask,
+                        encoder_hidden_states,
+                        None,  # encoder attention mask
+                        head_mask[idx] if head_mask is not None else None,
+                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
+                        None,  # past_key_value
+                    )
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,

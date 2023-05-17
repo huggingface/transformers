@@ -37,6 +37,7 @@ from ...file_utils import (
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ...utils.versions import is_torch_version
 from .configuration_mask2former import Mask2FormerConfig
 
 
@@ -1875,14 +1876,25 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    None,
-                    None,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(decoder_layer),
+                        hidden_states,
+                        attention_mask,
+                        encoder_hidden_states,
+                        None,
+                        None,
+                        use_reentrant=False,
+                    )
+                else:
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(decoder_layer),
+                        hidden_states,
+                        attention_mask,
+                        encoder_hidden_states,
+                        None,
+                        None,
+                    )
 
             else:
                 level_index = idx % self.num_feature_levels

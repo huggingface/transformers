@@ -36,6 +36,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.versions import is_torch_version
 from .configuration_data2vec_audio import Data2VecAudioConfig
 
 
@@ -300,10 +301,15 @@ class Data2VecAudioFeatureEncoder(nn.Module):
 
                     return custom_forward
 
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(conv_layer),
-                    hidden_states,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    hidden_states = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(conv_layer), hidden_states, use_reentrant=False
+                    )
+                else:
+                    hidden_states = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(conv_layer),
+                        hidden_states,
+                    )
             else:
                 hidden_states = conv_layer(hidden_states)
 
@@ -600,11 +606,16 @@ class Data2VecAudioEncoder(nn.Module):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
-                        hidden_states,
-                        attention_mask,
-                    )
+                    if is_torch_version(">=", "1.11.0"):
+                        layer_outputs = torch.utils.checkpoint.checkpoint(
+                            create_custom_forward(layer), hidden_states, attention_mask, use_reentrant=False
+                        )
+                    else:
+                        layer_outputs = torch.utils.checkpoint.checkpoint(
+                            create_custom_forward(layer),
+                            hidden_states,
+                            attention_mask,
+                        )
                 else:
                     layer_outputs = layer(
                         hidden_states, attention_mask=attention_mask, output_attentions=output_attentions

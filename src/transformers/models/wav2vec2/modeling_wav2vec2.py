@@ -45,6 +45,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.versions import is_torch_version
 from .configuration_wav2vec2 import Wav2Vec2Config
 
 
@@ -445,10 +446,15 @@ class Wav2Vec2FeatureEncoder(nn.Module):
 
                     return custom_forward
 
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(conv_layer),
-                    hidden_states,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    hidden_states = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(conv_layer), hidden_states, use_reentrant=False
+                    )
+                else:
+                    hidden_states = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(conv_layer),
+                        hidden_states,
+                    )
             else:
                 hidden_states = conv_layer(hidden_states)
 
@@ -789,11 +795,16 @@ class Wav2Vec2Encoder(nn.Module):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
-                        hidden_states,
-                        attention_mask,
-                    )
+                    if is_torch_version(">=", "1.11.0"):
+                        layer_outputs = torch.utils.checkpoint.checkpoint(
+                            create_custom_forward(layer), hidden_states, attention_mask, use_reentrant=False
+                        )
+                    else:
+                        layer_outputs = torch.utils.checkpoint.checkpoint(
+                            create_custom_forward(layer),
+                            hidden_states,
+                            attention_mask,
+                        )
                 else:
                     layer_outputs = layer(
                         hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
@@ -878,11 +889,16 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
-                        hidden_states,
-                        attention_mask,
-                    )
+                    if is_torch_version(">=", "1.11.0"):
+                        layer_outputs = torch.utils.checkpoint.checkpoint(
+                            create_custom_forward(layer), hidden_states, attention_mask, use_reentrant=False
+                        )
+                    else:
+                        layer_outputs = torch.utils.checkpoint.checkpoint(
+                            create_custom_forward(layer),
+                            hidden_states,
+                            attention_mask,
+                        )
                 else:
                     layer_outputs = layer(
                         hidden_states, attention_mask=attention_mask, output_attentions=output_attentions

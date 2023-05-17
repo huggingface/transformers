@@ -39,6 +39,7 @@ from ...utils import (
     logging,
 )
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
+from ...utils.versions import is_torch_version
 from .configuration_gptj import GPTJConfig
 
 
@@ -676,14 +677,25 @@ class GPTJModel(GPTJPreTrainedModel):
 
                     return custom_forward
 
-                outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
-                    hidden_states,
-                    None,
-                    attention_mask,
-                    position_ids,
-                    head_mask[i],
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(block),
+                        hidden_states,
+                        None,
+                        attention_mask,
+                        position_ids,
+                        head_mask[i],
+                        use_reentrant=False,
+                    )
+                else:
+                    outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(block),
+                        hidden_states,
+                        None,
+                        attention_mask,
+                        position_ids,
+                        head_mask[i],
+                    )
             else:
                 outputs = block(
                     hidden_states=hidden_states,

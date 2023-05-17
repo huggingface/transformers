@@ -37,6 +37,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.versions import is_torch_version
 from .configuration_swinv2 import Swinv2Config
 
 
@@ -908,9 +909,18 @@ class Swinv2Encoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module), hidden_states, input_dimensions, layer_head_mask
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module),
+                        hidden_states,
+                        input_dimensions,
+                        layer_head_mask,
+                        use_reentrant=False,
+                    )
+                else:
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module), hidden_states, input_dimensions, layer_head_mask
+                    )
             else:
                 layer_outputs = layer_module(
                     hidden_states, input_dimensions, layer_head_mask, output_attentions, always_partition

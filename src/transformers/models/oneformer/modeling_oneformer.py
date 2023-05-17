@@ -37,6 +37,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ...utils.versions import is_torch_version
 from .configuration_oneformer import OneFormerConfig
 
 
@@ -2619,7 +2620,10 @@ class OneFormerTextTransformer(nn.Module):
     def forward(self, hidden_states: torch.Tensor):
         for layer in self.layers:
             if self.use_checkpoint:
-                hidden_states = torch.utils.checkpoint.checkpoint(layer, hidden_states)
+                if is_torch_version(">=", "1.11.0"):
+                    hidden_states = torch.utils.checkpoint.checkpoint(layer, hidden_states, use_reentrant=False)
+                else:
+                    hidden_states = torch.utils.checkpoint.checkpoint(layer, hidden_states)
             else:
                 hidden_states = layer(hidden_states)
         return hidden_states

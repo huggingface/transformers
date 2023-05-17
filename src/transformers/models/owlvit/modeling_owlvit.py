@@ -35,6 +35,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.versions import is_torch_version
 from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
 
 
@@ -754,12 +755,21 @@ class OwlViTEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(encoder_layer),
-                    hidden_states,
-                    attention_mask,
-                    causal_attention_mask,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(encoder_layer),
+                        hidden_states,
+                        attention_mask,
+                        causal_attention_mask,
+                        use_reentrant=False,
+                    )
+                else:
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(encoder_layer),
+                        hidden_states,
+                        attention_mask,
+                        causal_attention_mask,
+                    )
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,

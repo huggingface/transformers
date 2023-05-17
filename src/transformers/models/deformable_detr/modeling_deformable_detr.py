@@ -43,6 +43,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
 from ...utils import is_ninja_available, logging
+from ...utils.versions import is_torch_version
 from ..auto import AutoBackbone
 from .configuration_deformable_detr import DeformableDetrConfig
 from .load_custom import load_cuda_kernels
@@ -1380,13 +1381,23 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
-                    hidden_states,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    None,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(decoder_layer),
+                        hidden_states,
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                        None,
+                        use_reentrant=False,
+                    )
+                else:
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(decoder_layer),
+                        hidden_states,
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                        None,
+                    )
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,

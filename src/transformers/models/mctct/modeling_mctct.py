@@ -34,6 +34,7 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
+from ...utils.versions import is_torch_version
 from .configuration_mctct import MCTCTConfig
 
 
@@ -623,12 +624,21 @@ class MCTCTEncoder(MCTCTPreTrainedModel):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                    )
+                    if is_torch_version(">=", "1.11.0"):
+                        layer_outputs = torch.utils.checkpoint.checkpoint(
+                            create_custom_forward(encoder_layer),
+                            hidden_states,
+                            attention_mask,
+                            (head_mask[idx] if head_mask is not None else None),
+                            use_reentrant=False,
+                        )
+                    else:
+                        layer_outputs = torch.utils.checkpoint.checkpoint(
+                            create_custom_forward(encoder_layer),
+                            hidden_states,
+                            attention_mask,
+                            (head_mask[idx] if head_mask is not None else None),
+                        )
                 else:
                     layer_outputs = encoder_layer(
                         hidden_states=hidden_states,

@@ -41,6 +41,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.versions import is_torch_version
 from .configuration_plbart import PLBartConfig
 
 
@@ -810,12 +811,21 @@ class PLBartEncoder(PLBartPreTrainedModel):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                    )
+                    if is_torch_version(">=", "1.11.0"):
+                        layer_outputs = torch.utils.checkpoint.checkpoint(
+                            create_custom_forward(encoder_layer),
+                            hidden_states,
+                            attention_mask,
+                            (head_mask[idx] if head_mask is not None else None),
+                            use_reentrant=False,
+                        )
+                    else:
+                        layer_outputs = torch.utils.checkpoint.checkpoint(
+                            create_custom_forward(encoder_layer),
+                            hidden_states,
+                            attention_mask,
+                            (head_mask[idx] if head_mask is not None else None),
+                        )
                 else:
                     layer_outputs = encoder_layer(
                         hidden_states,
@@ -1067,16 +1077,29 @@ class PLBartDecoder(PLBartPreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(decoder_layer),
+                        hidden_states,
+                        attention_mask,
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                        head_mask[idx] if head_mask is not None else None,
+                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
+                        None,
+                        use_reentrant=False,
+                    )
+                else:
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(decoder_layer),
+                        hidden_states,
+                        attention_mask,
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                        head_mask[idx] if head_mask is not None else None,
+                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
+                        None,
+                    )
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,

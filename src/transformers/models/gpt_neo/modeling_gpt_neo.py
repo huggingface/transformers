@@ -35,6 +35,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.versions import is_torch_version
 from .configuration_gpt_neo import GPTNeoConfig
 
 
@@ -612,13 +613,23 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
                     return custom_forward
 
-                outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
-                    hidden_states,
-                    None,
-                    attention_mask,
-                    head_mask[i],
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(block),
+                        hidden_states,
+                        None,
+                        attention_mask,
+                        head_mask[i],
+                        use_reentrant=False,
+                    )
+                else:
+                    outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(block),
+                        hidden_states,
+                        None,
+                        attention_mask,
+                        head_mask[i],
+                    )
             else:
                 outputs = block(
                     hidden_states,

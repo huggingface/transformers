@@ -30,6 +30,7 @@ from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils.backbone_utils import BackboneMixin, get_aligned_output_features_output_indices
+from ...utils.versions import is_torch_version
 from .configuration_maskformer_swin import MaskFormerSwinConfig
 
 
@@ -695,9 +696,22 @@ class MaskFormerSwinEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_hidden_states, output_dimensions, layer_all_hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module), hidden_states, layer_head_mask
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    (
+                        layer_hidden_states,
+                        output_dimensions,
+                        layer_all_hidden_states,
+                    ) = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module), hidden_states, layer_head_mask, use_reentrant=False
+                    )
+                else:
+                    (
+                        layer_hidden_states,
+                        output_dimensions,
+                        layer_all_hidden_states,
+                    ) = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module), hidden_states, layer_head_mask
+                    )
             else:
                 layer_hidden_states, output_dimensions, layer_all_hidden_states = layer_module(
                     hidden_states,

@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...utils import is_scipy_available
+from ...utils.versions import is_torch_version
 
 
 if is_scipy_available():
@@ -297,7 +298,14 @@ class FNetEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(create_custom_forward(layer_module), hidden_states)
+                if is_torch_version(">=", "1.11.0"):
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module), hidden_states, use_reentrant=False
+                    )
+                else:
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module), hidden_states
+                    )
             else:
                 layer_outputs = layer_module(hidden_states)
 

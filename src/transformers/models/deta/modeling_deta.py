@@ -38,6 +38,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
 from ...utils import is_torchvision_available, logging, requires_backends
+from ...utils.versions import is_torch_version
 from ..auto import AutoBackbone
 from .configuration_deta import DetaConfig
 
@@ -1272,13 +1273,23 @@ class DetaDecoder(DetaPreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
-                    hidden_states,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    None,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(decoder_layer),
+                        hidden_states,
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                        None,
+                        use_reentrant=False,
+                    )
+                else:
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(decoder_layer),
+                        hidden_states,
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                        None,
+                    )
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
@@ -2484,9 +2495,9 @@ class DetaMatcher(object):
         thresholds.insert(0, -float("inf"))
         thresholds.append(float("inf"))
         # Currently torchscript does not support all + generator
-        if not all([low <= high for (low, high) in zip(thresholds[:-1], thresholds[1:])]):
+        if not all(low <= high for (low, high) in zip(thresholds[:-1], thresholds[1:])):
             raise ValueError("Thresholds should be sorted.")
-        if not all([l in [-1, 0, 1] for l in labels]):
+        if not all(l in [-1, 0, 1] for l in labels):
             raise ValueError("All labels should be either -1, 0 or 1")
         if len(labels) != len(thresholds) - 1:
             raise ValueError("Number of labels should be equal to number of thresholds - 1")

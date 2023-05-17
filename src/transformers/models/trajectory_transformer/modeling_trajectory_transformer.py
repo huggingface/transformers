@@ -33,6 +33,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.versions import is_torch_version
 from .configuration_trajectory_transformer import TrajectoryTransformerConfig
 
 
@@ -556,13 +557,23 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
 
                     return custom_forward
 
-                outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
-                    hidden_states,
-                    layer_past,
-                    use_cache,
-                    output_attentions,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(block),
+                        hidden_states,
+                        layer_past,
+                        use_cache,
+                        output_attentions,
+                        use_reentrant=False,
+                    )
+                else:
+                    outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(block),
+                        hidden_states,
+                        layer_past,
+                        use_cache,
+                        output_attentions,
+                    )
             else:
                 outputs = block(hidden_states, layer_past, use_cache, output_attentions)
 

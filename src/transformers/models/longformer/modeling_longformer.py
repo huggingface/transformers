@@ -34,6 +34,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.versions import is_torch_version
 from .configuration_longformer import LongformerConfig
 
 
@@ -1313,14 +1314,25 @@ class LongformerEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    is_index_masked,
-                    is_index_global_attn,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module),
+                        hidden_states,
+                        attention_mask,
+                        head_mask[idx] if head_mask is not None else None,
+                        is_index_masked,
+                        is_index_global_attn,
+                        use_reentrant=False,
+                    )
+                else:
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module),
+                        hidden_states,
+                        attention_mask,
+                        head_mask[idx] if head_mask is not None else None,
+                        is_index_masked,
+                        is_index_global_attn,
+                    )
             else:
                 layer_outputs = layer_module(
                     hidden_states,

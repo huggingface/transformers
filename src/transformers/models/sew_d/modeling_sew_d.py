@@ -31,6 +31,7 @@ from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassif
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import softmax_backward_data
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.versions import is_torch_version
 from .configuration_sew_d import SEWDConfig
 
 
@@ -460,10 +461,15 @@ class SEWDFeatureEncoder(nn.Module):
 
                     return custom_forward
 
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(conv_layer),
-                    hidden_states,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    hidden_states = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(conv_layer), hidden_states, use_reentrant=False
+                    )
+                else:
+                    hidden_states = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(conv_layer),
+                        hidden_states,
+                    )
             else:
                 hidden_states = conv_layer(hidden_states)
 
@@ -1142,14 +1148,25 @@ class SEWDTransformerEncoder(nn.Module):
 
                     return custom_forward
 
-                output_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    next_kv,
-                    attention_mask,
-                    query_states,
-                    relative_pos,
-                    rel_embeddings,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    output_states = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module),
+                        next_kv,
+                        attention_mask,
+                        query_states,
+                        relative_pos,
+                        rel_embeddings,
+                        use_reentrant=False,
+                    )
+                else:
+                    output_states = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module),
+                        next_kv,
+                        attention_mask,
+                        query_states,
+                        relative_pos,
+                        rel_embeddings,
+                    )
             else:
                 output_states = layer_module(
                     next_kv,

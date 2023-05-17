@@ -33,6 +33,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.versions import is_torch_version
 from .configuration_lilt import LiltConfig
 
 
@@ -519,13 +520,23 @@ class LiltEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    layout_inputs,
-                    attention_mask,
-                    layer_head_mask,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module),
+                        hidden_states,
+                        layout_inputs,
+                        attention_mask,
+                        layer_head_mask,
+                        use_reentrant=False,
+                    )
+                else:
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module),
+                        hidden_states,
+                        layout_inputs,
+                        attention_mask,
+                        layer_head_mask,
+                    )
             else:
                 layer_outputs = layer_module(
                     hidden_states,

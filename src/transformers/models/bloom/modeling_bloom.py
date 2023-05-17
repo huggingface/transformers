@@ -34,6 +34,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ...utils.versions import is_torch_version
 from .configuration_bloom import BloomConfig
 
 
@@ -774,14 +775,25 @@ class BloomModel(BloomPreTrainedModel):
 
                     return custom_forward
 
-                outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
-                    hidden_states,
-                    alibi,
-                    causal_mask,
-                    layer_past,
-                    head_mask[i],
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(block),
+                        hidden_states,
+                        alibi,
+                        causal_mask,
+                        layer_past,
+                        head_mask[i],
+                        use_reentrant=False,
+                    )
+                else:
+                    outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(block),
+                        hidden_states,
+                        alibi,
+                        causal_mask,
+                        layer_past,
+                        head_mask[i],
+                    )
             else:
                 outputs = block(
                     hidden_states,

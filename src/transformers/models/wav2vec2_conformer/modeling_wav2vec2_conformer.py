@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.versions import is_torch_version
 from .configuration_wav2vec2_conformer import Wav2Vec2ConformerConfig
 
 
@@ -519,10 +520,15 @@ class Wav2Vec2ConformerFeatureEncoder(nn.Module):
 
                     return custom_forward
 
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(conv_layer),
-                    hidden_states,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    hidden_states = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(conv_layer), hidden_states, use_reentrant=False
+                    )
+                else:
+                    hidden_states = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(conv_layer),
+                        hidden_states,
+                    )
             else:
                 hidden_states = conv_layer(hidden_states)
 
@@ -912,12 +918,21 @@ class Wav2Vec2ConformerEncoder(nn.Module):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
-                        hidden_states,
-                        attention_mask,
-                        relative_position_embeddings,
-                    )
+                    if is_torch_version(">=", "1.11.0"):
+                        layer_outputs = torch.utils.checkpoint.checkpoint(
+                            create_custom_forward(layer),
+                            hidden_states,
+                            attention_mask,
+                            relative_position_embeddings,
+                            use_reentrant=False,
+                        )
+                    else:
+                        layer_outputs = torch.utils.checkpoint.checkpoint(
+                            create_custom_forward(layer),
+                            hidden_states,
+                            attention_mask,
+                            relative_position_embeddings,
+                        )
                 else:
                     layer_outputs = layer(
                         hidden_states,

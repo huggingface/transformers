@@ -40,6 +40,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ...utils.versions import is_torch_version
 from .configuration_layoutlmv2 import LayoutLMv2Config
 
 
@@ -455,14 +456,25 @@ class LayoutLMv2Encoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    rel_pos=rel_pos,
-                    rel_2d_pos=rel_2d_pos,
-                )
+                if is_torch_version(">=", "1.11.0"):
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module),
+                        hidden_states,
+                        attention_mask,
+                        layer_head_mask,
+                        rel_pos=rel_pos,
+                        rel_2d_pos=rel_2d_pos,
+                        use_reentrant=False,
+                    )
+                else:
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer_module),
+                        hidden_states,
+                        attention_mask,
+                        layer_head_mask,
+                        rel_pos=rel_pos,
+                        rel_2d_pos=rel_2d_pos,
+                    )
             else:
                 layer_outputs = layer_module(
                     hidden_states,
