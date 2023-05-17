@@ -34,4 +34,4 @@ jobs:
           sudo apt-get install -y curl
           pip install slack_sdk
           pip show slack_sdk
-          python utils/count_stars.py
+          python count_stars.py
