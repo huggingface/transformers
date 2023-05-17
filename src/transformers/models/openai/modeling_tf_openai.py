@@ -35,7 +35,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list, stable_softmax
+from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -295,30 +295,12 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         position_ids = tf.reshape(position_ids, [-1, shape_list(position_ids)[-1]])
 
         if inputs_embeds is None:
-            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-            tf.debugging.assert_less(
-                input_ids,
-                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
-                message=(
-                    "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
-                ),
-            )
+            check_embeddings_within_bounds(input_ids, self.config.vocab_size)
             inputs_embeds = self.tokens_embed(input_ids, mode="embedding")
         position_embeds = tf.gather(self.positions_embed, position_ids)
         if token_type_ids is not None:
             token_type_ids = tf.reshape(token_type_ids, [-1, shape_list(token_type_ids)[-1]])
-            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-            tf.debugging.assert_less(
-                token_type_ids,
-                tf.cast(self.config.vocab_size, dtype=token_type_ids.dtype),
-                message=(
-                    "token_type_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(token_type_ids)} >= {self.config.vocab_size})"
-                ),
-            )
+            check_embeddings_within_bounds(token_type_ids, self.config.vocab_size, "token_type_ids")
             token_type_embeds = self.tokens_embed(token_type_ids, mode="embedding")
         else:
             token_type_embeds = 0

@@ -39,7 +39,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list, stable_softmax
+from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
     DUMMY_INPUTS,
     ModelOutput,
@@ -437,16 +437,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         position_ids = tf.reshape(position_ids, [-1, shape_list(position_ids)[-1]])
 
         if inputs_embeds is None:
-            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-            tf.debugging.assert_less(
-                input_ids,
-                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
-                message=(
-                    "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
-                ),
-            )
+            check_embeddings_within_bounds(input_ids, self.config.vocab_size)
             inputs_embeds = self.wte(input_ids, mode="embedding")
 
         position_embeds = tf.gather(self.wpe, position_ids)
