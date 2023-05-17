@@ -140,12 +140,6 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     all_model_classes = (SwiftFormerModel, SwiftFormerForImageClassification) if is_torch_available() else ()
 
-    pipeline_model_mapping = (
-        {"feature-extraction": SwiftFormerModel, "image-classification": SwiftFormerForImageClassification}
-        if is_torch_available()
-        else {}
-    )
-
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
