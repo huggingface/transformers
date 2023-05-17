@@ -32,7 +32,7 @@ from ...modeling_tf_utils import (
     shape_list,
     unpack_inputs,
 )
-from ...tf_utils import invert_attention_mask, stable_softmax
+from ...tf_utils import check_embeddings_within_bounds, invert_attention_mask, stable_softmax
 from ...utils import add_start_docstrings_to_model_forward, logging
 from .configuration_blip import BlipTextConfig
 
@@ -112,16 +112,7 @@ class TFBlipTextEmbeddings(tf.keras.layers.Layer):
             position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
         if inputs_embeds is None:
-            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-            tf.debugging.assert_less(
-                input_ids,
-                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
-                message=(
-                    "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
-                ),
-            )
+            check_embeddings_within_bounds(input_ids, self.config.vocab_size)
             inputs_embeds = self.word_embeddings(input_ids)
 
         embeddings = inputs_embeds

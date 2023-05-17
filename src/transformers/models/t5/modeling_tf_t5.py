@@ -40,7 +40,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list, stable_softmax
+from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -686,16 +686,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             if hasattr(self.embed_tokens, "load_weight_prefix"):
                 context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
             with ContextManagers(context):
-                # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-                # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-                tf.debugging.assert_less(
-                    input_ids,
-                    tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
-                    message=(
-                        "input_ids must be smaller than the embedding layer's input dimension (got"
-                        f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
-                    ),
-                )
+                check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
                 inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
