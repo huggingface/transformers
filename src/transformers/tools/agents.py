@@ -92,8 +92,7 @@ def _setup_default_tools():
     tools_module = main_module.tools
 
     remote_tools = get_remote_tools()
-    for task_name in TASK_MAPPING:
-        tool_class_name = TASK_MAPPING.get(task_name)
+    for task_name, tool_class_name in TASK_MAPPING.items():
         tool_class = getattr(tools_module, tool_class_name)
         description = tool_class.description
         HUGGINGFACE_DEFAULT_TOOLS[tool_class.name] = PreTool(task=task_name, description=description, repo_id=None)
@@ -198,7 +197,7 @@ class Agent:
     def __init__(self, chat_prompt_template=None, run_prompt_template=None, additional_tools=None):
         _setup_default_tools()
 
-        self.chat_prompt_template = CHAT_MESSAGE_PROMPT if chat_prompt_template is None else chat_prompt_template
+        self.chat_prompt_template = CHAT_PROMPT_TEMPLATE if chat_prompt_template is None else chat_prompt_template
         self.run_prompt_template = RUN_PROMPT_TEMPLATE if run_prompt_template is None else run_prompt_template
         self._toolbox = HUGGINGFACE_DEFAULT_TOOLS.copy()
         if additional_tools is not None:
@@ -229,7 +228,7 @@ class Agent:
         description = "\n".join([f"- {name}: {tool.description}" for name, tool in self.toolbox.items()])
         if chat_mode:
             if self.chat_history is None:
-                prompt = CHAT_PROMPT_TEMPLATE.replace("<<all_tools>>", description)
+                prompt = self.chat_prompt_template.replace("<<all_tools>>", description)
             else:
                 prompt = self.chat_history
             prompt += CHAT_MESSAGE_PROMPT.replace("<<task>>", task)
@@ -248,7 +247,7 @@ class Agent:
                 Whether to just return code and not evaluate it.
             remote (`bool`, *optional*, defaults to `False`):
                 Whether or not to use remote tools (inference endpoints) instead of local ones.
-            kwargs:
+            kwargs (additional keyword arguments, *optional*):
                 Any keyword argument to send to the agent when evaluating the code.
 
         Example:
@@ -298,7 +297,7 @@ class Agent:
                 Whether to just return code and not evaluate it.
             remote (`bool`, *optional*, defaults to `False`):
                 Whether or not to use remote tools (inference endpoints) instead of local ones.
-            kwargs:
+            kwargs (additional keyword arguments, *optional*):
                 Any keyword argument to send to the agent when evaluating the code.
 
         Example:
@@ -430,7 +429,7 @@ class OpenAiAgent(Agent):
 
 class HfAgent(Agent):
     """
-    Agent that uses and inference endpoint to generate code.
+    Agent that uses an inference endpoint to generate code.
 
     Args:
         url_endpoint (`str`):
@@ -491,5 +490,5 @@ class HfAgent(Agent):
         # Inference API returns the stop sequence
         for stop_seq in stop:
             if result.endswith(stop_seq):
-                result = result[: -len(stop_seq)]
+                return result[: -len(stop_seq)]
         return result
