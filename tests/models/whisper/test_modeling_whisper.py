@@ -1017,7 +1017,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = WhisperForConditionalGeneration(config).eval().to(torch_device)
         input_features = input_dict["input_features"]
-        prompt_ids = np.asarray(range(5))
+        prompt_ids = np.arange(5)
         language = "<|de|>"
         task = "translate"
         lang_id = 6
@@ -1033,7 +1033,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             lang_id,
             task_id,
         ]
-        self.assertTrue(all(row[: len(expected_output_start)] == expected_output_start for row in output.tolist()))
+        for row in output.tolist():
+            self.assertListEqual(row[:len(expected_output_start)], expected_output_start)
 
     def test_generate_with_prompt_ids_and_forced_decoder_ids(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1051,7 +1052,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             model.generation_config.decoder_start_token_id,
             *[token for _rank, token in forced_decoder_ids],
         ]
-        self.assertTrue(all(row[: len(expected_output_start)] == expected_output_start for row in output.tolist()))
+        for row in output.tolist():
+            self.assertListEqual(row[:len(expected_output_start)], expected_output_start)
 
 
 @require_torch
@@ -1514,6 +1516,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(input_speech, return_tensors="pt").input_features
         prompt = "test prompt"
         prompt_ids = processor.get_prompt_ids(prompt)
+        
+        model.generation_config.forced_decoder_ids = None
+        model.config.forced_decoder_ids = None
 
         output = model.generate(input_features, prompt_ids=prompt_ids, return_timestamps=True)
         text = processor.decode(output[0])

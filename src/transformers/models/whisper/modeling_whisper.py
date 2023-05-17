@@ -1617,7 +1617,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     raise ValueError(
                         f"The `{generation_config.task}`task is not supported. The task should be one of `{TASK_IDS}`"
                     )
-            else:
+            elif hasattr(generation_config, "task_to_id"):
                 forced_decoder_ids.append((2, generation_config.task_to_id["transcribe"]))  # defaults to transcribe
             if hasattr(generation_config, "no_timestamps_token_id") and not generation_config.return_timestamps:
                 idx = forced_decoder_ids[-1][0] + 1 if forced_decoder_ids else 1
@@ -1640,7 +1640,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             specified_max_length = kwargs.pop("max_new_tokens", None) or kwargs.pop("max_length", None)
             default_max_length = generation_config.max_new_tokens or generation_config.max_length
             non_prompt_max_length = specified_max_length or default_max_length
-            generation_config.max_new_tokens = non_prompt_max_length + len(text_prompt_ids)
+            kwargs["max_new_tokens"] = non_prompt_max_length + len(text_prompt_ids)
 
             # Reformat the forced_decoder_ids to incorporate the prompt
             non_prompt_forced_decoder_ids = (
