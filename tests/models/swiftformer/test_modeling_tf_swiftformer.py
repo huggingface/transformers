@@ -103,19 +103,16 @@ class TFSwiftFormerModelTester:
 
     def create_and_check_model(self, config, pixel_values, labels):
         model = TFSwiftFormerModel(config=config)
-        model.to(torch_device)
         result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.embed_dims[-1], 7, 7))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, 7, 7, self.embed_dims[-1]))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
         model = TFSwiftFormerForImageClassification(config)
-        model.to(torch_device)
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
         model = TFSwiftFormerForImageClassification(config)
-        model.to(torch_device)
 
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         result = model(pixel_values)
@@ -172,7 +169,7 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
         for model_class in self.all_model_classes:
             model = model_class(config)
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
+            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Dense))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -207,7 +204,6 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
-            model.to(torch_device)
 
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -224,9 +220,9 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
                     tf.TensorShape(
                         [
                             self.model_tester.batch_size,
+                            (self.model_tester.image_size // 4) // 2 ** (i // 2),
+                            (self.model_tester.image_size // 4) // 2 ** (i // 2),
                             self.model_tester.embed_dims[i // 2],
-                            (self.model_tester.image_size // 4) // 2 ** (i // 2),
-                            (self.model_tester.image_size // 4) // 2 ** (i // 2),
                         ]
                     ),
                 )
