@@ -20,6 +20,7 @@ jobs:
     name: Send results to webhook
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
       - name: Count 🤗 stars ⭐
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
