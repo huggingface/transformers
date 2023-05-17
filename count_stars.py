@@ -4,7 +4,7 @@ import time
 if __name__ == "__main__":
 
     for i in range(86400):
-        time.sleep(1)
+        time.sleep(4)
 
         s1 = None
         s2 = None
@@ -13,6 +13,7 @@ if __name__ == "__main__":
         os.system(cmd)
         with open("stars.txt") as fp:
             s = fp.read()
+            print(s)
             s1 = s[1:-1]
             if s2 != s1:
                 print(f"🤗 stars ⭐: {s1}")
