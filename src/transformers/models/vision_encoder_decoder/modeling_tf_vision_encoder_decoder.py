@@ -254,13 +254,20 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
     @property
     def input_signature(self):
+        vision_config = self.config.encoder
+        if hasattr(vision_config, "vision_config"):
+            vision_config = vision_config.vision_config
+        if hasattr(vision_config, "image_size"):
+            image_size = vision_config.image_size
+        else:
+            image_size = vision_config.input_size
         return {
             "pixel_values": tf.TensorSpec(
                 shape=(
                     None,
-                    self.config.encoder.num_channels,
-                    self.config.encoder.input_size,
-                    self.config.encoder.input_size,
+                    vision_config.num_channels,
+                    image_size,
+                    image_size,
                 ),
                 dtype=tf.float32,
             ),
