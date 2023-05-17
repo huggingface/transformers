@@ -19,13 +19,13 @@ def foo(token, old):
 
     if count != old:
         print("-" * 40)
-        print(f"⭐: {count} | {now}")
+    print(f"⭐: {count} | {now}")
 
     return count
 
 
 if __name__ == "__main__":
     old = None
-    for i in range(10000):
+    for i in range(20000):
         time.sleep(5)
         old = foo(token=os.environ["ACCESS_REPO_INFO_TOKEN"], old=old)
