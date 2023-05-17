@@ -28,4 +28,4 @@ if __name__ == "__main__":
     old = None
     for i in range(10000):
         time.sleep(10)
-        foo(token=os.environ["ACCESS_REPO_INFO_TOKEN"], old=old)
+        old = foo(token=os.environ["ACCESS_REPO_INFO_TOKEN"], old=old)
