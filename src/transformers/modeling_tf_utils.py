@@ -1124,8 +1124,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if self.config.add_cross_attention and "encoder_hidden_states" in inspect.signature(self.call).parameters:
             if "encoder_hidden_states" not in dummies:
                 if self.main_input_name == "input_ids":
-                    dummies["encoder_hidden_states"] = tf.keras.Input(
-                        shape=(2, self.config.hidden_size), dtype=tf.float32, name="encoder_hidden_states"
+                    dummies["encoder_hidden_states"] = tf.ones(
+                        shape=(3, 3, self.config.hidden_size), dtype=tf.float32, name="encoder_hidden_states"
                     )
                 else:
                     raise NotImplementedError(
