@@ -20,10 +20,7 @@ jobs:
     name: Send results to webhook
     runs-on: ubuntu-latest
     steps:
-      - name: Preliminary job status
-        shell: bash
-
-      - name: Send message to Slack
+      - name: Count 🤗 stars ⭐
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
           CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
