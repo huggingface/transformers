@@ -1045,7 +1045,6 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             all_hidden_states = transformer_outputs.hidden_states[:-1] + (hidden_states,)
         else:
             all_hidden_states = None
-
         lm_logits = tf.matmul(hidden_states, self.transformer.wte.weights, transpose_b=True)
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids, training=training)
         mc_logits = tf.squeeze(mc_logits, axis=-1)
