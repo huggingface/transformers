@@ -1,6 +1,7 @@
 import os
 import time
 import requests
+from datetime import datetime
 
 
 def foo(token):
@@ -13,7 +14,9 @@ def foo(token):
 
     result = requests.get(url, headers=headers).json()
     count = result["stargazers_count"]
-    print(f"⭐: {count}")
+
+    now = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+    print(f"⭐: {count} | {now}")
 
 
 if __name__ == "__main__":
