@@ -29,9 +29,7 @@ jobs:
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-
+        shell: bash
         run: |
           sudo apt-get install -y curl
-          pip install slack_sdk
-          pip show slack_sdk
           python count_stars.py
