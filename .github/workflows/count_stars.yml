@@ -22,6 +22,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Count 🤗 stars ⭐
+        env:
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
         shell: bash
         run: |
           python count_stars.py
