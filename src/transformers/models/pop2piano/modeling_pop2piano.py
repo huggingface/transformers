@@ -987,13 +987,12 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
 class Pop2PianoConcatEmbeddingToMel(nn.Module):
     """Embedding Matrix for `composer` tokens."""
 
-    def __init__(self, embedding_offset, n_vocab, n_dim) -> None:
+    def __init__(self, n_vocab, n_dim):
         super().__init__()
         self.embedding = nn.Embedding(num_embeddings=n_vocab, embedding_dim=n_dim)
-        self.embedding_offset = embedding_offset
 
-    def forward(self, feature, index_value):
-        index_shifted = index_value - self.embedding_offset
+    def forward(self, feature, index_value, embedding_offset):
+        index_shifted = index_value - embedding_offset
         composer_embedding = self.embedding(index_shifted).unsqueeze(1)
         inputs_embeds = torch.cat([composer_embedding, feature], dim=1)
         return inputs_embeds
@@ -1039,14 +1038,9 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         self.config = config
         self.model_dim = config.d_model
 
-        composer_n_vocab = config.composer_n_vocab
-        embedding_offset = min(config.composer_to_feature_token.values())
-
-        self.mel_conditioner = Pop2PianoConcatEmbeddingToMel(
-            embedding_offset=embedding_offset, n_vocab=composer_n_vocab, n_dim=self.model_dim
-        )
-
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
+
+        self.mel_conditioner = Pop2PianoConcatEmbeddingToMel(n_vocab=config.composer_n_vocab, n_dim=self.model_dim)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
@@ -1091,11 +1085,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         return self.decoder
 
     def get_mel_conditioner_outputs(self, input_features, composer, generation_config):
-        try:
-            composer_to_feature_token = generation_config.composer_to_feature_token
-        except AttributeError:
-            composer_to_feature_token = self.config.composer_to_feature_token
-
+        composer_to_feature_token = generation_config.composer_to_feature_token
         # select composer randomly if not already given
         if composer is None:
             composer = np.random.choice(list(composer_to_feature_token.keys()), size=1)[0]
@@ -1106,7 +1096,14 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         composer_value = composer_to_feature_token[composer]
         composer_value = torch.tensor(composer_value, device=self.device)
         composer_value = composer_value.repeat(input_features.shape[0])
-        return self.mel_conditioner(input_features, composer_value)
+
+        embedding_offset = min(composer_to_feature_token.values())
+
+        return self.mel_conditioner(
+            feature=input_features,
+            index_value=composer_value,
+            embedding_offset=embedding_offset,
+        )
 
     @add_start_docstrings_to_model_forward(Pop2Piano_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1290,6 +1287,21 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
 
         if generation_config is None:
             generation_config = self.generation_config
+
+        if not hasattr(generation_config, "composer_to_feature_token"):
+            raise ValueError(
+                "`composer_to_feature_token` was not found! Please refer to "
+                "https://huggingface.co/susnato/pop2piano_dev/blob/main/generation_config.json"
+                "and parse a dict like that."
+            )
+
+        if hasattr(generation_config, "composer_to_feature_token"):
+            if len(generation_config.composer_to_feature_token) != self.config.composer_n_vocab:
+                raise ValueError(
+                    "config.composer_n_vocab must be same as the number of keys in "
+                    f"generation_config.composer_to_feature_token! "
+                    f"Found {self.config.composer_n_vocab} vs {len(generation_config.composer_to_feature_token)}."
+                )
 
         inputs_embeds = self.get_mel_conditioner_outputs(
             input_features=input_features["input_features"], composer=composer, generation_config=generation_config

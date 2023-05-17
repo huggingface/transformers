@@ -640,10 +640,12 @@ class Pop2PianoModelIntegrationTests(unittest.TestCase):
         model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
         input_embeds = torch.ones([10, 100, 512])
 
-        composer_value = model.config.composer_to_feature_token[composer]
+        composer_value = model.generation_config.composer_to_feature_token[composer]
         composer_value = torch.tensor(composer_value)
         composer_value = composer_value.repeat(input_embeds.size(0))
-        outputs = model.mel_conditioner(input_embeds, composer_value)
+        outputs = model.mel_conditioner(
+            input_embeds, composer_value, min(model.generation_config.composer_to_feature_token.values())
+        )
 
         # check shape
         self.assertEqual(outputs.size(), torch.Size([10, 101, 512]))

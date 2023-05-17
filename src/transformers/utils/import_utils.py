@@ -184,162 +184,6 @@ else:
         logger.info("Disabling Tensorflow because USE_TORCH is set")
 
 
-if USE_JAX in ENV_VARS_TRUE_AND_AUTO_VALUES:
-    _flax_available = importlib.util.find_spec("jax") is not None and importlib.util.find_spec("flax") is not None
-    if _flax_available:
-        try:
-            _jax_version = importlib_metadata.version("jax")
-            _flax_version = importlib_metadata.version("flax")
-            logger.info(f"JAX version {_jax_version}, Flax version {_flax_version} available.")
-        except importlib_metadata.PackageNotFoundError:
-            _flax_available = False
-else:
-    _flax_available = False
-
-
-_datasets_available = importlib.util.find_spec("datasets") is not None
-try:
-    # Check we're not importing a "datasets" directory somewhere but the actual library by trying to grab the version
-    # AND checking it has an author field in the metadata that is HuggingFace.
-    _ = importlib_metadata.version("datasets")
-    _datasets_metadata = importlib_metadata.metadata("datasets")
-    if _datasets_metadata.get("author", "") != "HuggingFace Inc.":
-        _datasets_available = False
-except importlib_metadata.PackageNotFoundError:
-    _datasets_available = False
-
-
-_detectron2_available = importlib.util.find_spec("detectron2") is not None
-try:
-    _detectron2_version = importlib_metadata.version("detectron2")
-    logger.debug(f"Successfully imported detectron2 version {_detectron2_version}")
-except importlib_metadata.PackageNotFoundError:
-    _detectron2_available = False
-
-
-_faiss_available = importlib.util.find_spec("faiss") is not None
-try:
-    _faiss_version = importlib_metadata.version("faiss")
-    logger.debug(f"Successfully imported faiss version {_faiss_version}")
-except importlib_metadata.PackageNotFoundError:
-    try:
-        _faiss_version = importlib_metadata.version("faiss-cpu")
-        logger.debug(f"Successfully imported faiss version {_faiss_version}")
-    except importlib_metadata.PackageNotFoundError:
-        _faiss_available = False
-
-
-_ftfy_available = importlib.util.find_spec("ftfy") is not None
-try:
-    _ftfy_version = importlib_metadata.version("ftfy")
-    logger.debug(f"Successfully imported ftfy version {_ftfy_version}")
-except importlib_metadata.PackageNotFoundError:
-    _ftfy_available = False
-
-
-coloredlogs = importlib.util.find_spec("coloredlogs") is not None
-try:
-    _coloredlogs_available = importlib_metadata.version("coloredlogs")
-    logger.debug(f"Successfully imported sympy version {_coloredlogs_available}")
-except importlib_metadata.PackageNotFoundError:
-    _coloredlogs_available = False
-
-
-sympy_available = importlib.util.find_spec("sympy") is not None
-try:
-    _sympy_available = importlib_metadata.version("sympy")
-    logger.debug(f"Successfully imported sympy version {_sympy_available}")
-except importlib_metadata.PackageNotFoundError:
-    _sympy_available = False
-
-
-_tf2onnx_available = importlib.util.find_spec("tf2onnx") is not None
-try:
-    _tf2onnx_version = importlib_metadata.version("tf2onnx")
-    logger.debug(f"Successfully imported tf2onnx version {_tf2onnx_version}")
-except importlib_metadata.PackageNotFoundError:
-    _tf2onnx_available = False
-
-
-_onnx_available = importlib.util.find_spec("onnxruntime") is not None
-try:
-    _onxx_version = importlib_metadata.version("onnx")
-    logger.debug(f"Successfully imported onnx version {_onxx_version}")
-except importlib_metadata.PackageNotFoundError:
-    _onnx_available = False
-
-
-_pytorch_quantization_available = importlib.util.find_spec("pytorch_quantization") is not None
-try:
-    _pytorch_quantization_version = importlib_metadata.version("pytorch_quantization")
-    logger.debug(f"Successfully imported pytorch-quantization version {_pytorch_quantization_version}")
-except importlib_metadata.PackageNotFoundError:
-    _pytorch_quantization_available = False
-
-
-_soundfile_available = importlib.util.find_spec("soundfile") is not None
-try:
-    _soundfile_version = importlib_metadata.version("soundfile")
-    logger.debug(f"Successfully imported soundfile version {_soundfile_version}")
-except importlib_metadata.PackageNotFoundError:
-    _soundfile_available = False
-
-
-_tensorflow_probability_available = importlib.util.find_spec("tensorflow_probability") is not None
-try:
-    _tensorflow_probability_version = importlib_metadata.version("tensorflow_probability")
-    logger.debug(f"Successfully imported tensorflow-probability version {_tensorflow_probability_version}")
-except importlib_metadata.PackageNotFoundError:
-    _tensorflow_probability_available = False
-
-
-_timm_available = importlib.util.find_spec("timm") is not None
-try:
-    _timm_version = importlib_metadata.version("timm")
-    logger.debug(f"Successfully imported timm version {_timm_version}")
-except importlib_metadata.PackageNotFoundError:
-    _timm_available = False
-
-
-_natten_available = importlib.util.find_spec("natten") is not None
-try:
-    _natten_version = importlib_metadata.version("natten")
-    logger.debug(f"Successfully imported natten version {_natten_version}")
-except importlib_metadata.PackageNotFoundError:
-    _natten_available = False
-
-
-_torchaudio_available = importlib.util.find_spec("torchaudio") is not None
-try:
-    _torchaudio_version = importlib_metadata.version("torchaudio")
-    logger.debug(f"Successfully imported torchaudio version {_torchaudio_version}")
-except importlib_metadata.PackageNotFoundError:
-    _torchaudio_available = False
-
-
-_phonemizer_available = importlib.util.find_spec("phonemizer") is not None
-try:
-    _phonemizer_version = importlib_metadata.version("phonemizer")
-    logger.debug(f"Successfully imported phonemizer version {_phonemizer_version}")
-except importlib_metadata.PackageNotFoundError:
-    _phonemizer_available = False
-
-
-_pyctcdecode_available = importlib.util.find_spec("pyctcdecode") is not None
-try:
-    _pyctcdecode_version = importlib_metadata.version("pyctcdecode")
-    logger.debug(f"Successfully imported pyctcdecode version {_pyctcdecode_version}")
-except importlib_metadata.PackageNotFoundError:
-    _pyctcdecode_available = False
-
-
-_librosa_available = importlib.util.find_spec("librosa") is not None
-try:
-    _librosa_version = importlib_metadata.version("librosa")
-    logger.debug(f"Successfully imported librosa version {_librosa_version}")
-except importlib_metadata.PackageNotFoundError:
-    _librosa_available = False
-
 _essentia_available = importlib.util.find_spec("essentia") is not None
 try:
     _essentia_version = importlib_metadata.version("essentia")
@@ -347,12 +191,14 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _essentia_version = False
 
+
 _pretty_midi_available = importlib.util.find_spec("pretty_midi") is not None
 try:
     _pretty_midi_version = importlib_metadata.version("pretty_midi")
     logger.debug(f"Successfully imported essentia version {_pretty_midi_version}")
 except importlib_metadata.PackageNotFoundError:
     _pretty_midi_available = False
+
 
 ccl_version = "N/A"
 _is_ccl_available = (

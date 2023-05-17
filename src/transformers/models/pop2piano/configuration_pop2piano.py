@@ -25,30 +25,6 @@ POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "susnato/pop2piano_dev": "https://huggingface.co/susnato/pop2piano_dev/blob/main/config.json"  # For now
 }
 
-COMPOSER_TO_FEATURE_TOKEN = {
-    "composer1": 2052,
-    "composer2": 2053,
-    "composer3": 2054,
-    "composer4": 2055,
-    "composer5": 2056,
-    "composer6": 2057,
-    "composer7": 2058,
-    "composer8": 2059,
-    "composer9": 2060,
-    "composer10": 2061,
-    "composer11": 2062,
-    "composer12": 2063,
-    "composer13": 2064,
-    "composer14": 2065,
-    "composer15": 2066,
-    "composer16": 2067,
-    "composer17": 2068,
-    "composer18": 2069,
-    "composer19": 2070,
-    "composer20": 2071,
-    "composer21": 2072,
-}
-
 
 class Pop2PianoConfig(PretrainedConfig):
     r"""
@@ -94,10 +70,6 @@ class Pop2PianoConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         dense_act_fn (`string`, *optional*, defaults to `"relu"`):
             Type of Activation Function to be used in `Pop2PianoDenseActDense` and in `Pop2PianoDenseGatedActDense`.
-        composer_n_vocab (`int`, *optional*, defaults to 21):
-            Number of composers.
-        composer_to_feature_token (`dict`, *optional*, defaults to `COMPOSER_TO_FEATURE_TOKEN`):
-            composer_to_feature_token holds the feature value for each composer.
     """
 
     model_type = "pop2piano"
@@ -125,7 +97,6 @@ class Pop2PianoConfig(PretrainedConfig):
         eos_token_id=1,
         dense_act_fn="relu",
         composer_n_vocab=21,
-        composer_to_feature_token=COMPOSER_TO_FEATURE_TOKEN,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -144,7 +115,6 @@ class Pop2PianoConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.dense_act_fn = dense_act_fn
         self.composer_n_vocab = composer_n_vocab
-        self.composer_to_feature_token = composer_to_feature_token
 
         super().__init__(
             pad_token_id=pad_token_id,

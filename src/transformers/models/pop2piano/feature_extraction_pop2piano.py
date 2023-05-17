@@ -224,9 +224,10 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         **kwargs,
     ) -> BatchFeature:
         """
-        Args:
         Main method to featurize and prepare for the model one sequence. Please note that `Pop2PianoFeatureExtractor`
         only accepts one raw_audio at a time.
+
+        Args:
             raw_audio (`np.ndarray`, `List`):
                 Denotes the raw_audio.
             sampling_rate (`int`):
