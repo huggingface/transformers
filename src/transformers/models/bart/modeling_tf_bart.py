@@ -493,6 +493,15 @@ class TFBartPretrainedModel(TFPreTrainedModel):
             "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
         }
 
+    @property
+    def dummy_inputs(self):
+        dummy_inputs = super().dummy_inputs
+        # Dummy inputs should not contain the default val of 1
+        # as this is the padding token and some assertions check it
+        dummy_inputs["input_ids"] = dummy_inputs["input_ids"] * 2
+        dummy_inputs["decoder_input_ids"] = dummy_inputs["decoder_input_ids"] * 2
+        return dummy_inputs
+
 
 BART_START_DOCSTRING = r"""
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
