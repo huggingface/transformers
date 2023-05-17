@@ -128,9 +128,6 @@ class ImageToTextPipeline(Pipeline):
         elif prompt is not None and self.model.config.model_type != "vision-encoder-decoder":
             text_inputs = self.tokenizer(prompt, return_tensors=self.framework)
 
-            if "token_type_ids" in text_inputs:
-                text_inputs.pop("token_type_ids", None)
-
             model_inputs.update(text_inputs)
 
         return model_inputs
