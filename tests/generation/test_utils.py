@@ -1457,6 +1457,7 @@ class GenerationTesterMixin:
             for output in (output_contrastive, output_generate):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
 
+    @slow  # TODO(Joao): remove this. Some models (e.g. data2vec, xcom, roberta) have an error rate between 1 and 10%.
     def test_assisted_decoding_matches_greedy_search(self):
         # This test ensures that the assisted generation does not introduce output changes over greedy search.
         # It breaks the pattern in the tests above, for multiple reasons:
@@ -1472,7 +1473,7 @@ class GenerationTesterMixin:
             # may fix in the future: the following models fail with assisted decoding, and need model-specific fixes
             if any(
                 model_name in model_class.__name__.lower()
-                for model_name in ["bigbirdpegasus", "gptbigcode", "led", "mega", "speech2text", "git", "prophetnet"]
+                for model_name in ["bigbirdpegasus", "led", "mega", "speech2text", "git", "prophetnet"]
             ):
                 return
 
@@ -1518,8 +1519,8 @@ class GenerationTesterMixin:
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
 
     def test_assisted_decoding_sample(self):
-        # Seeded assisted decoding will not match sample for the same seed, as there are >1 sampling steps per output
-        # token. As such, this test only checks that the output format is correct.
+        # Seeded assisted decoding will not match sample for the same seed, as the forward pass does not return the
+        # exact same logits (the forward pass of the main model, now with several tokens at once, has causal masking).
 
         for model_class in self.all_generative_model_classes:
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
@@ -1528,7 +1529,7 @@ class GenerationTesterMixin:
             # may fix in the future: the following models fail with assisted decoding, and need model-specific fixes
             if any(
                 model_name in model_class.__name__.lower()
-                for model_name in ["bigbirdpegasus", "gptbigcode", "led", "mega", "speech2text", "git", "prophetnet"]
+                for model_name in ["bigbirdpegasus", "led", "mega", "speech2text", "git", "prophetnet"]
             ):
                 return
 
@@ -1643,6 +1644,77 @@ class GenerationTesterMixin:
                     break
 
             self.assertTrue(no_failures)
+
+    def test_past_key_values_format(self):
+        # Test that the KV cache is formatted correctly. Exceptions need to explicitly overwrite this test. Having a
+        # standard KV cache format is important for a consistent API (and for advanced generation methods).
+        for model_class in self.all_generative_model_classes:
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+            # If it doesn't support cache, pass the test
+            if not hasattr(config, "use_cache"):
+                return
+
+            model = model_class(config).to(torch_device)
+            if "use_cache" not in inputs:
+                inputs["use_cache"] = True
+            outputs = model(**inputs)
+
+            # If "past_key_values" is not returned, pass the test (e.g. RWKV uses a different cache name and format)
+            if "past_key_values" not in outputs:
+                return
+
+            num_hidden_layers = (
+                getattr(config, "decoder_layers", None)
+                or getattr(config, "num_decoder_layers", None)
+                or config.num_hidden_layers
+            )
+            num_attention_heads = getattr(config, "decoder_attention_heads", config.num_attention_heads)
+            embed_dim = getattr(config, "d_model", config.hidden_size)
+            per_head_embed_dim = embed_dim // num_attention_heads
+
+            past_kv = outputs["past_key_values"]
+            self.assertEqual(len(past_kv), num_hidden_layers)
+
+            # Encoder-Decoder checks
+            if config.is_encoder_decoder:
+                encoder_num_attention_heads = config.encoder_attention_heads
+                encoder_per_head_embed_dim = embed_dim // encoder_num_attention_heads
+                batch_size, seq_length = inputs["decoder_input_ids"].shape
+                for i in range(num_hidden_layers):
+                    self.assertEqual(len(past_kv[i]), 4)  # K V for the decoder + K V for the encoder = 4
+                    self.assertEqual(
+                        past_kv[i][0].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                    )
+                    self.assertEqual(
+                        past_kv[i][1].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                    )
+                    # The sequence length for the encoder K V depends on the model. Since it is not manipulated in
+                    # autoregressive generation, I'm keeping the test general and not checking the 3rd dim
+                    self.assertEqual(
+                        (past_kv[i][2].shape[0], past_kv[i][2].shape[1], past_kv[i][2].shape[3]),
+                        (batch_size, encoder_num_attention_heads, encoder_per_head_embed_dim),
+                    )
+                    self.assertEqual(
+                        (past_kv[i][3].shape[0], past_kv[i][3].shape[1], past_kv[i][3].shape[3]),
+                        (batch_size, encoder_num_attention_heads, encoder_per_head_embed_dim),
+                    )
+
+            # Decoder-only checks
+            else:
+                # TODO: this line is only needed because of imagegpt, where "pixel_values" = "input_ids". Fix the
+                # tests in imagegpt such that `prepare_config_and_inputs_for_common` returns the later (and the other
+                # tests use it)
+                key = "input_ids" if "input_ids" in inputs else "pixel_values"
+                batch_size, seq_length = inputs[key].shape
+                for i in range(num_hidden_layers):
+                    self.assertEqual(len(past_kv[0]), 2)  # K V for the decoder = 2
+                    self.assertEqual(
+                        past_kv[i][0].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                    )
+                    self.assertEqual(
+                        past_kv[i][1].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                    )
 
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape

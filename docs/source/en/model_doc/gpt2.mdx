@@ -24,7 +24,7 @@ specific language governing permissions and limitations under the License.
 ## Overview
 
 OpenAI GPT-2 model was proposed in [Language Models are Unsupervised Multitask Learners](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) by Alec
-Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei and Ilya Sutskever. It's a causal (unidirectional)
+Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei and Ilya Sutskever from [OpenAI](https://huggingface.co/openai). It's a causal (unidirectional)
 transformer pretrained using language modeling on a very large corpus of ~40 GB of text data.
 
 The abstract from the paper is the following:
@@ -109,6 +109,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## GPT2DoubleHeadsModel
 
 [[autodoc]] GPT2DoubleHeadsModel
+    - forward
+
+## GPT2ForQuestionAnswering
+
+[[autodoc]] GPT2ForQuestionAnswering
     - forward
 
 ## GPT2ForSequenceClassification
