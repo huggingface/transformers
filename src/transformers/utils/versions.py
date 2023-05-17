@@ -23,8 +23,6 @@ from typing import Optional, Union
 from packaging import version
 from packaging.version import Version, parse
 
-from .import_utils import _torch_version
-
 
 # The package importlib_metadata is in a different place, depending on the python version.
 if sys.version_info < (3, 8):
@@ -32,6 +30,11 @@ if sys.version_info < (3, 8):
 else:
     import importlib.metadata as importlib_metadata
 
+_torch_version = "N/A"
+try:
+    _torch_version = importlib_metadata.version('torch')
+except importlib_metadata.PackageNotFoundError:
+    pass
 
 ops = {
     "<": operator.lt,
