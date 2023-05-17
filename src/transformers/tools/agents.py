@@ -430,7 +430,7 @@ class OpenAiAgent(Agent):
 
 class HfAgent(Agent):
     """
-    Agent that uses and inference endpoint to generate code.
+    Agent that uses an inference endpoint to generate code.
 
     Args:
         url_endpoint (`str`):
