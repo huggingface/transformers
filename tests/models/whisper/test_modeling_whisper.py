@@ -1034,7 +1034,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             task_id,
         ]
         for row in output.tolist():
-            self.assertListEqual(row[:len(expected_output_start)], expected_output_start)
+            self.assertListEqual(row[: len(expected_output_start)], expected_output_start)
 
     def test_generate_with_prompt_ids_and_forced_decoder_ids(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1053,7 +1053,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             *[token for _rank, token in forced_decoder_ids],
         ]
         for row in output.tolist():
-            self.assertListEqual(row[:len(expected_output_start)], expected_output_start)
+            self.assertListEqual(row[: len(expected_output_start)], expected_output_start)
 
 
 @require_torch
@@ -1516,7 +1516,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(input_speech, return_tensors="pt").input_features
         prompt = "test prompt"
         prompt_ids = processor.get_prompt_ids(prompt)
-        
+
         model.generation_config.forced_decoder_ids = None
         model.config.forced_decoder_ids = None
 
