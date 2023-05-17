@@ -36,6 +36,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
+from ...tf_utils import check_embeddings_within_bounds
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
@@ -240,16 +241,7 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
             token_type_ids = tf.zeros(input_shape, dtype=position_ids.dtype)
 
         if inputs_embeds is None:
-            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-            tf.debugging.assert_less(
-                input_ids,
-                tf.cast(self.word_embeddings.input_dim, dtype=input_ids.dtype),
-                message=(
-                    "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.word_embeddings.input_dim})"
-                ),
-            )
+            check_embeddings_within_bounds(input_ids, self.word_embeddings.input_dim)
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
