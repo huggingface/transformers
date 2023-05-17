@@ -975,18 +975,17 @@ class TFWhisperEncoderModelTest(TFModelTesterMixin, unittest.TestCase):
             model = model_class(config)
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            
+
             outputs = model(**inputs)[0]
-            
+
             input_ids = inputs["input_features"]
-            del inputs["input_features"]
 
             encoder = model.encoder
-            
+
             inputs["encoder_outputs"] = encoder(input_ids)
             outputs_embeds = model(**inputs)[0]
 
-            self.assertTrue((outputs_embeds == outputs).all())
+            self.assertTrue(tf.experimental.numpy.all(outputs_embeds == outputs))
 
     # WhisperEncoder has no inputs_embeds and thus the `get_input_embeddings` fn is not implemented
     def test_model_common_attributes(self):

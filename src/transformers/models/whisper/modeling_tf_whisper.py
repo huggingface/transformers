@@ -1452,4 +1452,3 @@ class TFWhisperForAudioClassification(TFWhisperPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
