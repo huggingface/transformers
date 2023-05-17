@@ -114,7 +114,7 @@ class Beit3Config(PretrainedConfig):
         num_attention_heads=12,
         hidden_size=3072,
         layers=12,
-        normalize_before=True,
+        normalize_before=False,
         activation_fn="gelu",
         dropout=0.0,
         attention_dropout=0.0,

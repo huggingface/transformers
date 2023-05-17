@@ -560,7 +560,8 @@ class Beit3Encoder(nn.Module):
         for i in range(config.layers):
             self.layers.append(Beit3EncoderLayer(config))
         self.num_layers = len(self.layers)
-        self.layer_norm = Beit3MultiwayNetwork(LayerNorm(embed_dim, eps=config.layernorm_eps))
+        if config.normalize_before:
+            self.fc_norm = Beit3MultiwayNetwork(LayerNorm(embed_dim, eps=config.layernorm_eps))
 
         self.relative_position = None
 
@@ -635,8 +636,8 @@ class Beit3Encoder(nn.Module):
             if return_all_hiddens:
                 hidden_states.append(x)
 
-        if self.layer_norm is not None:
-            x = self.layer_norm(x)
+        if self.fc_norm is not None:
+            x = self.fc_norm(x)
 
         if not return_dict:
             return [x, encoder_embedding, hidden_states]
@@ -750,7 +751,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         super(Beit3ForVisualReasoning, self).__init__(config)
         embed_dim = config.embed_dim
         self.beit3 = Beit3Model(config)
-        self.head = Beit3MLP(
+        self.classifier = Beit3MLP(
             in_features=embed_dim * 4,
             hidden_features=embed_dim * 2,
             out_features=config.num_labels,
@@ -789,7 +790,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         a, b = torch.split(cls_rep, split_size_or_sections=[batch_size, batch_size], dim=0)
         cls_rep = torch.cat((a, b), dim=-1)
 
-        logits = self.head(cls_rep)
+        logits = self.classifier(cls_rep)
         reshaped_logits = logits.contiguous()
 
         loss = None
@@ -888,7 +889,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         embed_dim = config.embed_dim
         self.beit3 = Beit3Model(config)
         self.label_smoothing = config.label_smoothing
-        self.output = nn.Linear(embed_dim, config.vocab_size)
+        self.mlm_classifier = nn.Linear(embed_dim, config.vocab_size)
         self.log_soft = nn.LogSoftmax(dim=1)
         self.kl = nn.KLDivLoss(reduction="none")
         self.post_init()
@@ -955,7 +956,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         if language_masked_pos is not None:
             text_feats = text_feats[language_masked_pos.bool()]
 
-        logits = self.output(text_feats)
+        logits = self.mlm_classifier(text_feats)
 
         loss = None
         if labels is not None:
@@ -1107,8 +1108,8 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         super(Beit3ForImageTextRetrieval, self).__init__(config)
         embed_dim = config.embed_dim
         self.beit3 = Beit3Model(config)
-        self.language_head = nn.Linear(embed_dim, embed_dim, bias=False)
-        self.vision_head = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.language_classifier = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.vision_classifier = nn.Linear(embed_dim, embed_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
         self.post_init()
 
@@ -1130,7 +1131,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_out = outputs.encoder_out
-        vision_cls = self.vision_head(vision_out[:, 0, :])
+        vision_cls = self.vision_classifier(vision_out[:, 0, :])
         vision_cls = F.normalize(vision_cls, dim=-1)
 
         outputs = self.beit3(
@@ -1139,7 +1140,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
             text_padding_position=padding_mask,
         )
         text_out = outputs.encoder_out
-        text_cls = self.language_head(text_out[:, 0, :])
+        text_cls = self.language_classifier(text_out[:, 0, :])
         text_cls = F.normalize(text_cls, dim=-1)
 
         logit_scale = self.logit_scale.exp()
