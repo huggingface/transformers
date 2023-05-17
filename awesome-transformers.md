@@ -221,7 +221,7 @@ Keywords: Data augmentation, Synthetic data generation, Audio, NLP
 
 ## [dream-textures](https://github.com/carson-katri/dream-textures)
 
-[dream-textures](https://github.com/carson-katri/dream-textures) is a library targeted at bringing stable-diffusion support within Blender. It supports several use-cases, such as image generation, texture projection, inpainting/outpainting, rendering passes, and upscaling.
+[dream-textures](https://github.com/carson-katri/dream-textures) is a library targeted at bringing stable-diffusion support within Blender. It supports several use-cases, such as image generation, texture projection, inpainting/outpainting, ControlNet, and upscaling.
 
 Keywords: Stable-Diffusion, Blender
 
@@ -258,7 +258,7 @@ Keywords: Semantic search, LLM
 
 ## [djl](https://github.com/deepjavalibrary/djl)
 
-Deep Java Library (DJL) is an open-source, high-level, engine-agnostic Java framework for deep learning. DJL is designed to be easy to get started with and simple to use for Java developers. DJL provides a native Java development experience and functions like any other regular Java library.
+Deep Java Library (DJL) is an open-source, high-level, engine-agnostic Java framework for deep learning. DJL is designed to be easy to get started with and simple to use for developers. DJL provides a native Java development experience and functions like any other regular Java library. DJL offers [a Java binding](https://github.com/deepjavalibrary/djl/tree/master/extensions/tokenizers) for HuggingFace Tokenizers and easy conversion toolkit for HuggingFace model to deploy in Java.
 
 Keywords: Java, Framework
 
