@@ -83,7 +83,7 @@ class TFSwiftFormerPatchEmbedding(tf.keras.layers.Layer):
                 ),  # FIXME: is this the equivalent momentum?
                 tf.keras.layers.Activation("relu"),
                 tf.keras.layers.ZeroPadding2D(padding=(1, 1)),
-                tf.keras.layers.Conv2D(out_chs, kernel_size=2, strides=2),
+                tf.keras.layers.Conv2D(out_chs, kernel_size=3, strides=2),
                 tf.keras.layers.BatchNormalization(
                     epsilon=config.batch_norm_eps, momentum=0.9
                 ),  # FIXME: is this the equivalent momentum?
