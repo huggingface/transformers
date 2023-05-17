@@ -566,11 +566,23 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
 
 
         EXPECTED_LEP = (
-            'we study the rare decays @xmath0 ( @xmath1 ) at the gigaz option of the international linear collider ( ilc ).<n> we calculate the branching ratios of @xmath2 in the two higgs doublet model ( 2hdm ), the minimal supersymmetric standard model ( mssm ), the next - to - minimal supersymmetric standard model ( nmssm ) and the nearly minimal supersymmetric standard model ( nmssm ).<n> we find that the branching ratios of @xmath3 can reach @xmath4 in 2hdm, @xmath5 in mssm, @xmath6 in nmssm and @xmath7 in nmssm, while they are much smaller than @xmath8 in 2hdm, @xmath9 in mssm, @xmath10 in nmssm and @xmath11 in nmssm.'
+            "we study the rare decays @xmath0 ( @xmath1 ) at the gigaz option of the international linear collider "
+            "( ilc ).<n> we calculate the branching ratios of @xmath2 in the two higgs doublet model ( 2hdm ), the "
+            "minimal supersymmetric standard model ( mssm ), the next - to - minimal supersymmetric standard model "
+            "( nmssm ) and the nearly minimal supersymmetric standard model ( nmssm ).<n> we find that the branching "
+            "ratios of @xmath3 can reach @xmath4 in 2hdm, @xmath5 in mssm, @xmath6 in nmssm and @xmath7 in nmssm, "
+            "while they are much smaller than @xmath8 in 2hdm, @xmath9 in mssm, @xmath10 in nmssm and @xmath11 in "
+            "nmssm."
         )
 
         EXPECTED_MAGNET = (
-            'we investigate the two - dimensional magnetotransport in the surface state of a topological insulator ( ti ).<n> we find that a positive, nonsaturating and dominantly linear magnetoresistance can appear within quite wide magnetic - field range in the ti surface state having a positive and finite effective g - factor.<n> this linear magnetoresistance shows up in the system of high carrier concentration and low mobility when electrons are in extended states and spread over many smeared landau levels, and persists up to room temperature, providing a possible mechanism for the recently observed linear magnetoresistance in topological insulator bi@xmath0se@xmath1 nanoribbons.'
+            "we investigate the two - dimensional magnetotransport in the surface state of a topological insulator "
+            "( ti ).<n> we find that a positive, nonsaturating and dominantly linear magnetoresistance can appear "
+            "within quite wide magnetic - field range in the ti surface state having a positive and finite effective g "
+            "- factor.<n> this linear magnetoresistance shows up in the system of high carrier concentration and low "
+            "mobility when electrons are in extended states and spread over many smeared landau levels, and persists "
+            "up to room temperature, providing a possible mechanism for the recently observed linear magnetoresistance "
+            "in topological insulator bi@xmath0se@xmath1 nanoribbons."
         )
 
         generated = tokenizer.batch_decode(
