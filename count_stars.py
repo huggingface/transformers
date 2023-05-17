@@ -9,7 +9,7 @@ if __name__ == "__main__":
         s1 = None
         s2 = None
 
-        cmd = 'curl -s "https://api.github.com/repos/huggingface/transformers" | grep stargazers_count | cut -d : -f 2 | tee stars.txt'
+        cmd = 'curl -s "https://api.github.com/repos/huggingface/transformers" | grep stargazers_count | cut -d : -f 2 > stars.txt'
         os.system(cmd)
         with open("stars.txt") as fp:
             s = fp.read()
