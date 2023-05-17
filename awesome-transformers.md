@@ -191,9 +191,9 @@ Keywords: Visualization, Transformers
 
 ## [mesh-transformer-jax](https://github.com/kingoflolz/mesh-transformer-jax)
 
-[mesh-transformer-jax](https://github.com/kingoflolz/mesh-transformer-jax) is a haiku library using the xmap/pjit operators in JAX for model parallelism of transformers. This library is designed for scalability up to approximately 40B parameters on TPUv3s.
+[mesh-transformer-jax](https://github.com/kingoflolz/mesh-transformer-jax) is a haiku library using the xmap/pjit operators in JAX for model parallelism of transformers. This library is designed for scalability up to approximately 40B parameters on TPUv3s. It was the library used to train the GPT-J model.
 
-Keywords: Haiku, Model parallelism, 40B parameters, TPU, TPUv3
+Keywords: Haiku, Model parallelism, LLM, TPU
 
 ## [deepchem](https://github.com/deepchem/deepchem)
 
