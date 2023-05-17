@@ -3649,6 +3649,8 @@ class Trainer:
             _, self.push_in_progress = self.repo.push_to_hub(
                 commit_message=commit_message, blocking=False, auto_lfs_prune=True
             )
+        except Exception as e:
+            logger.error(f"Error when pushing to hub: {e}")
         finally:
             if self.args.hub_strategy == HubStrategy.CHECKPOINT:
                 # Move back the checkpoint to its place
