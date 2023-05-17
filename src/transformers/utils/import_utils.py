@@ -502,7 +502,7 @@ def is_protobuf_available():
 
 def is_accelerate_available(check_partial_state=False):
     if check_partial_state:
-        return _accelerate_available and version.parse(_accelerate_version) >= version.parse("0.17.0")
+        return _accelerate_available and version.parse(_accelerate_version) >= version.parse("0.19.0")
     return _accelerate_available
 
 
