@@ -127,6 +127,15 @@ class ImageToTextPipelineTests(unittest.TestCase):
             ],
         )
 
+    @require_torch
+    def test_small_model_pt_conditional(self):
+        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-BlipForConditionalGeneration")
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        prompt = "a photo of"
+
+        outputs = pipe(image, prompt=prompt)
+        self.assertTrue(outputs[0]["generated_text"].startswith(prompt))
+
     @slow
     @require_torch
     def test_large_model_pt(self):
