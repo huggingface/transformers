@@ -599,7 +599,7 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
     def __init__(self, config: SwiftFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.swiftofrmer = TFSwiftFormerMainLayer(config, name="swiftformer")
+        self.swiftformer = TFSwiftFormerMainLayer(config, name="swiftformer")
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(SWIFTFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -636,7 +636,7 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`). Set to `False` during training, `True` during generation
         """
-        outputs = self.swiftofrmer(
+        outputs = self.swiftformer(
             pixel_values=pixel_values,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
