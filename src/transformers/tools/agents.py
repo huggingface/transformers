@@ -490,5 +490,5 @@ class HfAgent(Agent):
         # Inference API returns the stop sequence
         for stop_seq in stop:
             if result.endswith(stop_seq):
-                result = result[: -len(stop_seq)]
+                return result[: -len(stop_seq)]
         return result
