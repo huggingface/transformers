@@ -289,9 +289,10 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     pipeline_model_mapping = (
         {
             "feature-extraction": BioGptModel,
+            "text-classification": BioGptForSequenceClassification,
             "text-generation": BioGptForCausalLM,
             "token-classification": BioGptForTokenClassification,
-            "text-classification": BioGptForSequenceClassification,
+            "zero-shot": BioGptForSequenceClassification,
         }
         if is_torch_available()
         else {}
