@@ -129,9 +129,10 @@ class SciBartTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
-        Args:
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
+        
+        Args:
             token_ids_0 (`List[int]`):
                 List of IDs.
             token_ids_1 (`List[int]`, *optional*):
