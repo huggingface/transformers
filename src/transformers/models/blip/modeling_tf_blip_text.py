@@ -800,19 +800,6 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
-    def serving_output(
-        self, output: TFBaseModelOutputWithPoolingAndCrossAttentions
-    ) -> TFBaseModelOutputWithPoolingAndCrossAttentions:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutputWithPoolingAndCrossAttentions(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            hidden_states=hs,
-            attentions=attns,
-        )
-
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L811
 class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
