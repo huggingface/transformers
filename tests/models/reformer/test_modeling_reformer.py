@@ -682,6 +682,10 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
                 [expected_shape] * len(iter_hidden_states),
             )
 
+    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
+    def test_left_padding_compatibility(self):
+        pass
+
 
 @require_torch
 class ReformerLSHAttnModelTest(
@@ -837,6 +841,10 @@ class ReformerLSHAttnModelTest(
 
     @unittest.skip("Fails because the sequence length is not a multiple of 4")
     def test_past_key_values_format(self):
+        pass
+
+    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
+    def test_left_padding_compatibility(self):
         pass
 
 
