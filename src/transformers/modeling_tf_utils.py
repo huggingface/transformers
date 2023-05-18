@@ -1229,11 +1229,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         model_inputs = list(inspect.signature(self.call).parameters)
         sig = {}
-        if self.__class__.__name__.endswith("ForMultipleChoice"):
-            text_dims = 3
-        else:
-            text_dims = 2
         if "input_ids" in model_inputs:
+            if self.__class__.__name__.endswith("ForMultipleChoice"):
+                text_dims = 3
+            else:
+                text_dims = 2
             for input_name in ("input_ids", "attention_mask", "token_type_ids"):
                 if input_name in model_inputs:
                     sig[input_name] = tf.TensorSpec([None] * text_dims, tf.int32, name=input_name)
