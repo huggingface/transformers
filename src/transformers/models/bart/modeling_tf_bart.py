@@ -499,7 +499,8 @@ class TFBartPretrainedModel(TFPreTrainedModel):
         # Dummy inputs should not contain the default val of 1
         # as this is the padding token and some assertions check it
         dummy_inputs["input_ids"] = dummy_inputs["input_ids"] * 2
-        dummy_inputs["decoder_input_ids"] = dummy_inputs["decoder_input_ids"] * 2
+        if "decoder_input_ids" in dummy_inputs:
+            dummy_inputs["decoder_input_ids"] = dummy_inputs["decoder_input_ids"] * 2
         return dummy_inputs
 
 
