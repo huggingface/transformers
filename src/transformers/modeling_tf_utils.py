@@ -1264,7 +1264,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     def _prune_signature(self, signature):
         """Keeps only the keys of a given input signature that are valid for this model."""
-        breakpoint()
         model_inputs = list(inspect.signature(self.call).parameters)
         return {key: val for key, val in signature.items() if key in model_inputs}
 
