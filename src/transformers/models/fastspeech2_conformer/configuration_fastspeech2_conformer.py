@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The ESPnet Authors and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,414 +14,192 @@
 # limitations under the License.
 """ FastSpeech2Conformer model configuration"""
 
-import functools
-import operator
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-FastSpeech2Conformer_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/FastSpeech2Conformer_asr": "https://huggingface.co/microsoft/FastSpeech2Conformer_asr/resolve/main/config.json",
-    "microsoft/FastSpeech2Conformer_tts": "https://huggingface.co/microsoft/FastSpeech2Conformer_tts/resolve/main/config.json",
-    "microsoft/FastSpeech2Conformer_vc": "https://huggingface.co/microsoft/FastSpeech2Conformer_vc/resolve/main/config.json",
-}
-
-FastSpeech2Conformer_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP = {
-    "microsoft/FastSpeech2Conformer_hifigan": "https://huggingface.co/microsoft/FastSpeech2Conformer_hifigan/resolve/main/config.json",
+FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "fastspeech2_conformer": "https://huggingface.co/jaketae/fastspeech2-ljspeech/resolve/main/config.json",
+    "fastspeech2_conformer": "https://huggingface.co/jaketae/fastspeech2-commonvoice/resolve/main/config.json",
+    # See all FastSpeech2Conformer models at https://huggingface.co/models?filter=fastspeech2
 }
 
 
 class FastSpeech2ConformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FastSpeech2ConformerModel`]. It is used to instantiate a
-    FastSpeech2Conformer model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the FastSpeech2Conformer
-    [microsoft/FastSpeech2Conformer_asr](https://huggingface.co/microsoft/FastSpeech2Conformer_asr) architecture.
+    This is the configuration class to store the configuration of a [`FastSpeech2ConformerModel`]. It is used to instantiate an
+    FastSpeech2Conformer model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the FastSpeech2Conformer
+    [fastspeech2](https://huggingface.co/jaketae/fastspeech2) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
+
     Args:
-        vocab_size (`int`, *optional*, defaults to 81):
+        vocab_size (`int`, *optional*, defaults to 75):
             Vocabulary size of the FastSpeech2Conformer model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed to the forward method of [`FastSpeech2ConformerModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        encoder_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        encoder_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.1):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
-        decoder_layers (`int`, *optional*, defaults to 6):
-            Number of hidden layers in the Transformer decoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer decoder.
-        decoder_layerdrop (`float`, *optional*, defaults to 0.1):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        positional_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the text position encoding layers.
-        hidden_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
+            the `inputs_ids` passed when calling [`~FastSpeech2ConformerModel`].
+        encoder_embed_dim (`int`, *optional*, defaults to 256):
+            Dimensionality of the encoder layers.
+        encoder_layers (`int`, *optional*, defaults to 4):
+            Number of hidden layers in the encoder.
+        encoder_attention_heads (`int`, *optional*, defaults to 2):
+            Number of attention heads for each attention layer in the encoder.
+        decoder_embed_dim (`int`, *optional*, defaults to 256):
+            Dimensionality of the decoder layers.
+        decoder_layers (`int`, *optional*, defaults to 4):
+            Number of hidden layers in the decoder.
+        decoder_attention_heads (`int`, *optional*, defaults to 2):
+            Number of attention heads for each attention layer in the decoder.
+        attention_dropout (`float`, *optional*, defaults to 0)
             The dropout ratio for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for activations inside the fully connected layer.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the layer normalization layers.
-        scale_embedding (`bool`, *optional*, defaults to `False`):
-            Scale embeddings by diving by sqrt(d_model).
-        feat_extract_norm (`str`, *optional*, defaults to `"group"`):
-            The norm to be applied to 1D convolutional layers in the speech encoder pre-net. One of `"group"` for group
-            normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all 1D
-            convolutional layers.
-        feat_proj_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for output of the speech encoder pre-net.
-        feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the 1D convolutional layers of the feature
-            extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        conv_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
-            A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
-            speech encoder pre-net. The length of *conv_dim* defines the number of 1D convolutional layers.
-        conv_stride (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
-            A tuple of integers defining the stride of each 1D convolutional layer in the speech encoder pre-net. The
-            length of *conv_stride* defines the number of convolutional layers and has to match the length of
-            *conv_dim*.
-        conv_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(10, 3, 3, 3, 3, 3, 3)`):
-            A tuple of integers defining the kernel size of each 1D convolutional layer in the speech encoder pre-net.
-            The length of *conv_kernel* defines the number of convolutional layers and has to match the length of
-            *conv_dim*.
-        conv_bias (`bool`, *optional*, defaults to `False`):
-            Whether the 1D convolutional layers have a bias.
-        num_conv_pos_embeddings (`int`, *optional*, defaults to 128):
-            Number of convolutional positional embeddings. Defines the kernel size of 1D convolutional positional
-            embeddings layer.
-        num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
-            Number of groups of 1D convolutional positional embeddings layer.
-        apply_spec_augment (`bool`, *optional*, defaults to `True`):
-            Whether to apply *SpecAugment* data augmentation to the outputs of the speech encoder pre-net. For
-            reference see [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
-            Recognition](https://arxiv.org/abs/1904.08779).
-        mask_time_prob (`float`, *optional*, defaults to 0.05):
-            Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
-            procecure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
-            reasoning from the propability of each feature vector to be chosen as the start of the vector span to be
-            masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the
-            actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`.
-        mask_time_length (`int`, *optional*, defaults to 10):
-            Length of vector span along the time axis.
-        mask_time_min_masks (`int`, *optional*, defaults to 2),:
-            The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step,
-            irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
-            mask_time_min_masks''
-        mask_feature_prob (`float`, *optional*, defaults to 0.0):
-            Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
-            masking procecure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
-            the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
-            span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
-            may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
-            True`.
-        mask_feature_length (`int`, *optional*, defaults to 10):
-            Length of vector span along the feature axis.
-        mask_feature_min_masks (`int`, *optional*, defaults to 0),:
-            The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
-            step, irrespectively of `mask_feature_prob`. Only relevant if
-            ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
-        num_mel_bins (`int`, *optional*, defaults to 80):
-            Number of mel features used per input features. Used by the speech decoder pre-net. Should correspond to
-            the value used in the [`FastSpeech2ConformerProcessor`] class.
-        speech_decoder_prenet_layers (`int`, *optional*, defaults to 2):
-            Number of layers in the speech decoder pre-net.
-        speech_decoder_prenet_units (`int`, *optional*, defaults to 256):
-            Dimensionality of the layers in the speech decoder pre-net.
-        speech_decoder_prenet_dropout (`float`, *optional*, defaults to 0.5):
-            The dropout probability for the speech decoder pre-net layers.
-        speaker_embedding_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of the *XVector* embedding vectors.
-        speech_decoder_postnet_layers (`int`, *optional*, defaults to 5):
-            Number of layers in the speech decoder post-net.
-        speech_decoder_postnet_units (`int`, *optional*, defaults to 256):
-            Dimensionality of the layers in the speech decoder post-net.
-        speech_decoder_postnet_kernel (`int`, *optional*, defaults to 5):
-            Number of convolutional filter channels in the speech decoder post-net.
-        speech_decoder_postnet_dropout (`float`, *optional*, defaults to 0.5):
-            The dropout probability for the speech decoder post-net layers.
-        reduction_factor (`int`, *optional*, defaults to 2):
-            Spectrogram length reduction factor for the speech decoder inputs.
-        max_speech_positions (`int`, *optional*, defaults to 4000):
-            The maximum sequence length of speech features that this model might ever be used with.
-        max_text_positions (`int`, *optional*, defaults to 450):
-            The maximum sequence length of text features that this model might ever be used with.
-        encoder_max_relative_position (`int`, *optional*, defaults to 160):
-            Maximum distance for relative position embedding in the encoder.
-        use_guided_attention_loss (`bool`, *optional*, defaults to `True`):
-            Whether to apply guided attention loss while training the TTS model.
-        guided_attention_loss_num_heads (`int`, *optional*, defaults to 2):
-            Number of attention heads the guided attention loss will be applied to. Use -1 to apply this loss to all
-            attention heads.
-        guided_attention_loss_sigma (`float`, *optional*, defaults to 0.4):
-            Standard deviation for guided attention loss.
-        guided_attention_loss_scale (`float`, *optional*, defaults to 10.0):
-            Scaling coefficient for guided attention loss (also known as lambda).
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
+        fft_hidden_dim (`int`, *optional*, defaults to 1024)
+            Dimensionality of the feed forward layers.
+        fft_kernel_size (`int`, *optional*, defaults to 9)
+            Kernel size of the feed forward layers.
+        fft_dropout (`float`, *optional*, defaults to 0.5)
+            The dropout ratio for the feedforward layers.
+        var_pred_hidden_dim (`int`, *optional*, defaults to 256)
+            Dimensionality of the hidden size of the variance predictor.
+        var_pred_kernel_size (`int`, *optional*, defaults to 3)
+            Kernel size of the variance predictor layer.
+        var_pred_dropout (`float`, *optional*, defaults to 0.5)
+            The dropout ratio for the variance predictor.
+        add_postnet (`bool`, *optional*, defaults to `False`)
+            Flag that specifies whether or not to add postnet.
+        postnet_conv_dim (`int`, *optional*, defaults to 512)
+            Dimensionality of the postnet convolution layers.
+        postnet_conv_kernel_size (`int`, *optional*, defaults to 5)
+            Kernel size of the convolution layers in the postnet.
+        postnet_layers (`int`, *optional*, defaults to 5)
+            Number of hidden layers in the postnet.
+        postnet_dropout (`float`, *optional*, defaults to 0.5)
+            The dropout ratio for the postnet.
+        pitch_min (`float`, *optional*, defaults to -4.660287183665281)
+            The minimum pitch value of the pitch bucket in the variance predictor.
+        pitch_max (`float`, *optional*, defaults to 5.733940816898645)
+            The maximum pitch value of the pitch bucket in the variance predictor.
+        energy_min (`float`, *optional*, defaults to -4.9544901847839355)
+            The minimum energy value of the pitch bucket in the variance predictor.
+        energy_max (`float`, *optional*, defaults to 3.2244551181793213)
+            The maximum energy value of the pitch bucket in the variance predictor.
+        speaker_embed_dim (`int`, *optional*, defaults to 64)
+            Dimensionality of the speaker identity embedding.
+        num_speakers (`int`, *optional*, defaults to 1)
+            Number of speakers. Set to 1 if the dataset is a single-speaker dataset. Otherwise, set to the number of
+            speakers in the multi-speaker training dataset.
+        max_source_positions (`int`, *optional*, defaults to 1024):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        initializer_range (`float`, *optional*, defaults to 0.0625):
+            The standard deviation of the truncated_normal_initializer for initializing all embedding weight matrices.
+        use_mean (`bool`, *optional*, defaults to `True`)
+            Flag that specifies whether or not to denormalize predicted output using cepstral mean and variance
+            normalization. For more information, please refer to [cepstral mean and variance
+            normalization](https://en.wikipedia.org/wiki/Cepstral_mean_and_variance_normalization).
+        use_standard_deviation (`bool`, *optional*, defaults to `True`)
+            Flag that specifies whether or not to scale predicted output using cepstral mean and variance
+            normalization. For more information, please refer to [cepstral mean and variance
+            normalization](https://en.wikipedia.org/wiki/Cepstral_mean_and_variance_normalization).
 
     Example:
 
     ```python
     >>> from transformers import FastSpeech2ConformerModel, FastSpeech2ConformerConfig
 
-    >>> # Initializing a "microsoft/FastSpeech2Conformer_asr" style configuration
+    >>> # Initializing a FastSpeech2Conformer fastspeech2 style configuration
     >>> configuration = FastSpeech2ConformerConfig()
 
-    >>> # Initializing a model (with random weights) from the "microsoft/FastSpeech2Conformer_asr" style configuration
+    >>> # Initializing a model from the fastspeech2 style configuration
     >>> model = FastSpeech2ConformerModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "FastSpeech2Conformer"
-    attribute_map = {"num_attention_heads": "encoder_attention_heads", "num_hidden_layers": "encoder_layers"}
+    model_type = "fastspeech2_conformer"
 
     def __init__(
         self,
-        vocab_size=81,
-        hidden_size=768,
-        encoder_layers=12,
-        encoder_attention_heads=12,
-        encoder_ffn_dim=3072,
-        encoder_layerdrop=0.1,
-        decoder_layers=6,
-        decoder_ffn_dim=3072,
-        decoder_attention_heads=12,
-        decoder_layerdrop=0.1,
-        hidden_act="gelu",
-        positional_dropout=0.1,
-        hidden_dropout=0.1,
-        attention_dropout=0.1,
-        activation_dropout=0.1,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        scale_embedding=False,
-        feat_extract_norm="group",
-        feat_proj_dropout=0.0,
-        feat_extract_activation="gelu",
-        conv_dim=(512, 512, 512, 512, 512, 512, 512),
-        conv_stride=(5, 2, 2, 2, 2, 2, 2),
-        conv_kernel=(10, 3, 3, 3, 3, 2, 2),
-        conv_bias=False,
-        num_conv_pos_embeddings=128,
-        num_conv_pos_embedding_groups=16,
-        apply_spec_augment=True,
-        mask_time_prob=0.05,
-        mask_time_length=10,
-        mask_time_min_masks=2,
-        mask_feature_prob=0.0,
-        mask_feature_length=10,
-        mask_feature_min_masks=0,
-        pad_token_id=1,
+        vocab_size=75,
+        encoder_embed_dim=256,
+        encoder_attention_heads=2,
+        encoder_layers=4,
+        decoder_embed_dim=256,
+        decoder_attention_heads=2,
+        decoder_layers=4,
+        attention_dropout=0,
+        fft_hidden_dim=1024,
+        fft_kernel_size=9,
+        fft_dropout=0.2,
+        var_pred_hidden_dim=256,
+        var_pred_kernel_size=3,
+        var_pred_dropout=0.5,
+        add_postnet=False,
+        postnet_conv_dim=512,
+        postnet_conv_kernel_size=5,
+        postnet_layers=5,
+        postnet_dropout=0.5,
+        pitch_min=-4.660287183665281,
+        pitch_max=5.733940816898645,
+        energy_min=-4.9544901847839355,
+        energy_max=3.2244551181793213,
+        speaker_embed_dim=64,
+        num_speakers=1,
+        use_mean=True,
+        use_standard_deviation=True,
+        max_source_positions=1024,
+        initializer_range=0.0625,
         bos_token_id=0,
+        pad_token_id=1,
         eos_token_id=2,
-        decoder_start_token_id=2,
-        num_mel_bins=80,
-        speech_decoder_prenet_layers=2,
-        speech_decoder_prenet_units=256,
-        speech_decoder_prenet_dropout=0.5,
-        speaker_embedding_dim=512,
-        speech_decoder_postnet_layers=5,
-        speech_decoder_postnet_units=256,
-        speech_decoder_postnet_kernel=5,
-        speech_decoder_postnet_dropout=0.5,
-        reduction_factor=2,
-        max_speech_positions=4000,
-        max_text_positions=450,
-        encoder_max_relative_position=160,
-        use_guided_attention_loss=True,
-        guided_attention_loss_num_heads=2,
-        guided_attention_loss_sigma=0.4,
-        guided_attention_loss_scale=10.0,
-        use_cache=True,
-        is_encoder_decoder=True,
         **kwargs,
     ):
+        if fft_kernel_size % 2 == 0:
+            raise ValueError(f"`fft_kernel_size` must be odd, but got {fft_kernel_size} instead.")
+        if postnet_conv_kernel_size % 2 == 0:
+            raise ValueError(f"`postnet_conv_kernel_size` must be odd, but got {postnet_conv_kernel_size} instead.")
+        if var_pred_kernel_size % 2 == 0:
+            raise ValueError(f"`var_pred_kernel_size` must be odd, but got {var_pred_kernel_size} instead.")
+        super().__init__(bos_token_id=bos_token_id, pad_token_id=pad_token_id, eos_token_id=eos_token_id, **kwargs)
         self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.encoder_layers = encoder_layers
-        self.encoder_ffn_dim = encoder_ffn_dim
+        self.encoder_embed_dim = encoder_embed_dim
         self.encoder_attention_heads = encoder_attention_heads
-        self.encoder_layerdrop = encoder_layerdrop
-        self.decoder_layers = decoder_layers
-        self.decoder_ffn_dim = decoder_ffn_dim
+        self.encoder_layers = encoder_layers
+        self.decoder_embed_dim = decoder_embed_dim
         self.decoder_attention_heads = decoder_attention_heads
-        self.decoder_layerdrop = decoder_layerdrop
-        self.hidden_act = hidden_act
-        self.positional_dropout = positional_dropout
-        self.hidden_dropout = hidden_dropout
+        self.decoder_layers = decoder_layers
         self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
+        self.fft_hidden_dim = fft_hidden_dim
+        self.fft_kernel_size = fft_kernel_size
+        self.fft_dropout = fft_dropout
+        self.var_pred_hidden_dim = var_pred_hidden_dim
+        self.var_pred_kernel_size = var_pred_kernel_size
+        self.var_pred_dropout = var_pred_dropout
+        self.add_postnet = add_postnet
+        self.postnet_conv_dim = postnet_conv_dim
+        self.postnet_conv_kernel_size = postnet_conv_kernel_size
+        self.postnet_layers = postnet_layers
+        self.postnet_dropout = postnet_dropout
+        self.pitch_max = pitch_max
+        self.pitch_min = pitch_min
+        self.energy_max = energy_max
+        self.energy_min = energy_min
+        self.speaker_embed_dim = speaker_embed_dim
+        self.num_speakers = num_speakers
+        self.max_source_positions = max_source_positions
         self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.scale_embedding = scale_embedding
+        self.use_mean = use_mean
+        self.use_standard_deviation = use_standard_deviation
 
-        self.feat_extract_norm = feat_extract_norm
-        self.feat_proj_dropout = feat_proj_dropout
-        self.feat_extract_activation = feat_extract_activation
-        self.conv_dim = list(conv_dim)
-        self.conv_stride = list(conv_stride)
-        self.conv_kernel = list(conv_kernel)
-        self.conv_bias = conv_bias
-        self.num_conv_pos_embeddings = num_conv_pos_embeddings
-        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
-        self.num_feat_extract_layers = len(self.conv_dim)
+    @property
+    def mel_dim(self):
+        # Dimensionality of the prediced mel-spectrograms.
+        return 80
 
-        if (
-            (len(self.conv_stride) != self.num_feat_extract_layers)
-            or (len(self.conv_kernel) != self.num_feat_extract_layers)
-            or (len(self.conv_dim) != self.num_feat_extract_layers)
-        ):
-            raise ValueError(
-                "Configuration for convolutional layers is incorrect. It is required that `len(config.conv_dim)` =="
-                " `len(config.conv_stride)` == `len(config.conv_kernel)`, but is `len(config.conv_dim) ="
-                f" {len(self.conv_dim)}`, `len(config.conv_stride) = {len(self.conv_stride)}`,"
-                f" `len(config.conv_kernel) = {len(self.conv_kernel)}`."
-            )
-
-        # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
-        self.apply_spec_augment = apply_spec_augment
-        self.mask_time_prob = mask_time_prob
-        self.mask_time_length = mask_time_length
-        self.mask_time_min_masks = mask_time_min_masks
-        self.mask_feature_prob = mask_feature_prob
-        self.mask_feature_length = mask_feature_length
-        self.mask_feature_min_masks = mask_feature_min_masks
-
-        self.num_mel_bins = num_mel_bins
-        self.speech_decoder_prenet_layers = speech_decoder_prenet_layers
-        self.speech_decoder_prenet_units = speech_decoder_prenet_units
-        self.speech_decoder_prenet_dropout = speech_decoder_prenet_dropout
-        self.speaker_embedding_dim = speaker_embedding_dim
-
-        self.speech_decoder_postnet_layers = speech_decoder_postnet_layers
-        self.speech_decoder_postnet_units = speech_decoder_postnet_units
-        self.speech_decoder_postnet_kernel = speech_decoder_postnet_kernel
-        self.speech_decoder_postnet_dropout = speech_decoder_postnet_dropout
-        self.reduction_factor = reduction_factor
-
-        self.max_speech_positions = max_speech_positions
-        self.max_text_positions = max_text_positions
-        self.encoder_max_relative_position = encoder_max_relative_position
-
-        self.use_guided_attention_loss = use_guided_attention_loss
-        self.guided_attention_loss_num_heads = guided_attention_loss_num_heads
-        self.guided_attention_loss_sigma = guided_attention_loss_sigma
-        self.guided_attention_loss_scale = guided_attention_loss_scale
-
-        self.use_cache = use_cache
-        self.is_encoder_decoder = is_encoder_decoder
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
-
-    def inputs_to_logits_ratio(self):
-        return functools.reduce(operator.mul, self.conv_stride, 1)
-
-
-class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`FastSpeech2ConformerHifiGanModel`]. It is used to instantiate
-    a FastSpeech2Conformer HiFi-GAN vocoder model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the FastSpeech2Conformer
-    [microsoft/FastSpeech2Conformer_hifigan](https://huggingface.co/microsoft/FastSpeech2Conformer_hifigan) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        model_in_dim (`int`, *optional*, defaults to 80):
-            The number of frequency bins in the input log-mel spectrogram.
-        sampling_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate at which the output audio will be generated, expressed in hertz (Hz).
-        upsample_initial_channel (`int`, *optional*, defaults to 512):
-            The number of input channels into the upsampling network.
-        upsample_rates (`Tuple[int]` or `List[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
-            A tuple of integers defining the stride of each 1D convolutional layer in the upsampling network. The
-            length of *upsample_rates* defines the number of convolutional layers and has to match the length of
-            *upsample_kernel_sizes*.
-        upsample_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[8, 8, 8, 8]`):
-            A tuple of integers defining the kernel size of each 1D convolutional layer in the upsampling network. The
-            length of *upsample_kernel_sizes* defines the number of convolutional layers and has to match the length of
-            *upsample_rates*.
-        resblock_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 7, 11]`):
-            A tuple of integers defining the kernel sizes of the 1D convolutional layers in the multi-receptive field
-            fusion (MRF) module.
-        resblock_dilation_sizes (`Tuple[Tuple[int]]` or `List[List[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
-            A nested tuple of integers defining the dilation rates of the dilated 1D convolutional layers in the
-            multi-receptive field fusion (MRF) module.
-        initializer_range (`float`, *optional*, defaults to 0.01):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        leaky_relu_slope (`float`, *optional*, defaults to 0.1):
-            The angle of the negative slope used by the leaky ReLU activation.
-        normalize_before (`bool`, *optional*, defaults to `True`):
-            Whether or not to normalize the spectrogram before vocoding using the vocoder's learned mean and variance.
-
-    Example:
-
-    ```python
-    >>> from transformers import FastSpeech2ConformerHifiGan, FastSpeech2ConformerHifiGanConfig
-
-    >>> # Initializing a "microsoft/FastSpeech2Conformer_hifigan" style configuration
-    >>> configuration = FastSpeech2ConformerHifiGanConfig()
-
-    >>> # Initializing a model (with random weights) from the "microsoft/FastSpeech2Conformer_hifigan" style configuration
-    >>> model = FastSpeech2ConformerHifiGan(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-    model_type = "hifigan"
-
-    def __init__(
-        self,
-        model_in_dim=80,
-        sampling_rate=16000,
-        upsample_initial_channel=512,
-        upsample_rates=[4, 4, 4, 4],
-        upsample_kernel_sizes=[8, 8, 8, 8],
-        resblock_kernel_sizes=[3, 7, 11],
-        resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
-        initializer_range=0.01,
-        leaky_relu_slope=0.1,
-        normalize_before=True,
-        **kwargs,
-    ):
-        self.model_in_dim = model_in_dim
-        self.sampling_rate = sampling_rate
-        self.upsample_initial_channel = upsample_initial_channel
-        self.upsample_rates = upsample_rates
-        self.upsample_kernel_sizes = upsample_kernel_sizes
-        self.resblock_kernel_sizes = resblock_kernel_sizes
-        self.resblock_dilation_sizes = resblock_dilation_sizes
-        self.initializer_range = initializer_range
-        self.leaky_relu_slope = leaky_relu_slope
-        self.normalize_before = normalize_before
-        super().__init__(**kwargs)
+    @property
+    def var_pred_num_bins(self):
+        # Number of bins in the variance predictors.
+        return 256
