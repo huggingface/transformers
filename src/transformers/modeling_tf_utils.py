@@ -3132,6 +3132,10 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.initializer_range = hidden_size**-0.5 if initializer_range is None else initializer_range
+        warnings.warn(
+            "`TFSharedEmbeddings` is scheduled for deletion in v4.32, use `tf.keras.layers.Embedding` instead.",
+            DeprecationWarning,
+        )
 
     def build(self, input_shape):
         """
