@@ -17,7 +17,12 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_mplug_owl": ["MPLUG_OWL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MplugOwlConfig"],
+    "configuration_mplug_owl": [
+        "MPLUG_OWL_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MplugOwlConfig",
+        "MplugOwlVisionConfig",
+        "MplugOwlVisualAbstractorConfig",
+    ],
     "processing_mplug_owl": ["MplugOwlImageProcessor", "MplugOwlProcessor"],
     "tokenization_mplug_owl": ["MplugOwlTokenizer"],
 }
@@ -40,6 +45,7 @@ else:
         "MplugOwlForConditionalGeneration",
         "MplugOwlVisualAbstractorModel",
         "MplugOwlPreTrainedModel",
+        "MplugOwlVisionModel",
         "MplugOwlModel",
     ]
 
@@ -75,7 +81,12 @@ else:
 
     sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
 
-from .configuration_mplug_owl import MplugOwlVisionConfig, MplugOwlVisualAbstractorConfig, MplugOwlConfig
-from .modeling_mplug_owl import MplugOwlVisualAbstractorModel, MplugOwlModel, MplugOwlForConditionalGeneration
-from .processing_mplug_owl import MplugOwlProcessor, MplugOwlImageProcessor
+from .configuration_mplug_owl import MplugOwlConfig, MplugOwlVisionConfig, MplugOwlVisualAbstractorConfig
+from .modeling_mplug_owl import (
+    MplugOwlForConditionalGeneration,
+    MplugOwlModel,
+    MplugOwlVisionModel,
+    MplugOwlVisualAbstractorModel,
+)
+from .processing_mplug_owl import MplugOwlImageProcessor, MplugOwlProcessor
 from .tokenization_mplug_owl import MplugOwlTokenizer

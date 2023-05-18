@@ -1121,7 +1121,7 @@ class MplugOwlVisualAbstractorModel(MplugOwlPreTrainedModel):
 )
 class MplugOwlModel(MplugOwlPreTrainedModel):
     config_class = MplugOwlConfig
-    main_input_name = "pixel_values"
+    main_input_name = "input_ids"
 
     def __init__(self, config: MplugOwlConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1256,7 +1256,7 @@ def get_media_indices(my_list):
 )
 class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
     config_class = MplugOwlConfig
-    main_input_name = "pixel_values"
+    main_input_name = "input_ids"
 
     def __init__(self, config: MplugOwlConfig):
         super().__init__(config)
@@ -1330,9 +1330,9 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
         input_ids: torch.FloatTensor,
-        num_images,
+        pixel_values: torch.FloatTensor = None,
+        num_images=None,
         non_padding_mask: Optional[torch.LongTensor] = None,
         non_media_mask: Optional[torch.LongTensor] = None,
         prompt_mask: Optional[torch.LongTensor] = None,
@@ -1379,7 +1379,6 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         if pixel_values is not None:
             pixel_values = pixel_values.to(self.vision_model.embeddings.cls_token.data.dtype)
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         # get text embedding
         text_tokens_ = input_ids.clone()
         batch_size = input_ids.shape[0]
@@ -1407,8 +1406,10 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
             )["last_hidden_state"]
             torch.ones(query_features.size()[:-1], dtype=torch.long).to(query_features.device)
             img_seq_length = query_features.shape[1]
-
-        num_images_per_sample = num_images.long().cpu().tolist()
+        if num_images is not None:
+            num_images_per_sample = num_images.long().cpu().tolist()
+        else:
+            num_images_per_sample = [0] * input_ids.shape[0]
 
         text_chunk_embeds = []
         img_idx = 0
@@ -1425,6 +1426,7 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
                 result.append(text_embeds[b, start:])
 
             img_idx += num_images_per_sample[b]
+            print(result)
             text_chunk_embeds.append(torch.cat(result, dim=0))
 
         # Actual Input Embeddings
@@ -1444,19 +1446,24 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         # Create causal mask and position ids
         _, loss_mask, position_ids = get_ltor_masks_and_position_ids_from_embeddings(input_embeds)
 
-        # Calculate the loss_mask
-        non_padding_mask = non_padding_mask.long()
-        non_media_mask = non_media_mask.long()
-        prompt_mask = prompt_mask.long()  # TODO How to deal with prompt mask
-        # from icecream import ic
-        # non_padding_mask = non_padding_mask[:,:-1]
-        # non_media_mask = non_media_mask[:,:-1]
-        # prompt_mask = prompt_mask[:,:-1]
-        # attention_mask = attention_mask[:,:-1]
         loss_mask = loss_mask[:, :-1]
+        # Calculate the loss_mask
+        if non_padding_mask is not None:
+            non_padding_mask = non_padding_mask.long()
+        else:
+            non_padding_mask = 1
+        if non_media_mask is not None:
+            non_media_mask = non_media_mask.long()
+        else:
+            non_media_mask = 1
+        if prompt_mask is not None:
+            prompt_mask = prompt_mask.long()
+        else:
+            prompt_mask = 1
 
         loss_mask = loss_mask * non_padding_mask * non_media_mask * prompt_mask
-        labels[:, 1:][loss_mask != 1] = -100
+        if labels is not None:
+            labels[:, 1:][loss_mask != 1] = -100
         # Forward into GPT
         outputs = self.language_model(
             inputs_embeds=input_embeds,
@@ -1472,8 +1479,8 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
     @torch.no_grad()
     def generate(
         self,
-        pixel_values: torch.FloatTensor,
         input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.LongTensor] = None,
         isdecoder=True,
         **generate_kwargs,
