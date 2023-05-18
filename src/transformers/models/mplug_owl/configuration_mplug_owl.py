@@ -69,7 +69,7 @@ class MplugOwlVisionConfig(PretrainedConfig):
              testing).
 
 
-     ```"""
+    """
 
     model_type = "mplug_owl_vision_model"
 
@@ -169,8 +169,8 @@ class MplugOwlVisualAbstractorConfig(PretrainedConfig):
 class MplugOwlConfig(PretrainedConfig):
     r"""
     [`MplugOwlConfig`] is the configuration class to store the configuration of a [`MplugOwlForConditionalGeneration`].
-    It is used to instantiate a mPLUG-Owl model according to the specified arguments, defining the vision model,
-    Q-Former model and language model configs. Instantiating a configuration with the defaults will yield a similar
+    It is used to instantiate a mPLUG-Owl model according to the specified arguments, defining the vision model, visual
+    abstractor and language model configs. Instantiating a configuration with the defaults will yield a similar
     configuration to that of the mPLUG-Owl [x-plug/x_plug-llama-7b](https://huggingface.co/x-plug/x_plug-llama-7b)
     architecture.
 
@@ -190,35 +190,7 @@ class MplugOwlConfig(PretrainedConfig):
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
-    Example:
-
-    ```python
-    >>> from transformers import (
-    ...     MplugOwlVisionConfig,
-    ...     MplugOwlVisualAbstractorConfig,
-    ...     OPTConfig,
-    ...     MplugOwlConfig,
-    ...     MplugOwlForConditionalGeneration,
-    ... )
-
-    >>> # Initializing a MplugOwlConfig with x-plug/x_plug-llama-7b style configuration
-    >>> configuration = MplugOwlConfig()
-
-    >>> # Initializing a MplugOwlForConditionalGeneration (with random weights) from the x-plug/x_plug-llama-7b style configuration
-    >>> model = MplugOwlForConditionalGeneration(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-
-    >>> # We can also initialize a MplugOwlConfig from a MplugOwlVisionConfig, MplugOwlVisualAbstractorConfig and any PretrainedConfig
-
-    >>> # Initializing mPLUG-Owl vision, mPLUG-Owl Q-Former and language model configurations
-    >>> vision_config = MplugOwlVisionConfig()
-    >>> visual_abstractor_config = MplugOwlVisualAbstractorConfig()
-    >>> text_config = OPTConfig()
-
-    >>> config = MplugOwlConfig.from_text_vision_configs(vision_config, visual_abstractor_config, text_config)
-    ```"""
+    """
     model_type = "mplug-owl"
     is_composition = True
 

@@ -87,12 +87,12 @@ else:
 
     sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
 
-from .configuration_mplug_owl import MplugOwlConfig, MplugOwlVisionConfig, MplugOwlVisualAbstractorConfig
-from .modeling_mplug_owl import (
-    MplugOwlForConditionalGeneration,
-    MplugOwlModel,
-    MplugOwlVisionModel,
-    MplugOwlVisualAbstractorModel,
-)
-from .processing_mplug_owl import MplugOwlImageProcessor, MplugOwlProcessor
-from .tokenization_mplug_owl import MplugOwlTokenizer
+# from .configuration_mplug_owl import MplugOwlConfig, MplugOwlVisionConfig, MplugOwlVisualAbstractorConfig
+# from .modeling_mplug_owl import (
+#     MplugOwlForConditionalGeneration,
+#     MplugOwlModel,
+#     MplugOwlVisionModel,
+#     MplugOwlVisualAbstractorModel,
+# )
+# from .processing_mplug_owl import MplugOwlImageProcessor, MplugOwlProcessor
+# from .tokenization_mplug_owl import MplugOwlTokenizer
