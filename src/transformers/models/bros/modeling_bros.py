@@ -581,13 +581,13 @@ class BrosEncoder(nn.Module):
                 )
             else:
                 layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
+                    hidden_states=hidden_states,
+                    attention_mask=attention_mask,
+                    head_mask=layer_head_mask,
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    past_key_value=past_key_value,
+                    output_attentions=output_attentions,
                     bbox_pos_emb=bbox_pos_emb,
                 )
 
