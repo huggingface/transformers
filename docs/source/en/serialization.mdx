@@ -34,7 +34,7 @@ switch between frameworks. For example, a model trained in PyTorch can be export
 ONNX format and then imported in TensorFlow (and vice versa).
 
 Once exported to ONNX format, a model can be:
-- optimized for inference via techniques such as graph optimization and quantization. 
+- optimized for inference via techniques such as [graph optimization](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/optimization) and [quantization](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/quantization). 
 - run with ONNX Runtime via [`ORTModelForXXX` classes](https://huggingface.co/docs/optimum/onnxruntime/package_reference/modeling_ort),
 which follow the same `AutoModel` API as the one you are used to in 🤗 Transformers.
 - run with [optimized inference pipelines](https://huggingface.co/docs/optimum/main/en/onnxruntime/usage_guides/pipelines),
@@ -214,7 +214,7 @@ Alternative to CLI, you can export a 🤗 Transformers model to ONNX programmati
 ### Exporting a model for an unsupported architecture
 
 If you wish to contribute by adding support for a model that cannot be currently exported, you should first check if it is
-supported in [`optimum.exporters.onnx`](https://huggingface.co/docs/optimum/exporters/onnx/package_reference/configuration#supported-architectures),
+supported in [`optimum.exporters.onnx`](https://huggingface.co/docs/optimum/exporters/onnx/overview),
 and if it is not, [contribute to 🤗 Optimum](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/contribute)
 directly.
 
@@ -222,7 +222,7 @@ directly.
 
 <Tip warning={true}>
 
-`tranformers.onnx` is no longer maintained, please export models with 🤗 Optimum as described above. This section is will be removed in the future versions.
+`tranformers.onnx` is no longer maintained, please export models with 🤗 Optimum as described above. This section will be removed in the future versions.
 
 </Tip>
 
