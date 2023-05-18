@@ -15,14 +15,26 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepiece_available
 
 
-_import_structure = {"tokenization_scibart": ["SciBartTokenizer"]}
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure = {"tokenization_scibart": ["SciBartTokenizer"]}
 
 
 if TYPE_CHECKING:
-    from .tokenization_scibart import SciBartTokenizer
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_scibart import SciBartTokenizer
 
 else:
     import sys

@@ -131,7 +131,7 @@ class SciBartTokenizer(PreTrainedTokenizer):
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
-        
+
         Args:
             token_ids_0 (`List[int]`):
                 List of IDs.
@@ -160,7 +160,7 @@ class SciBartTokenizer(PreTrainedTokenizer):
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. mBART does not
         make use of token type ids, therefore a list of zeros is returned.
-        
+
         Args:
             token_ids_0 (`List[int]`):
                 List of IDs.
@@ -185,7 +185,7 @@ class SciBartTokenizer(PreTrainedTokenizer):
         adding special tokens. An SciBART sequence has the following format, where `X` represents the sequence:
         - `input_ids` (for encoder) `bos X eos`
         - `decoder_input_ids`: (for decoder) `bos X eos`
-        
+
         Args:
             token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
