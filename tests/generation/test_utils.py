@@ -1478,7 +1478,7 @@ class GenerationTesterMixin:
                 return
 
             # This for loop is a naive and temporary effort to make the test less flaky.
-            failures = []
+            failed = 0
             for i in range(10):
                 # enable cache
                 config, input_ids, attention_mask, max_length = self._get_input_ids_and_config(batch_size=1)
@@ -1522,13 +1522,12 @@ class GenerationTesterMixin:
                     for output in (output_greedy, output_assisted):
                         self._check_outputs(output, input_ids, model.config, use_cache=True)
                 except AssertionError:
-                    failures.append((output_greedy, output_assisted))
+                    failed += 1
+                    if failed > 1:
+                        self.assertListEqual(output_greedy.sequences.tolist(), output_assisted.sequences.tolist())
 
-            if len(failures) > 1:
-                self.assertListEqual(output_greedy.sequences.tolist(), output_assisted.sequences.tolist())
-
-                for output in (output_greedy, output_assisted):
-                    self._check_outputs(output, input_ids, model.config, use_cache=True)
+                        for output in (output_greedy, output_assisted):
+                            self._check_outputs(output, input_ids, model.config, use_cache=True)
 
     def test_assisted_decoding_sample(self):
         # Seeded assisted decoding will not match sample for the same seed, as the forward pass does not return the
