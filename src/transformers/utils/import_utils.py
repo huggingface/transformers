@@ -118,7 +118,7 @@ if _sklearn_available:
         importlib_metadata.version("scikit-learn")
     except importlib_metadata.PackageNotFoundError:
         _sklearn_available = False
-_smdistributed_available = _is_package_available("smdistributed")
+_smdistributed_available = importlib.util.find_spec("smdistributed") is not None
 _soundfile_available = _is_package_available("soundfile")
 _spacy_available = _is_package_available("spacy")
 _sudachipy_available = _is_package_available("sudachipy")
@@ -502,7 +502,7 @@ def is_protobuf_available():
 
 def is_accelerate_available(check_partial_state=False):
     if check_partial_state:
-        return _accelerate_available and version.parse(_accelerate_version) >= version.parse("0.17.0")
+        return _accelerate_available and version.parse(_accelerate_version) >= version.parse("0.19.0")
     return _accelerate_available
 
 

@@ -831,8 +831,12 @@ class ReformerLSHAttnModelTest(
                 [expected_shape] * len(iter_hidden_states),
             )
 
+    @unittest.skip("Fails because the sequence length is not a multiple of 4")
     def test_problem_types(self):
-        # Fails because the sequence length is not a multiple of 4
+        pass
+
+    @unittest.skip("Fails because the sequence length is not a multiple of 4")
+    def test_past_key_values_format(self):
         pass
 
 
