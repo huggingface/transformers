@@ -63,6 +63,7 @@ class BrosModelTester:
             num_labels=3,
             num_choices=4,
             scope=None,
+            range_bbox=1000,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -86,9 +87,23 @@ class BrosModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.scope = scope
+        self.range_bbox = range_bbox
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        bbox = ids_tensor([self.batch_size, self.seq_length, 8], 1)
+        # Ensure that bbox is legal
+        for i in range(bbox.shape[0]):
+            for j in range(bbox.shape[1]):
+                if bbox[i, j, 3] < bbox[i, j, 1]:
+                    t = bbox[i, j, 3]
+                    bbox[i, j, 3] = bbox[i, j, 1]
+                    bbox[i, j, 1] = t
+                if bbox[i, j, 2] < bbox[i, j, 0]:
+                    t = bbox[i, j, 2]
+                    bbox[i, j, 2] = bbox[i, j, 0]
+                    bbox[i, j, 0] = t
 
         input_mask = None
         if self.use_input_mask:
@@ -108,7 +123,7 @@ class BrosModelTester:
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
         return BrosConfig(
@@ -124,33 +139,6 @@ class BrosModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
-        )
-
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        config.is_decoder = True
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
         )
 
     def create_and_check_model(
@@ -211,13 +199,17 @@ class BrosModelTester:
         (
             config,
             input_ids,
+            bbox,
             token_type_ids,
             input_mask,
             sequence_labels,
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {"input_ids": input_ids,
+                       "bbox": bbox,
+                       "token_type_ids": token_type_ids,
+                       "attention_mask": input_mask}
         return config, inputs_dict
 
 
@@ -251,17 +243,9 @@ class BrosModelTest(ModelTesterMixin, unittest.TestCase):
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_decoder_model_past_with_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
-
-    def test_model_as_decoder(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
         # This regression test was failing with PyTorch < 1.3
