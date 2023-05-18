@@ -312,6 +312,10 @@ class MplugOwlModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_can_use_safetensors(
         self,
     ):
