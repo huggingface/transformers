@@ -1031,9 +1031,6 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
         )
         self.transformer = TFTransfoXLMainLayer(config, name="transformer")
 
-    def get_output_embeddings(self):
-        return self.transformer.word_emb
-
     @unpack_inputs
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

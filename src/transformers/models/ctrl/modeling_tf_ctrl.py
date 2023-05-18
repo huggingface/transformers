@@ -724,9 +724,6 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
         )
         self.transformer = TFCTRLMainLayer(config, name="transformer")
 
-    def get_output_embeddings(self):
-        return self.transformer.w
-
     @unpack_inputs
     @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
