@@ -678,7 +678,7 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
-    def forward(
+    def call(
         self,
         pixel_values: Optional[tf.Tensor] = None,
         labels: Optional[tf.Tensor] = None,
