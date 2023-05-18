@@ -1227,7 +1227,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         shape and dtype for model inputs. It is used for both serving and for generating the dummy inputs used to build
         the model.
         """
-        model_inputs = list(dict(inspect.signature(self.call).parameters).keys())
+        model_inputs = list(inspect.signature(self.call).parameters)
         sig = {}
         if self.__class__.__name__.endswith("ForMultipleChoice"):
             text_dims = 3
@@ -1264,7 +1264,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     def _prune_signature(self, signature):
         """Keeps only the keys of a given input signature that are valid for this model."""
-        model_inputs = list(dict(inspect.signature(self.call).parameters).keys())
+        breakpoint()
+        model_inputs = list(inspect.signature(self.call).parameters)
         return {key: val for key, val in signature.items() if key in model_inputs}
 
     def serving_output(self, output):
@@ -1443,7 +1444,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if not isinstance(dataset, datasets.Dataset):
             raise TypeError("Dataset argument should be a datasets.Dataset!")
-        model_inputs = list(dict(inspect.signature(self.call).parameters).keys())
+        model_inputs = list(inspect.signature(self.call).parameters)
         model_labels = find_labels(self.__class__)
         if "cols_to_retain" in list(inspect.signature(dataset._get_output_signature).parameters.keys()):
             output_signature, _ = dataset._get_output_signature(
@@ -1555,7 +1556,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             return self.hf_compute_loss(*args, **kwargs)
 
     def get_label_to_output_name_mapping(self):
-        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+        arg_names = list(inspect.signature(self.call).parameters)
         if self._label_to_output_map is not None:
             return self._label_to_output_map
         elif "start_positions" in arg_names:
@@ -1578,7 +1579,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
 
         # We hardcode the most common renamings; models with weirder names can set `self._label_to_output_map`
-        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+        arg_names = list(inspect.signature(self.call).parameters)
         label_kwargs = find_labels(self.__class__)
         label_to_output = self.get_label_to_output_name_mapping()
         output_to_label = {val: key for key, val in label_to_output.items()}
@@ -1685,7 +1686,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         that they are available to the model during the forward pass.
         """
         # We hardcode the most common renamings; models with weirder names can set `self._label_to_output_map`
-        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+        arg_names = list(inspect.signature(self.call).parameters)
         label_kwargs = find_labels(self.__class__)
         label_to_output = self.get_label_to_output_name_mapping()
         output_to_label = {val: key for key, val in label_to_output.items()}
@@ -1704,7 +1705,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # When using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
         # if those keys are not already present in the input dict
         if self._using_dummy_loss and y is not None:
-            arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+            arg_names = list(inspect.signature(self.call).parameters)
             # If y is a tensor and the model only has one label-like input, map y to that input
             if len(label_kwargs) == 1 and isinstance(y, tf.Tensor):
                 if isinstance(x, tf.Tensor):
