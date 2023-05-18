@@ -708,7 +708,11 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
 
         # run classification head
         sequence_output = self.norm(sequence_output, training=training)
-        sequence_output = sequence_output.flatten(2).mean(-1)
+        # FIXME: review this conversion
+        sequence_output = tf.transpose(sequence_output, perm=[0, 3, 1, 2])
+        _, c, h, w = sequence_output.shape
+        sequence_output = tf.reshape(sequence_output, [-1, c, h*w])
+        sequence_output = tf.reduce_mean(sequence_output, axis=-1)
         cls_out = self.head(sequence_output)
         distillation_out = self.dist_head(sequence_output)
         logits = (cls_out + distillation_out) / 2
