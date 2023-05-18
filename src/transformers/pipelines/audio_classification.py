@@ -119,9 +119,9 @@ class AudioClassificationPipeline(Pipeline):
                     - (`np.ndarray` of shape (n, ) of type `np.float32` or `np.float64`)
                         Raw audio at the correct sampling rate (no further check will be done)
                     - `dict` form can be used to pass raw audio sampled at arbitrary `sampling_rate` and let this
-                      pipeline do the resampling. The dict must be either be in the format `{"sampling_rate": int, "raw":
-                      np.array}`, or `{"sampling_rate": int, "array": np.array}`, where the key `"raw"` or `"array"` is
-                      used to denote the raw audio waveform.
+                      pipeline do the resampling. The dict must be either be in the format `{"sampling_rate": int,
+                      "raw": np.array}`, or `{"sampling_rate": int, "array": np.array}`, where the key `"raw"` or
+                      `"array"` is used to denote the raw audio waveform.
             top_k (`int`, *optional*, defaults to None):
                 The number of top labels that will be returned by the pipeline. If the provided number is `None` or
                 higher than the number of labels available in the model configuration, it will default to the number of
