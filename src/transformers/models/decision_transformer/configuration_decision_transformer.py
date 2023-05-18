@@ -57,9 +57,9 @@ class DecisionTransformerConfig(PretrainedConfig):
         n_positions (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        n_layer (`int`, *optional*, defaults to 12):
+        n_layer (`int`, *optional*, defaults to 3):
             Number of hidden layers in the Transformer encoder.
-        n_head (`int`, *optional*, defaults to 12):
+        n_head (`int`, *optional*, defaults to 1):
             Number of attention heads for each attention layer in the Transformer encoder.
         n_inner (`int`, *optional*):
             Dimensionality of the inner feed-forward layers. If unset, will default to 4 times `n_embd`.
