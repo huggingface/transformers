@@ -208,7 +208,7 @@ class SamProcessor(ProcessorMixin):
                 input_points = input_points.numpy().tolist()
 
             if not isinstance(input_points, list) or not isinstance(input_points[0], list):
-                raise ValueError("Input points must be a list of list of floating integers.")
+                raise ValueError("Input points must be a list of list of floating points.")
             input_points = [np.array(input_point) for input_point in input_points]
         else:
             input_points = None
@@ -232,7 +232,7 @@ class SamProcessor(ProcessorMixin):
                 or not isinstance(input_boxes[0], list)
                 or not isinstance(input_boxes[0][0], list)
             ):
-                raise ValueError("Input boxes must be a list of list of list of floating integers.")
+                raise ValueError("Input boxes must be a list of list of list of floating points.")
             input_boxes = [np.array(box).astype(np.float32) for box in input_boxes]
         else:
             input_boxes = None

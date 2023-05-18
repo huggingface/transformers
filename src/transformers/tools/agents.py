@@ -92,8 +92,7 @@ def _setup_default_tools():
     tools_module = main_module.tools
 
     remote_tools = get_remote_tools()
-    for task_name in TASK_MAPPING:
-        tool_class_name = TASK_MAPPING.get(task_name)
+    for task_name, tool_class_name in TASK_MAPPING.items():
         tool_class = getattr(tools_module, tool_class_name)
         description = tool_class.description
         HUGGINGFACE_DEFAULT_TOOLS[tool_class.name] = PreTool(task=task_name, description=description, repo_id=None)
@@ -430,7 +429,7 @@ class OpenAiAgent(Agent):
 
 class HfAgent(Agent):
     """
-    Agent that uses and inference endpoint to generate code.
+    Agent that uses an inference endpoint to generate code.
 
     Args:
         url_endpoint (`str`):
@@ -491,5 +490,5 @@ class HfAgent(Agent):
         # Inference API returns the stop sequence
         for stop_seq in stop:
             if result.endswith(stop_seq):
-                result = result[: -len(stop_seq)]
+                return result[: -len(stop_seq)]
         return result
