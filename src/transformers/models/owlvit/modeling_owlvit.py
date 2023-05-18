@@ -1554,8 +1554,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> for box, score in zip(boxes, scores):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(f"Detected similar object with confidence {round(score.item(), 3)} at location {box}")
-        Detected similar object with confidence 0.782 at location [-0.06, -1.52, 637.96, 271.16]
-        Detected similar object with confidence 1.0 at location [39.64, 71.61, 176.21, 117.15]
+        Detected similar object with confidence 0.856 at location [10.94, 50.4, 315.8, 471.39]
+        Detected similar object with confidence 1.0 at location [334.84, 25.33, 636.16, 374.71]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

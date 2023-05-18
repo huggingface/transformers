@@ -115,6 +115,19 @@ In Multimodal tasks:
 
 **[Write With Transformer](https://transformer.huggingface.co)**, built by the Hugging Face team, is the official demo of this repo’s text generation capabilities.
 
+
+## 100 projects using Transformers
+
+Transformers is more than a toolkit to use pretrained models: it's a community of projects built around it and the 
+Hugging Face Hub. We want Transformers to enable developers, researchers, students, professors, engineers, and anyone 
+else to build their dream projects.
+
+In order to celebrate the 100,000 stars of transformers, we have decided to put the spotlight on the
+community, and we have created the [awesome-transformers](./awesome-transformers.md) page which lists 100
+incredible projects built in the vicinity of transformers.
+
+If you own or use a project that you believe should be part of the list, please open a PR to add it!
+
 ## If you are looking for custom support from the Hugging Face team
 
 <a target="_blank" href="https://huggingface.co/support">
