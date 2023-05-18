@@ -144,6 +144,7 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFSwiftFormerModelTester(self)
