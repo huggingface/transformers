@@ -485,15 +485,6 @@ class TFBartPretrainedModel(TFPreTrainedModel):
     base_model_prefix = "model"
 
     @property
-    def input_signature(self):
-        return {
-            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
-            "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
-        }
-
-    @property
     def dummy_inputs(self):
         dummy_inputs = super().dummy_inputs
         # Dummy inputs should not contain the default val of 1

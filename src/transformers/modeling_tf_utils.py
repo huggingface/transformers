@@ -1234,7 +1234,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 text_dims = 3
             else:
                 text_dims = 2
-            for input_name in ("input_ids", "attention_mask", "token_type_ids", "decoder_input_ids"):
+            for input_name in (
+                "input_ids",
+                "attention_mask",
+                "token_type_ids",
+                "decoder_input_ids",
+                "decoder_attention_mask",
+            ):
                 if input_name in model_inputs:
                     sig[input_name] = tf.TensorSpec([None] * text_dims, tf.int32, name=input_name)
         if "pixel_values" in model_inputs:

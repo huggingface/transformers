@@ -275,13 +275,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
                 "following discussion on GitHub: https://github.com/huggingface/transformers/issues/23350"
             )
 
-    @property
-    def input_signature(self):
-        return {
-            "input_ids": tf.TensorSpec([None, None], dtype=tf.int32),
-            "decoder_input_ids": tf.TensorSpec([None, None], dtype=tf.int32),
-        }
-
     def get_encoder(self):
         return self.encoder
 

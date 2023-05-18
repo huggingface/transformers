@@ -1208,12 +1208,6 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
 
         return shifted_input_ids
 
-    @property
-    def input_signature(self):
-        base_sig = super().input_signature
-        base_sig["decoder_input_ids"] = base_sig["input_ids"]
-        return base_sig
-
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBlipTextVisionModelOutput, config_class=BlipVisionConfig)
