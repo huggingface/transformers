@@ -148,9 +148,9 @@ class BrosModelTester:
         model = BrosModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids)
+        result = model(input_ids, bbox=bbox, attention_mask=input_mask, token_type_ids=token_type_ids)
+        result = model(input_ids, bbox=bbox, token_type_ids=token_type_ids)
+        result = model(input_ids, bbox=bbox)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_token_classification(
@@ -160,7 +160,7 @@ class BrosModelTester:
         model = BrosForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        result = model(input_ids, bbox=bbox, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
