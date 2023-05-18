@@ -875,6 +875,20 @@ class BartModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
 
     @slow
+    def test_inference_no_head_scibart(self):
+        model = BartModel.from_pretrained("uclanlp/scibart-large").to(torch_device)
+        input_ids = _long_tensor([[2, 330, 78, 91, 2729, 22, 7, 30001, 2783, 29912, 3]])
+        attention_mask = input_ids.ne(model.config.pad_token_id)
+        with torch.no_grad():
+            output = model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        expected_shape = torch.Size((1, 11, 1024))
+        self.assertEqual(output.shape, expected_shape)
+        expected_slice = torch.tensor(
+            [[0.1568, -0.3311, 1.2537], [-0.3448, 1.0334, 0.5947], [-1.0494, 2.1346, 1.7844]], device=torch_device
+        )
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
+
+    @slow
     def test_base_mask_filling(self):
         pbase = pipeline(task="fill-mask", model="facebook/bart-base")
         src_text = [" I went to the <mask>."]
@@ -887,6 +901,22 @@ class BartModelIntegrationTests(unittest.TestCase):
         src_text = [" I went to the <mask>."]
         results = [x["token_str"] for x in plarge(src_text)]
         expected_results = [" bathroom", " gym", " wrong", " movies", " hospital"]
+        self.assertListEqual(results, expected_results)
+
+    @slow
+    def test_base_mask_filling_scibart(self):
+        pbase = pipeline(task="fill-mask", model="uclanlp/scibart-base")
+        src_text = ["This is an example of a <mask> computer."]
+        results = [x["token_str"] for x in pbase(src_text)]
+        expected_results = ["computer", "simple", "real", "single", "multi"]
+        self.assertListEqual(results, expected_results)
+
+    @slow
+    def test_large_mask_filling_scibart(self):
+        plarge = pipeline(task="fill-mask", model="uclanlp/scibart-large")
+        src_text = ["This is an example of a <mask> computer."]
+        results = [x["token_str"] for x in plarge(src_text)]
+        expected_results = ["small", "simple", "large", "computer", "real"]
         self.assertListEqual(results, expected_results)
 
     @slow
