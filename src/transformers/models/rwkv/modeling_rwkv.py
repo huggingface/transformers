@@ -617,7 +617,7 @@ class RwkvModel(RwkvPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,  # noqa: this argument is currently not used, but probably in the future
+        attention_mask: Optional[torch.LongTensor] = None,  # noqa: this is currently not used, but maybe in the future
         inputs_embeds: Optional[torch.FloatTensor] = None,
         state: Optional[List[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
@@ -751,7 +751,7 @@ class RwkvForCausalLM(RwkvPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,  # noqa: this argument is currently not used, but probably in the future
+        attention_mask: Optional[torch.LongTensor] = None,  # noqa: this is currently not used, but maybe in the future
         inputs_embeds: Optional[torch.FloatTensor] = None,
         state: Optional[List[torch.FloatTensor]] = None,
         labels: Optional[torch.LongTensor] = None,
