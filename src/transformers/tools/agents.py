@@ -24,7 +24,7 @@ from typing import Dict
 import requests
 from huggingface_hub import HfFolder, hf_hub_download, list_spaces
 
-from ..models.auto import AutoModelForCausalLM, AutoTokenizer
+from ..models.auto import AutoTokenizer
 from ..utils import is_openai_available, is_torch_available, logging
 from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, load_tool, supports_remote
 from .prompts import CHAT_MESSAGE_PROMPT, CHAT_PROMPT_TEMPLATE, RUN_PROMPT_TEMPLATE
@@ -39,6 +39,7 @@ if is_openai_available():
 
 if is_torch_available():
     from ..generation import StoppingCriteria, StoppingCriteriaList
+    from ..models.auto import AutoModelForCausalLM
 
 _tools_are_initialized = False
 
