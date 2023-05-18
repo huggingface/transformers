@@ -625,13 +625,13 @@ class RwkvModel(RwkvPreTrainedModel):
         return_dict: Optional[bool] = None,
         attention_mask: Optional[bool] = None,
     ) -> Union[Tuple, RwkvOutput]:
-
         if attention_mask is not None:
             logger.warning_once(
                 "`RwkvModel` doesn't use `attention_mask` but its `forward` method receives a value which is not "
                 "`None`. The inputs are likely prepared with a tokenizer that outputs `attention_mask`. This will be "
                 "discarded by setting the value to `None`."
             )
+            attention_mask = None  # noqa
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
