@@ -647,6 +647,17 @@ class TFBlipVisionModel(TFBlipPreTrainedModel):
         self.encoder = TFBlipEncoder(config, name="encoder")
         self.post_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="post_layernorm")
 
+    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=BlipVisionConfig)
@@ -836,6 +847,14 @@ class TFBlipModel(TFBlipPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
 
         self.blip = TFBlipMainLayer(config, name="blip")
+
+    def serving_output(self, output: TFBlipOutput) -> TFBlipOutput:
+        return TFBlipOutput(
+            logits_per_image=output.logits_per_image,
+            logits_per_text=output.logits_per_text,
+            text_embeds=output.text_embeds,
+            image_embeds=output.image_embeds,
+        )
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BLIP_INPUTS_DOCSTRING)
