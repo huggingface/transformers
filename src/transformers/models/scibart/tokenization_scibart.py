@@ -185,6 +185,7 @@ class SciBartTokenizer(PreTrainedTokenizer):
         adding special tokens. An SciBART sequence has the following format, where `X` represents the sequence:
         - `input_ids` (for encoder) `bos X eos`
         - `decoder_input_ids`: (for decoder) `bos X eos`
+        
         Args:
             token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
