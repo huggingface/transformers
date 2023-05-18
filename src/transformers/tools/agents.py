@@ -40,6 +40,8 @@ if is_openai_available():
 if is_torch_available():
     from ..generation import StoppingCriteria, StoppingCriteriaList
     from ..models.auto import AutoModelForCausalLM
+else:
+    StoppingCriteria = object
 
 _tools_are_initialized = False
 
