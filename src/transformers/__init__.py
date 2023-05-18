@@ -614,6 +614,7 @@ _import_structure = {
     "tools": [
         "Agent",
         "HfAgent",
+        "LocalAgent",
         "OpenAiAgent",
         "PipelineTool",
         "RemoteTool",
@@ -4361,7 +4362,17 @@ if TYPE_CHECKING:
     )
 
     # Tools
-    from .tools import Agent, HfAgent, OpenAiAgent, PipelineTool, RemoteTool, Tool, launch_gradio_demo, load_tool
+    from .tools import (
+        Agent,
+        HfAgent,
+        LocalAgent,
+        OpenAiAgent,
+        PipelineTool,
+        RemoteTool,
+        Tool,
+        launch_gradio_demo,
+        load_tool,
+    )
 
     # Trainer
     from .trainer_callback import (
