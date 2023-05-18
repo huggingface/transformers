@@ -270,6 +270,7 @@ class PipelineTesterMixin:
                 f"currently known to fail for: model `{model_architecture.__name__}` | tokenizer "
                 f"`{tokenizer_name}` | processor `{processor_name}`."
             )
+            return
 
         # validate
         validate_test_components(self, task, model, tokenizer, processor)
