@@ -239,8 +239,8 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             "feature-extraction": GPTNeoXModel,
             "question-answering": GPTNeoXForQuestionAnswering,
             "text-classification": GPTNeoXForSequenceClassification,
-            "token-classification": GPTNeoXForTokenClassification,
             "text-generation": GPTNeoXForCausalLM,
+            "token-classification": GPTNeoXForTokenClassification,
             "zero-shot": GPTNeoXForSequenceClassification,
         }
         if is_torch_available()
