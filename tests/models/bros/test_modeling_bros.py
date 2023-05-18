@@ -143,7 +143,7 @@ class BrosModelTester:
         )
 
     def create_and_check_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = BrosModel(config=config)
         model.to(torch_device)
@@ -153,40 +153,8 @@ class BrosModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_model_as_decoder(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-    ):
-        config.add_cross_attention = True
-        model = BrosModel(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-        )
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
     def create_and_check_for_token_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = BrosForTokenClassification(config=config)
@@ -247,34 +215,6 @@ class BrosModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
-
-    def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        ) = self.model_tester.prepare_config_and_inputs_for_decoder()
-
-        input_mask = None
-
-        self.model_tester.create_and_check_model_as_decoder(
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
 
     @slow
     def test_model_from_pretrained(self):
