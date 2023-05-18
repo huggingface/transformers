@@ -608,6 +608,7 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
         output_type=TFBaseModelOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
     )
+    @unpack_inputs
     def call(
         self,
         pixel_values: Optional[tf.Tensor] = None,
@@ -678,6 +679,7 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
+    @unpack_inputs
     def call(
         self,
         pixel_values: Optional[tf.Tensor] = None,
