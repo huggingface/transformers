@@ -616,6 +616,8 @@
         title: MatCha
       - local: model_doc/mgp-str
         title: MGP-STR
+      - local: model_doc/mplug_owl
+        title: mPLUG-Owl
       - local: model_doc/oneformer
         title: OneFormer
       - local: model_doc/owlvit

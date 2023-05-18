@@ -34,13 +34,11 @@ MPLUG_OWL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class MplugOwlVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MplugOwlVisionModel`]. It is used to instantiate
-    a
-     mPLUG-Owl vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-     configuration defaults will yield a similar configuration to that of the mPLUG-Owl
-     [x-plug/x_plug-llama-7b](https://huggingface.co/x-plug/x_plug-llama-7b) architecture.
-
-     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-     documentation from [`PretrainedConfig`] for more information.
+    a mPLUG-Owl vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration defaults will yield a similar configuration to that of the mPLUG-Owl
+    [x-plug/x_plug-llama-7b](https://huggingface.co/x-plug/x_plug-llama-7b) architecture. Configuration objects inherit
+    from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from
+    [`PretrainedConfig`] for more information.
 
      Args:
          hidden_size (`int`, *optional*, defaults to 768):
@@ -67,8 +65,6 @@ class MplugOwlVisionConfig(PretrainedConfig):
          initializer_factor (`float`, *optional*, defaults to 1):
              A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
              testing).
-
-
     """
 
     model_type = "mplug_owl_vision_model"
@@ -125,18 +121,21 @@ class MplugOwlVisionConfig(PretrainedConfig):
 
 
 class MplugOwlVisualAbstractorConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`MplugOwlVisionAbstractor`].
+    """
     model_type = "mplug_owl_visual_abstract"
 
     def __init__(
         self,
-        hidden_size=1024,  #
-        num_hidden_layers=6,  #
-        num_attention_heads=16,  #
-        intermediate_size=4096,  #
-        attention_probs_dropout_prob=0.1,  #
+        hidden_size=1024,
+        num_hidden_layers=6,
+        num_attention_heads=16,
+        intermediate_size=4096,
+        attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
-        layer_norm_eps=1e-6,  #
-        encoder_hidden_size=1024,  #
+        layer_norm_eps=1e-6,
+        encoder_hidden_size=1024,
         **kwargs,
     ):
         super().__init__(**kwargs)
