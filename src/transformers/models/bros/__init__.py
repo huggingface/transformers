@@ -42,7 +42,6 @@ else:
         "BROS_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BrosPreTrainedModel",
         "BrosModel",
-        "BrosForSequenceClassification",
         "BrosForTokenClassification",
     ]
 
@@ -71,7 +70,6 @@ if TYPE_CHECKING:
             BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
             BrosPreTrainedModel,
             BrosModel,
-            BrosForSequenceClassification,
             BrosForTokenClassification,
         )
 
