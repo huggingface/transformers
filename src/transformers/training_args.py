@@ -1633,7 +1633,11 @@ class TrainingArguments:
         if not is_sagemaker_mp_enabled():
             device = self.distributed_state.device
             self.local_rank = self.distributed_state.local_process_index
-        if torch.distributed.is_available() and torch.distributed.is_initialized() and self.local_rank != -1:
+        if (
+            torch.distributed.is_available()
+            and torch.distributed.is_initialized()
+            and self.parallel_mode != ParallelMode.DISTRIBUTED
+        ):
             logger.warning(
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
@@ -1724,7 +1728,9 @@ class TrainingArguments:
             return ParallelMode.SAGEMAKER_MODEL_PARALLEL
         elif is_sagemaker_dp_enabled():
             return ParallelMode.SAGEMAKER_DATA_PARALLEL
-        elif self.local_rank != -1:
+        elif (not hasattr(self, "distributed_state") and self.local_rank != -1) or (
+            self.distributed_state.distributed_type != DistributedType.NO
+        ):
             return ParallelMode.DISTRIBUTED
         elif self.n_gpu > 1:
             return ParallelMode.NOT_DISTRIBUTED
