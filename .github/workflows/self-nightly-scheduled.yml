@@ -226,7 +226,7 @@ jobs:
         run: git fetch && git checkout ${{ github.sha }}
 
       - name: Reinstall transformers in edit mode (removed the one during docker image build)
-        working-directory: /transformers
+        working-directory: /workspace/transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
       - name: Remove cached torch extensions
