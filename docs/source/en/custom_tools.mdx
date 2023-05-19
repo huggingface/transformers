@@ -503,7 +503,7 @@ print("\n".join([f"- {a}" for a in agent.toolbox.keys()]))
 
 Note how `image_upscaler` is now part of the agents' toolbox.
 
-Let's now try out the new tools! We will re-use the image we generated in (Transformers Agents Quickstart)[./transformers_agents#single-execution-run].
+Let's now try out the new tools! We will re-use the image we generated in [Transformers Agents Quickstart](./transformers_agents#single-execution-run).
 
 ```py
 from diffusers.utils import load_image
@@ -726,7 +726,7 @@ We pass that instance to the `Tool.from_gradio` method:
 ```python
 from transformers import Tool
 
-tool = Tool.from_gradio(gradio_tools)
+tool = Tool.from_gradio(gradio_tool)
 ```
 
 Now we can manage it exactly as we would a usual custom tool. We leverage it to improve our prompt
