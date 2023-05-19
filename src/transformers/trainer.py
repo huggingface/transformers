@@ -1441,6 +1441,10 @@ class Trainer:
                 ).to(self.args.device)
         # Distributed training using PyTorch FSDP
         elif self.fsdp is not None:
+            # Torch compile requires use_orig_params in FSDP
+            use_orig_params = False
+            if self.args.torch_compile and is_torch_compile_available():
+                use_orig_params = True
             if not self.args.fsdp_config["xla"]:
                 # PyTorch FSDP!
                 from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload, MixedPrecision
@@ -1494,6 +1498,7 @@ class Trainer:
                         auto_wrap_policy=auto_wrap_policy,
                         mixed_precision=mixed_precision_policy,
                         device_id=self.args.device,
+                        use_orig_params=use_orig_params,
                         **kwargs,
                     )
             else:
@@ -1536,6 +1541,7 @@ class Trainer:
                     model,
                     auto_wrap_policy=auto_wrap_policy,
                     auto_wrapper_callable=auto_wrapper_callable,
+                    use_orig_params=use_orig_params,
                     **fsdp_kwargs,
                 )
 
