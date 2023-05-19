@@ -1,4 +1,4 @@
-# https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel_22-08.html#rel_22-08
+# https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-22-12.html#rel-22-12
 FROM nvcr.io/nvidia/pytorch:22.12-py3
 LABEL maintainer="Hugging Face"
 
@@ -25,6 +25,9 @@ RUN python3 -m pip install --no-cache-dir -U torch==$PYTORCH torchvision torchau
 RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
+
+# Uninstall `transformer-engine` shipped with the base image
+RUN python3 -m pip uninstall -y transformer-engine
 
 # Uninstall `torch-tensorrt` shipped with the base image
 RUN python3 -m pip uninstall -y torch-tensorrt
