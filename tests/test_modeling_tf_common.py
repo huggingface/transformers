@@ -24,10 +24,9 @@ import random
 import tempfile
 import unittest
 import unittest.mock as mock
-from dataclasses import fields
 from importlib import import_module
 from math import isnan
-from typing import List, Tuple, get_type_hints
+from typing import List, Tuple
 
 from datasets import Dataset
 from huggingface_hub import HfFolder, Repository, delete_repo
@@ -140,26 +139,6 @@ def _config_zero_init(config):
         if "_range" in key or "_std" in key:
             setattr(configs_no_init, key, 0.0)
     return configs_no_init
-
-
-def _return_type_has_loss(model):
-    return_type = get_type_hints(model.call)
-    if "return" not in return_type:
-        return False
-    return_type = return_type["return"]
-    if hasattr(return_type, "__args__"):  # Awkward check for union because UnionType only turns up in 3.10
-        for type_annotation in return_type.__args__:
-            if inspect.isclass(type_annotation) and issubclass(type_annotation, ModelOutput):
-                field_names = [field.name for field in fields(type_annotation)]
-                if "loss" in field_names:
-                    return True
-        return False
-    elif isinstance(return_type, tuple):
-        return False
-    elif isinstance(return_type, ModelOutput):
-        class_fields = fields(return_type)
-        return "loss" in class_fields
-    return False
 
 
 @require_tf
@@ -1466,8 +1445,6 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config)
-            if not getattr(model, "hf_compute_loss", None) and not _return_type_has_loss(model):
-                continue
             # The number of elements in the loss should be the same as the number of elements in the label
             prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
             added_label_names = sorted(prepared_for_class.keys() - inputs_dict.keys(), reverse=True)
@@ -1482,7 +1459,11 @@ class TFModelTesterMixin:
             input_name = possible_input_names.intersection(set(prepared_for_class)).pop()
             model_input = prepared_for_class.pop(input_name)
 
-            loss = model(model_input, **prepared_for_class)[0]
+            outputs = model(model_input, **prepared_for_class)
+            if not hasattr(outputs, "loss"):
+                continue
+
+            loss = outputs.loss
             self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
 
             # Test that model correctly compute the loss when we mask some positions
@@ -1542,8 +1523,6 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config)
-            if not getattr(model, "hf_compute_loss", False) and not _return_type_has_loss(model):
-                continue
             # Test that model correctly compute the loss with kwargs
             prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
             # Is there a better way to remove these decoder inputs?
@@ -1578,7 +1557,11 @@ class TFModelTesterMixin:
             else:
                 sample_weight = None
 
-            model(model.dummy_inputs)  # Build the model so we can get some constant weights
+            outputs = model(
+                prepared_for_class
+            )  # Build the model so we can get some constant weights and check outputs
+            if getattr(outputs, "loss", None) is None:
+                continue
             model_weights = model.get_weights()
 
             # Run eagerly to save some expensive compilation times
