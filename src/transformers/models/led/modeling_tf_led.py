@@ -1033,7 +1033,7 @@ class TFLEDDecoderAttention(tf.keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         key_value_states: tf.Tensor | None = None,
-        past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
+        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
         attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
         training=False,
@@ -1245,7 +1245,7 @@ class TFLEDDecoderLayer(tf.keras.layers.Layer):
         encoder_attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
         encoder_layer_head_mask: tf.Tensor | None = None,
-        past_key_value: Optional[Tuple[tf.Tensor]] = None,
+        past_key_value: Tuple[tf.Tensor] | None = None,
         training=False,
     ) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
         """
@@ -1391,9 +1391,9 @@ class TFLEDEncoderBaseModelOutput(ModelOutput):
     """
 
     last_hidden_state: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
-    global_attentions: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
+    global_attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -1454,14 +1454,14 @@ class TFLEDSeq2SeqModelOutput(ModelOutput):
     """
 
     last_hidden_state: tf.Tensor = None
-    past_key_values: Optional[List[tf.Tensor]] = None
-    decoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    decoder_attentions: Optional[Tuple[tf.Tensor]] = None
-    cross_attentions: Optional[Tuple[tf.Tensor]] = None
+    past_key_values: List[tf.Tensor] | None = None
+    decoder_hidden_states: Tuple[tf.Tensor] | None = None
+    decoder_attentions: Tuple[tf.Tensor] | None = None
+    cross_attentions: Tuple[tf.Tensor] | None = None
     encoder_last_hidden_state: tf.Tensor | None = None
-    encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    encoder_attentions: Optional[Tuple[tf.Tensor]] = None
-    encoder_global_attentions: Optional[Tuple[tf.Tensor]] = None
+    encoder_hidden_states: Tuple[tf.Tensor] | None = None
+    encoder_attentions: Tuple[tf.Tensor] | None = None
+    encoder_global_attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -1521,14 +1521,14 @@ class TFLEDSeq2SeqLMOutput(ModelOutput):
 
     loss: tf.Tensor | None = None
     logits: tf.Tensor = None
-    past_key_values: Optional[List[tf.Tensor]] = None
-    decoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    decoder_attentions: Optional[Tuple[tf.Tensor]] = None
-    cross_attentions: Optional[Tuple[tf.Tensor]] = None
+    past_key_values: List[tf.Tensor] | None = None
+    decoder_hidden_states: Tuple[tf.Tensor] | None = None
+    decoder_attentions: Tuple[tf.Tensor] | None = None
+    cross_attentions: Tuple[tf.Tensor] | None = None
     encoder_last_hidden_state: tf.Tensor | None = None
-    encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    encoder_attentions: Optional[Tuple[tf.Tensor]] = None
-    encoder_global_attentions: Optional[Tuple[tf.Tensor]] = None
+    encoder_hidden_states: Tuple[tf.Tensor] | None = None
+    encoder_attentions: Tuple[tf.Tensor] | None = None
+    encoder_global_attentions: Tuple[tf.Tensor] | None = None
 
 
 LED_START_DOCSTRING = r"""
@@ -2386,16 +2386,16 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        decoder_input_ids: np.ndarray | tf.Tensor | None = None,
+        decoder_attention_mask: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        decoder_head_mask: np.ndarray | tf.Tensor | None = None,
         encoder_outputs: Optional[TFLEDEncoderBaseModelOutput] = None,
-        global_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        global_attention_mask: np.ndarray | tf.Tensor | None = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        decoder_inputs_embeds: np.ndarray | tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

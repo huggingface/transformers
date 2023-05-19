@@ -87,8 +87,8 @@ class TFWav2Vec2BaseModelOutput(ModelOutput):
 
     last_hidden_state: tf.Tensor = None
     extract_features: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 def _sample_without_replacement(distribution, num_samples):
@@ -677,7 +677,7 @@ class TFWav2Vec2Attention(tf.keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         key_value_states: tf.Tensor | None = None,
-        past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
+        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
         attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
         training: Optional[bool] = False,

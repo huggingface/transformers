@@ -97,8 +97,8 @@ class TFDeiTForImageClassificationWithTeacherOutput(ModelOutput):
     logits: tf.Tensor = None
     cls_logits: tf.Tensor = None
     distillation_logits: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 class TFDeiTEmbeddings(tf.keras.layers.Layer):

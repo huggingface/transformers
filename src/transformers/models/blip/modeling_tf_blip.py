@@ -104,12 +104,12 @@ class TFBlipForConditionalGenerationModelOutput(ModelOutput):
             heads.`
     """
 
-    loss: Optional[Tuple[tf.Tensor]] = None
-    decoder_logits: Optional[Tuple[tf.Tensor]] = None
+    loss: Tuple[tf.Tensor] | None = None
+    decoder_logits: Tuple[tf.Tensor] | None = None
     image_embeds: tf.Tensor | None = None
     last_hidden_state: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -141,8 +141,8 @@ class TFBlipTextVisionModelOutput(ModelOutput):
     loss: tf.Tensor | None = None
     image_embeds: tf.Tensor | None = None
     last_hidden_state: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -182,10 +182,10 @@ class TFBlipImageTextMatchingModelOutput(ModelOutput):
     loss: tf.Tensor | None = None
     image_embeds: tf.Tensor | None = None
     last_hidden_state: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor] | None = None
     vision_pooler_output: tf.Tensor | None = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
-    question_embeds: Optional[Tuple[tf.Tensor]] = None
+    attentions: Tuple[tf.Tensor] | None = None
+    question_embeds: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -364,7 +364,7 @@ class TFBlipAttention(tf.keras.layers.Layer):
         head_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = False,
         training: Optional[bool] = None,
-    ) -> Tuple[tf.Tensor, tf.Tensor | None, Optional[Tuple[tf.Tensor]]]:
+    ) -> Tuple[tf.Tensor, tf.Tensor | None, Tuple[tf.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = shape_list(hidden_states)

@@ -284,7 +284,7 @@ class TFBlipTextAttention(tf.keras.layers.Layer):
         head_mask: tf.Tensor | None = None,
         encoder_hidden_states: tf.Tensor | None = None,
         encoder_attention_mask: tf.Tensor | None = None,
-        past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
+        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
         output_attentions: Optional[bool] = False,
         training: Optional[bool] = None,
     ):

@@ -96,11 +96,11 @@ class TFLxmertModelOutput(ModelOutput):
     language_output: tf.Tensor | None = None
     vision_output: tf.Tensor | None = None
     pooled_output: tf.Tensor | None = None
-    language_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    vision_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    language_attentions: Optional[Tuple[tf.Tensor]] = None
-    vision_attentions: Optional[Tuple[tf.Tensor]] = None
-    cross_encoder_attentions: Optional[Tuple[tf.Tensor]] = None
+    language_hidden_states: Tuple[tf.Tensor] | None = None
+    vision_hidden_states: Tuple[tf.Tensor] | None = None
+    language_attentions: Tuple[tf.Tensor] | None = None
+    vision_attentions: Tuple[tf.Tensor] | None = None
+    cross_encoder_attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -144,11 +144,11 @@ class TFLxmertForPreTrainingOutput(ModelOutput):
     prediction_logits: tf.Tensor | None = None
     cross_relationship_score: tf.Tensor | None = None
     question_answering_score: tf.Tensor | None = None
-    language_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    vision_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    language_attentions: Optional[Tuple[tf.Tensor]] = None
-    vision_attentions: Optional[Tuple[tf.Tensor]] = None
-    cross_encoder_attentions: Optional[Tuple[tf.Tensor]] = None
+    language_hidden_states: Tuple[tf.Tensor] | None = None
+    vision_hidden_states: Tuple[tf.Tensor] | None = None
+    language_attentions: Tuple[tf.Tensor] | None = None
+    vision_attentions: Tuple[tf.Tensor] | None = None
+    cross_encoder_attentions: Tuple[tf.Tensor] | None = None
 
 
 class TFLxmertVisualFeatureEncoder(tf.keras.layers.Layer):
@@ -951,10 +951,10 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
         input_ids: TFModelInputType | None = None,
         visual_feats: tf.Tensor | None = None,
         visual_pos: tf.Tensor | None = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        visual_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        visual_attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,

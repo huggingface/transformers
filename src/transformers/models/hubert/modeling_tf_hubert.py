@@ -646,7 +646,7 @@ class TFHubertAttention(tf.keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         key_value_states: tf.Tensor | None = None,
-        past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
+        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
         attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
         training: Optional[bool] = False,
