@@ -36,7 +36,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list, stable_softmax
+from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_whisper import WhisperConfig
 
@@ -128,7 +128,7 @@ class TFWhisperPositionalEmbedding(tf.keras.layers.Layer):
 
     def call(self, input_ids, past_key_values_length=0):
         past_key_values_length = tf.cast(past_key_values_length, tf.int32)
-        gather_indices = tf.range(tf.shape(input_ids)[-1], delta=1) + past_key_values_length
+        gather_indices = tf.range(tf.shape(input_ids)[1], delta=1) + past_key_values_length
         return tf.gather(self.weight, gather_indices)
 
 
@@ -882,16 +882,7 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-            tf.debugging.assert_less(
-                input_ids,
-                tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
-                message=(
-                    "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
-                ),
-            )
+            check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
             inputs_embeds = self.embed_tokens(input_ids)
 
         attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values_length)

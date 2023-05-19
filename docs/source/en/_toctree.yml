@@ -21,6 +21,8 @@
     title: Set up distributed training with 🤗 Accelerate
   - local: model_sharing
     title: Share your model
+  - local: transformers_agents
+    title: Agents
   title: Tutorials
 - sections:
   - sections:
@@ -71,6 +73,8 @@
         title: Image captioning
       - local: tasks/document_question_answering
         title: Document Question Answering
+      - local: tasks/text-to-speech
+        title: Text to speech
     title: Multimodal
     isExpanded: false
   title: Task Guides
@@ -97,6 +101,8 @@
       title: Notebooks with examples
     - local: community
       title: Community resources
+    - local: custom_tools
+      title: Custom Tools and Prompts
     - local: troubleshooting
       title: Troubleshoot
   title: Developer guides
@@ -177,6 +183,8 @@
   title: Conceptual guides
 - sections:
   - sections:
+    - local: main_classes/agent
+      title: Agents and Tools
     - local: model_doc/auto
       title: Auto Classes
     - local: main_classes/callback
@@ -397,6 +405,8 @@
         title: RoCBert
       - local: model_doc/roformer
         title: RoFormer
+      - local: model_doc/rwkv
+        title: RWKV
       - local: model_doc/splinter
         title: Splinter
       - local: model_doc/squeezebert
@@ -492,6 +502,8 @@
         title: ResNet
       - local: model_doc/segformer
         title: SegFormer
+      - local: model_doc/swiftformer
+        title: SwiftFormer
       - local: model_doc/swin
         title: Swin Transformer
       - local: model_doc/swinv2

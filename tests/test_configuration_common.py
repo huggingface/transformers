@@ -93,15 +93,20 @@ config_common_kwargs = {
 
 
 class ConfigTester(object):
-    def __init__(self, parent, config_class=None, has_text_modality=True, **kwargs):
+    def __init__(self, parent, config_class=None, has_text_modality=True, common_properties=None, **kwargs):
         self.parent = parent
         self.config_class = config_class
         self.has_text_modality = has_text_modality
         self.inputs_dict = kwargs
+        self.common_properties = common_properties
 
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
-        common_properties = ["hidden_size", "num_attention_heads", "num_hidden_layers"]
+        common_properties = (
+            ["hidden_size", "num_attention_heads", "num_hidden_layers"]
+            if self.common_properties is None
+            else self.common_properties
+        )
 
         # Add common fields for text models
         if self.has_text_modality:
