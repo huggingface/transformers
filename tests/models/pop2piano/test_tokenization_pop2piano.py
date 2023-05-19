@@ -18,6 +18,7 @@ import unittest
 import numpy as np
 from datasets import load_dataset
 
+from transformers.feature_extraction_utils import BatchFeature
 from transformers.testing_utils import (
     is_pretty_midi_available,
     is_torch_available,
@@ -30,7 +31,10 @@ from transformers.testing_utils import (
 if is_torch_available():
     import torch
 
-    from transformers import Pop2PianoForConditionalGeneration
+    from transformers.models.pop2piano.modeling_pop2piano import (
+        Pop2PianoForConditionalGeneration,
+        Pop2PianoGreedySearchEncoderDecoderOutput,
+    )
 
 requirements = is_torch_available() and is_pretty_midi_available()
 if requirements:
@@ -44,22 +48,32 @@ if requirements:
 class Pop2PianoTokenizerTest(unittest.TestCase):
     def test_call(self):
         tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
-        input = {
-            "relative_tokens": torch.ones([120, 96]),
-            "beatsteps": torch.ones(
-                [
-                    955,
-                ]
-            ),
-            "ext_beatstep": torch.ones(
-                [
-                    958,
-                ]
-            ),
-        }
+        model_output = Pop2PianoGreedySearchEncoderDecoderOutput(sequences=[torch.ones([120, 96])])
+        input_features = BatchFeature({"beatsteps": torch.ones([1, 955]), "ext_beatstep": torch.ones([1, 1000])})
 
-        output = tokenizer(**input)
-        self.assertTrue(isinstance(output, pretty_midi.pretty_midi.PrettyMIDI))
+        output = tokenizer(relative_tokens=model_output.sequences, input_features=input_features)
+        self.assertTrue(isinstance(output[0], pretty_midi.pretty_midi.PrettyMIDI))
+
+    def test_call_batched(self):
+        tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
+        model_output = Pop2PianoGreedySearchEncoderDecoderOutput(
+            sequences=[torch.ones([120, 96]), torch.zeros([100, 50])]
+        )
+        input_features = BatchFeature(
+            {
+                "beatsteps": torch.ones([2, 955]),
+                "ext_beatstep": torch.ones([2, 1000]),
+                "attention_mask_beatsteps": torch.ones([2, 955]),
+                "attention_mask_ext_beatstep": torch.ones([2, 1000]),
+            }
+        )
+
+        output = tokenizer(relative_tokens=model_output.sequences, input_features=input_features)
+        # check length
+        self.assertTrue(len(output) == 2)
+        # check object type
+        self.assertTrue(isinstance(output[0], pretty_midi.pretty_midi.PrettyMIDI))
+        self.assertTrue(isinstance(output[1], pretty_midi.pretty_midi.PrettyMIDI))
 
     # This is the test for a real music from K-Pop genre.
     @slow
@@ -75,10 +89,9 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         )
         output_model = model.generate(output_fe, composer="composer1")
         output_tokenizer = tokenizer(
-            relative_tokens=output_model.cpu(),
-            beatsteps=output_fe["beatsteps"].cpu(),
-            ext_beatstep=output_fe["ext_beatstep"].cpu(),
-        )
+            relative_tokens=output_model.sequences,
+            input_features=output_fe,
+        )[0]
 
         # Checking if no of notes are same
         self.assertEqual(len(output_tokenizer.instruments[0].notes), 59)

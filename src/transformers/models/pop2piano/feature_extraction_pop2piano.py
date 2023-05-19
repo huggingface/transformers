@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Feature extractor class for Pop2Piano"""
 
+import warnings
 from typing import List, Optional, Union
 
 import librosa
@@ -215,17 +216,66 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
         return batch, ext_beatstep
 
+    def pad(self, inputs: BatchFeature):
+        """
+        Takes input_features of shape (batch, dim1, dim2, dim3), beatsteps of shape (batch, dim1) and ext_beatstep of
+        shape (batch, dim1) and returns the padded version of themselves along with the attention_mask. Please note
+        that dim1, dim2, dim3 are variable sizes so the padding is applied on those axis.
+        """
+
+        input_features_shapes = [input_feature.shape for input_feature in inputs["input_features"]]
+        beatsteps_shapes = [beatsteps.shape for beatsteps in inputs["beatsteps"]]
+        ext_beatstep_shapes = [ext_beatstep.shape for ext_beatstep in inputs["ext_beatstep"]]
+
+        for i, input_feature in enumerate(inputs["input_features"]):
+            padding = (
+                (0, max([*zip(*input_features_shapes)][0]) - input_features_shapes[i][0]),
+                (0, max([*zip(*input_features_shapes)][1]) - input_features_shapes[i][1]),
+                (0, 0),
+            )
+            inputs["input_features"][i] = np.pad(
+                input_feature, padding, "constant", constant_values=self.padding_value
+            )
+
+            # compute attention_mask for input_features and add it to dict
+            attention_mask_input_feature = np.ones(input_features_shapes[i])
+            inputs["attention_mask_input_features"][i] = np.pad(
+                attention_mask_input_feature, padding, "constant", constant_values=self.padding_value
+            )
+
+        for i, beatsteps in enumerate(inputs["beatsteps"]):
+            padding = (0, max([*zip(*beatsteps_shapes)][0]) - beatsteps_shapes[i][0])
+            inputs["beatsteps"][i] = np.pad(beatsteps, padding, "constant", constant_values=self.padding_value)
+
+            # compute attention_mask for beatsteps and add it to dict
+            attention_mask_beatsteps = np.ones(beatsteps_shapes[i])
+            inputs["attention_mask_beatsteps"][i] = np.pad(
+                attention_mask_beatsteps, padding, "constant", constant_values=self.padding_value
+            )
+
+        for i, ext_beatstep in enumerate(inputs["ext_beatstep"]):
+            padding = (0, max([*zip(*ext_beatstep_shapes)][0]) - ext_beatstep_shapes[i][0])
+            inputs["ext_beatstep"][i] = np.pad(ext_beatstep, padding, "constant", constant_values=self.padding_value)
+
+            # compute attention_mask for beatsteps and add it to dict
+            attention_mask_ext_beatstep = np.ones(ext_beatstep_shapes[i])
+            inputs["attention_mask_ext_beatstep"][i] = np.pad(
+                attention_mask_ext_beatstep, padding, "constant", constant_values=self.padding_value
+            )
+
+        return inputs
+
     def __call__(
         self,
         raw_audio: Union[np.ndarray, List[float], List[np.ndarray]],
-        sampling_rate: int,
+        sampling_rate: Union[int, List[int]],
         steps_per_beat: int = 2,
+        return_attention_mask: Optional[bool] = False,
         return_tensors: Optional[Union[str, TensorType]] = "pt",
         **kwargs,
     ) -> BatchFeature:
         """
-        Main method to featurize and prepare for the model one sequence. Please note that `Pop2PianoFeatureExtractor`
-        only accepts one raw_audio at a time.
+        Main method to featurize and prepare for the model.
 
         Args:
             raw_audio (`np.ndarray`, `List`):
@@ -234,6 +284,9 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 Denotes the Sampling Rate of `raw_audio`.
             steps_per_beat (`int`, *optional*, defaults to 2):
                 Denotes Steps per beat.
+            return_attention_mask (`bool` *optional*, defaults to False):
+                Denotes if attention_mask for input_features, beatsteps and ext_beatstep will be given as output or
+                not.
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to 'pt'):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
@@ -244,43 +297,79 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             and (isinstance(raw_audio[0], np.ndarray) or isinstance(raw_audio[0], (tuple, list)))
         )
         if is_batched:
-            raise ValueError(
-                "Pop2PianoFeatureExtractor only takes one raw_audio at a time, if you want to extract features from more than a single audio then you might need to call it multiple times."
+            # This enables the user to process files of different sampling_rate at same time
+            if not isinstance(sampling_rate, list):
+                raise ValueError(
+                    "Please give sampling_rate of each raw_audio separately when you are"
+                    f"passing multiple raw_audios at the same time. "
+                    f"Received {sampling_rate}, expected [audio_1_sr, ..., audio_n_sr]."
+                )
+            warnings.warn("return_attention_mask is set to True for batched inputs")
+            return_attention_mask = True
+        else:
+            # To process it in the same pipeline
+            raw_audio = [raw_audio]
+            sampling_rate = [sampling_rate]
+
+        batch_input_feature, batch_beatsteps, batch_ext_beatstep = [], [], []
+        for single_raw_audio, single_sampling_rate in zip(raw_audio, sampling_rate):
+            # If it's [np.ndarray]
+            if isinstance(single_raw_audio, list) and isinstance(single_raw_audio[0], np.ndarray):
+                single_raw_audio = single_raw_audio[0]
+
+            bpm, beat_times, confidence, estimates, essentia_beat_intervals = self.extract_rhythm(
+                raw_audio=single_raw_audio
+            )
+            beatsteps = self.interpolate_beat_times(beat_times, steps_per_beat, extend=True)
+
+            if self.sampling_rate != single_sampling_rate and self.sampling_rate is not None:
+                # Change sampling_rate to self.sampling_rate
+                single_raw_audio = librosa.core.resample(
+                    single_raw_audio,
+                    orig_sr=single_sampling_rate,
+                    target_sr=self.sampling_rate,
+                    res_type="kaiser_best",
+                )
+
+            single_sampling_rate = self.sampling_rate
+            start_sample = int(beatsteps[0] * single_sampling_rate)
+            end_sample = int(beatsteps[-1] * single_sampling_rate)
+            single_audio = torch.from_numpy(single_raw_audio)[start_sample:end_sample]
+
+            input_feature, ext_beatstep = self.single_preprocess(
+                beatstep=beatsteps - beatsteps[0],
+                audio=single_audio,
             )
 
-        # If it's [np.ndarray]
-        if isinstance(raw_audio, list) and isinstance(raw_audio[0], np.ndarray):
-            raw_audio = raw_audio[0]
+            # Apply LogMelSpectogram
+            input_feature = np.transpose(self.log_mel_spectogram(input_feature), (0, -1, -2))
 
-        bpm, beat_times, confidence, estimates, essentia_beat_intervals = self.extract_rhythm(raw_audio=raw_audio)
-        beatsteps = self.interpolate_beat_times(beat_times, steps_per_beat, extend=True)
+            batch_input_feature.append(input_feature)
+            batch_beatsteps.append(beatsteps)
+            batch_ext_beatstep.append(ext_beatstep)
 
-        if self.sampling_rate != sampling_rate and self.sampling_rate is not None:
-            # Change sampling_rate to self.sampling_rate
-            raw_audio = librosa.core.resample(
-                raw_audio, orig_sr=sampling_rate, target_sr=self.sampling_rate, res_type="kaiser_best"
+        if return_attention_mask:
+            output = BatchFeature(
+                {
+                    "input_features": batch_input_feature,
+                    "beatsteps": batch_beatsteps,
+                    "ext_beatstep": batch_ext_beatstep,
+                    "attention_mask_input_features": [None] * len(batch_input_feature),  # To be updated in pad
+                    "attention_mask_beatsteps": [None] * len(batch_input_feature),  # To be updated in pad
+                    "attention_mask_ext_beatstep": [None] * len(batch_input_feature),  # To be updated in pad
+                }
+            )
+        else:
+            output = BatchFeature(
+                {
+                    "input_features": batch_input_feature,
+                    "beatsteps": batch_beatsteps,
+                    "ext_beatstep": batch_ext_beatstep,
+                }
             )
 
-        sampling_rate = self.sampling_rate
-        start_sample = int(beatsteps[0] * sampling_rate)
-        end_sample = int(beatsteps[-1] * sampling_rate)
-        _audio = torch.from_numpy(raw_audio)[start_sample:end_sample]
-
-        batch, ext_beatstep = self.single_preprocess(
-            beatstep=beatsteps - beatsteps[0],
-            audio=_audio,
-        )
-
-        # Apply LogMelSpectogram
-        batch = np.transpose(self.log_mel_spectogram(batch), (0, -1, -2))
-
-        output = BatchFeature(
-            {
-                "input_features": batch,
-                "beatsteps": beatsteps,
-                "ext_beatstep": ext_beatstep,
-            }
-        )
+        if is_batched or return_attention_mask:
+            output = self.pad(output)
 
         if return_tensors is not None:
             output = output.convert_to_tensors(return_tensors)

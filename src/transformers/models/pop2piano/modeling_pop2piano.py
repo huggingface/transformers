@@ -18,7 +18,8 @@
 import copy
 import math
 import warnings
-from typing import Optional, Tuple, Union
+from dataclasses import dataclass
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -36,6 +37,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
+    ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torch_fx_proxy,
@@ -768,6 +770,221 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
+@dataclass
+class Pop2PianoGreedySearchEncoderDecoderOutput(ModelOutput):
+    """
+    Base class for outputs of Pop2Piano using greedy search. Hidden states and attention weights of the decoder
+    (respectively the encoder) can be accessed via the encoder_attentions and the encoder_hidden_states attributes
+    (respectively the decoder_attentions and the decoder_hidden_states attributes)
+
+
+    Args:
+        sequences (`list(torch.LongTensor)` each of shape `(timestamp, sequence_length)`):
+            Each item in the list denotes generated sequences for each example. For each item in list the second
+            dimension (sequence_length) is either equal to `max_length` or shorter if all batches finished early due to
+            the `eos_token_id`.
+        scores (`list(tuple(torch.FloatTensor))` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Each item in the list denotes scores for each example. For each item in the list processed prediction
+            scores of the language modeling head (scores for each vocabulary token before SoftMax) at each generation
+            step. For each example Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            each generated token), with each tensor of shape `(timestamp, config.vocab_size)`.
+        encoder_attentions (`list(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Each item in the list denotes decoder_attentions for each example. For each example Tuple of
+            `torch.FloatTensor` (Each item in the List denotes encoder_attentions for each example. For each example
+            Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(timestamp, num_heads,
+            sequence_length, sequence_length)`.
+        encoder_hidden_states (`list(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Each item in the list denotes decoder_attentions for each example. For each example Tuple of
+            `torch.FloatTensor` (Each item in the list denotes encoder_hidden_states for each example and for each
+            example one for the output of the embeddings + one for the output of each layer) of shape `(timestamp,
+            sequence_length, hidden_size)`.
+        decoder_attentions (`list(tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Each item in the list denotes decoder_attentions for each example. For each example Tuple (one element for
+            each generated token) of tuples (one element for each layer of the decoder) of `torch.FloatTensor` of shape
+            `(timestamp, num_heads, generated_length, sequence_length)`.
+        cross_attentions (`list(tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Each item in the list denotes cross_attentions for each example. For each example Tuple (one element for
+            each generated token) of tuples (one element for each layer of the decoder) of `torch.FloatTensor` of shape
+            `(timestamp, num_heads, generated_length, sequence_length)`.
+        decoder_hidden_states (`list(tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Each item in the list denotes decoder_hidden_states for each example. For each example Tuple (one element
+            for each generated token) of tuples (one element for each layer of the decoder) of `torch.FloatTensor` of
+            shape `(timestamp, generated_length, hidden_size)`.
+    """
+
+    sequences: List[torch.LongTensor] = None
+    scores: Optional[List[Tuple[torch.FloatTensor]]] = None
+    encoder_attentions: Optional[List[Tuple[torch.FloatTensor]]] = None
+    encoder_hidden_states: Optional[List[Tuple[torch.FloatTensor]]] = None
+    decoder_attentions: Optional[List[Tuple[Tuple[torch.FloatTensor]]]] = None
+    cross_attentions: Optional[List[Tuple[Tuple[torch.FloatTensor]]]] = None
+    decoder_hidden_states: Optional[List[Tuple[Tuple[torch.FloatTensor]]]] = None
+
+
+@dataclass
+class Pop2PianoSampleEncoderDecoderOutput(ModelOutput):
+    """
+    Base class for outputs of Pop2Piano using sampling. Hidden states and attention weights of the decoder
+    (respectively the encoder) can be accessed via the encoder_attentions and the encoder_hidden_states attributes
+    (respectively the decoder_attentions and the decoder_hidden_states attributes)
+
+
+    Args:
+        sequences (`list(torch.LongTensor)` each of shape `(timestamp*num_return_sequences, sequence_length)`):
+            Each item in the list denotes sequences for each example. For each example the generated sequences. The
+            second dimension (sequence_length) is either equal to `max_length` or shorter if all batches finished early
+            due to the `eos_token_id`.
+        scores (`list(tuple(torch.FloatTensor))` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Each item in the list denotes scores for each example. For each example Processed prediction scores of the
+            language modeling head (scores for each vocabulary token before SoftMax) at each generation step. Tuple of
+            `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token), with each
+            tensor of shape `(timestamp*num_return_sequences, config.vocab_size)`.
+        encoder_attentions (`list(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Each item in the list denotes encoder_attentions for each example. For each example Tuple of
+            `torch.FloatTensor` (one for each layer of the decoder) of shape `(timestamp*num_return_sequences,
+            num_heads, sequence_length, sequence_length)`.
+        encoder_hidden_states (`list(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Each item in the list denotes encoder_hidden_states for each example. For each example Tuple of
+            `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(timestamp*num_return_sequences, sequence_length, hidden_size)`.
+        decoder_attentions (`list(tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Each item in the list denotes decoder_attentions for each example. For each example Tuple (one element for
+            each generated token) of tuples (one element for each layer of the decoder) of `torch.FloatTensor` of shape
+            `(timestamp*num_return_sequences, num_heads, generated_length, sequence_length)`.
+        cross_attentions (`list(tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Each item in the list denotes cross_attentions for each example. For each example Tuple (one element for
+            each generated token) of tuples (one element for each layer of the decoder) of `torch.FloatTensor` of shape
+            `(timestamp, num_heads, generated_length, sequence_length)`.
+        decoder_hidden_states (`list(tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Each item in the list denotes decoder_hidden_states for each example. For each example Tuple (one element
+            for each generated token) of tuples (one element for each layer of the decoder) of `torch.FloatTensor` of
+            shape `(timestamp*num_return_sequences, generated_length, hidden_size)`.
+    """
+
+    sequences: List[torch.LongTensor] = None
+    scores: Optional[List[Tuple[torch.FloatTensor]]] = None
+    encoder_attentions: Optional[List[Tuple[torch.FloatTensor]]] = None
+    encoder_hidden_states: Optional[List[Tuple[torch.FloatTensor]]] = None
+    decoder_attentions: Optional[List[Tuple[Tuple[torch.FloatTensor]]]] = None
+    cross_attentions: Optional[List[Tuple[Tuple[torch.FloatTensor]]]] = None
+    decoder_hidden_states: Optional[List[Tuple[Tuple[torch.FloatTensor]]]] = None
+
+
+@dataclass
+class Pop2PianoBeamSearchEncoderDecoderOutput(ModelOutput):
+    """
+    Base class for outputs of Pop2Piano using beam search. Hidden states and attention weights of the decoder
+    (respectively the encoder) can be accessed via the encoder_attentions and the encoder_hidden_states attributes
+    (respectively the decoder_attentions and the decoder_hidden_states attributes)
+
+    Args:
+        sequences (`list(torch.LongTensor)` each of shape `(timestamp*num_return_sequences, sequence_length)`):
+            Each item in the list denotes sequences for each example. For each example the generated sequences. The
+            second dimension (sequence_length) is either equal to `max_length` or shorter if all batches finished early
+            due to the `eos_token_id`.
+        sequences_scores (`list(torch.FloatTensor)` of shape `(timestamp*num_return_sequences)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Each item in the list denotes sequence_scores for each example. For each example final beam scores of the
+            generated `sequences`.
+        scores (`list(tuple(torch.FloatTensor))` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Each item in the list denotes scores for each example. For each example beam transition scores for each
+            vocabulary token at each generation step. Beam transition scores consisting of log probabilities of tokens
+            conditioned on log softmax of previously generated tokens in this beam. Tuple of `torch.FloatTensor` with
+            up to `max_new_tokens` elements (one element for each generated token), with each tensor of shape
+            `(timestamp*num_beams, config.vocab_size)`.
+        beam_indices (`list(torch.LongTensor)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Each item in the list denotes beam_indices for each example. For each example beam indices of generated
+            token id at each generation step. `torch.LongTensor` of shape `(timestamp*num_return_sequences,
+            sequence_length)`.
+        encoder_attentions (`list(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Each item in the list denotes encoder_attentions for each example. For each example Tuple of
+            `torch.FloatTensor` (one for each layer of the decoder) of shape `(timestamp, num_heads, sequence_length,
+            sequence_length)`.
+        encoder_hidden_states (`list(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Each item in the list denotes encoder_hidden_states for each example. For each example Tuple of
+            `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(timestamp*num_beams*num_return_sequences, sequence_length, hidden_size)`.
+        decoder_attentions (`list(tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Each item in the list denotes decoder_attentions for each example. For each example Tuple (one element for
+            each generated token) of tuples (one element for each layer of the decoder) of `torch.FloatTensor` of shape
+            `(timestamp*num_beams*num_return_sequences, num_heads, generated_length, sequence_length)`.
+        cross_attentions (`list(tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Each item in the list denotes cross_attentions for each example. For each example Tuple (one element for
+            each generated token) of tuples (one element for each layer of the decoder) of `torch.FloatTensor` of shape
+            `(timestamp, num_heads, generated_length, sequence_length)`.
+        decoder_hidden_states (`list(tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Each item in the list denotes decoder_hidden_states for each example. For each example Tuple (one element
+            for each generated token) of tuples (one element for each layer of the decoder) of `torch.FloatTensor` of
+            shape `(timestamp*num_beams*num_return_sequences, generated_length, hidden_size)`.
+    """
+
+    sequences: List[torch.LongTensor] = None
+    sequences_scores: Optional[List[torch.FloatTensor]] = None
+    scores: Optional[List[Tuple[torch.FloatTensor]]] = None
+    beam_indices: Optional[List[torch.LongTensor]] = None
+    encoder_attentions: Optional[List[Tuple[torch.FloatTensor]]] = None
+    encoder_hidden_states: Optional[List[Tuple[torch.FloatTensor]]] = None
+    decoder_attentions: Optional[List[Tuple[Tuple[torch.FloatTensor]]]] = None
+    cross_attentions: Optional[List[Tuple[Tuple[torch.FloatTensor]]]] = None
+    decoder_hidden_states: Optional[List[Tuple[Tuple[torch.FloatTensor]]]] = None
+
+
+@dataclass
+class Pop2PianoBeamSampleEncoderDecoderOutput(ModelOutput):
+    """
+    Base class for outputs of Pop2Piano using beam sampling. Hidden states and attention weights of the decoder
+    (respectively the encoder) can be accessed via the encoder_attentions and the encoder_hidden_states attributes
+    (respectively the decoder_attentions and the decoder_hidden_states attributes)
+
+    Args:
+        sequences (`list(torch.LongTensor)` each of shape `(timestamp*num_beams, sequence_length)`):
+            Each item in the list denotes generated sequences for each example. For each example the second dimension
+            (sequence_length) is either equal to `max_length` or shorter if all batches finished early due to the
+            `eos_token_id`.
+        sequences_scores (`list(torch.FloatTensor)` of shape `(timestamp * num_return_sequence)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Each item in the list denotes final beam scores for each example.
+        scores (`list(tuple(torch.FloatTensor))` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Each item in the list denotes scores for each example. For each example beam transition scores for each
+            vocabulary token at each generation step. Beam transition scores consisting of log probabilities of tokens
+            conditioned on log softmax of previously generated tokens in this beam. Tuple of `torch.FloatTensor` with
+            up to `max_new_tokens` elements (one element for each generated token), with each tensor of shape
+            `(timestamp*num_beams, config.vocab_size)`).
+        beam_indices (`list(torch.LongTensor)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Each item in the list denotes beam_indices for each example. For each example beam indices of generated
+            token id at each generation step. `torch.LongTensor` of shape `(timestamp*num_return_sequences,
+            sequence_length)`.
+        encoder_attentions (`list(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Each item in the list denotes encoder_attentions for each example. For each example Tuple of
+            `torch.FloatTensor` (one for each layer of the decoder) of shape `(timestamp, num_heads, sequence_length,
+            sequence_length)`.
+        encoder_hidden_states (`list(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Each item in the list denotes encoder_hidden_states for each example. For each example Tuple of
+            `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(timestamp*num_beams, sequence_length, hidden_size)`.
+        decoder_attentions (`list(tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Each item in the list denotes ddecoder_attentions for each example. For each example Tuple (one element for
+            each generated token) of tuples (one element for each layer of the decoder) of `torch.FloatTensor` of shape
+            `(timestamp*num_beams, num_heads, generated_length, sequence_length)`.
+        cross_attentions (`list(tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Each item in the list denotes cross_attentions for each example. For each example Tuple (one element for
+            each generated token) of tuples (one element for each layer of the decoder) of `torch.FloatTensor` of shape
+            `(timestamp, num_heads, generated_length, sequence_length)`.
+        decoder_hidden_states (`list(tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Each item in the list denotes decoder_hidden_states for each example. For each example Tuple (one element
+            for each generated token) of tuples (one element for each layer of the decoder) of `torch.FloatTensor` of
+            shape `(timestamp*num_beams, generated_length, hidden_size)`.
+    """
+
+    sequences: List[torch.LongTensor] = None
+    sequences_scores: Optional[List[torch.FloatTensor]] = None
+    scores: Optional[List[Tuple[torch.FloatTensor]]] = None
+    beam_indices: Optional[List[torch.LongTensor]] = None
+    encoder_attentions: Optional[List[Tuple[torch.FloatTensor]]] = None
+    encoder_hidden_states: Optional[List[Tuple[torch.FloatTensor]]] = None
+    decoder_attentions: Optional[List[Tuple[Tuple[torch.FloatTensor]]]] = None
+    cross_attentions: Optional[List[Tuple[Tuple[torch.FloatTensor]]]] = None
+    decoder_hidden_states: Optional[List[Tuple[Tuple[torch.FloatTensor]]]] = None
+
+
 class Pop2PianoStack(Pop2PianoPreTrainedModel):
     # Copied from transformers.models.t5.modeling_t5.T5Stack.__init__ with T5->Pop2Piano,t5->pop2piano
     def __init__(self, config, embed_tokens=None):
@@ -1220,6 +1437,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         composer="composer1",
         max_length: int = 256,
         generation_config=None,
+        return_dict_in_generate=True,
         **kwargs,
     ):
         """
@@ -1236,11 +1454,11 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
 
         Parameters:
             input_features (`BatchFeature`):
-                `input_features` returned by `Pop2PianoFeatureExtractor.__call__`
+                `input_features` returned by `Pop2PianoFeatureExtractor.__call__`.
             composer (`str`, *optional*, defaults to `"composer1"`):
                 This value is passed to `Pop2PianoConcatEmbeddingToMel` to generate different embeddings for each
                 `"composer"`.
-            max_length (`int`, *optional*):
+            max_length (`int`, *optional*, defaults to 256):
                 Number of tokens to be generated.
             generation_config (`~generation.GenerationConfig`, *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
@@ -1249,6 +1467,8 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
                 priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
                 configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
                 default values, whose documentation should be checked to parameterize generation.
+            return_dict_in_generate (`bool`, *optional*, defaults to `True`):
+                Whether to return dict or not.
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1256,18 +1476,12 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         Return:
             [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
             or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`.
-                If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
+                Since Pop2Piano is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
                 [`~utils.ModelOutput`] types are:
-                    - [`~generation.GreedySearchDecoderOnlyOutput`],
-                    - [`~generation.SampleDecoderOnlyOutput`],
-                    - [`~generation.BeamSearchDecoderOnlyOutput`],
-                    - [`~generation.BeamSampleDecoderOnlyOutput`]
-                If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
-                [`~utils.ModelOutput`] types are:
-                    - [`~generation.GreedySearchEncoderDecoderOutput`],
-                    - [`~generation.SampleEncoderDecoderOutput`],
-                    - [`~generation.BeamSearchEncoderDecoderOutput`],
-                    - [`~generation.BeamSampleEncoderDecoderOutput`]
+                    - [`Pop2PianoGreedySearchEncoderDecoderOutput`],
+                    - [`Pop2PianoSampleEncoderDecoderOutput`],
+                    - [`Pop2PianoBeamSearchEncoderDecoderOutput`],
+                    - [`Pop2PianoBeamSampleEncoderDecoderOutput`]
         Examples:
         ```python
         >>> from datasets import load_dataset
@@ -1287,15 +1501,16 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
 
         if generation_config is None:
             generation_config = self.generation_config
+        generation_config.update(**kwargs)
 
+        # check for composer_to_feature_token
         if not hasattr(generation_config, "composer_to_feature_token"):
             raise ValueError(
                 "`composer_to_feature_token` was not found! Please refer to "
                 "https://huggingface.co/susnato/pop2piano_dev/blob/main/generation_config.json"
                 "and parse a dict like that."
             )
-
-        if hasattr(generation_config, "composer_to_feature_token"):
+        else:
             if len(generation_config.composer_to_feature_token) != self.config.composer_n_vocab:
                 raise ValueError(
                     "config.composer_n_vocab must be same as the number of keys in "
@@ -1303,17 +1518,148 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
                     f"Found {self.config.composer_n_vocab} vs {len(generation_config.composer_to_feature_token)}."
                 )
 
-        inputs_embeds = self.get_mel_conditioner_outputs(
-            input_features=input_features["input_features"], composer=composer, generation_config=generation_config
+        # check for attention_mask
+        if input_features["input_features"].shape[0] > 1 and not hasattr(
+            input_features, "attention_mask_input_features"
+        ):
+            raise ValueError("attention_mask must be present for batched inputs!")
+
+        # determine generation mode
+        is_constraint_gen_mode = (
+            generation_config.constraints is not None or generation_config.force_words_ids is not None
         )
 
-        return super().generate(
-            inputs=None,
-            generation_config=generation_config,
-            inputs_embeds=inputs_embeds,
-            max_length=max_length,
-            **kwargs,
+        is_contrastive_search_gen_mode = (
+            (generation_config.num_beams == 1)
+            and generation_config.top_k is not None
+            and generation_config.top_k > 1
+            and generation_config.do_sample is False
+            and generation_config.penalty_alpha is not None
+            and generation_config.penalty_alpha > 0
         )
+
+        is_greedy_gen_mode = (
+            (generation_config.num_beams == 1)
+            and (generation_config.num_beam_groups == 1)
+            and generation_config.do_sample is False
+            and not is_constraint_gen_mode
+            and not is_contrastive_search_gen_mode
+        )
+        is_sample_gen_mode = (
+            (generation_config.num_beams == 1)
+            and (generation_config.num_beam_groups == 1)
+            and generation_config.do_sample is True
+            and not is_constraint_gen_mode
+            and not is_contrastive_search_gen_mode
+        )
+        is_beam_gen_mode = (
+            (generation_config.num_beams > 1)
+            and (generation_config.num_beam_groups == 1)
+            and generation_config.do_sample is False
+            and not is_constraint_gen_mode
+            and not is_contrastive_search_gen_mode
+        )
+        is_beam_sample_gen_mode = (
+            (generation_config.num_beams > 1)
+            and (generation_config.num_beam_groups == 1)
+            and generation_config.do_sample is True
+            and not is_constraint_gen_mode
+            and not is_contrastive_search_gen_mode
+        )
+
+        generation_outputs = []
+        for index in range(input_features["input_features"].shape[0]):
+            _input_features = input_features["input_features"][index]
+            if hasattr(input_features, "attention_mask_input_features"):
+                attention_mask = input_features["attention_mask_input_features"][index]
+                _input_features = _input_features[
+                    : torch.max(torch.where(attention_mask == 1)[0]) + 1,
+                    : torch.max(torch.where(attention_mask == 1)[1]) + 1,
+                    : torch.max(torch.where(attention_mask == 1)[2]) + 1,
+                ]
+
+            inputs_embeds = self.get_mel_conditioner_outputs(
+                input_features=_input_features, composer=composer, generation_config=generation_config
+            )
+
+            generation_output = super().generate(
+                inputs=None,
+                generation_config=generation_config,
+                inputs_embeds=inputs_embeds,
+                max_length=max_length,
+                return_dict_in_generate=True,
+                **kwargs,
+            )
+            generation_outputs.append(generation_output)
+
+        if is_greedy_gen_mode:
+            if return_dict_in_generate:
+                return Pop2PianoGreedySearchEncoderDecoderOutput(
+                    sequences=[gen_opt.sequences for gen_opt in generation_outputs],
+                    scores=[gen_opt.scores for gen_opt in generation_outputs],
+                    encoder_attentions=[gen_opt.encoder_attentions for gen_opt in generation_outputs],
+                    encoder_hidden_states=[gen_opt.encoder_hidden_states for gen_opt in generation_outputs],
+                    decoder_attentions=[gen_opt.decoder_attentions for gen_opt in generation_outputs],
+                    cross_attentions=[gen_opt.cross_attentions for gen_opt in generation_outputs],
+                    decoder_hidden_states=[gen_opt.decoder_hidden_states for gen_opt in generation_outputs],
+                )
+            return tuple(
+                zip(*[tuple(v for k, v in gen_opt.items() if v is not None) for gen_opt in generation_outputs])
+            )
+
+        elif is_sample_gen_mode:
+            if return_dict_in_generate:
+                return Pop2PianoSampleEncoderDecoderOutput(
+                    sequences=[gen_opt.sequences for gen_opt in generation_outputs],
+                    scores=[gen_opt.scores for gen_opt in generation_outputs],
+                    encoder_attentions=[gen_opt.encoder_attentions for gen_opt in generation_outputs],
+                    encoder_hidden_states=[gen_opt.encoder_hidden_states for gen_opt in generation_outputs],
+                    decoder_attentions=[gen_opt.decoder_attentions for gen_opt in generation_outputs],
+                    cross_attentions=[gen_opt.cross_attentions for gen_opt in generation_outputs],
+                    decoder_hidden_states=[gen_opt.decoder_hidden_states for gen_opt in generation_outputs],
+                )
+            return tuple(
+                zip(*[tuple(v for k, v in gen_opt.items() if v is not None) for gen_opt in generation_outputs])
+            )
+
+        elif is_beam_gen_mode:
+            if return_dict_in_generate:
+                return Pop2PianoBeamSearchEncoderDecoderOutput(
+                    sequences=[gen_opt.sequences for gen_opt in generation_outputs],
+                    sequences_scores=[gen_opt.sequences_scores for gen_opt in generation_outputs],
+                    scores=[gen_opt.scores for gen_opt in generation_outputs],
+                    beam_indices=[gen_opt.beam_indices for gen_opt in generation_outputs],
+                    encoder_attentions=[gen_opt.encoder_attentions for gen_opt in generation_outputs],
+                    encoder_hidden_states=[gen_opt.encoder_hidden_states for gen_opt in generation_outputs],
+                    decoder_attentions=[gen_opt.decoder_attentions for gen_opt in generation_outputs],
+                    cross_attentions=[gen_opt.cross_attentions for gen_opt in generation_outputs],
+                    decoder_hidden_states=[gen_opt.decoder_hidden_states for gen_opt in generation_outputs],
+                )
+            return tuple(
+                zip(*[tuple(v for k, v in gen_opt.items() if v is not None) for gen_opt in generation_outputs])
+            )
+
+        elif is_beam_sample_gen_mode:
+            if return_dict_in_generate:
+                return Pop2PianoBeamSampleEncoderDecoderOutput(
+                    sequences=[gen_opt.sequences for gen_opt in generation_outputs],
+                    sequences_scores=[gen_opt.sequences_scores for gen_opt in generation_outputs],
+                    scores=[gen_opt.scores for gen_opt in generation_outputs],
+                    beam_indices=[gen_opt.beam_indices for gen_opt in generation_outputs],
+                    encoder_attentions=[gen_opt.encoder_attentions for gen_opt in generation_outputs],
+                    encoder_hidden_states=[gen_opt.encoder_hidden_states for gen_opt in generation_outputs],
+                    decoder_attentions=[gen_opt.decoder_attentions for gen_opt in generation_outputs],
+                    cross_attentions=[gen_opt.cross_attentions for gen_opt in generation_outputs],
+                    decoder_hidden_states=[gen_opt.decoder_hidden_states for gen_opt in generation_outputs],
+                )
+            return tuple(
+                zip(*[tuple(v for k, v in gen_opt.items() if v is not None) for gen_opt in generation_outputs])
+            )
+
+        else:
+            return tuple(
+                zip(*[tuple(v for k, v in gen_opt.items() if v is not None) for gen_opt in generation_outputs])
+            )
 
     def prepare_inputs_for_generation(
         self,
