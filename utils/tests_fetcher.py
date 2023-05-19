@@ -116,6 +116,26 @@ def clean_code(content):
     return "\n".join(lines_to_keep)
 
 
+def keep_doc_examples_only(content):
+    """
+    Remove code, docstring that is not code example, empty line or comments from `content`.
+    """
+    # Keep doc examples only by splitting on triple "`"
+    splits = content.split("```")
+    # Add leading and trailing "```" so the navigation is easier when compared to the original input `content`
+    content = "```" + "```".join(splits[1::2]) + "```"
+
+    # Remove empty lines and comments
+    lines_to_keep = []
+    for line in content.split("\n"):
+        # remove anything that is after a # sign.
+        line = re.sub("#.*$", "", line)
+        if len(line) == 0 or line.isspace():
+            continue
+        lines_to_keep.append(line)
+    return "\n".join(lines_to_keep)
+
+
 def get_all_tests():
     """
     Return a list of paths to all test folders and files under `tests`. All paths are rooted at `tests`.
@@ -160,6 +180,24 @@ def diff_is_docstring_only(repo, branching_point, filename):
     new_content_clean = clean_code(new_content)
 
     return old_content_clean == new_content_clean
+
+
+def diff_contains_doc_examples(repo, branching_point, filename):
+    """
+    Check if the diff is only in code in a filename.
+    """
+    folder = Path(repo.working_dir)
+    with checkout_commit(repo, branching_point):
+        with open(folder / filename, "r", encoding="utf-8") as f:
+            old_content = f.read()
+
+    with open(folder / filename, "r", encoding="utf-8") as f:
+        new_content = f.read()
+
+    old_content_clean = keep_doc_examples_only(old_content)
+    new_content_clean = keep_doc_examples_only(new_content)
+
+    return old_content_clean != new_content_clean
 
 
 def get_diff(repo, base_commit, commits):
@@ -216,15 +254,15 @@ def get_modified_python_files(diff_with_last_commit=False):
         return get_diff(repo, repo.head.commit, parent_commits)
 
 
-def get_diff_for_py_and_mdx_files(repo, base_commit, commits):
+def get_diff_for_doctesting(repo, base_commit, commits):
     """
-    Get's the diff between one or several commits and the head of the repository.
+    Get's the diff between one or several commits and the head of the repository where some doc example(s) are changed.
     """
     print("\n### DIFF ###\n")
     code_diff = []
     for commit in commits:
         for diff_obj in commit.diff(base_commit):
-            # We always add new python files
+            # We always add new python/mdx files
             if diff_obj.change_type in ["A"] and (diff_obj.b_path.endswith(".py") or diff_obj.b_path.endswith(".mdx")):
                 code_diff.append(diff_obj.b_path)
             # Now for modified files
@@ -237,24 +275,25 @@ def get_diff_for_py_and_mdx_files(repo, base_commit, commits):
                 if diff_obj.a_path != diff_obj.b_path:
                     code_diff.extend([diff_obj.a_path, diff_obj.b_path])
                 else:
-                    # Otherwise, we check modifications are in code and not docstrings.
-                    if diff_is_docstring_only(repo, commit, diff_obj.b_path):
-                        print(f"Ignoring diff in {diff_obj.b_path} as it only concerns docstrings or comments.")
-                    else:
+                    # Otherwise, we check modifications contain some doc example(s).
+                    if diff_contains_doc_examples(repo, commit, diff_obj.b_path):
                         code_diff.append(diff_obj.a_path)
+                    else:
+                        print(f"Ignoring diff in {diff_obj.b_path} as it doesn't contain any doc example.")
 
     return code_diff
 
 
-def get_modified_python_and_mdx_files(diff_with_last_commit=False):
+def get_doctest_files(diff_with_last_commit=False):
     """
-    Return a list of python and mdx files that have been modified between:
+    Return a list of python and mdx files where some doc example(s) in them have been modified between:
 
     - the current head and the main branch if `diff_with_last_commit=False` (default)
     - the current head and its parent commit otherwise.
     """
     repo = Repo(PATH_TO_REPO)
 
+    test_files_to_run = []  # noqa
     if not diff_with_last_commit:
         print(f"main is at {repo.refs.main.commit}")
         print(f"Current head is at {repo.head.commit}")
@@ -262,23 +301,14 @@ def get_modified_python_and_mdx_files(diff_with_last_commit=False):
         branching_commits = repo.merge_base(repo.refs.main, repo.head)
         for commit in branching_commits:
             print(f"Branching commit: {commit}")
-        return get_diff_for_py_and_mdx_files(repo, repo.head.commit, branching_commits)
+        test_files_to_run = get_diff_for_doctesting(repo, repo.head.commit, branching_commits)
     else:
         print(f"main is at {repo.head.commit}")
         parent_commits = repo.head.commit.parents
         for commit in parent_commits:
             print(f"Parent commit: {commit}")
-        return get_diff_for_py_and_mdx_files(repo, repo.head.commit, parent_commits)
+        test_files_to_run = get_diff_for_doctesting(repo, repo.head.commit, parent_commits)
 
-
-def get_doctest_files(diff_with_last_commit=False):
-    """
-    Return a list of python and mdx files that have been modified between:
-
-    - the current head and the main branch if `diff_with_last_commit=False` (default)
-    - the current head and its parent commit otherwise.
-    """
-    test_files_to_run = get_modified_python_and_mdx_files(diff_with_last_commit)
     with open("utils/documentation_tests.txt") as fp:
         documentation_tests = set(fp.read().strip().split("\n"))
     # So far we don't have 100% coverage for doctest. This line will be removed once we achieve 100%.
@@ -659,6 +689,14 @@ def infer_tests_to_run(
             test_files_to_run = get_all_tests()
 
         create_json_map(test_files_to_run, json_output_file)
+
+    doctest_list = get_doctest_files()
+
+    print(f"\n### DOCTEST TO RUN ###\n{_print_list(doctest_list)}")
+    if len(doctest_list) > 0:
+        doctest_file = Path(output_file).parent / "doctest_list.txt"
+        with open(doctest_file, "w", encoding="utf-8") as f:
+            f.write(" ".join(doctest_list))
 
 
 def filter_tests(output_file, filters):

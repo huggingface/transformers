@@ -338,9 +338,8 @@ For the complete list of the available parameters, refer to the [API documentati
 Assisted decoding is a modification of the decoding strategies above that uses an assistant model with the same
 tokenizer (ideally a much smaller model) to greedily generate a few candidate tokens. The main model then validates
 the candidate tokens in a single forward pass, which speeds up the decoding process. Currently, only greedy search
-and sampling are supported with assisted decoding, and doesn't support batched inputs.
-
-<!-- TODO: add link to the blog post about assisted decoding when it exists -->
+and sampling are supported with assisted decoding, and doesn't support batched inputs. To learn more about assisted
+decoding, check [this blog post](https://huggingface.co/blog/assisted-generation).
 
 To enable assisted decoding, set the `assistant_model` argument with a model.
 
@@ -363,8 +362,6 @@ To enable assisted decoding, set the `assistant_model` argument with a model.
 
 When using assisted decoding with sampling methods, you can use the `temperarure` argument to control the randomness
 just like in multinomial sampling. However, in assisted decoding, reducing the temperature will help improving latency.
-
-<!-- TODO: link the blog post again to explain why the tradeoff exists -->
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
