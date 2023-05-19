@@ -504,6 +504,7 @@ SPECIAL_MODEL_NAMES = {
     "Perceiver": "Perceiver IO",
     "SAM": "Segment Anything",
     "ViT": "Vision Transformer (ViT)",
+    "MplugOwl": "mPLUG-Owl",
 }
 
 # Update this list with the models that shouldn't be in the README. This only concerns modular models or those who do
