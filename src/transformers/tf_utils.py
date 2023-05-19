@@ -70,6 +70,56 @@ def stable_softmax(logits: tf.Tensor, axis: Optional[int] = None, name: Optional
     return tf.nn.softmax(logits=logits + 1e-9, axis=axis, name=name)
 
 
+def functional_layernorm(inputs, weight, bias, epsilon=1e-5, axis=-1):
+    # This is a very simplified functional layernorm, designed to duplicate
+    # the functionality of PyTorch nn.functional.layer_norm when this is needed to port
+    # models in Transformers.
+
+    if weight.shape.rank != 1 or bias.shape.rank != 1 or not isinstance(axis, int):
+        raise NotImplementedError("Only 1D weight and bias tensors are supported for now, with only a single axis.")
+
+    # Get mean and variance on the axis to be normalized
+    mean, variance = tf.nn.moments(inputs, axes=[axis], keepdims=True)
+
+    if axis != -1:
+        # Reshape scale and weight to have the same rank as inputs, but with 1 dimensions
+        # on every dimension except axis
+        shape = [1] * inputs.shape.rank
+        shape[axis] = shape_list(inputs)[axis]
+        weight = tf.reshape(weight, shape)
+        bias = tf.reshape(bias, shape)
+
+    # Compute layer normalization using the batch_normalization
+    # function.
+    outputs = tf.nn.batch_normalization(
+        inputs,
+        mean,
+        variance,
+        offset=bias,
+        scale=weight,
+        variance_epsilon=epsilon,
+    )
+    return outputs
+
+
+def flatten(input, start_dim=0, end_dim=-1):
+    # Replicates the behavior of torch.flatten in TF
+
+    # If end_dim or start_dim is negative, count them from the end
+    if end_dim < 0:
+        end_dim += input.shape.rank
+    if start_dim < 0:
+        start_dim += input.shape.rank
+
+    if start_dim == end_dim:
+        return input
+
+    in_shape = tf.shape(input)
+    flattened_dim = tf.math.reduce_prod(in_shape[start_dim : end_dim + 1])
+    out_shape = tf.concat([in_shape[:start_dim], [flattened_dim], in_shape[end_dim + 1 :]], axis=0)
+    return tf.reshape(input, out_shape)
+
+
 def invert_attention_mask(encoder_attention_mask: tf.Tensor) -> tf.Tensor:
     """
     Invert an attention mask (e.g., switches 0. and 1.).
