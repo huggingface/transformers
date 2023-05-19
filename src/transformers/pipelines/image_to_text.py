@@ -108,27 +108,34 @@ class ImageToTextPipeline(Pipeline):
     def preprocess(self, image, prompt=None):
         image = load_image(image)
 
-        if prompt is not None and not isinstance(prompt, str):
-            raise ValueError(
-                f"Received an invalid text input, got - {type(prompt)} - but expected a single string. "
-                "Note also that one single text can be provided for conditional image to text generation."
-            )
+        if prompt is not None:
+            if not isinstance(prompt, str):
+                raise ValueError(
+                    f"Received an invalid text input, got - {type(prompt)} - but expected a single string. "
+                    "Note also that one single text can be provided for conditional image to text generation."
+                )
+            
+            model_type = self.model.config.model_type
 
-        elif prompt is not None and self.model.config.model_type == "git":
-            model_inputs = self.image_processor(images=image, return_tensors=self.framework)
-            input_ids = self.tokenizer(text=prompt, add_special_tokens=False).input_ids
-            input_ids = [self.tokenizer.cls_token_id] + input_ids
-            input_ids = torch.tensor(input_ids).unsqueeze(0)
-            model_inputs.update({"input_ids": input_ids})
+            if model_type == "git":
+                model_inputs = self.image_processor(images=image, return_tensors=self.framework)
+                input_ids = self.tokenizer(text=prompt, add_special_tokens=False).input_ids
+                input_ids = [self.tokenizer.cls_token_id] + input_ids
+                input_ids = torch.tensor(input_ids).unsqueeze(0)
+                model_inputs.update({"input_ids": input_ids})
 
-        elif prompt is not None and self.model.config.model_type == "pix2struct":
-            model_inputs = self.image_processor(images=image, header_text=prompt, return_tensors=self.framework)
+            elif model_type == "pix2struct":
+                model_inputs = self.image_processor(images=image, header_text=prompt, return_tensors=self.framework)
 
-        elif prompt is not None and self.model.config.model_type != "vision-encoder-decoder":
-            # vision-encoder-decoder does not support conditional generation
-            model_inputs = self.image_processor(images=image, return_tensors=self.framework)
-            text_inputs = self.tokenizer(prompt, return_tensors=self.framework)
-            model_inputs.update(text_inputs)
+            elif model_type != "vision-encoder-decoder":
+                # vision-encoder-decoder does not support conditional generation
+                model_inputs = self.image_processor(images=image, return_tensors=self.framework)
+                text_inputs = self.tokenizer(prompt, return_tensors=self.framework)
+                model_inputs.update(text_inputs)
+            
+            else:
+                raise ValueError(f"Model type {model_type} does not support conditional text generation")
+
         else:
             model_inputs = self.image_processor(images=image, return_tensors=self.framework)
 
