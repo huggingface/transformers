@@ -1335,30 +1335,6 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
             attentions=attns,
         )
 
-    # Adapted from transformers.models.t5.modeling_tf_t5.TFT5PreTrainedModel._shift_right
-    def _shift_right(self, input_ids):
-        decoder_start_token_id = self.decoder_start_token_id
-        pad_token_id = self.decoder_pad_token_id
-
-        if decoder_start_token_id is None or pad_token_id is None:
-            raise ValueError("decoder_start_token_id and pad_token_id must be defined!")
-
-        start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
-        start_tokens = tf.cast(start_tokens, input_ids.dtype)  # Ensure compatible dtypes for concatenation
-        shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
-
-        # replace possible -100 values in labels by `pad_token_id`
-        shifted_input_ids = tf.where(
-            shifted_input_ids == -100,
-            tf.cast(tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids.dtype),
-            shifted_input_ids,
-        )
-
-        # "Verify that `labels` has only positive values and -100"
-        tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0, dtype=shifted_input_ids.dtype))
-
-        return shifted_input_ids
-
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBlipTextVisionModelOutput, config_class=BlipVisionConfig)
@@ -1439,10 +1415,6 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
         )
 
         question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
-
-        if labels is not None and decoder_input_ids is None:
-            # get decoder inputs from shifting lm labels to the right - this is used in training mode
-            decoder_input_ids = self._shift_right(labels)
 
         answer_output = self.text_decoder(
             input_ids=decoder_input_ids,
