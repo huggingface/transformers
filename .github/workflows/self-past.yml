@@ -111,7 +111,7 @@ jobs:
         working-directory: /transformers
         run: git fetch && git checkout ${{ inputs.sha }}
 
-      - name: Reinstall transformers in edit mode (removed the one during docker image build)
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
@@ -187,7 +187,7 @@ jobs:
         working-directory: /transformers
         run: git fetch && git checkout ${{ inputs.sha }}
 
-      - name: Reinstall transformers in edit mode (removed the one during docker image build)
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
@@ -263,7 +263,7 @@ jobs:
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
 
-      - name: Reinstall transformers in edit mode (removed the one during docker image build)
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
