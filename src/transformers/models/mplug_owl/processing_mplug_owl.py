@@ -1,8 +1,5 @@
 import re
 
-import torch
-import torch.utils.checkpoint
-
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 from ..clip.image_processing_clip import CLIPImageProcessor
@@ -127,9 +124,7 @@ def detokenize_generations(tokens_gpu_tensor, lengths_gpu_tensor, return_segment
     return tokens, prompts_plus_generations
 
 
-def tokenize_prompts(
-    prompts=None, tokens_to_generate=None, add_BOS=None, rank=0, tokenizer=None, ignore_dist=False, **kwargs
-):
+def tokenize_prompts(prompts=None, tokens_to_generate=None, add_BOS=None, rank=0, tokenizer=None, **kwargs):
     """Tokenize prompts and make them avaiable on all ranks."""
 
     # On all ranks set to None so we can pass them to functions
@@ -138,13 +133,10 @@ def tokenize_prompts(
 
     # On the specified rank, build the above.
     attention_mask = None
-    if ignore_dist or torch.distributed.get_rank() == rank:
-        assert prompts is not None
-        assert tokens_to_generate is not None
-        # Tensor of tokens padded and their unpadded length.
-        prompts_tokens_cuda_long_tensor, prompts_length_cuda_long_tensor, attention_mask = _tokenize_prompts_and_batch(
-            prompts, tokens_to_generate, add_BOS, tokenizer, **kwargs
-        )
+
+    prompts_tokens_cuda_long_tensor, prompts_length_cuda_long_tensor, attention_mask = _tokenize_prompts_and_batch(
+        prompts, tokens_to_generate, add_BOS, tokenizer, **kwargs
+    )
 
     return {
         "input_ids": prompts_tokens_cuda_long_tensor,
@@ -154,6 +146,8 @@ def tokenize_prompts(
 
 
 def _tokenize_prompts_and_batch(prompts, tokens_to_generate, add_BOS, tokenizer, **kwargs):
+    import torch
+
     """Given a set of prompts and number of tokens to generate:
     - tokenize prompts
     - set the sequence length to be the max of length of prompts plus the number of tokens we would like to generate
