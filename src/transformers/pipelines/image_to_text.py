@@ -114,7 +114,7 @@ class ImageToTextPipeline(Pipeline):
                     f"Received an invalid text input, got - {type(prompt)} - but expected a single string. "
                     "Note also that one single text can be provided for conditional image to text generation."
                 )
-            
+
             model_type = self.model.config.model_type
 
             if model_type == "git":
@@ -132,7 +132,7 @@ class ImageToTextPipeline(Pipeline):
                 model_inputs = self.image_processor(images=image, return_tensors=self.framework)
                 text_inputs = self.tokenizer(prompt, return_tensors=self.framework)
                 model_inputs.update(text_inputs)
-            
+
             else:
                 raise ValueError(f"Model type {model_type} does not support conditional text generation")
 
