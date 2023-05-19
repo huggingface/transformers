@@ -27,7 +27,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure = {"tokenization_scibart": ["SciBartTokenizer"]}
+    _import_structure["tokenization_scibart"] = ["SciBartTokenizer"]
 
 
 if TYPE_CHECKING:
