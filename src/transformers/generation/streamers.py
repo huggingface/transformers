@@ -131,6 +131,23 @@ class TextStreamer(BaseStreamer):
         """Prints the new text to stdout. If the stream is ending, also prints a newline."""
         print(text, flush=True, end="" if not stream_end else None)
 
+    def _is_halfwidth_and_fullwidth(cp):
+        """Checks whether CP is the codepoint of a Halfwidth and Fullwidth Forms character."""
+        # This defines a "Halfwidth and Fullwidth Forms" as anything in the Unicode block:
+        #   https://en.wikipedia.org/wiki/Halfwidth_and_Fullwidth_Forms_(Unicode_block)
+        #
+        # Note that the Halfwidth and Fullwidth Forms Unicode block is NOT all Japanese and Korean characters,
+        # despite its name. The modern Korean Hangul alphabet is a different block,
+        # as is Japanese Hiragana and Katakana. Those alphabets are used to write
+        # space-separated words, so they are not treated specially and handled
+        # like the all of the other languages.
+        if (
+            (cp >= 0xFF01 and cp <= 0xFF5E)
+            or (cp >= 0x21 and 0x7E)
+        ):
+            return True
+        return False
+        
     def _is_chinese_char(self, cp):
         """Checks whether CP is the codepoint of a CJK character."""
         # This defines a "chinese character" as anything in the CJK Unicode block:
