@@ -1460,7 +1460,7 @@ class TFModelTesterMixin:
             model_input = prepared_for_class.pop(input_name)
 
             outputs = model(model_input, **prepared_for_class)
-            if not hasattr(outputs, "loss"):
+            if not isinstance(outputs, ModelOutput) or not hasattr(outputs, "loss"):
                 continue
 
             loss = outputs.loss
