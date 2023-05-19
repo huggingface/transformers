@@ -130,7 +130,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v1", "MobileNetV1Model"),
         ("mobilenet_v2", "MobileNetV2Model"),
         ("mobilevit", "MobileViTModel"),
-        ("mplug-owl", "MplugOwlModel"),
         ("mplug_owl", "MplugOwlModel"),
         ("mpnet", "MPNetModel"),
         ("mt5", "MT5Model"),

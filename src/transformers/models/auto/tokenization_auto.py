@@ -212,7 +212,6 @@ else:
             ("mgp-str", ("MgpstrTokenizer", None)),
             ("mluke", ("MLukeTokenizer" if is_sentencepiece_available() else None, None)),
             ("mobilebert", ("MobileBertTokenizer", "MobileBertTokenizerFast" if is_tokenizers_available() else None)),
-            ("mplug-owl", ("MplugOwlTokenizer", None if is_tokenizers_available() else None)),
             ("mpnet", ("MPNetTokenizer", "MPNetTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "mt5",
