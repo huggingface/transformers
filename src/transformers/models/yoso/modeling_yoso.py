@@ -16,7 +16,7 @@
 
 
 import math
-import os
+from pathlib import Path
 from typing import Optional, Tuple, Union
 
 import torch
@@ -56,8 +56,8 @@ def load_cuda_kernels():
         from torch.utils.cpp_extension import load
 
         def append_root(files):
-            src_folder = os.path.dirname(os.path.realpath(__file__))
-            return [os.path.join(src_folder, file) for file in files]
+            src_folder = Path(__file__).resolve().parent.parent.parent / "kernels" / "yoso"
+            return [src_folder / file for file in files]
 
         src_files = append_root(
             ["fast_lsh_cumulation_torch.cpp", "fast_lsh_cumulation.cu", "fast_lsh_cumulation_cuda.cu"]

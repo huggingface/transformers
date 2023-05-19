@@ -582,3 +582,9 @@ Keywords: IR, Information Retrieval, Dense, Sparse
 
 Keywords: Active Learning, Research, Labeling
 
+## [cleanlab](https://github.com/cleanlab/cleanlab)
+
+[cleanlab](https://github.com/cleanlab/cleanlab) is the standard data-centric AI package for data quality and machine learning with messy, real-world data and labels. For text, image, tabular, audio (among others) datasets, you can use cleanlab to automatically: detect data issues (outliers, label errors, near duplicates, etc), train robust ML models, infer consensus + annotator-quality for multi-annotator data, suggest data to (re)label next (active learning).
+
+Keywords: Data-Centric AI, Data Quality, Noisy Labels, Outlier Detection, Active Learning  
+
