@@ -1442,9 +1442,7 @@ class Trainer:
         # Distributed training using PyTorch FSDP
         elif self.fsdp is not None:
             # Torch compile requires use_orig_params in FSDP
-            use_orig_params = False
-            if self.args.torch_compile and is_torch_compile_available():
-                use_orig_params = True
+            use_orig_params = self.args.torch_compile and is_torch_compile_available()
             if not self.args.fsdp_config["xla"]:
                 # PyTorch FSDP!
                 from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload, MixedPrecision
