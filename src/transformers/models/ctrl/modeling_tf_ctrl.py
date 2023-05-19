@@ -15,6 +15,9 @@
 # limitations under the License.
 """ TF 2.0 CTRL model."""
 
+
+from __future__ import annotations
+
 import warnings
 from typing import Optional, Tuple, Union
 
@@ -256,7 +259,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -532,7 +535,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -645,7 +648,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -749,7 +752,7 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,

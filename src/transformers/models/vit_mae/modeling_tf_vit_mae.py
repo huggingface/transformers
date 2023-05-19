@@ -14,6 +14,9 @@
 # limitations under the License.
 """ TF 2.0 ViT MAE (masked autoencoder) model."""
 
+
+from __future__ import annotations
+
 import collections.abc
 import math
 from copy import deepcopy
@@ -125,7 +128,7 @@ class TFViTMAEForPreTrainingOutput(ModelOutput):
             the self-attention heads.
     """
 
-    loss: Optional[tf.Tensor] = None
+    loss: tf.Tensor | None = None
     logits: tf.Tensor = None
     mask: tf.Tensor = None
     ids_restore: tf.Tensor = None
@@ -232,7 +235,7 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    def random_masking(self, sequence: tf.Tensor, noise: Optional[tf.Tensor] = None):
+    def random_masking(self, sequence: tf.Tensor, noise: tf.Tensor | None = None):
         """
         Perform per-sample random masking by per-sample shuffling. Per-sample shuffling is done by argsort random
         noise.
@@ -639,7 +642,7 @@ class TFViTMAEMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
+        pixel_values: TFModelInputType | None = None,
         noise: tf.Tensor = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
@@ -816,7 +819,7 @@ class TFViTMAEModel(TFViTMAEPreTrainedModel):
     @replace_return_docstrings(output_type=TFViTMAEModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
+        pixel_values: TFModelInputType | None = None,
         noise: tf.Tensor = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
@@ -1107,7 +1110,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
     @replace_return_docstrings(output_type=TFViTMAEForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
+        pixel_values: TFModelInputType | None = None,
         noise: tf.Tensor = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,

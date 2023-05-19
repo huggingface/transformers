@@ -15,6 +15,9 @@
 # limitations under the License.
 """ TF 2.0 ALBERT model."""
 
+
+from __future__ import annotations
+
 import math
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple, Union
@@ -561,7 +564,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -797,7 +800,7 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -863,7 +866,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel, TFAlbertPreTrainingLoss):
     @replace_return_docstrings(output_type=TFAlbertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -979,7 +982,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
     @replace_return_docstrings(output_type=TFMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1097,7 +1100,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1189,7 +1192,7 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1276,7 +1279,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1386,7 +1389,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,

@@ -386,8 +386,8 @@ class TF{{cookiecutter.camelcase_modelname}}Layer(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
-        encoder_hidden_states: Optional[tf.Tensor],
-        encoder_attention_mask: Optional[tf.Tensor],
+        encoder_hidden_states: tf.Tensor | None,
+        encoder_attention_mask: tf.Tensor | None,
         past_key_value: Optional[Tuple[tf.Tensor]],
         output_attentions: bool,
         training: bool = False,
@@ -465,8 +465,8 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
-        encoder_hidden_states: Optional[tf.Tensor],
-        encoder_attention_mask: Optional[tf.Tensor],
+        encoder_hidden_states: tf.Tensor | None,
+        encoder_attention_mask: tf.Tensor | None,
         past_key_values: Optional[Tuple[Tuple[tf.Tensor]]],
         use_cache: Optional[bool],
         output_attentions: bool,
@@ -639,7 +639,7 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -937,7 +937,7 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1038,7 +1038,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelca
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1129,7 +1129,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForCausalLM(TF{{cookiecutter.camelca
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1274,7 +1274,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification(TF{{cookie
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1362,7 +1362,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1487,7 +1487,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForTokenClassification(TF{{cookiecut
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1566,7 +1566,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(TF{{cookiecutte
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1777,12 +1777,12 @@ class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        key_value_states: Optional[tf.Tensor] = None,
+        key_value_states: tf.Tensor | None = None,
         past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        layer_head_mask: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        layer_head_mask: tf.Tensor | None = None,
         training=False,
-    ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
+    ) -> Tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -1962,11 +1962,11 @@ class TF{{cookiecutter.camelcase_modelname}}DecoderLayer(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states,
-        attention_mask: Optional[tf.Tensor] = None,
-        encoder_hidden_states: Optional[tf.Tensor] = None,
-        encoder_attention_mask: Optional[tf.Tensor] = None,
-        layer_head_mask: Optional[tf.Tensor] = None,
-        cross_attn_layer_head_mask: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        encoder_hidden_states: tf.Tensor | None = None,
+        encoder_attention_mask: tf.Tensor | None = None,
+        layer_head_mask: tf.Tensor | None = None,
+        cross_attn_layer_head_mask: tf.Tensor | None = None,
         past_key_value: Optional[Tuple[tf.Tensor]] = None,
         training=False,
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:

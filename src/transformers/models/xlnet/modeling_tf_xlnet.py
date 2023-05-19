@@ -17,6 +17,9 @@
  TF 2.0 XLNet model.
 """
 
+
+from __future__ import annotations
+
 import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -582,7 +585,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         mems: Optional[Union[np.ndarray, tf.Tensor]] = None,
         perm_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -859,7 +862,7 @@ class TFXLNetLMHeadModelOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[tf.Tensor] = None
+    loss: tf.Tensor | None = None
     logits: tf.Tensor = None
     mems: Optional[List[tf.Tensor]] = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
@@ -893,7 +896,7 @@ class TFXLNetForSequenceClassificationOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[tf.Tensor] = None
+    loss: tf.Tensor | None = None
     logits: tf.Tensor = None
     mems: Optional[List[tf.Tensor]] = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
@@ -927,7 +930,7 @@ class TFXLNetForTokenClassificationOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[tf.Tensor] = None
+    loss: tf.Tensor | None = None
     logits: tf.Tensor = None
     mems: Optional[List[tf.Tensor]] = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
@@ -963,7 +966,7 @@ class TFXLNetForMultipleChoiceOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[tf.Tensor] = None
+    loss: tf.Tensor | None = None
     logits: tf.Tensor = None
     mems: Optional[List[tf.Tensor]] = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
@@ -999,7 +1002,7 @@ class TFXLNetForQuestionAnsweringSimpleOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[tf.Tensor] = None
+    loss: tf.Tensor | None = None
     start_logits: tf.Tensor = None
     end_logits: tf.Tensor = None
     mems: Optional[List[tf.Tensor]] = None
@@ -1140,7 +1143,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         mems: Optional[Union[np.ndarray, tf.Tensor]] = None,
         perm_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1249,7 +1252,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
     @replace_return_docstrings(output_type=TFXLNetLMHeadModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         mems: Optional[Union[np.ndarray, tf.Tensor]] = None,
         perm_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1379,7 +1382,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         mems: Optional[Union[np.ndarray, tf.Tensor]] = None,
         perm_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1484,7 +1487,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         input_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1604,7 +1607,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         mems: Optional[Union[np.ndarray, tf.Tensor]] = None,
         perm_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1689,7 +1692,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         mems: Optional[Union[np.ndarray, tf.Tensor]] = None,
         perm_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,

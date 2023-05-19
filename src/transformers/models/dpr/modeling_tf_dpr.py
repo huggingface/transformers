@@ -15,6 +15,8 @@
 
 """ TensorFlow DPR model for Open Domain Question Answering."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -167,9 +169,9 @@ class TFDPREncoderLayer(tf.keras.layers.Layer):
     def call(
         self,
         input_ids: tf.Tensor = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: bool = None,
         output_hidden_states: bool = None,
         return_dict: bool = None,
@@ -227,8 +229,8 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
     def call(
         self,
         input_ids: tf.Tensor = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = False,
@@ -283,9 +285,9 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
     def call(
         self,
         input_ids: tf.Tensor = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = False,
@@ -316,9 +318,9 @@ class TFDPREncoder(TFPreTrainedModel):
     def call(
         self,
         input_ids: tf.Tensor = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = False,
@@ -552,9 +554,9 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
     def call(
         self,
         input_ids=None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -639,9 +641,9 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
     def call(
         self,
         input_ids=None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -725,8 +727,8 @@ class TFDPRReader(TFDPRPretrainedReader):
     def call(
         self,
         input_ids=None,
-        attention_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: bool = None,
         output_hidden_states: bool = None,
         return_dict=None,

@@ -15,6 +15,9 @@
 
 """TFRAG model implementation."""
 
+
+from __future__ import annotations
+
 import copy
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -111,18 +114,18 @@ class TFRetrievAugLMMarginOutput(ModelOutput):
             average in the self-attention heads.
     """
 
-    loss: Optional[tf.Tensor] = None
+    loss: tf.Tensor | None = None
     logits: tf.Tensor = None
     past_key_values: Optional[List[tf.Tensor]] = None
-    doc_scores: Optional[tf.Tensor] = None
-    retrieved_doc_embeds: Optional[tf.Tensor] = None
-    retrieved_doc_ids: Optional[tf.Tensor] = None
-    context_input_ids: Optional[tf.Tensor] = None
-    context_attention_mask: Optional[tf.Tensor] = None
-    question_encoder_last_hidden_state: Optional[tf.Tensor] = None
+    doc_scores: tf.Tensor | None = None
+    retrieved_doc_embeds: tf.Tensor | None = None
+    retrieved_doc_ids: tf.Tensor | None = None
+    context_input_ids: tf.Tensor | None = None
+    context_attention_mask: tf.Tensor | None = None
+    question_encoder_last_hidden_state: tf.Tensor | None = None
     question_enc_hidden_states: Optional[Tuple[tf.Tensor]] = None
     question_enc_attentions: Optional[Tuple[tf.Tensor]] = None
-    generator_enc_last_hidden_state: Optional[tf.Tensor] = None
+    generator_enc_last_hidden_state: tf.Tensor | None = None
     generator_enc_hidden_states: Optional[Tuple[tf.Tensor]] = None
     generator_enc_attentions: Optional[Tuple[tf.Tensor]] = None
     generator_dec_hidden_states: Optional[Tuple[tf.Tensor]] = None
@@ -197,15 +200,15 @@ class TFRetrievAugLMOutput(ModelOutput):
 
     logits: tf.Tensor = None
     past_key_values: Optional[List[tf.Tensor]] = None
-    doc_scores: Optional[tf.Tensor] = None
-    retrieved_doc_embeds: Optional[tf.Tensor] = None
-    retrieved_doc_ids: Optional[tf.Tensor] = None
-    context_input_ids: Optional[tf.Tensor] = None
-    context_attention_mask: Optional[tf.Tensor] = None
-    question_encoder_last_hidden_state: Optional[tf.Tensor] = None
+    doc_scores: tf.Tensor | None = None
+    retrieved_doc_embeds: tf.Tensor | None = None
+    retrieved_doc_ids: tf.Tensor | None = None
+    context_input_ids: tf.Tensor | None = None
+    context_attention_mask: tf.Tensor | None = None
+    question_encoder_last_hidden_state: tf.Tensor | None = None
     question_enc_hidden_states: Optional[Tuple[tf.Tensor]] = None
     question_enc_attentions: Optional[Tuple[tf.Tensor]] = None
-    generator_enc_last_hidden_state: Optional[tf.Tensor] = None
+    generator_enc_last_hidden_state: tf.Tensor | None = None
     generator_enc_hidden_states: Optional[Tuple[tf.Tensor]] = None
     generator_enc_attentions: Optional[Tuple[tf.Tensor]] = None
     generator_dec_hidden_states: Optional[Tuple[tf.Tensor]] = None
@@ -545,7 +548,7 @@ class TFRagModel(TFRagPreTrainedModel):
     @replace_return_docstrings(output_type=TFRetrievAugLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         encoder_outputs: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -841,7 +844,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     @replace_return_docstrings(output_type=TFRetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -993,8 +996,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
     def generate(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[tf.Tensor] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: tf.Tensor | None = None,
         context_input_ids=None,
         context_attention_mask=None,
         doc_scores=None,
@@ -1347,7 +1350,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
     @replace_return_docstrings(output_type=TFRetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1579,8 +1582,8 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
 
     def generate(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[tf.Tensor] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: tf.Tensor | None = None,
         context_input_ids=None,
         context_attention_mask=None,
         doc_scores=None,
