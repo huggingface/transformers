@@ -13,10 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from typing import TYPE_CHECKING
 
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepiece_available
 
+
+_import_structure = {}
 
 try:
     if not is_sentencepiece_available():
