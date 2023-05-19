@@ -15,6 +15,8 @@
 # limitations under the License.
 """TF general model utils."""
 
+from __future__ import annotations
+
 import functools
 import gc
 import inspect
