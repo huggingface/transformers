@@ -22,11 +22,14 @@ import numpy as np
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import TensorType, is_torch_available
+from ...utils import TensorType, is_tf_available, is_torch_available
 
 
 if is_torch_available():
     import torch
+
+if is_tf_available():
+    import tensorflow as tf
 
 
 class SamProcessor(ProcessorMixin):
@@ -72,7 +75,7 @@ class SamProcessor(ProcessorMixin):
         # pop arguments that are not used in the foward but used nevertheless
         original_sizes = encoding_image_processor["original_sizes"]
 
-        if isinstance(original_sizes, torch.Tensor):
+        if hasattr(original_sizes, "numpy"):  # Checks if Torch or TF tensor
             original_sizes = original_sizes.numpy()
 
         input_points, input_labels, input_boxes = self._check_and_preprocess_points(
@@ -139,18 +142,30 @@ class SamProcessor(ProcessorMixin):
                 input_boxes = torch.from_numpy(input_boxes)
                 # boxes batch size of 1 by default
                 input_boxes = input_boxes.unsqueeze(1) if len(input_boxes.shape) != 3 else input_boxes
+            elif return_tensors == "tf":
+                input_boxes = tf.convert_to_tensor(input_boxes)
+                # boxes batch size of 1 by default
+                input_boxes = tf.expand_dims(input_boxes, 1) if len(input_boxes.shape) != 3 else input_boxes
             encoding_image_processor.update({"input_boxes": input_boxes})
         if input_points is not None:
             if return_tensors == "pt":
                 input_points = torch.from_numpy(input_points)
                 # point batch size of 1 by default
                 input_points = input_points.unsqueeze(1) if len(input_points.shape) != 4 else input_points
+            elif return_tensors == "tf":
+                input_points = tf.convert_to_tensor(input_points)
+                # point batch size of 1 by default
+                input_points = tf.expand_dims(input_points, 1) if len(input_points.shape) != 4 else input_points
             encoding_image_processor.update({"input_points": input_points})
         if input_labels is not None:
             if return_tensors == "pt":
                 input_labels = torch.from_numpy(input_labels)
                 # point batch size of 1 by default
                 input_labels = input_labels.unsqueeze(1) if len(input_labels.shape) != 3 else input_labels
+            elif return_tensors == "tf":
+                input_labels = tf.convert_to_tensor(input_labels)
+                # point batch size of 1 by default
+                input_labels = tf.expand_dims(input_labels, 1) if len(input_labels.shape) != 3 else input_labels
             encoding_image_processor.update({"input_labels": input_labels})
 
         return encoding_image_processor
@@ -204,7 +219,7 @@ class SamProcessor(ProcessorMixin):
         it is converted to a `numpy.ndarray` and then to a `list`.
         """
         if input_points is not None:
-            if isinstance(input_points, torch.Tensor):
+            if hasattr(input_points, "numpy"):  # Checks for TF or Torch tensor
                 input_points = input_points.numpy().tolist()
 
             if not isinstance(input_points, list) or not isinstance(input_points[0], list):
@@ -214,7 +229,7 @@ class SamProcessor(ProcessorMixin):
             input_points = None
 
         if input_labels is not None:
-            if isinstance(input_labels, torch.Tensor):
+            if hasattr(input_labels, "numpy"):
                 input_labels = input_labels.numpy().tolist()
 
             if not isinstance(input_labels, list) or not isinstance(input_labels[0], list):
@@ -224,7 +239,7 @@ class SamProcessor(ProcessorMixin):
             input_labels = None
 
         if input_boxes is not None:
-            if isinstance(input_boxes, torch.Tensor):
+            if hasattr(input_boxes, "numpy"):
                 input_boxes = input_boxes.numpy().tolist()
 
             if (
