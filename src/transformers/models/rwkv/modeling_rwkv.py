@@ -709,8 +709,12 @@ class RwkvModel(RwkvPreTrainedModel):
                         block.attention.output.weight.mul_(2 ** int(block_id // self.config.rescale_every))
                         block.feed_forward.value.weight.mul_(2 ** int(block_id // self.config.rescale_every))
                     else:
-                        block.attention.output.weight.div_(2 ** int(block_id // self.config.rescale_every))
-                        block.feed_forward.value.weight.div_(2 ** int(block_id // self.config.rescale_every))
+                        if hasattr(block.attention.output.weight, "SCB"):
+                            block.attention.output.weight.SCB.div_(2 ** int(block_id // self.config.rescale_every))
+                            block.feed_forward.value.weight.SCB.div_(2 ** int(block_id // self.config.rescale_every))
+                        else:
+                            block.attention.output.weight.div_(2 ** int(block_id // self.config.rescale_every))
+                            block.feed_forward.value.weight.div_(2 ** int(block_id // self.config.rescale_every))
 
         self.layers_are_rescaled = not self.training
 
