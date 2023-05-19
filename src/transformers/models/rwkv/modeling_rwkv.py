@@ -709,6 +709,7 @@ class RwkvModel(RwkvPreTrainedModel):
                         block.attention.output.weight.mul_(2 ** int(block_id // self.config.rescale_every))
                         block.feed_forward.value.weight.mul_(2 ** int(block_id // self.config.rescale_every))
                     else:
+                        # Deal with quantization statistics
                         if hasattr(block.attention.output.weight, "SCB"):
                             block.attention.output.weight.SCB.div_(2 ** int(block_id // self.config.rescale_every))
                             block.feed_forward.value.weight.SCB.div_(2 ** int(block_id // self.config.rescale_every))
