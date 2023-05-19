@@ -89,15 +89,26 @@ class MplugOwlModelTester:
         input_ids[:, -1] = self.eos_token_id  # Eos Token
 
         config = MplugOwlConfig(
+            vision_config={
+                "hidden_size": self.hidden_size,
+                "intermediate_size": self.intermediate_size,
+                "projection_dim": self.hidden_size,
+                "num_hidden_layers": self.num_hidden_layers,
+                "num_attention_heads": self.num_attention_heads,
+            },
+            visual_abstractor_config={
+                "hidden_size": self.hidden_size,
+                "intermediate_size": self.intermediate_size,
+                "projection_dim": self.hidden_size,
+                "num_hidden_layers": self.num_hidden_layers,
+                "num_attention_heads": self.num_attention_heads,
+            },
             text_config={
                 "vocab_size": self.vocab_size,
-                "d_model": self.hidden_size,
-                "encoder_layers": self.num_hidden_layers,
-                "decoder_layers": self.num_hidden_layers,
-                "encoder_attention_heads": self.num_attention_heads,
-                "decoder_attention_heads": self.num_attention_heads,
-                "encoder_ffn_dim": self.intermediate_size,
-                "decoder_ffn_dim": self.intermediate_size,
+                "hidden_size": self.hidden_size,
+                "num_hidden_layers": self.num_hidden_layers,
+                "num_attention_heads": self.num_attention_heads,
+                "intermediate_size": self.intermediate_size,
                 "dropout": self.hidden_dropout_prob,
                 "attention_dropout": self.attention_probs_dropout_prob,
                 "max_position_embeddings": self.max_position_embeddings,
@@ -106,6 +117,7 @@ class MplugOwlModelTester:
                 "pad_token_id": self.pad_token_id,
             },
         )
+        print(config)
         mask_shape = (input_ids.shape[0], input_ids.shape[1] - 1)
         inputs_dict = {
             "input_ids": input_ids.long(),
