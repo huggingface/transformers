@@ -2635,17 +2635,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if load_in_8bit or load_in_4bit:
             from .utils.bitsandbytes import get_keys_to_not_convert, replace_with_bnb_linear
 
-            llm_int8_skippnmodules = quantization_config.llm_int8_skippnmodules
+            bnb_kbit_skip_modules = quantization_config.bnb_kbit_skip_modules
             load_in_8bit_threshold = quantization_config.llm_int8_threshold
             load_in_8bit_fp32_cpu_offload = quantization_config.llm_int8_enable_fp32_cpu_offload
 
             logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
 
             # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
-            if llm_int8_skippnmodules is None:
+            if bnb_kbit_skip_modules is None:
                 modules_to_not_convert = get_keys_to_not_convert(model)
             else:
-                modules_to_not_convert = llm_int8_skippnmodules
+                modules_to_not_convert = bnb_kbit_skip_modules
 
             if not isinstance(modules_to_not_convert, list):
                 modules_to_not_convert = [modules_to_not_convert]
