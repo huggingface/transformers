@@ -246,7 +246,9 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
 
         self.do_lower_case = do_lower_case
 
-    def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None) -> List[int]:
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A BERT sequence has the following format:

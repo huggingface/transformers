@@ -392,8 +392,8 @@ class BasicTokenizer(object):
         do_lower_case: bool = True,
         never_split: Optional[Iterable[str]] = None,
         tokenize_chinese_chars: bool = True,
-        strip_accents: Optional[str] = None
-        ):
+        strip_accents: Optional[str] = None,
+    ):
         if never_split is None:
             never_split = []
         self.do_lower_case = do_lower_case
