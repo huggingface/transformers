@@ -171,16 +171,7 @@ class TFEfficientFormerSelfAttention(tf.keras.layers.Layer):
     def call(
         self, hidden_states: tf.Tensor, output_attentions: bool = False, training: bool = False
     ) -> Tuple[tf.Tensor]:
-        if training and hasattr(self, "ab"):
-            del self.ab
-        else:
-            self.ab = tf.gather(params=self.attention_biases, indices=self.attention_bias_idxs, axis=1)
-
-        batch_size, sequence_length, _ = (
-            shape_list(hidden_states)[0],
-            shape_list(hidden_states)[1],
-            shape_list(hidden_states)[2],
-        )
+        batch_size, sequence_length, _* = shape_list(hidden_states)
         qkv = self.qkv(inputs=hidden_states)
 
         query_layer, key_layer, value_layer = tf.split(
@@ -197,11 +188,9 @@ class TFEfficientFormerSelfAttention(tf.keras.layers.Layer):
         scale = tf.cast(self.scale, dtype=attention_probs.dtype)
         attention_probs = tf.multiply(attention_probs, scale)
 
-        if training:
-            x = tf.gather(params=self.attention_biases, indices=self.attention_bias_idxs, axis=1)
-        else:
-            x = self.ab
-        attention_probs = attention_probs + x
+
+        attention_biases = tf.gather(params=self.attention_biases, indices=self.attention_bias_idxs, axis=1)
+        attention_probs = attention_probs + attention_biases
         attention_probs = stable_softmax(logits=attention_probs, axis=-1)
 
         context_layer = tf.matmul(attention_probs, value_layer)
