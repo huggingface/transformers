@@ -1305,7 +1305,7 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
             self.language_model.encoder.embed_tokens = self.language_model.shared
             self.language_model.decoder.embed_tokens = self.language_model.shared
 
-    # Copied from transformers.models.blip_2.modeling_blip_2._preprocess_accelerate
+    # Copied from transformers.models.blip_2.modeling_blip_2.Blip2ForConditionalGeneration._preprocess_accelerate
     def _preprocess_accelerate(self):
         r"""
         Some pre-processing hacks to make the model `accelerate` compatible. Check
@@ -1314,7 +1314,7 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         hf_device_map = self.hf_device_map
 
         if len(hf_device_map) > 1 and "language_model" not in hf_device_map and torch.cuda.device_count() > 1:
-            # warn users about unexpected behavior when using multi-GPU + mPLUG-Owl + `accelerate`.
+            # warn users about unexpected behavior when using multi-GPU + BLIP-2 + `accelerate`.
             logger.warning(
                 "The `language_model` is not in the `hf_device_map` dictionary and you are running your script"
                 " in a multi-GPU environment. this may lead to unexpected behavior when using `accelerate`."
@@ -1325,7 +1325,7 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
 
         if hasattr(self.language_model, "_hf_hook"):
             self.language_model._hf_hook.io_same_device = True  # For `generate` compatibility
-
+ 
     @add_start_docstrings_to_model_forward(MPLUG_OWL_INPUTS_DOCSTRING)
     @replace_return_docstrings(
         output_type=MplugOwlForConditionalGenerationModelOutput, config_class=MplugOwlVisionConfig
