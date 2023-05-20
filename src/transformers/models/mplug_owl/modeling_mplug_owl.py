@@ -1347,6 +1347,8 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MplugOwlForConditionalGenerationModelOutput]:
         r"""
+        Returns:
+
         Example:
 
         ```python
