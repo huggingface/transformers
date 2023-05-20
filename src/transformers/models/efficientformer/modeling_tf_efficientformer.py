@@ -188,7 +188,6 @@ class TFEfficientFormerSelfAttention(tf.keras.layers.Layer):
         scale = tf.cast(self.scale, dtype=attention_probs.dtype)
         attention_probs = tf.multiply(attention_probs, scale)
 
-
         attention_biases = tf.gather(params=self.attention_biases, indices=self.attention_bias_idxs, axis=1)
         attention_probs = attention_probs + attention_biases
         attention_probs = stable_softmax(logits=attention_probs, axis=-1)
@@ -852,10 +851,13 @@ class TFEfficientFormerModel(TFEfficientFormerPreTrainedModel):
         return outputs
 
     def serving_output(self, output: TFBaseModelOutput) -> TFBaseModelOutput:
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
+        hidden_states = output.hidden_states if self.config.output_hidden_states else None
+        attentions = output.attentions if self.config.output_attentions else None
         return TFBaseModelOutput(
             last_hidden_state=output.last_hidden_state,
-            hidden_states=output.hidden_states,
-            attentions=output.attentions,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )
 
 
@@ -928,9 +930,10 @@ class TFEfficientFormerForImageClassification(TFEfficientFormerPreTrainedModel, 
         )
 
     def serving_output(self, output: TFImageClassifierOutput) -> TFImageClassifierOutput:
-        return TFImageClassifierOutput(
-            logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions
-        )
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
+        hidden_states = output.hidden_states if self.config.output_hidden_states else None
+        attentions = output.attentions if self.config.output_attentions else None
+        return TFImageClassifierOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
 
 
 @dataclass
@@ -1046,10 +1049,13 @@ class TFEfficientFormerForImageClassificationWithTeacher(TFEfficientFormerPreTra
     def serving_output(
         self, output: TFEfficientFormerForImageClassificationWithTeacherOutput
     ) -> TFEfficientFormerForImageClassificationWithTeacherOutput:
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
+        hidden_states = output.hidden_states if self.config.output_hidden_states else None
+        attentions = output.attentions if self.config.output_attentions else None
         return TFEfficientFormerForImageClassificationWithTeacherOutput(
             logits=output.logits,
             cls_logits=output.cls_logits,
             distillation_logits=output.distillation_logits,
-            hidden_states=output.hidden_states,
-            attentions=output.attentions,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )
