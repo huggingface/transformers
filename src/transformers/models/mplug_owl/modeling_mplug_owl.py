@@ -1349,35 +1349,39 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import MplugOwlProcessor, MplugOwlForConditionalGeneration
-        >>> import torch
 
-        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+        ```
 
-        >>> processor = MplugOwlProcessor.from_pretrained("MAGAer13/mplug-owl-llama-7b")
-        >>> model = MplugOwlForConditionalGeneration.from_pretrained(
-        ...     "MAGAer13/mplug-owl-llama-7b", torch_dtype=torch.float16
-        ... )
-        >>> model.to(device)  # doctest: +IGNORE_RESULT
+                ```python
+                >>> from PIL import Image
+                >>> import requests
+                >>> from transformers import MplugOwlProcessor, MplugOwlForConditionalGeneration
+                >>> import torch
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+                >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        >>> prompt = [
-        ...     "The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.\nHuman: <image>\nHuman: how many cats are there?\nAI: "
-        ... ]
-        >>> inputs = processor(images=[image], text=prompt, return_tensors="pt").to(device, torch.float16)
+                >>> processor = MplugOwlProcessor.from_pretrained("MAGAer13/mplug-owl-llama-7b")
+                >>> model = MplugOwlForConditionalGeneration.from_pretrained(
+                ...     "MAGAer13/mplug-owl-llama-7b", torch_dtype=torch.float16
+                ... )
+                >>> model.to(device)  # doctest: +IGNORE_RESULT
 
-        >>> generated_ids = model.generate(**inputs)
-        >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
-        >>> print(generated_text)
-        There are two cats in the image.
-        ```"""
+                >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+                >>> image = Image.open(requests.get(url, stream=True).raw)
+
+                >>> prompt = [
+                ...     "The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.\nHuman: <image>\nHuman: how many cats are there?\nAI: "
+                ... ]
+                >>> inputs = processor(images=[image], text=prompt, return_tensors="pt").to(device, torch.float16)
+
+                >>> generated_ids = model.generate(**inputs)
+                >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
+                >>> print(generated_text)
+                There are two cats in the image.
+                ```"""
         if pixel_values is not None:
             pixel_values = pixel_values.to(self.vision_model.embeddings.cls_token.data.dtype)
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1422,7 +1426,6 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
                 result.append(text_embeds[b, start:])
 
             img_idx += num_images_per_sample[b]
-            print(result)
             text_chunk_embeds.append(torch.cat(result, dim=0))
 
         # Actual Input Embeddings
