@@ -1442,16 +1442,6 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         # Actual Input Embeddings
         input_embeds = torch.stack(text_chunk_embeds, dim=0)
 
-        # if pixel_values is None and self.language_model.is_gradient_checkpointing:
-        #     # Hack here when gradient checkpoint is enable.
-        #     # Keep the compute graph static
-        #     image_embeds = self.vision_model(torch.zeros(1,3,224,224,device=input_embeds.device,dtype=input_embeds.dtype), return_dict=True).last_hidden_state
-        #     query_tokens = self.query_tokens.expand(
-        #         image_embeds.shape[0], -1, -1)
-        #     query_features = self.abstractor(query_embeds=query_tokens,
-        #     encoder_hidden_states=image_embeds,)['last_hidden_state']
-
-        #     input_embeds = input_embeds + query_features.mean()*0
 
         # Create causal mask and position ids
         _, loss_mask, position_ids = get_ltor_masks_and_position_ids_from_embeddings(input_embeds)
