@@ -21,8 +21,8 @@ from pathlib import Path
 FILES_TO_FIND = [
     "kernels/rwkv/wkv_cuda.cu",
     "kernels/rwkv/wkv_op.cpp",
-    "models/deformable_detr/custom_kernel/ms_deform_attn.h",
-    "models/deformable_detr/custom_kernel/cuda/ms_deform_im2col_cuda.cuh",
+    "kernels/deformable_detr/ms_deform_attn.h",
+    "kernels/deformable_detr/cuda/ms_deform_im2col_cuda.cuh",
     "models/graphormer/algos_graphormer.pyx",
 ]
 
