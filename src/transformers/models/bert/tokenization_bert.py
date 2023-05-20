@@ -114,7 +114,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 }
 
 
-def load_vocab(vocab_file):
+def load_vocab(vocab_file: str) -> collections.OrderedDict:
     """Loads a vocabulary file into a dictionary."""
     vocab = collections.OrderedDict()
     with open(vocab_file, "r", encoding="utf-8") as reader:
@@ -125,7 +125,7 @@ def load_vocab(vocab_file):
     return vocab
 
 
-def whitespace_tokenize(text):
+def whitespace_tokenize(text: str) -> List[str]:
     """Runs basic whitespace cleaning and splitting on a piece of text."""
     text = text.strip()
     if not text:
@@ -171,7 +171,7 @@ class BertTokenizer(PreTrainedTokenizer):
 
             This should likely be deactivated for Japanese (see this
             [issue](https://github.com/huggingface/transformers/issues/328)).
-        strip_accents (`bool`, *optional*):
+        strip_accents (`str`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
     """
@@ -183,17 +183,17 @@ class BertTokenizer(PreTrainedTokenizer):
 
     def __init__(
         self,
-        vocab_file,
-        do_lower_case=True,
-        do_basic_tokenize=True,
-        never_split=None,
-        unk_token="[UNK]",
-        sep_token="[SEP]",
-        pad_token="[PAD]",
-        cls_token="[CLS]",
-        mask_token="[MASK]",
-        tokenize_chinese_chars=True,
-        strip_accents=None,
+        vocab_file: str,
+        do_lower_case: bool = True,
+        do_basic_tokenize: bool = True,
+        never_split: Optional[Iterable[str]] = None,
+        unk_token: str = "[UNK]",
+        sep_token: str = "[SEP]",
+        pad_token: str = "[PAD]",
+        cls_token: str = "[CLS]",
+        mask_token: str = "[MASK]",
+        tokenize_chinese_chars: str = True,
+        strip_accents: Optional[str] = None,
         **kwargs,
     ):
         super().__init__(
@@ -235,7 +235,7 @@ class BertTokenizer(PreTrainedTokenizer):
     def vocab_size(self):
         return len(self.vocab)
 
-    def get_vocab(self):
+    def get_vocab(self) -> dict:
         return dict(self.vocab, **self.added_tokens_encoder)
 
     def _tokenize(self, text):
@@ -382,12 +382,18 @@ class BasicTokenizer(object):
 
             This should likely be deactivated for Japanese (see this
             [issue](https://github.com/huggingface/transformers/issues/328)).
-        strip_accents (`bool`, *optional*):
+        strip_accents (`str`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
     """
 
-    def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
+    def __init__(
+        self,
+        do_lower_case: bool = True,
+        never_split: Optional[Iterable[str]] = None,
+        tokenize_chinese_chars: bool = True,
+        strip_accents Optional[str] = None
+        ):
         if never_split is None:
             never_split = []
         self.do_lower_case = do_lower_case
@@ -395,7 +401,7 @@ class BasicTokenizer(object):
         self.tokenize_chinese_chars = tokenize_chinese_chars
         self.strip_accents = strip_accents
 
-    def tokenize(self, text, never_split=None):
+    def tokenize(self, text: str, never_split: Optional[List[str]] = None):
         """
         Basic Tokenization of a piece of text. Split on "white spaces" only, for sub-word tokenization, see
         WordPieceTokenizer.
@@ -519,12 +525,12 @@ class BasicTokenizer(object):
 class WordpieceTokenizer(object):
     """Runs WordPiece tokenization."""
 
-    def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
+    def __init__(self, vocab: collections.OrderedDict, unk_token: str, max_input_chars_per_word: int = 100):
         self.vocab = vocab
         self.unk_token = unk_token
         self.max_input_chars_per_word = max_input_chars_per_word
 
-    def tokenize(self, text):
+    def tokenize(self, text: str) -> List[str]:
         """
         Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
         tokenization using the given vocabulary.

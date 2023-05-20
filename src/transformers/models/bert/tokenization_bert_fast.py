@@ -191,7 +191,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see [this
             issue](https://github.com/huggingface/transformers/issues/328)).
-        strip_accents (`bool`, *optional*):
+        strip_accents (`str`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
         wordpieces_prefix (`str`, *optional*, defaults to `"##"`):
@@ -206,16 +206,16 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file=None,
-        tokenizer_file=None,
-        do_lower_case=True,
-        unk_token="[UNK]",
-        sep_token="[SEP]",
-        pad_token="[PAD]",
-        cls_token="[CLS]",
-        mask_token="[MASK]",
-        tokenize_chinese_chars=True,
-        strip_accents=None,
+        vocab_file: Optional[str] = None,
+        tokenizer_file Optional[str] = None,
+        do_lower_case: bool = True,
+        unk_token: str = "[UNK]",
+        sep_token: str = "[SEP]",
+        pad_token: str = "[PAD]",
+        cls_token: str = "[CLS]",
+        mask_token: str = "[MASK]",
+        tokenize_chinese_chars: bool = True,
+        strip_accents: Optional[str] = None,
         **kwargs,
     ):
         super().__init__(
@@ -246,7 +246,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
 
         self.do_lower_case = do_lower_case
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+    def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A BERT sequence has the following format:
