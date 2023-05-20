@@ -45,6 +45,12 @@ Keywords: Database, low-code, AI table
 
 Keywords: LLMs, Large Language Models, Agents, Chains
 
+## [LlamaIndex](https://github.com/jerryjliu/llama_index)
+
+[LlamaIndex](https://github.com/jerryjliu/llama_index) is a project that provides a central interface to connect your LLM's with external data. It provides various kinds of indices and retreival mechanisms to perform different LLM tasks and obtain knowledge-augmented results.
+
+Keywords: LLMs, Large Language Models, Data Retrieval, Indices, Knowledge Augmentation 
+
 ## [ParlAI](https://github.com/facebookresearch/ParlAI)
 
 [ParlAI](https://github.com/facebookresearch/ParlAI) is a python framework for sharing, training and testing dialogue models, from open-domain chitchat, to task-oriented dialogue, to visual question answering. It provides more than 100 datasets under the same API, a large zoo of pretrained models, a set of agents, and has several integrations.
