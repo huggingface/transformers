@@ -171,7 +171,7 @@ class TFEfficientFormerSelfAttention(tf.keras.layers.Layer):
     def call(
         self, hidden_states: tf.Tensor, output_attentions: bool = False, training: bool = False
     ) -> Tuple[tf.Tensor]:
-        batch_size, sequence_length, _* = shape_list(hidden_states)
+        batch_size, sequence_length, *_ = shape_list(hidden_states)
         qkv = self.qkv(inputs=hidden_states)
 
         query_layer, key_layer, value_layer = tf.split(
