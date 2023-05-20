@@ -117,7 +117,6 @@ class MplugOwlModelTester:
                 "pad_token_id": self.pad_token_id,
             },
         )
-        print(config)
         mask_shape = (input_ids.shape[0], input_ids.shape[1] - 1)
         inputs_dict = {
             "input_ids": input_ids.long(),
