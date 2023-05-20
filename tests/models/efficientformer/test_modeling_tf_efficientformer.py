@@ -54,12 +54,12 @@ class TFEfficientFormerModelTester:
         batch_size: int = 13,
         image_size: int = 224,
         patch_size: int = 2,
-        embed_dim: int = 48,  # last embed dim of stem
+        embed_dim: int = 48,
         num_channels: int = 3,
         is_training: bool = True,
         use_labels: bool = True,
         hidden_size: int = 448,
-        num_hidden_layers: int = 7,  # For the l1
+        num_hidden_layers: int = 7,
         num_attention_heads: int = 8,
         intermediate_size: int = 37,
         hidden_act: str = "gelu",
@@ -68,7 +68,7 @@ class TFEfficientFormerModelTester:
         type_sequence_label_size: int = 10,
         initializer_range: float = 0.02,
         encoder_stride: int = 2,
-        num_attention_outputs: int = 1,  # For l1
+        num_attention_outputs: int = 1,
     ):
         self.parent = parent
         self.batch_size = batch_size
