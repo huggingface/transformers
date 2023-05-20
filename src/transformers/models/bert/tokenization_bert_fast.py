@@ -207,7 +207,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
     def __init__(
         self,
         vocab_file: Optional[str] = None,
-        tokenizer_file Optional[str] = None,
+        tokenizer_file: Optional[str] = None,
         do_lower_case: bool = True,
         unk_token: str = "[UNK]",
         sep_token: str = "[SEP]",

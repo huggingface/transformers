@@ -18,7 +18,7 @@
 import collections
 import os
 import unicodedata
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Iterable
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
@@ -392,7 +392,7 @@ class BasicTokenizer(object):
         do_lower_case: bool = True,
         never_split: Optional[Iterable[str]] = None,
         tokenize_chinese_chars: bool = True,
-        strip_accents Optional[str] = None
+        strip_accents: Optional[str] = None
         ):
         if never_split is None:
             never_split = []
