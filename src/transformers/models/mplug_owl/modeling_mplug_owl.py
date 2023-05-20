@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 x-plug The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 x-plug The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1340,7 +1340,7 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         r"""
         Returns:
 
-        SFT example:
+        Example::
 
         ```python
         >>> from PIL import Image
@@ -1375,15 +1375,12 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         # get text embedding
         text_tokens_ = input_ids.clone()
         batch_size = input_ids.shape[0]
-        # labels = text_tokens_[:, 1:].clone().contiguous()
 
         media_token_indices = [
-            # [:-1] since we would not use the last token for embedding
             get_media_indices(text_tokens_[i][:-1])
             for i in range(batch_size)
         ]
         text_tokens_[text_tokens_ < 0] = 1  # Not used
-        # text_tokens = text_tokens_[:, :-1].contiguous()
         text_embeds = self.get_input_embeddings()(text_tokens_)  # Temporally Embedding
 
         if pixel_values is not None:
@@ -1454,7 +1451,6 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
             return_dict=return_dict,
             output_attentions=self.config.output_attentions,
         )
-
         return outputs
 
     @torch.no_grad()

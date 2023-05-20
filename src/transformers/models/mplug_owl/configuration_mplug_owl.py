@@ -195,7 +195,7 @@ class MplugOwlConfig(PretrainedConfig):
             Dictionary of configuration options used to initialize [`MplugOwlVisualAbstractorConfig`].
         text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize any [`PretrainedConfig`].
-        num_query_tokens (`int`, *optional*, defaults to 32):
+        num_query_tokens (`int`, *optional*, defaults to 64):
             The number of query tokens passed through the Transformer.
 
         kwargs (*optional*):
