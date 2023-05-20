@@ -128,15 +128,14 @@ class MixedInt8Test(BaseMixedInt8Test):
         A simple test to check if the model conversion has been done correctly by checking on the
         memory footprint of the converted model and the class type of the linear layers of the converted models
         """
-        from bitsandbytes.nn import Int8Params
         from transformers import T5PreTrainedModel
 
-        mem_fp16 = self.model_fp16.get_memory_footprint()
-        mem_8bit = self.model_8bit.get_memory_footprint()
+        self.model_fp16.get_memory_footprint()
+        self.model_8bit.get_memory_footprint()
 
         for name, module in self.model_8bit.named_modules():
             if isinstance(module, torch.nn.Linear):
-                if name not in ['lm_head'] + T5PreTrainedModel._keep_in_fp32_modules:
+                if name not in ["lm_head"] + T5PreTrainedModel._keep_in_fp32_modules:
                     self.assertTrue(module.weight.dtype == torch.int8)
 
     def test_generate_quality(self):
