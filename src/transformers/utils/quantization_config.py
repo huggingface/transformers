@@ -54,7 +54,7 @@ class BitsAndBytesConfig:
             These outliers are often in the interval [-60, -6] or [6, 60]. Int8 quantization works well for values of
             magnitude ~5, but beyond that, there is a significant performance penalty. A good default threshold is 6,
             but a lower threshold might be needed for more unstable models (small models, fine-tuning).
-        llm_int8_skip_modules (`List[str]`, *optional*):
+        bnb_kbit_skip_modules (`List[str]`, *optional*):
             An explicit list of the modules that we do not want to convert in 8-bit. This is useful for models such as
             Jukebox that has several heads in different places and not necessarily at the last position. For example
             for `CausalLM` models, the last `lm_head` is kept in its original `dtype`.
@@ -84,7 +84,7 @@ class BitsAndBytesConfig:
         load_in_8bit=False,
         load_in_4bit=False,
         llm_int8_threshold=6.0,
-        llm_int8_skip_modules=None,
+        bnb_kbit_skip_modules=None,
         llm_int8_enable_fp32_cpu_offload=False,
         llm_int8_has_fp16_weight=False,
         bnb_4bit_compute_dtype=torch.float32,
@@ -95,7 +95,7 @@ class BitsAndBytesConfig:
         self.load_in_8bit = load_in_8bit
         self.load_in_4bit = load_in_4bit
         self.llm_int8_threshold = llm_int8_threshold
-        self.llm_int8_skip_modules = llm_int8_skip_modules
+        self.bnb_kbit_skip_modules = bnb_kbit_skip_modules
         self.llm_int8_enable_fp32_cpu_offload = llm_int8_enable_fp32_cpu_offload
         self.llm_int8_has_fp16_weight = llm_int8_has_fp16_weight
         self.bnb_4bit_compute_dtype = bnb_4bit_compute_dtype
