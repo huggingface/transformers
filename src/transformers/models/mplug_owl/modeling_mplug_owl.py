@@ -208,8 +208,7 @@ class MplugOwlVisionAttention(nn.Module):
             mixed_qkv[1],
             mixed_qkv[2],
         )
-        # if self.config.use_flash_attn and flash_attn_func is not None:
-        if False:
+       if self.config.use_flash_attn and flash_attn_func is not None:
             # [b*sq, np, hn]
             query_states = query_states.permute(0, 2, 1, 3).contiguous()
             query_states = query_states.view(query_states.size(0) * query_states.size(1), query_states.size(2), -1)
