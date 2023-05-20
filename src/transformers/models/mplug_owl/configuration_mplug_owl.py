@@ -120,7 +120,21 @@ class MplugOwlVisionConfig(PretrainedConfig):
 
 class MplugOwlVisualAbstractorConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MplugOwlVisionAbstractor`].
+    This is the configuration class to store the configuration of a [`MplugOwlVisionAbstractor`].  It is used to instantiate
+    a mPLUG-Owl vision abstractor according to the specified arguments.
+    Args:
+         hidden_size (`int`, *optional*, defaults to 1024):
+             Dimensionality of the crossattention layers.
+         num_hidden_layers (`int`, *optional*, defaults to 6):
+             Number of hidden layers in the VisualAbstractor.
+         num_attention_heads (`int`, *optional*, defaults to 16):
+             Number of attention heads for each attention layer in the VisualAbstractor.
+         intermediate_size (`int`, *optional*, defaults to 2816):
+             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the VisualAbstractor.
+         initializer_range (`float`, *optional*, defaults to 0.02):
+             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+             The epsilon used by the layer normalization layers.
     """
     model_type = "mplug_owl_visual_abstract"
 
@@ -129,7 +143,7 @@ class MplugOwlVisualAbstractorConfig(PretrainedConfig):
         hidden_size=1024,
         num_hidden_layers=6,
         num_attention_heads=16,
-        intermediate_size=4096,
+        intermediate_size=2816,
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
         layer_norm_eps=1e-6,

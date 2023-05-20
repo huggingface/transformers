@@ -9,36 +9,26 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-
 # mPLUG-Owl
 
 ## Overview
 
-The  mPLUG-Owl model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>)  by <INSERT AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
+The mPLUG-Owl model was proposed in [mPLUG-Owl: Modularization Empowers Large Language Models with Multimodality](https://arxiv.org/abs/2304.14178)  by Qinghao Ye, Haiyang Xu, Guohai Xu, Jiabo Ye, Ming Yan, Yiyang Zhou, Junyang Wang, Anwen Hu, Pengcheng Shi, Yaya Shi, Chenliang Li, Yuanhong Xu, Hehong Chen, Junfeng Tian, Qian Qi, Ji Zhang, Fei Huang. mPLUG-Owl is a large multi-modal language model with a modularized design. It supports multi-turn conversation with different modalities such as images, videos, and texts. The model has also demonstrated abilities in multi-image correlation, scene text understanding, and vision-based document comprehension.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*Large language models (LLMs) have demonstrated impressive zero-shot abilities on a variety of open-ended tasks, while recent research has also explored the use of LLMs for multi-modal generation. In this study, we introduce mPLUG-Owl, a novel training paradigm that equips LLMs with multi-modal abilities through modularized learning of foundation LLM, a visual knowledge module, and a visual abstractor module. This approach can support multiple modalities and facilitate diverse unimodal and multimodal abilities through modality collaboration. The training paradigm of mPLUG-Owl involves a two-stage method for aligning image and text, which learns visual knowledge with the assistance of LLM while maintaining and even improving the generation abilities of LLM. In the first stage, the visual knowledge module and abstractor module are trained with a frozen LLM module to align the image and text. In the second stage, language-only and multi-modal supervised datasets are used to jointly fine-tune a low-rank adaption (LoRA) module on LLM and the abstractor module by freezing the visual knowledge module. We carefully build a visually-related instruction evaluation set OwlEval. Experimental results show that our model outperforms existing multi-modal models, demonstrating mPLUG-Owl's impressive instruction and visual understanding ability, multi-turn conversation ability, and knowledge reasoning ability. Besides, we observe some unexpected and exciting abilities such as multi-image correlation and scene text understanding, which makes it possible to leverage it for harder real scenarios, such as vision-only document comprehension.*
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+- mPLUG-Owl can be used for conditional text generation. At inference time, it's recommended to use the [`generate`] method. 
+- One can use [`MplugOwlProcessor`] to prepare images for the model, and decode the predicted tokens ID's back to text.
+MAGAer13/mplug-owl-llama-7b-ft
+This model was contributed by [MAGAer13](<https://huggingface.co/MAGAer13). The original code can be found [here](https://github.com/X-PLUG/mPLUG-Owl).
 
 ## MplugOwlConfig
 
 [[autodoc]] MplugOwlConfig
-
-
-## MplugOwlTokenizer
-
-[[autodoc]] MplugOwlTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-
 
 ## MplugOwlVisionConfig
 
@@ -48,10 +38,6 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingfac
 ## MplugOwlVisualAbstractorConfig
 
 [[autodoc]] MplugOwlVisualAbstractorConfig
-
-## MplugOwlImageProcessor
-
-[[autodoc]] MplugOwlImageProcessor
 
 ## MplugOwlProcessor
 

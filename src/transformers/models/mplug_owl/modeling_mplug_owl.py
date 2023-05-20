@@ -18,15 +18,11 @@ import math
 from typing import Any, Optional, Tuple, Union
 
 import torch
+from transformers.utils.import_utils import is_flashattention_available
+if is_flashattention_available():
+    from flash_attn.flash_attn_interface import flash_attn_unpadded_func as flash_attn_func
 
 
-try:
-    from flash_attn.flash_attn_interface import flash_attn_unpadded_func
-
-    flash_attn_func = flash_attn_unpadded_func
-except ImportError:
-    flash_attn_func = None
-    print("install flash-attn first.")
 from dataclasses import dataclass
 
 import torch.utils.checkpoint
@@ -44,7 +40,7 @@ from ...utils import (
 )
 from ..auto import AutoModelForCausalLM
 from .configuration_mplug_owl import MplugOwlConfig, MplugOwlVisionConfig, MplugOwlVisualAbstractorConfig
-
+from transformers.activations import QuickGELUActivation
 
 logger = logging.get_logger(__name__)
 
@@ -208,8 +204,7 @@ class MplugOwlVisionAttention(nn.Module):
             mixed_qkv[1],
             mixed_qkv[2],
         )
-        # if self.config.use_flash_attn and flash_attn_func is not None:
-        if False:
+        if self.config.use_flash_attn and is_flashattention_available():
             # [b*sq, np, hn]
             query_states = query_states.permute(0, 2, 1, 3).contiguous()
             query_states = query_states.view(query_states.size(0) * query_states.size(1), query_states.size(2), -1)
@@ -267,17 +262,11 @@ class MplugOwlVisionAttention(nn.Module):
 
         return outputs
 
-
-class QuickGELU(nn.Module):
-    def forward(self, x: torch.Tensor):
-        return x * torch.sigmoid(1.702 * x)
-
-
 class MplugOwlMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.activation_fn = QuickGELU()
+        self.activation_fn = QuickGELUActivation()
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
@@ -670,16 +659,12 @@ class MplugOwlVisualAbstractorMLP(nn.Module):
         super().__init__()
         self.config = config
         in_features = config.hidden_size
-        hidden_features = config.intermediate_size
-        hidden_features = int(2 * hidden_features / 3)
-        multiple_of = 256
-        hidden_features = multiple_of * ((hidden_features + multiple_of - 1) // multiple_of)
         self.act = nn.SiLU()
 
-        self.w1 = nn.Linear(in_features, hidden_features)
-        self.w2 = nn.Linear(hidden_features, in_features)
-        self.w3 = nn.Linear(in_features, hidden_features)
-        self.ffn_ln = LayerNormFp32(hidden_features, eps=config.layer_norm_eps)
+        self.w1 = nn.Linear(in_features, config.intermediate_size)
+        self.w2 = nn.Linear(config.intermediate_size, in_features)
+        self.w3 = nn.Linear(in_features, config.intermediate_size)
+        self.ffn_ln = LayerNormFp32(config.intermediate_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.act(self.w1(hidden_states)) * self.w3(hidden_states)
@@ -971,7 +956,6 @@ class MplugOwlVisualAbstractorModel(MplugOwlPreTrainedModel):
         self.encoder = MplugOwlVisualAbstractorEncoder(config)
         self.visual_fc = torch.nn.Linear(config.hidden_size, language_hidden_size)
         self.vit_eos = torch.nn.Parameter(torch.randn(1, 1, language_hidden_size))
-        nn.init.trunc_normal_(self.vit_eos, mean=0.0, std=self.config.initializer_range)
         self.post_init()
 
     def _prune_heads(self, heads_to_prune):
@@ -1148,13 +1132,7 @@ class MplugOwlModel(MplugOwlPreTrainedModel):
         self.abstractor = MplugOwlVisualAbstractorModel(
             config.visual_abstractor_config, config.text_config.hidden_size
         )
-
-        # if config.use_decoder_only_language_model:
-        # from llama.modeling_llama import LlamaForCausalLM
         language_model = AutoModelForCausalLM.from_config(config.text_config)
-        # language_model = AutoModelForCausalLM.from_pretrained('/nas-alinlp/butyuhao/llama-7b-hf')
-        # else:
-        #     language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
         self.language_model = language_model
 
         # Initialize weights and apply final processing
@@ -1317,7 +1295,8 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         if not self.config.use_decoder_only_language_model:
             self.language_model.encoder.embed_tokens = self.language_model.shared
             self.language_model.decoder.embed_tokens = self.language_model.shared
-
+    
+    # Copied from transformers.models.blip_2.modeling_blip_2._preprocess_accelerate 
     def _preprocess_accelerate(self):
         r"""
         Some pre-processing hacks to make the model `accelerate` compatible. Check
@@ -1446,17 +1425,6 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         # Actual Input Embeddings
         input_embeds = torch.stack(text_chunk_embeds, dim=0)
 
-        # if pixel_values is None and self.language_model.is_gradient_checkpointing:
-        #     # Hack here when gradient checkpoint is enable.
-        #     # Keep the compute graph static
-        #     image_embeds = self.vision_model(torch.zeros(1,3,224,224,device=input_embeds.device,dtype=input_embeds.dtype), return_dict=True).last_hidden_state
-        #     query_tokens = self.query_tokens.expand(
-        #         image_embeds.shape[0], -1, -1)
-        #     query_features = self.abstractor(query_embeds=query_tokens,
-        #     encoder_hidden_states=image_embeds,)['last_hidden_state']
-
-        #     input_embeds = input_embeds + query_features.mean()*0
-
         # Create causal mask and position ids
         _, loss_mask, position_ids = get_ltor_masks_and_position_ids_from_embeddings(input_embeds)
 
@@ -1486,8 +1454,7 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
             return_dict=return_dict,
             output_attentions=self.config.output_attentions,
         )
-        # outputs.loss = (outputs.loss * loss_mask.view(-1)
-        #                 ).sum()/loss_mask.sum()
+
         return outputs
 
     @torch.no_grad()
@@ -1598,16 +1565,9 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
-        # # cut decoder_input_ids if past_key_values is used
-        # if past_key_values is not None:
-        #     input_ids = input_ids[:, -1:]
-
         return {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
             "attention_mask": attention_mask,
-            # "past_key_values": past_key_values,
-            # "encoder_hidden_states": model_kwargs.get("encoder_hidden_states", None),
-            # "encoder_attention_mask": model_kwargs.get("encoder_attention_mask", None),
             "is_decoder": True,
         }

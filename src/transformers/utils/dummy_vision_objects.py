@@ -352,11 +352,6 @@ class MobileViTImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class MplugOwlImageProcessor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
 
 
 class MplugOwlProcessor(metaclass=DummyObject):

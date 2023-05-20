@@ -386,9 +386,7 @@ _import_structure = {
     "models.mplug_owl": [
         "MPLUG_OWL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "MplugOwlConfig",
-        "MplugOwlImageProcessor",
         "MplugOwlProcessor",
-        "MplugOwlTokenizer",
         "MplugOwlVisionConfig",
         "MplugOwlVisualAbstractorConfig",
     ],
@@ -901,7 +899,7 @@ else:
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
-    _import_structure["models.mplug_owl"].extend(["MplugOwlImageProcessor", "MplugOwlProcessor"])
+    _import_structure["models.mplug_owl"].extend(["MplugOwlProcessor"])
     _import_structure["models.oneformer"].extend(["OneFormerImageProcessor"])
     _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
@@ -4174,9 +4172,7 @@ if TYPE_CHECKING:
     from .models.mplug_owl import (
         MPLUG_OWL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MplugOwlConfig,
-        MplugOwlImageProcessor,
         MplugOwlProcessor,
-        MplugOwlTokenizer,
         MplugOwlVisionConfig,
         MplugOwlVisualAbstractorConfig,
     )
@@ -4625,7 +4621,7 @@ if TYPE_CHECKING:
         from .models.mobilenet_v1 import MobileNetV1FeatureExtractor, MobileNetV1ImageProcessor
         from .models.mobilenet_v2 import MobileNetV2FeatureExtractor, MobileNetV2ImageProcessor
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
-        from .models.mplug_owl import MplugOwlImageProcessor, MplugOwlProcessor
+        from .models.mplug_owl import MplugOwlProcessor
         from .models.oneformer import OneFormerImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor

@@ -201,6 +201,7 @@ if _torch_available:
         TORCH_FX_REQUIRED_VERSION.minor,
     )
 
+_flashattention_available = _is_package_available("flash_attn")
 
 def is_kenlm_available():
     return _kenlm_available
@@ -672,6 +673,8 @@ def is_cython_available():
 def is_jieba_available():
     return _jieba_available
 
+def is_flashattention_available():
+    return _flashattention_available
 
 # docstyle-ignore
 DATASETS_IMPORT_ERROR = """

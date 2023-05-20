@@ -23,8 +23,7 @@ _import_structure = {
         "MplugOwlVisionConfig",
         "MplugOwlVisualAbstractorConfig",
     ],
-    "processing_mplug_owl": ["MplugOwlImageProcessor", "MplugOwlProcessor"],
-    "tokenization_mplug_owl": ["MplugOwlTokenizer"],
+    "processing_mplug_owl": ["MplugOwlProcessor"],
 }
 
 try:
@@ -57,8 +56,7 @@ if TYPE_CHECKING:
         MplugOwlVisionConfig,
         MplugOwlVisualAbstractorConfig,
     )
-    from .processing_mplug_owl import MplugOwlImageProcessor, MplugOwlProcessor
-    from .tokenization_mplug_owl import MplugOwlTokenizer
+    from .processing_mplug_owl import MplugOwlProcessor
 
     try:
         if not is_tokenizers_available():
