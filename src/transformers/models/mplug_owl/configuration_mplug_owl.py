@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 x-plug and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 x-plug and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,22 +41,22 @@ class MplugOwlVisionConfig(PretrainedConfig):
     [`PretrainedConfig`] for more information.
 
      Args:
-         hidden_size (`int`, *optional*, defaults to 768):
+         hidden_size (`int`, *optional*, defaults to 1024):
              Dimensionality of the encoder layers and the pooler layer.
-         intermediate_size (`int`, *optional*, defaults to 3072):
+         intermediate_size (`int`, *optional*, defaults to 4096):
              Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-         num_hidden_layers (`int`, *optional*, defaults to 12):
+         num_hidden_layers (`int`, *optional*, defaults to 24):
              Number of hidden layers in the Transformer encoder.
-         num_attention_heads (`int`, *optional*, defaults to 12):
+         num_attention_heads (`int`, *optional*, defaults to 16):
              Number of attention heads for each attention layer in the Transformer encoder.
          image_size (`int`, *optional*, defaults to 224):
              The size (resolution) of each image.
-         patch_size (`int`, *optional*, defaults to 32):
+         patch_size (`int`, *optional*, defaults to 14):
              The size (resolution) of each patch.
          hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
              The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
              `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
-         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
              The epsilon used by the layer normalization layers.
          attention_dropout (`float`, *optional*, defaults to 0.0):
              The dropout ratio for the attention probabilities.

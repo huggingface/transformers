@@ -1,4 +1,4 @@
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -86,13 +86,3 @@ else:
     import sys
 
     sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
-
-# from .configuration_mplug_owl import MplugOwlConfig, MplugOwlVisionConfig, MplugOwlVisualAbstractorConfig
-# from .modeling_mplug_owl import (
-#     MplugOwlForConditionalGeneration,
-#     MplugOwlModel,
-#     MplugOwlVisionModel,
-#     MplugOwlVisualAbstractorModel,
-# )
-# from .processing_mplug_owl import MplugOwlImageProcessor, MplugOwlProcessor
-# from .tokenization_mplug_owl import MplugOwlTokenizer

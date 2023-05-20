@@ -154,12 +154,6 @@ def _tokenize_prompts_and_batch(prompts, tokens_to_generate, add_BOS, tokenizer,
     - pad all the sequences to this length so we can convert them into a 2D tensor.
     """
 
-    # Tokenize all the prompts.
-    # if add_BOS:
-    #     prompts_tokens = [[tokenizer.bos] + tokenizer.tokenize(prompt)
-    #                       for prompt in prompts]
-    # else:
-    #     prompts_tokens = [tokenizer.tokenize(prompt) for prompt in prompts]
 
     prompts_tokens = [_tokenize_prompt(prompt, tokenizer, add_BOS, **kwargs) for prompt in prompts]
 
@@ -211,7 +205,5 @@ def _tokenize_prompt(prompt, tokenizer, add_BOS=False, media_info={"<image>": 65
                 enc_chunk += [media_tokens[chunk_str]] * media_lengths[chunk_str]
             else:
                 tmp_chunk = tokenizer(chunk_str, add_special_tokens=False)["input_ids"]
-                # if idx < len(chunk_strs) - 1: # Last chunk should not have eos
-                #     tmp_chunk += [tokenizer.eod_id]
                 enc_chunk += tmp_chunk
     return enc_chunk
