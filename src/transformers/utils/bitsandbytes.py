@@ -135,7 +135,6 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
     for name, module in model.named_children():
         if current_key_name is None:
             current_key_name = []
-        #current_key_name.append(name)
 
         if isinstance(module, nn.Linear) and name not in modules_to_not_convert:
             # Check if the current key is not in the `modules_to_not_convert`
@@ -150,7 +149,7 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
                             threshold=quantization_config.llm_int8_threshold,
                         )
                     else:
-                        if quantization_config.bnb_kbit_skip_modules is not None and name in quantization_config.bnb_kbit_skip_modules:
+                        if quantization_config.llm_int8_skippnmodules is not None and name in quantization_config.llm_int8_skippnmodules:
                             pass
                         else:
                             model._modules[name] = bnb.nn.Linear4bit(
@@ -164,7 +163,6 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
                     # Force requires grad to False to avoid unexpected errors
                     model._modules[name].requires_grad_(False)
         # Remove the last key for recursion
-        #current_key_name.pop(-1)
         if len(list(module.children())) > 0:
             replace_with_bnb_linear(
                 module,
