@@ -1395,15 +1395,12 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         # get text embedding
         text_tokens_ = input_ids.clone()
         batch_size = input_ids.shape[0]
-        # labels = text_tokens_[:, 1:].clone().contiguous()
 
         media_token_indices = [
-            # [:-1] since we would not use the last token for embedding
             get_media_indices(text_tokens_[i][:-1])
             for i in range(batch_size)
         ]
         text_tokens_[text_tokens_ < 0] = 1  # Not used
-        # text_tokens = text_tokens_[:, :-1].contiguous()
         text_embeds = self.get_input_embeddings()(text_tokens_)  # Temporally Embedding
 
         if pixel_values is not None:
