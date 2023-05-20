@@ -1360,7 +1360,7 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         r"""
         Returns:
 
-        SFT example:
+        Example::
 
         ```python
         >>> from PIL import Image
