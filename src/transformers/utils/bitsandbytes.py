@@ -149,7 +149,10 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
                             threshold=quantization_config.llm_int8_threshold,
                         )
                     else:
-                        if quantization_config.llm_int8_skip_modules is not None and name in quantization_config.llm_int8_skip_modules:
+                        if (
+                            quantization_config.llm_int8_skip_modules is not None
+                            and name in quantization_config.llm_int8_skip_modules
+                        ):
                             pass
                         else:
                             model._modules[name] = bnb.nn.Linear4bit(
@@ -158,7 +161,7 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
                                 module.bias is not None,
                                 quantization_config.bnb_4bit_compute_dtype,
                                 compress_statistics=quantization_config.bnb_4bit_use_double_quant,
-                                quant_type=quantization_config.bnb_4bit_quant_type
+                                quant_type=quantization_config.bnb_4bit_quant_type,
                             )
                     # Force requires grad to False to avoid unexpected errors
                     model._modules[name].requires_grad_(False)

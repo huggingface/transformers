@@ -628,8 +628,8 @@ def _load_state_dict_into_meta_model(
     # - Is there a situation where some keys aren't in `loaded_state_dict_keys` and in which case
     #   they won't get loaded.
 
-    if (load_in_4bit == True and load_in_8bit == True):
-        raise ValueError('You cannot set load_in_4bit=True and load_in_8bit=True at the same time! Choose one option.')
+    if load_in_4bit is True and load_in_8bit is True:
+        raise ValueError("You cannot set load_in_4bit=True and load_in_8bit=True at the same time! Choose one option.")
     if load_in_8bit or load_in_4bit:
         from .utils.bitsandbytes import set_module_kbit_tensor_to_device
 
@@ -702,7 +702,6 @@ def _load_state_dict_into_meta_model(
                 # TODO: group all errors and raise at the end.
                 raise ValueError(f"{param_name} doesn't have any device set.")
             param_device = device_map[module_name]
-
 
         if param_device == "disk":
             if not is_safetensors:
@@ -1706,8 +1705,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         if getattr(self, "is_loaded_in_4bit", False):
-            raise NotImplementedError("You are calling `save_pretrained` on a 4-bit converted model. \
-                                      This is currently not supported")
+            raise NotImplementedError(
+                "You are calling `save_pretrained` on a 4-bit converted model. \
+                                      This is currently not supported"
+            )
 
         if "save_config" in kwargs:
             warnings.warn(
@@ -2204,7 +2205,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if quantization_config is None:
             quantization_config, kwargs = BitsAndBytesConfig.from_dict(
-                    config_dict={"load_in_8bit": load_in_8bit, "load_in_4bit" : load_in_4bit}, return_unused_kwargs=True, **kwargs
+                config_dict={"load_in_8bit": load_in_8bit, "load_in_4bit": load_in_4bit},
+                return_unused_kwargs=True,
+                **kwargs,
             )
         elif quantization_config is not None:
             load_in_8bit = quantization_config.load_in_8bit
@@ -2589,8 +2592,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # Check if `_keep_in_fp32_modules` is not None
             use_keep_in_fp32_modules = (
-                (cls._keep_in_fp32_modules is not None) and is_accelerate_available() and
-                (torch_dtype == torch.float16 or load_in_4bit or load_in_8bit)
+                (cls._keep_in_fp32_modules is not None)
+                and is_accelerate_available()
+                and (torch_dtype == torch.float16 or load_in_4bit or load_in_8bit)
             )
             if (
                 (cls._keep_in_fp32_modules is not None)
@@ -2619,7 +2623,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
-        elif load_in_8bit or load_in_4bit  or low_cpu_mem_usage:
+        elif load_in_8bit or load_in_4bit or low_cpu_mem_usage:
             init_contexts.append(init_empty_weights())
 
         with ContextManagers(init_contexts):
@@ -2636,7 +2640,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             from .utils.bitsandbytes import get_keys_to_not_convert, replace_with_bnb_linear
 
             llm_int8_skip_modules = quantization_config.llm_int8_skip_modules
-            load_in_8bit_threshold = quantization_config.llm_int8_threshold
             load_in_8bit_fp32_cpu_offload = quantization_config.llm_int8_enable_fp32_cpu_offload
 
             logger.info("Detected 8-bit loading: activating 8-bit loading for this model")

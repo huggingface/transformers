@@ -19,7 +19,6 @@ import unittest
 from packaging import version
 
 from transformers import (
-    AutoConfig,
     AutoModel,
     AutoModelForCausalLM,
     AutoModelForSeq2SeqLM,
@@ -83,7 +82,7 @@ class Base4bitTest(unittest.TestCase):
     input_text = "Hello my name is"
     EXPECTED_OUTPUTS = set()
     EXPECTED_OUTPUTS.add("Hello my name is John and I am a professional photographer. I")
-    EXPECTED_OUTPUTS.add( "Hello my name is John.\nI am a friend of your father.\n")
+    EXPECTED_OUTPUTS.add("Hello my name is John.\nI am a friend of your father.\n")
     MAX_NEW_TOKENS = 10
 
     def setUp(self):
@@ -130,15 +129,14 @@ class Bnb4BitTest(Base4bitTest):
         A simple test to check if the model conversion has been done correctly by checking on the
         memory footprint of the converted model and the class type of the linear layers of the converted models
         """
-        from bitsandbytes.nn import Int8Params
         from transformers import T5PreTrainedModel
 
-        mem_fp16 = self.model_fp16.get_memory_footprint()
-        mem_8bit = self.model_4bit.get_memory_footprint()
+        self.model_fp16.get_memory_footprint()
+        self.model_4bit.get_memory_footprint()
 
         for name, module in self.model_4bit.named_modules():
             if isinstance(module, torch.nn.Linear):
-                if name not in ['lm_head'] + T5PreTrainedModel._keep_in_fp32_modules:
+                if name not in ["lm_head"] + T5PreTrainedModel._keep_in_fp32_modules:
                     # 4-bit parameters are packed in uint8 variables
                     self.assertTrue(module.weight.dtype == torch.uint8)
 
@@ -190,7 +188,7 @@ class Bnb4BitTest(Base4bitTest):
                 quantization_config=bnb_config,
                 load_in_4bit=True,
                 device_map="auto",
-                bnb_4bit_quant_type = 'nf4'
+                bnb_4bit_quant_type="nf4",
             )
 
     def test_device_and_dtype_assignment(self):
@@ -237,8 +235,11 @@ class Bnb4BitTest(Base4bitTest):
         r"""
         Test whether it is possible to mix both `4bit` and `fp32` weights when using `keep_in_fp32_modules` correctly.
         """
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-small", load_in_4bit=True, device_map="auto", torch_dtype=torch.float16)
+        model = AutoModelForSeq2SeqLM.from_pretrained(
+            "t5-small", load_in_4bit=True, device_map="auto", torch_dtype=torch.float16
+        )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
+
 
 @require_bitsandbytes
 @require_accelerate
@@ -385,7 +386,7 @@ class Pipeline4BitTest(Base4bitTest):
         self.pipe = pipeline(
             "text-generation",
             model=self.model_name,
-            model_kwargs={"device_map": "auto", "load_in_4bit": True, 'torch_dtype' : torch.float16},
+            model_kwargs={"device_map": "auto", "load_in_4bit": True, "torch_dtype": torch.float16},
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
 
@@ -418,7 +419,6 @@ class Bnb4bitTestMultiGpu(Base4bitTest):
         # Second real batch
         output_parallel = model_parallel.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
         self.assertIn(self.tokenizer.decode(output_parallel[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
-
 
 
 class Bnb4BitTestTraining(Base4bitTest):

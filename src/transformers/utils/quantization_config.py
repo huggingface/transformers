@@ -17,9 +17,10 @@
 import copy
 import json
 import os
-import torch
 from dataclasses import dataclass
 from typing import Any, Dict, Union
+
+import torch
 
 from ..utils import logging
 
@@ -35,8 +36,8 @@ class BitsAndBytesConfig:
 
     This replaces `load_in_8bit` or `load_in_4bit`therefore both options are mutually exclusive.
 
-    Currently only supports `LLM.int8()`, `FP4`, and `NF4` quantization.
-    If more methods are added to `bitsandbytes`, then more arguments will be added to this class.
+    Currently only supports `LLM.int8()`, `FP4`, and `NF4` quantization. If more methods are added to `bitsandbytes`,
+    then more arguments will be added to this class.
 
     Args:
         load_in_8bit (`bool`, *optional*, defaults to `False`):
@@ -66,14 +67,14 @@ class BitsAndBytesConfig:
             This flag runs LLM.int8() with 16-bit main weights. This is useful for fine-tuning as the weights do not
             have to be converted back and forth for the backward pass.
         bnb_4bit_compute_dtype (`torch.dtype` or str, *optional*, defaults to `torch.float32`):
-            This sets the computational type which might be different than the input time. For example, inputs might
-            be fp32, but computation can be set to bf16 for speedups.
+            This sets the computational type which might be different than the input time. For example, inputs might be
+            fp32, but computation can be set to bf16 for speedups.
         bnb_4bit_quant_type (`str`, {fp4, fn4}, defaults to `fp4`):
             This sets the quantization data type in the bnb.nn.Linear4Bit layers. Options are FP4 and NF4 data types
             which are specified by `fp4` or `fn4`.
         bnb_4bit_use_double_quant (`bool`, *optional*, defaults to `False`):
-            This flag is used for nested quantization where the quantization constants from the first quantization
-            are quantized again.
+            This flag is used for nested quantization where the quantization constants from the first quantization are
+            quantized again.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
@@ -87,7 +88,7 @@ class BitsAndBytesConfig:
         llm_int8_enable_fp32_cpu_offload=False,
         llm_int8_has_fp16_weight=False,
         bnb_4bit_compute_dtype=torch.float32,
-        bnb_4bit_quant_type='fp4',
+        bnb_4bit_quant_type="fp4",
         bnb_4bit_use_double_quant=False,
         **kwargs,
     ):
@@ -143,9 +144,9 @@ class BitsAndBytesConfig:
         """
         if self.load_in_8bit:
             return "llm_int8"
-        elif self.load_in_4bit and self.bnb_4bit_quant_type == 'fp4':
+        elif self.load_in_4bit and self.bnb_4bit_quant_type == "fp4":
             return "fp4"
-        elif self.load_in_4bit and self.bnb_4bit_quant_type == 'nf4':
+        elif self.load_in_4bit and self.bnb_4bit_quant_type == "nf4":
             return "nf4"
         else:
             return None
@@ -168,7 +169,6 @@ class BitsAndBytesConfig:
             [`BitsAndBytesConfig`]: The configuration object instantiated from those parameters.
         """
 
-
         config = cls(**config_dict)
 
         to_remove = []
@@ -178,7 +178,6 @@ class BitsAndBytesConfig:
                 to_remove.append(key)
         for key in to_remove:
             kwargs.pop(key, None)
-
 
         if return_unused_kwargs:
             return config, kwargs
@@ -209,6 +208,6 @@ class BitsAndBytesConfig:
         """
 
         output = copy.deepcopy(self.__dict__)
-        output['bnb_4bit_compute_dtype'] = str(output['bnb_4bit_compute_dtype']).split(".")[1]
+        output["bnb_4bit_compute_dtype"] = str(output["bnb_4bit_compute_dtype"]).split(".")[1]
 
         return output
