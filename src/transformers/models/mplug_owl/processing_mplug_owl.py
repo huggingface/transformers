@@ -4,8 +4,6 @@ from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
 
-
-
 class MplugOwlProcessor(ProcessorMixin):
     r"""
     Constructs a mPLUG-Owl processor which wraps a mPLUG-Owl image processor and an mPLUG-Owl tokenizer into a single
@@ -78,25 +76,26 @@ class MplugOwlProcessor(ProcessorMixin):
         # On the specified rank, build the above.
         attention_mask = None
 
-        prompts_tokens_cuda_long_tensor, prompts_length_cuda_long_tensor, attention_mask = self._tokenize_prompts_and_batch(
-            prompts, tokens_to_generate, add_BOS, **kwargs
-        )
+        (
+            prompts_tokens_cuda_long_tensor,
+            prompts_length_cuda_long_tensor,
+            attention_mask,
+        ) = self._tokenize_prompts_and_batch(prompts, tokens_to_generate, add_BOS, **kwargs)
 
         return {
             "input_ids": prompts_tokens_cuda_long_tensor,
             "attention_mask": attention_mask,
         }
 
-
     def _tokenize_prompts_and_batch(self, prompts, tokens_to_generate, add_BOS, **kwargs):
         import torch
 
         """Given a set of prompts and number of tokens to generate:
         - tokenize prompts
-        - set the sequence length to be the max of length of prompts plus the number of tokens we would like to generate
+        - set the sequence length to be the max of length of prompts plus the number of tokens we would like to
+          generate
         - pad all the sequences to this length so we can convert them into a 2D tensor.
         """
-
 
         prompts_tokens = [self._tokenize_prompt(prompt, add_BOS, **kwargs) for prompt in prompts]
 
@@ -122,7 +121,6 @@ class MplugOwlProcessor(ProcessorMixin):
         for i, l in enumerate(prompts_length_tensor):
             attention_mask[i, :l] = 1
         return prompts_tokens_tensor, prompts_length_tensor, attention_mask
-
 
     def _tokenize_prompt(self, prompt, add_BOS=False, media_info={"<image>": 65}, **kwargs):
         media_tokens = {k: -int(i + 1) for i, k in enumerate(media_info.keys())}
@@ -150,7 +148,3 @@ class MplugOwlProcessor(ProcessorMixin):
                     tmp_chunk = self.tokenizer(chunk_str, add_special_tokens=False)["input_ids"]
                     enc_chunk += tmp_chunk
         return enc_chunk
-
-
-
-

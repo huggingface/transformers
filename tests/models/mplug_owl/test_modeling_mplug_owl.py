@@ -37,7 +37,7 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import MplugOwlConfig, MplugOwlForConditionalGeneration, LlamaTokenizer
+    from transformers import LlamaTokenizer, MplugOwlConfig, MplugOwlForConditionalGeneration
 
 
 @require_torch
@@ -389,16 +389,13 @@ def _long_tensor(tok_lst):
     return torch.tensor(tok_lst, dtype=torch.long, device=torch_device)
 
 
-
-
-
 @require_torch
 @require_sentencepiece
 @require_tokenizers
 @slow
 class MplugOwlModelIntegrationTests(unittest.TestCase):
     TOLERANCE = 1e-4
-    
+
     @cached_property
     def default_tokenizer(self):
         return LlamaTokenizer.from_pretrained("MAGAer13/mplug-owl-llama-7b")
@@ -419,7 +416,7 @@ class MplugOwlModelIntegrationTests(unittest.TestCase):
             [[-6.0774, -14.2518, 0.9577], [-5.3115, -12.1374, 0.3657], [-5.7249, -14.9420, 0.9261]],
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=self.TOLERANCE))
 
     def test_seq_to_seq_generation(self):
         hf = MplugOwlForConditionalGeneration.from_pretrained("MAGAer13/mplug-owl-llama-7b").to(torch_device)
@@ -459,4 +456,3 @@ class MplugOwlModelIntegrationTests(unittest.TestCase):
             hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
         )
         assert generated == EXPECTED
-

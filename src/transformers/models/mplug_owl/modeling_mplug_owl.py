@@ -18,7 +18,10 @@ import math
 from typing import Any, Optional, Tuple, Union
 
 import torch
+
 from transformers.utils.import_utils import is_flashattention_available
+
+
 if is_flashattention_available():
     from flash_attn.flash_attn_interface import flash_attn_unpadded_func as flash_attn_func
 
@@ -27,6 +30,8 @@ from dataclasses import dataclass
 
 import torch.utils.checkpoint
 from torch import nn
+
+from transformers.activations import QuickGELUActivation
 
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -40,7 +45,7 @@ from ...utils import (
 )
 from ..auto import AutoModelForCausalLM
 from .configuration_mplug_owl import MplugOwlConfig, MplugOwlVisionConfig, MplugOwlVisualAbstractorConfig
-from transformers.activations import QuickGELUActivation
+
 
 logger = logging.get_logger(__name__)
 
@@ -262,6 +267,7 @@ class MplugOwlVisionAttention(nn.Module):
 
         return outputs
 
+
 class MplugOwlMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -369,7 +375,6 @@ class MplugOwlPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
         elif isinstance(module, nn.Parameter):
-            raise ValueError
             nn.init.trunc_normal_(module.data, mean=0.0, std=factor)
 
     def _set_gradient_checkpointing(self, module, value=False):
@@ -958,6 +963,10 @@ class MplugOwlVisualAbstractorModel(MplugOwlPreTrainedModel):
         self.vit_eos = torch.nn.Parameter(torch.randn(1, 1, language_hidden_size))
         self.post_init()
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        nn.init.trunc_normal_(self.vit_eos, mean=0.0, std=self.config.initializer_range)
+
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
@@ -1295,8 +1304,8 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         if not self.config.use_decoder_only_language_model:
             self.language_model.encoder.embed_tokens = self.language_model.shared
             self.language_model.decoder.embed_tokens = self.language_model.shared
-    
-    # Copied from transformers.models.blip_2.modeling_blip_2._preprocess_accelerate 
+
+    # Copied from transformers.models.blip_2.modeling_blip_2._preprocess_accelerate
     def _preprocess_accelerate(self):
         r"""
         Some pre-processing hacks to make the model `accelerate` compatible. Check
@@ -1376,10 +1385,7 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         text_tokens_ = input_ids.clone()
         batch_size = input_ids.shape[0]
 
-        media_token_indices = [
-            get_media_indices(text_tokens_[i][:-1])
-            for i in range(batch_size)
-        ]
+        media_token_indices = [get_media_indices(text_tokens_[i][:-1]) for i in range(batch_size)]
         text_tokens_[text_tokens_ < 0] = 1  # Not used
         text_embeds = self.get_input_embeddings()(text_tokens_)  # Temporally Embedding
 

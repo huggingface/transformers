@@ -120,9 +120,9 @@ class MplugOwlVisionConfig(PretrainedConfig):
 
 class MplugOwlVisualAbstractorConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MplugOwlVisionAbstractor`].  It is used to instantiate
-    a mPLUG-Owl vision abstractor according to the specified arguments.
     Args:
+    This is the configuration class to store the configuration of a [`MplugOwlVisionAbstractor`]. It is used to
+    instantiate a mPLUG-Owl vision abstractor according to the specified arguments.
          hidden_size (`int`, *optional*, defaults to 1024):
              Dimensionality of the crossattention layers.
          num_hidden_layers (`int`, *optional*, defaults to 6):
