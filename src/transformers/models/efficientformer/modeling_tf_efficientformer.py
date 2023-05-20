@@ -92,11 +92,10 @@ class TFEfficientFormerPatchEmbeddings(tf.keras.layers.Layer):
         )
 
     def call(self, pixel_values: tf.Tensor, training: bool = False) -> tf.Tensor:
-        num_channels = shape_list(pixel_values)[1]
-        if tf.executing_eagerly() and num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
+        tf.debugging.assert_shapes(
+            [(pixel_values, (..., self.num_channels, None, None))],
+            message="Make sure that the channel dimension of the pixel values match with the one set in the configuration.",
+        )
         # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
         # shape = (batch_size, in_height, in_width, in_channels=num_channels)
@@ -636,18 +635,20 @@ class TFEfficientFormerEncoder(tf.keras.layers.Layer):
         ]
 
         intermediate_stages = []
+        layer_count = -1
         for i in range(num_intermediate_stages):
+            layer_count += 1
             intermediate_stages.append(
-                TFEfficientFormerIntermediateStage(
-                    config,
-                    i,
-                    name=f"intermediate_stages.{2*i}",
-                )
+                TFEfficientFormerIntermediateStage(config, i, name=f"intermediate_stages.{layer_count}")
             )
             if downsamples[i]:
+                layer_count += 1
                 intermediate_stages.append(
                     TFEfficientFormerPatchEmbeddings(
-                        config, config.hidden_sizes[i], config.hidden_sizes[i + 1], name=f"intermediate_stages.{2*i+1}"
+                        config,
+                        config.hidden_sizes[i],
+                        config.hidden_sizes[i + 1],
+                        name=f"intermediate_stages.{layer_count}",
                     )
                 )
         self.intermediate_stages = intermediate_stages
