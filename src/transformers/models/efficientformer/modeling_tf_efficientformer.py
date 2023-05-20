@@ -1018,6 +1018,9 @@ class TFEfficientFormerForImageClassificationWithTeacher(TFEfficientFormerPreTra
     ) -> Union[tuple, TFEfficientFormerForImageClassificationWithTeacherOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if training:
+            raise Exception("This model supports inference-only. Fine-tuning with distillation (i.e. with a teacher) is not yet supported.")
+
         outputs = self.efficientformer(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -1029,10 +1032,7 @@ class TFEfficientFormerForImageClassificationWithTeacher(TFEfficientFormerPreTra
         sequence_output = outputs[0]
 
         cls_logits = self.classifier(tf.reduce_mean(sequence_output, axis=-2))
-
         distillation_logits = self.distillation_classifier(tf.reduce_mean(sequence_output, axis=-2))
-
-        # during inference, return the average of both classifier predictions
         logits = (cls_logits + distillation_logits) / 2
 
         if not return_dict:
