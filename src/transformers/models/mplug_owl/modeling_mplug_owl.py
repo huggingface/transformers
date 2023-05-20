@@ -1582,16 +1582,9 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
-        # # cut decoder_input_ids if past_key_values is used
-        # if past_key_values is not None:
-        #     input_ids = input_ids[:, -1:]
-
         return {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
             "attention_mask": attention_mask,
-            # "past_key_values": past_key_values,
-            # "encoder_hidden_states": model_kwargs.get("encoder_hidden_states", None),
-            # "encoder_attention_mask": model_kwargs.get("encoder_attention_mask", None),
             "is_decoder": True,
         }
