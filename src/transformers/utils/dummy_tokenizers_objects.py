@@ -58,6 +58,13 @@ class BloomTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class BrosTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class CamembertTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 

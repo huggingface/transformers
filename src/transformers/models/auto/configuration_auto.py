@@ -29,7 +29,6 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
-        ("bros", "BrosConfig"),
         ("albert", "AlbertConfig"),
         ("align", "AlignConfig"),
         ("altclip", "AltCLIPConfig"),
@@ -48,6 +47,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("blip-2", "Blip2Config"),
         ("bloom", "BloomConfig"),
         ("bridgetower", "BridgeTowerConfig"),
+        ("bros", "BrosConfig"),
         ("camembert", "CamembertConfig"),
         ("canine", "CanineConfig"),
         ("chinese_clip", "ChineseCLIPConfig"),
@@ -222,7 +222,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
-        ("bros", "BROS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("align", "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("altclip", "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -240,6 +239,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("blip-2", "BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bloom", "BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bridgetower", "BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("bros", "BROS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("camembert", "CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("canine", "CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("chinese_clip", "CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -397,7 +397,6 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("bros", "Bros"),
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),
@@ -421,6 +420,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("bloom", "BLOOM"),
         ("bort", "BORT"),
         ("bridgetower", "BridgeTower"),
+        ("bros", "Bros"),
         ("byt5", "ByT5"),
         ("camembert", "CamemBERT"),
         ("canine", "CANINE"),

@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from . import (
-    bros,
     albert,
     align,
     altclip,
@@ -38,6 +37,7 @@ from . import (
     bloom,
     bort,
     bridgetower,
+    bros,
     byt5,
     camembert,
     canine,

@@ -122,7 +122,6 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.bros": ["BROS_PRETRAINED_CONFIG_ARCHIVE_MAP", "BrosConfig", "BrosTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -206,6 +205,7 @@ _import_structure = {
         "BridgeTowerTextConfig",
         "BridgeTowerVisionConfig",
     ],
+    "models.bros": ["BROS_PRETRAINED_CONFIG_ARCHIVE_MAP", "BrosConfig", "BrosTokenizer"],
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
@@ -735,7 +735,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
-    _import_structure["models.bros"].append("BrosTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -744,6 +743,7 @@ else:
     _import_structure["models.blenderbot"].append("BlenderbotTokenizerFast")
     _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
     _import_structure["models.bloom"].append("BloomTokenizerFast")
+    _import_structure["models.bros"].append("BrosTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.codegen"].append("CodeGenTokenizerFast")
@@ -975,14 +975,6 @@ else:
 
     # PyTorch models structure
 
-    _import_structure["models.bros"].extend(
-        [
-            "BROS_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "BrosPreTrainedModel",
-            "BrosModel",
-            "BrosForTokenClassification",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1245,6 +1237,14 @@ else:
             "BridgeTowerForMaskedLM",
             "BridgeTowerModel",
             "BridgeTowerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.bros"].extend(
+        [
+            "BROS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BrosForTokenClassification",
+            "BrosModel",
+            "BrosPreTrainedModel",
         ]
     )
     _import_structure["models.camembert"].extend(
@@ -3925,7 +3925,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.bros import BROS_PRETRAINED_CONFIG_ARCHIVE_MAP, BrosConfig, BrosTokenizer
     from .models.align import (
         ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AlignConfig,
@@ -4002,6 +4001,7 @@ if TYPE_CHECKING:
         BridgeTowerTextConfig,
         BridgeTowerVisionConfig,
     )
+    from .models.bros import BROS_PRETRAINED_CONFIG_ARCHIVE_MAP, BrosConfig, BrosTokenizer
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
@@ -4497,7 +4497,6 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
-        from .models.bros import BrosTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -4506,6 +4505,7 @@ if TYPE_CHECKING:
         from .models.blenderbot import BlenderbotTokenizerFast
         from .models.blenderbot_small import BlenderbotSmallTokenizerFast
         from .models.bloom import BloomTokenizerFast
+        from .models.bros import BrosTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast
         from .models.codegen import CodeGenTokenizerFast
@@ -4695,15 +4695,6 @@ if TYPE_CHECKING:
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
-
-        # PyTorch model imports
-
-        from .models.bros import (
-            BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BrosPreTrainedModel,
-            BrosModel,
-            BrosForTokenClassification,
-        )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -4929,6 +4920,14 @@ if TYPE_CHECKING:
             BridgeTowerForMaskedLM,
             BridgeTowerModel,
             BridgeTowerPreTrainedModel,
+        )
+
+        # PyTorch model imports
+        from .models.bros import (
+            BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BrosForTokenClassification,
+            BrosModel,
+            BrosPreTrainedModel,
         )
         from .models.camembert import (
             CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
