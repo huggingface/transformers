@@ -154,12 +154,6 @@ def _tokenize_prompts_and_batch(prompts, tokens_to_generate, add_BOS, tokenizer,
     - pad all the sequences to this length so we can convert them into a 2D tensor.
     """
 
-    # Tokenize all the prompts.
-    # if add_BOS:
-    #     prompts_tokens = [[tokenizer.bos] + tokenizer.tokenize(prompt)
-    #                       for prompt in prompts]
-    # else:
-    #     prompts_tokens = [tokenizer.tokenize(prompt) for prompt in prompts]
 
     prompts_tokens = [_tokenize_prompt(prompt, tokenizer, add_BOS, **kwargs) for prompt in prompts]
 
