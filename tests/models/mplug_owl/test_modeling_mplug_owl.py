@@ -413,20 +413,6 @@ class MplugOwlModelIntegrationTests(unittest.TestCase):
     def default_tokenizer(self):
         return MplugOwlTokenizer.from_pretrained("MAGAer13/mplug-owl-llama-7b")
 
-    # def test_inference_no_head(self):
-    #     model = MplugOwlModel.from_pretrained('MAGAer13/mplug-owl-llama-7b').to(torch_device)
-    #     input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-    #     decoder_input_ids = _long_tensor([[2, 0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588]])
-    #     inputs_dict = prepare_mplug_owl_inputs_dict(model.config, input_ids, decoder_input_ids)
-    #     with torch.no_grad():
-    #         output = model(**inputs_dict)[0]
-    #     expected_shape = torch.Size((1, 11, 1024))
-    #     self.assertEqual(output.shape, expected_shape)
-    #     # change to expected output here
-    #     expected_slice = torch.tensor(
-    #         [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
-    #     )
-    #     self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
         model = MplugOwlForConditionalGeneration.from_pretrained("MAGAer13/mplug-owl-llama-7b").to(torch_device)
