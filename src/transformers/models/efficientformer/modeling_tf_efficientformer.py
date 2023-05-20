@@ -86,7 +86,7 @@ class TFEfficientFormerPatchEmbeddings(tf.keras.layers.Layer):
         )
         # Use same default momentum and epsilon as PyTorch equivalent for BatchNormalization
         self.norm = (
-            tf.keras.layers.BatchNormalization(axis=-1, epsilon=1e-05, momentum=0.9, name="norm")
+            tf.keras.layers.BatchNormalization(axis=-1, epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
             if apply_norm
             else tf.identity
         )
@@ -216,7 +216,7 @@ class TFEfficientFormerConvStem(tf.keras.layers.Layer):
         )
         # Use same default momentum and epsilon as PyTorch equivalent for BatchNormalization
         self.batchnorm_before = tf.keras.layers.BatchNormalization(
-            axis=-1, epsilon=1e-05, momentum=0.9, name="batchnorm_before"
+            axis=-1, epsilon=config.batch_norm_eps, momentum=0.9, name="batchnorm_before"
         )
 
         self.convolution2 = tf.keras.layers.Conv2D(
@@ -228,7 +228,7 @@ class TFEfficientFormerConvStem(tf.keras.layers.Layer):
         )
         # Use same default momentum and epsilon as PyTorch equivalent for BatchNormalization
         self.batchnorm_after = tf.keras.layers.BatchNormalization(
-            axis=-1, epsilon=1e-05, momentum=0.9, name="batchnorm_after"
+            axis=-1, epsilon=config.batch_norm_eps, momentum=0.9, name="batchnorm_after"
         )
 
         self.activation = tf.keras.layers.Activation(activation=tf.keras.activations.relu, name="activation")
@@ -333,11 +333,11 @@ class TFEfficientFormerConvMlp(tf.keras.layers.Layer):
 
         # Use same default momentum and epsilon as PyTorch equivalent for BatchNormalization
         self.batchnorm_before = tf.keras.layers.BatchNormalization(
-            axis=-1, epsilon=1e-05, momentum=0.9, name="batchnorm_before"
+            axis=-1, epsilon=config.batch_norm_eps, momentum=0.9, name="batchnorm_before"
         )
         # Use same default momentum and epsilon as PyTorch equivalent for BatchNormalization
         self.batchnorm_after = tf.keras.layers.BatchNormalization(
-            axis=-1, epsilon=1e-05, momentum=0.9, name="batchnorm_after"
+            axis=-1, epsilon=config.batch_norm_eps, momentum=0.9, name="batchnorm_after"
         )
 
     def call(self, hidden_state: tf.Tensor, training: bool = False) -> tf.Tensor:

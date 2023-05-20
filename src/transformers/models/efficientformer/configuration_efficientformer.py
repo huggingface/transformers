@@ -139,6 +139,7 @@ class EfficientFormerConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         layer_norm_eps: float = 1e-12,
         image_size: int = 224,
+        batch_norm_eps: float = 1e-05,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -169,3 +170,4 @@ class EfficientFormerConfig(PretrainedConfig):
         self.use_layer_scale = use_layer_scale
         self.layer_scale_init_value = layer_scale_init_value
         self.image_size = image_size
+        self.batch_norm_eps = batch_norm_eps

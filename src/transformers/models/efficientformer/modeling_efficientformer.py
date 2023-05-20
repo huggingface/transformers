@@ -73,7 +73,7 @@ class EfficientFormerPatchEmbeddings(nn.Module):
             stride=config.downsample_stride,
             padding=config.downsample_pad,
         )
-        self.norm = nn.BatchNorm2d(embed_dim) if apply_norm else nn.Identity()
+        self.norm = nn.BatchNorm2d(embed_dim, eps=config.batch_norm_eps) if apply_norm else nn.Identity()
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
@@ -157,10 +157,10 @@ class EfficientFormerConvStem(nn.Module):
         super().__init__()
 
         self.convolution1 = nn.Conv2d(config.num_channels, out_channels // 2, kernel_size=3, stride=2, padding=1)
-        self.batchnorm_before = nn.BatchNorm2d(out_channels // 2)
+        self.batchnorm_before = nn.BatchNorm2d(out_channels // 2, eps=config.batch_norm_eps)
 
         self.convolution2 = nn.Conv2d(out_channels // 2, out_channels, kernel_size=3, stride=2, padding=1)
-        self.batchnorm_after = nn.BatchNorm2d(out_channels)
+        self.batchnorm_after = nn.BatchNorm2d(out_channels, eps=config.batch_norm_eps)
 
         self.activation = nn.ReLU()
 
@@ -228,8 +228,8 @@ class EfficientFormerConvMlp(nn.Module):
         self.convolution2 = nn.Conv2d(hidden_features, out_features, 1)
         self.dropout = nn.Dropout(drop)
 
-        self.batchnorm_before = nn.BatchNorm2d(hidden_features)
-        self.batchnorm_after = nn.BatchNorm2d(out_features)
+        self.batchnorm_before = nn.BatchNorm2d(hidden_features, eps=config.batch_norm_eps)
+        self.batchnorm_after = nn.BatchNorm2d(out_features, eps=config.batch_norm_eps)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.convolution1(hidden_state)
