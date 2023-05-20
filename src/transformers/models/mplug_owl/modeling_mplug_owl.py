@@ -1325,7 +1325,7 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
 
         if hasattr(self.language_model, "_hf_hook"):
             self.language_model._hf_hook.io_same_device = True  # For `generate` compatibility
- 
+
     @add_start_docstrings_to_model_forward(MPLUG_OWL_INPUTS_DOCSTRING)
     @replace_return_docstrings(
         output_type=MplugOwlForConditionalGenerationModelOutput, config_class=MplugOwlVisionConfig
