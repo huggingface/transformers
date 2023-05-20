@@ -211,7 +211,5 @@ def _tokenize_prompt(prompt, tokenizer, add_BOS=False, media_info={"<image>": 65
                 enc_chunk += [media_tokens[chunk_str]] * media_lengths[chunk_str]
             else:
                 tmp_chunk = tokenizer(chunk_str, add_special_tokens=False)["input_ids"]
-                # if idx < len(chunk_strs) - 1: # Last chunk should not have eos
-                #     tmp_chunk += [tokenizer.eod_id]
                 enc_chunk += tmp_chunk
     return enc_chunk
