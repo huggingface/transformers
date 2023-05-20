@@ -15,7 +15,7 @@
 # limitations under the License.
 """ BERT model configuration"""
 from collections import OrderedDict
-from typing import Mapping
+from typing import Mapping, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
