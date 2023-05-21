@@ -181,7 +181,7 @@ class AutoformerConfig(PretrainedConfig):
     ):
         # time series specific configuration
         self.prediction_length = prediction_length
-        self.context_length = context_length or prediction_length
+        self.context_length = context_length if context_length is not None else prediction_length
         self.distribution_output = distribution_output
         self.loss = loss
         self.input_size = input_size
