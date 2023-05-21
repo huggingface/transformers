@@ -320,10 +320,10 @@ class AutoformerSeriesDecompositionLayer(nn.Module):
         x_trend = AvgPool(Padding(X)) and x_seasonal = X - x_trend
     """
 
-    def __init__(self, kernel_size):
+    def __init__(self, config: AutoformerConfig):
         super().__init__()
-        self.kernel_size = kernel_size
-        self.avg = nn.AvgPool1d(kernel_size=kernel_size, stride=1, padding=0)
+        self.kernel_size = config.moving_average
+        self.avg = nn.AvgPool1d(kernel_size=self.kernel_size, stride=1, padding=0)
 
     def forward(self, x):
         """Input shape: Batch x Time x EMBED_DIM"""
@@ -348,9 +348,9 @@ class AutoformerLayernorm(nn.Module):
     - torch.mean(nn.LayerNorm(x))
     """
 
-    def __init__(self, channels):
+    def __init__(self, config: AutoformerConfig):
         super().__init__()
-        self.layernorm = nn.LayerNorm(channels)
+        self.layernorm = nn.LayerNorm(config.d_model)
 
     def forward(self, x):
         x_hat = self.layernorm(x)
@@ -598,8 +598,8 @@ class AutoformerEncoderLayer(nn.Module):
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = AutoformerLayernorm(self.embed_dim)
-        self.decomp1 = AutoformerSeriesDecompositionLayer(config.moving_average)
-        self.decomp2 = AutoformerSeriesDecompositionLayer(config.moving_average)
+        self.decomp1 = AutoformerSeriesDecompositionLayer(config)
+        self.decomp2 = AutoformerSeriesDecompositionLayer(config)
 
     def forward(
         self,
@@ -684,9 +684,9 @@ class AutoformerDecoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = AutoformerLayernorm(self.embed_dim)
 
-        self.decomp1 = AutoformerSeriesDecompositionLayer(config.moving_average)
-        self.decomp2 = AutoformerSeriesDecompositionLayer(config.moving_average)
-        self.decomp3 = AutoformerSeriesDecompositionLayer(config.moving_average)
+        self.decomp1 = AutoformerSeriesDecompositionLayer(config)
+        self.decomp2 = AutoformerSeriesDecompositionLayer(config)
+        self.decomp3 = AutoformerSeriesDecompositionLayer(config)
 
         # source: https://github.com/thuml/Autoformer/blob/e6371e24f2ae2dd53e472edefdd5814c5176f864/layers/Autoformer_EncDec.py#L128
         self.trend_projection = nn.Conv1d(
@@ -1379,7 +1379,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
         self.decoder = AutoformerDecoder(config)
 
         # used for decoder seasonal and trend initialization
-        self.decomposition_layer = AutoformerSeriesDecompositionLayer(config.moving_average)
+        self.decomposition_layer = AutoformerSeriesDecompositionLayer(config)
 
         # Initialize weights and apply final processing
         self.post_init()
