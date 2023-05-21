@@ -1488,10 +1488,6 @@ class AutoformerModel(AutoformerPreTrainedModel):
             raise ValueError(
                 f"input length {reshaped_lagged_sequence.shape[1]} and time feature lengths {time_feat.shape[1]} does not match"
             )
-
-        # transformer inputs
-        # transformer_inputs = torch.cat((reshaped_lagged_sequence, features), dim=-1)
-
         return reshaped_lagged_sequence, features, loc, scale, static_feat
 
     def get_encoder(self):
