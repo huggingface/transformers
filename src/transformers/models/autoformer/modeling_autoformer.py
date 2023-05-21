@@ -1602,7 +1602,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
                 device=enc_input.device,
             )
 
-            dec_input = torch.cat(
+            decoder_input = torch.cat(
                 (
                     torch.cat((seasonal_input[:, -self.config.label_length :, ...], zeros), dim=1),
                     temporal_features[:, self.config.context_length - self.config.label_length :, ...],
@@ -1619,7 +1619,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
 
             decoder_outputs = self.decoder(
                 trend=trend_init,
-                inputs_embeds=dec_input,
+                inputs_embeds=decoder_input,
                 attention_mask=decoder_attention_mask,
                 encoder_hidden_states=encoder_outputs[0],
                 head_mask=decoder_head_mask,
@@ -1679,8 +1679,8 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         # Initialize weights of distribution_output and apply final processing
         self.post_init()
 
-    def output_params(self, dec_output):
-        return self.parameter_projection(dec_output[:, -self.config.prediction_length :, :])
+    def output_params(self, decoder_output):
+        return self.parameter_projection(decoder_output[:, -self.config.prediction_length :, :])
 
     def get_encoder(self):
         return self.model.get_encoder()
@@ -1990,10 +1990,10 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             dim=-1,
         )
         decoder_outputs = decoder(
-            trend=trend_init, inputs_embeds=dec_input, encoder_hidden_states=repeated_enc_last_hidden
+            trend=trend_init, inputs_embeds=decoder_input, encoder_hidden_states=repeated_enc_last_hidden
         )
         decoder_last_hidden = decoder_outputs.last_hidden_state
-        params = self.output_params(dec_last_hidden[0] + dec_last_hidden[1])
+        params = self.output_params(decoder_last_hidden[0] + decoder_last_hidden[1])
         distr = self.output_distribution(params, loc=repeated_loc, scale=repeated_scale)
         future_samples = distr.sample()
 
