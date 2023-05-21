@@ -16,6 +16,7 @@
 
 import inspect
 import unittest
+from typing import List
 
 import numpy as np
 
@@ -52,15 +53,16 @@ class TFEfficientFormerModelTester:
         self,
         parent,
         batch_size: int = 13,
-        image_size: int = 224,
+        image_size: int = 64,
         patch_size: int = 2,
-        embed_dim: int = 48,
+        embed_dim: int = 3,
         num_channels: int = 3,
         is_training: bool = True,
         use_labels: bool = True,
-        hidden_size: int = 448,
+        hidden_size: int = 128,
+        hidden_sizes=[16, 32, 64, 128],
         num_hidden_layers: int = 7,
-        num_attention_heads: int = 8,
+        num_attention_heads: int = 4,
         intermediate_size: int = 37,
         hidden_act: str = "gelu",
         hidden_dropout_prob: float = 0.1,
@@ -69,6 +71,10 @@ class TFEfficientFormerModelTester:
         initializer_range: float = 0.02,
         encoder_stride: int = 2,
         num_attention_outputs: int = 1,
+        dim: int = 128,
+        depths: List[int] = [2, 2, 2, 2],
+        resolution: int = 2,
+        mlp_expansion_ratio: int = 2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -90,6 +96,11 @@ class TFEfficientFormerModelTester:
         self.num_attention_outputs = num_attention_outputs
         self.embed_dim = embed_dim
         self.seq_length = embed_dim + 1
+        self.resolution = resolution
+        self.depths = depths
+        self.hidden_sizes = hidden_sizes
+        self.dim = dim
+        self.mlp_expansion_ratio = mlp_expansion_ratio
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -117,7 +128,12 @@ class TFEfficientFormerModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             encoder_stride=self.encoder_stride,
-        )
+            resolution=self.resolution,
+            depths=self.depths,
+            hidden_sizes=self.hidden_sizes,
+            dim=self.dim,
+            mlp_expansion_ratio=self.mlp_expansion_ratio,
+            )
 
     def create_and_check_model(self, config, pixel_values, labels):
         model = TFEfficientFormerModel(config=config)
