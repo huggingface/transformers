@@ -508,6 +508,7 @@ def main():
             checkpoint = training_args.resume_from_checkpoint
         elif last_checkpoint is not None:
             checkpoint = last_checkpoint
+        trainer._signature_columns=["input_ids", "attention_mask", data_args.image_column]
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()
         tokenizer.save_pretrained(training_args.output_dir)
