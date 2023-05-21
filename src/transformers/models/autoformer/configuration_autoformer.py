@@ -191,7 +191,7 @@ class AutoformerConfig(PretrainedConfig):
         self.num_dynamic_real_features = num_dynamic_real_features
         self.num_static_real_features = num_static_real_features
         self.num_static_categorical_features = num_static_categorical_features
-        if cardinality and num_static_categorical_features > 0:
+        if cardinality is not None and num_static_categorical_features > 0:
             if len(cardinality) != num_static_categorical_features:
                 raise ValueError(
                     "The cardinality should be a list of the same length as `num_static_categorical_features`"
