@@ -1487,8 +1487,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         >>> from datasets import load_dataset
         >>> from transformers import Pop2PianoForConditionalGeneration, Pop2PianoTokenizer, Pop2PianoFeatureExtractor
 
-        >>> model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
-        >>> model.eval()
+        >>> model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev").eval()
         >>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
         >>> tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
         >>> ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
