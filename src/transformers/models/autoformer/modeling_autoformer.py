@@ -671,7 +671,7 @@ class AutoformerDecoderLayer(nn.Module):
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.encoder_attn = AutoformerAttention(
             self.embed_dim,
             config.decoder_attention_heads,
@@ -679,10 +679,10 @@ class AutoformerDecoderLayer(nn.Module):
             is_decoder=True,
             autocorrelation_factor=config.autocorrelation_factor,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = AutoformerLayernorm(self.embed_dim)
+        self.final_layer_norm = AutoformerLayernorm(self.embed_dim, eps=config.layer_norm_eps)
 
         self.decomp1 = AutoformerSeriesDecompositionLayer(config)
         self.decomp2 = AutoformerSeriesDecompositionLayer(config)
