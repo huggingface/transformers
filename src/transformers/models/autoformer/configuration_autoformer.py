@@ -106,7 +106,7 @@ class AutoformerConfig(PretrainedConfig):
             The standard deviation of the truncated normal weight initialization distribution.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
-        label_length (`int`, *optional*, defaults to 10):
+        label_length (`int`, *optional*):
             Start token length of the Autoformer decoder, which is used for direct multi-step prediction (i.e.
             non-autoregressive generation).
         moving_average (`int`, defaults to 25):
