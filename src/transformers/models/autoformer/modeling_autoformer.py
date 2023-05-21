@@ -1981,7 +1981,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             device=reshaped_lagged_sequence.device,
         )
 
-        dec_input = torch.cat(
+        decoder_input = torch.cat(
             (
                 torch.cat((seasonal_input[:, -self.config.label_length :, ...], zeros), dim=1),
                 repeated_features[:, -self.config.prediction_length - self.config.label_length :, ...],
