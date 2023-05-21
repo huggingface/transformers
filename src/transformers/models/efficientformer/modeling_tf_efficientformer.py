@@ -93,16 +93,11 @@ class TFEfficientFormerPatchEmbeddings(tf.keras.layers.Layer):
 
     def call(self, pixel_values: tf.Tensor, training: bool = False) -> tf.Tensor:
         tf.debugging.assert_shapes(
-            [(pixel_values, (..., self.num_channels, None, None))],
+            [(pixel_values, (..., None, None, self.num_channels))],
             message="Make sure that the channel dimension of the pixel values match with the one set in the configuration.",
         )
-        # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
-        # So change the input format from `NCHW` to `NHWC`.
-        # shape = (batch_size, in_height, in_width, in_channels=num_channels)
-        pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
         embeddings = self.projection(self.padding(pixel_values))
         embeddings = self.norm(embeddings, training=training)
-        embeddings = tf.transpose(embeddings, perm=(0, 3, 1, 2))
         return embeddings
 
 
@@ -232,18 +227,10 @@ class TFEfficientFormerConvStem(tf.keras.layers.Layer):
         self.activation = tf.keras.layers.Activation(activation=tf.keras.activations.relu, name="activation")
 
     def call(self, pixel_values: tf.Tensor, training: bool = False) -> tf.Tensor:
-        # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
-        # So change the input format from `NCHW` to `NHWC`.
-        # shape = (batch_size, in_height, in_width, in_channels=num_channels)
-        pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
         features = self.batchnorm_before(self.convolution1(self.padding(pixel_values)), training=training)
         features = self.activation(features)
-
         features = self.batchnorm_after(self.convolution2(self.padding(features)), training=training)
-
         features = self.activation(features)
-        features = tf.transpose(features, perm=(0, 3, 1, 2))
-
         return features
 
 
@@ -253,13 +240,7 @@ class TFEfficientFormerPooling(tf.keras.layers.Layer):
         self.pool = tf.keras.layers.AveragePooling2D(pool_size=pool_size, strides=1, padding="same")
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
-        # When running on CPU, `tf.keras.layers.AveragePooling2D` with "same" padding
-        # doesn't support `NCHW` == (batch, channel, height, width) format to arrive at
-        # the equivalent pooled tensor that PyTorch AvgPool2D(count_include_pad=False) does.
-        # So change the input format from `NCHW` to `NHWC`, avgpool, and then change back.
-        output = tf.transpose(hidden_states, perm=(0, 2, 3, 1))
-        output = self.pool(output)
-        output = tf.transpose(output, perm=(0, 3, 1, 2))
+        output = self.pool(hidden_states)
         output = output - hidden_states
         return output
 
@@ -339,24 +320,13 @@ class TFEfficientFormerConvMlp(tf.keras.layers.Layer):
         )
 
     def call(self, hidden_state: tf.Tensor, training: bool = False) -> tf.Tensor:
-        # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
-        # So change the input format from `NCHW` to `NHWC`.
-        # shape = (batch_size, in_height, in_width, in_channels=num_channels)
-        hidden_state = tf.transpose(hidden_state, perm=(0, 2, 3, 1))
         hidden_state = self.convolution1(hidden_state)
-
         hidden_state = self.batchnorm_before(hidden_state, training=training)
-
         hidden_state = self.activation(hidden_state)
         hidden_state = self.dropout(hidden_state, training=training)
-
         hidden_state = self.convolution2(hidden_state)
-
         hidden_state = self.batchnorm_after(hidden_state, training=training)
-
         hidden_state = self.dropout(hidden_state, training=training)
-        hidden_state = tf.transpose(hidden_state, perm=(0, 3, 1, 2))
-
         return hidden_state
 
 
@@ -386,10 +356,8 @@ class TFEfficientFormerFlat(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
     def call(self, hidden_states: tf.Tensor) -> Tuple[tf.Tensor]:
-        batch_size, in_channels, _, _ = shape_list(hidden_states)
-
-        hidden_states = tf.reshape(hidden_states, shape=[batch_size, in_channels, -1])
-        hidden_states = tf.transpose(hidden_states, perm=[0, 2, 1])
+        batch_size, _, _, in_channels = shape_list(hidden_states)
+        hidden_states = tf.reshape(hidden_states, shape=[batch_size, -1, in_channels])
         return hidden_states
 
 
@@ -551,12 +519,12 @@ class TFEfficientFormerMeta4D(tf.keras.layers.Layer):
 
         if self.config.use_layer_scale:
             layer_output = hidden_states + self.drop_path(
-                tf.expand_dims(tf.expand_dims(self.layer_scale_1, -1), -1) * outputs,
+                tf.expand_dims(tf.expand_dims(self.layer_scale_1, 0), 0) * outputs,
                 training=training,
             )
 
             layer_output = layer_output + self.drop_path(
-                tf.expand_dims(tf.expand_dims(self.layer_scale_2, -1), -1)
+                tf.expand_dims(tf.expand_dims(self.layer_scale_2, 0), 0)
                 * self.mlp(hidden_state=layer_output, training=training),
                 training=training,
             )
@@ -615,7 +583,6 @@ class TFEfficientFormerLastStage(tf.keras.layers.Layer):
     ) -> Tuple[tf.Tensor]:
         hidden_states = self.meta4D_layers(hidden_states=hidden_states, training=training)
         hidden_states = self.flat(hidden_states=hidden_states)
-
         hidden_states = self.meta3D_layers(
             hidden_states=hidden_states, output_attentions=output_attentions, training=training
         )
@@ -723,6 +690,11 @@ class TFEfficientFormerMainLayer(tf.keras.layers.Layer):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
+        # When running on CPU, `tf.keras.layers.Conv2D` and tf.keras.layers.AveragePool2D" do not
+        # support `NCHW` format. A number of blocks contain both.
+        # So change the input format from `NCHW` to `NHWC` here.
+        # shape = (batch_size, in_height, in_width, in_channels=num_channels)
+        pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
         embedding_output = self.patch_embed(pixel_values, training=training)
 
         encoder_outputs = self.encoder(
@@ -736,13 +708,18 @@ class TFEfficientFormerMainLayer(tf.keras.layers.Layer):
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output, training=training)
 
+        # Change the hidden states from NHWC to NCHW; the hidden states are
+        # in NHWC shape after all stages except the MB3D blocks
+        if output_hidden_states:
+            hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1][:-1]]) + (encoder_outputs[1][-1], )
+
         if not return_dict:
             head_outputs = (sequence_output,)
             return head_outputs + encoder_outputs[1:]
 
         return TFBaseModelOutput(
             last_hidden_state=sequence_output,
-            hidden_states=encoder_outputs.hidden_states,
+            hidden_states=hidden_states if output_hidden_states else encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
 
