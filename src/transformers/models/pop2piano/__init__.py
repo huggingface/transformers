@@ -28,7 +28,6 @@ _import_structure = {
     "configuration_pop2piano": ["POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP", "Pop2PianoConfig"],
 }
 
-# Model
 try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
@@ -41,7 +40,6 @@ else:
         "Pop2PianoPreTrainedModel",
     ]
 
-# Feature Extractor
 try:
     if not (is_librosa_available() and is_essentia_available() and is_scipy_available() and is_torch_available()):
         raise OptionalDependencyNotAvailable()
@@ -50,7 +48,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["feature_extraction_pop2piano"] = ["Pop2PianoFeatureExtractor"]
 
-# Tokenizer
 try:
     if not (is_pretty_midi_available() and is_torch_available()):
         raise OptionalDependencyNotAvailable()
@@ -63,7 +60,6 @@ else:
 if TYPE_CHECKING:
     from .configuration_pop2piano import POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP, Pop2PianoConfig
 
-    # Model
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
@@ -76,7 +72,6 @@ if TYPE_CHECKING:
             Pop2PianoPreTrainedModel,
         )
 
-    # Feature Extractor
     try:
         if not (is_librosa_available() and is_essentia_available() and is_scipy_available() and is_torch_available()):
             raise OptionalDependencyNotAvailable()
@@ -85,7 +80,6 @@ if TYPE_CHECKING:
     else:
         from .feature_extraction_pop2piano import Pop2PianoFeatureExtractor
 
-    # Tokenizer
     try:
         if not (is_pretty_midi_available() and is_torch_available()):
             raise OptionalDependencyNotAvailable()

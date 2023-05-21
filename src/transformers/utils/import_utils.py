@@ -1014,7 +1014,7 @@ Please note that you may need to restart your runtime after installation.
 # docstyle-ignore
 MUSIC_IMPORT_ERROR = """
 {0} requires these libraries - pretty_midi, essentia, librosa, scipy. But at least
-one of them were not found in your environment. You can install them with pip:
+one of them was not found in your environment. You can install them with pip:
 `pip install pretty-midi==0.2.9 essentia==2.1b6.dev609 librosa scipy`
 Please note that you may need to restart your runtime after installation.
 """

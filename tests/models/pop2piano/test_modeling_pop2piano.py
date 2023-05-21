@@ -627,7 +627,7 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
             {
                 "input_features": torch.randint(size=(1, 75, 100, 512), low=0, high=100).type(torch.float32),
                 "beatsteps": torch.randint(size=(1, 955), low=0, high=100).type(torch.float32),
-                "ext_beatstep": torch.randint(size=(1, 900), low=0, high=100).type(torch.float32),
+                "extrapolated_beatstep": torch.randint(size=(1, 900), low=0, high=100).type(torch.float32),
             }
         ).to(torch_device)
         model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev").to(torch_device)
@@ -641,10 +641,10 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
             {
                 "input_features": torch.randint(size=(5, 100, 100, 512), low=0, high=100).type(torch.float32),
                 "beatsteps": torch.randint(size=(5, 955), low=0, high=100).type(torch.float32),
-                "ext_beatstep": torch.randint(size=(5, 900), low=0, high=100).type(torch.float32),
+                "extrapolated_beatstep": torch.randint(size=(5, 900), low=0, high=100).type(torch.float32),
                 "attention_mask_input_features": torch.ones((5, 100, 100, 512)).type(torch.int32),
                 "attention_mask_beatsteps": torch.ones((5, 955)).type(torch.int32),
-                "attention_mask_ext_beatstep": torch.ones((5, 900)).type(torch.int32),
+                "attention_mask_extrapolated_beatstep": torch.ones((5, 900)).type(torch.int32),
             }
         ).to(torch_device)
         model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev").to(torch_device)

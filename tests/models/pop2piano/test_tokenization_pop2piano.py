@@ -49,10 +49,12 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
     def test_call(self):
         tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
         model_output = Pop2PianoGreedySearchEncoderDecoderOutput(sequences=[torch.ones([120, 96])])
-        input_features = BatchFeature({"beatsteps": torch.ones([1, 955]), "ext_beatstep": torch.ones([1, 1000])})
+        input_features = BatchFeature(
+            {"beatsteps": torch.ones([1, 955]), "extrapolated_beatstep": torch.ones([1, 1000])}
+        )
 
         output = tokenizer(relative_tokens=model_output.sequences, input_features=input_features)
-        self.assertTrue(isinstance(output[0], pretty_midi.pretty_midi.PrettyMIDI))
+        self.assertTrue(isinstance(output, pretty_midi.pretty_midi.PrettyMIDI))
 
     def test_call_batched(self):
         tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
@@ -62,9 +64,9 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         input_features = BatchFeature(
             {
                 "beatsteps": torch.ones([2, 955]),
-                "ext_beatstep": torch.ones([2, 1000]),
+                "extrapolated_beatstep": torch.ones([2, 1000]),
                 "attention_mask_beatsteps": torch.ones([2, 955]),
-                "attention_mask_ext_beatstep": torch.ones([2, 1000]),
+                "attention_mask_extrapolated_beatstep": torch.ones([2, 1000]),
             }
         )
 
@@ -78,20 +80,18 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
     # This is the test for a real music from K-Pop genre.
     @slow
     def test_real_music(self):
-        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev").to("cuda")
+        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
         model.eval()
         feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
         tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
         ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
 
-        output_fe = feature_extractor(ds["audio"][0]["array"], sampling_rate=ds["audio"][0]["sampling_rate"]).to(
-            "cuda"
-        )
+        output_fe = feature_extractor(ds["audio"][0]["array"], sampling_rate=ds["audio"][0]["sampling_rate"])
         output_model = model.generate(output_fe, composer="composer1")
         output_tokenizer = tokenizer(
             relative_tokens=output_model.sequences,
             input_features=output_fe,
-        )[0]
+        )
 
         # Checking if no of notes are same
         self.assertEqual(len(output_tokenizer.instruments[0].notes), 59)

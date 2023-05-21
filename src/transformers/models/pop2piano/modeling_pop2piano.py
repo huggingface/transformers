@@ -21,7 +21,6 @@ import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
@@ -230,10 +229,11 @@ class Pop2PianoDenseGatedActDense(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.t5.modeling_t5.T5LayerFF with T5->Pop2Piano
 class Pop2PianoLayerFF(nn.Module):
     def __init__(self, config: Pop2PianoConfig):
         super().__init__()
-        if config.feed_forward_proj.split("-")[0] == "gated":
+        if config.is_gated_act:
             self.DenseReluDense = Pop2PianoDenseGatedActDense(config)
         else:
             self.DenseReluDense = Pop2PianoDenseActDense(config)
@@ -241,7 +241,6 @@ class Pop2PianoLayerFF(nn.Module):
         self.layer_norm = Pop2PianoLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-    # Copied from transformers.models.t5.modeling_t5.T5LayerFF.forward
     def forward(self, hidden_states):
         forwarded_states = self.layer_norm(hidden_states)
         forwarded_states = self.DenseReluDense(forwarded_states)
@@ -1204,9 +1203,9 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
 class Pop2PianoConcatEmbeddingToMel(nn.Module):
     """Embedding Matrix for `composer` tokens."""
 
-    def __init__(self, n_vocab, n_dim):
+    def __init__(self, num_vocab, num_dim):
         super().__init__()
-        self.embedding = nn.Embedding(num_embeddings=n_vocab, embedding_dim=n_dim)
+        self.embedding = nn.Embedding(num_embeddings=num_vocab, embedding_dim=num_dim)
 
     def forward(self, feature, index_value, embedding_offset):
         index_shifted = index_value - embedding_offset
@@ -1257,7 +1256,9 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
 
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
-        self.mel_conditioner = Pop2PianoConcatEmbeddingToMel(n_vocab=config.composer_n_vocab, n_dim=self.model_dim)
+        self.mel_conditioner = Pop2PianoConcatEmbeddingToMel(
+            num_vocab=config.composer_vocab_size, num_dim=self.model_dim
+        )
 
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
@@ -1303,12 +1304,9 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
 
     def get_mel_conditioner_outputs(self, input_features, composer, generation_config):
         composer_to_feature_token = generation_config.composer_to_feature_token
-        # select composer randomly if not already given
-        if composer is None:
-            composer = np.random.choice(list(composer_to_feature_token.keys()), size=1)[0]
-        elif composer not in composer_to_feature_token.keys():
+        if composer not in composer_to_feature_token.keys():
             raise ValueError(
-                f"Composer not found in list, Please choose from {list(composer_to_feature_token.keys())}"
+                f"Please choose a composer from {list(composer_to_feature_token.keys())}. Composer received - {composer}"
             )
         composer_value = composer_to_feature_token[composer]
         composer_value = torch.tensor(composer_value, device=self.device)
@@ -1457,7 +1455,9 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
                 `input_features` returned by `Pop2PianoFeatureExtractor.__call__`.
             composer (`str`, *optional*, defaults to `"composer1"`):
                 This value is passed to `Pop2PianoConcatEmbeddingToMel` to generate different embeddings for each
-                `"composer"`.
+                `"composer"`. Please make sure that the composet value is present in `composer_to_feature_token` in
+                `generation_config`. For an example please see
+                https://huggingface.co/susnato/pop2piano_dev/blob/main/generation_config.json .
             max_length (`int`, *optional*, defaults to 256):
                 Number of tokens to be generated.
             generation_config (`~generation.GenerationConfig`, *optional*):
@@ -1487,15 +1487,13 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         >>> from datasets import load_dataset
         >>> from transformers import Pop2PianoForConditionalGeneration, Pop2PianoTokenizer, Pop2PianoFeatureExtractor
 
-        >>> model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev").to("cuda")
+        >>> model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
         >>> model.eval()
         >>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
         >>> tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
         >>> ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
 
-        >>> fe_output = feature_extractor(
-        ...     raw_audio=ds["audio"][0]["array"], sampling_rate=ds["audio"][0]["sampling_rate"]
-        ... ).to("cuda")
+        >>> fe_output = feature_extractor(audio=ds["audio"][0]["array"], sampling_rate=ds["audio"][0]["sampling_rate"])
         >>> model_output = model.generate(fe_output, composer="composer1")
         ```"""
 
@@ -1511,11 +1509,11 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
                 "and parse a dict like that."
             )
         else:
-            if len(generation_config.composer_to_feature_token) != self.config.composer_n_vocab:
+            if len(generation_config.composer_to_feature_token) != self.config.composer_vocab_size:
                 raise ValueError(
-                    "config.composer_n_vocab must be same as the number of keys in "
+                    "config.composer_vocab_size must be same as the number of keys in "
                     f"generation_config.composer_to_feature_token! "
-                    f"Found {self.config.composer_n_vocab} vs {len(generation_config.composer_to_feature_token)}."
+                    f"Found {self.config.composer_vocab_size} vs {len(generation_config.composer_to_feature_token)}."
                 )
 
         # check for attention_mask
@@ -1710,9 +1708,13 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
                 )
 
             if reordered_layer_past_states[0].shape != layer_past_states[0].shape:
-                raise ValueError
+                raise ValueError(
+                    f"reordered_layer_past_states[0] shape {reordered_layer_past_states[0].shape} and layer_past_states[0] shape {layer_past_states[0].shape} mismatched"
+                )
             if len(reordered_layer_past_states) != len(layer_past_states):
-                raise ValueError
+                raise ValueError(
+                    f"length of reordered_layer_past_states {len(reordered_layer_past_states)} and length of layer_past_states {len(layer_past_states)} mismatched"
+                )
 
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
         return reordered_decoder_past

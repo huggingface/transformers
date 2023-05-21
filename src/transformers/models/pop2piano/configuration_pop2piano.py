@@ -96,7 +96,7 @@ class Pop2PianoConfig(PretrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         dense_act_fn="relu",
-        composer_n_vocab=21,
+        composer_vocab_size=21,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -114,7 +114,8 @@ class Pop2PianoConfig(PretrainedConfig):
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
         self.dense_act_fn = dense_act_fn
-        self.composer_n_vocab = composer_n_vocab
+        self.composer_vocab_size = composer_vocab_size
+        self.is_gated_act = self.feed_forward_proj.split("-")[0] == "gated"
 
         super().__init__(
             pad_token_id=pad_token_id,

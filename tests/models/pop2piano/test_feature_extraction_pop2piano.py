@@ -136,7 +136,7 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         self.assertEqual(input_features.input_features.shape[-1], 512)
 
         self.assertTrue(input_features.beatsteps.ndim == 2)
-        self.assertTrue(input_features.ext_beatstep.ndim == 2)
+        self.assertTrue(input_features.extrapolated_beatstep.ndim == 2)
 
     def test_integration(self):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -177,16 +177,16 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         # check shapes
         self.assertEqual(input_features["attention_mask_input_features"].shape[0], 2)
         self.assertEqual(input_features["attention_mask_beatsteps"].shape[0], 2)
-        self.assertEqual(input_features["attention_mask_ext_beatstep"].shape[0], 2)
+        self.assertEqual(input_features["attention_mask_extrapolated_beatstep"].shape[0], 2)
 
         # check if they are any values except 0 and 1
         self.assertTrue(np.max(input_features["attention_mask_input_features"]) == 1)
         self.assertTrue(np.max(input_features["attention_mask_beatsteps"]) == 1)
-        self.assertTrue(np.max(input_features["attention_mask_ext_beatstep"]) == 1)
+        self.assertTrue(np.max(input_features["attention_mask_extrapolated_beatstep"]) == 1)
 
         self.assertTrue(np.min(input_features["attention_mask_input_features"]) == 0)
         self.assertTrue(np.min(input_features["attention_mask_beatsteps"]) == 0)
-        self.assertTrue(np.min(input_features["attention_mask_ext_beatstep"]) == 0)
+        self.assertTrue(np.min(input_features["attention_mask_extrapolated_beatstep"]) == 0)
 
     def test_batch_feature(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
@@ -217,7 +217,7 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         # check shape
         self.assertEqual(input_features["input_features"].shape[0], 3)
         self.assertEqual(input_features["beatsteps"].shape[0], 3)
-        self.assertEqual(input_features["ext_beatstep"].shape[0], 3)
+        self.assertEqual(input_features["extrapolated_beatstep"].shape[0], 3)
 
     def test_batch_feature_np(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
