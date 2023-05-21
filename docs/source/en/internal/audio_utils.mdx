@@ -12,10 +12,9 @@ specific language governing permissions and limitations under the License.
 
 # Utilities for `FeatureExtractors`
 
-This page lists all the utility functions that can be used by the audio [`FeatureExtractor`] in order to compute special features from a raw audio using common algorithms such as *Short Time Fourier Transform* or *Mel log spectrogram*.
+This page lists all the utility functions that can be used by the audio [`FeatureExtractor`] in order to compute special features from a raw audio using common algorithms such as *Short Time Fourier Transform* or *log mel spectrogram*.
 
-
-Most of those are only useful if you are studying the code of the image processors in the library.
+Most of those are only useful if you are studying the code of the audio processors in the library.
 
 ## Audio Transformations
 
@@ -23,12 +22,14 @@ Most of those are only useful if you are studying the code of the image processo
 
 [[autodoc]] audio_utils.mel_to_hertz
 
-[[autodoc]] audio_utils.get_mel_filter_banks
+[[autodoc]] audio_utils.mel_filter_bank
 
-[[autodoc]] audio_utils.stft
+[[autodoc]] audio_utils.optimal_fft_length
+
+[[autodoc]] audio_utils.window_function
+
+[[autodoc]] audio_utils.spectrogram
 
 [[autodoc]] audio_utils.power_to_db
 
-[[autodoc]] audio_utils.fram_wave
-
-
+[[autodoc]] audio_utils.amplitude_to_db

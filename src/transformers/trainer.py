@@ -1105,10 +1105,10 @@ class Trainer:
                     for module in opt_model.modules():
                         if isinstance(module, nn.Embedding):
                             skipped += sum({p.data_ptr(): p.numel() for p in module.parameters()}.values())
-                            print(f"skipped {module}: {skipped/2**20}M params")
+                            logger.info(f"skipped {module}: {skipped/2**20}M params")
                             manager.register_module_override(module, "weight", {"optim_bits": 32})
                             logger.debug(f"bitsandbytes: will optimize {module} in fp32")
-                    print(f"skipped: {skipped/2**20}M params")
+                    logger.info(f"skipped: {skipped/2**20}M params")
 
         if is_sagemaker_mp_enabled():
             self.optimizer = smp.DistributedOptimizer(self.optimizer)
@@ -1711,6 +1711,14 @@ class Trainer:
                 "args.max_steps must be set to a positive value if dataloader does not have a length, was"
                 f" {args.max_steps}"
             )
+
+        # Compute absolute values for logging, eval, and save if given as ratio
+        if args.logging_steps and args.logging_steps < 1:
+            args.logging_steps = math.ceil(max_steps * args.logging_steps)
+        if args.eval_steps and args.eval_steps < 1:
+            args.eval_steps = math.ceil(max_steps * args.eval_steps)
+        if args.save_steps and args.save_steps < 1:
+            args.save_steps = math.ceil(max_steps * args.save_steps)
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
@@ -3641,6 +3649,8 @@ class Trainer:
             _, self.push_in_progress = self.repo.push_to_hub(
                 commit_message=commit_message, blocking=False, auto_lfs_prune=True
             )
+        except Exception as e:
+            logger.error(f"Error when pushing to hub: {e}")
         finally:
             if self.args.hub_strategy == HubStrategy.CHECKPOINT:
                 # Move back the checkpoint to its place

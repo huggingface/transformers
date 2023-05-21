@@ -1243,7 +1243,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
         # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation
-        if "GenerationMixin" in str(self.prepare_inputs_for_generation):
+        if "GenerationMixin" in str(self.prepare_inputs_for_generation.__func__):
             return False
         return True
 
@@ -2820,6 +2820,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 allow_missing_keys=True,
                 output_loading_info=output_loading_info,
                 _prefix=load_weight_prefix,
+                ignore_mismatched_sizes=ignore_mismatched_sizes,
             )
 
         # 'by_name' allow us to do transfer learning by skipping/adding layers
@@ -3131,6 +3132,10 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.initializer_range = hidden_size**-0.5 if initializer_range is None else initializer_range
+        warnings.warn(
+            "`TFSharedEmbeddings` is scheduled for deletion in v4.32, use `tf.keras.layers.Embedding` instead.",
+            DeprecationWarning,
+        )
 
     def build(self, input_shape):
         """

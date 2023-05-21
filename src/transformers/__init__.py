@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.29.0.dev0"
+__version__ = "4.30.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -432,6 +432,7 @@ _import_structure = {
     "models.roberta_prelayernorm": ["ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaPreLayerNormConfig"],
     "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig", "RoCBertTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
+    "models.rwkv": ["RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP", "RwkvConfig"],
     "models.sam": [
         "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SamConfig",
@@ -464,6 +465,7 @@ _import_structure = {
     ],
     "models.splinter": ["SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SplinterConfig", "SplinterTokenizer"],
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
+    "models.swiftformer": ["SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwiftFormerConfig"],
     "models.swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
     "models.swin2sr": ["SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swin2SRConfig"],
     "models.swinv2": ["SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swinv2Config"],
@@ -609,6 +611,17 @@ _import_structure = {
         "PreTrainedTokenizerBase",
         "SpecialTokensMixin",
         "TokenSpan",
+    ],
+    "tools": [
+        "Agent",
+        "HfAgent",
+        "LocalAgent",
+        "OpenAiAgent",
+        "PipelineTool",
+        "RemoteTool",
+        "Tool",
+        "launch_gradio_demo",
+        "load_tool",
     ],
     "trainer_callback": [
         "DefaultFlowCallback",
@@ -2374,6 +2387,14 @@ else:
             "load_tf_weights_in_roformer",
         ]
     )
+    _import_structure["models.rwkv"].extend(
+        [
+            "RWKV_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RwkvForCausalLM",
+            "RwkvModel",
+            "RwkvPreTrainedModel",
+        ]
+    )
     _import_structure["models.sam"].extend(
         [
             "SAM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2452,6 +2473,14 @@ else:
             "SqueezeBertModel",
             "SqueezeBertModule",
             "SqueezeBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.swiftformer"].extend(
+        [
+            "SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SwiftFormerForImageClassification",
+            "SwiftFormerModel",
+            "SwiftFormerPreTrainedModel",
         ]
     )
     _import_structure["models.swin"].extend(
@@ -3387,6 +3416,13 @@ else:
             "TFRoFormerPreTrainedModel",
         ]
     )
+    _import_structure["models.sam"].extend(
+        [
+            "TF_SAM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFSamModel",
+            "TFSamPreTrainedModel",
+        ]
+    )
     _import_structure["models.segformer"].extend(
         [
             "TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4180,6 +4216,7 @@ if TYPE_CHECKING:
     )
     from .models.roc_bert import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RoCBertConfig, RoCBertTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
+    from .models.rwkv import RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP, RwkvConfig
     from .models.sam import (
         SAM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SamConfig,
@@ -4212,6 +4249,7 @@ if TYPE_CHECKING:
     )
     from .models.splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig, SplinterTokenizer
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
+    from .models.swiftformer import SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SwiftFormerConfig
     from .models.swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
     from .models.swin2sr import SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP, Swin2SRConfig
     from .models.swinv2 import SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Swinv2Config
@@ -4339,6 +4377,19 @@ if TYPE_CHECKING:
         PreTrainedTokenizerBase,
         SpecialTokensMixin,
         TokenSpan,
+    )
+
+    # Tools
+    from .tools import (
+        Agent,
+        HfAgent,
+        LocalAgent,
+        OpenAiAgent,
+        PipelineTool,
+        RemoteTool,
+        Tool,
+        launch_gradio_demo,
+        load_tool,
     )
 
     # Trainer
@@ -5801,6 +5852,12 @@ if TYPE_CHECKING:
             RoFormerPreTrainedModel,
             load_tf_weights_in_roformer,
         )
+        from .models.rwkv import (
+            RWKV_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RwkvForCausalLM,
+            RwkvModel,
+            RwkvPreTrainedModel,
+        )
         from .models.sam import (
             SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
             SamModel,
@@ -5864,6 +5921,12 @@ if TYPE_CHECKING:
             SqueezeBertModel,
             SqueezeBertModule,
             SqueezeBertPreTrainedModel,
+        )
+        from .models.swiftformer import (
+            SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SwiftFormerForImageClassification,
+            SwiftFormerModel,
+            SwiftFormerPreTrainedModel,
         )
         from .models.swin import (
             SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6618,6 +6681,11 @@ if TYPE_CHECKING:
             TFRoFormerLayer,
             TFRoFormerModel,
             TFRoFormerPreTrainedModel,
+        )
+        from .models.sam import (
+            TF_SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSamModel,
+            TFSamPreTrainedModel,
         )
         from .models.segformer import (
             TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
