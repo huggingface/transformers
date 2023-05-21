@@ -224,7 +224,7 @@ class BrosModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class BrosModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_masked_lm(self):
+    def test_inference_no_head(self):
         ...
         # model = BrosForMaskedLM.from_pretrained("naver-clova-ocr/bros-base-uncased")
         # input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
@@ -254,3 +254,8 @@ class BrosModelIntegrationTest(unittest.TestCase):
         # # expected_slice = torch.tensor([[[0.4249, 0.1008, 0.7531], [0.3771, 0.1188, 0.7467], [0.4152, 0.1098, 0.7108]]])
 
         # # self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
+
+    def test_inference_token_classification(self):
+        ...
+
+    # TODO add other tests
