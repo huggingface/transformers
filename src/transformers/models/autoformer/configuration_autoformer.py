@@ -106,6 +106,8 @@ class AutoformerConfig(PretrainedConfig):
             The standard deviation of the truncated normal weight initialization distribution.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+            The epsilon used by the layer normalization layers.
         label_length (`int`, *optional*):
             Start token length of the Autoformer decoder, which is used for direct multi-step prediction (i.e.
             non-autoregressive generation).
@@ -169,7 +171,8 @@ class AutoformerConfig(PretrainedConfig):
         activation_dropout: float = 0.1,
         num_parallel_samples: int = 100,
         init_std: float = 0.02,
-        use_cache=True,
+        use_cache: bool = True,
+        layer_norm_eps: float = 1e-6,
         # Autoformer arguments
         label_length: Optional[int] = None,
         moving_average: int = 25,
@@ -226,6 +229,7 @@ class AutoformerConfig(PretrainedConfig):
         self.init_std = init_std
 
         self.use_cache = use_cache
+        self.layer_norm_eps = layer_norm_eps
 
         # Autoformer
         self.label_length = label_length or 10
