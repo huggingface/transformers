@@ -635,17 +635,20 @@ class TFEfficientFormerEncoder(tf.keras.layers.Layer):
         ]
 
         intermediate_stages = []
+        layer_count = -1
         for i in range(num_intermediate_stages):
+            layer_count += 1
             intermediate_stages.append(
-                TFEfficientFormerIntermediateStage(config, i, name=f"intermediate_stages.{2*i}")
+                TFEfficientFormerIntermediateStage(config, i, name=f"intermediate_stages.{layer_count}")
             )
             if downsamples[i]:
+                layer_count += 1
                 intermediate_stages.append(
                     TFEfficientFormerPatchEmbeddings(
                         config,
                         config.hidden_sizes[i],
                         config.hidden_sizes[i + 1],
-                        name=f"intermediate_stages.{2*i+1}",
+                        name=f"intermediate_stages.{layer_count}",
                     )
                 )
         self.intermediate_stages = intermediate_stages
