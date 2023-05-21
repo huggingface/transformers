@@ -350,7 +350,7 @@ class AutoformerLayernorm(nn.Module):
 
     def __init__(self, config: AutoformerConfig):
         super().__init__()
-        self.layernorm = nn.LayerNorm(config.d_model)
+        self.layernorm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
 
     def forward(self, x):
         x_hat = self.layernorm(x)
@@ -597,7 +597,7 @@ class AutoformerEncoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = AutoformerLayernorm(self.embed_dim)
+        self.final_layer_norm = AutoformerLayernorm(config)
         self.decomp1 = AutoformerSeriesDecompositionLayer(config)
         self.decomp2 = AutoformerSeriesDecompositionLayer(config)
 
@@ -682,7 +682,7 @@ class AutoformerDecoderLayer(nn.Module):
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = AutoformerLayernorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.final_layer_norm = AutoformerLayernorm(config)
 
         self.decomp1 = AutoformerSeriesDecompositionLayer(config)
         self.decomp2 = AutoformerSeriesDecompositionLayer(config)
