@@ -174,7 +174,7 @@ class AutoformerConfig(PretrainedConfig):
         use_cache: bool = True,
         layer_norm_eps: float = 1e-6,
         # Autoformer arguments
-        label_length: Optional[int] = None,
+        label_length: int = 10,
         moving_average: int = 25,
         autocorrelation_factor: int = 3,
         **kwargs,
