@@ -795,6 +795,13 @@ class ModelTesterMixin:
                     traced_model = torch.jit.trace(
                         model, (input_ids, bbox, image), check_trace=False
                     )  # when traced model is checked, an error is produced due to name mangling
+                elif "bbox" in inputs:  # Bros requires additional inputs (bbox)
+                    input_ids = inputs["input_ids"]
+                    bbox = inputs["bbox"]
+                    model(input_ids, bbox)
+                    traced_model = torch.jit.trace(
+                        model, (input_ids, bbox), check_trace=False
+                    )  # when traced model is checked, an error is produced due to name mangling
                 else:
                     main_input = inputs[main_input_name]
                     model(main_input)
