@@ -133,7 +133,7 @@ class TFEfficientFormerModelTester:
             hidden_sizes=self.hidden_sizes,
             dim=self.dim,
             mlp_expansion_ratio=self.mlp_expansion_ratio,
-            )
+        )
 
     def create_and_check_model(self, config, pixel_values, labels):
         model = TFEfficientFormerModel(config=config)

@@ -711,7 +711,9 @@ class TFEfficientFormerMainLayer(tf.keras.layers.Layer):
         # Change the hidden states from NHWC to NCHW; the hidden states are
         # in NHWC shape after all stages except the MB3D blocks
         if output_hidden_states:
-            hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1][:-1]]) + (encoder_outputs[1][-1], )
+            hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1][:-1]]) + (
+                encoder_outputs[1][-1],
+            )
 
         if not return_dict:
             head_outputs = (sequence_output,)
@@ -996,7 +998,9 @@ class TFEfficientFormerForImageClassificationWithTeacher(TFEfficientFormerPreTra
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if training:
-            raise Exception("This model supports inference-only. Fine-tuning with distillation (i.e. with a teacher) is not yet supported.")
+            raise Exception(
+                "This model supports inference-only. Fine-tuning with distillation (i.e. with a teacher) is not yet supported."
+            )
 
         outputs = self.efficientformer(
             pixel_values=pixel_values,
