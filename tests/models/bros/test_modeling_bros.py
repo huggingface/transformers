@@ -225,6 +225,9 @@ class BrosModelTest(ModelTesterMixin, unittest.TestCase):
 
 def prepare_bros_batch_inputs():
     attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+    labels = torch.tensor(
+        [[-100, 6, 6, 6, 6, 5, 5, 5, 6, 6, 6, 6, -100], [-100, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, -100]]
+    )
 
     bbox = torch.tensor(
         [
