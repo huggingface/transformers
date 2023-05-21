@@ -1998,7 +1998,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         decoder_outputs = decoder(
             trend=trend_init, inputs_embeds=dec_input, encoder_hidden_states=repeated_enc_last_hidden
         )
-        dec_last_hidden = decoder_outputs.last_hidden_state
+        decoder_last_hidden = decoder_outputs.last_hidden_state
         params = self.output_params(dec_last_hidden[0] + dec_last_hidden[1])
         distr = self.output_distribution(params, loc=repeated_loc, scale=repeated_scale)
         future_samples = distr.sample()
