@@ -51,8 +51,8 @@ _CONFIG_FOR_DOC = "BrosConfig"
 _TOKENIZER_FOR_DOC = "BrosTokenizer"
 
 BROS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "bros-base-uncased",
-    "bros-large-uncased",
+    "naver-clova-ocr/bros-base-uncased",
+    "naver-clova-ocr/bros-large-uncased",
     # See all Bros models at https://huggingface.co/models?filter=bros
 ]
 
