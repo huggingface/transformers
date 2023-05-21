@@ -24,7 +24,7 @@ from ..utils import (
 
 
 _import_structure = {
-    "agents": ["Agent", "HfAgent", "OpenAiAgent"],
+    "agents": ["Agent", "HfAgent", "LocalAgent", "OpenAiAgent"],
     "base": ["PipelineTool", "RemoteTool", "Tool", "launch_gradio_demo", "load_tool"],
 }
 
@@ -46,7 +46,7 @@ else:
     _import_structure["translation"] = ["TranslationTool"]
 
 if TYPE_CHECKING:
-    from .agents import Agent, HfAgent, OpenAiAgent
+    from .agents import Agent, HfAgent, LocalAgent, OpenAiAgent
     from .base import PipelineTool, RemoteTool, Tool, launch_gradio_demo, load_tool
 
     try:
