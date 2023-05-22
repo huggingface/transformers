@@ -2703,7 +2703,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if _accelerate_has_custom_dtype:
                     from accelerate.utils import CustomDtype
 
-                    target_dtype = CustomDtype.int4
+                    target_dtype = CustomDtype.INT4
                 else:
                     logger.warning(
                         "You are using `device_map='auto'` on a 4bit loaded version of the model. To automatically compute the appropriate device map, you should upgrade your `accelerate` library, `pip install --upgrade accelerare` or install it from source to support int4 auto device map calculation. You may encounter unexpected behavior, or pass your own device map"
