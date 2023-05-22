@@ -2638,7 +2638,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             keep_in_fp32_modules = []
 
         if load_in_8bit or load_in_4bit:
-            import bitsandbytes as bnb
 
             from .utils.bitsandbytes import get_keys_to_not_convert, replace_with_bnb_linear
 
@@ -2671,7 +2670,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 modules_to_not_convert.extend(keys_on_cpu)
 
-            supports_4bit = hasattr(bnb.nn, "Linear4bit")
+            supports_4bit = version.parse(importlib_metadata.version("bitsandbytes")) >= version.parse("0.39.0")
+
             if load_in_4bit and not supports_4bit:
                 raise ValueError(
                     "You have a version of `bitsandbytes` that is not compatible with 4bit inference and training"
@@ -2718,19 +2718,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             target_dtype = torch_dtype
 
             if load_in_4bit:
-                _accelerate_has_custom_dtype = version.parse(importlib_metadata.version("accelerate")) > version.parse(
-                    "0.19.0"
-                )
-
-                if _accelerate_has_custom_dtype:
+                if version.parse(importlib_metadata.version("accelerate")) > version.parse("0.19.0"):
                     from accelerate.utils import CustomDtype
 
                     target_dtype = CustomDtype.INT4
                 else:
-                    logger.warning(
-                        "You are using `device_map='auto'` on a 4bit loaded version of the model. To automatically compute the appropriate device map, you should upgrade your `accelerate` library, `pip install --upgrade accelerare` or install it from source to support int4 auto device map calculation. You may encounter unexpected behavior, or pass your own device map"
+                    raise ValueError(
+                        "You are using `device_map='auto'` on a 4bit loaded version of the model. To automatically compute the appropriate device map, you should upgrade your `accelerate` library, `pip install --upgrade accelerare` or install it from source to support fp4 auto device map calculation. You may encounter unexpected behavior, or pass your own device map"
                     )
-                    target_dtype = torch.int8
             elif load_in_8bit:
                 target_dtype = torch.int8
 
