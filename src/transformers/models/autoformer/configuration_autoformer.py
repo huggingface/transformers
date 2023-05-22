@@ -106,6 +106,8 @@ class AutoformerConfig(PretrainedConfig):
             The standard deviation of the truncated normal weight initialization distribution.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+            The epsilon used by the layer normalization layers.
         label_length (`int`, *optional*):
             Start token length of the Autoformer decoder, which is used for direct multi-step prediction (i.e.
             non-autoregressive generation).
@@ -169,7 +171,9 @@ class AutoformerConfig(PretrainedConfig):
         num_parallel_samples: int = 100,
         init_std: float = 0.02,
         use_cache: bool = True,
+        is_encoder_decoder=True,
         # Autoformer arguments
+        layer_norm_eps: float = 1e-6,
         label_length: int = 10,
         moving_average: int = 25,
         autocorrelation_factor: int = 3,
@@ -225,13 +229,14 @@ class AutoformerConfig(PretrainedConfig):
         self.init_std = init_std
 
         self.use_cache = use_cache
+        self.layer_norm_eps = layer_norm_eps
 
         # Autoformer
         self.label_length = label_length or 10
         self.moving_average = moving_average
         self.autocorrelation_factor = autocorrelation_factor
 
-        super().__init__(is_encoder_decoder=True, **kwargs)
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
     def _number_of_features(self) -> int:
