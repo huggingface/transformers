@@ -2634,6 +2634,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             keep_in_fp32_modules = []
 
         if load_in_8bit or load_in_4bit:
+            import bitsandbytes as bnb
+
             from .utils.bitsandbytes import get_keys_to_not_convert, replace_with_bnb_linear
 
             llm_int8_skip_modules = quantization_config.llm_int8_skip_modules
@@ -2664,6 +2666,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
 
                 modules_to_not_convert.extend(keys_on_cpu)
+
+            supports_4bit = hasattr(bnb.nn, "Linear4bit")
+            if load_in_4bit and not supports_4bit:
+                raise ValueError(
+                    "You have a version of `bitsandbytes` that is not compatible with 4bit inference and training"
+                    " make sure you have the latest version of `bitsandbytes` installed"
+                )
 
             model = replace_with_bnb_linear(
                 model, modules_to_not_convert=modules_to_not_convert, quantization_config=quantization_config
