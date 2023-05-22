@@ -81,7 +81,6 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("oneformer", "OneFormerImageProcessor"),
         ("owlvit", "OwlViTImageProcessor"),
         ("perceiver", "PerceiverImageProcessor"),
-        ("persam", "PerSamImageProcessor"),
         ("pix2struct", "Pix2StructImageProcessor"),
         ("poolformer", "PoolFormerImageProcessor"),
         ("regnet", "ConvNextImageProcessor"),

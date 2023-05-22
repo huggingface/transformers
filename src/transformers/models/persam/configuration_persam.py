@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PERSAM model configuration"""
+""" PerSAM model configuration"""
 
 import copy
 
@@ -27,12 +27,13 @@ PERSAM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
+# Copied from transformers.models.sam.configuration_sam.SamPromptEncoderConfig with Sam->PerSam
 class PerSamPromptEncoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PerSamPromptEncoder`]. The
     [`PerSamPromptEncoder`] module is used to encode the input 2D points and bounding boxes. Instantiating a
-    configuration defaults will yield a similar configuration to that of the PERSAM-vit-h
-    [facebook/sam-vit-base](https://huggingface.co/facebook/sam-vit-base) architecture.
+    configuration defaults will yield a similar configuration to that of the SAM-vit-h
+    [facebook/sam-vit-huge](https://huggingface.co/facebook/sam-vit-huge) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -135,12 +136,13 @@ class PerSamMaskDecoderConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
 
 
+# Copied from transformers.models.sam.configuration_sam.SamVisionConfig with Sam->PerSam
 class PerSamVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PerSamVisionModel`]. It is used to instantiate a
-    PERSAM vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration defaults will yield a similar configuration to that of the PERSAM ViT-h
-    [facebook/sam-vit-base](https://huggingface.co/facebook/sam-vit-base) architecture.
+    SAM vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration defaults will yield a similar configuration to that of the SAM ViT-h
+    [facebook/sam-vit-huge](https://huggingface.co/facebook/sam-vit-huge) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -252,9 +254,9 @@ class PerSamVisionConfig(PretrainedConfig):
 class PerSamConfig(PretrainedConfig):
     r"""
     [`PerSamConfig`] is the configuration class to store the configuration of a [`PerSamModel`]. It is used to
-    instantiate a PERSAM model according to the specified arguments, defining the vision model, prompt-encoder model
-    and mask decoder configs. Instantiating a configuration with the defaults will yield a similar configuration to
-    that of the PERSAM-ViT-H [facebook/sam-vit-base](https://huggingface.co/facebook/sam-vit-base) architecture.
+    instantiate a SAM model according to the specified arguments, defining the vision model, prompt-encoder model and
+    mask decoder configs. Instantiating a configuration with the defaults will yield a similar configuration to that of
+    the SAM-ViT-H [facebook/sam-vit-huge](https://huggingface.co/facebook/sam-vit-huge) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -280,10 +282,10 @@ class PerSamConfig(PretrainedConfig):
     ...     PerSamModel,
     ... )
 
-    >>> # Initializing a PerSamConfig with `"facebook/sam-vit-base"` style configuration
+    >>> # Initializing a PerSamConfig with `"facebook/sam-vit-huge"` style configuration
     >>> configuration = PerSamConfig()
 
-    >>> # Initializing a PerSamModel (with random weights) from the `"facebook/sam-vit-base"` style configuration
+    >>> # Initializing a PerSamModel (with random weights) from the `"facebook/sam-vit-huge"` style configuration
     >>> model = PerSamModel(configuration)
 
     >>> # Accessing the model configuration
@@ -291,7 +293,7 @@ class PerSamConfig(PretrainedConfig):
 
     >>> # We can also initialize a PerSamConfig from a PerSamVisionConfig, PerSamPromptEncoderConfig, and PerSamMaskDecoderConfig
 
-    >>> # Initializing PERSAM vision, PERSAM Q-Former and language model configurations
+    >>> # Initializing SAM vision, SAM Q-Former and language model configurations
     >>> vision_config = PerSamVisionConfig()
     >>> prompt_encoder_config = PerSamPromptEncoderConfig()
     >>> mask_decoder_config = PerSamMaskDecoderConfig()

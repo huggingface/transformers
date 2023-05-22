@@ -14,19 +14,19 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The PerSAM model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The PerSAM model was proposed in [Personalize Segment Anything Model with One Shot](https://arxiv.org/abs/2305.03048) by Renrui Zhang, Zhengkai Jiang, Ziyu Guo, Shilin Yan, Junting Pan, Hao Dong, Peng Gao, Hongsheng Li.
+PerSAM proposes a minimal modification to [SAM](sam) to allow dreambooth-like personalization, enabling to segment concepts in new images using just one example.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*Driven by large-data pre-training, Segment Anything Model (SAM) has been demonstrated as a powerful and promptable framework, revolutionizing the segmentation models. Despite the generality, customizing SAM for specific visual concepts without man-powered prompting is under explored, e.g., automatically segmenting your pet dog in different images. In this paper, we propose a training-free Personalization approach for SAM, termed as PerSAM. Given only a single image with a reference mask, PerSAM first localizes the target concept by a location prior, and segments it within other images or videos via three techniques: target-guided attention, target-semantic prompting, and cascaded post-refinement. In this way, we effectively adapt SAM for private use without any training. To further alleviate the mask ambiguity, we present an efficient one-shot fine-tuning variant, PerSAM-F. Freezing the entire SAM, we introduce two learnable weights for multi-scale masks, only training 2 parameters within 10 seconds for improved performance. To demonstrate our efficacy, we construct a new segmentation dataset, PerSeg, for personalized evaluation, and test our methods on video object segmentation with competitive performance. Besides, our approach can also enhance DreamBooth to personalize Stable Diffusion for text-to-image generation, which discards the background disturbance for better target appearance learning.*
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- PerSAM only adds 2 additional arguments to the forward of `SamModel`, namely attention similarity and target embedding, to allow for training-free personalization of SAM.
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [nielsr](https://huggingface.co/nielsr).
+The original code can be found [here](https://github.com/ZrrSkywalker/Personalize-SAM).
 
 
 ## PerSamConfig
@@ -44,7 +44,6 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## PerSamPromptEncoderConfig
 
 [[autodoc]] PerSamPromptEncoderConfig
-
 
 ## PerSamModel
 

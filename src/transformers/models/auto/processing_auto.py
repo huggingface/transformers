@@ -60,7 +60,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("mgp-str", "MgpstrProcessor"),
         ("oneformer", "OneFormerProcessor"),
         ("owlvit", "OwlViTProcessor"),
-        ("persam", "PerSamProcessor"),
+        ("persam", "SamProcessor"),
         ("pix2struct", "Pix2StructProcessor"),
         ("sam", "SamProcessor"),
         ("sew", "Wav2Vec2Processor"),
