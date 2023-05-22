@@ -2680,6 +2680,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model.config.quantization_config = quantization_config
             model.is_8bit_serializable = is_8bit_serializable
 
+        if load_in_8bit and torch_dtype is None:
+            logger.warning(
+                "You are loading your model in 8bit but you did not specify a `torch_dtype` attribute. All non-linear modules will be loaded in full precision.",
+                " If you want to load the other modules in other precision, please specify a `torch_dtype` attribute.",
+            )
+
         if isinstance(device_map, str):
             special_dtypes = {}
             special_dtypes.update(
