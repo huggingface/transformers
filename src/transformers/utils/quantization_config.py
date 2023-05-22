@@ -23,7 +23,7 @@ from typing import Any, Dict, Union
 import importlib_metadata
 from packaging import version
 
-from ..utils import is_bitsandbytes_available, is_torch_available, logging
+from ..utils import is_torch_available, logging
 
 
 if is_torch_available():
@@ -121,9 +121,6 @@ class BitsAndBytesConfig:
         r"""
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
-        if not is_bitsandbytes_available():
-            raise ImportError("You need to install bitsandbytes to use `BitsAndBytesConfig.")
-
         if not isinstance(self.llm_int8_threshold, float):
             raise ValueError("llm_int8_threshold must be a float")
 
