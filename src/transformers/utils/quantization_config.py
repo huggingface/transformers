@@ -106,7 +106,7 @@ class BitsAndBytesConfig:
         if bnb_4bit_compute_dtype is None:
             self.bnb_4bit_compute_dtype = torch.float32
         elif isinstance(bnb_4bit_compute_dtype, str):
-            self.bnb_4bit_compute_dtype = getattr(torch, self.bnb_4bit_compute_dtype)
+            self.bnb_4bit_compute_dtype = getattr(torch, bnb_4bit_compute_dtype)
         elif isinstance(bnb_4bit_compute_dtype, torch.dtype):
             self.bnb_4bit_compute_dtype = bnb_4bit_compute_dtype
         else:

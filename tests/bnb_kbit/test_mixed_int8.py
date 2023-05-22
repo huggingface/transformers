@@ -105,9 +105,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         self.model_fp16 = AutoModelForCausalLM.from_pretrained(
             self.model_name, torch_dtype=torch.float16, device_map="auto"
         )
-        self.model_8bit = AutoModelForCausalLM.from_pretrained(
-            self.model_name, load_in_8bit=True, device_map="auto", torch_dtype=torch.float16
-        )
+        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
 
     def tearDown(self):
         r"""
@@ -167,7 +165,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         bnb_config.load_in_8bit = True
 
         model_8bit_from_config = AutoModelForCausalLM.from_pretrained(
-            self.model_name, quantization_config=bnb_config, device_map="auto", torch_dtype=torch.float16
+            self.model_name, quantization_config=bnb_config, device_map="auto"
         )
 
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
@@ -259,9 +257,7 @@ class MixedInt8Test(BaseMixedInt8Test):
             config = AutoConfig.from_pretrained(tmpdirname)
             self.assertTrue(hasattr(config, "quantization_config"))
 
-            model_from_saved = AutoModelForCausalLM.from_pretrained(
-                tmpdirname, load_in_8bit=True, device_map="auto", torch_dtype=torch.float16
-            )
+            model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
 
             self.assertTrue(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
             self.assertTrue(hasattr(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
@@ -287,7 +283,7 @@ class MixedInt8Test(BaseMixedInt8Test):
             config = AutoConfig.from_pretrained(tmpdirname)
             self.assertTrue(hasattr(config, "quantization_config"))
 
-            model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, torch_dtype=torch.float16)
+            model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname)
 
             self.assertTrue(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
             self.assertTrue(hasattr(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
@@ -308,7 +304,7 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         model_id = "ybelkada/bloom-1b7-8bit"
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16)
+        model = AutoModelForCausalLM.from_pretrained(model_id)
 
         self.assertTrue(model.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
         self.assertTrue(hasattr(model.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
@@ -519,7 +515,7 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
         """
 
         model_parallel = AutoModelForCausalLM.from_pretrained(
-            self.model_name, load_in_8bit=True, device_map="balanced", torch_dtype=torch.float16
+            self.model_name, load_in_8bit=True, device_map="balanced"
         )
 
         # Check correct device map

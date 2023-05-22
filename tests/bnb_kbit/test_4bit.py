@@ -76,7 +76,7 @@ class Base4bitTest(unittest.TestCase):
 
     # Constant values
     EXPECTED_RELATIVE_DIFFERENCE = (
-        1.2941795619898806  # This was obtained on a RTX Titan so the number might slightly change
+        2.109659552692574  # This was obtained on a RTX Titan so the number might slightly change
     )
 
     input_text = "Hello my name is"
@@ -235,9 +235,7 @@ class Bnb4BitTest(Base4bitTest):
         r"""
         Test whether it is possible to mix both `4bit` and `fp32` weights when using `keep_in_fp32_modules` correctly.
         """
-        model = AutoModelForSeq2SeqLM.from_pretrained(
-            "t5-small", load_in_4bit=True, device_map="auto", torch_dtype=torch.float16
-        )
+        model = AutoModelForSeq2SeqLM.from_pretrained("t5-small", load_in_4bit=True, device_map="auto")
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
 
 

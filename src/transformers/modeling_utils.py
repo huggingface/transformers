@@ -2235,7 +2235,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
             if torch_dtype is None:
-                torch_dtype = torch.float32
+                # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
+                logger.warning(
+                    f"Overriding torch_dtype={torch_dtype} with `torch_dtype=torch.float16` due to "
+                    "requirements of `bitsandbytes` to enable model loading in mixed kbit. "
+                    "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass torch_dtype=torch.float16 to remove this warning."
+                )
+                torch_dtype = torch.float16
 
             if device_map is None:
                 raise ValueError(
@@ -2303,8 +2309,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if load_in_8bit:
                 if torch_dtype is None:
-                    torch_dtype = torch.float32
-
+                    torch_dtype = torch.float16
                 if device_map is None:
                     device_map = "auto"
 
