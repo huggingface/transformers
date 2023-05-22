@@ -42,7 +42,7 @@ from transformers.utils.versions import importlib_metadata
 
 
 if is_accelerate_available():
-    from accelerate import Accelerator
+    from accelerate import PartialState
     from accelerate.logging import get_logger
 
     logger = get_logger(__name__)
