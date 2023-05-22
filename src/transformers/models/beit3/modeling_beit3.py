@@ -975,7 +975,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
             return ((loss.mean(),) + output) if loss is not None else output
 
         return CausalLMOutputWithPast(
-            loss=loss.mean() if loss else None,
+            loss=loss.mean() if loss is not None else None,
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
