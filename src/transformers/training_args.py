@@ -1733,7 +1733,7 @@ class TrainingArguments:
             self.distributed_state is not None and self.distributed_state.distributed_type != DistributedType.NO
         ) or (self.distributed_state is None and self.local_rank != -1):
             return ParallelMode.DISTRIBUTED
-        elif self.n_gpu > 1:
+        elif self._n_gpu > 1:
             return ParallelMode.NOT_DISTRIBUTED
         else:
             return ParallelMode.NOT_PARALLEL
