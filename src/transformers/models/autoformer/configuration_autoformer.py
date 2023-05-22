@@ -52,11 +52,11 @@ class AutoformerConfig(PretrainedConfig):
         input_size (`int`, *optional*, defaults to 1):
             The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
             multivariate targets.
-        scaling (`bool`, *optional* defaults to `True`):
-            Whether to scale the input targets.
         lags_sequence (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`):
             The lags of the input time series as covariates often dictated by the frequency. Default is `[1, 2, 3, 4,
             5, 6, 7]`.
+        scaling (`bool`, *optional* defaults to `True`):
+            Whether to scale the input targets.
         num_time_features (`int`, *optional*, defaults to 0):
             The number of time features in the input time series.
         num_dynamic_real_features (`int`, *optional*, defaults to 0):
@@ -149,20 +149,19 @@ class AutoformerConfig(PretrainedConfig):
         input_size: int = 1,
         lags_sequence: List[int] = [1, 2, 3, 4, 5, 6, 7],
         scaling: bool = True,
+        num_time_features: int = 0,
         num_dynamic_real_features: int = 0,
         num_static_categorical_features: int = 0,
         num_static_real_features: int = 0,
-        num_time_features: int = 0,
         cardinality: Optional[List[int]] = None,
         embedding_dimension: Optional[List[int]] = None,
         d_model: int = 64,
-        encoder_ffn_dim: int = 32,
-        decoder_ffn_dim: int = 32,
         encoder_attention_heads: int = 2,
         decoder_attention_heads: int = 2,
         encoder_layers: int = 2,
         decoder_layers: int = 2,
-        is_encoder_decoder: bool = True,
+        encoder_ffn_dim: int = 32,
+        decoder_ffn_dim: int = 32,
         activation_function: str = "gelu",
         dropout: float = 0.1,
         encoder_layerdrop: float = 0.1,
@@ -236,7 +235,7 @@ class AutoformerConfig(PretrainedConfig):
         self.moving_average = moving_average
         self.autocorrelation_factor = autocorrelation_factor
 
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        super().__init__(is_encoder_decoder=True, **kwargs)
 
     @property
     def _number_of_features(self) -> int:
