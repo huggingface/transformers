@@ -56,6 +56,7 @@ else:
         "T5Model",
         "T5PreTrainedModel",
         "load_tf_weights_in_t5",
+        "T5ForQuestionAnswering",
     ]
 
 try:
@@ -118,6 +119,7 @@ if TYPE_CHECKING:
             T5Model,
             T5PreTrainedModel,
             load_tf_weights_in_t5,
+            T5ForQuestionAnswering,
         )
 
     try:

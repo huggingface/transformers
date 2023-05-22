@@ -45,6 +45,7 @@ if is_torch_available():
         T5ForConditionalGeneration,
         T5Model,
         T5Tokenizer,
+        T5ForQuestionAnswering,
     )
     from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -520,7 +521,7 @@ class T5ModelTester:
 
 @require_torch
 class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
+    all_model_classes = (T5Model, T5ForConditionalGeneration, T5ForQuestionAnswering) if is_torch_available() else ()
     all_generative_model_classes = (T5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -529,6 +530,7 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
             "summarization": T5ForConditionalGeneration,
             "text2text-generation": T5ForConditionalGeneration,
             "translation": T5ForConditionalGeneration,
+            "question-answering": T5ForQuestionAnswering,
         }
         if is_torch_available()
         else {}
