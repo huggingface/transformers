@@ -18,6 +18,7 @@
 
 import math
 import random
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -41,6 +42,11 @@ from .configuration_autoformer import AutoformerConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "AutoformerConfig"
+
+
+@dataclass
+class AutoformerModelOutput(Seq2SeqTSModelOutput):
+    trend: torch.FloatTensor = None
 
 
 AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1562,7 +1568,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Seq2SeqTSModelOutput, Tuple]:
+    ) -> Union[AutoformerModelOutput, Tuple]:
         r"""
         Returns:
 
@@ -1677,14 +1683,18 @@ class AutoformerModel(AutoformerPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
+            last_hidden_state = decoder_outputs[0][0]
+            trend = decoder_outputs[0][1]
         else:
             decoder_outputs = BaseModelOutputWithPastAndCrossAttentions()
+            last_hidden_state = decoder_outputs.last_hidden_state
+            trend = None
 
         if not return_dict:
-            return decoder_outputs + encoder_outputs + (loc, scale, static_feat)
+            return (last_hidden_state,) + decoder_outputs[2:] + encoder_outputs + (loc, scale, static_feat, trend)
 
-        return Seq2SeqTSModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
+        return AutoformerModelOutput(
+            last_hidden_state=last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
@@ -1695,6 +1705,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
             loc=loc,
             scale=scale,
             static_features=static_feat,
+            trend=trend,
         )
 
 
@@ -1764,7 +1775,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Seq2SeqTSModelOutput, Tuple]:
+    ) -> Union[Seq2SeqTSPredictionOutput, Tuple]:
         r"""
         Returns:
 
@@ -1839,9 +1850,9 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         prediction_loss = None
         params = None
         if future_values is not None:
-            params = self.output_params(outputs[0][0] + outputs[0][1])  # outputs.last_hidden_state
-            # loc is 3rd last and scale is 2nd last output
-            distribution = self.output_distribution(params, loc=outputs[-3], scale=outputs[-2])
+            params = self.output_params(outputs[0] + outputs[-1])  # outputs.last_hidden_state and trend
+            # loc is 4rd last and scale is 3nd last output
+            distribution = self.output_distribution(params, loc=outputs[-4], scale=outputs[-3])
 
             loss = self.loss(distribution, future_values)
 
@@ -1856,7 +1867,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             prediction_loss = weighted_average(loss, weights=loss_weights)
 
         if not return_dict:
-            outputs = ((params,) + outputs[1:]) if params is not None else outputs[1:]
+            outputs = ((params,) + outputs[1:-1]) if params is not None else outputs[1:-1]
             return ((prediction_loss,) + outputs) if prediction_loss is not None else outputs
 
         return Seq2SeqTSPredictionOutput(

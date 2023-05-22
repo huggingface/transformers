@@ -144,7 +144,7 @@ class AutoformerModelTester:
         outputs = model(**inputs_dict)
 
         encoder_last_hidden_state = outputs.encoder_last_hidden_state
-        last_hidden_state, _ = outputs.last_hidden_state
+        last_hidden_state = outputs.last_hidden_state
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             encoder = model.get_encoder()
@@ -236,20 +236,12 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(reason="Result of the model outputs is a tuple of tensors in one case")
-    def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(reason="Result of the model is a tuple")
+    @unittest.skip(reason="Result of the decoder's hidden state is a tuple")
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="Result of the model is a tuple")
+    @unittest.skip(reason="Result of the model has randomness")
     def test_model_outputs_equivalence(self):
-        pass
-
-    @unittest.skip(reason="Result of the model is a tuple")
-    def test_retain_grad_hidden_states_attentions(self):
         pass
 
     # # Input is 'static_categorical_features' not 'input_ids'
@@ -355,6 +347,9 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
             if "last_hidden_state" in outputs:
                 correct_outlen += 1
 
+            if "trend" in outputs:
+                correct_outlen += 1
+
             if "past_key_values" in outputs:
                 correct_outlen += 1  # past_key_values have been returned
 
@@ -418,7 +413,7 @@ class AutoformerModelIntegrationTests(unittest.TestCase):
         batch = prepare_batch()
 
         with torch.no_grad():
-            output, _ = model(
+            output = model(
                 past_values=batch["past_values"],
                 past_time_features=batch["past_time_features"],
                 past_observed_mask=batch["past_observed_mask"],
