@@ -26,10 +26,10 @@ from PIL import Image
 
 from transformers import (
     PerSamConfig,
-    SamImageProcessor,
     PerSamModel,
-    SamProcessor,
     PerSamVisionConfig,
+    SamImageProcessor,
+    SamProcessor,
 )
 
 

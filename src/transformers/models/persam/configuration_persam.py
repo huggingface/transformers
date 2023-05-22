@@ -27,12 +27,11 @@ PERSAM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class PerSamPromptEncoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PerSamPromptEncoder`]. The [`PerSamPromptEncoder`]
-    module is used to encode the input 2D points and bounding boxes. Instantiating a configuration defaults will yield
-    a similar configuration to that of the PERSAM-vit-h
+    This is the configuration class to store the configuration of a [`PerSamPromptEncoder`]. The
+    [`PerSamPromptEncoder`] module is used to encode the input 2D points and bounding boxes. Instantiating a
+    configuration defaults will yield a similar configuration to that of the PERSAM-vit-h
     [facebook/sam-vit-base](https://huggingface.co/facebook/sam-vit-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -77,9 +76,9 @@ class PerSamPromptEncoderConfig(PretrainedConfig):
 
 class PerSamMaskDecoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PerSamMaskDecoder`]. It is used to instantiate a PERSAM
-    mask decoder to the specified arguments, defining the model architecture. Instantiating a configuration defaults
-    will yield a similar configuration to that of the PERSAM-vit-h
+    This is the configuration class to store the configuration of a [`PerSamMaskDecoder`]. It is used to instantiate a
+    PERSAM mask decoder to the specified arguments, defining the model architecture. Instantiating a configuration
+    defaults will yield a similar configuration to that of the PERSAM-vit-h
     [facebook/sam-vit-base](https://huggingface.co/facebook/sam-vit-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -138,9 +137,9 @@ class PerSamMaskDecoderConfig(PretrainedConfig):
 
 class PerSamVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PerSamVisionModel`]. It is used to instantiate a PERSAM
-    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    defaults will yield a similar configuration to that of the PERSAM ViT-h
+    This is the configuration class to store the configuration of a [`PerSamVisionModel`]. It is used to instantiate a
+    PERSAM vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration defaults will yield a similar configuration to that of the PERSAM ViT-h
     [facebook/sam-vit-base](https://huggingface.co/facebook/sam-vit-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -252,10 +251,10 @@ class PerSamVisionConfig(PretrainedConfig):
 
 class PerSamConfig(PretrainedConfig):
     r"""
-    [`PerSamConfig`] is the configuration class to store the configuration of a [`PerSamModel`]. It is used to instantiate a
-    PERSAM model according to the specified arguments, defining the vision model, prompt-encoder model and mask decoder
-    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    PERSAM-ViT-H [facebook/sam-vit-base](https://huggingface.co/facebook/sam-vit-base) architecture.
+    [`PerSamConfig`] is the configuration class to store the configuration of a [`PerSamModel`]. It is used to
+    instantiate a PERSAM model according to the specified arguments, defining the vision model, prompt-encoder model
+    and mask decoder configs. Instantiating a configuration with the defaults will yield a similar configuration to
+    that of the PERSAM-ViT-H [facebook/sam-vit-base](https://huggingface.co/facebook/sam-vit-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

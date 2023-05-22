@@ -408,6 +408,13 @@ _import_structure = {
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
+    "models.persam": [
+        "PERSAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "PerSamConfig",
+        "PerSamMaskDecoderConfig",
+        "PerSamPromptEncoderConfig",
+        "PerSamVisionConfig",
+    ],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -439,14 +446,6 @@ _import_structure = {
         "SamProcessor",
         "SamPromptEncoderConfig",
         "SamVisionConfig",
-    ],
-    "models.persam": [
-        "PERSAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "PerSamConfig",
-        "PerSamMaskDecoderConfig",
-       
-        "PerSamPromptEncoderConfig",
-        "PerSamVisionConfig",
     ],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
@@ -2210,6 +2209,13 @@ else:
             "PerceiverPreTrainedModel",
         ]
     )
+    _import_structure["models.persam"].extend(
+        [
+            "PERSAM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PerSamModel",
+            "PerSamPreTrainedModel",
+        ]
+    )
     _import_structure["models.pix2struct"].extend(
         [
             "PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2398,13 +2404,6 @@ else:
             "SAM_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SamModel",
             "SamPreTrainedModel",
-        ]
-    )
-    _import_structure["models.persam"].extend(
-        [
-            "PERSAM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "PerSamModel",
-            "PerSamPreTrainedModel",
         ]
     )
     _import_structure["models.segformer"].extend(
@@ -4194,6 +4193,13 @@ if TYPE_CHECKING:
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
+    from .models.persam import (
+        PERSAM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PerSamConfig,
+        PerSamMaskDecoderConfig,
+        PerSamPromptEncoderConfig,
+        PerSamVisionConfig,
+    )
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4228,14 +4234,6 @@ if TYPE_CHECKING:
         SamProcessor,
         SamPromptEncoderConfig,
         SamVisionConfig,
-    )
-    from .models.persam import (
-        PERSAM_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        PerSamConfig,
-        PerSamMaskDecoderConfig,
-       
-        PerSamPromptEncoderConfig,
-        PerSamVisionConfig,
     )
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
@@ -5714,6 +5712,11 @@ if TYPE_CHECKING:
             PerceiverModel,
             PerceiverPreTrainedModel,
         )
+        from .models.persam import (
+            PERSAM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PerSamModel,
+            PerSamPreTrainedModel,
+        )
         from .models.pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Pix2StructForConditionalGeneration,
@@ -5867,11 +5870,6 @@ if TYPE_CHECKING:
             SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
             SamModel,
             SamPreTrainedModel,
-        )
-        from .models.persam import (
-            PERSAM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PerSamModel,
-            PerSamPreTrainedModel,
         )
         from .models.segformer import (
             SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

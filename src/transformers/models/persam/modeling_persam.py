@@ -43,7 +43,6 @@ PERSAM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 @dataclass
 # Copied from transformers.models.sam.modeling_sam.SamVisionEncoderOutput with Sam->PerSam,sam->persam
 class PerSamVisionEncoderOutput(ModelOutput):
@@ -196,8 +195,8 @@ class PerSamLayerNorm(nn.Module):
 
 class PerSamAttention(nn.Module):
     """
-    PERSAM's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
-    values.
+    PERSAM's attention layer that allows for downscaling the size of the embedding after projection to queries, keys,
+    and values.
     """
 
     # Copied from transformers.models.sam.modeling_sam.SamAttention.__init__
@@ -230,7 +229,9 @@ class PerSamAttention(nn.Module):
         hidden_states = hidden_states.transpose(1, 2)
         return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, attn_sim: Tensor = None, print_values = False) -> Tensor:
+    def forward(
+        self, query: Tensor, key: Tensor, value: Tensor, attn_sim: Tensor = None, print_values=False
+    ) -> Tensor:
         # Input projections
         query = self.q_proj(query)
         key = self.k_proj(key)
@@ -242,14 +243,14 @@ class PerSamAttention(nn.Module):
         key = self._separate_heads(key, self.num_attention_heads)
         value = self._separate_heads(value, self.num_attention_heads)
 
-        if print_values:
-            print("Shape of queries:", query.shape)
-            print("First values of queries:", query[0,0,:3,:3])
-            print("First values of keys:", key[0,0,:3,:3])
-            print("First values of values:", value[0,0,:3,:3])
+        # if print_values:
+        #     print("Shape of queries:", query.shape)
+        #     print("First values of queries:", query[0,0,:3,:3])
+        #     print("First values of keys:", key[0,0,:3,:3])
+        #     print("First values of values:", value[0,0,:3,:3])
 
-            if attn_sim is not None:
-                print("Mean value of attn_sim:", torch.mean(attn_sim))
+        #     if attn_sim is not None:
+        #         print("Mean value of attn_sim:", torch.mean(attn_sim))
 
         # PerSamAttention
         _, _, _, c_per_head = query.shape
@@ -257,17 +258,17 @@ class PerSamAttention(nn.Module):
         attn = attn / math.sqrt(c_per_head)
         attn = torch.softmax(attn, dim=-1)
 
-        if print_values:
-            print("Shape of attn before adding attn_sim: ", attn.shape)
-            print("First values of attn after adding attn_sim: ", attn[0,0,:3,:3])
+        # if print_values:
+        #     print("Shape of attn before adding attn_sim: ", attn.shape)
+        #     print("First values of attn after adding attn_sim: ", attn[0,0,:3,:3])
 
         if attn_sim is not None:
             attn = attn + attn_sim
             attn = torch.softmax(attn, dim=-1)
 
-        if print_values:
-            print("Shape of attn after adding attn_sim: ", attn.shape)
-            print("First values of attn after adding attn_sim: ", attn[0,0,:3,:3])
+        # if print_values:
+        #     print("Shape of attn after adding attn_sim: ", attn.shape)
+        #     print("First values of attn after adding attn_sim: ", attn[0,0,:3,:3])
 
         # Get output
         out = attn @ value
@@ -331,20 +332,22 @@ class PerSamTwoWayAttentionBlock(nn.Module):
             queries = queries + attn_out
         queries = self.layer_norm1(queries)
 
-        if print_values:
-            print("Queries before cross-attention: ", queries[0,0,:3,:3])
+        # if print_values:
+        #     print("Queries before cross-attention: ", queries[0,0,:3,:3])
 
         # Cross attention block, tokens attending to image embedding
         query = queries + query_point_embedding
         key = keys + key_point_embedding
 
-        attn_out = self.cross_attn_token_to_image(query=query, key=key, value=keys, attn_sim=attn_sim, print_values=print_values)
+        attn_out = self.cross_attn_token_to_image(
+            query=query, key=key, value=keys, attn_sim=attn_sim, print_values=print_values
+        )
         queries = queries + attn_out
 
         queries = self.layer_norm2(queries)
 
-        if print_values:
-            print("Queries after cross-attention: ", queries[0,0,:3,:3])
+        # if print_values:
+        #     print("Queries after cross-attention: ", queries[0,0,:3,:3])
 
         # MLP block
         mlp_out = self.mlp(queries)
@@ -414,16 +417,14 @@ class PerSamTwoWayTransformer(nn.Module):
         queries = point_embeddings
         keys = image_embeddings
 
-        print("First values of keys before Transformer:", keys[0,0,:3,:3])
-
         # Apply transformer blocks and final layernorm
         for idx, layer in enumerate(self.layers):
             if target_embedding is not None:
                 queries += target_embedding
 
-            if idx == 0:
-                print("Queries before layer 0", queries.shape)
-                print("First values of queries before layer 0", queries[0, 0, :3, :3])
+            # if idx == 0:
+            #     print("Queries before layer 0", queries.shape)
+            #     print("First values of queries before layer 0", queries[0, 0, :3, :3])
 
             queries, keys, attention_outputs = layer(
                 queries=queries,
@@ -435,9 +436,9 @@ class PerSamTwoWayTransformer(nn.Module):
                 print_values=idx == 0,
             )
 
-            if idx == 0:
-                print("Queries after layer 0", queries.shape)
-                print("First values of queries after layer 0", queries[0, 0, :3, :3])
+            # if idx == 0:
+            #     print("Queries after layer 0", queries.shape)
+            #     print("First values of queries after layer 0", queries[0, 0, :3, :3])
 
             if output_attentions:
                 all_attentions = all_attentions + (attention_outputs,)
@@ -641,16 +642,15 @@ class PerSamMaskEmbedding(nn.Module):
         self.conv1 = nn.Conv2d(1, self.mask_input_channels, kernel_size=2, stride=2)
         self.conv2 = nn.Conv2d(self.mask_input_channels, config.mask_input_channels, kernel_size=2, stride=2)
         self.conv3 = nn.Conv2d(config.mask_input_channels, config.hidden_size, kernel_size=1)
-        self.layer_norm1 = PerSamLayerNorm(self.mask_input_channels, eps=config.layer_norm_eps, data_format="channels_first")
-        self.layer_norm2 = PerSamLayerNorm(self.mask_input_channels * 4, eps=config.layer_norm_eps, data_format="channels_first")
+        self.layer_norm1 = PerSamLayerNorm(
+            self.mask_input_channels, eps=config.layer_norm_eps, data_format="channels_first"
+        )
+        self.layer_norm2 = PerSamLayerNorm(
+            self.mask_input_channels * 4, eps=config.layer_norm_eps, data_format="channels_first"
+        )
 
     def forward(self, masks):
-        print("Shape of masks before embedding:", masks.shape)
-
         hidden_states = self.conv1(masks)
-
-        print("Shape of mask embeddings after conv1:", hidden_states.shape)
-
         hidden_states = self.layer_norm1(hidden_states)
         hidden_states = self.activation(hidden_states)
 
@@ -658,9 +658,6 @@ class PerSamMaskEmbedding(nn.Module):
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.activation(hidden_states)
         dense_embeddings = self.conv3(hidden_states)
-
-        print("Shape of mask embedding:", dense_embeddings.shape)
-
 
         return dense_embeddings
 
@@ -1454,11 +1451,6 @@ class PerSamModel(PerSamPreTrainedModel):
             input_boxes=input_boxes,
             input_masks=input_masks,
         )
-
-        print("Shape of sparse_embeddings:", sparse_embeddings.shape)
-        print("First values of sparse embeddings:", sparse_embeddings[0, 0, :3, :3])
-        print("Shape of dense_embeddings:", dense_embeddings.shape)
-        print("First values of dense embeddings:", dense_embeddings[0, 0, :3, :3])
 
         low_res_masks, iou_predictions, mask_decoder_attentions = self.mask_decoder(
             image_embeddings=image_embeddings,
