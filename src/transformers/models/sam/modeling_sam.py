@@ -224,7 +224,7 @@ class SamAttention(nn.Module):
         hidden_states = hidden_states.transpose(1, 2)
         return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, attn_sim: Tensor) -> Tensor:
+    def forward(self, query: Tensor, key: Tensor, value: Tensor, attn_sim: Tensor = None) -> Tensor:
         # Input projections
         query = self.q_proj(query)
         key = self.k_proj(key)
