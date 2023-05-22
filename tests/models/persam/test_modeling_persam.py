@@ -24,6 +24,7 @@ from transformers import PerSamConfig, PerSamMaskDecoderConfig, PerSamPromptEnco
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -82,7 +83,7 @@ class PerSamMaskDecoderTester:
         mlp_dim=64,
         num_hidden_layers=2,
         num_attention_heads=4,
-        attention_downpersample_rate=2,
+        attention_downsample_rate=2,
         num_multimask_outputs=3,
         iou_head_depth=3,
         iou_head_hidden_dim=32,
@@ -93,7 +94,7 @@ class PerSamMaskDecoderTester:
         self.mlp_dim = mlp_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.attention_downpersample_rate = attention_downpersample_rate
+        self.attention_downsample_rate = attention_downsample_rate
         self.num_multimask_outputs = num_multimask_outputs
         self.iou_head_depth = iou_head_depth
         self.iou_head_hidden_dim = iou_head_hidden_dim
@@ -106,7 +107,7 @@ class PerSamMaskDecoderTester:
             mlp_dim=self.mlp_dim,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            attention_downpersample_rate=self.attention_downpersample_rate,
+            attention_downsample_rate=self.attention_downsample_rate,
             num_multimask_outputs=self.num_multimask_outputs,
             iou_head_depth=self.iou_head_depth,
             iou_head_hidden_dim=self.iou_head_hidden_dim,
@@ -289,11 +290,39 @@ class PerSamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (PerSamModel,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": PerSamModel, "mask-generation": PerSamModel} if is_torch_available() else {}
+    )
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
     test_torchscript = False
+
+    # TODO: Fix me @Arthur: `run_batch_test` in `tests/test_pipeline_mixin.py` not working
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return True
+
+    def setUp(self):
+        self.model_tester = PerSamModelTester(self)
+        self.vision_config_tester = ConfigTester(self, config_class=PerSamVisionConfig, has_text_modality=False)
+        self.prompt_encoder_config_tester = ConfigTester(
+            self,
+            config_class=PerSamPromptEncoderConfig,
+            has_text_modality=False,
+            num_attention_heads=12,
+            num_hidden_layers=2,
+        )
+        self.mask_decoder_config_tester = ConfigTester(
+            self, config_class=PerSamMaskDecoderConfig, has_text_modality=False
+        )
+
+    def test_config(self):
+        self.vision_config_tester.run_common_tests()
+        self.prompt_encoder_config_tester.run_common_tests()
+        self.mask_decoder_config_tester.run_common_tests()
 
     @unittest.skip(reason="PERSAM's vision encoder does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -407,6 +436,9 @@ class PerSamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=True, tol=5e-4):
+        super().test_pt_tf_model_equivalence(allow_missing_keys=True, tol=tol)
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in PERSAM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -421,7 +453,7 @@ def prepare_image():
 
 
 def prepare_dog_img():
-    img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-persam.png"
+    img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam.png"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
     return raw_image
 
@@ -429,8 +461,8 @@ def prepare_dog_img():
 @slow
 class PerSamModelIntegrationTest(unittest.TestCase):
     def test_inference_mask_generation_no_point(self):
-        model = PerSamModel.from_pretrained("facebook/sam-vit-base")
-        processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
+        model = PerSamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -441,18 +473,20 @@ class PerSamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
+        masks = outputs.pred_masks[0, 0, 0, 0, :3]
 
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.5798), atol=1e-4))
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.5798), atol=2e-4))
+        self.assertTrue(torch.allclose(masks, torch.tensor([-6.6381, -6.0734, -7.5308]).to(torch_device), atol=2e-4))
 
     def test_inference_mask_generation_one_point_one_bb(self):
-        model = PerSamModel.from_pretrained("facebook/sam-vit-base")
-        processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
+        model = PerSamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
 
         raw_image = prepare_image()
-        input_boxes = [[650, 900, 1000, 1250]]
+        input_boxes = [[[650, 900, 1000, 1250]]]
         input_points = [[[820, 1080]]]
 
         inputs = processor(
@@ -462,12 +496,16 @@ class PerSamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
+        masks = outputs.pred_masks[0, 0, 0, 0, :3]
 
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9935), atol=1e-4))
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9935), atol=2e-4))
+        self.assertTrue(
+            torch.allclose(masks, torch.tensor([-21.5465, -23.1122, -22.3331]).to(torch_device), atol=2e-4)
+        )
 
     def test_inference_mask_generation_batched_points_batched_images(self):
-        model = PerSamModel.from_pretrained("facebook/sam-vit-base")
-        processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
+        model = PerSamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -485,6 +523,7 @@ class PerSamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze().cpu()
+        masks = outputs.pred_masks[0, 0, 0, 0, :3].cpu()
 
         EXPECTED_SCORES = torch.tensor(
             [
@@ -502,17 +541,19 @@ class PerSamModelIntegrationTest(unittest.TestCase):
                 ],
             ]
         )
+        EXPECTED_MASKS = torch.tensor([-26.5424, -34.0901, -30.6406])
         self.assertTrue(torch.allclose(scores, EXPECTED_SCORES, atol=1e-3))
+        self.assertTrue(torch.allclose(masks, EXPECTED_MASKS, atol=1e-3))
 
     def test_inference_mask_generation_one_point_one_bb_zero(self):
-        model = PerSamModel.from_pretrained("facebook/sam-vit-base")
-        processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
+        model = PerSamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
 
         raw_image = prepare_image()
-        input_boxes = [[620, 900, 1000, 1255]]
+        input_boxes = [[[620, 900, 1000, 1255]]]
         input_points = [[[820, 1080]]]
         labels = [[0]]
 
@@ -531,8 +572,8 @@ class PerSamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9689), atol=1e-4))
 
     def test_inference_mask_generation_one_point(self):
-        model = PerSamModel.from_pretrained("facebook/sam-vit-base")
-        processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
+        model = PerSamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -564,8 +605,8 @@ class PerSamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9712), atol=1e-4))
 
     def test_inference_mask_generation_two_points(self):
-        model = PerSamModel.from_pretrained("facebook/sam-vit-base")
-        processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
+        model = PerSamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -595,8 +636,8 @@ class PerSamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9936), atol=1e-4))
 
     def test_inference_mask_generation_two_points_batched(self):
-        model = PerSamModel.from_pretrained("facebook/sam-vit-base")
-        processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
+        model = PerSamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -618,8 +659,8 @@ class PerSamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[1][-1], torch.tensor(0.9716), atol=1e-4))
 
     def test_inference_mask_generation_one_box(self):
-        model = PerSamModel.from_pretrained("facebook/sam-vit-base")
-        processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
+        model = PerSamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -637,8 +678,8 @@ class PerSamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.8686), atol=1e-4))
 
     def test_inference_mask_generation_batched_image_one_point(self):
-        model = PerSamModel.from_pretrained("facebook/sam-vit-base")
-        processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
+        model = PerSamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -666,8 +707,8 @@ class PerSamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores_batched[1, :], scores_single, atol=1e-4))
 
     def test_inference_mask_generation_two_points_point_batch(self):
-        model = PerSamModel.from_pretrained("facebook/sam-vit-base")
-        processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
+        model = PerSamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -692,8 +733,8 @@ class PerSamModelIntegrationTest(unittest.TestCase):
         )
 
     def test_inference_mask_generation_three_boxes_point_batch(self):
-        model = PerSamModel.from_pretrained("facebook/sam-vit-base")
-        processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
+        model = PerSamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
