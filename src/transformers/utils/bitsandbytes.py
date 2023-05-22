@@ -15,7 +15,7 @@ if is_accelerate_available():
     from accelerate.utils import find_tied_parameters
 
 
-def set_module_kbit_tensor_to_device(module, tensor_name, device, value=None, fp16_statistics=None):
+def set_module_quantized_tensor_to_device(module, tensor_name, device, value=None, fp16_statistics=None):
     """
     A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
     `param.to(device)` creates a new tensor not linked to the parameter, which is why we need this function). The
@@ -174,6 +174,20 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
                 quantization_config,
             )
     return model
+
+
+# For backward compatibility
+def replace_8bit_linear(*args, **kwargs):
+    print("`replace_8bit_linear` will be deprecated in a future version, please use `replace_with_bnb_linear` instead")
+    return replace_with_bnb_linear(*args, **kwargs)
+
+
+# For backward compatiblity
+def set_module_8bit_tensor_to_device(*args, **kwargs):
+    print(
+        "`set_module_8bit_tensor_to_device` will be deprecated in a future version, please use `set_module_quantized_tensor_to_device` instead"
+    )
+    return set_module_quantized_tensor_to_device(*args, **kwargs)
 
 
 def get_keys_to_not_convert(model):

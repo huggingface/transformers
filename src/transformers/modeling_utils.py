@@ -628,7 +628,7 @@ def _load_state_dict_into_meta_model(
     #   they won't get loaded.
 
     if is_quantized:
-        from .utils.bitsandbytes import set_module_kbit_tensor_to_device
+        from .utils.bitsandbytes import set_module_quantized_tensor_to_device
 
     error_msgs = []
 
@@ -715,7 +715,7 @@ def _load_state_dict_into_meta_model(
                 fp16_statistics = None
 
             if "SCB" not in param_name:
-                set_module_kbit_tensor_to_device(
+                set_module_quantized_tensor_to_device(
                     model, param_name, param_device, value=param, fp16_statistics=fp16_statistics
                 )
 
@@ -2909,7 +2909,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     ):
         is_safetensors = False
         if is_quantized:
-            from .utils.bitsandbytes import set_module_kbit_tensor_to_device
+            from .utils.bitsandbytes import set_module_quantized_tensor_to_device
 
         if device_map is not None and "disk" in device_map.values():
             archive_file = (
@@ -3018,7 +3018,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     if not (is_quantized):
                         set_module_tensor_to_device(model, key, "cpu", torch.empty(*param.size(), dtype=target_dtype))
                     else:
-                        set_module_kbit_tensor_to_device(
+                        set_module_quantized_tensor_to_device(
                             model, key, "cpu", torch.empty(*param.size(), dtype=target_dtype)
                         )
 
