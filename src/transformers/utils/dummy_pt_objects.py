@@ -5340,6 +5340,23 @@ class PerceiverPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+PERSAM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class PerSamModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerSamPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -6140,23 +6157,6 @@ class SamModel(metaclass=DummyObject):
 
 
 class SamPreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-PERSAM_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class PerSamModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PerSamPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

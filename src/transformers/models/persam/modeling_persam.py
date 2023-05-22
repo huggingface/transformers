@@ -279,7 +279,6 @@ class PerSamAttention(nn.Module):
 
 
 class PerSamTwoWayAttentionBlock(nn.Module):
-    # Copied from transformers.models.sam.modeling_sam.SamTwoWayAttentionBlock.__init__ with Sam->PerSam,sam->persam
     def __init__(self, config, attention_downsample_rate: int = 2, skip_first_layer_pe: bool = False) -> None:
         """
         A transformer block with four layers:
@@ -658,7 +657,6 @@ class PerSamMaskEmbedding(nn.Module):
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.activation(hidden_states)
         dense_embeddings = self.conv3(hidden_states)
-
         return dense_embeddings
 
 
@@ -739,11 +737,11 @@ class PerSamPromptEncoder(nn.Module):
         Embeds different types of prompts, returning both sparse and dense embeddings.
 
         Args:
-            points (`torch.Tensor`, **optionnal**):
+            points (`torch.Tensor`, *optional*):
                 point coordinates and labels to embed.
-            boxes (`torch.Tensor`, **optionnal**):
+            boxes (`torch.Tensor`, *optional*):
                 boxes to embed
-            masks (`torch.Tensor`, **optionnal**):
+            masks (`torch.Tensor`, *optional*):
                 masks to embed
         """
         sparse_embeddings = None
@@ -779,7 +777,7 @@ class PerSamPromptEncoder(nn.Module):
 class PerSamVisionAttention(nn.Module):
     """Multi-head Attention block with relative position embeddings."""
 
-    def __init__(self, config, window_size) -> None:
+    def __init__(self, config, window_size):
         super().__init__()
         input_size = (
             (config.image_size // config.patch_size, config.image_size // config.patch_size)
@@ -918,7 +916,7 @@ class PerSamVisionAttention(nn.Module):
 
 # Copied from transformers.models.sam.modeling_sam.SamVisionLayer with Sam->PerSam
 class PerSamVisionLayer(nn.Module):
-    def __init__(self, config, window_size) -> None:
+    def __init__(self, config, window_size):
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn = PerSamVisionAttention(config, window_size)
