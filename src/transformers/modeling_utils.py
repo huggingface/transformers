@@ -1882,7 +1882,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def to(self, *args, **kwargs):
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_loaded_in_kbit", False):
+        if getattr(self, "is_quantized", False):
             raise ValueError(
                 "`.to` is not supported for `4-bit` or `8-bit` models. Please use the model as it is, since the"
                 " model has already been set to the correct devices and casted to the correct `dtype`."
@@ -1892,7 +1892,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def half(self, *args):
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_loaded_in_kbit", False):
+        if getattr(self, "is_quantized", False):
             raise ValueError(
                 "`.half()` is not supported for `4-bit` or `8-bit` models. Please use the model as it is, since the"
                 " model has already been casted to the correct `dtype`."
@@ -1902,7 +1902,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def float(self, *args):
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_loaded_in_kbit", False):
+        if getattr(self, "is_quantized", False):
             raise ValueError(
                 "`.float()` is not supported for `4-bit` or `8-bit` models. Please use the model as it is, since the"
                 " model has already been casted to the correct `dtype`."
@@ -2842,7 +2842,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         model.is_loaded_in_4bit = load_in_4bit
         model.is_loaded_in_8bit = load_in_8bit
-        model.is_loaded_in_kbit = load_in_8bit or load_in_4bit
+        model.is_quantized = load_in_8bit or load_in_4bit
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
