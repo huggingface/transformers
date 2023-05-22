@@ -20,9 +20,10 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, Union
 
-import torch
+from ..utils import logging, is_torch_available
 
-from ..utils import logging
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
