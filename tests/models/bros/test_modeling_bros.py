@@ -480,7 +480,6 @@ class BrosModelIntegrationTest(unittest.TestCase):
         # input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
 
         input_ids, bbox, attention_mask, labels = prepare_bros_batch_inputs()
-        model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask)
 
         with torch.no_grad():
             output = model(input_ids, bbox, attention_mask=attention_mask)[0]
