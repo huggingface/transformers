@@ -1443,7 +1443,38 @@ class AutoformerModel(AutoformerPreTrainedModel):
         past_observed_mask: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
         future_time_features: Optional[torch.Tensor] = None,
-    ):
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Creates the inputs for the network given the past and future values, time features, and static features.
+
+        Args:
+            past_values (torch.Tensor):
+                A tensor of shape `(batch_size, past_length, input_size)` containing the past values.
+            past_time_features (torch.Tensor):
+                A tensor of shape `(batch_size, past_length, num_features)` containing the past time features.
+            static_categorical_features (Optional[torch.Tensor]):
+                An optional tensor of shape `(batch_size, num_categorical_features)` containing the static categorical
+                features.
+            static_real_features (Optional[torch.Tensor]):
+                An optional tensor of shape `(batch_size, num_real_features)` containing the static real features.
+            past_observed_mask (Optional[torch.Tensor]):
+                An optional tensor of shape `(batch_size, past_length, input_size)` containing the mask of observed
+                values in the past.
+            future_values (Optional[torch.Tensor]):
+                An optional tensor of shape `(batch_size, future_length, input_size)` containing the future values.
+
+        Returns:
+            A tuple containing the following tensors:
+            - reshaped_lagged_sequence (torch.Tensor): A tensor of shape `(batch_size, sequence_length, num_lags *
+              input_size)` containing the lagged subsequences of the inputs.
+            - features (torch.Tensor): A tensor of shape `(batch_size, sequence_length, num_features)` containing the
+              concatenated static and time features.
+            - loc (torch.Tensor): A tensor of shape `(batch_size, input_size)` containing the mean of the input values.
+            - scale (torch.Tensor): A tensor of shape `(batch_size, input_size)` containing the std of the input
+              values.
+            - static_feat (torch.Tensor): A tensor of shape `(batch_size, num_static_features)` containing the
+              concatenated static features.
+        """
         # time feature
         time_feat = (
             torch.cat(
