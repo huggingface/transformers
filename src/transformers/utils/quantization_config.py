@@ -20,7 +20,8 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, Union
 
-from ..utils import logging, is_torch_available
+from ..utils import is_torch_available, logging
+
 
 if is_torch_available():
     import torch

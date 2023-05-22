@@ -2690,6 +2690,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 }
             )
 
+            target_dtype = torch_dtype
+
+            if load_in_4bit:
+                _accelerate_has_custom_dtype = version.parse(importlib_metadata.version("accelerate")) > version.parse(
+                    "0.19.0"
+                )
+
+                if _accelerate_has_custom_dtype:
+                    from accelerate.utils import CustomDtype
+
+                    target_dtype = CustomDtype.int4
+                else:
+                    logger.warning(
+                        "You are using `device_map='auto'` on a 4bit loaded version of the model. To automatically compute the appropriate device map, you should upgrade your `accelerate` library, `pip install --upgrade accelerare` or install it from source to support int4 auto device map calculation. You may encounter unexpected behavior, or pass your own device map"
+                    )
+                    target_dtype = torch.int8
+            elif load_in_8bit:
+                target_dtype = torch.int8
+
             if model._no_split_modules is None:
                 raise ValueError(f"{model.__class__.__name__} does not support `device_map='{device_map}'` yet.")
             no_split_modules = model._no_split_modules
@@ -2712,7 +2731,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if device_map != "sequential" and get_balanced_memory is not None:
                 max_memory = get_balanced_memory(
                     model,
-                    dtype=torch_dtype if not load_in_8bit else torch.int8,
+                    dtype=target_dtype,
                     low_zero=(device_map == "balanced_low_0"),
                     max_memory=max_memory,
                     **kwargs,
@@ -2720,7 +2739,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             kwargs["max_memory"] = max_memory
             # Make sure tied weights are tied before creating the device map.
             model.tie_weights()
-            device_map = infer_auto_device_map(model, dtype=torch_dtype if not load_in_8bit else torch.int8, **kwargs)
+            device_map = infer_auto_device_map(model, dtype=target_dtype, **kwargs)
 
             if load_in_8bit or load_in_4bit:
                 # The LM head / tied weights or any last module can stay on disk / CPU
