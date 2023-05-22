@@ -32,15 +32,8 @@ TOLERANCE = 1e-4
 if is_torch_available():
     import torch
 
-    from transformers import (
-        AutoformerConfig,
-        AutoformerForPrediction,
-        AutoformerModel,
-    )
-    from transformers.models.autoformer.modeling_autoformer import (
-        AutoformerDecoder,
-        AutoformerEncoder,
-    )
+    from transformers import AutoformerConfig, AutoformerForPrediction, AutoformerModel
+    from transformers.models.autoformer.modeling_autoformer import AutoformerDecoder, AutoformerEncoder
 
 
 @require_torch
