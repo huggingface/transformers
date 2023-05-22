@@ -1894,7 +1894,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "is_loaded_in_kbit", False):
             raise ValueError(
-                "`.half()` is not supported for `k-bit` models. Please use the model as it is, since the"
+                "`.half()` is not supported for `4-bit` or `8-bit` models. Please use the model as it is, since the"
                 " model has already been casted to the correct `dtype`."
             )
         else:
@@ -1904,7 +1904,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "is_loaded_in_kbit", False):
             raise ValueError(
-                "`.float()` is not supported for `k-bit` models. Please use the model as it is, since the"
+                "`.float()` is not supported for `4-bit` or `8-bit` models. Please use the model as it is, since the"
                 " model has already been casted to the correct `dtype`."
             )
         else:
@@ -2698,6 +2698,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if isinstance(device_map, str):
             special_dtypes = {}
+            if load_in_8bit or load_in_4bit:
+                special_dtypes.update(
+                    {
+                        name: torch_dtype
+                        for name, _ in model.named_parameters()
+                        if any(m in name for m in modules_to_not_convert)
+                    }
+                )
+
             special_dtypes.update(
                 {
                     name: torch.float32
