@@ -38,7 +38,7 @@ from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, TFGenerationMixin
-from .tf_utils import load_attributes_from_hdf5_group, save_attributes_to_hdf5_group, shape_list
+from .tf_utils import expand_1d, load_attributes_from_hdf5_group, save_attributes_to_hdf5_group, shape_list
 from .utils import (
     DUMMY_INPUTS,
     SAFE_WEIGHTS_INDEX_NAME,
@@ -99,18 +99,6 @@ TFModelInputType = Union[
     np.ndarray,
     KerasTensor,
 ]
-
-
-def expand_1d(data):
-    """Expands 1-dimensional `Tensor`s into 2-dimensional `Tensor`s.
-    Copied from Keras to here to avoid versioning issues."""
-
-    def _expand_single_1d_tensor(t):
-        if isinstance(t, tf.Tensor) and t.shape.rank == 1:
-            return tf.expand_dims(t, axis=-1)
-        return t
-
-    return tf.nest.map_structure(_expand_single_1d_tensor, data)
 
 
 def dummy_loss(y_true, y_pred):
@@ -518,7 +506,6 @@ def input_processing(func, config, **kwargs):
         if isinstance(v, allowed_types) or v is None:
             output[k] = v
         else:
-            print()
             raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
 
     if isinstance(main_input, (tuple, list)):

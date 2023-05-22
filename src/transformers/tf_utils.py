@@ -241,3 +241,15 @@ def load_attributes_from_hdf5_group(group, name):
             )
             chunk_id += 1
     return data
+
+
+def expand_1d(data):
+    """Expands 1-dimensional `Tensor`s into 2-dimensional `Tensor`s.
+    Copied from Keras to here to avoid versioning issues."""
+
+    def _expand_single_1d_tensor(t):
+        if isinstance(t, tf.Tensor) and t.shape.rank == 1:
+            return tf.expand_dims(t, axis=-1)
+        return t
+
+    return tf.nest.map_structure(_expand_single_1d_tensor, data)
