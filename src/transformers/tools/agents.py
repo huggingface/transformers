@@ -27,7 +27,7 @@ from huggingface_hub import HfFolder, hf_hub_download, list_spaces
 from ..models.auto import AutoTokenizer
 from ..utils import is_openai_available, is_torch_available, logging
 from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, load_tool, supports_remote
-from .prompts import CHAT_MESSAGE_PROMPT, CHAT_PROMPT_TEMPLATE, RUN_PROMPT_TEMPLATE
+from .prompts import CHAT_MESSAGE_PROMPT, download_prompt
 from .python_interpreter import evaluate
 
 
@@ -204,8 +204,9 @@ class Agent:
     def __init__(self, chat_prompt_template=None, run_prompt_template=None, additional_tools=None):
         _setup_default_tools()
 
-        self.chat_prompt_template = CHAT_PROMPT_TEMPLATE if chat_prompt_template is None else chat_prompt_template
-        self.run_prompt_template = RUN_PROMPT_TEMPLATE if run_prompt_template is None else run_prompt_template
+        agent_name = self.__class__.__name__
+        self.chat_prompt_template = download_prompt(chat_prompt_template, agent_name, mode="chat")
+        self.run_prompt_template = download_prompt(run_prompt_template, agent_name, mode="run")
         self._toolbox = HUGGINGFACE_DEFAULT_TOOLS.copy()
         self.log = print
         if additional_tools is not None:
