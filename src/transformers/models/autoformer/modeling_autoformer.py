@@ -728,6 +728,8 @@ class AutoformerDecoderLayer(nn.Module):
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
+            use_cache: (`bool`, *optional*, defaults to `True`):
+                Whether or not the model should return the `present_key_value` state to be used for subsequent decoding.
         """
         residual = hidden_states
 
@@ -783,7 +785,10 @@ class AutoformerDecoderLayer(nn.Module):
         hidden_states, trend3 = self.decomp3(hidden_states)
         hidden_states = self.final_layer_norm(hidden_states)
 
-        residual_trend = trend1 + trend2 + trend3
+        if encoder_hidden_states is not None:
+            residual_trend = trend1 + trend2 + trend3
+        else:
+            residual_trend = trend1 + trend3
         residual_trend = self.trend_projection(residual_trend.permute(0, 2, 1)).transpose(1, 2)
         outputs = ((hidden_states, residual_trend),)
 
