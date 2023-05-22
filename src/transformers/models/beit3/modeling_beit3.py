@@ -560,9 +560,10 @@ class Beit3Encoder(nn.Module):
         for i in range(config.layers):
             self.layers.append(Beit3EncoderLayer(config))
         self.num_layers = len(self.layers)
-        if config.normalize_before:
+        if config.normalize_before and config.encoder_normalize_before:
             self.fc_norm = Beit3MultiwayNetwork(LayerNorm(embed_dim, eps=config.layernorm_eps))
-
+        else:
+            self.fc_norm = None
         self.relative_position = None
 
         if config.subln:
@@ -974,7 +975,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
             return ((loss.mean(),) + output) if loss is not None else output
 
         return CausalLMOutputWithPast(
-            loss=loss.mean(),
+            loss=loss.mean() if loss else None,
             logits=logits,
             hidden_states=outputs.hidden_states,
         )

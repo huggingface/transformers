@@ -2,17 +2,19 @@ import argparse
 import copy
 from pathlib import Path
 
+import numpy as np
+import requests
 import torch
-
+from PIL import Image
 from transformers import (
     Beit3Config,
     Beit3ForCaptioning,
     Beit3ForImageClassification,
     Beit3ForImageTextRetrieval,
     Beit3ForVisualQuestionAnswering,
-    Beit3ForVisualReasoning,
+    Beit3ForVisualReasoning, Beit3ImageProcessor, XLMRobertaTokenizer, Beit3Processor,
 )
-
+from transformers.testing_utils import get_tests_dir
 
 model_type_to_class_mapping = {
     "image_classification": Beit3ForImageClassification,
@@ -37,6 +39,8 @@ rename_key_mappings = {
 }
 
 
+# SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
+
 def get_base_config_image_classification():
     return Beit3Config(hidden_size=768 * 4, num_labels=1000)
 
@@ -56,7 +60,8 @@ def get_large_config_vqa(img_size):
 
 
 def get_base_config_visual_reasoning(img_size):
-    return Beit3Config(hidden_size=768 * 4, num_labels=2, img_size=img_size, normalize_before=True)
+    return Beit3Config(hidden_size=768 * 4, num_labels=2, img_size=img_size, normalize_before=True,
+                       encoder_normalize_before=True)
 
 
 def get_large_config_visual_reasoning(img_size):
@@ -68,11 +73,13 @@ def get_large_config_visual_reasoning(img_size):
         num_labels=2,
         img_size=img_size,
         normalize_before=True,
+        encoder_normalize_before=True,
     )
 
 
 def get_base_config_captioning(img_size):
-    return Beit3Config(hidden_size=768 * 4, num_labels=2, img_size=img_size, normalize_before=True)
+    return Beit3Config(hidden_size=768 * 4, num_labels=2, img_size=img_size, normalize_before=True,
+                       encoder_normalize_before=True)
 
 
 def get_large_config_captioning(img_size):
@@ -84,11 +91,13 @@ def get_large_config_captioning(img_size):
         num_labels=2,
         img_size=img_size,
         normalize_before=True,
+        encoder_normalize_before=True,
     )
 
 
 def get_base_config_image_text_retrieval(img_size):
-    return Beit3Config(hidden_size=768 * 4, num_labels=2, img_size=img_size, normalize_before=True)
+    return Beit3Config(hidden_size=768 * 4, num_labels=2, img_size=img_size, normalize_before=True,
+                       encoder_normalize_before=True)
 
 
 def get_large_config_image_text_retrieval(img_size):
@@ -100,6 +109,7 @@ def get_large_config_image_text_retrieval(img_size):
         num_labels=2,
         img_size=img_size,
         normalize_before=True,
+        encoder_normalize_before=True,
     )
 
 
@@ -115,6 +125,17 @@ def rename_keys(model_state_dict):
                 current_key = current_key.replace(rename_key, rename_key_mappings[rename_key])
 
     return new_state_dict
+
+
+def prepare_img():
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    im = Image.open(requests.get(url, stream=True).raw)
+    return im
+
+
+def get_tokenizer():
+    return XLMRobertaTokenizer.from_pretrained(
+        "https://huggingface.co/xlm-roberta-base/resolve/main/sentencepiece.bpe.model")
 
 
 def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_model_type):
@@ -161,6 +182,47 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
     model_state_dict = rename_keys(model_state_dict)
     model.load_state_dict(model_state_dict)
 
+    image_processor = Beit3ImageProcessor(do_resize=True, size=img_size)
+    tokenizer = get_tokenizer()
+    beit3_processor = Beit3Processor(image_processor, tokenizer)
+    text = "this is a picture of a cat"
+    image = prepare_img()
+    model.eval()
+    input = beit3_processor(text=["This is photo of a cat"], images=image)
+    if "beit3_base_patch16_224_in1k" in checkpoint_url:
+        output = model(pixel_values=torch.tensor(input['pixel_values']))
+        assert output.logits.shape == torch.Size([1, 1000])
+        np.testing.assert_allclose(output.logits.detach().numpy()[:, :3],
+                                   torch.tensor([[-0.260473, -0.420061, -0.492118]]), rtol=1e-05)
+    elif "beit3_base_patch16_480_vqa" in checkpoint_url:
+        output = model(input_ids=torch.tensor(input["input_ids"]), pixel_values=torch.tensor(input['pixel_values']),
+                       padding_mask=torch.ones(input["input_ids"].shape))
+        assert output.logits.shape == torch.Size([1, 3129])
+        np.testing.assert_allclose(output.logits.detach().numpy()[:, :3],
+                                   torch.tensor([[-10.862484, - 12.388088, - 7.6599636]]), rtol=1e-05)
+    elif "beit3_base_patch16_224_nlvr2" in checkpoint_url:
+        output = model(input_ids=torch.tensor(input["input_ids"]),
+                       pixel_values1=torch.tensor(input['pixel_values']),
+                       pixel_values2=torch.tensor(input['pixel_values']),
+                       padding_mask=torch.ones(input["input_ids"].shape))
+        assert output.logits.shape == torch.Size([1, 2])
+        np.testing.assert_allclose(output.logits.detach().numpy(),
+                                   torch.tensor([[6.5938, -6.5821]]), rtol=1e-05)
+    elif "beit3_base_patch16_480_coco_captioning" in checkpoint_url:
+        language_masked_pos = torch.zeros(input["input_ids"].shape)
+        to_fill = list(range(0, input["input_ids"].shape[1], 3))
+        language_masked_pos[:, to_fill] = 1
+        output = model(input_ids=torch.tensor(input["input_ids"]), pixel_values=torch.tensor(input['pixel_values']),
+                       padding_mask=torch.ones(input["input_ids"].shape), language_masked_pos=language_masked_pos)
+        assert output.logits.shape == torch.Size([3, 64010])
+        np.testing.assert_allclose(output.logits.detach().numpy()[0, :3],
+                                   torch.tensor([-19.36987, - 19.369905, - 17.022049]), rtol=1e-05)
+    elif "beit3_base_patch16_384_coco_retrieval" in checkpoint_url:
+        another_input_ids = beit3_processor(text=["This is photo of a dog"], images=image)["input_ids"]
+        output = model(input_ids=torch.tensor([input["input_ids"][0], another_input_ids[0]]),
+                       pixel_values=torch.tensor([input["pixel_values"][0], input["pixel_values"][0]]))
+        assert round(float(output.loss.detach().numpy()), 4) == 0.7461
+
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
@@ -185,7 +247,7 @@ if __name__ == "__main__":
         default=None,
         type=str,
         help="Beit3 model type, it has to be one of image_classification, vqa,visual_reasoning,"
-        "image_captioning,image_text_retrieval",
+             "image_captioning,image_text_retrieval",
     )
     args = parser.parse_args()
 
