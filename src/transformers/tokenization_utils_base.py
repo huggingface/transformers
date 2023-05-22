@@ -227,17 +227,25 @@ class BatchEncoding(UserDict):
         """
         return self._encodings is not None
 
-    def __getitem__(self, item: Union[int, str]) -> Union[Any, EncodingFast]:
+    def __getitem__(self, item: Union[int, str, slice]) -> Union[Any, EncodingFast]:
         """
         If the key is a string, returns the value of the dict associated to `key` ('input_ids', 'attention_mask',
         etc.).
 
         If the key is an integer, get the `tokenizers.Encoding` for batch item with index `key`.
+
+        If the key is a slice, returns the value of the dict associated to `key` ('input_ids', 'attention_mask',
+        etc.) with the constraint of slice.
         """
         if isinstance(item, str):
             return self.data[item]
         elif self._encodings is not None:
             return self._encodings[item]
+        elif isinstance(item, slice):
+            _start = item.start
+            _stop = item.stop
+            _step = item.step
+            return {key: self.data[key][_start:_stop:_step] for key in self.data.keys()}
         else:
             raise KeyError(
                 "Indexing with integers (to access backend Encoding for a given batch index) "
