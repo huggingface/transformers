@@ -46,7 +46,7 @@ if is_accelerate_available():
     from accelerate.logging import get_logger
 
     logger = get_logger(__name__)
-    _ = Accelerator()
+    _ = PartialState()
 
 if is_torch_available():
     import torch
