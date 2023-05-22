@@ -20,10 +20,10 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, Union
 
-import importlib_metadata
 from packaging import version
 
 from ..utils import is_torch_available, logging
+from ..utils.import_utils import importlib_metadata
 
 
 if is_torch_available():
