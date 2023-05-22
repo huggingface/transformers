@@ -38,14 +38,9 @@ To create the package for pypi.
 7. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
 
-   Clean up your build and dist folders (to avoid re-uploading oldies):
-   rm -rf dist
-   rm -rf build
+   Run `make build-release`. This will build the release and do some sanity checks for you. If this ends with an error
+   message, you need to fix things before going further.
 
-   For the wheel, run: "python setup.py bdist_wheel" in the top level directory.
-   (this will build a wheel for the python version you use to build it).
-
-   For the sources, run: "python setup.py sdist"
    You should now have a /dist directory with both .whl and .tar.gz source versions.
 
 8. Check that everything looks correct by uploading the package to the pypi test server:
@@ -61,6 +56,7 @@ To create the package for pypi.
    Check you can run the following commands:
    python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))"
    python -c "from transformers import *"
+   python utils/check_build.py --check_lib
 
    If making a patch release, double check the bug you are patching is indeed resolved.
 
@@ -112,6 +108,7 @@ _deps = [
     "datasets!=2.5.0",
     "decord==0.6.0",
     "deepspeed>=0.8.3",
+    "diffusers",
     "dill<0.3.5",
     "evaluate>=0.2.0",
     "fairscale>0.3",
@@ -123,7 +120,7 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.11.0,<1.0",
+    "huggingface-hub>=0.14.1,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -140,6 +137,7 @@ _deps = [
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
+    "opencv-python",
     "optuna",
     "optax>=0.0.8,<=0.1.4",
     "packaging>=20.0",
@@ -149,7 +147,7 @@ _deps = [
     "psutil",
     "pyyaml>=5.1",
     "pydantic",
-    "pytest",
+    "pytest>=7.2.0",
     "pytest-timeout",
     "pytest-xdist",
     "python>=3.7.0",
@@ -412,6 +410,10 @@ extras["torchhub"] = deps_list(
     "tqdm",
 )
 
+extras["agents"] = deps_list(
+    "diffusers", "accelerate", "datasets", "torch", "sentencepiece", "opencv-python", "Pillow"
+)
+
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
     deps["importlib_metadata"] + ";python_version<'3.8'",  # importlib_metadata for Python versions that don't have it
@@ -440,7 +442,7 @@ setup(
     package_dir={"": "src"},
     packages=find_packages("src"),
     include_package_data=True,
-    package_data={"transformers": ["*.cu", "*.cpp", "*.cuh", "*.h", "*.pyx"]},
+    package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx"]},
     zip_safe=False,
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},

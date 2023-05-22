@@ -217,7 +217,7 @@ torch_and_tf_job = CircleCIJob(
         "git lfs install",
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
-        'pip install "tensorflow_probability<0.20"',
+        "pip install tensorflow_probability",
         "pip install git+https://github.com/huggingface/accelerate",
     ],
     marker="is_pt_tf_cross_test",
@@ -258,7 +258,7 @@ tf_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng cmake",
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
-        'pip install "tensorflow_probability<0.20"',
+        "pip install tensorflow_probability",
     ],
     parallelism=1,
     pytest_options={"rA": None},
@@ -297,7 +297,7 @@ pipelines_tf_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y cmake",
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,testing,sentencepiece,vision]",
-        'pip install "tensorflow_probability<0.20"',
+        "pip install tensorflow_probability",
     ],
     pytest_options={"rA": None},
     marker="is_pipeline_test",
@@ -483,7 +483,6 @@ REGULAR_TESTS = [
     hub_job,
     onnx_job,
     exotic_models_job,
-    doc_test_job
 ]
 EXAMPLES_TESTS = [
     examples_torch_job,
@@ -495,6 +494,8 @@ PIPELINE_TESTS = [
     pipelines_tf_job,
 ]
 REPO_UTIL_TESTS = [repo_utils_job]
+DOC_TESTS = [doc_test_job]
+
 
 def create_circleci_config(folder=None):
     if folder is None:
@@ -551,6 +552,15 @@ def create_circleci_config(folder=None):
     example_file = os.path.join(folder, "examples_test_list.txt")
     if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
         jobs.extend(EXAMPLES_TESTS)
+
+    doctest_file = os.path.join(folder, "doctest_list.txt")
+    if os.path.exists(doctest_file):
+        with open(doctest_file) as f:
+            doctest_list = f.read()
+    else:
+        doctest_list = []
+    if len(doctest_list) > 0:
+        jobs.extend(DOC_TESTS)
 
     repo_util_file = os.path.join(folder, "test_repo_utils.txt")
     if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
