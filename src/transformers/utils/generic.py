@@ -399,8 +399,7 @@ def can_return_loss(model_class):
         model_class (`type`): The class of the model.
     """
     base_classes = str(inspect.getmro(model_class))
-
-    if "keras.engine.training.Model" in base_classes:
+    if "TFPreTrainedModel" in base_classes:
         signature = inspect.signature(model_class.call)  # TensorFlow models
     elif "torch.nn.modules.module.Module" in base_classes:
         signature = inspect.signature(model_class.forward)  # PyTorch models
@@ -423,8 +422,7 @@ def find_labels(model_class):
     """
     model_name = model_class.__name__
     base_classes = str(inspect.getmro(model_class))
-
-    if "keras.engine.training.Model" in base_classes:
+    if "TFPreTrainedModel" in base_classes:
         signature = inspect.signature(model_class.call)  # TensorFlow models
     elif "torch.nn.modules.module.Module" in base_classes:
         signature = inspect.signature(model_class.forward)  # PyTorch models
