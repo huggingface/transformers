@@ -400,9 +400,8 @@ class TFSamModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_SAM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFSamModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model = TFSamModel.from_pretrained("facebook/sam-vit-base")  # sam-vit-huge blows out our memory
+        self.assertIsNotNone(model)
 
     def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=5e-4, name="outputs", attributes=None):
         super().check_pt_tf_outputs(
