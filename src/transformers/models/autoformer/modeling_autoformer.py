@@ -44,7 +44,7 @@ _CONFIG_FOR_DOC = "AutoformerConfig"
 
 
 AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "thuml/Autoformer",
+    "huggingface/autoformer-tourism-monthly",
     # See all Autoformer models at https://huggingface.co/models?filter=autoformer
 ]
 
