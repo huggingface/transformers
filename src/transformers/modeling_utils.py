@@ -628,7 +628,7 @@ def _load_state_dict_into_meta_model(
     # - Is there a situation where some keys aren't in `loaded_state_dict_keys` and in which case
     #   they won't get loaded.
 
-    if load_in_4bit is True and load_in_8bit is True:
+    if load_in_4bit and load_in_8bit:
         raise ValueError("You cannot set load_in_4bit=True and load_in_8bit=True at the same time! Choose one option.")
     if load_in_8bit or load_in_4bit:
         from .utils.bitsandbytes import set_module_kbit_tensor_to_device
