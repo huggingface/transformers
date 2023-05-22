@@ -705,7 +705,7 @@ def _load_state_dict_into_meta_model(
                 offload_index = offload_weight(param, param_name, offload_folder, offload_index)
         elif param_device == "cpu" and state_dict_index is not None:
             state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
-        elif not (load_in_kbit):
+        elif not load_in_kbit:
             # For backward compatibility with older versions of `accelerate`
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
@@ -2703,7 +2703,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if _accelerate_has_custom_dtype:
                     from accelerate.utils import CustomDtype
 
-                    target_dtype = CustomDtype.int4
+                    target_dtype = CustomDtype.INT4
                 else:
                     logger.warning(
                         "You are using `device_map='auto'` on a 4bit loaded version of the model. To automatically compute the appropriate device map, you should upgrade your `accelerate` library, `pip install --upgrade accelerare` or install it from source to support int4 auto device map calculation. You may encounter unexpected behavior, or pass your own device map"

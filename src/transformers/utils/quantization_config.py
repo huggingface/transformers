@@ -89,7 +89,7 @@ class BitsAndBytesConfig:
         llm_int8_skip_modules=None,
         llm_int8_enable_fp32_cpu_offload=False,
         llm_int8_has_fp16_weight=False,
-        bnb_4bit_compute_dtype="torch.float32",
+        bnb_4bit_compute_dtype=None,
         bnb_4bit_quant_type="fp4",
         bnb_4bit_use_double_quant=False,
         **kwargs,
@@ -100,12 +100,17 @@ class BitsAndBytesConfig:
         self.llm_int8_skip_modules = llm_int8_skip_modules
         self.llm_int8_enable_fp32_cpu_offload = llm_int8_enable_fp32_cpu_offload
         self.llm_int8_has_fp16_weight = llm_int8_has_fp16_weight
-        self.bnb_4bit_compute_dtype = bnb_4bit_compute_dtype
         self.bnb_4bit_quant_type = bnb_4bit_quant_type
         self.bnb_4bit_use_double_quant = bnb_4bit_use_double_quant
 
-        if isinstance(self.bnb_4bit_compute_dtype, str):
+        if bnb_4bit_compute_dtype is None:
+            self.bnb_4bit_compute_dtype = torch.float32
+        elif isinstance(bnb_4bit_compute_dtype, str):
             self.bnb_4bit_compute_dtype = getattr(torch, self.bnb_4bit_compute_dtype)
+        elif isinstance(bnb_4bit_compute_dtype, torch.dtype):
+            self.bnb_4bit_compute_dtype = bnb_4bit_compute_dtype
+        else:
+            raise ValueError("bnb_4bit_compute_dtype must be a string or a torch.dtype")
 
         self.post_init()
 
