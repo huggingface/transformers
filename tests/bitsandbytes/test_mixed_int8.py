@@ -494,7 +494,7 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
         self.pipe = pipeline(
             "text-generation",
             model=self.model_name,
-            model_kwargs={"device_map": "auto", "load_in_8bit": True, "torch_dtype": torch.float16},
+            model_kwargs={"device_map": "auto", "load_in_8bit": True},
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
 

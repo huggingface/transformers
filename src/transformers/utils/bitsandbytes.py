@@ -1,3 +1,4 @@
+import warnings
 from copy import deepcopy
 
 from packaging import version
@@ -178,14 +179,18 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
 
 # For backward compatibility
 def replace_8bit_linear(*args, **kwargs):
-    print("`replace_8bit_linear` will be deprecated in a future version, please use `replace_with_bnb_linear` instead")
+    warnings.warn(
+        "`replace_8bit_linear` will be deprecated in a future version, please use `replace_with_bnb_linear` instead",
+        FutureWarning,
+    )
     return replace_with_bnb_linear(*args, **kwargs)
 
 
 # For backward compatiblity
 def set_module_8bit_tensor_to_device(*args, **kwargs):
-    print(
-        "`set_module_8bit_tensor_to_device` will be deprecated in a future version, please use `set_module_quantized_tensor_to_device` instead"
+    warnings.warn(
+        "`set_module_8bit_tensor_to_device` will be deprecated in a future version, please use `set_module_quantized_tensor_to_device` instead",
+        FutureWarning,
     )
     return set_module_quantized_tensor_to_device(*args, **kwargs)
 
