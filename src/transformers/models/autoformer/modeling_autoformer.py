@@ -997,7 +997,7 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
             config.context_length + config.prediction_length, config.d_model
         )
         self.layers = nn.ModuleList([AutoformerEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layernorm_embedding = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -1133,7 +1133,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
             config.context_length + config.prediction_length, config.d_model
         )
         self.layers = nn.ModuleList([AutoformerDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.layernorm_embedding = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         # https://github.com/thuml/Autoformer/blob/e6371e24f2ae2dd53e472edefdd5814c5176f864/models/Autoformer.py#L74
         self.seasonality_projection = nn.Linear(config.d_model, config.feature_size)
