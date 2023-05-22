@@ -20,7 +20,10 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, Union
 
-from ..utils import is_torch_available, logging
+import importlib_metadata
+from packaging import version
+
+from ..utils import is_bitsandbytes_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -118,6 +121,9 @@ class BitsAndBytesConfig:
         r"""
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
+        if not is_bitsandbytes_available():
+            raise ImportError("You need to install bitsandbytes to use `BitsAndBytesConfig.")
+
         if not isinstance(self.llm_int8_threshold, float):
             raise ValueError("llm_int8_threshold must be a float")
 
@@ -137,6 +143,13 @@ class BitsAndBytesConfig:
 
         if not isinstance(self.bnb_4bit_use_double_quant, bool):
             raise ValueError("bnb_4bit_use_double_quant must be a boolean")
+
+        if self.load_in_4bit and not version.parse(importlib_metadata.version("bitsandbytes")) >= version.parse(
+            "0.39.0"
+        ):
+            raise ValueError(
+                "4 bit quantization requires bitsandbytes>=0.39.0 - please upgrade your bitsandbytes version"
+            )
 
     def is_quantizable(self):
         r"""
