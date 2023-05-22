@@ -85,11 +85,11 @@ class BaseMixedInt8Test(unittest.TestCase):
 
     # Constant values
     EXPECTED_RELATIVE_DIFFERENCE = (
-        1.054829776346287  # This was obtained on a Quadro RTX 8000 so the number might slightly change
+        1.540025  # This was obtained on a Quadro RTX 8000 so the number might slightly change
     )
 
     input_text = "Hello my name is"
-    EXPECTED_OUTPUT = "Hello my name is John.\nI am a friend of your father.\n"
+    EXPECTED_OUTPUT = "Hello my name is John.\nI am a friend of the family.\n"
     MAX_NEW_TOKENS = 10
 
     def setUp(self):
@@ -105,7 +105,9 @@ class MixedInt8Test(BaseMixedInt8Test):
         self.model_fp16 = AutoModelForCausalLM.from_pretrained(
             self.model_name, torch_dtype=torch.float16, device_map="auto"
         )
-        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        self.model_8bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, load_in_8bit=True, device_map="auto", torch_dtype=torch.float16
+        )
 
     def tearDown(self):
         r"""
@@ -165,7 +167,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         bnb_config.load_in_8bit = True
 
         model_8bit_from_config = AutoModelForCausalLM.from_pretrained(
-            self.model_name, quantization_config=bnb_config, device_map="auto"
+            self.model_name, quantization_config=bnb_config, device_map="auto", torch_dtype=torch.float16
         )
 
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
@@ -257,7 +259,9 @@ class MixedInt8Test(BaseMixedInt8Test):
             config = AutoConfig.from_pretrained(tmpdirname)
             self.assertTrue(hasattr(config, "quantization_config"))
 
-            model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
+            model_from_saved = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, load_in_8bit=True, device_map="auto", torch_dtype=torch.float16
+            )
 
             self.assertTrue(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
             self.assertTrue(hasattr(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
@@ -283,7 +287,7 @@ class MixedInt8Test(BaseMixedInt8Test):
             config = AutoConfig.from_pretrained(tmpdirname)
             self.assertTrue(hasattr(config, "quantization_config"))
 
-            model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname)
+            model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, torch_dtype=torch.float16)
 
             self.assertTrue(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
             self.assertTrue(hasattr(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
@@ -304,7 +308,7 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         model_id = "ybelkada/bloom-1b7-8bit"
 
-        model = AutoModelForCausalLM.from_pretrained(model_id)
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16)
 
         self.assertTrue(model.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
         self.assertTrue(hasattr(model.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
@@ -494,7 +498,7 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
         self.pipe = pipeline(
             "text-generation",
             model=self.model_name,
-            model_kwargs={"device_map": "auto", "load_in_8bit": True},
+            model_kwargs={"device_map": "auto", "load_in_8bit": True, "torch_dtype": torch.float16},
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
 
@@ -515,7 +519,7 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
         """
 
         model_parallel = AutoModelForCausalLM.from_pretrained(
-            self.model_name, load_in_8bit=True, device_map="balanced"
+            self.model_name, load_in_8bit=True, device_map="balanced", torch_dtype=torch.float16
         )
 
         # Check correct device map

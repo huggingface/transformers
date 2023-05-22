@@ -58,7 +58,7 @@ def set_module_kbit_tensor_to_device(module, tensor_name, device, value=None, fp
         is_8bit = False
         is_4bit = False
     else:
-        is_4bit = isinstance(module._parameters[tensor_name], bnb.nn.Params4bit)
+        is_4bit = hasattr(bnb.nn, "Params4bit") and isinstance(module._parameters[tensor_name], bnb.nn.Params4bit)
         is_8bit = isinstance(module._parameters[tensor_name], bnb.nn.Int8Params)
 
     if is_8bit or is_4bit:
