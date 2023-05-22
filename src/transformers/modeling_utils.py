@@ -606,7 +606,7 @@ def _load_state_dict_into_meta_model(
     state_dict_folder=None,
     state_dict_index=None,
     dtype=None,
-    load_in_kbit=False,
+    is_quantized=False,
     is_safetensors=False,
     keep_in_fp32_modules=None,
 ):
@@ -627,7 +627,7 @@ def _load_state_dict_into_meta_model(
     # - Is there a situation where some keys aren't in `loaded_state_dict_keys` and in which case
     #   they won't get loaded.
 
-    if load_in_kbit:
+    if is_quantized:
         from .utils.bitsandbytes import set_module_kbit_tensor_to_device
 
     error_msgs = []
@@ -705,7 +705,7 @@ def _load_state_dict_into_meta_model(
                 offload_index = offload_weight(param, param_name, offload_folder, offload_index)
         elif param_device == "cpu" and state_dict_index is not None:
             state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
-        elif not load_in_kbit:
+        elif not is_quantized:
             # For backward compatibility with older versions of `accelerate`
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
@@ -2638,7 +2638,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             keep_in_fp32_modules = []
 
         if load_in_8bit or load_in_4bit:
-
             from .utils.bitsandbytes import get_keys_to_not_convert, replace_with_bnb_linear
 
             llm_int8_skip_modules = quantization_config.llm_int8_skip_modules
@@ -2836,7 +2835,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 offload_folder=offload_folder,
                 offload_state_dict=offload_state_dict,
                 dtype=torch_dtype,
-                load_in_kbit=(load_in_8bit or load_in_4bit),
+                is_quantized=(load_in_8bit or load_in_4bit),
                 keep_in_fp32_modules=keep_in_fp32_modules,
             )
 
@@ -2905,11 +2904,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_folder=None,
         offload_state_dict=None,
         dtype=None,
-        load_in_kbit=False,
+        is_quantized=False,
         keep_in_fp32_modules=None,
     ):
         is_safetensors = False
-        if load_in_kbit:
+        if is_quantized:
             from .utils.bitsandbytes import set_module_kbit_tensor_to_device
 
         if device_map is not None and "disk" in device_map.values():
@@ -3016,7 +3015,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     target_dtype = torch.float32
 
                 if param.device == torch.device("meta"):
-                    if not (load_in_kbit):
+                    if not (is_quantized):
                         set_module_tensor_to_device(model, key, "cpu", torch.empty(*param.size(), dtype=target_dtype))
                     else:
                         set_module_kbit_tensor_to_device(
@@ -3177,7 +3176,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         state_dict_folder=state_dict_folder,
                         state_dict_index=state_dict_index,
                         dtype=dtype,
-                        load_in_kbit=load_in_kbit,
+                        is_quantized=is_quantized,
                         is_safetensors=is_safetensors,
                         keep_in_fp32_modules=keep_in_fp32_modules,
                     )
@@ -3217,7 +3216,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
 
-        if load_in_kbit:
+        if is_quantized:
             unexpected_keys = [elem for elem in unexpected_keys if "SCB" not in elem]
             missing_keys = [elem for elem in missing_keys if "SCB" not in elem]
 
