@@ -34,7 +34,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import SamProcessor, TFSamModel
-    from transformers.models.sam.modeling_tf_sam import TF_SAM_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
