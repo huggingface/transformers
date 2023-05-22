@@ -729,7 +729,8 @@ class AutoformerDecoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
             use_cache: (`bool`, *optional*, defaults to `True`):
-                Whether or not the model should return the `present_key_value` state to be used for subsequent decoding.
+                Whether or not the model should return the `present_key_value` state to be used for subsequent
+                decoding.
         """
         residual = hidden_states
 
@@ -1398,32 +1399,39 @@ class AutoformerModel(AutoformerPreTrainedModel):
         self, sequence: torch.Tensor, subsequences_length: int, shift: int = 0
     ) -> torch.Tensor:
         """
-        Returns lagged subsequences of a given sequence. Returns a tensor of shape (N, S, C, I),
-            where S = subsequences_length and I = len(indices), containing lagged subsequences. Specifically, lagged[i,
-            j, :, k] = sequence[i, -indices[k]-S+j, :].
+        Returns lagged subsequences of a given sequence. Returns a tensor of shape (batch_size, subsequences_length,
+        feature_size, indices_length),
+            containing lagged subsequences. Specifically, lagged[i, j, :, k] = sequence[i, -indices[k]-S+j, :].
 
         Args:
             sequence: Tensor
-                The sequence from which lagged subsequences should be extracted. Shape: (N, T, C).
+                The sequence from which lagged subsequences should be extracted. Shape: (batch_size, context_length,
+                feature_size).
             subsequences_length : int
                 Length of the subsequences to be extracted.
             shift: int
-                Shift the lags by this amount back.
+                Shift the lags by this amount back in the time index. Default is 0.
         """
-        sequence_length = sequence.shape[1]
+
+        # calculates the indices of the lags by subtracting the shift value from the given lags_sequence
         indices = [lag - shift for lag in self.config.lags_sequence]
 
+        # checks if the maximum lag plus the length of the subsequences exceeds the length of the input sequence
+        sequence_length = sequence.shape[1]
         if max(indices) + subsequences_length > sequence_length:
             raise ValueError(
                 f"lags cannot go further than history length, found lag {max(indices)} "
                 f"while history length is only {sequence_length}"
             )
 
+        # extracts the lagged subsequences from the input sequence using the calculated indices
         lagged_values = []
         for lag_index in indices:
             begin_index = -lag_index - subsequences_length
             end_index = -lag_index if lag_index > 0 else None
             lagged_values.append(sequence[:, begin_index:end_index, ...])
+
+        # return as stacked tensor in the feature dimension
         return torch.stack(lagged_values, dim=-1)
 
     def create_network_inputs(
