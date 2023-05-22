@@ -1649,8 +1649,9 @@ class TrainingArguments:
         if is_torch_tpu_available():
             device = self.distributed_state.device
             self._n_gpu = 0
-        elif is_sagemaker_dp_enabled():
-            self._n_gpu = 1
+        elif is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled():
+            # Already set _n_gpu
+            pass
         elif self.distributed_state.distributed_type == DistributedType.NO:
             if self.use_mps_device:
                 if not torch.backends.mps.is_available():
