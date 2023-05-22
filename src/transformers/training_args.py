@@ -1622,6 +1622,9 @@ class TrainingArguments:
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
             torch.cuda.set_device(device)
+        elif is_sagemaker_dp_enabled():
+            self.distributed_state = PartialState(_use_sagemaker_dp=True)
+            self._n_gpu = 1
         elif self.deepspeed:
             # Need to do similar for Accelerator init
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"
