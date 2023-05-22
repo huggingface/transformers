@@ -1743,7 +1743,9 @@ class MegaForCausalLM(MegaPreTrainedModel):
         >>> config = AutoConfig.from_pretrained("mnaylor/mega-base-wikitext")
         >>> config.is_decoder = True
         >>> config.bidirectional = False
-        >>> model = MegaForCausalLM.from_pretrained("mnaylor/mega-base-wikitext", config=config)
+        >>> model = MegaForCausalLM.from_pretrained(
+        ...     "mnaylor/mega-base-wikitext", config=config, ignore_mismatched_sizes=True
+        ... )
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
