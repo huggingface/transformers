@@ -1703,8 +1703,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if getattr(self, "is_loaded_in_4bit", False):
             raise NotImplementedError(
-                "You are calling `save_pretrained` on a 4-bit converted model. \
-                                      This is currently not supported"
+                "You are calling `save_pretrained` on a 4-bit converted model. This is currently not supported"
             )
 
         if "save_config" in kwargs:
@@ -1885,7 +1884,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "is_loaded_in_kbit", False):
             raise ValueError(
-                "`.to` is not supported for `k-bit` models. Please use the model as it is, since the"
+                "`.to` is not supported for `4-bit` or `8-bit` models. Please use the model as it is, since the"
                 " model has already been set to the correct devices and casted to the correct `dtype`."
             )
         else:

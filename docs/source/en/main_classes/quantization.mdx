@@ -38,7 +38,7 @@ Make sure that you have installed the requirements below before running any of t
 
 #### Load a large model in 4bit
 
-You can load a model by roughly quartering the memory requirements by using `load_in_4bit=True` argument when calling `.from_pretrained` method
+By using `load_in_4bit=True` when calling the `.from_pretrained` method, you can divide your memory use by 4 (roughly).
 
 ```python
 # pip install transformers accelerate bitsandbytes
