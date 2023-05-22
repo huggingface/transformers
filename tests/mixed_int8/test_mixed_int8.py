@@ -29,6 +29,7 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import (
+    is_accelerate_available,
     is_torch_available,
     require_accelerate,
     require_bitsandbytes,
@@ -39,6 +40,13 @@ from transformers.testing_utils import (
 )
 from transformers.utils.versions import importlib_metadata
 
+
+if is_accelerate_available():
+    from accelerate import Accelerator
+    from accelerate.logging import get_logger
+
+    logger = get_logger(__name__)
+    _ = Accelerator()
 
 if is_torch_available():
     import torch
