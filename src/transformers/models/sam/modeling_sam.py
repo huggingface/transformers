@@ -224,7 +224,7 @@ class SamAttention(nn.Module):
         hidden_states = hidden_states.transpose(1, 2)
         return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, attn_sim: Tensor = None) -> Tensor:
+    def forward(self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Tensor = None) -> Tensor:
         # Input projections
         query = self.q_proj(query)
         key = self.k_proj(key)
@@ -242,8 +242,8 @@ class SamAttention(nn.Module):
         attn = attn / math.sqrt(c_per_head)
         attn = torch.softmax(attn, dim=-1)
 
-        if attn_sim is not None:
-            attn = attn + attn_sim
+        if attention_similarity is not None:
+            attn = attn + attention_similarity
             attn = torch.softmax(attn, dim=-1)
 
         # Get output
@@ -294,7 +294,7 @@ class SamTwoWayAttentionBlock(nn.Module):
         keys: Tensor,
         query_point_embedding: Tensor,
         key_point_embedding: Tensor,
-        attn_sim: Tensor,
+        attention_similarity: Tensor,
         output_attentions: bool = False,
     ):
         # Self attention block
@@ -310,7 +310,9 @@ class SamTwoWayAttentionBlock(nn.Module):
         query = queries + query_point_embedding
         key = keys + key_point_embedding
 
-        attn_out = self.cross_attn_token_to_image(query=query, key=key, value=keys, attn_sim=attn_sim)
+        attn_out = self.cross_attn_token_to_image(
+            query=query, key=key, value=keys, attention_similarity=attention_similarity
+        )
         queries = queries + attn_out
 
         queries = self.layer_norm2(queries)
@@ -358,7 +360,7 @@ class SamTwoWayTransformer(nn.Module):
         point_embeddings: Tensor,
         image_embeddings: Tensor,
         image_positional_embeddings: Tensor,
-        attn_sim: Tensor,
+        attention_similarity: Tensor,
         target_embedding=None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -392,7 +394,7 @@ class SamTwoWayTransformer(nn.Module):
                 keys=keys,
                 query_point_embedding=point_embeddings,
                 key_point_embedding=image_positional_embeddings,
-                attn_sim=attn_sim,
+                attention_similarity=attention_similarity,
                 output_attentions=output_attentions,
             )
 
@@ -471,7 +473,7 @@ class SamMaskDecoder(nn.Module):
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
         output_attentions: Optional[bool] = None,
-        attn_sim: torch.Tensor = None,
+        attention_similarity: torch.Tensor = None,
         target_embedding: torch.Tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -513,7 +515,7 @@ class SamMaskDecoder(nn.Module):
             point_embeddings=point_embeddings,
             image_embeddings=image_embeddings,
             image_positional_embeddings=image_positional_embeddings,
-            attn_sim=attn_sim,
+            attention_similarity=attention_similarity,
             target_embedding=target_embedding,
             output_attentions=output_attentions,
         )
@@ -1284,7 +1286,7 @@ class SamModel(SamPreTrainedModel):
         input_masks: Optional[torch.LongTensor] = None,
         image_embeddings: Optional[torch.FloatTensor] = None,
         multimask_output: bool = True,
-        attn_sim: Optional[torch.FloatTensor] = None,
+        attention_similarity: Optional[torch.FloatTensor] = None,
         target_embedding: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1395,7 +1397,7 @@ class SamModel(SamPreTrainedModel):
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=multimask_output,
-            attn_sim=attn_sim,
+            attention_similarity=attention_similarity,
             target_embedding=target_embedding,
             output_attentions=output_attentions,
         )
