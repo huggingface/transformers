@@ -1394,7 +1394,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         >>> from transformers import TimeSeriesTransformerModel
 
         >>> file = hf_hub_download(
-        ...     repo_id="kashif/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
+        ...     repo_id="hf-internal-testing/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
         ... )
         >>> batch = torch.load(file)
 
@@ -1558,7 +1558,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         >>> from transformers import TimeSeriesTransformerForPrediction
 
         >>> file = hf_hub_download(
-        ...     repo_id="kashif/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
+        ...     repo_id="hf-internal-testing/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
         ... )
         >>> batch = torch.load(file)
 

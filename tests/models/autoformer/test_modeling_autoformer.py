@@ -204,7 +204,6 @@ class AutoformerModelTester:
 class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (AutoformerModel, AutoformerForPrediction) if is_torch_available() else ()
     all_generative_model_classes = (AutoformerForPrediction,) if is_torch_available() else ()
-    is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
@@ -406,7 +405,7 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 def prepare_batch(filename="train-batch.pt"):
-    file = hf_hub_download(repo_id="kashif/tourism-monthly-batch", filename=filename, repo_type="dataset")
+    file = hf_hub_download(repo_id="hf-internal-testing/tourism-monthly-batch", filename=filename, repo_type="dataset")
     batch = torch.load(file, map_location=torch_device)
     return batch
 
