@@ -89,7 +89,7 @@ class BitsAndBytesConfig:
         llm_int8_skip_modules=None,
         llm_int8_enable_fp32_cpu_offload=False,
         llm_int8_has_fp16_weight=False,
-        bnb_4bit_compute_dtype=torch.float32,
+        bnb_4bit_compute_dtype="torch.float32",
         bnb_4bit_quant_type="fp4",
         bnb_4bit_use_double_quant=False,
         **kwargs,

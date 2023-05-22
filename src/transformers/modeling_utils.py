@@ -626,6 +626,7 @@ def _load_state_dict_into_meta_model(
     # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
     # - Is there a situation where some keys aren't in `loaded_state_dict_keys` and in which case
     #   they won't get loaded.
+
     if load_in_kbit:
         from .utils.bitsandbytes import set_module_kbit_tensor_to_device
 
@@ -704,7 +705,7 @@ def _load_state_dict_into_meta_model(
                 offload_index = offload_weight(param, param_name, offload_folder, offload_index)
         elif param_device == "cpu" and state_dict_index is not None:
             state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
-        elif not load_in_kbit:
+        elif not (load_in_kbit):
             # For backward compatibility with older versions of `accelerate`
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
@@ -2168,7 +2169,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
         use_safetensors = kwargs.pop("use_safetensors", None if is_safetensors_available() else False)
-        load_in_kbit = load_in_4bit or load_in_8bit
 
         if is_bitsandbytes_available():
             is_8bit_serializable = version.parse(importlib_metadata.version("bitsandbytes")) > version.parse("0.37.2")
@@ -2226,7 +2226,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if low_cpu_mem_usage is None:
                     low_cpu_mem_usage = True
 
-        if load_in_kbit:
+        if load_in_8bit or load_in_4bit:
             if not (is_accelerate_available() and is_bitsandbytes_available()):
                 raise ImportError(
                     "Using `load_in_8bit=True` requires Accelerate: `pip install accelerate` and the latest version of"
@@ -2620,7 +2620,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
-        elif load_in_kbit or low_cpu_mem_usage:
+        elif load_in_8bit or load_in_4bit or low_cpu_mem_usage:
             init_contexts.append(init_empty_weights())
 
         with ContextManagers(init_contexts):
@@ -2633,7 +2633,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             keep_in_fp32_modules = []
 
-        if load_in_kbit:
+        if load_in_8bit or load_in_4bit:
             from .utils.bitsandbytes import get_keys_to_not_convert, replace_with_bnb_linear
 
             llm_int8_skip_modules = quantization_config.llm_int8_skip_modules
@@ -2703,7 +2703,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if _accelerate_has_custom_dtype:
                     from accelerate.utils import CustomDtype
 
-                    target_dtype = CustomDtype.INT4
+                    target_dtype = CustomDtype.int4
                 else:
                     logger.warning(
                         "You are using `device_map='auto'` on a 4bit loaded version of the model. To automatically compute the appropriate device map, you should upgrade your `accelerate` library, `pip install --upgrade accelerare` or install it from source to support int4 auto device map calculation. You may encounter unexpected behavior, or pass your own device map"
@@ -2744,7 +2744,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model.tie_weights()
             device_map = infer_auto_device_map(model, dtype=target_dtype, **kwargs)
 
-            if load_in_kbit:
+            if load_in_8bit or load_in_4bit:
                 # The LM head / tied weights or any last module can stay on disk / CPU
                 device_map_without_lm_head = {
                     key: device_map[key] for key in device_map.keys() if key not in modules_to_not_convert
@@ -2819,18 +2819,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 offload_folder=offload_folder,
                 offload_state_dict=offload_state_dict,
                 dtype=torch_dtype,
-                load_in_kbit=(load_in_4bit or load_in_8bit),
+                load_in_kbit=(load_in_8bit or load_in_4bit),
                 keep_in_fp32_modules=keep_in_fp32_modules,
             )
 
         model.is_loaded_in_4bit = load_in_4bit
         model.is_loaded_in_8bit = load_in_8bit
-        model.is_loaded_in_kbit = load_in_kbit
-
-        if load_in_4bit and load_in_8bit:
-            raise ValueError(
-                "You cannot set load_in_4bit=True and load_in_8bit=True at the same time! Choose one option."
-            )
+        model.is_loaded_in_kbit = load_in_8bit or load_in_4bit
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -3004,7 +2999,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     target_dtype = torch.float32
 
                 if param.device == torch.device("meta"):
-                    if not load_in_kbit:
+                    if not (load_in_kbit):
                         set_module_tensor_to_device(model, key, "cpu", torch.empty(*param.size(), dtype=target_dtype))
                     else:
                         set_module_kbit_tensor_to_device(
