@@ -135,7 +135,8 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         Args:
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values.
+                values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
+                stereo, i.e. single float per timestep.
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors.
@@ -161,9 +162,8 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
             )
 
         is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
-        if is_batched_numpy:
-            if len(raw_speech.shape) > 2:
-                raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+        if is_batched_numpy and len(raw_speech.shape) > 2:
+            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
         is_batched = is_batched_numpy or (
             isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
         )
