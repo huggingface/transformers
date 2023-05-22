@@ -1168,11 +1168,11 @@ SAM_INPUTS_DOCSTRING = r"""
             bounding box if relevant). However, it is possible to just output a single mask, that corresponds to the
             "best" mask, by specifying `multimask_output=False`.
         attention_similarity (`torch.FloatTensor`, *optional*):
-            Attention similarity tensor, to be provided to the mask decoder in case the model is used for
-            personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
+            Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
+            model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
         target_embedding (`torch.FloatTensor`, *optional*):
-            Embedding of the target concept, to be provided to the mask decoder in case the model is used for
-            personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
+            Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
+            the model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
