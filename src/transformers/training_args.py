@@ -1708,7 +1708,8 @@ class TrainingArguments:
         """
         requires_backends(self, ["torch"])
         # Make sure `self._n_gpu` is properly setup.
-        _ = self._setup_devices
+        if not hasattr(self, "_n_gpu"):
+            _ = self._setup_devices
         return self._n_gpu
 
     @property
@@ -1733,7 +1734,7 @@ class TrainingArguments:
             self.distributed_state is not None and self.distributed_state.distributed_type != DistributedType.NO
         ) or (self.distributed_state is None and self.local_rank != -1):
             return ParallelMode.DISTRIBUTED
-        elif self._n_gpu > 1:
+        elif self.n_gpu > 1:
             return ParallelMode.NOT_DISTRIBUTED
         else:
             return ParallelMode.NOT_PARALLEL
