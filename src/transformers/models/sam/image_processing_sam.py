@@ -934,7 +934,7 @@ def _generate_crop_boxes(
     cropped_images, point_grid_per_crop = _generate_crop_images(
         crop_boxes, image, points_grid, layer_idxs, target_size, original_size
     )
-
+    crop_boxes = np.array(crop_boxes)
     crop_boxes = crop_boxes.astype(np.float32)
     points_per_crop = np.array([point_grid_per_crop])
     points_per_crop = np.transpose(points_per_crop, axes=(0, 2, 1, 3))
