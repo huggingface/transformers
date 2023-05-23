@@ -582,6 +582,8 @@
         title: BLIP-2
       - local: model_doc/bridgetower
         title: BridgeTower
+      - local: model_doc/bros
+        title: Bros
       - local: model_doc/chinese_clip
         title: Chinese-CLIP
       - local: model_doc/clip
