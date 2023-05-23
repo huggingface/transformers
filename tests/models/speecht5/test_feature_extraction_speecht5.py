@@ -255,8 +255,8 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
     def test_call_target(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        # create three inputs of length 8000, 14000, and 2000
-        speech_inputs = [floats_list((1, x))[0] for x in range(8000, 14000, 2000)]
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
 
         # Test feature size
@@ -395,7 +395,8 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         input_speech = self._load_datasamples(1)
         feature_extractor = SpeechT5FeatureExtractor()
         input_values = feature_extractor(input_speech, return_tensors="pt").input_values
-        self.assertTrue(torch.allclose(input_values[0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))
+        self.assertEquals(input_values.shape, (1, 93680))
+        self.assertTrue(torch.allclose(input_values[0, :30], EXPECTED_INPUT_VALUES, atol=1e-6))
 
     def test_integration_target(self):
         # fmt: off
@@ -410,4 +411,5 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         input_speech = self._load_datasamples(1)
         feature_extractor = SpeechT5FeatureExtractor()
         input_values = feature_extractor(audio_target=input_speech, return_tensors="pt").input_values
+        self.assertEquals(input_values.shape, (1, 366, 80))
         self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))

@@ -34,7 +34,12 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_whisper import WhisperConfig
 from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
 
@@ -1464,6 +1469,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         task=None,
         language=None,
         is_multilingual=None,
+        prompt_ids: Optional[torch.Tensor] = None,
         **kwargs,
     ):
         """
@@ -1521,6 +1527,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 find all the possible language tokens in the `model.generation_config.lang_to_id` dictionary.
             is_multilingual (`bool`, *optional*):
                 Whether or not the model is multilingual.
+            prompt_ids (`torch.Tensor`, *optional*):
+                Rank-1 tensor of token IDs created by passing text to [`~WhisperProcessor.get_prompt_ids`] that is
+                provided as a prompt to each chunk. This can be used to provide or "prompt-engineer" a context for
+                transcription, e.g. custom vocabularies or proper nouns to make it more likely to predict those words
+                correctly. It cannot be used in conjunction with `decoder_start_token_id` as it overwrites this value.
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1567,8 +1578,21 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if task is not None:
             generation_config.task = task
 
-        forced_decoder_ids = []
-        if task is not None or language is not None:
+        forced_decoder_ids = None
+
+        # Legacy code for backward compatibility
+        if hasattr(self.config, "forced_decoder_ids") and self.config.forced_decoder_ids is not None:
+            forced_decoder_ids = self.config.forced_decoder_ids
+        elif (
+            hasattr(self.generation_config, "forced_decoder_ids")
+            and self.generation_config.forced_decoder_ids is not None
+        ):
+            forced_decoder_ids = self.generation_config.forced_decoder_ids
+        else:
+            forced_decoder_ids = kwargs.get("forced_decoder_ids", None)
+
+        if task is not None or language is not None or (forced_decoder_ids is None and prompt_ids is not None):
+            forced_decoder_ids = []
             if hasattr(generation_config, "language"):
                 if generation_config.language in generation_config.lang_to_id.keys():
                     language_token = generation_config.language
@@ -1593,26 +1617,47 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     raise ValueError(
                         f"The `{generation_config.task}`task is not supported. The task should be one of `{TASK_IDS}`"
                     )
-            else:
+            elif hasattr(generation_config, "task_to_id"):
                 forced_decoder_ids.append((2, generation_config.task_to_id["transcribe"]))  # defaults to transcribe
             if hasattr(generation_config, "no_timestamps_token_id") and not generation_config.return_timestamps:
                 idx = forced_decoder_ids[-1][0] + 1 if forced_decoder_ids else 1
                 forced_decoder_ids.append((idx, generation_config.no_timestamps_token_id))
 
-        # Legacy code for backward compatibility
-        elif hasattr(self.config, "forced_decoder_ids") and self.config.forced_decoder_ids is not None:
-            forced_decoder_ids = self.config.forced_decoder_ids
-        elif (
-            hasattr(self.generation_config, "forced_decoder_ids")
-            and self.generation_config.forced_decoder_ids is not None
-        ):
-            forced_decoder_ids = self.generation_config.forced_decoder_ids
+        if forced_decoder_ids is not None:
+            generation_config.forced_decoder_ids = forced_decoder_ids
+
+        if prompt_ids is not None:
+            if kwargs.get("decoder_start_token_id") is not None:
+                raise ValueError(
+                    "When specifying `prompt_ids`, you cannot also specify `decoder_start_token_id` as it gets overwritten."
+                )
+            prompt_ids = prompt_ids.tolist()
+            decoder_start_token_id, *text_prompt_ids = prompt_ids
+            # Set the decoder_start_token_id to <|startofprev|>
+            kwargs.update({"decoder_start_token_id": decoder_start_token_id})
+
+            # Update the max generation length to include the prompt
+            specified_max_length = kwargs.pop("max_new_tokens", None) or kwargs.pop("max_length", None)
+            default_max_length = generation_config.max_new_tokens or generation_config.max_length
+            non_prompt_max_length = specified_max_length or default_max_length
+            kwargs["max_new_tokens"] = non_prompt_max_length + len(text_prompt_ids)
+
+            # Reformat the forced_decoder_ids to incorporate the prompt
+            non_prompt_forced_decoder_ids = (
+                kwargs.pop("forced_decoder_ids", None) or generation_config.forced_decoder_ids
+            )
+            forced_decoder_ids = [
+                # Slicing the text prompt ids in a manner consistent with the OpenAI implementation
+                # to accomodate context space for the prefix (see https://github.com/openai/whisper/blob/c09a7ae299c4c34c5839a76380ae407e7d785914/whisper/decoding.py#L599)
+                *text_prompt_ids[-self.config.max_length // 2 - 1 :],
+                generation_config.decoder_start_token_id,
+                *[token for _rank, token in non_prompt_forced_decoder_ids],
+            ]
+            forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_decoder_ids)]
+            generation_config.forced_decoder_ids = forced_decoder_ids
 
         if generation_config.return_timestamps:
             logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
-
-        if len(forced_decoder_ids) > 0:
-            generation_config.forced_decoder_ids = forced_decoder_ids
 
         return super().generate(
             inputs,

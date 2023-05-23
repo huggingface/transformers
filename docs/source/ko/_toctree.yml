@@ -45,8 +45,8 @@
   - sections:
       - local: in_translation
         title: (번역중) Audio classification
-      - local: in_translation
-        title: (번역중) Automatic speech recognition
+      - local: tasks/asr
+        title: 자동 음성 인식
     title: (번역중) 오디오
     isExpanded: false
   - sections:
@@ -58,12 +58,12 @@
         title: (번역중) Video classification
       - local: in_translation
         title: (번역중) Object detection
-      - local: in_translation
-        title: (번역중) Zero-shot object detection
+      - local: tasks/zero_shot_object_detection
+        title: 제로샷(zero-shot) 객체 탐지
       - local: tasks/zero_shot_image_classification
         title: 제로샷(zero-shot) 이미지 분류
-      - local: in_translation
-        title: (번역중) Depth estimation
+      - local: tasks/monocular_depth_estimation
+        title: 단일 영상 기반 깊이 추정
     title: (번역중) 컴퓨터 비전
     isExpanded: false
   - sections:
