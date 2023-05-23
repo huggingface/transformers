@@ -2162,6 +2162,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         variant = kwargs.pop("variant", None)
         use_safetensors = kwargs.pop("use_safetensors", None if is_safetensors_available() else False)
 
+        if kwargs.get("use_pretrained_backbone") is not None:
+            logger.warning(
+                "The weights from using `use_pretrained_backbone` may be overriden when using `from_pretrained`."
+            )
+
         if is_bitsandbytes_available():
             is_8bit_serializable = version.parse(importlib_metadata.version("bitsandbytes")) > version.parse("0.37.2")
         else:
