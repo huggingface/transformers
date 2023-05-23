@@ -40,7 +40,7 @@ try:
 except ImportError:
     xops = None
     logger.warn(
-        "Xformers is not installed correctly. If you want to use memorry_efficient_attention to accelerate training use the following command to install Xformers\npip install xformers."
+        "Xformers is not installed correctly. If you want to use memory_efficient_attention to accelerate training use the following command to install Xformers\npip install xformers."
     )
 
 
@@ -223,7 +223,7 @@ class OpenLlamaAttention(nn.Module):
 
         past_key_value = (key_states, value_states) if use_cache else None
 
-        if self.config.use_memorry_efficient_attention and xops is not None and self.training:
+        if self.config.use_memory_efficient_attention and xops is not None and self.training:
             attn_weights = None
             query_states = query_states.transpose(1, 2)
             key_states = key_states.transpose(1, 2)
@@ -563,7 +563,7 @@ class OpenLlamaModel(OpenLlamaPreTrainedModel):
             if self.embed_layer_norm:
                 inputs_embeds = self.embed_layer_norm(inputs_embeds)
         # embed positions
-        if self.config.use_memorry_efficient_attention and self.training:
+        if self.config.use_memory_efficient_attention and self.training:
             attention_mask = None
         elif attention_mask is None:
             attention_mask = torch.ones(
