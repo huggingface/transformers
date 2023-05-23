@@ -781,8 +781,8 @@ EFFICIENTFORMER_START_DOCSTRING = r"""
 EFFICIENTFORMER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values ((`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ViTFeatureExtractor`]. See
-            [`ViTFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`EfficientFormerImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -951,7 +951,7 @@ class TFEfficientFormerForImageClassificationWithTeacherOutput(ModelOutput):
 @add_start_docstrings(
     """
     EfficientFormer Model transformer with image classification heads on top (a linear layer on top of the final hidden
-    state of the [CLS] token and a linear layer on top of the final hidden state of the distillation token) e.g. for
+    state and a linear layer on top of the final hidden state of the distillation token) e.g. for
     ImageNet.
 
     .. warning::
