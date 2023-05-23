@@ -633,7 +633,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
                 Mask with ones indicating tokens to attend to, zeros for tokens to ignore.
             input_shape (`Tuple[int]`):
                 The shape of the input to the model.
-            is_decoder: (`bool`):
+            is_decoder (`bool`):
                 Whether the model is used as a decoder.
 
         Returns:
