@@ -38,7 +38,7 @@ from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, TFGenerationMixin
-from .tf_utils import shape_list
+from .tf_utils import expand_1d, load_attributes_from_hdf5_group, save_attributes_to_hdf5_group, shape_list
 from .utils import (
     DUMMY_INPUTS,
     SAFE_WEIGHTS_INDEX_NAME,
@@ -65,16 +65,15 @@ from .utils import (
 from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 
 
-if parse(tf.__version__) >= parse("2.11.0"):
+if parse(tf.__version__).minor >= 13:
     from keras import backend as K
-    from keras.engine import data_adapter
+    from keras.__internal__ import KerasTensor
+elif parse(tf.__version__).minor >= 11:
+    from keras import backend as K
     from keras.engine.keras_tensor import KerasTensor
-    from keras.saving.legacy import hdf5_format
 else:
     from tensorflow.python.keras import backend as K
-    from tensorflow.python.keras.engine import data_adapter
     from tensorflow.python.keras.engine.keras_tensor import KerasTensor
-    from tensorflow.python.keras.saving import hdf5_format
 
 
 if is_safetensors_available():
@@ -797,9 +796,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
     try:
         with h5py.File(resolved_archive_file, "r") as sharded_checkpoint_file:
             # Retrieve the name of each layer from the H5 file
-            saved_h5_model_layers_name = set(
-                hdf5_format.load_attributes_from_hdf5_group(sharded_checkpoint_file, "layer_names")
-            )
+            saved_h5_model_layers_name = set(load_attributes_from_hdf5_group(sharded_checkpoint_file, "layer_names"))
             weight_value_tuples = []
 
             # Compute missing and unexpected sub layers
@@ -898,9 +895,7 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
     # Read the H5 file
     with h5py.File(resolved_archive_file, "r") as sharded_checkpoint_file:
         # Retrieve the name of each layer from the H5 file
-        saved_h5_model_layers_name = set(
-            hdf5_format.load_attributes_from_hdf5_group(sharded_checkpoint_file, "layer_names")
-        )
+        saved_h5_model_layers_name = set(load_attributes_from_hdf5_group(sharded_checkpoint_file, "layer_names"))
 
         # Find the missing layers from the high level list of layers
         missing_layers = list({layer.name for layer in model.layers} - saved_h5_model_layers_name)
@@ -924,7 +919,7 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
 
                 # Create a dict from the H5 saved model that looks like {"weight_name": weight_value}
                 # And a set with only the names
-                for weight_name in hdf5_format.load_attributes_from_hdf5_group(h5_layer_object, "weight_names"):
+                for weight_name in load_attributes_from_hdf5_group(h5_layer_object, "weight_names"):
                     # TF names always start with the model name so we ignore it
                     name = "/".join(weight_name.split("/")[1:])
 
@@ -1528,8 +1523,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         output_to_label = {val: key for key, val in label_to_output.items()}
         if not self._using_dummy_loss and parse(tf.__version__) < parse("2.11.0"):
             # Newer TF train steps leave this out
-            data = data_adapter.expand_1d(data)
-        x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+            data = expand_1d(data)
+        x, y, sample_weight = tf.keras.utils.unpack_x_y_sample_weight(data)
         # If the inputs are mutable dictionaries, make a shallow copy of them because we will modify
         # them during input/label pre-processing. This avoids surprising the user by wrecking their data.
         # In addition, modifying mutable Python inputs makes XLA compilation impossible.
@@ -1635,8 +1630,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         output_to_label = {val: key for key, val in label_to_output.items()}
         if not self._using_dummy_loss and parse(tf.__version__) < parse("2.11.0"):
             # Newer versions leave this out
-            data = data_adapter.expand_1d(data)
-        x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+            data = expand_1d(data)
+        x, y, sample_weight = tf.keras.utils.unpack_x_y_sample_weight(data)
         # If the inputs are mutable dictionaries, make a shallow copy of them because we will modify
         # them during input/label pre-processing. This avoids surprising the user by wrecking their data.
         # In addition, modifying mutable Python inputs makes XLA compilation impossible.
@@ -2402,7 +2397,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         )
                         param_dset[:] = layer.numpy()
                         layers.append(layer_name.encode("utf8"))
-                    hdf5_format.save_attributes_to_hdf5_group(shard_file, "layer_names", layers)
+                    save_attributes_to_hdf5_group(shard_file, "layer_names", layers)
 
         if push_to_hub:
             self._upload_modified_files(
