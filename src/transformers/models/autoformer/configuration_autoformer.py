@@ -23,7 +23,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "thuml/Autoformer": "https://huggingface.co/thuml/Autoformer/resolve/main/config.json",
+    "huggingface/autoformer-tourism-monthly": "https://huggingface.co/huggingface/autoformer-tourism-monthly/resolve/main/config.json",
 }
 
 
