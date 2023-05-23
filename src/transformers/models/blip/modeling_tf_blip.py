@@ -1416,6 +1416,10 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
 
         question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
 
+        if labels is not None and decoder_input_ids is None:
+            # labels are already shifted right, see: https://github.com/huggingface/transformers/pull/23153
+            decoder_input_ids = labels
+
         answer_output = self.text_decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
