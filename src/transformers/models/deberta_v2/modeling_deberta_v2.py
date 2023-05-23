@@ -130,7 +130,7 @@ class XSoftmax(torch.autograd.Function):
         r_mask = g.op(
             "Cast",
             g.op("Sub", g.op("Constant", value_t=torch.tensor(1, dtype=torch.int64)), mask_cast_value),
-            to_i=sym_help.cast_pytorch_to_onnx["Byte"],
+            to_i=sym_help.cast_pytorch_to_onnx["Bool"],
         )
         output = masked_fill(
             g, self, r_mask, g.op("Constant", value_t=torch.tensor(torch.finfo(self.type().dtype()).min))
@@ -453,7 +453,6 @@ class DebertaV2Encoder(nn.Module):
         if attention_mask.dim() <= 2:
             extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
             attention_mask = extended_attention_mask * extended_attention_mask.squeeze(-2).unsqueeze(-1)
-            attention_mask = attention_mask.byte()
         elif attention_mask.dim() == 3:
             attention_mask = attention_mask.unsqueeze(1)
 
