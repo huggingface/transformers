@@ -247,11 +247,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                       inference to provide more context to the model). Only use `stride` with CTC models.
             return_timestamps (*optional*, `str`):
                 Only available for pure CTC models. If set to `"char"`, the pipeline will return `timestamps` along the
-                text for every character in the text. For instance if you get `[{"text": "h", "timestamps": (0.5,0.6),
-                {"text": "i", "timestamps": (0.7, .9)}]`, then it means the model predicts that the letter "h" was
+                text for every character in the text. For instance if you get `[{"text": "h", "timestamp": (0.5, 0.6)},
+                {"text": "i", "timestamp": (0.7, 0.9)}]`, then it means the model predicts that the letter "h" was
                 pronounced after `0.5` and before `0.6` seconds. If set to `"word"`, the pipeline will return
                 `timestamps` along the text for every word in the text. For instance if you get `[{"text": "hi ",
-                "timestamps": (0.5,0.9)}, {"text": "there", "timestamps": (1.0, .1.5)}]`, then it means the model
+                "timestamp": (0.5, 0.9)}, {"text": "there", "timestamp": (1.0, 1.5)}]`, then it means the model
                 predicts that the word "hi" was pronounced after `0.5` and before `0.9` seconds.
             generate_kwargs (`dict`, *optional*):
                 The dictionary of ad-hoc parametrization of `generate_config` to be used for the generation call. For a
@@ -265,8 +265,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 - **text** (`str` ) -- The recognized text.
                 - **chunks** (*optional(, `List[Dict]`)
                         When using `return_timestamps`, the `chunks` will become a list containing all the various text
-                        chunks identified by the model, *e.g.* `[{"text": "hi ", "timestamps": (0.5,0.9), {"text":
-                        "there", "timestamps": (1.0, 1.5)}]`. The original full text can roughly be recovered by doing
+                        chunks identified by the model, *e.g.* `[{"text": "hi ", "timestamp": (0.5, 0.9)}, {"text":
+                        "there", "timestamp": (1.0, 1.5)}]`. The original full text can roughly be recovered by doing
                         `"".join(chunk["text"] for chunk in output["chunks"])`.
         """
         return super().__call__(inputs, **kwargs)
