@@ -748,6 +748,22 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         return token_ids
 
+    def combine_tokens_into_words(self, tokens: List[int], language=None):
+        """
+        Groups tokens by word. Returns a tuple containing a list of strings with the words, and a list of
+        `token_id` sequences with the tokens making up each word.
+        """
+        if language is None:
+            language = self.language
+        if language is None:
+            language = "english"
+
+        if language in {"chinese", "japanese", "thai", "lao", "myanmar"}:
+            # These languages don't typically use spaces.
+            return _split_tokens_on_unicode(self, tokens)
+        else:
+            return _split_tokens_on_spaces(self, tokens)
+
 
 def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language, time_precision):
     """
@@ -891,7 +907,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                         resolved_tokens, resolved_token_timestamps = _find_longest_common_sequence(previous_tokens, previous_token_timestamps)
                         resolved_text = tokenizer.decode(resolved_tokens)
                         chunk["text"] = resolved_text
-                        chunk["words"] = resolved_token_timestamps
+                        chunk["words"] = _collate_word_timestamps(tokenizer, resolved_tokens, resolved_token_timestamps, last_language)
                         chunks.append(chunk)
 
                         # Flush all our temporary context
@@ -933,7 +949,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
         resolved_tokens, resolved_token_timestamps = _find_longest_common_sequence(previous_tokens, previous_token_timestamps)
         resolved_text = tokenizer.decode(resolved_tokens)
         chunk["text"] = resolved_text
-        chunk["words"] = resolved_token_timestamps
+        chunk["words"] = _collate_word_timestamps(tokenizer, resolved_tokens, resolved_token_timestamps, last_language)
         chunks.append(chunk)
 
     # Preparing and cleaning up the pipeline output
@@ -1051,3 +1067,65 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
         total_token_timestamp_sequence = None
 
     return total_sequence, total_token_timestamp_sequence
+
+
+def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language):
+    words, word_tokens = tokenizer.combine_tokens_into_words(tokens, language)
+    word_boundaries = np.pad(np.cumsum([len(t) for t in word_tokens[:-1]]), (1, 0))
+    token_timestamps = np.array(token_timestamps)
+    start_times = token_timestamps[word_boundaries[:-1]]
+    end_times = token_timestamps[word_boundaries[1:]]
+    timings = [
+        {"text": word, "timestamp": (round(start, 2), round(end, 2))}
+        for word, start, end in zip(
+            words, start_times, end_times
+        )
+    ]
+    return timings
+
+
+def _split_tokens_on_unicode(tokenizer, tokens: List[int]):
+    """Combine tokens into words by splitting at any position where the tokens are decoded as valid unicode points."""
+    decoded_full = tokenizer.decode(tokens, decode_with_timestamps=True)
+    replacement_char = "\ufffd"
+
+    words = []
+    word_tokens = []
+    current_tokens = []
+    unicode_offset = 0
+
+    for token in tokens:
+        current_tokens.append(token)
+        decoded = tokenizer.decode(current_tokens, decode_with_timestamps=True)
+
+        if (
+            replacement_char not in decoded
+            or decoded_full[unicode_offset + decoded.index(replacement_char)]
+            == replacement_char
+        ):
+            words.append(decoded)
+            word_tokens.append(current_tokens)
+            current_tokens = []
+            unicode_offset += len(decoded)
+
+    return words, word_tokens
+
+
+def _split_tokens_on_spaces(tokenizer, tokens: List[int]):
+    """Combine tokens into words by splitting at whitespace and punctuation tokens."""
+    subwords, subword_tokens_list = _split_tokens_on_unicode(tokenizer, tokens)
+    words = []
+    word_tokens = []
+
+    for subword, subword_tokens in zip(subwords, subword_tokens_list):
+        special = subword_tokens[0] >= tokenizer.eos_token_id
+        with_space = subword.startswith(" ")
+        punctuation = subword.strip() in "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
+        if special or with_space or punctuation or len(words) == 0:
+            words.append(subword)
+            word_tokens.append(subword_tokens)
+        else:
+            words[-1] = words[-1] + subword
+            word_tokens[-1].extend(subword_tokens)
+
+    return words, word_tokens
