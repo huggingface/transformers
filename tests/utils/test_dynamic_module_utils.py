@@ -33,6 +33,34 @@ except ImportError:
     raise ValueError()
 """
 
+TRY_IMPORT_IN_FUNCTION = """
+import os
+
+def foo():
+    try:
+        import bar
+    except ImportError:
+        raise ValueError()
+"""
+
+MULTIPLE_EXCEPTS_IMPORT = """
+import os
+
+try:
+    import bar
+except (ImportError, AttributeError):
+    raise ValueError()
+"""
+
+EXCEPT_AS_IMPORT = """
+import os
+
+try:
+    import bar
+except ImportError as e:
+    raise ValueError()
+"""
+
 GENERIC_EXCEPT_IMPORT = """
 import os
 
@@ -71,6 +99,9 @@ CASES = [
     GENERIC_EXCEPT_IMPORT,
     MULTILINE_TRY_IMPORT,
     MULTILINE_BOTH_IMPORT,
+    MULTIPLE_EXCEPTS_IMPORT,
+    EXCEPT_AS_IMPORT,
+    TRY_IMPORT_IN_FUNCTION,
 ]
 
 
