@@ -111,10 +111,10 @@ class TFLxmertForPreTrainingOutput(ModelOutput):
             (classification) loss.
         prediction_logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        cross_relationship_score: (`tf.Tensor` of shape `(batch_size, 2)`):
+        cross_relationship_score (`tf.Tensor` of shape `(batch_size, 2)`):
             Prediction scores of the textual matching objective (classification) head (scores of True/False
             continuation before SoftMax).
-        question_answering_score: (`tf.Tensor` of shape `(batch_size, n_qa_answers)`):
+        question_answering_score (`tf.Tensor` of shape `(batch_size, n_qa_answers)`):
             Prediction scores of question answering objective (classification).
         language_hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `tf.Tensor` (one for input features + one for the output of each cross-modality layer) of shape
@@ -873,12 +873,12 @@ LXMERT_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        visual_feats: (`tf.Tensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
+        visual_feats (`tf.Tensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
             This input represents visual features. They ROI pooled object features from bounding boxes using a
             faster-RCNN model)
 
             These are currently not provided by the transformers library.
-        visual_pos: (`tf.Tensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
+        visual_pos (`tf.Tensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
             This input represents spacial features corresponding to their relative (via index) visual features. The
             pre-trained LXMERT model expects these spacial features to be normalized bounding boxes on a scale of 0 to
             1.
@@ -1297,7 +1297,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        obj_labels: (`Dict[Str: Tuple[tf.Tensor, tf.Tensor]]`, *optional*, defaults to `None`):
+        obj_labels (`Dict[Str: Tuple[tf.Tensor, tf.Tensor]]`, *optional*, defaults to `None`):
             each key is named after each one of the visual losses and each element of the tuple is of the shape
             `(batch_size, num_features)` and `(batch_size, num_features, visual_feature_dim)` for each the label id and
             the label score respectively

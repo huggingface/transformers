@@ -63,7 +63,7 @@ class SEWConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`SEWForCTC`].
-        layerdrop: (`float`, *optional*, defaults to 0.1):
+        layerdrop (`float`, *optional*, defaults to 0.1):
             The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
             details.
         initializer_range (`float`, *optional*, defaults to 0.02):
