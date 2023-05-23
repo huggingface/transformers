@@ -1175,7 +1175,11 @@ class LlamaConverter(SpmConverter):
             single = f"{(bos+':0 ') * add_bos}$A:0{(' '+eos+':0') * add_eos}"
             pair = f"{single}{(' '+bos+':1') * add_bos} $B:1{(' '+eos+':1') * add_eos}"
 
-            special_tokens = [(bos, bos_token_id), (eos, eos_token_id)]
+            special_tokens = []
+            if add_bos:
+                special_tokens.append((bos, bos_token_id))
+            if add_eos:
+                special_tokens.append((eos, eos_token_id))
             return processors.TemplateProcessing(single=single, pair=pair, special_tokens=special_tokens)
 
         else:

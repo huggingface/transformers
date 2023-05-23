@@ -39,6 +39,7 @@ from .generic import (
     expand_dims,
     find_labels,
     flatten_dict,
+    infer_framework,
     is_jax_tensor,
     is_numpy_array,
     is_tensor,
