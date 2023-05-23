@@ -215,7 +215,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         cls_token: str = "[CLS]",
         mask_token: str = "[MASK]",
         tokenize_chinese_chars: bool = True,
-        strip_accents: Optional[str] = None,
+        strip_accents: Optional[bool] = None,
         **kwargs,
     ):
         super().__init__(
