@@ -926,8 +926,8 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
     if previous_tokens:
         if return_timestamps:
             logger.warning(
-                "There was an error while processing timestamps, we haven't found a timestamp as last token. Was"
-                " WhisperTimeStampLogitsProcessor used?"
+                "Whisper did not predict an ending timestamp, which can happen if audio is cut off in the middle of a word. "
+                "Also make sure WhisperTimeStampLogitsProcessor was used during generation."
             )
         # Happens when we don't use timestamps
         resolved_tokens, resolved_token_timestamps = _find_longest_common_sequence(previous_tokens, previous_token_timestamps)
