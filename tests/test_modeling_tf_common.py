@@ -1525,14 +1525,14 @@ class TFModelTesterMixin:
             model = model_class(config)
             # Test that model correctly compute the loss with kwargs
             prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
-            # Is there a better way to remove these decoder inputs?
             # We also remove "return_loss" as this is covered by the train_step when using fit()
             prepared_for_class = {
                 key: val
                 for key, val in prepared_for_class.items()
-                if key
-                not in ("head_mask", "decoder_head_mask", "cross_attn_head_mask", "decoder_input_ids", "return_loss")
+                if key not in ("head_mask", "decoder_head_mask", "cross_attn_head_mask", "return_loss")
             }
+            if "labels" in prepared_for_class and "decoder_input_ids" in prepared_for_class:
+                del prepared_for_class["decoder_input_ids"]
 
             accuracy_classes = [
                 "ForPreTraining",
@@ -1556,10 +1556,8 @@ class TFModelTesterMixin:
                 sample_weight = tf.convert_to_tensor([0.5] * self.model_tester.batch_size, dtype=tf.float32)
             else:
                 sample_weight = None
-
-            outputs = model(
-                prepared_for_class
-            )  # Build the model so we can get some constant weights and check outputs
+            # Build the model so we can get some constant weights and check outputs
+            outputs = model(prepared_for_class)
             if getattr(outputs, "loss", None) is None:
                 continue
             model_weights = model.get_weights()
@@ -1633,7 +1631,6 @@ class TFModelTesterMixin:
             # Pass in all samples as a batch to match other `fit` calls
             weighted_dataset = weighted_dataset.batch(len(dataset))
             dataset = dataset.batch(len(dataset))
-
             # Reinitialize to fix batchnorm again
             model.set_weights(model_weights)
 
