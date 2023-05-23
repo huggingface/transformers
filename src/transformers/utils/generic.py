@@ -580,4 +580,4 @@ def infer_framework(model_class):
         elif module.startswith("flax") or module.startswith("jax") or name == "FlaxPreTrainedModel":
             return "flax"
     else:
-        raise ValueError(f"Could not infer framework from class {model_class}.")
+        raise TypeError(f"Could not infer framework from class {model_class}.")
