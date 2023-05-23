@@ -750,8 +750,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     def combine_tokens_into_words(self, tokens: List[int], language=None):
         """
-        Groups tokens by word. Returns a tuple containing a list of strings with the words, and a list of
-        `token_id` sequences with the tokens making up each word.
+        Groups tokens by word. Returns a tuple containing a list of strings with the words, and a list of `token_id`
+        sequences with the tokens making up each word.
         """
         if language is None:
             language = self.language
@@ -904,10 +904,14 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                         previous_tokens.append(current_tokens)
                         if return_timestamps == "word":
                             previous_token_timestamps.append(current_token_timestamps)
-                        resolved_tokens, resolved_token_timestamps = _find_longest_common_sequence(previous_tokens, previous_token_timestamps)
+                        resolved_tokens, resolved_token_timestamps = _find_longest_common_sequence(
+                            previous_tokens, previous_token_timestamps
+                        )
                         resolved_text = tokenizer.decode(resolved_tokens)
                         chunk["text"] = resolved_text
-                        chunk["words"] = _collate_word_timestamps(tokenizer, resolved_tokens, resolved_token_timestamps, last_language)
+                        chunk["words"] = _collate_word_timestamps(
+                            tokenizer, resolved_tokens, resolved_token_timestamps, last_language
+                        )
                         chunks.append(chunk)
 
                         # Flush all our temporary context
@@ -1077,9 +1081,7 @@ def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language):
     end_times = token_timestamps[word_boundaries[1:]]
     timings = [
         {"text": word, "timestamp": (round(start, 2), round(end, 2))}
-        for word, start, end in zip(
-            words, start_times, end_times
-        )
+        for word, start, end in zip(words, start_times, end_times)
     ]
     return timings
 
@@ -1100,8 +1102,7 @@ def _split_tokens_on_unicode(tokenizer, tokens: List[int]):
 
         if (
             replacement_char not in decoded
-            or decoded_full[unicode_offset + decoded.index(replacement_char)]
-            == replacement_char
+            or decoded_full[unicode_offset + decoded.index(replacement_char)] == replacement_char
         ):
             words.append(decoded)
             word_tokens.append(current_tokens)

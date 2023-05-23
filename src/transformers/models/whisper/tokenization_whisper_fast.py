@@ -24,7 +24,15 @@ from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .english_normalizer import EnglishTextNormalizer
-from .tokenization_whisper import LANGUAGES, TASK_IDS, TO_LANGUAGE_CODE, WhisperTokenizer, _decode_asr, _split_tokens_on_unicode, _split_tokens_on_spaces
+from .tokenization_whisper import (
+    LANGUAGES,
+    TASK_IDS,
+    TO_LANGUAGE_CODE,
+    WhisperTokenizer,
+    _decode_asr,
+    _split_tokens_on_spaces,
+    _split_tokens_on_unicode,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -525,8 +533,8 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.combine_tokens_into_words
     def combine_tokens_into_words(self, tokens: List[int], language=None):
         """
-        Groups tokens by word. Returns a tuple containing a list of strings with the words, and a list of
-        `token_id` sequences with the tokens making up each word.
+        Groups tokens by word. Returns a tuple containing a list of strings with the words, and a list of `token_id`
+        sequences with the tokens making up each word.
         """
         if language is None:
             language = self.language
