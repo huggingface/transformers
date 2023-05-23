@@ -171,7 +171,7 @@ class BertTokenizer(PreTrainedTokenizer):
 
             This should likely be deactivated for Japanese (see this
             [issue](https://github.com/huggingface/transformers/issues/328)).
-        strip_accents (`str`, *optional*):
+        strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
     """
@@ -193,7 +193,7 @@ class BertTokenizer(PreTrainedTokenizer):
         cls_token: str = "[CLS]",
         mask_token: str = "[MASK]",
         tokenize_chinese_chars: str = True,
-        strip_accents: Optional[str] = None,
+        strip_accents: Optional[bool] = None,
         **kwargs,
     ):
         super().__init__(
@@ -382,7 +382,7 @@ class BasicTokenizer(object):
 
             This should likely be deactivated for Japanese (see this
             [issue](https://github.com/huggingface/transformers/issues/328)).
-        strip_accents (`str`, *optional*):
+        strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
     """
@@ -392,7 +392,7 @@ class BasicTokenizer(object):
         do_lower_case: bool = True,
         never_split: Optional[Iterable[str]] = None,
         tokenize_chinese_chars: bool = True,
-        strip_accents: Optional[str] = None,
+        strip_accents: Optional[bool] = None,
     ):
         if never_split is None:
             never_split = []
