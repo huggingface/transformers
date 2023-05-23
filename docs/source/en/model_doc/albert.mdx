@@ -56,15 +56,29 @@ Next sentence prediction is replaced by a sentence ordering prediction: in the i
 This model was contributed by [lysandre](https://huggingface.co/lysandre). This model jax version was contributed by
 [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/google-research/ALBERT).
 
-## Documentation resources
+## Resources
 
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ALBERT. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
-## AlbertConfig
+<PipelineTag pipeline="fill-mask" />
+- [`AlbertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling)
+
+<PipelineTag pipeline="text-classification"/>
+
+- A notebook on how to [Fine-tune ALBERT for sentence-pair classification](https://github.com/NadirEM/nlp-notebooks/blob/master/Fine_tune_ALBERT_sentence_pair_classification.ipynb).🌎
+- [Text classification](https://huggingface.co/docs/transformers/tasks/sequence_classification) chapter of the 🤗 Hugging Face Task Guides.
+- A blog post on [Deep Learning over Internet](https://huggingface.co/blog/collaborative-training) that uses ALBERT model.
+
+<PipelineTag pipeline="token-classification" /> 
+
+- A course material on [EncoderModel](https://huggingface.co/course/chapter1/5). 
+- A Transformers ALBERT document on [AlbertForTokenClassification](https://huggingface.co/docs/transformers/v4.24.0/en/model_doc/albert#transformers.AlbertForTokenClassification)
+
+<PipelineTag pipeline="Research" />
+- A research project [bert-loses-patience](https://github.com/huggingface/transformers/tree/main/examples/research_projects/bert-loses-patience)
+that uses ALBERT pretrained model.
+
+## AlbertConfigmake fixup
 
 [[autodoc]] AlbertConfig
 
