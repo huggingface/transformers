@@ -116,8 +116,10 @@ class OpenLlamaConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.use_memory_efficient_attention = kwargs['use_memorry_efficient_attention'] \
-            if 'use_memorry_efficient_attention' in kwargs else use_memory_efficient_attention
+        if "use_memorry_efficient_attention" in kwargs:
+            self.use_memory_efficient_attention = kwargs["use_memorry_efficient_attention"]
+        else:
+            self.use_memory_efficient_attention = use_memory_efficient_attention
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_dropout_prob = attention_dropout_prob
         self.use_stable_embedding = use_stable_embedding
