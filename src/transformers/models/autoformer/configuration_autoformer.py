@@ -232,7 +232,7 @@ class AutoformerConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
 
         # Autoformer
-        self.label_length = label_length or 10
+        self.label_length = label_length
         self.moving_average = moving_average
         self.autocorrelation_factor = autocorrelation_factor
 
