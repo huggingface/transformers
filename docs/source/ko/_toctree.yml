@@ -62,8 +62,8 @@
         title: 제로샷(zero-shot) 객체 탐지
       - local: tasks/zero_shot_image_classification
         title: 제로샷(zero-shot) 이미지 분류
-      - local: in_translation
-        title: (번역중) Depth estimation
+      - local: tasks/monocular_depth_estimation
+        title: 단일 영상 기반 깊이 추정
     title: (번역중) 컴퓨터 비전
     isExpanded: false
   - sections:
