@@ -778,6 +778,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
     time_offset = 0.0
     timestamp_begin = tokenizer.convert_tokens_to_ids("<|notimestamps|>") + 1
     previous_tokens = []
+    previous_token_timestamps = []
     skip = False
     right_stride_start = None
 
@@ -787,6 +788,8 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
         # We can drop everything to Python list, it's going to make
         # our lives easier
         token_ids = output["tokens"][0].tolist()
+        if return_timestamps == "word":
+            token_timestamps = output["token_timestamps"][0].tolist()
 
         # Those keep track of timestamps within strides
         # Which need to be skipped and resolve all tokens in a single
@@ -819,6 +822,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                         last_timestamp = token
 
         current_tokens = []
+        current_token_timestamps = []
 
         # - all tokens within output
         for i, token in enumerate(token_ids):
@@ -839,7 +843,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                     # one, and we cannot use timestamped tokens to create chunks
                     if last_language and language != last_language and not return_timestamps:
                         previous_tokens.append(current_tokens)
-                        resolved_tokens = _find_longest_common_sequence(previous_tokens)
+                        resolved_tokens, _ = _find_longest_common_sequence(previous_tokens, None)
                         resolved_text = tokenizer.decode(resolved_tokens)
                         chunk["text"] = resolved_text
                         chunks.append(chunk)
@@ -882,20 +886,27 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                         chunk["timestamp"][1] = time
                         # Handling merges.
                         previous_tokens.append(current_tokens)
-                        resolved_tokens = _find_longest_common_sequence(previous_tokens)
+                        if return_timestamps == "word":
+                            previous_token_timestamps.append(current_token_timestamps)
+                        resolved_tokens, resolved_token_timestamps = _find_longest_common_sequence(previous_tokens, previous_token_timestamps)
                         resolved_text = tokenizer.decode(resolved_tokens)
                         chunk["text"] = resolved_text
+                        chunk["words"] = resolved_token_timestamps
                         chunks.append(chunk)
 
                         # Flush all our temporary context
                         previous_tokens = []
                         current_tokens = []
+                        previous_token_timestamps = []
+                        current_token_timestamps = []
                         chunk = new_chunk()
             else:
                 # 4/ Regular token
                 # We just append to the list of all tokens so we can handle
                 # merges later and decode into text.
                 current_tokens.append(token)
+                if return_timestamps == "word":
+                    current_token_timestamps.append(token_timestamps[i] + time_offset)
 
         if "stride" in output:
             time_offset += chunk_len - stride_right
@@ -903,10 +914,14 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
         # Leftover tokens
         if current_tokens:
             previous_tokens.append(current_tokens)
+            if return_timestamps == "word":
+                previous_token_timestamps.append(current_token_timestamps)
         elif not (any(p for p in previous_tokens)):
             chunk = new_chunk()
             previous_tokens = []
             current_tokens = []
+            previous_token_timestamps = []
+            current_token_timestamps = []
 
     if previous_tokens:
         if return_timestamps:
@@ -915,9 +930,10 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                 " WhisperTimeStampLogitsProcessor used?"
             )
         # Happens when we don't use timestamps
-        resolved_tokens = _find_longest_common_sequence(previous_tokens)
+        resolved_tokens, resolved_token_timestamps = _find_longest_common_sequence(previous_tokens, previous_token_timestamps)
         resolved_text = tokenizer.decode(resolved_tokens)
         chunk["text"] = resolved_text
+        chunk["words"] = resolved_token_timestamps
         chunks.append(chunk)
 
     # Preparing and cleaning up the pipeline output
@@ -931,21 +947,25 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
             if not return_language:
                 chunk.pop("language")
         optional = {"chunks": chunks}
-        if return_timestamps == "word":
-            optional["word_timestamps"] = ["TODO"]   # TODO: this should override `"chunks"` !
     else:
         optional = {}
     return full_text, optional
 
 
-def _find_longest_common_sequence(sequences):
+def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
     # It would be much harder to do O(n) because of fault tolerance.
     # We actually have a really good property which is that the total sequence
     # MUST be those subsequences in order.
+
     left_sequence = sequences[0]
     left_length = len(left_sequence)
     total_sequence = []
-    for right_sequence in sequences[1:]:
+
+    if token_timestamp_sequences:
+        left_token_timestamp_sequence = token_timestamp_sequences[0]
+        total_token_timestamp_sequence = []
+
+    for seq_idx, right_sequence in enumerate(sequences[1:]):
         # index = 0
         max_ = 0.0
         max_indices = (left_length, left_length, 0, 0)
@@ -1019,6 +1039,15 @@ def _find_longest_common_sequence(sequences):
         left_sequence = right_sequence[right_mid:]
         left_length = len(left_sequence)
 
+        if token_timestamp_sequences:
+            total_token_timestamp_sequence.extend(left_token_timestamp_sequence[:left_mid])
+            left_token_timestamp_sequence = token_timestamp_sequences[seq_idx + 1][right_mid:]
+
     total_sequence.extend(left_sequence)
 
-    return total_sequence
+    if token_timestamp_sequences:
+        total_token_timestamp_sequence.extend(left_token_timestamp_sequence)
+    else:
+        total_token_timestamp_sequence = None
+
+    return total_sequence, total_token_timestamp_sequence
