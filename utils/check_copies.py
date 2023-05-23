@@ -1041,6 +1041,7 @@ def check_model_list_copy(overwrite: bool = False):
 SPECIAL_MODEL_NAMES = {
     "Bert Generation": "BERT For Sequence Generation",
     "BigBird": "BigBird-RoBERTa",
+    "Beit3":"BEiT-3",
     "Data2VecAudio": "Data2Vec",
     "Data2VecText": "Data2Vec",
     "Data2VecVision": "Data2Vec",
