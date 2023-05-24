@@ -27,7 +27,7 @@ from huggingface_hub import HfFolder, hf_hub_download, list_spaces
 from ..models.auto import AutoTokenizer
 from ..utils import is_openai_available, is_torch_available, logging
 from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, load_tool, supports_remote
-from .prompts import CHAT_MESSAGE_PROMPT, CHAT_PROMPT_TEMPLATE, RUN_PROMPT_TEMPLATE
+from .prompts import CHAT_MESSAGE_PROMPT, download_prompt
 from .python_interpreter import evaluate
 
 
@@ -193,9 +193,13 @@ class Agent:
 
     Args:
         chat_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `chat` method.
+            Pass along your own prompt if you want to override the default template for the `chat` method. Can be the
+            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
+            `chat_prompt_template.txt` in this repo in this case.
         run_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `run` method.
+            Pass along your own prompt if you want to override the default template for the `run` method. Can be the
+            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
+            `run_prompt_template.txt` in this repo in this case.
         additional_tools ([`Tool`], list of tools or dictionary with tool values, *optional*):
             Any additional tools to include on top of the default ones. If you pass along a tool with the same name as
             one of the default tools, that default tool will be overridden.
@@ -204,8 +208,9 @@ class Agent:
     def __init__(self, chat_prompt_template=None, run_prompt_template=None, additional_tools=None):
         _setup_default_tools()
 
-        self.chat_prompt_template = CHAT_PROMPT_TEMPLATE if chat_prompt_template is None else chat_prompt_template
-        self.run_prompt_template = RUN_PROMPT_TEMPLATE if run_prompt_template is None else run_prompt_template
+        agent_name = self.__class__.__name__
+        self.chat_prompt_template = download_prompt(chat_prompt_template, agent_name, mode="chat")
+        self.run_prompt_template = download_prompt(run_prompt_template, agent_name, mode="run")
         self._toolbox = HUGGINGFACE_DEFAULT_TOOLS.copy()
         self.log = print
         if additional_tools is not None:
@@ -367,9 +372,13 @@ class OpenAiAgent(Agent):
         api_key (`str`, *optional*):
             The API key to use. If unset, will look for the environment variable `"OPENAI_API_KEY"`.
         chat_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `chat` method.
+            Pass along your own prompt if you want to override the default template for the `chat` method. Can be the
+            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
+            `chat_prompt_template.txt` in this repo in this case.
         run_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `run` method.
+            Pass along your own prompt if you want to override the default template for the `run` method. Can be the
+            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
+            `run_prompt_template.txt` in this repo in this case.
         additional_tools ([`Tool`], list of tools or dictionary with tool values, *optional*):
             Any additional tools to include on top of the default ones. If you pass along a tool with the same name as
             one of the default tools, that default tool will be overridden.
@@ -455,9 +464,13 @@ class HfAgent(Agent):
             The token to use as HTTP bearer authorization for remote files. If unset, will use the token generated when
             running `huggingface-cli login` (stored in `~/.huggingface`).
         chat_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `chat` method.
+            Pass along your own prompt if you want to override the default template for the `chat` method. Can be the
+            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
+            `chat_prompt_template.txt` in this repo in this case.
         run_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `run` method.
+            Pass along your own prompt if you want to override the default template for the `run` method. Can be the
+            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
+            `run_prompt_template.txt` in this repo in this case.
         additional_tools ([`Tool`], list of tools or dictionary with tool values, *optional*):
             Any additional tools to include on top of the default ones. If you pass along a tool with the same name as
             one of the default tools, that default tool will be overridden.
@@ -521,9 +534,13 @@ class LocalAgent(Agent):
         tokenizer ([`PreTrainedTokenizer`]):
             The tokenizer to use for the agent.
         chat_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `chat` method.
+            Pass along your own prompt if you want to override the default template for the `chat` method. Can be the
+            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
+            `chat_prompt_template.txt` in this repo in this case.
         run_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `run` method.
+            Pass along your own prompt if you want to override the default template for the `run` method. Can be the
+            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
+            `run_prompt_template.txt` in this repo in this case.
         additional_tools ([`Tool`], list of tools or dictionary with tool values, *optional*):
             Any additional tools to include on top of the default ones. If you pass along a tool with the same name as
             one of the default tools, that default tool will be overridden.
