@@ -35,7 +35,7 @@ def download_prompt(prompt, agent_name, mode="run"):
     Downloads and caches the prompt from a repo and returns it contents (if necessary)
     """
     if prompt is None:
-        prompt = "huggingface-tools/default-prompts"
+        prompt = DEFAULT_PROMPTS_REPO
 
     # prompt is considered a repo ID when it does not contain any kind of space
     if re.search("\\s", prompt) is not None:
