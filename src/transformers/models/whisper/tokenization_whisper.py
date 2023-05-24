@@ -748,7 +748,13 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         return token_ids
 
-    def combine_tokens_into_words(self, tokens: List[int], language=None):
+    def combine_tokens_into_words(
+        self,
+        tokens: List[int],
+        language: str = None,
+        prepend_punctuations: str = "\"'“¿([{-",
+        append_punctuations: str = "\"'.。,，!！?？:：”)]}、"
+    ):
         """
         Groups tokens by word. Returns a tuple containing a list of strings with the words, and a list of `token_id`
         sequences with the tokens making up each word.
@@ -760,9 +766,14 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         if language in {"chinese", "japanese", "thai", "lao", "myanmar"}:
             # These languages don't typically use spaces.
-            return _split_tokens_on_unicode(self, tokens)
+            words, word_tokens = _split_tokens_on_unicode(self, tokens)
         else:
-            return _split_tokens_on_spaces(self, tokens)
+            words, word_tokens = _split_tokens_on_spaces(self, tokens)
+
+        words[:] = [word.strip() for word in words]
+
+        _merge_punctuations(words, word_tokens, prepend_punctuations, append_punctuations)
+        return words, word_tokens
 
 
 def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language, time_precision):
@@ -1140,3 +1151,35 @@ def _split_tokens_on_spaces(tokenizer, tokens: List[int]):
             word_tokens[-1].extend(subword_tokens)
 
     return words, word_tokens
+
+
+def _merge_punctuations(words, tokens, prepended, appended):
+    # merge prepended punctuations
+    i = len(words) - 2
+    j = len(words) - 1
+    while i >= 0:
+        if words[i] in prepended:
+            words[j] = words[i] + words[j]
+            tokens[j] = tokens[i] + tokens[j]
+            words[i] = ""
+            tokens[i] = []
+        else:
+            j = i
+        i -= 1
+
+    # merge appended punctuations
+    i = 0
+    j = 1
+    while j < len(words):
+        if words[j] in appended:
+            words[i] += words[j]
+            tokens[i] += tokens[j]
+            words[j] = ""
+            tokens[j] = []
+        else:
+            i = j
+        j += 1
+
+    # remove elements that are now empty
+    words[:] = [word for word in words if word]
+    tokens[:] = [token for token in tokens if token]
