@@ -766,14 +766,14 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         if language in {"chinese", "japanese", "thai", "lao", "myanmar"}:
             # These languages don't typically use spaces.
-            words, word_tokens = _split_tokens_on_unicode(self, tokens)
+            words, word_tokens, token_indices = _split_tokens_on_unicode(self, tokens)
         else:
-            words, word_tokens = _split_tokens_on_spaces(self, tokens)
+            words, word_tokens, token_indices = _split_tokens_on_spaces(self, tokens)
 
         words[:] = [word.strip() for word in words]
 
-        _merge_punctuations(words, word_tokens, prepend_punctuations, append_punctuations)
-        return words, word_tokens
+        _merge_punctuations(words, word_tokens, token_indices, prepend_punctuations, append_punctuations)
+        return words, word_tokens, token_indices
 
 
 def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language, time_precision):
@@ -1096,16 +1096,15 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
 
 
 def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language):
-    words, word_tokens = tokenizer.combine_tokens_into_words(tokens, language)
-    word_boundaries = np.pad(np.cumsum([len(t) for t in word_tokens[:-1]]), (1, 0))
-
-    token_timestamps = np.array(token_timestamps)
-    start_times = token_timestamps[word_boundaries][:, 0]
-    end_times = np.concatenate([token_timestamps[word_boundaries[1:] - 1][:, 1], token_timestamps[-1:, 1]])
+    words, word_tokens, token_indices = tokenizer.combine_tokens_into_words(tokens, language)
 
     timings = [
-        {"text": word, "tokens": tokens, "timestamp": (start, end)}
-        for word, tokens, start, end in zip(words, word_tokens, start_times, end_times)
+        {
+            "text": word,
+            "tokens": tokens,
+            "timestamp": (token_timestamps[indices[0]][0], token_timestamps[indices[-1]][1]),
+        }
+        for word, tokens, indices in zip(words, word_tokens, token_indices)
     ]
     return timings
 
@@ -1117,11 +1116,14 @@ def _split_tokens_on_unicode(tokenizer, tokens: List[int]):
 
     words = []
     word_tokens = []
+    token_indices = []
     current_tokens = []
+    current_indices = []
     unicode_offset = 0
 
-    for token in tokens:
+    for token_idx, token in enumerate(tokens):
         current_tokens.append(token)
+        current_indices.append(token_idx)
         decoded = tokenizer.decode(current_tokens, decode_with_timestamps=True)
 
         if (
@@ -1130,33 +1132,39 @@ def _split_tokens_on_unicode(tokenizer, tokens: List[int]):
         ):
             words.append(decoded)
             word_tokens.append(current_tokens)
+            token_indices.append(current_indices)
             current_tokens = []
+            current_indices = []
             unicode_offset += len(decoded)
 
-    return words, word_tokens
+    return words, word_tokens, token_indices
 
 
 def _split_tokens_on_spaces(tokenizer, tokens: List[int]):
     """Combine tokens into words by splitting at whitespace and punctuation tokens."""
-    subwords, subword_tokens_list = _split_tokens_on_unicode(tokenizer, tokens)
+    subwords, subword_tokens_list, subword_indices_list = _split_tokens_on_unicode(tokenizer, tokens)
     words = []
     word_tokens = []
+    token_indices = []
 
-    for subword, subword_tokens in zip(subwords, subword_tokens_list):
+    for subword, subword_tokens, subword_indices in zip(subwords, subword_tokens_list, subword_indices_list):
         special = subword_tokens[0] >= tokenizer.eos_token_id
         with_space = subword.startswith(" ")
         punctuation = subword.strip() in "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
+
         if special or with_space or punctuation or len(words) == 0:
             words.append(subword)
             word_tokens.append(subword_tokens)
+            token_indices.append(subword_indices)
         else:
             words[-1] = words[-1] + subword
             word_tokens[-1].extend(subword_tokens)
+            token_indices[-1].extend(subword_indices)
 
-    return words, word_tokens
+    return words, word_tokens, token_indices
 
 
-def _merge_punctuations(words, tokens, prepended, appended):
+def _merge_punctuations(words, tokens, indices, prepended, appended):
     # merge prepended punctuations
     i = len(words) - 2
     j = len(words) - 1
@@ -1164,8 +1172,10 @@ def _merge_punctuations(words, tokens, prepended, appended):
         if words[i] in prepended:
             words[j] = words[i] + words[j]
             tokens[j] = tokens[i] + tokens[j]
+            indices[j] = indices[i] + indices[j]
             words[i] = ""
             tokens[i] = []
+            indices[i] = []
         else:
             j = i
         i -= 1
@@ -1177,8 +1187,10 @@ def _merge_punctuations(words, tokens, prepended, appended):
         if words[j] in appended:
             words[i] += words[j]
             tokens[i] += tokens[j]
+            indices[i] += indices[j]
             words[j] = ""
             tokens[j] = []
+            indices[j] = []
         else:
             i = j
         j += 1
@@ -1186,3 +1198,4 @@ def _merge_punctuations(words, tokens, prepended, appended):
     # remove elements that are now empty
     words[:] = [word for word in words if word]
     tokens[:] = [token for token in tokens if token]
+    indices[:] = [idx for idx in indices if idx]

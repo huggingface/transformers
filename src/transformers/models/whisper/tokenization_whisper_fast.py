@@ -550,11 +550,11 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
         if language in {"chinese", "japanese", "thai", "lao", "myanmar"}:
             # These languages don't typically use spaces.
-            words, word_tokens = _split_tokens_on_unicode(self, tokens)
+            words, word_tokens, token_indices = _split_tokens_on_unicode(self, tokens)
         else:
-            words, word_tokens = _split_tokens_on_spaces(self, tokens)
+            words, word_tokens, token_indices = _split_tokens_on_spaces(self, tokens)
 
         words[:] = [word.strip() for word in words]
 
-        _merge_punctuations(words, word_tokens, prepend_punctuations, append_punctuations)
-        return words, word_tokens
+        _merge_punctuations(words, word_tokens, token_indices, prepend_punctuations, append_punctuations)
+        return words, word_tokens, token_indices
