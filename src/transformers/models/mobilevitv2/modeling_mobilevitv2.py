@@ -62,7 +62,7 @@ MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all MobileViTv2 models at https://huggingface.co/models?filter=mobilevitv2
 ]
 
-
+# Copied from transformers.models.mobilevit.modeling_mobilevit.make_divisible
 def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
     """
     Ensure that all layers have a channel count that is divisible by `divisor`. This function is taken from the
@@ -78,40 +78,8 @@ def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None
     return int(new_value)
 
 
-def bound_fn(min_val: Union[float, int], max_val: Union[float, int], value: Union[float, int]) -> Union[float, int]:
+def clip(value: float, min_val: float = float("-inf"), max_val: float = float("inf")) -> float:
     return max(min_val, min(max_val, value))
-
-
-class MobileViTv2LayerNorm2D(nn.GroupNorm):
-    """
-    Applies [Layer Normalization](https://arxiv.org/abs/1607.06450) over a 4D input tensor
-
-    Args:
-        num_features (int): \\(C\\) from an expected input of size \\((N, C, H, W)\\)
-        eps (Optional, float): Value added to the denominator for numerical stability. Default: 1e-5
-        elementwise_affine (bool): If `True`, use learnable affine parameters. Default: `True`
-
-    Shape:
-        - Input: \\((N, C, H, W)\\) where \\(N\\) is the batch size, \\(C\\) is the number of input channels,
-        \\(H\\) is the input height, and \\(W\\) is the input width
-        - Output: same shape as the input
-    """
-
-    def __init__(
-        self,
-        num_features: int,
-        eps: Optional[float] = 1e-5,
-        elementwise_affine: Optional[bool] = True,
-        *args,
-        **kwargs,
-    ) -> None:
-        super().__init__(num_channels=num_features, eps=eps, affine=elementwise_affine, num_groups=1)
-        self.num_channels = num_features
-
-    def __repr__(self):
-        return "{}(num_channels={}, eps={}, affine={})".format(
-            self.__class__.__name__, self.num_channels, self.eps, self.affine
-        )
 
 
 # Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTConvLayer with MobileViT->MobileViTv2
@@ -253,39 +221,24 @@ class MobileViTv2MobileNetLayer(nn.Module):
 
 
 class MobileViTv2LinearSelfAttention(nn.Module):
-    """LinearSelfAttention"""
-
     """
-    This layer applies a self-attention with linear complexity, as described in `MobileViTv2
-    <https://arxiv.org/abs/2206.02680>`_ paper. This layer can be used for self- as well as cross-attention.
+    This layer applies a self-attention with linear complexity, as described in MobileViTv2 paper: 
+    https://arxiv.org/abs/2206.02680 
 
     Args:
         config: MobileVitv2Config
-        embed_dim (int): :math:`C` from an expected input of size :math:`(N, C, H, W)`
-        attn_dropout (Optional[float]): Dropout value for context scores. Default: 0.0
-        bias (Optional[bool]): Use bias in learnable layers. Default: True
+        embed_dim (int): :math:`input_channels` from an expected input of size :math:`(batch_size, input_channels, height, width)`
 
     Shape:
-        - Input: :math:`(N, C, P, N)` where :math:`N` is the batch size, :math:`C` is the input channels,
-        :math:`P` is the number of pixels in the patch, and :math:`N` is the number of patches
+        - Input: :math:`(batch_size, input_channels, num_pixels_in_patch, num_patches)`
         - Output: same as the input
 
-    .. note::
-        For MobileViTv2, we unfold the feature map [B, C, H, W] into [B, C, P, N] where P is the number of pixels in a
-        patch and N is the number of patches. Because channel is the first dimension in this unfolded tensor, we use
-        point-wise convolution (instead of a linear layer). This avoids a transpose operation (which may be expensive
-        on resource-constrained devices) that may be required to convert the unfolded tensor from channel-first to
-        channel-last format in case of a linear layer.
     """
 
     def __init__(
         self,
         config: MobileViTv2Config,
         embed_dim: int,
-        attn_dropout: Optional[float] = 0.0,
-        bias: Optional[bool] = True,
-        *args,
-        **kwargs,
     ) -> None:
         super().__init__()
 
@@ -293,105 +246,51 @@ class MobileViTv2LinearSelfAttention(nn.Module):
             config=config,
             in_channels=embed_dim,
             out_channels=1 + (2 * embed_dim),
-            bias=bias,
+            bias=True,
             kernel_size=1,
             use_normalization=False,
             use_activation=False,
         )
 
-        self.attn_dropout = nn.Dropout(p=attn_dropout)
+        self.attn_dropout = nn.Dropout(p=config.attn_dropout)
         self.out_proj = MobileViTv2ConvLayer(
             config=config,
             in_channels=embed_dim,
             out_channels=embed_dim,
-            bias=bias,
+            bias=True,
             kernel_size=1,
             use_normalization=False,
             use_activation=False,
         )
         self.embed_dim = embed_dim
 
-    def __repr__(self):
-        return "{}(embed_dim={}, attn_dropout={})".format(self.__class__.__name__, self.embed_dim, self.attn_dropout.p)
-
     def _forward_self_attn(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
-        # [B, C, P, N] --> [B, h + 2d, P, N]
+        # (batch_size, embed_dim, num_pixels_in_patch, num_patches) --> (batch_size, 1+2*embed_dim, num_pixels_in_patch, num_patches)
         qkv = self.qkv_proj(x)
 
         # Project x into query, key and value
-        # Query --> [B, 1, P, N]
-        # value, key --> [B, d, P, N]
+        # Query --> [batch_size, 1, num_pixels_in_patch, num_patches]
+        # value, key --> [batch_size, embed_dim, num_pixels_in_patch, num_patches]
         query, key, value = torch.split(qkv, split_size_or_sections=[1, self.embed_dim, self.embed_dim], dim=1)
 
-        # apply softmax along N dimension
+        # apply softmax along num_patches dimension
         context_scores = torch.nn.functional.softmax(query, dim=-1)
-        # Uncomment below line to visualize context scores
-        # self.visualize_context_scores(context_scores=context_scores)
         context_scores = self.attn_dropout(context_scores)
 
         # Compute context vector
-        # [B, d, P, N] x [B, 1, P, N] -> [B, d, P, N]
+        # [batch_size, embed_dim, num_pixels_in_patch, num_patches] x [batch_size, 1, num_pixels_in_patch, num_patches] -> [batch_size, embed_dim, num_pixels_in_patch, num_patches]
         context_vector = key * context_scores
-        # [B, d, P, N] --> [B, d, P, 1]
+        # [batch_size, embed_dim, num_pixels_in_patch, num_patches] --> [batch_size, embed_dim, num_pixels_in_patch, 1]
         context_vector = torch.sum(context_vector, dim=-1, keepdim=True)
 
         # combine context vector with values
-        # [B, d, P, N] * [B, d, P, 1] --> [B, d, P, N]
+        # [batch_size, embed_dim, num_pixels_in_patch, num_patches] * [batch_size, embed_dim, num_pixels_in_patch, 1] --> [batch_size, embed_dim, num_pixels_in_patch, num_patches]
         out = torch.nn.functional.relu(value) * context_vector.expand_as(value)
         out = self.out_proj(out)
         return out
 
-    def _forward_cross_attn(
-        self, x: torch.Tensor, x_prev: Optional[torch.Tensor] = None, *args, **kwargs
-    ) -> torch.Tensor:
-        # x --> [B, C, P, N]
-        # x_prev = [B, C, P, M]
-
-        batch_size, in_dim, kv_patch_area, kv_num_patches = x.shape
-
-        q_patch_area, q_num_patches = x.shape[-2:]
-
-        assert (
-            kv_patch_area == q_patch_area
-        ), "The number of pixels in a patch for query and key_value should be the same"
-
-        # compute query, key, and value
-        # [B, C, P, M] --> [B, 1 + d, P, M]
-        qk = torch.nn.functional.conv2d(
-            x_prev,
-            weight=self.qkv_proj.block.conv.weight[: self.embed_dim + 1, ...],
-            bias=self.qkv_proj.block.conv.bias[: self.embed_dim + 1, ...],
-        )
-        # [B, 1 + d, P, M] --> [B, 1, P, M], [B, d, P, M]
-        query, key = torch.split(qk, split_size_or_sections=[1, self.embed_dim], dim=1)
-        # [B, C, P, N] --> [B, d, P, N]
-        value = torch.nn.functional.conv2d(
-            x,
-            weight=self.qkv_proj.block.conv.weight[self.embed_dim + 1 :, ...],
-            bias=self.qkv_proj.block.conv.bias[self.embed_dim + 1 :, ...],
-        )
-
-        # apply softmax along M dimension
-        context_scores = torch.nn.functional.softmax(query, dim=-1)
-        context_scores = self.attn_dropout(context_scores)
-
-        # compute context vector
-        # [B, d, P, M] * [B, 1, P, M] -> [B, d, P, M]
-        context_vector = key * context_scores
-        # [B, d, P, M] --> [B, d, P, 1]
-        context_vector = torch.sum(context_vector, dim=-1, keepdim=True)
-
-        # combine context vector with values
-        # [B, d, P, N] * [B, d, P, 1] --> [B, d, P, N]
-        out = torch.nn.functional.relu(value) * context_vector.expand_as(value)
-        out = self.out_proj(out)
-        return out
-
-    def forward(self, x: torch.Tensor, x_prev: Optional[torch.Tensor] = None, *args, **kwargs) -> torch.Tensor:
-        if x_prev is None:
-            return self._forward_self_attn(x, *args, **kwargs)
-        else:
-            return self._forward_cross_attn(x, x_prev=x_prev, *args, **kwargs)
+    def forward(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+        return self._forward_self_attn(x, *args, **kwargs)
 
 
 class MobileViTv2FFN(nn.Module):
@@ -445,11 +344,13 @@ class MobileViTv2TransformerLayer(nn.Module):
     ) -> None:
         super().__init__()
         # pre_norm_attn
-        self.layernorm_before = MobileViTv2LayerNorm2D(embed_dim, eps=config.layer_norm_eps)
-        self.attention = MobileViTv2LinearSelfAttention(config, embed_dim, attn_dropout=config.attn_dropout, bias=True)
+        # self.layernorm_before = MobileViTv2LayerNorm2D(embed_dim, eps=config.layer_norm_eps)
+        self.layernorm_before = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=config.layer_norm_eps)
+        self.attention = MobileViTv2LinearSelfAttention(config, embed_dim)
         self.dropout1 = nn.Dropout(p=dropout)
         # pre_norm_ffn
-        self.layernorm_after = MobileViTv2LayerNorm2D(embed_dim, eps=config.layer_norm_eps)
+        # self.layernorm_after = MobileViTv2LayerNorm2D(embed_dim, eps=config.layer_norm_eps)
+        self.layernorm_after = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=config.layer_norm_eps)
         self.ffn = MobileViTv2FFN(config, embed_dim, ffn_latent_dim, config.ffn_dropout)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -466,18 +367,22 @@ class MobileViTv2TransformerLayer(nn.Module):
 
 class MobileViTv2Transformer(nn.Module):
     def __init__(
-        self, config: MobileViTv2Config, n_layers: int, d_model: int, ffn_multiplier: Union[Sequence, int, float]
+        self, config: MobileViTv2Config, n_layers: int, d_model: int,
     ) -> None:
         super().__init__()
+        
+        ffn_multiplier = config.ffn_multiplier
 
-        if isinstance(ffn_multiplier, Sequence) and len(ffn_multiplier) == 2:
-            ffn_dims = torch.linspace(ffn_multiplier[0], ffn_multiplier[1], n_layers, dtype=float) * d_model
-        elif isinstance(ffn_multiplier, Sequence) and len(ffn_multiplier) == 1:
-            ffn_dims = [ffn_multiplier[0] * d_model] * n_layers
-        elif isinstance(ffn_multiplier, (int, float)):
-            ffn_dims = [ffn_multiplier * d_model] * n_layers
-        else:
-            raise NotImplementedError
+        # if isinstance(ffn_multiplier, Sequence) and len(ffn_multiplier) == 2:
+        #     ffn_dims = torch.linspace(ffn_multiplier[0], ffn_multiplier[1], n_layers, dtype=float) * d_model
+        # elif isinstance(ffn_multiplier, Sequence) and len(ffn_multiplier) == 1:
+        #     ffn_dims = [ffn_multiplier[0] * d_model] * n_layers
+        # elif isinstance(ffn_multiplier, (int, float)):
+        #     ffn_dims = [ffn_multiplier * d_model] * n_layers
+        # else:
+        #     raise NotImplementedError
+        
+        ffn_dims = [ffn_multiplier * d_model] * n_layers
 
         # ensure that dims are multiple of 16
         ffn_dims = [int((d // 16) * 16) for d in ffn_dims]
@@ -506,11 +411,9 @@ class MobileViTv2Layer(nn.Module):
         in_channels: int,
         out_channels: int,
         attn_unit_dim: int,
-        stride: int,
+        stride: Optional[int] = 2,
         n_attn_blocks: Optional[int] = 2,
-        ffn_multiplier: Optional[Union[Sequence[Union[int, float]], int, float]] = 2.0,
         dilation: int = 1,
-        patch_size: Optional[int] = 2,
     ) -> None:
         super().__init__()
         self.patch_width = config.patch_size
@@ -549,10 +452,11 @@ class MobileViTv2Layer(nn.Module):
 
         # Global representations
         self.transformer = MobileViTv2Transformer(
-            config, d_model=attn_unit_dim, ffn_multiplier=ffn_multiplier, n_layers=n_attn_blocks
+            config, d_model=attn_unit_dim, n_layers=n_attn_blocks
         )
 
-        self.layernorm = MobileViTv2LayerNorm2D(attn_unit_dim, eps=config.layer_norm_eps)
+        # self.layernorm = MobileViTv2LayerNorm2D(attn_unit_dim, eps=config.layer_norm_eps)
+        self.layernorm = nn.GroupNorm(num_groups=1, num_channels=attn_unit_dim, eps=config.layer_norm_eps)
 
         # Fusion
         self.conv_projection = MobileViTv2ConvLayer(
@@ -564,33 +468,26 @@ class MobileViTv2Layer(nn.Module):
             use_activation=False,
         )
 
-        self.patch_h = patch_size
-        self.patch_w = patch_size
-
-    def unfolding_pytorch(self, feature_map: torch.Tensor) -> Tuple[torch.Tensor, Tuple[int, int]]:
+    def unfolding(self, feature_map: torch.Tensor) -> Tuple[torch.Tensor, Tuple[int, int]]:
         batch_size, in_channels, img_h, img_w = feature_map.shape
-
-        # [B, C, H, W] --> [B, C, P, N]
         patches = nn.functional.unfold(
             feature_map,
-            kernel_size=(self.patch_h, self.patch_w),
-            stride=(self.patch_h, self.patch_w),
+            kernel_size=(self.patch_height, self.patch_width),
+            stride=(self.patch_height, self.patch_width),
         )
-        patches = patches.reshape(batch_size, in_channels, self.patch_h * self.patch_w, -1)
+        patches = patches.reshape(batch_size, in_channels, self.patch_height * self.patch_width, -1)
 
         return patches, (img_h, img_w)
 
-    def folding_pytorch(self, patches: torch.Tensor, output_size: Tuple[int, int]) -> torch.Tensor:
+    def folding(self, patches: torch.Tensor, output_size: Tuple[int, int]) -> torch.Tensor:
         batch_size, in_dim, patch_size, n_patches = patches.shape
-
-        # [B, C, P, N]
         patches = patches.reshape(batch_size, in_dim * patch_size, n_patches)
 
         feature_map = nn.functional.fold(
             patches,
             output_size=output_size,
-            kernel_size=(self.patch_h, self.patch_w),
-            stride=(self.patch_h, self.patch_w),
+            kernel_size=(self.patch_height, self.patch_width),
+            stride=(self.patch_height, self.patch_width),
         )
 
         return feature_map
@@ -605,9 +502,7 @@ class MobileViTv2Layer(nn.Module):
         features = self.conv_1x1(features)
 
         # convert feature map to patches
-        patches, output_size = self.unfolding_pytorch(
-            features,
-        )
+        patches, output_size = self.unfolding(features)
 
         # learn global representations
         patches = self.transformer(patches)
@@ -615,7 +510,7 @@ class MobileViTv2Layer(nn.Module):
 
         # convert patches back to feature maps
         # [B x Patch x Patches x C] --> [B x C x Patches x Patch]
-        features = self.folding_pytorch(patches, output_size)
+        features = self.folding(patches, output_size)
 
         features = self.conv_projection(features)
         return features
@@ -640,19 +535,14 @@ class MobileViTv2Encoder(nn.Module):
 
         dilation = 1
 
-        layer_0_dim = int(
-            make_divisible(
-                bound_fn(min_val=16, max_val=64, value=32 * config.width_multiplier), divisor=8, min_value=16
-            )
-        )
-        layer_1_dim = int(make_divisible(64 * config.width_multiplier, divisor=16))
-        layer_2_dim = int(make_divisible(128 * config.width_multiplier, divisor=8))
-        layer_3_dim = int(make_divisible(256 * config.width_multiplier, divisor=8))
-        layer_4_dim = int(make_divisible(384 * config.width_multiplier, divisor=8))
-        layer_5_dim = int(make_divisible(512 * config.width_multiplier, divisor=8))
-        ffn_multiplier = 2
+        layer_0_dim = make_divisible(clip(value=32 * config.width_multiplier, min_val=16, max_val=64), divisor=8, min_value=16)
+        
+        layer_1_dim = make_divisible(64 * config.width_multiplier, divisor=16)
+        layer_2_dim = make_divisible(128 * config.width_multiplier, divisor=8)
+        layer_3_dim = make_divisible(256 * config.width_multiplier, divisor=8)
+        layer_4_dim = make_divisible(384 * config.width_multiplier, divisor=8)
+        layer_5_dim = make_divisible(512 * config.width_multiplier, divisor=8)
 
-        # 1: layer_1
         layer_1 = MobileViTv2MobileNetLayer(
             config,
             in_channels=layer_0_dim,
@@ -662,7 +552,6 @@ class MobileViTv2Encoder(nn.Module):
         )
         self.layer.append(layer_1)
 
-        # 2: layer_2
         layer_2 = MobileViTv2MobileNetLayer(
             config,
             in_channels=layer_1_dim,
@@ -672,49 +561,38 @@ class MobileViTv2Encoder(nn.Module):
         )
         self.layer.append(layer_2)
 
-        # 3: layer_3
         layer_3 = MobileViTv2Layer(
             config,
             in_channels=layer_2_dim,
             out_channels=layer_3_dim,
-            attn_unit_dim=int(make_divisible(128 * config.width_multiplier, divisor=8)),
-            stride=2,
-            ffn_multiplier=ffn_multiplier,
-            n_attn_blocks=2,
+            attn_unit_dim=make_divisible(config.base_attn_unit_dims[0] * config.width_multiplier, divisor=8),
+            n_attn_blocks=config.n_attn_blocks[0],
         )
         self.layer.append(layer_3)
 
         if dilate_layer_4:
             dilation *= 2
 
-        # 4: layer_4
         layer_4 = MobileViTv2Layer(
             config,
             in_channels=layer_3_dim,
             out_channels=layer_4_dim,
-            attn_unit_dim=int(make_divisible(192 * config.width_multiplier, divisor=8)),
-            stride=2,
-            ffn_multiplier=ffn_multiplier,
-            n_attn_blocks=4,
+            attn_unit_dim=make_divisible(config.base_attn_unit_dims[1] * config.width_multiplier, divisor=8),
+            n_attn_blocks=config.n_attn_blocks[1],
             dilation=dilation,
-            patch_size=config.patch_size,
         )
         self.layer.append(layer_4)
 
         if dilate_layer_5:
             dilation *= 2
 
-        # 5: layer_5
         layer_5 = MobileViTv2Layer(
             config,
             in_channels=layer_4_dim,
             out_channels=layer_5_dim,
-            attn_unit_dim=int(make_divisible(256 * config.width_multiplier, divisor=8)),
-            stride=2,
-            ffn_multiplier=ffn_multiplier,
-            n_attn_blocks=3,
+            attn_unit_dim=make_divisible(config.base_attn_unit_dims[2] * config.width_multiplier, divisor=8),
+            n_attn_blocks=config.n_attn_blocks[2],
             dilation=dilation,
-            patch_size=config.patch_size,
         )
         self.layer.append(layer_5)
 
@@ -814,13 +692,8 @@ class MobileViTv2Model(MobileViTv2PreTrainedModel):
         self.config = config
         self.expand_output = expand_output
 
-        layer_0_dim = int(
-            make_divisible(
-                bound_fn(min_val=16, max_val=64, value=32 * config.width_multiplier), divisor=8, min_value=16
-            )
-        )
+        layer_0_dim = make_divisible(clip(value=32 * config.width_multiplier, min_val=16, max_val=64), divisor=8, min_value=16)
 
-        # 0: conv_1
         self.conv_stem = MobileViTv2ConvLayer(
             config,
             in_channels=config.num_channels,
@@ -830,12 +703,7 @@ class MobileViTv2Model(MobileViTv2PreTrainedModel):
             use_normalization=True,
             use_activation=True,
         )
-
-        # 1: layer_1, 2: layer_2, 3: layer_3, 4: layer_4, 5: layer_5
         self.encoder = MobileViTv2Encoder(config)
-
-        # 6: conv_1x1_exp
-        self.conv_1x1_exp = nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -881,7 +749,7 @@ class MobileViTv2Model(MobileViTv2PreTrainedModel):
         )
 
         if self.expand_output:
-            last_hidden_state = self.conv_1x1_exp(encoder_outputs[0])
+            last_hidden_state = encoder_outputs[0]
 
             # global average pooling: (batch_size, channels, height, width) -> (batch_size, channels)
             pooled_output = torch.mean(last_hidden_state, dim=[-2, -1], keepdim=False)
@@ -914,7 +782,7 @@ class MobileViTv2ForImageClassification(MobileViTv2PreTrainedModel):
         self.num_labels = config.num_labels
         self.mobilevitv2 = MobileViTv2Model(config)
 
-        out_channels = int(make_divisible(512 * config.width_multiplier, divisor=8))  # layer 5 output dimension
+        out_channels = make_divisible(512 * config.width_multiplier, divisor=8)  # layer 5 output dimension
         # Classifier head
         self.classifier = (
             nn.Linear(in_features=out_channels, out_features=config.num_labels)
@@ -1020,9 +888,7 @@ class MobileViTv2ASPP(nn.Module):
     def __init__(self, config: MobileViTv2Config) -> None:
         super().__init__()
 
-        encoder_out_channels = int(
-            make_divisible(512 * config.width_multiplier, divisor=8)
-        )  # layer 5 output dimension
+        encoder_out_channels = make_divisible(512 * config.width_multiplier, divisor=8)  # layer 5 output dimension
         in_channels = encoder_out_channels
         out_channels = config.aspp_out_channels
 

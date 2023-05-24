@@ -37,7 +37,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import MobileViTv2FeatureExtractor
+    from transformers import MobileViTv2ImageProcessor
 
 
 class MobileViTv2ConfigTester(ConfigTester):
@@ -73,8 +73,7 @@ class MobileViTv2ModelTester:
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
-        self.last_hidden_size = last_hidden_size  # int(make_divisible(512 * width_multiplier, divisor=8))
-
+        self.last_hidden_size = last_hidden_size
         self.hidden_act = hidden_act
         self.conv_kernel_size = conv_kernel_size
         self.output_stride = output_stride
@@ -298,9 +297,9 @@ def prepare_img():
 @require_vision
 class MobileViTv2ModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
-            MobileViTv2FeatureExtractor.from_pretrained("shehan97/mobilevitv2-1.0-imagenet1k-256")
+            MobileViTv2ImageProcessor.from_pretrained("shehan97/mobilevitv2-1.0-imagenet1k-256")
             if is_vision_available()
             else None
         )
@@ -311,9 +310,9 @@ class MobileViTv2ModelIntegrationTest(unittest.TestCase):
             torch_device
         )
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -332,10 +331,10 @@ class MobileViTv2ModelIntegrationTest(unittest.TestCase):
         model = MobileViTv2ForSemanticSegmentation.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
         model = model.to(torch_device)
 
-        feature_extractor = MobileViTv2FeatureExtractor.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
+        image_processor = MobileViTv2ImageProcessor.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
 
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -362,10 +361,10 @@ class MobileViTv2ModelIntegrationTest(unittest.TestCase):
         model = MobileViTv2ForSemanticSegmentation.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
         model = model.to(torch_device)
 
-        feature_extractor = MobileViTv2FeatureExtractor.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
+        image_processor = MobileViTv2ImageProcessor.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
 
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -373,10 +372,10 @@ class MobileViTv2ModelIntegrationTest(unittest.TestCase):
 
         outputs.logits = outputs.logits.detach().cpu()
 
-        segmentation = feature_extractor.post_process_semantic_segmentation(outputs=outputs, target_sizes=[(50, 60)])
+        segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs, target_sizes=[(50, 60)])
         expected_shape = torch.Size((50, 60))
         self.assertEqual(segmentation[0].shape, expected_shape)
 
-        segmentation = feature_extractor.post_process_semantic_segmentation(outputs=outputs)
+        segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs)
         expected_shape = torch.Size((32, 32))
         self.assertEqual(segmentation[0].shape, expected_shape)
