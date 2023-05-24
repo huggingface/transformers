@@ -511,8 +511,6 @@ class BrosModelIntegrationTest(unittest.TestCase):
         model = BrosModel.from_pretrained("naver-clova-ocr/bros-base-uncased").to(torch_device)
         input_ids, bbox, attention_mask = prepare_bros_batch_inputs()
 
-        model.eval()
-
         with torch.no_grad():
             outputs = model(
                 input_ids.to(torch_device),
@@ -532,6 +530,24 @@ class BrosModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
 
     def test_inference_token_classification(self):
-        ...
+        label_list = ["O", "B-HEADER", "I-HEADER", "B-QUESTION", "I-QUESTION", "B-ANSWER", "I-ANSWER"]  # 7 labels
+        id2label = {id: label for id, label in enumerate(label_list)}
+        model = BrosForTokenClassification.from_pretrained("naver-clova-ocr/bros-base-uncased", id2label=id2label).to(
+            torch_device
+        )
+        input_ids, bbox, attention_mask = prepare_bros_batch_inputs()
+
+        model.eval()
+        with torch.no_grad():
+            outputs = model(
+                input_ids.to(torch_device),
+                bbox.to(torch_device),
+                attention_mask=attention_mask.to(torch_device),
+                return_dict=True,
+            )
+
+        logits = outputs.logits
+        expected_shape = torch.Size((2, 13, 7))  # [batch_size, max_sequence_length, num_labels]
+        self.assertEqual(logits.shape, expected_shape)
 
     # TODO add other tests
