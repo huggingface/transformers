@@ -531,7 +531,7 @@ class BrosModelIntegrationTest(unittest.TestCase):
 
     def test_inference_token_classification(self):
         label_list = ["O", "B-HEADER", "I-HEADER", "B-QUESTION", "I-QUESTION", "B-ANSWER", "I-ANSWER"]  # 7 labels
-        id2label = {id: label for id, label in enumerate(label_list)}
+        id2label = dict(enumerate(label_list))
         model = BrosForTokenClassification.from_pretrained("naver-clova-ocr/bros-base-uncased", id2label=id2label).to(
             torch_device
         )
