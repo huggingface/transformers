@@ -42,7 +42,6 @@ from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, TFGenerationMixin
 from .tf_utils import expand_1d, load_attributes_from_hdf5_group, save_attributes_to_hdf5_group, shape_list
 from .utils import (
-    DUMMY_INPUTS,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
     TF2_WEIGHTS_INDEX_NAME,
@@ -1114,9 +1113,25 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        return {
-            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32),
-        }
+        dummies = {}
+        sig = self._prune_signature(self.input_signature)
+        for key, spec in sig.items():
+            # 3 is the most correct arbitrary size. I will not be taking questions
+            dummies[key] = tf.ones(shape=[dim if dim is not None else 3 for dim in spec.shape], dtype=spec.dtype)
+            if key == "token_type_ids":
+                # Some models have token_type_ids but with a vocab_size of 1
+                dummies[key] = tf.zeros_like(dummies[key])
+        if self.config.add_cross_attention and "encoder_hidden_states" in inspect.signature(self.call).parameters:
+            if "encoder_hidden_states" not in dummies:
+                if self.main_input_name == "input_ids":
+                    dummies["encoder_hidden_states"] = tf.ones(
+                        shape=(3, 3, self.config.hidden_size), dtype=tf.float32, name="encoder_hidden_states"
+                    )
+                else:
+                    raise NotImplementedError(
+                        "Model has cross-attention but we couldn't infer the shape for the encoder hidden states. Please manually override dummy_inputs!"
+                    )
+        return dummies
 
     @property
     def framework(self) -> str:
@@ -1137,6 +1152,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         self.config = config
         self.name_or_path = config.name_or_path
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
+        if not hasattr(self, "serving"):  # Don't overwrite existing serving signatures
+            self.serving = tf.function(
+                self.eager_serving, input_signature=[self._prune_signature(self.input_signature)]
+            )
         # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
         self._set_save_spec(self.serving.input_signature[0])
 
@@ -1201,36 +1220,82 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         return self.serving_output(output)
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
-            }
-        ]
-    )
-    def serving(self, inputs):
+    @property
+    def input_signature(self) -> Dict[str, tf.TensorSpec]:
         """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
+        This property should return a dict mapping input names to tf.TensorSpec objects, representing the expected
+        shape and dtype for model inputs. It is used for both serving and for generating the dummy inputs used to build
+        the model.
         """
-        output = self.call(inputs)
+        model_inputs = list(inspect.signature(self.call).parameters)
+        sig = {}
+        if "input_ids" in model_inputs:
+            if self.__class__.__name__.endswith("ForMultipleChoice"):
+                text_dims = 3
+            else:
+                text_dims = 2
+            for input_name in (
+                "input_ids",
+                "attention_mask",
+                "token_type_ids",
+                "decoder_input_ids",
+                "decoder_attention_mask",
+            ):
+                if input_name in model_inputs:
+                    sig[input_name] = tf.TensorSpec([None] * text_dims, tf.int32, name=input_name)
+        if "pixel_values" in model_inputs:
+            pixel_values_shape = [None, None, None, None]
+            if hasattr(self.config, "vision_config"):
+                vision_config = self.config.vision_config
+            else:
+                vision_config = self.config
+            if hasattr(vision_config, "num_channels"):
+                pixel_values_shape[1] = vision_config.num_channels
+            else:
+                raise NotImplementedError(
+                    "Could not infer number of channels from config, please override input_signature to specify input shapes."
+                )
+            if hasattr(vision_config, "image_size"):
+                pixel_values_shape[2] = pixel_values_shape[3] = vision_config.image_size
+            elif hasattr(vision_config, "input_size"):
+                pixel_values_shape[2] = pixel_values_shape[3] = vision_config.input_size
+            else:
+                raise NotImplementedError(
+                    "Could not infer input image shape from config, please override input_signature to specify input shapes."
+                )
+            sig["pixel_values"] = tf.TensorSpec(pixel_values_shape, tf.float32, name="pixel_values")
+        if "input_features" in model_inputs:
+            raise NotImplementedError("Audio models need a manually defined input_signature")
+        return sig
 
-        return self.serving_output(output)
+    def _prune_signature(self, signature):
+        """Keeps only the keys of a given input signature that are valid for this model."""
+        model_inputs = list(inspect.signature(self.call).parameters)
+        return {key: val for key, val in signature.items() if key in model_inputs}
 
     def serving_output(self, output):
         """
-        Prepare the output of the saved model. Each model must implement this function.
-
-        Args:
-            output ([`TFBaseModelOutput`]):
-                The output returned by the model.
+        Prepare the output of the saved model. Can be overridden if specific serving modifications are required.
         """
-        raise NotImplementedError
+        if not isinstance(output, ModelOutput):
+            return output
+        for key in output:
+            if key.endswith("hidden_states") and not getattr(self.config, "output_hidden_states", False):
+                output[key] = None
+            elif key.endswith("attentions") and not getattr(self.config, "output_attentions", False):
+                output[key] = None
+            elif key == "past_key_values" and not getattr(self.config, "use_cache", False):
+                output[key] = None
+            elif key == "cross_attentions" and not (
+                getattr(self.config, "output_attentions", False) and getattr(self.config, "add_cross_attention", False)
+            ):
+                output[key] = None
+            if isinstance(output[key], (tuple, list)):
+                try:
+                    output[key] = tf.convert_to_tensor(output[key])
+                except (ValueError, tf.errors.InvalidArgumentError):
+                    pass  # Layers may not have the same dimensions
+        return output
 
     def can_generate(self) -> bool:
         """
@@ -1384,7 +1449,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if not isinstance(dataset, datasets.Dataset):
             raise TypeError("Dataset argument should be a datasets.Dataset!")
-        model_inputs = list(dict(inspect.signature(self.call).parameters).keys())
+        model_inputs = list(inspect.signature(self.call).parameters)
         model_labels = find_labels(self.__class__)
         if "cols_to_retain" in list(inspect.signature(dataset._get_output_signature).parameters.keys()):
             output_signature, _ = dataset._get_output_signature(
@@ -1496,7 +1561,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             return self.hf_compute_loss(*args, **kwargs)
 
     def get_label_to_output_name_mapping(self):
-        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+        arg_names = list(inspect.signature(self.call).parameters)
         if self._label_to_output_map is not None:
             return self._label_to_output_map
         elif "start_positions" in arg_names:
@@ -1519,7 +1584,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
 
         # We hardcode the most common renamings; models with weirder names can set `self._label_to_output_map`
-        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+        arg_names = list(inspect.signature(self.call).parameters)
         label_kwargs = find_labels(self.__class__)
         label_to_output = self.get_label_to_output_name_mapping()
         output_to_label = {val: key for key, val in label_to_output.items()}
@@ -1626,7 +1691,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         that they are available to the model during the forward pass.
         """
         # We hardcode the most common renamings; models with weirder names can set `self._label_to_output_map`
-        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+        arg_names = list(inspect.signature(self.call).parameters)
         label_kwargs = find_labels(self.__class__)
         label_to_output = self.get_label_to_output_name_mapping()
         output_to_label = {val: key for key, val in label_to_output.items()}
@@ -1645,7 +1710,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # When using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
         # if those keys are not already present in the input dict
         if self._using_dummy_loss and y is not None:
-            arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+            arg_names = list(inspect.signature(self.call).parameters)
             # If y is a tensor and the model only has one label-like input, map y to that input
             if len(label_kwargs) == 1 and isinstance(y, tf.Tensor):
                 if isinstance(x, tf.Tensor):
