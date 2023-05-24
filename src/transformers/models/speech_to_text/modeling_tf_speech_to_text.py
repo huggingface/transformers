@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 import random
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -563,26 +563,6 @@ class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "input_features"
 
-    # Overwritten property due to different expected input shape and type
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        return {
-            self.main_input_name: tf.random.uniform(
-                [
-                    1,
-                    random.randint(1, self.config.max_source_positions),  # time
-                    self.config.input_feat_per_channel * self.config.input_channels,  # input channels
-                ]
-            ),
-            "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int32),
-        }
-
     def _get_feat_extract_output_lengths(self, input_lengths: tf.Tensor):
         """
         Computes the output length of the convolutional layers
@@ -592,20 +572,18 @@ class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
 
         return input_lengths
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_features": tf.TensorSpec((None, None, None), tf.float32, name="input_features"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
+    @property
+    def input_signature(self):
+        return {
+            "input_features": tf.TensorSpec(
+                (None, None, self.config.input_feat_per_channel * self.config.input_channels),
+                tf.float32,
+                name="input_features",
+            ),
+            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+            "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
+        }
 
 
 SPEECH_TO_TEXT_START_DOCSTRING = r"""

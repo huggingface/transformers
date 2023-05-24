@@ -23,7 +23,6 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
-    DUMMY_INPUTS,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -513,30 +512,6 @@ class TFGPTJPreTrainedModel(TFPreTrainedModel):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"h.\d+.attn.bias"]
 
-    @property
-    def dummy_inputs(self):
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        dummy = {"input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32)}
-        return dummy
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
 
 GPTJ_START_DOCSTRING = r"""
 
@@ -697,18 +672,6 @@ class TFGPTJModel(TFGPTJPreTrainedModel):
 
         return outputs
 
-    def serving_output(self, output):
-        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutputWithPast(
-            last_hidden_state=output.last_hidden_state,
-            past_key_values=pkv,
-            hidden_states=hs,
-            attentions=attns,
-        )
-
 
 @add_start_docstrings(
     """
@@ -820,13 +783,6 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
-
-    def serving_output(self, output):
-        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFCausalLMOutputWithPast(logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -952,15 +908,6 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
             attentions=transformer_outputs.attentions,
         )
 
-    def serving_output(self, output):
-        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFSequenceClassifierOutputWithPast(
-            logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns
-        )
-
 
 @add_start_docstrings(
     """
@@ -1050,12 +997,4 @@ class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel, TFQuestionAnsweringLoss)
             end_logits=end_logits,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
-        )
-
-    def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFQuestionAnsweringModelOutput(
-            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
         )

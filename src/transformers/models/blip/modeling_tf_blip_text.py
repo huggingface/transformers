@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import math
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 import tensorflow as tf
 
@@ -27,7 +27,6 @@ from ...modeling_tf_outputs import (
     TFCausalLMOutputWithCrossAttentions,
 )
 from ...modeling_tf_utils import (
-    DUMMY_INPUTS,
     TFPreTrainedModel,
     get_initializer,
     get_tf_activation,
@@ -593,31 +592,6 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
         self.encoder = TFBlipTextEncoder(config, name="encoder")
         self.pooler = TFBlipTextPooler(config, name="pooler") if add_pooling_layer else None
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPoolingAndCrossAttentions:
-        output = self.call(inputs)
-        return self.serving_output(output)
-
-    def serving_output(
-        self, output: TFBaseModelOutputWithPoolingAndCrossAttentions
-    ) -> TFBaseModelOutputWithPoolingAndCrossAttentions:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutputWithPoolingAndCrossAttentions(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            hidden_states=hs,
-            attentions=attns,
-        )
-
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
@@ -843,46 +817,6 @@ class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
-
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        return {"input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32)}
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-            }
-        ]
-    )
-    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFCausalLMOutputWithCrossAttentions:
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
-    def serving_output(self, output: TFCausalLMOutputWithCrossAttentions) -> TFCausalLMOutputWithCrossAttentions:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFCausalLMOutputWithCrossAttentions(
-            logits=output.logits,
-            cross_attentions=output.cross_attentions,
-            hidden_states=hs,
-            attentions=attns,
-        )
 
     @add_start_docstrings_to_model_forward(BLIP_TEXT_INPUTS_DOCSTRING)
     @unpack_inputs

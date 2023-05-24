@@ -986,27 +986,6 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
 
         return outputs
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertModel.serving_output
-    def serving_output(
-        self, output: TFBaseModelOutputWithPoolingAndCrossAttentions
-    ) -> TFBaseModelOutputWithPoolingAndCrossAttentions:
-        output_cache = self.config.use_cache and self.config.is_decoder
-        pkv = tf.convert_to_tensor(output.past_key_values) if output_cache else None
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if output.cross_attentions is not None else None
-        if not (self.config.output_attentions and self.config.add_cross_attention):
-            cross_attns = None
-
-        return TFBaseModelOutputWithPoolingAndCrossAttentions(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            past_key_values=pkv,
-            hidden_states=hs,
-            attentions=attns,
-            cross_attentions=cross_attns,
-        )
-
 
 @add_start_docstrings("""LayoutLM Model with a `language modeling` head on top.""", LAYOUTLM_START_DOCSTRING)
 class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingLoss):
@@ -1128,12 +1107,6 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
             attentions=outputs.attentions,
         )
 
-    def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
-
 
 @add_start_docstrings(
     """
@@ -1251,12 +1224,6 @@ class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceC
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1379,12 +1346,6 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1523,12 +1484,4 @@ class TFLayoutLMForQuestionAnswering(TFLayoutLMPreTrainedModel, TFQuestionAnswer
             end_logits=end_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-        )
-
-    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFQuestionAnsweringModelOutput(
-            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
         )
