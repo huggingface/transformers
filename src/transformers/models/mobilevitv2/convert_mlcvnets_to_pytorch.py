@@ -30,7 +30,7 @@ from transformers import (
     MobileViTv2Config,
     MobileViTv2ForImageClassification,
     MobileViTv2ForSemanticSegmentation,
-    MobileViTv2ImageProcessor,
+    MobileViTImageProcessor,
 )
 from transformers.utils import logging
 
@@ -258,8 +258,8 @@ def convert_mobilevitv2_checkpoint(task_name, checkpoint_path, orig_config_path,
     # load modified state_dict
     model.load_state_dict(state_dict)
 
-    # Check outputs on an image, prepared by MobileViTv2FeatureExtractor
-    feature_extractor = MobileViTv2ImageProcessor(crop_size=config.image_size, size=config.image_size + 32)
+    # Check outputs on an image, prepared by MobileViTImageProcessor
+    feature_extractor = MobileViTImageProcessor(crop_size=config.image_size, size=config.image_size + 32)
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     outputs = model(**encoding)
 

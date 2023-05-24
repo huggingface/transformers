@@ -35,8 +35,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_mobilevitv2"] = ["MobileViTv2FeatureExtractor"]
-    _import_structure["image_processing_mobilevitv2"] = ["MobileViTv2ImageProcessor"]
+    pass
 
 try:
     if not is_torch_available():
@@ -65,8 +64,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_mobilevitv2 import MobileViTv2FeatureExtractor
-        from .image_processing_mobilevitv2 import MobileViTv2ImageProcessor
+        pass
 
     try:
         if not is_torch_available():
