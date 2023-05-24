@@ -1,6 +1,8 @@
 """ Testing suite for the Tensorflow CvT model. """
 
 
+from __future__ import annotations
+
 import inspect
 import unittest
 from math import floor

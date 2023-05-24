@@ -15,6 +15,8 @@
 """ TF 2.0 ViT model."""
 
 
+from __future__ import annotations
+
 import collections.abc
 import math
 from typing import Dict, Optional, Tuple, Union
@@ -487,8 +489,8 @@ class TFViTMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        pixel_values: TFModelInputType | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
@@ -675,8 +677,8 @@ class TFViTModel(TFViTPreTrainedModel):
     )
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        pixel_values: TFModelInputType | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
@@ -766,13 +768,13 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
     )
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        pixel_values: TFModelInputType | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""

@@ -15,6 +15,8 @@
 """ TensorFlow DeiT model."""
 
 
+from __future__ import annotations
+
 import collections.abc
 import math
 from dataclasses import dataclass
@@ -95,8 +97,8 @@ class TFDeiTForImageClassificationWithTeacherOutput(ModelOutput):
     logits: tf.Tensor = None
     cls_logits: tf.Tensor = None
     distillation_logits: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 class TFDeiTEmbeddings(tf.keras.layers.Layer):
@@ -142,7 +144,7 @@ class TFDeiTEmbeddings(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def call(
-        self, pixel_values: tf.Tensor, bool_masked_pos: Optional[tf.Tensor] = None, training: bool = False
+        self, pixel_values: tf.Tensor, bool_masked_pos: tf.Tensor | None = None, training: bool = False
     ) -> tf.Tensor:
         embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_length, _ = shape_list(embeddings)
@@ -501,9 +503,9 @@ class TFDeiTMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
-        bool_masked_pos: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
+        bool_masked_pos: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -658,9 +660,9 @@ class TFDeiTModel(TFDeiTPreTrainedModel):
     )
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
-        bool_masked_pos: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
+        bool_masked_pos: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -768,9 +770,9 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
     @replace_return_docstrings(output_type=TFMaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
-        bool_masked_pos: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
+        bool_masked_pos: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -898,9 +900,9 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
     @replace_return_docstrings(output_type=TFImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        labels: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        labels: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1016,8 +1018,8 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
     )
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
