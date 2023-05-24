@@ -559,7 +559,7 @@ class XSoftmax(torch.autograd.Function):
         r_mask = g.op(
             "Cast",
             g.op("Sub", g.op("Constant", value_t=torch.tensor(1, dtype=torch.int64)), mask_cast_value),
-            to_i=sym_help.cast_pytorch_to_onnx["Byte"],
+            to_i=sym_help.cast_pytorch_to_onnx["Bool"],
         )
         output = masked_fill(
             g, self, r_mask, g.op("Constant", value_t=torch.tensor(torch.finfo(self.type().dtype()).min))
@@ -754,7 +754,7 @@ class DisentangledSelfAttention(nn.Module):
                 Input states to the module usually the output from previous layer, it will be the Q,K and V in
                 *Attention(Q,K,V)*
 
-            attention_mask (`torch.ByteTensor`):
+            attention_mask (`torch.BoolTensor`):
                 An attention mask matrix of shape [*B*, *N*, *N*] where *B* is the batch size, *N* is the maximum
                 sequence length in which element [i,j] = *1* means the *i* th token in the input can attend to the *j*
                 th token.
@@ -1086,7 +1086,6 @@ class SEWDTransformerEncoder(nn.Module):
         if attention_mask.dim() <= 2:
             extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
             attention_mask = extended_attention_mask * extended_attention_mask.squeeze(-2).unsqueeze(-1)
-            attention_mask = attention_mask.byte()
         elif attention_mask.dim() == 3:
             attention_mask = attention_mask.unsqueeze(1)
 
@@ -1117,7 +1116,7 @@ class SEWDTransformerEncoder(nn.Module):
         if attention_mask.dim() <= 2:
             input_mask = attention_mask
         else:
-            input_mask = (attention_mask.sum(-2) > 0).byte()
+            input_mask = attention_mask.sum(-2) > 0
         attention_mask = self.get_attention_mask(attention_mask)
         relative_pos = self.get_rel_pos(hidden_states, query_states, relative_pos)
 
