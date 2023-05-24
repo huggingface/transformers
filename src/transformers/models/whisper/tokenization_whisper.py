@@ -926,7 +926,12 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                 # merges later and decode into text.
                 current_tokens.append(token)
                 if return_timestamps == "word":
-                    current_token_timestamps.append(token_timestamps[i] + time_offset)
+                    start_time = round(token_timestamps[i] + time_offset, 2)
+                    if i + 1 < len(token_timestamps):
+                        end_time = round(token_timestamps[i + 1] + time_offset, 2)
+                    else:
+                        end_time = np.inf  # should never happen
+                    current_token_timestamps.append((start_time, end_time))
 
         if "stride" in output:
             time_offset += chunk_len - stride_right
@@ -1076,11 +1081,13 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
 def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language):
     words, word_tokens = tokenizer.combine_tokens_into_words(tokens, language)
     word_boundaries = np.pad(np.cumsum([len(t) for t in word_tokens[:-1]]), (1, 0))
+
     token_timestamps = np.array(token_timestamps)
-    start_times = token_timestamps[word_boundaries[:-1]]
-    end_times = token_timestamps[word_boundaries[1:]]
+    start_times = token_timestamps[word_boundaries][:, 0]
+    end_times = np.concatenate([token_timestamps[word_boundaries[1:] - 1][:, 1], token_timestamps[-1:, 1]])
+
     timings = [
-        {"text": word, "timestamp": (round(start, 2), round(end, 2))}
+        {"text": word, "timestamp": (start, end)}
         for word, start, end in zip(words, start_times, end_times)
     ]
     return timings
