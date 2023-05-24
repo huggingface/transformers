@@ -15,6 +15,8 @@
 # limitations under the License.
 """TF general model utils."""
 
+from __future__ import annotations
+
 import functools
 import gc
 import inspect
@@ -1154,7 +1156,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         return cls(config, **kwargs)
 
-    def get_head_mask(self, head_mask: Optional[tf.Tensor], num_hidden_layers: int) -> tf.Tensor:
+    def get_head_mask(self, head_mask: tf.Tensor | None, num_hidden_layers: int) -> tf.Tensor:
         """
         Prepare the head mask if needed.
 

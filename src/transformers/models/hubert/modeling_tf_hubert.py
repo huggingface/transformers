@@ -13,6 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ TensorFlow Hubert model."""
+
+from __future__ import annotations
+
 import warnings
 from typing import Any, Dict, Optional, Tuple, Union
 
@@ -642,12 +645,12 @@ class TFHubertAttention(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        key_value_states: Optional[tf.Tensor] = None,
-        past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        layer_head_mask: Optional[tf.Tensor] = None,
+        key_value_states: tf.Tensor | None = None,
+        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
+        attention_mask: tf.Tensor | None = None,
+        layer_head_mask: tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
+    ) -> Tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -812,7 +815,7 @@ class TFHubertEncoderLayer(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = False,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
@@ -856,7 +859,7 @@ class TFHubertEncoderLayerStableLayerNorm(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = False,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
@@ -890,7 +893,7 @@ class TFHubertEncoder(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
@@ -958,7 +961,7 @@ class TFHubertEncoderStableLayerNorm(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
@@ -1048,7 +1051,7 @@ class TFHubertMainLayer(tf.keras.layers.Layer):
 
         return input_lengths
 
-    def _mask_hidden_states(self, hidden_states: tf.Tensor, mask_time_indices: Optional[tf.Tensor] = None):
+    def _mask_hidden_states(self, hidden_states: tf.Tensor, mask_time_indices: tf.Tensor | None = None):
         """
         Masks extracted features along time axis and/or along feature axis according to
         [SpecAugment](https://arxiv.org/abs/1904.08779).
@@ -1096,13 +1099,13 @@ class TFHubertMainLayer(tf.keras.layers.Layer):
     def call(
         self,
         input_values: tf.Tensor,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        output_attentions: Optional[tf.Tensor] = None,
-        output_hidden_states: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        output_attentions: tf.Tensor | None = None,
+        output_hidden_states: tf.Tensor | None = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs: Any,
@@ -1299,11 +1302,11 @@ class TFHubertModel(TFHubertPreTrainedModel):
     def call(
         self,
         input_values: tf.Tensor,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1401,13 +1404,13 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
     def call(
         self,
         input_values: tf.Tensor,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
-        labels: Optional[tf.Tensor] = None,
+        labels: tf.Tensor | None = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,

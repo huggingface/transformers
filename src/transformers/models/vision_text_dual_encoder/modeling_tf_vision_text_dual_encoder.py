@@ -15,6 +15,8 @@
 """TensorFlow VisionTextDualEncoder model."""
 
 
+from __future__ import annotations
+
 import re
 from typing import Optional, Tuple, Union
 
@@ -340,12 +342,12 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
     @replace_return_docstrings(output_type=TFCLIPOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
-        pixel_values: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
+        pixel_values: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
         return_loss: Optional[bool] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
+        token_type_ids: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
