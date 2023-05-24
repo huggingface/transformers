@@ -957,29 +957,6 @@ class TFSwinPreTrainedModel(TFPreTrainedModel):
         if isinstance(module, TFSwinEncoder):
             module.gradient_checkpointing = value
 
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network. Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size),
-            dtype=tf.float32,
-        )
-        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
-
-    @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-        return self.serving_output(output)
-
 
 SWIN_START_DOCSTRING = r"""
     This model is a Tensorflow
@@ -1245,16 +1222,6 @@ class TFSwinModel(TFSwinPreTrainedModel):
 
         return swin_outputs
 
-    def serving_output(self, output: TFSwinModelOutput) -> TFSwinModelOutput:
-        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
-        return TFSwinModelOutput(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            hidden_states=output.hidden_states,
-            attentions=output.attentions,
-            reshaped_hidden_states=output.reshaped_hidden_states,
-        )
-
 
 class TFSwinPixelShuffle(tf.keras.layers.Layer):
     """TF layer implementation of torch.nn.PixelShuffle"""
@@ -1410,15 +1377,6 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
             reshaped_hidden_states=outputs.reshaped_hidden_states,
         )
 
-    def serving_output(self, output: TFSwinMaskedImageModelingOutput) -> TFSwinMaskedImageModelingOutput:
-        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
-        return TFSwinMaskedImageModelingOutput(
-            reconstruction=output.reconstruction,
-            hidden_states=output.hidden_states,
-            attentions=output.attentions,
-            reshaped_hidden_states=output.reshaped_hidden_states,
-        )
-
 
 @add_start_docstrings(
     """
@@ -1492,13 +1450,4 @@ class TFSwinForImageClassification(TFSwinPreTrainedModel, TFSequenceClassificati
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             reshaped_hidden_states=outputs.reshaped_hidden_states,
-        )
-
-    def serving_output(self, output: TFSwinImageClassifierOutput) -> TFSwinImageClassifierOutput:
-        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
-        return TFSwinImageClassifierOutput(
-            logits=output.logits,
-            hidden_states=output.hidden_states,
-            attentions=output.attentions,
-            reshaped_hidden_states=output.reshaped_hidden_states,
         )

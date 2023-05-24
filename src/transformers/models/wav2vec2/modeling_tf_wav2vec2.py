@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -1185,14 +1185,18 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
     main_input_name = "input_values"
 
     @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        pad_token = 0.0
-        input_values = tf.convert_to_tensor(np.random.rand(1, 16000), tf.float32)
-        dummy_inputs = {
-            "input_values": input_values,
-            "attention_mask": tf.cast(tf.not_equal(input_values, pad_token), tf.float32),
+    def input_signature(self):
+        return {
+            "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
+            "attention_mask": tf.TensorSpec((None, None), tf.float32, name="attention_mask"),
         }
-        return dummy_inputs
+
+    @property
+    def dummy_inputs(self):
+        return {
+            "input_values": tf.random.uniform(shape=(1, 16000), dtype=tf.float32),
+            "attention_mask": tf.ones(shape=(1, 16000), dtype=tf.float32),
+        }
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1200,20 +1204,6 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
             f"\n{self.__class__.__name__} has backpropagation operations that are NOT supported on CPU. If you wish "
             "to train/fine-tine this model, you need a GPU or a TPU"
         )
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(input_values=inputs, training=False)
-
-        return self.serving_output(output)
 
     def _get_feat_extract_output_lengths(self, input_lengths, add_adapter=None):
         """
@@ -1427,17 +1417,6 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
 
         return outputs
 
-    def serving_output(self, output):
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFWav2Vec2BaseModelOutput(
-            last_hidden_state=output.last_hidden_state,
-            extract_features=output.extract_features,
-            hidden_states=hidden_states,
-            attentions=attentions,
-        )
-
 
 @add_start_docstrings(
     """TFWav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
@@ -1591,11 +1570,6 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def serving_output(self, output: TFCausalLMOutput) -> TFCausalLMOutput:
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        return TFCausalLMOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
-
 
 class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
     def __init__(self, config):
@@ -1693,27 +1667,3 @@ class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def serving_output(self, output):
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFSequenceClassifierOutput(
-            logits=output.logits,
-            hidden_states=hidden_states,
-            attentions=attentions,
-        )
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(input_values=inputs)
-
-        return self.serving_output(output)
