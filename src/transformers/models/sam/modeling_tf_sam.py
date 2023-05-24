@@ -916,7 +916,6 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
             attn_weights = self.add_decomposed_rel_pos(
                 attn_weights, query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
             )
-        print(attn_weights.shape)
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
 
 
