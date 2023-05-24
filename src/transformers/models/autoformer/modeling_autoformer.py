@@ -29,8 +29,8 @@ from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
+    ModelOutput,
     SampleTSPredictionOutput,
-    Seq2SeqTSModelOutput,
     Seq2SeqTSPredictionOutput,
 )
 from ...modeling_utils import PreTrainedModel
@@ -45,8 +45,77 @@ _CONFIG_FOR_DOC = "AutoformerConfig"
 
 
 @dataclass
-class AutoformerModelOutput(Seq2SeqTSModelOutput):
+class AutoformerModelOutput(ModelOutput):
+    """
+    Autoformer model output that contains the additional trend output.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the decoder of the model.
+
+            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+            hidden_size)` is output.
+        trend (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Trend tensor for each time series.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the decoder at the output of each layer plus the optional initial embedding outputs.
+        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
+        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder of the model.
+        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the encoder at the output of each layer plus the optional initial embedding outputs.
+        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        loc (`torch.FloatTensor` of shape `(batch_size,)` or `(batch_size, input_size)`, *optional*):
+            Shift values of each time series' context window which is used to give the model inputs of the same
+            magnitude and then used to shift back to the original magnitude.
+        scale (`torch.FloatTensor` of shape `(batch_size,)` or `(batch_size, input_size)`, *optional*):
+            Scaling values of each time series' context window which is used to give the model inputs of the same
+            magnitude and then used to rescale back to the original magnitude.
+        static_features: (`torch.FloatTensor` of shape `(batch_size, feature size)`, *optional*):
+            Static features of each time series' in a batch which are copied to the covariates at inference time.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
     trend: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loc: Optional[torch.FloatTensor] = None
+    scale: Optional[torch.FloatTensor] = None
+    static_features: Optional[torch.FloatTensor] = None
 
 
 AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1548,7 +1617,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(AUTOFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqTSModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=AutoformerModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1691,10 +1760,11 @@ class AutoformerModel(AutoformerPreTrainedModel):
             trend = None
 
         if not return_dict:
-            return (last_hidden_state,) + decoder_outputs[2:] + encoder_outputs + (loc, scale, static_feat, trend)
+            return (last_hidden_state, trend) + decoder_outputs[2:] + encoder_outputs + (loc, scale, static_feat)
 
         return AutoformerModelOutput(
             last_hidden_state=last_hidden_state,
+            trend=trend,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
@@ -1705,7 +1775,6 @@ class AutoformerModel(AutoformerPreTrainedModel):
             loc=loc,
             scale=scale,
             static_features=static_feat,
-            trend=trend,
         )
 
 
@@ -1754,7 +1823,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         return self.distribution_output.distribution(sliced_params, loc=loc, scale=scale)
 
     @add_start_docstrings_to_model_forward(AUTOFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqTSModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Seq2SeqTSPredictionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1850,9 +1919,9 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         prediction_loss = None
         params = None
         if future_values is not None:
-            params = self.output_params(outputs[0] + outputs[-1])  # outputs.last_hidden_state and trend
+            params = self.output_params(outputs[0] + outputs[1])  # outputs.last_hidden_state and trend
             # loc is 4rd last and scale is 3nd last output
-            distribution = self.output_distribution(params, loc=outputs[-4], scale=outputs[-3])
+            distribution = self.output_distribution(params, loc=outputs[-3], scale=outputs[-2])
 
             loss = self.loss(distribution, future_values)
 
