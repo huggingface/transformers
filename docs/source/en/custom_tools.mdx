@@ -414,6 +414,13 @@ of the tools, it has available to it.
 
 </Tip>
 
+In both cases, you can pass a repo ID instead of the prompt template if you would like to use a template hosted by someone in the community. The default prompts live in [this repo](https://huggingface.co/datasets/huggingface-tools/default-prompts) as an example.
+
+To upload your custom prompt on a repo on the Hub and share it with the community just make sure:
+- to use a dataset repository
+- to put the prompt template for the `run` command in a file named `run_prompt_template.txt`
+- to put the prompt template for the `chat` command in a file named `chat_prompt_template.txt`
+
 ## Using custom tools
 
 In this section, we'll be leveraging two existing custom tools that are specific to image generation:
