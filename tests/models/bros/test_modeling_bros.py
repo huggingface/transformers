@@ -549,6 +549,5 @@ class BrosModelIntegrationTest(unittest.TestCase):
         logits = outputs.logits
         expected_shape = torch.Size((2, 13, 7))  # [batch_size, max_sequence_length, num_labels]
         self.assertEqual(logits.shape, expected_shape)
-        # # self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
 
     # TODO add other tests
