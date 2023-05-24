@@ -27,10 +27,10 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import (
+    MobileViTImageProcessor,
     MobileViTv2Config,
     MobileViTv2ForImageClassification,
     MobileViTv2ForSemanticSegmentation,
-    MobileViTImageProcessor,
 )
 from transformers.utils import logging
 

@@ -31,7 +31,10 @@ if is_torch_available():
     import torch
 
     from transformers import MobileViTv2ForImageClassification, MobileViTv2ForSemanticSegmentation, MobileViTv2Model
-    from transformers.models.mobilevitv2.modeling_mobilevitv2 import MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST, make_divisible
+    from transformers.models.mobilevitv2.modeling_mobilevitv2 import (
+        MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+        make_divisible,
+    )
 
 
 if is_vision_available():
@@ -72,7 +75,7 @@ class MobileViTv2ModelTester:
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
-        self.last_hidden_size = make_divisible(512 * width_multiplier, divisor=8) 
+        self.last_hidden_size = make_divisible(512 * width_multiplier, divisor=8)
         self.hidden_act = hidden_act
         self.conv_kernel_size = conv_kernel_size
         self.output_stride = output_stride
