@@ -254,6 +254,23 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         fast_tokenizer_prompt_ids = rust_tokenizer.get_prompt_ids(prompt)
 
         self.assertListEqual(tokenizer_prompt_ids.tolist(), fast_tokenizer_prompt_ids.tolist())
+    def test_combine_tokens_into_words(self):
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        # 'whatever "whatever" said someone, clever!?'
+        encoded_input = [1363, 7969, 503, 1363, 7969, 1, 848, 1580, 11, 13494, 7323]
+        expected_words = ['whatever', '"whatever"', 'said', 'someone,', 'clever!?']
+        expected_tokens = [[1363, 7969], [503, 1363, 7969, 1], [848], [1580, 11], [13494, 7323]]
+        expected_indices = [[0, 1], [2, 3, 4, 5], [6], [7, 8], [9, 10]]
+        output = tokenizer.combine_tokens_into_words(encoded_input)
+        self.assertEqual(expected_words, output[0])
+        self.assertEqual(expected_tokens, output[1])
+        self.assertEqual(expected_indices, output[2])
+        output_rust = rust_tokenizer.combine_tokens_into_words(encoded_input)
+        self.assertEqual(expected_words, output_rust[0])
+        self.assertEqual(expected_tokens, output_rust[1])
+        self.assertEqual(expected_indices, output_rust[2])
 
 
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
