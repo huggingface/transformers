@@ -1279,7 +1279,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         if not isinstance(output, ModelOutput):
             return output
-        for key in output.keys():
+        for key in output:
             if key.endswith("hidden_states") and not getattr(self.config, "output_hidden_states", False):
                 output[key] = None
             elif key.endswith("attentions") and not getattr(self.config, "output_attentions", False):
