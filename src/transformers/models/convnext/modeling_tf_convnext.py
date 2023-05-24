@@ -17,7 +17,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf

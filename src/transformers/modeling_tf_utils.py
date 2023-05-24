@@ -1287,8 +1287,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             elif key == "past_key_values" and not getattr(self.config, "use_cache", False):
                 output[key] = None
             elif key == "cross_attentions" and not (
-                getattr(self.config, "output_attentions", False)
-                and getattr(self.config, "add_cross_attention", False)
+                getattr(self.config, "output_attentions", False) and getattr(self.config, "add_cross_attention", False)
             ):
                 output[key] = None
             if isinstance(output[key], (tuple, list)):
