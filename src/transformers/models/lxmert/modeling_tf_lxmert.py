@@ -16,6 +16,9 @@
 # limitations under the License.
 """ TF 2.0 LXMERT model."""
 
+
+from __future__ import annotations
+
 import warnings
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple, Union
@@ -90,14 +93,14 @@ class TFLxmertModelOutput(ModelOutput):
             the self-attention heads.
     """
 
-    language_output: Optional[tf.Tensor] = None
-    vision_output: Optional[tf.Tensor] = None
-    pooled_output: Optional[tf.Tensor] = None
-    language_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    vision_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    language_attentions: Optional[Tuple[tf.Tensor]] = None
-    vision_attentions: Optional[Tuple[tf.Tensor]] = None
-    cross_encoder_attentions: Optional[Tuple[tf.Tensor]] = None
+    language_output: tf.Tensor | None = None
+    vision_output: tf.Tensor | None = None
+    pooled_output: tf.Tensor | None = None
+    language_hidden_states: Tuple[tf.Tensor] | None = None
+    vision_hidden_states: Tuple[tf.Tensor] | None = None
+    language_attentions: Tuple[tf.Tensor] | None = None
+    vision_attentions: Tuple[tf.Tensor] | None = None
+    cross_encoder_attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -137,15 +140,15 @@ class TFLxmertForPreTrainingOutput(ModelOutput):
 
     """
 
-    loss: Optional[tf.Tensor] = None
-    prediction_logits: Optional[tf.Tensor] = None
-    cross_relationship_score: Optional[tf.Tensor] = None
-    question_answering_score: Optional[tf.Tensor] = None
-    language_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    vision_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    language_attentions: Optional[Tuple[tf.Tensor]] = None
-    vision_attentions: Optional[Tuple[tf.Tensor]] = None
-    cross_encoder_attentions: Optional[Tuple[tf.Tensor]] = None
+    loss: tf.Tensor | None = None
+    prediction_logits: tf.Tensor | None = None
+    cross_relationship_score: tf.Tensor | None = None
+    question_answering_score: tf.Tensor | None = None
+    language_hidden_states: Tuple[tf.Tensor] | None = None
+    vision_hidden_states: Tuple[tf.Tensor] | None = None
+    language_attentions: Tuple[tf.Tensor] | None = None
+    vision_attentions: Tuple[tf.Tensor] | None = None
+    cross_encoder_attentions: Tuple[tf.Tensor] | None = None
 
 
 class TFLxmertVisualFeatureEncoder(tf.keras.layers.Layer):
@@ -945,13 +948,13 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        visual_feats: Optional[tf.Tensor] = None,
-        visual_pos: Optional[tf.Tensor] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        visual_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        visual_feats: tf.Tensor | None = None,
+        visual_pos: tf.Tensor | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        visual_attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,

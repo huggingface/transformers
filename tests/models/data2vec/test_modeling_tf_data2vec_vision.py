@@ -14,6 +14,8 @@
 # limitations under the License.
 """ Testing suite for the TensorFlow Data2VecVision model. """
 
+from __future__ import annotations
+
 import collections.abc
 import inspect
 import unittest

@@ -14,6 +14,9 @@
 # limitations under the License.
 """TF 2.0 LayoutLMv3 model."""
 
+
+from __future__ import annotations
+
 import collections
 import math
 from typing import Dict, List, Optional, Tuple, Union
@@ -222,11 +225,11 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
 
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
         bbox: tf.Tensor = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         training: bool = False,
     ) -> tf.Tensor:
         if position_ids is None:
@@ -319,11 +322,11 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[tf.Tensor],
-        head_mask: Optional[tf.Tensor],
+        attention_mask: tf.Tensor | None,
+        head_mask: tf.Tensor | None,
         output_attentions: bool,
-        rel_pos: Optional[tf.Tensor] = None,
-        rel_2d_pos: Optional[tf.Tensor] = None,
+        rel_pos: tf.Tensor | None = None,
+        rel_2d_pos: tf.Tensor | None = None,
         training: bool = False,
     ) -> Union[Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor]]:
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -398,11 +401,11 @@ class TFLayoutLMv3Attention(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[tf.Tensor],
-        head_mask: Optional[tf.Tensor],
+        attention_mask: tf.Tensor | None,
+        head_mask: tf.Tensor | None,
         output_attentions: bool,
-        rel_pos: Optional[tf.Tensor] = None,
-        rel_2d_pos: Optional[tf.Tensor] = None,
+        rel_pos: tf.Tensor | None = None,
+        rel_2d_pos: tf.Tensor | None = None,
         training: bool = False,
     ) -> Union[Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor]]:
         self_outputs = self.self_attention(
@@ -469,11 +472,11 @@ class TFLayoutLMv3Layer(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[tf.Tensor],
-        head_mask: Optional[tf.Tensor],
+        attention_mask: tf.Tensor | None,
+        head_mask: tf.Tensor | None,
         output_attentions: bool,
-        rel_pos: Optional[tf.Tensor] = None,
-        rel_2d_pos: Optional[tf.Tensor] = None,
+        rel_pos: tf.Tensor | None = None,
+        rel_2d_pos: tf.Tensor | None = None,
         training: bool = False,
     ) -> Union[Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor]]:
         self_attention_outputs = self.attention(
@@ -593,13 +596,13 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        bbox: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
+        bbox: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-        position_ids: Optional[tf.Tensor] = None,
+        position_ids: tf.Tensor | None = None,
         training: bool = False,
     ) -> Union[
         TFBaseModelOutput,
@@ -778,7 +781,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
 
         return extended_attention_mask
 
-    def get_head_mask(self, head_mask: Optional[tf.Tensor]) -> Union[tf.Tensor, List[Optional[tf.Tensor]]]:
+    def get_head_mask(self, head_mask: tf.Tensor | None) -> Union[tf.Tensor, List[tf.Tensor | None]]:
         if head_mask is None:
             return [None] * self.config.num_hidden_layers
 
@@ -806,14 +809,14 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
-        bbox: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        pixel_values: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
+        bbox: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        pixel_values: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1145,14 +1148,14 @@ class TFLayoutLMv3Model(TFLayoutLMv3PreTrainedModel):
     @replace_return_docstrings(output_type=TFBaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
-        bbox: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        pixel_values: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
+        bbox: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        pixel_values: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1272,18 +1275,18 @@ class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSeque
     @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        labels: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        labels: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        bbox: Optional[tf.Tensor] = None,
-        pixel_values: Optional[tf.Tensor] = None,
+        bbox: tf.Tensor | None = None,
+        pixel_values: tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[
         TFSequenceClassifierOutput,
@@ -1392,18 +1395,18 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
     @replace_return_docstrings(output_type=TFTokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
-        bbox: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        labels: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
+        bbox: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        labels: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        pixel_values: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[
         TFTokenClassifierOutput,
@@ -1514,18 +1517,18 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
     @replace_return_docstrings(output_type=TFQuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        start_positions: Optional[tf.Tensor] = None,
-        end_positions: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        start_positions: tf.Tensor | None = None,
+        end_positions: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        bbox: Optional[tf.Tensor] = None,
-        pixel_values: Optional[tf.Tensor] = None,
+        bbox: tf.Tensor | None = None,
+        pixel_values: tf.Tensor | None = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[

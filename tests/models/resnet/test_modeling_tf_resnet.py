@@ -15,6 +15,8 @@
 """ Testing suite for the Tensorflow ResNet model. """
 
 
+from __future__ import annotations
+
 import inspect
 import unittest
 

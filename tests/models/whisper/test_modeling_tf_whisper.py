@@ -14,6 +14,8 @@
 # limitations under the License.
 """ Testing suite for the TensorFlow Whisper model. """
 
+from __future__ import annotations
+
 import inspect
 import tempfile
 import traceback

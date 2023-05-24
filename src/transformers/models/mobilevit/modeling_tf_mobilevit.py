@@ -16,6 +16,8 @@
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
 """ TensorFlow 2.0 MobileViT model."""
 
+from __future__ import annotations
+
 from typing import Dict, Optional, Tuple, Union
 
 import tensorflow as tf
@@ -663,7 +665,7 @@ class TFMobileViTMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
@@ -846,7 +848,7 @@ class TFMobileViTModel(TFMobileViTPreTrainedModel):
     )
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
@@ -893,9 +895,9 @@ class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceCl
     )
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
         output_hidden_states: Optional[bool] = None,
-        labels: Optional[tf.Tensor] = None,
+        labels: tf.Tensor | None = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
     ) -> Union[tuple, TFImageClassifierOutputWithNoAttention]:
@@ -1083,8 +1085,8 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
     @replace_return_docstrings(output_type=TFSemanticSegmenterOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
-        labels: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
+        labels: tf.Tensor | None = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,

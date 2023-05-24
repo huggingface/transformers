@@ -14,6 +14,9 @@
 # limitations under the License.
 """ TensorFlow SegFormer model."""
 
+
+from __future__ import annotations
+
 import math
 from typing import Dict, Optional, Tuple, Union
 
@@ -664,8 +667,8 @@ class TFSegformerForImageClassification(TFSegformerPreTrainedModel, TFSequenceCl
     )
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
-        labels: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
+        labels: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -816,7 +819,7 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
     def call(
         self,
         pixel_values: tf.Tensor,
-        labels: Optional[tf.Tensor] = None,
+        labels: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
