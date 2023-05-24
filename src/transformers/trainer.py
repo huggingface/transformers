@@ -391,8 +391,8 @@ class Trainer:
             )
 
         # At this stage the model is already loaded
-        if getattr(model, "is_loaded_in_8bit", False):
-            if getattr(model, "_is_int8_training_enabled", False):
+        if getattr(model, "is_loaded_in_kbit", False):
+            if getattr(model, "_is_kbit_training_enabled", False):
                 logger.info(
                     "The model is loaded in 8-bit precision. To train this model you need to add additional modules"
                     " inside the model such as adapters using `peft` library and freeze the model weights. Please"
