@@ -34,12 +34,11 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
     TFSequenceSummary,
-    TFSharedEmbeddings,
     get_initializer,
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list, stable_softmax
+from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
     DUMMY_INPUTS,
     ModelOutput,
@@ -315,29 +314,27 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         self.n_positions = config.n_positions
         self.initializer_range = config.initializer_range
 
-        self.wte = TFSharedEmbeddings(
-            config.vocab_size, config.hidden_size, initializer_range=config.initializer_range, name="wte"
+        self.wte = tf.keras.layers.Embedding(
+            input_dim=config.vocab_size,
+            output_dim=config.hidden_size,
+            embeddings_initializer=get_initializer(config.initializer_range),
+            name="wte",
+        )
+        self.wpe = tf.keras.layers.Embedding(
+            input_dim=config.n_positions,
+            output_dim=config.n_embd,
+            embeddings_initializer=get_initializer(config.initializer_range),
+            name="wpe",
         )
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
         self.h = [TFBlock(config, scale=True, name=f"h_._{i}") for i in range(config.n_layer)]
         self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
 
-    def build(self, input_shape):
-        with tf.name_scope("wpe"):
-            self.wpe = self.add_weight(
-                name="embeddings",
-                shape=[self.n_positions, self.n_embd],
-                initializer=get_initializer(self.initializer_range),
-            )
-
-        super().build(input_shape)
-
     def get_input_embeddings(self):
         return self.wte
 
-    def set_input_embeddings(self, value):
-        self.wte.weight = value
-        self.wte.vocab_size = shape_list(value)[0]
+    def set_input_embeddings(self, new_embeddings):
+        self.wte = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -437,23 +434,14 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         position_ids = tf.reshape(position_ids, [-1, shape_list(position_ids)[-1]])
 
         if inputs_embeds is None:
-            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-            tf.debugging.assert_less(
-                input_ids,
-                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
-                message=(
-                    "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
-                ),
-            )
-            inputs_embeds = self.wte(input_ids, mode="embedding")
+            check_embeddings_within_bounds(input_ids, self.config.vocab_size)
+            inputs_embeds = self.wte(input_ids)
 
-        position_embeds = tf.gather(self.wpe, position_ids)
+        position_embeds = self.wpe(position_ids)
 
         if token_type_ids is not None:
             token_type_ids = tf.reshape(token_type_ids, [-1, shape_list(token_type_ids)[-1]])
-            token_type_embeds = self.wte(token_type_ids, mode="embedding")
+            token_type_embeds = self.wte(token_type_ids)
         else:
             token_type_embeds = tf.constant(0.0)
 
@@ -913,7 +901,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
             training=training,
         )
         hidden_states = transformer_outputs[0]
-        logits = self.transformer.wte(hidden_states, mode="linear")
+        logits = tf.matmul(hidden_states, self.transformer.wte.weights, transpose_b=True)
 
         loss = None
         if labels is not None:
@@ -1057,7 +1045,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             all_hidden_states = transformer_outputs.hidden_states[:-1] + (hidden_states,)
         else:
             all_hidden_states = None
-        lm_logits = self.transformer.wte(hidden_states, mode="linear")
+        lm_logits = tf.matmul(hidden_states, self.transformer.wte.weights, transpose_b=True)
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids, training=training)
         mc_logits = tf.squeeze(mc_logits, axis=-1)
 

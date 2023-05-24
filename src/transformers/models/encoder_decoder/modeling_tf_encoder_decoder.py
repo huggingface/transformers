@@ -14,7 +14,7 @@
 # limitations under the License.
 """ Classes to support TF Encoder-Decoder architectures"""
 
-
+import inspect
 import re
 import warnings
 from typing import Optional, Tuple, Union
@@ -264,6 +264,13 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         if self.encoder.get_output_embeddings() is not None:
             raise ValueError(
                 f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
+            )
+
+        decoder_signature = set(inspect.signature(self.decoder.call).parameters.keys())
+        if "encoder_hidden_states" not in decoder_signature:
+            raise ValueError(
+                "The selected decoder is not prepared for the encoder hidden states to be passed. Please see the "
+                "following discussion on GitHub: https://github.com/huggingface/transformers/issues/23350"
             )
 
     @property
