@@ -63,6 +63,7 @@ task_to_keys = {
     "stsb": ("sentence1", "sentence2"),
     "wnli": ("sentence1", "sentence2"),
 }
+task_to_keys["cola"] = ("sentence", None)
 
 logger = logging.getLogger(__name__)
 
