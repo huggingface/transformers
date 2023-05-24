@@ -1874,11 +1874,9 @@ class TFLongformerPreTrainedModel(TFPreTrainedModel):
 
     @property
     def input_signature(self):
-        return {
-            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            "global_attention_mask": tf.TensorSpec((None, None), tf.int32, name="global_attention_mask"),
-        }
+        sig = super().input_signature
+        sig["global_attention_mask"] = tf.TensorSpec((None, None), tf.int32, name="global_attention_mask")
+        return sig
 
 
 LONGFORMER_START_DOCSTRING = r"""
