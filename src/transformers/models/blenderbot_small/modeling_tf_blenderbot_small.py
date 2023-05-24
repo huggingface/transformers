@@ -15,6 +15,8 @@
 """ TF 2.0 BlenderbotSmall model."""
 
 
+from __future__ import annotations
+
 import random
 from typing import List, Optional, Tuple, Union
 
@@ -126,7 +128,7 @@ class TFBlenderbotSmallLearnedPositionalEmbedding(tf.keras.layers.Embedding):
         super().__init__(num_embeddings, embedding_dim, **kwargs)
 
     def call(
-        self, input_shape: tf.TensorShape, past_key_values_length: int = 0, position_ids: Optional[tf.Tensor] = None
+        self, input_shape: tf.TensorShape, past_key_values_length: int = 0, position_ids: tf.Tensor | None = None
     ):
         """Input is expected to be of size [bsz x seqlen]."""
         if position_ids is None:
@@ -175,12 +177,12 @@ class TFBlenderbotSmallAttention(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        key_value_states: Optional[tf.Tensor] = None,
-        past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        layer_head_mask: Optional[tf.Tensor] = None,
+        key_value_states: tf.Tensor | None = None,
+        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
+        attention_mask: tf.Tensor | None = None,
+        layer_head_mask: tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
+    ) -> Tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -310,8 +312,8 @@ class TFBlenderbotSmallEncoderLayer(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]],
-        layer_head_mask: Optional[tf.Tensor],
+        attention_mask: np.ndarray | tf.Tensor | None,
+        layer_head_mask: tf.Tensor | None,
         training: Optional[bool] = False,
     ) -> tf.Tensor:
         """
@@ -380,11 +382,11 @@ class TFBlenderbotSmallDecoderLayer(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        layer_head_mask: Optional[tf.Tensor] = None,
-        cross_attn_layer_head_mask: Optional[tf.Tensor] = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
+        encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
+        layer_head_mask: tf.Tensor | None = None,
+        cross_attn_layer_head_mask: tf.Tensor | None = None,
         past_key_value: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         training: Optional[bool] = False,
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
@@ -1175,18 +1177,18 @@ class TFBlenderbotSmallModel(TFBlenderbotSmallPreTrainedModel):
     )
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        decoder_input_ids: Optional[tf.Tensor] = None,
-        decoder_attention_mask: Optional[tf.Tensor] = None,
-        decoder_position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        decoder_head_mask: Optional[tf.Tensor] = None,
-        cross_attn_head_mask: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        decoder_input_ids: tf.Tensor | None = None,
+        decoder_attention_mask: tf.Tensor | None = None,
+        decoder_position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        decoder_head_mask: tf.Tensor | None = None,
+        cross_attn_head_mask: tf.Tensor | None = None,
         encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
-        past_key_values: Optional[List[tf.Tensor]] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        decoder_inputs_embeds: Optional[tf.Tensor] = None,
+        past_key_values: List[tf.Tensor] | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        decoder_inputs_embeds: tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1303,23 +1305,23 @@ class TFBlenderbotSmallForConditionalGeneration(TFBlenderbotSmallPreTrainedModel
     @add_end_docstrings(BLENDERBOT_SMALL_GENERATION_EXAMPLE)
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        decoder_input_ids: Optional[tf.Tensor] = None,
-        decoder_attention_mask: Optional[tf.Tensor] = None,
-        decoder_position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        decoder_head_mask: Optional[tf.Tensor] = None,
-        cross_attn_head_mask: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        decoder_input_ids: tf.Tensor | None = None,
+        decoder_attention_mask: tf.Tensor | None = None,
+        decoder_position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        decoder_head_mask: tf.Tensor | None = None,
+        cross_attn_head_mask: tf.Tensor | None = None,
         encoder_outputs: Optional[TFBaseModelOutput] = None,
-        past_key_values: Optional[List[tf.Tensor]] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        decoder_inputs_embeds: Optional[tf.Tensor] = None,
+        past_key_values: List[tf.Tensor] | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        decoder_inputs_embeds: tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[tf.Tensor] = None,
+        labels: tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple[tf.Tensor], TFSeq2SeqLMOutput]:
         r"""
