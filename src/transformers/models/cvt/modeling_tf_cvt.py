@@ -15,6 +15,8 @@
 """ TF 2.0 Cvt model."""
 
 
+from __future__ import annotations
+
 import collections.abc
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple, Union
@@ -75,7 +77,7 @@ class TFBaseModelOutputWithCLSToken(ModelOutput):
 
     last_hidden_state: tf.Tensor = None
     cls_token_value: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor] | None = None
 
 
 class TFCvtDropPath(tf.keras.layers.Layer):
@@ -668,7 +670,7 @@ class TFCvtMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
+        pixel_values: TFModelInputType | None = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
@@ -797,7 +799,7 @@ class TFCvtModel(TFCvtPreTrainedModel):
     @replace_return_docstrings(output_type=TFBaseModelOutputWithCLSToken, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
@@ -880,8 +882,8 @@ class TFCvtForImageClassification(TFCvtPreTrainedModel, TFSequenceClassification
     @replace_return_docstrings(output_type=TFImageClassifierOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
-        labels: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
+        labels: tf.Tensor | None = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
