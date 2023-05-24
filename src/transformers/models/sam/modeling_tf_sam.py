@@ -1155,7 +1155,7 @@ class TFSamPreTrainedModel(TFPreTrainedModel):
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
             shape=(
-                3,
+                1,
                 self.config.vision_config.num_channels,
                 self.config.vision_config.image_size,
                 self.config.vision_config.image_size,
