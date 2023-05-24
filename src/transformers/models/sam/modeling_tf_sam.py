@@ -918,7 +918,6 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
             )
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
 
-
         if training:
             attn_probs = tf.nn.dropout(attn_weights, rate=self.dropout)
         else:
