@@ -243,12 +243,13 @@ class TFSamAttention(tf.keras.layers.Layer):
 
         # SamAttention
         _, _, _, c_per_head = shape_list(query)
+        print(query.shape)
+        print(key.shape)
         attn = tf.matmul(
             query, tf.transpose(key, perm=[0, 1, 3, 2])
         )  # batch_size * point_batch_size  x N_heads x N_tokens x N_tokens
         attn = attn / tf.math.sqrt(float(c_per_head))
         attn = tf.nn.softmax(attn, axis=-1)
-        print(attn.shape)
 
         # Get output
         out = tf.matmul(attn, value)
