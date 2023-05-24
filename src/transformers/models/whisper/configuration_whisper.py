@@ -171,8 +171,8 @@ class WhisperConfig(PretrainedConfig):
             The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
             step, irrespectively of `mask_feature_prob`. Only relevant if
             `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`.
-        alignment_heads (`List[(int, int)]`, *optional*):
-            List of (layer index, head index) tuples selecting the cross-attention heads that are highly correlated to
+        alignment_heads (`List[List[int]]`, *optional*):
+            List of [layer index, head index] tuples selecting the cross-attention heads that are highly correlated to
             word-level timing, i.e. the alignment between audio and text tokens.
 
     Example:
@@ -231,7 +231,7 @@ class WhisperConfig(PretrainedConfig):
         mask_feature_prob=0.0,
         mask_feature_length=10,
         mask_feature_min_masks=0,
-        alignment_heads=[(2, 2), (3, 0), (3, 2), (3, 3), (3, 4), (3, 5)],
+        alignment_heads=[[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]],
         **kwargs,
     ):
         self.vocab_size = vocab_size

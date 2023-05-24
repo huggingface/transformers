@@ -859,7 +859,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                     # one, and we cannot use timestamped tokens to create chunks
                     if last_language and language != last_language and not return_timestamps:
                         previous_tokens.append(current_tokens)
-                        resolved_tokens, _ = _find_longest_common_sequence(previous_tokens, None)
+                        resolved_tokens = _find_longest_common_sequence(previous_tokens, None)
                         resolved_text = tokenizer.decode(resolved_tokens)
                         chunk["text"] = resolved_text
                         chunks.append(chunk)
@@ -909,9 +909,10 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                         )
                         resolved_text = tokenizer.decode(resolved_tokens)
                         chunk["text"] = resolved_text
-                        chunk["words"] = _collate_word_timestamps(
-                            tokenizer, resolved_tokens, resolved_token_timestamps, last_language
-                        )
+                        if return_timestamps == "word":
+                            chunk["words"] = _collate_word_timestamps(
+                                tokenizer, resolved_tokens, resolved_token_timestamps, last_language
+                            )
                         chunks.append(chunk)
 
                         # Flush all our temporary context
@@ -958,7 +959,10 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
         resolved_tokens, resolved_token_timestamps = _find_longest_common_sequence(previous_tokens, previous_token_timestamps)
         resolved_text = tokenizer.decode(resolved_tokens)
         chunk["text"] = resolved_text
-        chunk["words"] = _collate_word_timestamps(tokenizer, resolved_tokens, resolved_token_timestamps, last_language)
+        if return_timestamps == "word":
+            chunk["words"] = _collate_word_timestamps(
+                tokenizer, resolved_tokens, resolved_token_timestamps, last_language
+            )
         chunks.append(chunk)
 
     # Preparing and cleaning up the pipeline output
@@ -1070,12 +1074,14 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
 
     total_sequence.extend(left_sequence)
 
-    if token_timestamp_sequences:
-        total_token_timestamp_sequence.extend(left_token_timestamp_sequence)
-    else:
-        total_token_timestamp_sequence = None
+    if token_timestamp_sequences is None:
+        return total_sequence
 
-    return total_sequence, total_token_timestamp_sequence
+    if len(token_timestamp_sequences) > 0:
+        total_token_timestamp_sequence.extend(left_token_timestamp_sequence)
+        return total_sequence, total_token_timestamp_sequence
+    else:
+        return total_sequence, []
 
 
 def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language):
@@ -1086,10 +1092,7 @@ def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language):
     start_times = token_timestamps[word_boundaries][:, 0]
     end_times = np.concatenate([token_timestamps[word_boundaries[1:] - 1][:, 1], token_timestamps[-1:, 1]])
 
-    timings = [
-        {"text": word, "timestamp": (start, end)}
-        for word, start, end in zip(words, start_times, end_times)
-    ]
+    timings = [{"text": word, "timestamp": (start, end)} for word, start, end in zip(words, start_times, end_times)]
     return timings
 
 
