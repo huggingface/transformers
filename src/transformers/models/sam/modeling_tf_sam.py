@@ -248,6 +248,7 @@ class TFSamAttention(tf.keras.layers.Layer):
         )  # batch_size * point_batch_size  x N_heads x N_tokens x N_tokens
         attn = attn / tf.math.sqrt(float(c_per_head))
         attn = tf.nn.softmax(attn, axis=-1)
+        print(attn.shape)
 
         # Get output
         out = tf.matmul(attn, value)
@@ -918,6 +919,7 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
             )
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
+
 
         if training:
             attn_probs = tf.nn.dropout(attn_weights, rate=self.dropout)
