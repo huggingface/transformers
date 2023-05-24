@@ -30,17 +30,19 @@ DEFAULT_PROMPTS_REPO = "huggingface-tools/default-prompts"
 PROMPT_FILES = {"chat": "chat_prompt_template.txt", "run": "run_prompt_template.txt"}
 
 
-def download_prompt(prompt, agent_name, mode="run"):
+def download_prompt(prompt_or_repo_id, agent_name, mode="run"):
     """
     Downloads and caches the prompt from a repo and returns it contents (if necessary)
     """
-    if prompt is None:
-        prompt = DEFAULT_PROMPTS_REPO
+    if prompt_or_repo_id is None:
+        prompt_or_repo_id = DEFAULT_PROMPTS_REPO
 
     # prompt is considered a repo ID when it does not contain any kind of space
-    if re.search("\\s", prompt) is not None:
-        return prompt
+    if re.search("\\s", prompt_or_repo_id) is not None:
+        return prompt_or_repo_id
 
-    prompt_file = cached_file(prompt, PROMPT_FILES[mode], repo_type="dataset", user_agent={"agent": agent_name})
+    prompt_file = cached_file(
+        prompt_or_repo_id, PROMPT_FILES[mode], repo_type="dataset", user_agent={"agent": agent_name}
+    )
     with open(prompt_file, "r", encoding="utf-8") as f:
         return f.read()
