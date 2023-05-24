@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MobileViTv2 model. """
+""" Testing suite for the PyTorch MobileViTV2 model. """
 
 
 import inspect
 import unittest
 
-from transformers import MobileViTv2Config
+from transformers import MobileViTV2Config
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -30,7 +30,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import MobileViTv2ForImageClassification, MobileViTv2ForSemanticSegmentation, MobileViTv2Model
+    from transformers import MobileViTV2ForImageClassification, MobileViTV2ForSemanticSegmentation, MobileViTV2Model
     from transformers.models.mobilevitv2.modeling_mobilevitv2 import (
         MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST,
         make_divisible,
@@ -43,13 +43,13 @@ if is_vision_available():
     from transformers import MobileViTImageProcessor
 
 
-class MobileViTv2ConfigTester(ConfigTester):
+class MobileViTV2ConfigTester(ConfigTester):
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
         self.parent.assertTrue(hasattr(config, "width_multiplier"))
 
 
-class MobileViTv2ModelTester:
+class MobileViTV2ModelTester:
     def __init__(
         self,
         parent,
@@ -103,7 +103,7 @@ class MobileViTv2ModelTester:
         return config, pixel_values, labels, pixel_labels
 
     def get_config(self):
-        return MobileViTv2Config(
+        return MobileViTV2Config(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -118,7 +118,7 @@ class MobileViTv2ModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
-        model = MobileViTv2Model(config=config)
+        model = MobileViTV2Model(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -134,7 +134,7 @@ class MobileViTv2ModelTester:
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels, pixel_labels):
         config.num_labels = self.num_labels
-        model = MobileViTv2ForImageClassification(config)
+        model = MobileViTV2ForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
@@ -142,7 +142,7 @@ class MobileViTv2ModelTester:
 
     def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels, pixel_labels):
         config.num_labels = self.num_labels
-        model = MobileViTv2ForSemanticSegmentation(config)
+        model = MobileViTV2ForSemanticSegmentation(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -174,23 +174,23 @@ class MobileViTv2ModelTester:
 
 
 @require_torch
-class MobileViTv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as MobileViTv2 does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as MobileViTV2 does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (
-        (MobileViTv2Model, MobileViTv2ForImageClassification, MobileViTv2ForSemanticSegmentation)
+        (MobileViTV2Model, MobileViTV2ForImageClassification, MobileViTV2ForSemanticSegmentation)
         if is_torch_available()
         else ()
     )
 
     pipeline_model_mapping = (
         {
-            "feature-extraction": MobileViTv2Model,
-            "image-classification": MobileViTv2ForImageClassification,
-            "image-segmentation": MobileViTv2ForSemanticSegmentation,
+            "feature-extraction": MobileViTV2Model,
+            "image-classification": MobileViTV2ForImageClassification,
+            "image-segmentation": MobileViTV2ForSemanticSegmentation,
         }
         if is_torch_available()
         else {}
@@ -202,21 +202,21 @@ class MobileViTv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = MobileViTv2ModelTester(self)
-        self.config_tester = MobileViTv2ConfigTester(self, config_class=MobileViTv2Config, has_text_modality=False)
+        self.model_tester = MobileViTV2ModelTester(self)
+        self.config_tester = MobileViTV2ConfigTester(self, config_class=MobileViTV2Config, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="MobileViTv2 does not use inputs_embeds")
+    @unittest.skip(reason="MobileViTV2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="MobileViTv2 does not support input and output embeddings")
+    @unittest.skip(reason="MobileViTV2 does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="MobileViTv2 does not output attentions")
+    @unittest.skip(reason="MobileViTV2 does not output attentions")
     def test_attention_outputs(self):
         pass
 
@@ -250,7 +250,7 @@ class MobileViTv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             expected_num_stages = 5
             self.assertEqual(len(hidden_states), expected_num_stages)
 
-            # MobileViTv2's feature maps are of shape (batch_size, num_channels, height, width)
+            # MobileViTV2's feature maps are of shape (batch_size, num_channels, height, width)
             # with the width and height being successively divided by 2.
             divisor = 2
             for i in range(len(hidden_states)):
@@ -285,7 +285,7 @@ class MobileViTv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     @slow
     def test_model_from_pretrained(self):
         for model_name in MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MobileViTv2Model.from_pretrained(model_name)
+            model = MobileViTV2Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -297,7 +297,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class MobileViTv2ModelIntegrationTest(unittest.TestCase):
+class MobileViTV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
@@ -308,7 +308,7 @@ class MobileViTv2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = MobileViTv2ForImageClassification.from_pretrained("shehan97/mobilevitv2-1.0-imagenet1k-256").to(
+        model = MobileViTV2ForImageClassification.from_pretrained("shehan97/mobilevitv2-1.0-imagenet1k-256").to(
             torch_device
         )
 
@@ -330,7 +330,7 @@ class MobileViTv2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_semantic_segmentation(self):
-        model = MobileViTv2ForSemanticSegmentation.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
+        model = MobileViTV2ForSemanticSegmentation.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
         model = model.to(torch_device)
 
         image_processor = MobileViTImageProcessor.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
@@ -360,7 +360,7 @@ class MobileViTv2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_post_processing_semantic_segmentation(self):
-        model = MobileViTv2ForSemanticSegmentation.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
+        model = MobileViTV2ForSemanticSegmentation.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
         model = model.to(torch_device)
 
         image_processor = MobileViTImageProcessor.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")

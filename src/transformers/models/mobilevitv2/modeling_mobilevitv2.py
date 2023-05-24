@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
-""" PyTorch MobileViTv2 model."""
+""" PyTorch MobileViTV2 model."""
 
 
 from typing import Optional, Tuple, Union
@@ -39,14 +39,14 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_mobilevitv2 import MobileViTv2Config
+from .configuration_mobilevitv2 import MobileViTV2Config
 
 
 logger = logging.get_logger(__name__)
 
 
 # General docstring
-_CONFIG_FOR_DOC = "MobileViTv2Config"
+_CONFIG_FOR_DOC = "MobileViTV2Config"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "apple/mobilevitv2-1.0-imagenet1k-256"
@@ -59,7 +59,7 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "apple/mobilevitv2-1.0-imagenet1k-256"
-    # See all MobileViTv2 models at https://huggingface.co/models?filter=mobilevitv2
+    # See all MobileViTV2 models at https://huggingface.co/models?filter=mobilevitv2
 ]
 
 
@@ -83,11 +83,11 @@ def clip(value: float, min_val: float = float("-inf"), max_val: float = float("i
     return max(min_val, min(max_val, value))
 
 
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTConvLayer with MobileViT->MobileViTv2
-class MobileViTv2ConvLayer(nn.Module):
+# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTConvLayer with MobileViT->MobileViTV2
+class MobileViTV2ConvLayer(nn.Module):
     def __init__(
         self,
-        config: MobileViTv2Config,
+        config: MobileViTV2Config,
         in_channels: int,
         out_channels: int,
         kernel_size: int,
@@ -148,14 +148,14 @@ class MobileViTv2ConvLayer(nn.Module):
         return features
 
 
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTInvertedResidual with MobileViT->MobileViTv2
-class MobileViTv2InvertedResidual(nn.Module):
+# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTInvertedResidual with MobileViT->MobileViTV2
+class MobileViTV2InvertedResidual(nn.Module):
     """
     Inverted residual block (MobileNetv2): https://arxiv.org/abs/1801.04381
     """
 
     def __init__(
-        self, config: MobileViTv2Config, in_channels: int, out_channels: int, stride: int, dilation: int = 1
+        self, config: MobileViTV2Config, in_channels: int, out_channels: int, stride: int, dilation: int = 1
     ) -> None:
         super().__init__()
         expanded_channels = make_divisible(int(round(in_channels * config.expand_ratio)), 8)
@@ -165,11 +165,11 @@ class MobileViTv2InvertedResidual(nn.Module):
 
         self.use_residual = (stride == 1) and (in_channels == out_channels)
 
-        self.expand_1x1 = MobileViTv2ConvLayer(
+        self.expand_1x1 = MobileViTV2ConvLayer(
             config, in_channels=in_channels, out_channels=expanded_channels, kernel_size=1
         )
 
-        self.conv_3x3 = MobileViTv2ConvLayer(
+        self.conv_3x3 = MobileViTV2ConvLayer(
             config,
             in_channels=expanded_channels,
             out_channels=expanded_channels,
@@ -179,7 +179,7 @@ class MobileViTv2InvertedResidual(nn.Module):
             dilation=dilation,
         )
 
-        self.reduce_1x1 = MobileViTv2ConvLayer(
+        self.reduce_1x1 = MobileViTV2ConvLayer(
             config,
             in_channels=expanded_channels,
             out_channels=out_channels,
@@ -197,16 +197,16 @@ class MobileViTv2InvertedResidual(nn.Module):
         return residual + features if self.use_residual else features
 
 
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTMobileNetLayer with MobileViT->MobileViTv2
-class MobileViTv2MobileNetLayer(nn.Module):
+# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTMobileNetLayer with MobileViT->MobileViTV2
+class MobileViTV2MobileNetLayer(nn.Module):
     def __init__(
-        self, config: MobileViTv2Config, in_channels: int, out_channels: int, stride: int = 1, num_stages: int = 1
+        self, config: MobileViTV2Config, in_channels: int, out_channels: int, stride: int = 1, num_stages: int = 1
     ) -> None:
         super().__init__()
 
         self.layer = nn.ModuleList()
         for i in range(num_stages):
-            layer = MobileViTv2InvertedResidual(
+            layer = MobileViTV2InvertedResidual(
                 config,
                 in_channels=in_channels,
                 out_channels=out_channels,
@@ -221,9 +221,9 @@ class MobileViTv2MobileNetLayer(nn.Module):
         return features
 
 
-class MobileViTv2LinearSelfAttention(nn.Module):
+class MobileViTV2LinearSelfAttention(nn.Module):
     """
-    This layer applies a self-attention with linear complexity, as described in MobileViTv2 paper:
+    This layer applies a self-attention with linear complexity, as described in MobileViTV2 paper:
     https://arxiv.org/abs/2206.02680
 
     Args:
@@ -239,12 +239,12 @@ class MobileViTv2LinearSelfAttention(nn.Module):
 
     def __init__(
         self,
-        config: MobileViTv2Config,
+        config: MobileViTV2Config,
         embed_dim: int,
     ) -> None:
         super().__init__()
 
-        self.qkv_proj = MobileViTv2ConvLayer(
+        self.qkv_proj = MobileViTV2ConvLayer(
             config=config,
             in_channels=embed_dim,
             out_channels=1 + (2 * embed_dim),
@@ -255,7 +255,7 @@ class MobileViTv2LinearSelfAttention(nn.Module):
         )
 
         self.attn_dropout = nn.Dropout(p=config.attn_dropout)
-        self.out_proj = MobileViTv2ConvLayer(
+        self.out_proj = MobileViTV2ConvLayer(
             config=config,
             in_channels=embed_dim,
             out_channels=embed_dim,
@@ -295,16 +295,16 @@ class MobileViTv2LinearSelfAttention(nn.Module):
         return self._forward_self_attn(x, *args, **kwargs)
 
 
-class MobileViTv2FFN(nn.Module):
+class MobileViTV2FFN(nn.Module):
     def __init__(
         self,
-        config: MobileViTv2Config,
+        config: MobileViTV2Config,
         embed_dim: int,
         ffn_latent_dim: int,
         ffn_dropout: float = 0.0,
     ) -> None:
         super().__init__()
-        self.conv1 = MobileViTv2ConvLayer(
+        self.conv1 = MobileViTV2ConvLayer(
             config=config,
             in_channels=embed_dim,
             out_channels=ffn_latent_dim,
@@ -316,7 +316,7 @@ class MobileViTv2FFN(nn.Module):
         )
         self.dropout1 = nn.Dropout(ffn_dropout)
 
-        self.conv2 = MobileViTv2ConvLayer(
+        self.conv2 = MobileViTV2ConvLayer(
             config=config,
             in_channels=ffn_latent_dim,
             out_channels=embed_dim,
@@ -336,24 +336,24 @@ class MobileViTv2FFN(nn.Module):
         return hidden_states
 
 
-class MobileViTv2TransformerLayer(nn.Module):
+class MobileViTV2TransformerLayer(nn.Module):
     def __init__(
         self,
-        config: MobileViTv2Config,
+        config: MobileViTV2Config,
         embed_dim: int,
         ffn_latent_dim: int,
         dropout: float = 0.0,
     ) -> None:
         super().__init__()
         # pre_norm_attn
-        # self.layernorm_before = MobileViTv2LayerNorm2D(embed_dim, eps=config.layer_norm_eps)
+        # self.layernorm_before = MobileViTV2LayerNorm2D(embed_dim, eps=config.layer_norm_eps)
         self.layernorm_before = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=config.layer_norm_eps)
-        self.attention = MobileViTv2LinearSelfAttention(config, embed_dim)
+        self.attention = MobileViTV2LinearSelfAttention(config, embed_dim)
         self.dropout1 = nn.Dropout(p=dropout)
         # pre_norm_ffn
-        # self.layernorm_after = MobileViTv2LayerNorm2D(embed_dim, eps=config.layer_norm_eps)
+        # self.layernorm_after = MobileViTV2LayerNorm2D(embed_dim, eps=config.layer_norm_eps)
         self.layernorm_after = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=config.layer_norm_eps)
-        self.ffn = MobileViTv2FFN(config, embed_dim, ffn_latent_dim, config.ffn_dropout)
+        self.ffn = MobileViTV2FFN(config, embed_dim, ffn_latent_dim, config.ffn_dropout)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         layernorm_1_out = self.layernorm_before(hidden_states)
@@ -367,10 +367,10 @@ class MobileViTv2TransformerLayer(nn.Module):
         return layer_output
 
 
-class MobileViTv2Transformer(nn.Module):
+class MobileViTV2Transformer(nn.Module):
     def __init__(
         self,
-        config: MobileViTv2Config,
+        config: MobileViTV2Config,
         n_layers: int,
         d_model: int,
     ) -> None:
@@ -394,7 +394,7 @@ class MobileViTv2Transformer(nn.Module):
 
         self.layer = nn.ModuleList()
         for block_idx in range(n_layers):
-            transformer_layer = MobileViTv2TransformerLayer(
+            transformer_layer = MobileViTV2TransformerLayer(
                 config, embed_dim=d_model, ffn_latent_dim=ffn_dims[block_idx]
             )
             self.layer.append(transformer_layer)
@@ -405,14 +405,14 @@ class MobileViTv2Transformer(nn.Module):
         return hidden_states
 
 
-class MobileViTv2Layer(nn.Module):
+class MobileViTV2Layer(nn.Module):
     """
-    MobileViTv2 block: https://arxiv.org/abs/2206.02680
+    MobileViTV2 block: https://arxiv.org/abs/2206.02680
     """
 
     def __init__(
         self,
-        config: MobileViTv2Config,
+        config: MobileViTV2Config,
         in_channels: int,
         out_channels: int,
         attn_unit_dim: int,
@@ -427,7 +427,7 @@ class MobileViTv2Layer(nn.Module):
         cnn_out_dim = attn_unit_dim
 
         if stride == 2:
-            self.downsampling_layer = MobileViTv2InvertedResidual(
+            self.downsampling_layer = MobileViTV2InvertedResidual(
                 config,
                 in_channels=in_channels,
                 out_channels=out_channels,
@@ -439,14 +439,14 @@ class MobileViTv2Layer(nn.Module):
             self.downsampling_layer = None
 
         # Local representations
-        self.conv_kxk = MobileViTv2ConvLayer(
+        self.conv_kxk = MobileViTV2ConvLayer(
             config,
             in_channels=in_channels,
             out_channels=in_channels,
             kernel_size=config.conv_kernel_size,
             groups=in_channels,
         )
-        self.conv_1x1 = MobileViTv2ConvLayer(
+        self.conv_1x1 = MobileViTV2ConvLayer(
             config,
             in_channels=in_channels,
             out_channels=cnn_out_dim,
@@ -456,13 +456,13 @@ class MobileViTv2Layer(nn.Module):
         )
 
         # Global representations
-        self.transformer = MobileViTv2Transformer(config, d_model=attn_unit_dim, n_layers=n_attn_blocks)
+        self.transformer = MobileViTV2Transformer(config, d_model=attn_unit_dim, n_layers=n_attn_blocks)
 
-        # self.layernorm = MobileViTv2LayerNorm2D(attn_unit_dim, eps=config.layer_norm_eps)
+        # self.layernorm = MobileViTV2LayerNorm2D(attn_unit_dim, eps=config.layer_norm_eps)
         self.layernorm = nn.GroupNorm(num_groups=1, num_channels=attn_unit_dim, eps=config.layer_norm_eps)
 
         # Fusion
-        self.conv_projection = MobileViTv2ConvLayer(
+        self.conv_projection = MobileViTV2ConvLayer(
             config,
             in_channels=cnn_out_dim,
             out_channels=in_channels,
@@ -519,8 +519,8 @@ class MobileViTv2Layer(nn.Module):
         return features
 
 
-class MobileViTv2Encoder(nn.Module):
-    def __init__(self, config: MobileViTv2Config) -> None:
+class MobileViTV2Encoder(nn.Module):
+    def __init__(self, config: MobileViTV2Config) -> None:
         super().__init__()
         self.config = config
 
@@ -548,7 +548,7 @@ class MobileViTv2Encoder(nn.Module):
         layer_4_dim = make_divisible(384 * config.width_multiplier, divisor=8)
         layer_5_dim = make_divisible(512 * config.width_multiplier, divisor=8)
 
-        layer_1 = MobileViTv2MobileNetLayer(
+        layer_1 = MobileViTV2MobileNetLayer(
             config,
             in_channels=layer_0_dim,
             out_channels=layer_1_dim,
@@ -557,7 +557,7 @@ class MobileViTv2Encoder(nn.Module):
         )
         self.layer.append(layer_1)
 
-        layer_2 = MobileViTv2MobileNetLayer(
+        layer_2 = MobileViTV2MobileNetLayer(
             config,
             in_channels=layer_1_dim,
             out_channels=layer_2_dim,
@@ -566,7 +566,7 @@ class MobileViTv2Encoder(nn.Module):
         )
         self.layer.append(layer_2)
 
-        layer_3 = MobileViTv2Layer(
+        layer_3 = MobileViTV2Layer(
             config,
             in_channels=layer_2_dim,
             out_channels=layer_3_dim,
@@ -578,7 +578,7 @@ class MobileViTv2Encoder(nn.Module):
         if dilate_layer_4:
             dilation *= 2
 
-        layer_4 = MobileViTv2Layer(
+        layer_4 = MobileViTV2Layer(
             config,
             in_channels=layer_3_dim,
             out_channels=layer_4_dim,
@@ -591,7 +591,7 @@ class MobileViTv2Encoder(nn.Module):
         if dilate_layer_5:
             dilation *= 2
 
-        layer_5 = MobileViTv2Layer(
+        layer_5 = MobileViTV2Layer(
             config,
             in_channels=layer_4_dim,
             out_channels=layer_5_dim,
@@ -634,14 +634,14 @@ class MobileViTv2Encoder(nn.Module):
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTPreTrainedModel with MobileViT->MobileViTv2,mobilevit->mobilevitv2
-class MobileViTv2PreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTPreTrainedModel with MobileViT->MobileViTV2,mobilevit->mobilevitv2
+class MobileViTV2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = MobileViTv2Config
+    config_class = MobileViTV2Config
     base_model_prefix = "mobilevitv2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -659,7 +659,7 @@ class MobileViTv2PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, MobileViTv2Encoder):
+        if isinstance(module, MobileViTV2Encoder):
             module.gradient_checkpointing = value
 
 
@@ -669,7 +669,7 @@ MOBILEVITV2_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`MobileViTv2Config`]): Model configuration class with all the parameters of the model.
+        config ([`MobileViTV2Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -688,11 +688,11 @@ MOBILEVITV2_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare MobileViTv2 model outputting raw hidden-states without any specific head on top.",
+    "The bare MobileViTV2 model outputting raw hidden-states without any specific head on top.",
     MOBILEVITV2_START_DOCSTRING,
 )
-class MobileViTv2Model(MobileViTv2PreTrainedModel):
-    def __init__(self, config: MobileViTv2Config, expand_output: bool = True):
+class MobileViTV2Model(MobileViTV2PreTrainedModel):
+    def __init__(self, config: MobileViTV2Config, expand_output: bool = True):
         super().__init__(config)
         self.config = config
         self.expand_output = expand_output
@@ -701,7 +701,7 @@ class MobileViTv2Model(MobileViTv2PreTrainedModel):
             clip(value=32 * config.width_multiplier, min_val=16, max_val=64), divisor=8, min_value=16
         )
 
-        self.conv_stem = MobileViTv2ConvLayer(
+        self.conv_stem = MobileViTV2ConvLayer(
             config,
             in_channels=config.num_channels,
             out_channels=layer_0_dim,
@@ -710,7 +710,7 @@ class MobileViTv2Model(MobileViTv2PreTrainedModel):
             use_normalization=True,
             use_activation=True,
         )
-        self.encoder = MobileViTv2Encoder(config)
+        self.encoder = MobileViTV2Encoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -721,7 +721,7 @@ class MobileViTv2Model(MobileViTv2PreTrainedModel):
         """
         for layer_index, heads in heads_to_prune.items():
             mobilevitv2_layer = self.encoder.layer[layer_index]
-            if isinstance(mobilevitv2_layer, MobileViTv2Layer):
+            if isinstance(mobilevitv2_layer, MobileViTV2Layer):
                 for transformer_layer in mobilevitv2_layer.transformer.layer:
                     transformer_layer.attention.prune_heads(heads)
 
@@ -777,17 +777,17 @@ class MobileViTv2Model(MobileViTv2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    MobileViTv2 model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
+    MobileViTV2 model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
     ImageNet.
     """,
     MOBILEVITV2_START_DOCSTRING,
 )
-class MobileViTv2ForImageClassification(MobileViTv2PreTrainedModel):
-    def __init__(self, config: MobileViTv2Config) -> None:
+class MobileViTV2ForImageClassification(MobileViTV2PreTrainedModel):
+    def __init__(self, config: MobileViTV2Config) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.mobilevitv2 = MobileViTv2Model(config)
+        self.mobilevitv2 = MobileViTV2Model(config)
 
         out_channels = make_divisible(512 * config.width_multiplier, divisor=8)  # layer 5 output dimension
         # Classifier head
@@ -862,14 +862,14 @@ class MobileViTv2ForImageClassification(MobileViTv2PreTrainedModel):
         )
 
 
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTASPPPooling with MobileViT->MobileViTv2
-class MobileViTv2ASPPPooling(nn.Module):
-    def __init__(self, config: MobileViTv2Config, in_channels: int, out_channels: int) -> None:
+# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTASPPPooling with MobileViT->MobileViTV2
+class MobileViTV2ASPPPooling(nn.Module):
+    def __init__(self, config: MobileViTV2Config, in_channels: int, out_channels: int) -> None:
         super().__init__()
 
         self.global_pool = nn.AdaptiveAvgPool2d(output_size=1)
 
-        self.conv_1x1 = MobileViTv2ConvLayer(
+        self.conv_1x1 = MobileViTV2ConvLayer(
             config,
             in_channels=in_channels,
             out_channels=out_channels,
@@ -887,12 +887,12 @@ class MobileViTv2ASPPPooling(nn.Module):
         return features
 
 
-class MobileViTv2ASPP(nn.Module):
+class MobileViTV2ASPP(nn.Module):
     """
     ASPP module defined in DeepLab papers: https://arxiv.org/abs/1606.00915, https://arxiv.org/abs/1706.05587
     """
 
-    def __init__(self, config: MobileViTv2Config) -> None:
+    def __init__(self, config: MobileViTV2Config) -> None:
         super().__init__()
 
         encoder_out_channels = make_divisible(512 * config.width_multiplier, divisor=8)  # layer 5 output dimension
@@ -904,7 +904,7 @@ class MobileViTv2ASPP(nn.Module):
 
         self.convs = nn.ModuleList()
 
-        in_projection = MobileViTv2ConvLayer(
+        in_projection = MobileViTV2ConvLayer(
             config,
             in_channels=in_channels,
             out_channels=out_channels,
@@ -915,7 +915,7 @@ class MobileViTv2ASPP(nn.Module):
 
         self.convs.extend(
             [
-                MobileViTv2ConvLayer(
+                MobileViTV2ConvLayer(
                     config,
                     in_channels=in_channels,
                     out_channels=out_channels,
@@ -927,10 +927,10 @@ class MobileViTv2ASPP(nn.Module):
             ]
         )
 
-        pool_layer = MobileViTv2ASPPPooling(config, in_channels, out_channels)
+        pool_layer = MobileViTV2ASPPPooling(config, in_channels, out_channels)
         self.convs.append(pool_layer)
 
-        self.project = MobileViTv2ConvLayer(
+        self.project = MobileViTV2ConvLayer(
             config, in_channels=5 * out_channels, out_channels=out_channels, kernel_size=1, use_activation="relu"
         )
 
@@ -947,19 +947,19 @@ class MobileViTv2ASPP(nn.Module):
         return pooled_features
 
 
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTDeepLabV3 with MobileViT->MobileViTv2
-class MobileViTv2DeepLabV3(nn.Module):
+# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTDeepLabV3 with MobileViT->MobileViTV2
+class MobileViTV2DeepLabV3(nn.Module):
     """
     DeepLabv3 architecture: https://arxiv.org/abs/1706.05587
     """
 
-    def __init__(self, config: MobileViTv2Config) -> None:
+    def __init__(self, config: MobileViTV2Config) -> None:
         super().__init__()
-        self.aspp = MobileViTv2ASPP(config)
+        self.aspp = MobileViTV2ASPP(config)
 
         self.dropout = nn.Dropout2d(config.classifier_dropout_prob)
 
-        self.classifier = MobileViTv2ConvLayer(
+        self.classifier = MobileViTV2ConvLayer(
             config,
             in_channels=config.aspp_out_channels,
             out_channels=config.num_labels,
@@ -978,18 +978,18 @@ class MobileViTv2DeepLabV3(nn.Module):
 
 @add_start_docstrings(
     """
-    MobileViTv2 model with a semantic segmentation head on top, e.g. for Pascal VOC.
+    MobileViTV2 model with a semantic segmentation head on top, e.g. for Pascal VOC.
     """,
     MOBILEVITV2_START_DOCSTRING,
 )
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTForSemanticSegmentation with MOBILEVIT->MOBILEVITV2,MobileViT->MobileViTv2,mobilevit->mobilevitv2
-class MobileViTv2ForSemanticSegmentation(MobileViTv2PreTrainedModel):
-    def __init__(self, config: MobileViTv2Config) -> None:
+# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTForSemanticSegmentation with MOBILEVIT->MOBILEVITV2,MobileViT->MobileViTV2,mobilevit->mobilevitv2
+class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
+    def __init__(self, config: MobileViTV2Config) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.mobilevitv2 = MobileViTv2Model(config, expand_output=False)
-        self.segmentation_head = MobileViTv2DeepLabV3(config)
+        self.mobilevitv2 = MobileViTV2Model(config, expand_output=False)
+        self.segmentation_head = MobileViTV2DeepLabV3(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1013,7 +1013,7 @@ class MobileViTv2ForSemanticSegmentation(MobileViTv2PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, MobileViTv2ForSemanticSegmentation
+        >>> from transformers import AutoImageProcessor, MobileViTV2ForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
@@ -1021,7 +1021,7 @@ class MobileViTv2ForSemanticSegmentation(MobileViTv2PreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> image_processor = AutoImageProcessor.from_pretrained("apple/deeplabv3-mobilevitv2-small")
-        >>> model = MobileViTv2ForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevitv2-small")
+        >>> model = MobileViTV2ForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevitv2-small")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 

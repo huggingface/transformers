@@ -4722,28 +4722,28 @@ class MobileViTPreTrainedModel(metaclass=DummyObject):
 MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class MobileViTv2ForImageClassification(metaclass=DummyObject):
+class MobileViTV2ForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MobileViTv2ForSemanticSegmentation(metaclass=DummyObject):
+class MobileViTV2ForSemanticSegmentation(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MobileViTv2Model(metaclass=DummyObject):
+class MobileViTV2Model(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MobileViTv2PreTrainedModel(metaclass=DummyObject):
+class MobileViTV2PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

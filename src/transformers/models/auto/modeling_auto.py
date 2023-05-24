@@ -130,7 +130,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v1", "MobileNetV1Model"),
         ("mobilenet_v2", "MobileNetV2Model"),
         ("mobilevit", "MobileViTModel"),
-        ("mobilevitv2", "MobileViTv2Model"),
+        ("mobilevitv2", "MobileViTV2Model"),
         ("mpnet", "MPNetModel"),
         ("mt5", "MT5Model"),
         ("mvp", "MvpModel"),
@@ -457,7 +457,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v1", "MobileNetV1ForImageClassification"),
         ("mobilenet_v2", "MobileNetV2ForImageClassification"),
         ("mobilevit", "MobileViTForImageClassification"),
-        ("mobilevitv2", "MobileViTv2ForImageClassification"),
+        ("mobilevitv2", "MobileViTV2ForImageClassification"),
         ("nat", "NatForImageClassification"),
         (
             "perceiver",
@@ -497,7 +497,7 @@ MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         ("dpt", "DPTForSemanticSegmentation"),
         ("mobilenet_v2", "MobileNetV2ForSemanticSegmentation"),
         ("mobilevit", "MobileViTForSemanticSegmentation"),
-        ("mobilevitv2", "MobileViTv2ForSemanticSegmentation"),
+        ("mobilevitv2", "MobileViTV2ForSemanticSegmentation"),
         ("segformer", "SegformerForSemanticSegmentation"),
         ("upernet", "UperNetForSemanticSegmentation"),
     ]

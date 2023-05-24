@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert MobileViTv2 checkpoints from the ml-cvnets library."""
+"""Convert MobileViTV2 checkpoints from the ml-cvnets library."""
 
 
 import argparse
@@ -28,9 +28,9 @@ from PIL import Image
 
 from transformers import (
     MobileViTImageProcessor,
-    MobileViTv2Config,
-    MobileViTv2ForImageClassification,
-    MobileViTv2ForSemanticSegmentation,
+    MobileViTV2Config,
+    MobileViTV2ForImageClassification,
+    MobileViTV2ForSemanticSegmentation,
 )
 from transformers.utils import logging
 
@@ -66,7 +66,7 @@ def load_orig_config_file(orig_cfg_file):
 
 
 def get_mobilevitv2_config(task_name, orig_cfg_file):
-    config = MobileViTv2Config()
+    config = MobileViTV2Config()
 
     is_segmentation_model = False
 
@@ -233,7 +233,7 @@ def prepare_img():
 @torch.no_grad()
 def convert_mobilevitv2_checkpoint(task_name, checkpoint_path, orig_config_path, pytorch_dump_folder_path):
     """
-    Copy/paste/tweak model's weights to our MobileViTv2 structure.
+    Copy/paste/tweak model's weights to our MobileViTV2 structure.
     """
     config = get_mobilevitv2_config(task_name, orig_config_path)
 
@@ -242,10 +242,10 @@ def convert_mobilevitv2_checkpoint(task_name, checkpoint_path, orig_config_path,
 
     # load huggingface model
     if task_name.startswith("ade20k_") or task_name.startswith("voc_"):
-        model = MobileViTv2ForSemanticSegmentation(config).eval()
+        model = MobileViTV2ForSemanticSegmentation(config).eval()
         base_model = False
     else:
-        model = MobileViTv2ForImageClassification(config).eval()
+        model = MobileViTV2ForImageClassification(config).eval()
         base_model = False
 
     # remove and rename some keys of load the original model
@@ -288,14 +288,14 @@ if __name__ == "__main__":
         default="imagenet1k_256",
         type=str,
         help=(
-            "Name of the task for which the MobileViTv2 model you'd like to convert is trained on . "
+            "Name of the task for which the MobileViTV2 model you'd like to convert is trained on . "
             """
                 Classification (ImageNet-1k)
-                    - MobileViTv2 (256x256) : imagenet1k_256
-                    - MobileViTv2 (Trained on 256x256 and Finetuned on 384x384) : imagenet1k_384
-                    - MobileViTv2 (Trained on ImageNet-21k and Finetuned on ImageNet-1k 256x256) :
+                    - MobileViTV2 (256x256) : imagenet1k_256
+                    - MobileViTV2 (Trained on 256x256 and Finetuned on 384x384) : imagenet1k_384
+                    - MobileViTV2 (Trained on ImageNet-21k and Finetuned on ImageNet-1k 256x256) :
                       imagenet21k_to_1k_256
-                    - MobileViTv2 (Trained on ImageNet-21k, Finetuned on ImageNet-1k 256x256, and Finetuned on
+                    - MobileViTV2 (Trained on ImageNet-21k, Finetuned on ImageNet-1k 256x256, and Finetuned on
                       ImageNet-1k 384x384) : imagenet21k_to_1k_384
                 Segmentation
                     - ADE20K Dataset : ade20k_deeplabv3
