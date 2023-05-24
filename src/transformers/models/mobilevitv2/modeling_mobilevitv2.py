@@ -17,7 +17,7 @@
 """ PyTorch MobileViTv2 model."""
 
 
-from typing import Optional, Sequence, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -61,6 +61,7 @@ MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "apple/mobilevitv2-1.0-imagenet1k-256"
     # See all MobileViTv2 models at https://huggingface.co/models?filter=mobilevitv2
 ]
+
 
 # Copied from transformers.models.mobilevit.modeling_mobilevit.make_divisible
 def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
@@ -222,12 +223,13 @@ class MobileViTv2MobileNetLayer(nn.Module):
 
 class MobileViTv2LinearSelfAttention(nn.Module):
     """
-    This layer applies a self-attention with linear complexity, as described in MobileViTv2 paper: 
-    https://arxiv.org/abs/2206.02680 
+    This layer applies a self-attention with linear complexity, as described in MobileViTv2 paper:
+    https://arxiv.org/abs/2206.02680
 
     Args:
         config: MobileVitv2Config
-        embed_dim (int): :math:`input_channels` from an expected input of size :math:`(batch_size, input_channels, height, width)`
+        embed_dim (int):
+            :math:`input_channels` from an expected input of size :math:`(batch_size, input_channels, height, width)`
 
     Shape:
         - Input: :math:`(batch_size, input_channels, num_pixels_in_patch, num_patches)`
@@ -367,10 +369,13 @@ class MobileViTv2TransformerLayer(nn.Module):
 
 class MobileViTv2Transformer(nn.Module):
     def __init__(
-        self, config: MobileViTv2Config, n_layers: int, d_model: int,
+        self,
+        config: MobileViTv2Config,
+        n_layers: int,
+        d_model: int,
     ) -> None:
         super().__init__()
-        
+
         ffn_multiplier = config.ffn_multiplier
 
         # if isinstance(ffn_multiplier, Sequence) and len(ffn_multiplier) == 2:
@@ -381,7 +386,7 @@ class MobileViTv2Transformer(nn.Module):
         #     ffn_dims = [ffn_multiplier * d_model] * n_layers
         # else:
         #     raise NotImplementedError
-        
+
         ffn_dims = [ffn_multiplier * d_model] * n_layers
 
         # ensure that dims are multiple of 16
@@ -451,9 +456,7 @@ class MobileViTv2Layer(nn.Module):
         )
 
         # Global representations
-        self.transformer = MobileViTv2Transformer(
-            config, d_model=attn_unit_dim, n_layers=n_attn_blocks
-        )
+        self.transformer = MobileViTv2Transformer(config, d_model=attn_unit_dim, n_layers=n_attn_blocks)
 
         # self.layernorm = MobileViTv2LayerNorm2D(attn_unit_dim, eps=config.layer_norm_eps)
         self.layernorm = nn.GroupNorm(num_groups=1, num_channels=attn_unit_dim, eps=config.layer_norm_eps)
@@ -535,8 +538,10 @@ class MobileViTv2Encoder(nn.Module):
 
         dilation = 1
 
-        layer_0_dim = make_divisible(clip(value=32 * config.width_multiplier, min_val=16, max_val=64), divisor=8, min_value=16)
-        
+        layer_0_dim = make_divisible(
+            clip(value=32 * config.width_multiplier, min_val=16, max_val=64), divisor=8, min_value=16
+        )
+
         layer_1_dim = make_divisible(64 * config.width_multiplier, divisor=16)
         layer_2_dim = make_divisible(128 * config.width_multiplier, divisor=8)
         layer_3_dim = make_divisible(256 * config.width_multiplier, divisor=8)
@@ -692,7 +697,9 @@ class MobileViTv2Model(MobileViTv2PreTrainedModel):
         self.config = config
         self.expand_output = expand_output
 
-        layer_0_dim = make_divisible(clip(value=32 * config.width_multiplier, min_val=16, max_val=64), divisor=8, min_value=16)
+        layer_0_dim = make_divisible(
+            clip(value=32 * config.width_multiplier, min_val=16, max_val=64), divisor=8, min_value=16
+        )
 
         self.conv_stem = MobileViTv2ConvLayer(
             config,
