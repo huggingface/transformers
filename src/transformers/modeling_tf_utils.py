@@ -1277,24 +1277,25 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         Prepare the output of the saved model. Can be overridden if specific serving modifications are required.
         """
-        if isinstance(output, ModelOutput):
-            for key in output.keys():
-                if key.endswith("hidden_states") and not getattr(self.config, "output_hidden_states", False):
-                    output[key] = None
-                elif key.endswith("attentions") and not getattr(self.config, "output_attentions", False):
-                    output[key] = None
-                elif key == "past_key_values" and not getattr(self.config, "use_cache", False):
-                    output[key] = None
-                elif key == "cross_attentions" and not (
-                    getattr(self.config, "output_attentions", False)
-                    and getattr(self.config, "add_cross_attention", False)
-                ):
-                    output[key] = None
-                if isinstance(output[key], (tuple, list)):
-                    try:
-                        output[key] = tf.convert_to_tensor(output[key])
-                    except (ValueError, tf.errors.InvalidArgumentError):
-                        pass  # Layers may not have the same dimensions
+        if not isinstance(output, ModelOutput):
+            return output
+        for key in output.keys():
+            if key.endswith("hidden_states") and not getattr(self.config, "output_hidden_states", False):
+                output[key] = None
+            elif key.endswith("attentions") and not getattr(self.config, "output_attentions", False):
+                output[key] = None
+            elif key == "past_key_values" and not getattr(self.config, "use_cache", False):
+                output[key] = None
+            elif key == "cross_attentions" and not (
+                getattr(self.config, "output_attentions", False)
+                and getattr(self.config, "add_cross_attention", False)
+            ):
+                output[key] = None
+            if isinstance(output[key], (tuple, list)):
+                try:
+                    output[key] = tf.convert_to_tensor(output[key])
+                except (ValueError, tf.errors.InvalidArgumentError):
+                    pass  # Layers may not have the same dimensions
         return output
 
     def can_generate(self) -> bool:
