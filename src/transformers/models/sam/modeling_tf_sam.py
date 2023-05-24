@@ -243,8 +243,6 @@ class TFSamAttention(tf.keras.layers.Layer):
 
         # SamAttention
         _, _, _, c_per_head = shape_list(query)
-        print(query.shape)
-        print(key.shape)
         attn = tf.matmul(
             query, tf.transpose(key, perm=[0, 1, 3, 2])
         )  # batch_size * point_batch_size  x N_heads x N_tokens x N_tokens
@@ -918,7 +916,7 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
             attn_weights = self.add_decomposed_rel_pos(
                 attn_weights, query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
             )
-
+        print(attn_weights.shape)
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
 
 
