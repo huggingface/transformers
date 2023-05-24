@@ -753,7 +753,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         tokens: List[int],
         language: str = None,
         prepend_punctuations: str = "\"'“¿([{-",
-        append_punctuations: str = "\"'.。,，!！?？:：”)]}、"
+        append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
     ):
         """
         Groups tokens by word. Returns a tuple containing a list of strings with the words, and a list of `token_id`
@@ -1103,7 +1103,10 @@ def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language):
     start_times = token_timestamps[word_boundaries][:, 0]
     end_times = np.concatenate([token_timestamps[word_boundaries[1:] - 1][:, 1], token_timestamps[-1:, 1]])
 
-    timings = [{"text": word, "timestamp": (start, end)} for word, start, end in zip(words, start_times, end_times)]
+    timings = [
+        {"text": word, "tokens": tokens, "timestamp": (start, end)}
+        for word, tokens, start, end in zip(words, word_tokens, start_times, end_times)
+    ]
     return timings
 
 

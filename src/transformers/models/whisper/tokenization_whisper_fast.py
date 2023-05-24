@@ -537,7 +537,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         tokens: List[int],
         language: str = None,
         prepend_punctuations: str = "\"'“¿([{-",
-        append_punctuations: str = "\"'.。,，!！?？:：”)]}、"
+        append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
     ):
         """
         Groups tokens by word. Returns a tuple containing a list of strings with the words, and a list of `token_id`
