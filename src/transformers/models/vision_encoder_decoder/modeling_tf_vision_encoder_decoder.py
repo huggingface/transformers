@@ -29,7 +29,6 @@ from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
 from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, get_initializer, unpack_inputs
 from ...tf_utils import shape_list
 from ...utils import (
-    DUMMY_INPUTS,
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -254,29 +253,26 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             )
 
     @property
-    def dummy_inputs(self):
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        decoder_input_ids = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
-        batch_size, seq_len = decoder_input_ids.shape
-
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(
-                batch_size,
-                self.config.encoder.num_channels,
-                self.config.encoder.image_size,
-                self.config.encoder.image_size,
+    def input_signature(self):
+        vision_config = self.config.encoder
+        if hasattr(vision_config, "vision_config"):
+            vision_config = vision_config.vision_config
+        if hasattr(vision_config, "image_size"):
+            image_size = vision_config.image_size
+        else:
+            image_size = vision_config.input_size
+        return {
+            "pixel_values": tf.TensorSpec(
+                shape=(
+                    None,
+                    vision_config.num_channels,
+                    image_size,
+                    image_size,
+                ),
+                dtype=tf.float32,
             ),
-            dtype=tf.float32,
-        )
-        pixel_values = tf.constant(VISION_DUMMY_INPUTS)
-        # Add `decoder_input_ids` because `self.decoder` requires it.
-        dummy = {"pixel_values": pixel_values, "decoder_input_ids": decoder_input_ids}
-        return dummy
+            "decoder_input_ids": tf.TensorSpec(shape=(None, None), dtype=tf.int32, name="decoder_input_ids"),
+        }
 
     def get_encoder(self):
         return self.encoder

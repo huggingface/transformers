@@ -27,7 +27,6 @@ from ...modeling_tf_outputs import TFBaseModelOutputWithPast, TFCausalLMOutputWi
 
 # Public API
 from ...modeling_tf_utils import (
-    DUMMY_INPUTS,
     TFCausalLanguageModelingLoss,
     TFModelInputType,
     TFPreTrainedModel,
@@ -412,29 +411,6 @@ class TFOPTPreTrainedModel(TFPreTrainedModel):
 
     config_class = OPTConfig
     base_model_prefix = "model"
-
-    @property
-    def dummy_inputs(self):
-        pad_token = 1
-        input_ids = tf.convert_to_tensor(DUMMY_INPUTS, dtype=tf.int32)
-        dummy_inputs = {
-            "attention_mask": tf.cast(input_ids != pad_token, tf.int32),
-            "input_ids": input_ids,
-        }
-        return dummy_inputs
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
 
 
 OPT_INPUTS_DOCSTRING = r"""

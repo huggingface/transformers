@@ -1677,7 +1677,10 @@ class TFModelTesterMixin:
 
             # After testing that the model accepts all int inputs, confirm that its dummies are int32
             for key, tensor in model.dummy_inputs.items():
-                self.assertTrue(isinstance(tensor, tf.Tensor), "Dummy inputs should be tf.Tensor!")
+                self.assertTrue(
+                    isinstance(tensor, tf.Tensor) or tf.keras.backend.is_keras_tensor(tensor),
+                    "Dummy inputs should be tf.Tensor!",
+                )
                 if tensor.dtype.is_integer:
                     self.assertTrue(tensor.dtype == tf.int32, "Integer dummy inputs should be tf.int32!")
 

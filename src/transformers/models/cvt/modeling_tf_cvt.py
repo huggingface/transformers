@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import collections.abc
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -707,35 +707,6 @@ class TFCvtPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "cvt"
     main_input_name = "pixel_values"
 
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        VISION_DUMMY_INPUTS = tf.random.uniform(shape=(3, self.config.num_channels, 224, 224), dtype=tf.float32)
-        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
-
-    @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-        return self.serving_output(output)
-
 
 TFCVT_START_DOCSTRING = r"""
 
@@ -844,13 +815,6 @@ class TFCvtModel(TFCvtPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
-    def serving_output(self, output: TFBaseModelOutputWithCLSToken) -> TFBaseModelOutputWithCLSToken:
-        return TFBaseModelOutputWithCLSToken(
-            last_hidden_state=output.last_hidden_state,
-            cls_token_value=output.cls_token_value,
-            hidden_states=output.hidden_states,
-        )
-
 
 @add_start_docstrings(
     """
@@ -945,6 +909,3 @@ class TFCvtForImageClassification(TFCvtPreTrainedModel, TFSequenceClassification
             return ((loss,) + output) if loss is not None else output
 
         return TFImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
-
-    def serving_output(self, output: TFImageClassifierOutputWithNoAttention) -> TFImageClassifierOutputWithNoAttention:
-        return TFImageClassifierOutputWithNoAttention(logits=output.logits, hidden_states=output.hidden_states)
