@@ -20,7 +20,14 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, Union
 
-from ..utils import logging
+from packaging import version
+
+from ..utils import is_torch_available, logging
+from ..utils.import_utils import importlib_metadata
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -32,14 +39,17 @@ class BitsAndBytesConfig:
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
     loaded using `bitsandbytes`.
 
-    This replaces `load_in_8bit` therefore both options are mutually exclusive.
+    This replaces `load_in_8bit` or `load_in_4bit`therefore both options are mutually exclusive.
 
-    For now, only arguments that are relative to `LLM.int8()` are supported, therefore the arguments are all termed as
-    `llm_int8_*`. If more methods are added to `bitsandbytes`, then more arguments will be added to this class.
+    Currently only supports `LLM.int8()`, `FP4`, and `NF4` quantization. If more methods are added to `bitsandbytes`,
+    then more arguments will be added to this class.
 
     Args:
         load_in_8bit (`bool`, *optional*, defaults to `False`):
             This flag is used to enable 8-bit quantization with LLM.int8().
+        load_in_4bit (`bool`, *optional*, defaults to `False`):
+            This flag is used to enable 4-bit quantization by replacing the Linear layers with FP4/NF4 layers from
+            `bitsandbytes`.
         llm_int8_threshold (`float`, *optional*, defaults to 6):
             This corresponds to the outlier threshold for outlier detection as described in `LLM.int8() : 8-bit Matrix
             Multiplication for Transformers at Scale` paper: https://arxiv.org/abs/2208.07339 Any hidden states value
@@ -58,6 +68,18 @@ class BitsAndBytesConfig:
             your model in different parts and run some parts in int8 on GPU and some parts in fp32 on CPU, you can use
             this flag. This is useful for offloading large models such as `google/flan-t5-xxl`. Note that the int8
             operations will not be run on CPU.
+        llm_int8_has_fp16_weight (`bool`, *optional*, defaults to `False`):
+            This flag runs LLM.int8() with 16-bit main weights. This is useful for fine-tuning as the weights do not
+            have to be converted back and forth for the backward pass.
+        bnb_4bit_compute_dtype (`torch.dtype` or str, *optional*, defaults to `torch.float32`):
+            This sets the computational type which might be different than the input time. For example, inputs might be
+            fp32, but computation can be set to bf16 for speedups.
+        bnb_4bit_quant_type (`str`, {fp4, fn4}, defaults to `fp4`):
+            This sets the quantization data type in the bnb.nn.Linear4Bit layers. Options are FP4 and NF4 data types
+            which are specified by `fp4` or `fn4`.
+        bnb_4bit_use_double_quant (`bool`, *optional*, defaults to `False`):
+            This flag is used for nested quantization where the quantization constants from the first quantization are
+            quantized again.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
@@ -65,15 +87,33 @@ class BitsAndBytesConfig:
     def __init__(
         self,
         load_in_8bit=False,
+        load_in_4bit=False,
         llm_int8_threshold=6.0,
         llm_int8_skip_modules=None,
         llm_int8_enable_fp32_cpu_offload=False,
+        llm_int8_has_fp16_weight=False,
+        bnb_4bit_compute_dtype=None,
+        bnb_4bit_quant_type="fp4",
+        bnb_4bit_use_double_quant=False,
         **kwargs,
     ):
         self.load_in_8bit = load_in_8bit
+        self.load_in_4bit = load_in_4bit
         self.llm_int8_threshold = llm_int8_threshold
         self.llm_int8_skip_modules = llm_int8_skip_modules
         self.llm_int8_enable_fp32_cpu_offload = llm_int8_enable_fp32_cpu_offload
+        self.llm_int8_has_fp16_weight = llm_int8_has_fp16_weight
+        self.bnb_4bit_quant_type = bnb_4bit_quant_type
+        self.bnb_4bit_use_double_quant = bnb_4bit_use_double_quant
+
+        if bnb_4bit_compute_dtype is None:
+            self.bnb_4bit_compute_dtype = torch.float32
+        elif isinstance(bnb_4bit_compute_dtype, str):
+            self.bnb_4bit_compute_dtype = getattr(torch, bnb_4bit_compute_dtype)
+        elif isinstance(bnb_4bit_compute_dtype, torch.dtype):
+            self.bnb_4bit_compute_dtype = bnb_4bit_compute_dtype
+        else:
+            raise ValueError("bnb_4bit_compute_dtype must be a string or a torch.dtype")
 
         self.post_init()
 
@@ -86,9 +126,47 @@ class BitsAndBytesConfig:
 
         if self.llm_int8_skip_modules is not None and not isinstance(self.llm_int8_skip_modules, list):
             raise ValueError("llm_int8_skip_modules must be a list of strings")
-
         if not isinstance(self.llm_int8_enable_fp32_cpu_offload, bool):
             raise ValueError("llm_int8_enable_fp32_cpu_offload must be a boolean")
+
+        if not isinstance(self.llm_int8_has_fp16_weight, bool):
+            raise ValueError("llm_int8_has_fp16_weight must be a boolean")
+
+        if self.bnb_4bit_compute_dtype is not None and not isinstance(self.bnb_4bit_compute_dtype, torch.dtype):
+            raise ValueError("bnb_4bit_compute_dtype must be torch.dtype")
+
+        if not isinstance(self.bnb_4bit_quant_type, str):
+            raise ValueError("bnb_4bit_quant_type must be a string")
+
+        if not isinstance(self.bnb_4bit_use_double_quant, bool):
+            raise ValueError("bnb_4bit_use_double_quant must be a boolean")
+
+        if self.load_in_4bit and not version.parse(importlib_metadata.version("bitsandbytes")) >= version.parse(
+            "0.39.0"
+        ):
+            raise ValueError(
+                "4 bit quantization requires bitsandbytes>=0.39.0 - please upgrade your bitsandbytes version"
+            )
+
+    def is_quantizable(self):
+        r"""
+        Returns `True` if the model is quantizable, `False` otherwise.
+        """
+        return self.load_in_8bit or self.load_in_4bit
+
+    def quantization_method(self):
+        r"""
+        This method returns the quantization method used for the model. If the model is not quantizable, it returns
+        `None`.
+        """
+        if self.load_in_8bit:
+            return "llm_int8"
+        elif self.load_in_4bit and self.bnb_4bit_quant_type == "fp4":
+            return "fp4"
+        elif self.load_in_4bit and self.bnb_4bit_quant_type == "nf4":
+            return "nf4"
+        else:
+            return None
 
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs, **kwargs):
@@ -107,6 +185,7 @@ class BitsAndBytesConfig:
         Returns:
             [`BitsAndBytesConfig`]: The configuration object instantiated from those parameters.
         """
+
         config = cls(**config_dict)
 
         to_remove = []
@@ -144,5 +223,8 @@ class BitsAndBytesConfig:
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
+
         output = copy.deepcopy(self.__dict__)
+        output["bnb_4bit_compute_dtype"] = str(output["bnb_4bit_compute_dtype"]).split(".")[1]
+
         return output

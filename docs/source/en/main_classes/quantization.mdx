@@ -19,7 +19,44 @@ This is supported by most of the GPU hardwares since the `0.37.0` release of `bi
 
 Learn more about the quantization method in the [LLM.int8()](https://arxiv.org/abs/2208.07339) paper, or the [blogpost](https://huggingface.co/blog/hf-bitsandbytes-integration) about the collaboration.
 
+Since its `0.39.0` release, you can load any model that supports `device_map` using 4-bit quantization, leveraging FP4 data type.
+
 Here are the things you can do using `bitsandbytes` integration
+
+### FP4 quantization 
+
+#### Requirements
+
+Make sure that you have installed the requirements below before running any of the code snippets below.
+
+- Latest `bitsandbytes` library
+`pip install bitsandbytes>=0.39.0`
+
+- Install latest `accelerate` from source
+`pip install git+https://github.com/huggingface/accelerate.git`
+
+- Install latest `transformers` from source 
+`pip install git+https://github.com/huggingface/transformers.git`
+
+#### Load a large model in 4bit
+
+By using `load_in_4bit=True` when calling the `.from_pretrained` method, you can divide your memory use by 4 (roughly).
+
+```python
+# pip install transformers accelerate bitsandbytes
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model_id = "bigscience/bloom-1b7"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", load_in_4bit=True)
+```
+
+<Tip warning={true}>
+
+Note that once a model has been loaded in 4-bit it is currently not possible to push the quantized weights on the Hub. Note also that you cannot train 4-bit weights as this is not supported yet. However you can use 4-bit models to train extra parameters, this will be covered in the next section.
+
+</Tip>
 
 ### Load a large model in 8bit
 
@@ -48,9 +85,55 @@ With this integration we were able to load large models on smaller devices and r
 
 <Tip warning={true}>
 
-Note that once a model has been loaded in 8-bit it is currently not possible to push the quantized weights on the Hub. Note also that you cannot train 8-bit weights as this is not supported yet. However you can use 8-bit models to train extra parameters, this will be covered in the next section.
+Note that once a model has been loaded in 8-bit it is currently not possible to push the quantized weights on the Hub except if you use the latest `transformers` and `bitsandbytes`. Note also that you cannot train 8-bit weights as this is not supported yet. However you can use 8-bit models to train extra parameters, this will be covered in the next section.
 
 </Tip>
+
+#### Advanced usecases
+
+Here we will cover some advanced usecases you can perform with FP4 quantization 
+
+##### Change the compute dtype
+
+The compute dtype is used to change the dtype that will be used during computation. For example, hidden states could be in `float32` but computation can be set to bf16 for speedups. By default, the compute dtype is set to `float32`.
+
+```python
+import torch
+from transformers import BitsAndBytesConfig
+
+quantization_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
+```
+
+##### Using NF4 (Normal Float 4) data type 
+
+You can also use the NF4 data type, which is a new 4bit datatype adapted for weights that have been initialized using a normal distribution. For that run:
+
+```python
+from transformers import BitsAndBytesConfig
+
+nf4_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+)
+
+model_nf4 = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=nf4_config)
+```
+
+##### Use nested quantization for more memory efficient inference
+
+We also advise users to use the nested quantization technique. This saves more memory at no additional performance - from our empirical observations, this enables fine-tuning llama-13b model on an NVIDIA-T4 16GB with a sequence length of 1024, batch size of 1 and gradient accumulation steps of 4.
+
+```python
+from transformers import BitsAndBytesConfig
+
+double_quant_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_use_double_quant=True,
+)
+
+model_double_quant = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=double_quant_config)
+```
+
 
 ### Push quantized models on the 🤗 Hub
 
