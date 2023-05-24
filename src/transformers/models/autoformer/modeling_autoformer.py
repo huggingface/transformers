@@ -427,7 +427,7 @@ class AutoformerLayernorm(nn.Module):
 
     def __init__(self, config: AutoformerConfig):
         super().__init__()
-        self.layernorm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.layernorm = nn.LayerNorm(config.d_model)
 
     def forward(self, x):
         x_hat = self.layernorm(x)
@@ -668,7 +668,7 @@ class AutoformerEncoderLayer(nn.Module):
             dropout=config.attention_dropout,
             autocorrelation_factor=config.autocorrelation_factor,
         )
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
@@ -748,7 +748,7 @@ class AutoformerDecoderLayer(nn.Module):
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.encoder_attn = AutoformerAttention(
             self.embed_dim,
             config.decoder_attention_heads,
@@ -756,7 +756,7 @@ class AutoformerDecoderLayer(nn.Module):
             is_decoder=True,
             autocorrelation_factor=config.autocorrelation_factor,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = AutoformerLayernorm(config)
