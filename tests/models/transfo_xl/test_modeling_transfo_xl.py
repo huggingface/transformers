@@ -486,6 +486,10 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 weight = getattr(module, param)
                 weight.data.fill_(3)
 
+    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
+    def test_left_padding_compatibility(self):
+        pass
+
 
 @require_torch
 class TransfoXLModelLanguageGenerationTest(unittest.TestCase):

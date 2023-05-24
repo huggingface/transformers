@@ -29,7 +29,7 @@ from ...modeling_tf_utils import (
     shape_list,
     unpack_inputs,
 )
-from ...tf_utils import stable_softmax
+from ...tf_utils import check_embeddings_within_bounds, stable_softmax
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -316,16 +316,7 @@ class TFBlipTextEmbeddings(tf.keras.layers.Layer):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-            tf.debugging.assert_less(
-                input_ids,
-                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
-                message=(
-                    "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
-                ),
-            )
+            check_embeddings_within_bounds(input_ids, self.config.vocab_size)
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
         input_shape = shape_list(inputs_embeds)[:-1]
@@ -1344,30 +1335,6 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
             attentions=attns,
         )
 
-    # Adapted from transformers.models.t5.modeling_tf_t5.TFT5PreTrainedModel._shift_right
-    def _shift_right(self, input_ids):
-        decoder_start_token_id = self.decoder_start_token_id
-        pad_token_id = self.decoder_pad_token_id
-
-        if decoder_start_token_id is None or pad_token_id is None:
-            raise ValueError("decoder_start_token_id and pad_token_id must be defined!")
-
-        start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
-        start_tokens = tf.cast(start_tokens, input_ids.dtype)  # Ensure compatible dtypes for concatenation
-        shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
-
-        # replace possible -100 values in labels by `pad_token_id`
-        shifted_input_ids = tf.where(
-            shifted_input_ids == -100,
-            tf.cast(tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids.dtype),
-            shifted_input_ids,
-        )
-
-        # "Verify that `labels` has only positive values and -100"
-        tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0, dtype=shifted_input_ids.dtype))
-
-        return shifted_input_ids
-
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBlipTextVisionModelOutput, config_class=BlipVisionConfig)
@@ -1450,8 +1417,8 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
         question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
 
         if labels is not None and decoder_input_ids is None:
-            # get decoder inputs from shifting lm labels to the right - this is used in training mode
-            decoder_input_ids = self._shift_right(labels)
+            # labels are already shifted right, see: https://github.com/huggingface/transformers/pull/23153
+            decoder_input_ids = labels
 
         answer_output = self.text_decoder(
             input_ids=decoder_input_ids,

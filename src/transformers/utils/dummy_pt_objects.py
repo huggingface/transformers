@@ -3002,6 +3002,13 @@ class FNetPreTrainedModel(metaclass=DummyObject):
 FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class FocalNetBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class FocalNetForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -3186,6 +3193,13 @@ class GPT2DoubleHeadsModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class GPT2ForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class GPT2ForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -3273,6 +3287,13 @@ class GPTNeoForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class GPTNeoForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class GPTNeoForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -3309,6 +3330,13 @@ GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class GPTNeoXForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GPTNeoXForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -6108,6 +6136,30 @@ def load_tf_weights_in_roformer(*args, **kwargs):
     requires_backends(load_tf_weights_in_roformer, ["torch"])
 
 
+RWKV_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class RwkvForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RwkvModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RwkvPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 SAM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -6413,6 +6465,30 @@ class SqueezeBertModule(metaclass=DummyObject):
 
 
 class SqueezeBertPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SwiftFormerForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SwiftFormerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SwiftFormerPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

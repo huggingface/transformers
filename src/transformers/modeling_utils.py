@@ -207,21 +207,28 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
         # if no floating dtype was found return whatever the first dtype is
         return last_dtype
 
-    else:
-        # For nn.DataParallel compatibility in PyTorch > 1.5
-        def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
-            tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-            return tuples
+    # For nn.DataParallel compatibility in PyTorch > 1.5
+    def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
+        tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+        return tuples
 
-        gen = parameter._named_members(get_members_fn=find_tensor_attributes)
-        last_tuple = None
-        for tuple in gen:
-            last_tuple = tuple
-            if tuple[1].is_floating_point():
-                return tuple[1].dtype
+    gen = parameter._named_members(get_members_fn=find_tensor_attributes)
+    last_tuple = None
+    for tuple in gen:
+        last_tuple = tuple
+        if tuple[1].is_floating_point():
+            return tuple[1].dtype
 
+    if last_tuple is not None:
         # fallback to the last dtype
         return last_tuple[1].dtype
+
+    # fallback to buffer dtype
+    for t in parameter.buffers():
+        last_dtype = t.dtype
+        if t.is_floating_point():
+            return t.dtype
+    return last_dtype
 
 
 def get_state_dict_float_dtype(state_dict):
@@ -905,7 +912,7 @@ class ModuleUtilsMixin:
                 The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard).
             num_hidden_layers (`int`):
                 The number of hidden layers in the model.
-            is_attention_chunked: (`bool`, *optional*, defaults to `False`):
+            is_attention_chunked (`bool`, *optional*, defaults to `False`):
                 Whether or not the attentions scores are computed by chunks or not.
 
         Returns:
@@ -1004,32 +1011,6 @@ class ModuleUtilsMixin:
         """
 
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
-
-
-class BackboneMixin:
-    @property
-    def out_feature_channels(self):
-        # the current backbones will output the number of channels for each stage
-        # even if that stage is not in the out_features list.
-        return {stage: self.num_features[i] for i, stage in enumerate(self.stage_names)}
-
-    @property
-    def channels(self):
-        return [self.out_feature_channels[name] for name in self.out_features]
-
-    def forward_with_filtered_kwargs(self, *args, **kwargs):
-        signature = dict(inspect.signature(self.forward).parameters)
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k in signature}
-        return self(*args, **filtered_kwargs)
-
-    def forward(
-        self,
-        pixel_values: Tensor,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ):
-        raise NotImplementedError("This method should be implemented by the derived class.")
 
 
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin):
