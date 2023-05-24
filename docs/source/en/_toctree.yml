@@ -93,6 +93,8 @@
       title: Run training on Amazon SageMaker
     - local: serialization
       title: Export to ONNX
+    - local: tflite
+      title: Export to TFLite
     - local: torchscript
       title: Export to TorchScript
     - local: benchmarks
