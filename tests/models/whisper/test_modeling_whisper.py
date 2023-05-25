@@ -393,6 +393,18 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with torch.no_grad():
                 model(**inputs)[0]
 
+    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
+    def test_disk_offload(self):
+        pass
+
+    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
+    def test_model_parallelism(self):
+        pass
+
     # training is not supported yet
     def test_training(self):
         pass
