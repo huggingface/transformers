@@ -299,7 +299,7 @@ class TFEfficientFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFEfficientFormerModel.from_pretrained(model_name, from_pt=True)
+            model = TFEfficientFormerModel.from_pretrained(model_name)
             print(model.summary())
             self.assertIsNotNone(model)
 
@@ -365,9 +365,7 @@ class EfficientFormerModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFEfficientFormerForImageClassification.from_pretrained(
-            "snap-research/efficientformer-l1-300", from_pt=True
-        )
+        model = TFEfficientFormerForImageClassification.from_pretrained("snap-research/efficientformer-l1-300")
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -387,7 +385,7 @@ class EfficientFormerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification_head_with_teacher(self):
         model = TFEfficientFormerForImageClassificationWithTeacher.from_pretrained(
-            "snap-research/efficientformer-l1-300", from_pt=True
+            "snap-research/efficientformer-l1-300"
         )
 
         feature_extractor = self.default_feature_extractor

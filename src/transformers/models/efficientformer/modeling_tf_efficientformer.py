@@ -951,8 +951,7 @@ class TFEfficientFormerForImageClassificationWithTeacherOutput(ModelOutput):
 @add_start_docstrings(
     """
     EfficientFormer Model transformer with image classification heads on top (a linear layer on top of the final hidden
-    state and a linear layer on top of the final hidden state of the distillation token) e.g. for
-    ImageNet.
+    state and a linear layer on top of the final hidden state of the distillation token) e.g. for ImageNet.
 
     .. warning::
             This model supports inference-only. Fine-tuning with distillation (i.e. with a teacher) is not yet
