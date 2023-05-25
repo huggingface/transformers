@@ -28,7 +28,6 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
-    BaseModelOutputWithPastAndCrossAttentions,
     ModelOutput,
     SampleTSPredictionOutput,
     Seq2SeqTSPredictionOutput,
@@ -84,12 +83,14 @@ class DecoderOutputWithPastAndCrossAttentions(ModelOutput):
             Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
             weighted average in the cross-attention heads.
     """
+
     last_hidden_state: torch.FloatTensor = None
     trend: torch.FloatTensor = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
 
 @dataclass
 class AutoformerModelOutput(ModelOutput):
@@ -1477,7 +1478,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                 if v is not None
             )
         return DecoderOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states, 
+            last_hidden_state=hidden_states,
             trend=trend,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,

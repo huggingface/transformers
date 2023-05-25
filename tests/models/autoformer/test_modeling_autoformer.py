@@ -236,7 +236,6 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         pass
 
-
     # # Input is 'static_categorical_features' not 'input_ids'
     def test_model_main_input_name(self):
         model_signature = inspect.signature(getattr(AutoformerModel, "forward"))
@@ -300,7 +299,7 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
 
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
-        label_length = getattr(self.model_tester, "label_length", seq_len)
+        getattr(self.model_tester, "label_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         d_model = getattr(self.model_tester, "d_model", None)
         num_attention_heads = getattr(self.model_tester, "num_attention_heads", None)
