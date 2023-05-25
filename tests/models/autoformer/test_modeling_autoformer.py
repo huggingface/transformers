@@ -80,7 +80,7 @@ class AutoformerModelTester:
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
         self.encoder_seq_length = context_length
-        self.decoder_seq_length = prediction_length
+        self.decoder_seq_length = prediction_length + label_length
         self.label_length = label_length
 
         self.moving_average = moving_average
@@ -191,7 +191,7 @@ class AutoformerModelTester:
             decoder.save_pretrained(tmpdirname)
             decoder = AutoformerDecoder.from_pretrained(tmpdirname).to(torch_device)
 
-        last_hidden_state_2, _ = decoder(
+        last_hidden_state_2 = decoder(
             trend=trend_init,
             inputs_embeds=dec_input,
             encoder_hidden_states=encoder_last_hidden_state,
@@ -236,9 +236,6 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(reason="Result of the decoder's hidden state is a tuple")
-    def test_hidden_states_output(self):
-        pass
 
     # # Input is 'static_categorical_features' not 'input_ids'
     def test_model_main_input_name(self):
@@ -363,7 +360,7 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length + label_length, dim],
+                [self.model_tester.num_attention_heads, decoder_seq_length, dim],
             )
 
             # cross attentions
@@ -372,7 +369,7 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(cross_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length + label_length, dim],
+                [self.model_tester.num_attention_heads, decoder_seq_length, dim],
             )
 
         # Check attention is always last and order is fine
