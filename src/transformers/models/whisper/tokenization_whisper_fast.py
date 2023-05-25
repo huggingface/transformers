@@ -30,9 +30,6 @@ from .tokenization_whisper import (
     TO_LANGUAGE_CODE,
     WhisperTokenizer,
     _decode_asr,
-    _merge_punctuations,
-    _split_tokens_on_spaces,
-    _split_tokens_on_unicode,
 )
 
 
@@ -530,31 +527,3 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 return []
 
         return token_ids
-
-    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.combine_tokens_into_words
-    def combine_tokens_into_words(
-        self,
-        tokens: List[int],
-        language: str = None,
-        prepend_punctuations: str = "\"'“¿([{-",
-        append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
-    ):
-        """
-        Groups tokens by word. Returns a tuple containing a list of strings with the words, and a list of `token_id`
-        sequences with the tokens making up each word.
-        """
-        if language is None:
-            language = self.language
-        if language is None:
-            language = "english"
-
-        if language in {"chinese", "japanese", "thai", "lao", "myanmar"}:
-            # These languages don't typically use spaces.
-            words, word_tokens, token_indices = _split_tokens_on_unicode(self, tokens)
-        else:
-            words, word_tokens, token_indices = _split_tokens_on_spaces(self, tokens)
-
-        words[:] = [word.strip() for word in words]
-
-        _merge_punctuations(words, word_tokens, token_indices, prepend_punctuations, append_punctuations)
-        return words, word_tokens, token_indices

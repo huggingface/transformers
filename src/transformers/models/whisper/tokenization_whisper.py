@@ -748,33 +748,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         return token_ids
 
-    def combine_tokens_into_words(
-        self,
-        tokens: List[int],
-        language: str = None,
-        prepend_punctuations: str = "\"'“¿([{-",
-        append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
-    ):
-        """
-        Groups tokens by word. Returns a tuple containing a list of strings with the words, and a list of `token_id`
-        sequences with the tokens making up each word.
-        """
-        if language is None:
-            language = self.language
-        if language is None:
-            language = "english"
-
-        if language in {"chinese", "japanese", "thai", "lao", "myanmar"}:
-            # These languages don't typically use spaces.
-            words, word_tokens, token_indices = _split_tokens_on_unicode(self, tokens)
-        else:
-            words, word_tokens, token_indices = _split_tokens_on_spaces(self, tokens)
-
-        words[:] = [word.strip() for word in words]
-
-        _merge_punctuations(words, word_tokens, token_indices, prepend_punctuations, append_punctuations)
-        return words, word_tokens, token_indices
-
 
 def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language, time_precision):
     """
@@ -1096,7 +1069,7 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
 
 
 def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language):
-    words, word_tokens, token_indices = tokenizer.combine_tokens_into_words(tokens, language)
+    words, word_tokens, token_indices = _combine_tokens_into_words(tokenizer, tokens, language)
 
     timings = [
         {
@@ -1107,6 +1080,34 @@ def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language):
         for word, tokens, indices in zip(words, word_tokens, token_indices)
     ]
     return timings
+
+
+def _combine_tokens_into_words(
+    tokenizer,
+    tokens: List[int],
+    language: str = None,
+    prepend_punctuations: str = "\"'“¿([{-",
+    append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
+):
+    """
+    Groups tokens by word. Returns a tuple containing a list of strings with the words, and a list of `token_id`
+    sequences with the tokens making up each word.
+    """
+    if language is None:
+        language = tokenizer.language
+    if language is None:
+        language = "english"
+
+    if language in {"chinese", "japanese", "thai", "lao", "myanmar"}:
+        # These languages don't typically use spaces.
+        words, word_tokens, token_indices = _split_tokens_on_unicode(tokenizer, tokens)
+    else:
+        words, word_tokens, token_indices = _split_tokens_on_spaces(tokenizer, tokens)
+
+    words[:] = [word.strip() for word in words]
+
+    _merge_punctuations(words, word_tokens, token_indices, prepend_punctuations, append_punctuations)
+    return words, word_tokens, token_indices
 
 
 def _split_tokens_on_unicode(tokenizer, tokens: List[int]):
