@@ -2727,7 +2727,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     raise ValueError(
                         "You are using `device_map='auto'` on a 4bit loaded version of the model. To automatically compute"
                         " the appropriate device map, you should upgrade your `accelerate` library,"
-                        "`pip install --upgrade accelerare` or install it from source to support fp4 auto device map"
+                        "`pip install --upgrade accelerate` or install it from source to support fp4 auto device map"
                         "calculation. You may encounter unexpected behavior, or pass your own device map"
                     )
             elif load_in_8bit:
