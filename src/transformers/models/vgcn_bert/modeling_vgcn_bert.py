@@ -82,7 +82,26 @@ def _create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
     out.detach_()
 
 
-# can inherited from PreTrainedModel?
+class VgcnParameterList(nn.ParameterList):
+    def __init__(self, values=None, requires_grad=True) -> None:
+        super().__init__(values)
+        self.requires_grad = requires_grad
+
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+    ):
+        keys = filter(lambda x: x.startswith(prefix), state_dict.keys())
+        for k in keys:
+            self.append(nn.Parameter(state_dict[k], requires_grad=self.requires_grad))
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
+        for i in range(len(self)):
+            if self[i].layout is torch.sparse_coo and not self[i].is_coalesced():
+                self[i] = self[i].coalesce()
+            self[i].requires_grad = self.requires_grad
+
+
 class VocabGraphConvolution(nn.Module):
     """Vocabulary GCN module.
 
@@ -104,33 +123,40 @@ class VocabGraphConvolution(nn.Module):
 
     def __init__(
         self,
-        wgraphs: list,
-        wgraph_id_to_tokenizer_id_maps: List[dict],
         hid_dim: int,
         out_dim: int,
+        wgraphs: Optional[list] = None,
+        wgraph_id_to_tokenizer_id_maps: Optional[List[dict]] = None,
         activation=None,
         dropout_rate=0.1,
     ):
         super().__init__()
-        self.wgraphs = self._prepare_wgraphs(wgraphs)
-        self.gvoc_ordered_tokenizer_id_arrays, self.tokenizer_id_to_wgraph_id_arrays = self._prepare_inverted_arrays(
-            wgraph_id_to_tokenizer_id_maps
-        )
+        # self.wgraphs:VgcnParameterList = self._prepare_wgraphs(wgraphs) if wgraphs else VgcnParameterList(requires_grad=False)
+        # self.gvoc_ordered_tokenizer_id_arrays, self.tokenizer_id_to_wgraph_id_arrays=VgcnParameterList(requires_grad=False),VgcnParameterList(requires_grad=False)
+        # if wgraph_id_to_tokenizer_id_maps:
+        #     self.gvoc_ordered_tokenizer_id_arrays, self.tokenizer_id_to_wgraph_id_arrays = self._prepare_inverted_arrays(
+        #         wgraph_id_to_tokenizer_id_maps
+        #     )
 
         self.hid_dim = hid_dim
         self.out_dim = out_dim
 
-        self.W_vh_list = nn.ParameterList()
-        self.W_vh_list._is_vgcn_weights = True
-        for g in self.wgraphs:
-            self.W_vh_list.append(nn.Parameter(torch.randn(g.shape[0], hid_dim)))
-            # self.W_vh_list.append(nn.Parameter(torch.ones(g.shape[0], hid_dim)))
+        # self.W_vh_list = VgcnParameterList(requires_grad=True)
+        # self.W_vh_list._is_vgcn_weights = True
+        # for g in self.wgraphs:
+        #     self.W_vh_list.append(nn.Parameter(torch.randn(g.shape[0], hid_dim)))
+        #     # self.W_vh_list.append(nn.Parameter(torch.ones(g.shape[0], hid_dim)))
 
         self.fc_hg = nn.Linear(hid_dim, out_dim)
         self.fc_hg._is_vgcn_linear = True
         self.activation = get_activation(activation) if activation else None
         self.dropout = nn.Dropout(dropout_rate) if dropout_rate > 0 else None
-        # TODO: add a Linear layer for fintune/pretrain task
+        # TODO: add a Linear layer for vgcn fintune/pretrain task
+
+        # after init.set_wgraphs, _init_weights will set again the mode (transparent,normal,uniform)
+        # but if load wgraph parameters from checkpoint/pretrain, the mode will be accoding to the checkpoint
+        # you can call again set_parameters to change the mode
+        self.set_wgraphs(wgraphs, wgraph_id_to_tokenizer_id_maps)
 
     def set_parameters(self, mode="transparent"):
         """Set the parameters of the model (transparent, uniform, normal)."""
@@ -145,36 +171,78 @@ class VocabGraphConvolution(nn.Module):
         ) if mode == "normal" else nn.init.kaiming_uniform_(self.fc_hg.weight, a=math.sqrt(5))
         self.fc_hg.bias.data.zero_()
 
-    def _prepare_wgraphs(self, wgraphs: list) -> nn.ParameterList:
+    def set_wgraphs(
+        self,
+        wgraphs: Optional[list] = None,
+        wgraph_id_to_tokenizer_id_maps: Optional[List[dict]] = None,
+        mode="transparent",
+    ):
+        assert (
+            wgraphs is None
+            and wgraph_id_to_tokenizer_id_maps is None
+            or wgraphs is not None
+            and wgraph_id_to_tokenizer_id_maps is not None
+        )
+        self.wgraphs: VgcnParameterList = (
+            self._prepare_wgraphs(wgraphs) if wgraphs else VgcnParameterList(requires_grad=False)
+        )
+        self.gvoc_ordered_tokenizer_id_arrays, self.tokenizer_id_to_wgraph_id_arrays = VgcnParameterList(
+            requires_grad=False
+        ), VgcnParameterList(requires_grad=False)
+        if wgraph_id_to_tokenizer_id_maps:
+            (
+                self.gvoc_ordered_tokenizer_id_arrays,
+                self.tokenizer_id_to_wgraph_id_arrays,
+            ) = self._prepare_inverted_arrays(wgraph_id_to_tokenizer_id_maps)
+        self.W_vh_list = VgcnParameterList(requires_grad=True)
+        self.W_vh_list._is_vgcn_weights = True
+        for g in self.wgraphs:
+            self.W_vh_list.append(nn.Parameter(torch.randn(g.shape[0], self.hid_dim)))
+            # self.W_vh_list.append(nn.Parameter(torch.ones(g.shape[0], self.hid_dim)))
+        self.set_parameters(mode=mode)
+
+    # def set_wgraphs(self, wgraphs: list, wgraph_id_to_tokenizer_id_maps: List[dict]):
+    #     self.wgraphs:VgcnParameterList = self._prepare_wgraphs(wgraphs)
+    #     self.W_vh_list = VgcnParameterList(requires_grad=True)
+    #     self.W_vh_list._is_vgcn_weights = True
+    #     for g in self.wgraphs:
+    #         self.W_vh_list.append(nn.Parameter(torch.randn(g.shape[0], self.hid_dim)))
+    #     self.gvoc_ordered_tokenizer_id_arrays, self.tokenizer_id_to_wgraph_id_arrays = self._prepare_inverted_arrays(
+    #         wgraph_id_to_tokenizer_id_maps
+    #     )
+
+    def _prepare_wgraphs(self, wgraphs: list) -> VgcnParameterList:
         # def _zero_padding_graph(adj_matrix: torch.Tensor):
         #     if adj_matrix.layout is not torch.sparse_coo:
         #         adj_matrix=adj_matrix.to_sparse_coo()
         #     indices=adj_matrix.indices()+1
         #     padded_adj= torch.sparse_coo_tensor(indices=indices, values=adj_matrix.values(), size=(adj_matrix.shape[0]+1,adj_matrix.shape[1]+1))
         #     return padded_adj.coalesce()
-        glist = nn.ParameterList()
+        glist = VgcnParameterList(requires_grad=False)
         for g in wgraphs:
             assert g.layout is torch.sparse_coo
             # g[0,:] and g[:,0] should be 0
             assert 0 not in g.indices()
-            glist.append(nn.Parameter(g, requires_grad=False))
+            glist.append(nn.Parameter(g.coalesce(), requires_grad=False))
         return glist
 
     def _prepare_inverted_arrays(self, wgraph_id_to_tokenizer_id_maps: List[dict]):
         wgraph_id_to_tokenizer_id_maps = [dict(sorted(m.items())) for m in wgraph_id_to_tokenizer_id_maps]
         assert all([list(m.keys())[-1] == len(m) - 1 for m in wgraph_id_to_tokenizer_id_maps])
-        gvoc_ordered_tokenizer_id_arrays = nn.ParameterList(
+        gvoc_ordered_tokenizer_id_arrays = VgcnParameterList(
             [
                 nn.Parameter(torch.LongTensor(list(m.values())), requires_grad=False)
                 for m in wgraph_id_to_tokenizer_id_maps
-            ]
+            ],
+            requires_grad=False,
         )
 
-        tokenizer_id_to_wgraph_id_arrays = nn.ParameterList(
+        tokenizer_id_to_wgraph_id_arrays = VgcnParameterList(
             [
                 nn.Parameter(torch.zeros(max(m.values()) + 1, dtype=torch.long), requires_grad=False)
                 for m in wgraph_id_to_tokenizer_id_maps
-            ]
+            ],
+            requires_grad=False,
         )
         for m, t in zip(wgraph_id_to_tokenizer_id_maps, tokenizer_id_to_wgraph_id_arrays):
             for graph_id, tok_id in m.items():
@@ -211,6 +279,13 @@ class VocabGraphConvolution(nn.Module):
         return batch_sub_adj_matrix.coalesce()
 
     def forward(self, word_embeddings: nn.Embedding, input_ids: torch.Tensor):  # , position_ids: torch.Tensor = None):
+        if not self.wgraphs:
+            raise ValueError(
+                "No wgraphs is provided. There are 3 ways to initalize wgraphs:"
+                " instantiate VGCN_BERT with wgraphs, or call model.vgcn_bert.set_wgraphs(),"
+                " or load from_pretrained/checkpoint (make sure there is wgraphs in checkpoint"
+                " or you should call set_wgraphs)."
+            )
         device = input_ids.device
         batch_size = input_ids.shape[0]
         word_emb_dim = word_embeddings.weight.shape[1]
@@ -272,7 +347,12 @@ class VocabGraphConvolution(nn.Module):
 class VGCNEmbeddings(nn.Module):
     """Construct the embeddings from word, VGCN graph, position and token_type embeddings."""
 
-    def __init__(self, config: PretrainedConfig, vgcn_graphs: list, wgraph_id_to_tokenizer_id_maps: List[dict]):
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        wgraphs: Optional[list] = None,
+        wgraph_id_to_tokenizer_id_maps: Optional[List[dict]] = None,
+    ):
         super().__init__()
 
         self.word_embeddings = nn.Embedding(config.vocab_size, config.dim, padding_idx=config.pad_token_id)
@@ -280,12 +360,12 @@ class VGCNEmbeddings(nn.Module):
 
         self.vgcn_graph_embds_dim = config.vgcn_graph_embds_dim
         self.vgcn = VocabGraphConvolution(
-            vgcn_graphs,
-            wgraph_id_to_tokenizer_id_maps,
-            config.vgcn_hidden_dim,
-            config.vgcn_graph_embds_dim,
-            config.vgcn_activation,
-            config.vgcn_dropout,
+            hid_dim=config.vgcn_hidden_dim,
+            out_dim=config.vgcn_graph_embds_dim,
+            wgraphs=wgraphs,
+            wgraph_id_to_tokenizer_id_maps=wgraph_id_to_tokenizer_id_maps,
+            activation=config.vgcn_activation,
+            dropout_rate=config.vgcn_dropout,
         )
 
         if config.sinusoidal_pos_embds:
@@ -708,14 +788,27 @@ VGCNBERT_INPUTS_DOCSTRING = r"""
 )
 # Copied from transformers.models.distilbert.modeling_distilbert.DistilBertModel with DISTILBERT->VGCNBERT,DistilBert->VGCNBert
 class VGCNBertModel(VGCNBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig, vgcn_graphs: list, wgraph_id_to_tokenizer_id_maps: List[dict]):
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        wgraphs: Optional[list] = None,
+        wgraph_id_to_tokenizer_id_maps: Optional[List[dict]] = None,
+    ):
         super().__init__(config)
 
-        self.embeddings = VGCNEmbeddings(config, vgcn_graphs, wgraph_id_to_tokenizer_id_maps)  # Graph Embeddings
+        self.embeddings = VGCNEmbeddings(config, wgraphs, wgraph_id_to_tokenizer_id_maps)  # Graph Embeddings
         self.transformer = Transformer(config)  # Encoder
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def set_wgraphs(
+        self,
+        wgraphs: Optional[list] = None,
+        wgraph_id_to_tokenizer_id_maps: Optional[List[dict]] = None,
+        mode="transparent",
+    ):
+        self.embeddings.vgcn.set_wgraphs(wgraphs, wgraph_id_to_tokenizer_id_maps, mode)
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
@@ -844,12 +937,17 @@ class VGCNBertModel(VGCNBertPreTrainedModel):
 class VGCNBertForMaskedLM(VGCNBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["vocab_projector.weight"]
 
-    def __init__(self, config: PretrainedConfig, vgcn_graphs: list, wgraph_id_to_tokenizer_id_maps: List[dict]):
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        wgraphs: Optional[list] = None,
+        wgraph_id_to_tokenizer_id_maps: Optional[List[dict]] = None,
+    ):
         super().__init__(config)
 
         self.activation = get_activation(config.activation)
 
-        self.vgcn_bert = VGCNBertModel(config, vgcn_graphs, wgraph_id_to_tokenizer_id_maps)
+        self.vgcn_bert = VGCNBertModel(config, wgraphs, wgraph_id_to_tokenizer_id_maps)
         self.vocab_transform = nn.Linear(config.dim, config.dim)
         self.vocab_layer_norm = nn.LayerNorm(config.dim, eps=1e-12)
         self.vocab_projector = nn.Linear(config.dim, config.vocab_size)
@@ -950,12 +1048,17 @@ class VGCNBertForMaskedLM(VGCNBertPreTrainedModel):
 )
 # Copied from transformers.models.distilbert.modeling_distilbert.DistilBertForSequenceClassification with DISTILBERT->VGCNBERT,DistilBert->VGCNBert,distilbert->vgcn_bert
 class VGCNBertForSequenceClassification(VGCNBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig, vgcn_graphs: list, wgraph_id_to_tokenizer_id_maps: List[dict]):
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        wgraphs: Optional[list] = None,
+        wgraph_id_to_tokenizer_id_maps: Optional[List[dict]] = None,
+    ):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
 
-        self.vgcn_bert = VGCNBertModel(config, vgcn_graphs, wgraph_id_to_tokenizer_id_maps)
+        self.vgcn_bert = VGCNBertModel(config, wgraphs, wgraph_id_to_tokenizer_id_maps)
         self.pre_classifier = nn.Linear(config.dim, config.dim)
         self.classifier = nn.Linear(config.dim, config.num_labels)
         self.dropout = nn.Dropout(config.seq_classif_dropout)
@@ -1068,10 +1171,15 @@ class VGCNBertForSequenceClassification(VGCNBertPreTrainedModel):
 )
 # Copied from transformers.models.distilbert.modeling_distilbert.DistilBertForQuestionAnswering with DISTILBERT->VGCNBERT,DistilBert->VGCNBert,distilbert->vgcn_bert
 class VGCNBertForQuestionAnswering(VGCNBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig, vgcn_graphs: list, wgraph_id_to_tokenizer_id_maps: List[dict]):
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        wgraphs: Optional[list] = None,
+        wgraph_id_to_tokenizer_id_maps: Optional[List[dict]] = None,
+    ):
         super().__init__(config)
 
-        self.vgcn_bert = VGCNBertModel(config, vgcn_graphs, wgraph_id_to_tokenizer_id_maps)
+        self.vgcn_bert = VGCNBertModel(config, wgraphs, wgraph_id_to_tokenizer_id_maps)
         self.qa_outputs = nn.Linear(config.dim, config.num_labels)
         if config.num_labels != 2:
             raise ValueError(f"config.num_labels should be 2, but it is {config.num_labels}")
@@ -1187,11 +1295,16 @@ class VGCNBertForQuestionAnswering(VGCNBertPreTrainedModel):
 )
 # Copied from transformers.models.distilbert.modeling_distilbert.DistilBertForTokenClassification with DISTILBERT->VGCNBERT,DistilBert->VGCNBert,distilbert->vgcn_bert
 class VGCNBertForTokenClassification(VGCNBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig, vgcn_graphs: list, wgraph_id_to_tokenizer_id_maps: List[dict]):
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        wgraphs: Optional[list] = None,
+        wgraph_id_to_tokenizer_id_maps: Optional[List[dict]] = None,
+    ):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.vgcn_bert = VGCNBertModel(config, vgcn_graphs, wgraph_id_to_tokenizer_id_maps)
+        self.vgcn_bert = VGCNBertModel(config, wgraphs, wgraph_id_to_tokenizer_id_maps)
         self.dropout = nn.Dropout(config.dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
@@ -1282,10 +1395,15 @@ class VGCNBertForTokenClassification(VGCNBertPreTrainedModel):
 )
 # Copied from transformers.models.distilbert.modeling_distilbert.DistilBertForMultipleChoice with DISTILBERT->VGCNBERT,DistilBert->VGCNBert,distilbert->vgcn_bert
 class VGCNBertForMultipleChoice(VGCNBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig, vgcn_graphs: list, wgraph_id_to_tokenizer_id_maps: List[dict]):
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        wgraphs: Optional[list] = None,
+        wgraph_id_to_tokenizer_id_maps: Optional[List[dict]] = None,
+    ):
         super().__init__(config)
 
-        self.vgcn_bert = VGCNBertModel(config, vgcn_graphs, wgraph_id_to_tokenizer_id_maps)
+        self.vgcn_bert = VGCNBertModel(config, wgraphs, wgraph_id_to_tokenizer_id_maps)
         self.pre_classifier = nn.Linear(config.dim, config.dim)
         self.classifier = nn.Linear(config.dim, 1)
         self.dropout = nn.Dropout(config.seq_classif_dropout)

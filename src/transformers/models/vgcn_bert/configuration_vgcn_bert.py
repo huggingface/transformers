@@ -49,7 +49,7 @@ class VGCNBertConfig(PretrainedConfig):
         vgcn_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for VGCN graph embedding module.
         vgcn_weight_init_mode (`str`, defaults to `"transparent"`):
-            The weight initialization mode for VGCN graph embedding module, 
+            The weight initialization mode for VGCN graph embedding module,
             `"transparent"`, `"normal"`, `"uniform"` are supported.
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the VGCN-BERT model. Defines the number of different tokens that can be represented by
