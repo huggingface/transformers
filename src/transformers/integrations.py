@@ -1550,13 +1550,15 @@ class FlyteCallback(TrainerCallback):
             Determines whether or not to save the training logs to the task's Flyte Deck.
 
         sync_checkpoints (bool, optional, defaults to `True`):
-            When set to True, checkpoints are synced to Flyte and can be used to resume training
-            in the case of an interruption.
+            When set to True, checkpoints are synced to Flyte and can be used to resume training in the case of an
+            interruption.
 
     Example:
         ```python
         # Note: This example skips over some setup steps for brevity.
         from flytekit import current_context, task
+
+
         @task
         def train_hf_transformer():
             cp = current_context().checkpoint
@@ -1564,14 +1566,14 @@ class FlyteCallback(TrainerCallback):
             output = trainer.train(resume_from_checkpoint=cp.restore())
         ```
     """
+
     def __init__(self, save_log_history: bool = True, sync_checkpoints: bool = True):
         super().__init__()
         if not is_flytekit_available():
-            raise ImportError(
-                "FlyteCallback requires flytekit to be installed. Run `pip install flytekit`."
-            )
+            raise ImportError("FlyteCallback requires flytekit to be installed. Run `pip install flytekit`.")
 
         from flytekit import current_context
+
         self.cp = current_context().checkpoint
         self.save_log_history = save_log_history
         self.sync_checkpoints = sync_checkpoints
@@ -1581,9 +1583,7 @@ class FlyteCallback(TrainerCallback):
             ckpt_dir = f"checkpoint-{state.global_step}"
             artifact_path = os.path.join(args.output_dir, ckpt_dir)
 
-            logger.info(
-                f"Saving checkpoint in {ckpt_dir} to Flyte. This may take time."
-            )
+            logger.info(f"Saving checkpoint in {ckpt_dir} to Flyte. This may take time.")
             self.cp.save(artifact_path)
 
     def on_train_end(self, args, state, control, **kwargs):
