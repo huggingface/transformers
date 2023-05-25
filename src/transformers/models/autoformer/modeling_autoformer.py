@@ -1426,7 +1426,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
+                for v in [hidden_states, trend, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
                 if v is not None
             )
         return BaseModelOutputWithPastAndCrossAttentions(
@@ -1752,15 +1752,17 @@ class AutoformerModel(AutoformerPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-            last_hidden_state = decoder_outputs[0][0]
-            trend = decoder_outputs[0][1]
+            
+            if return_dict:
+                last_hidden_state, trend  = decoder_outputs[0]
+            else:
+                last_hidden_state, trend = decoder_outputs[:2]
         else:
             decoder_outputs = BaseModelOutputWithPastAndCrossAttentions()
-            last_hidden_state = decoder_outputs.last_hidden_state
-            trend = None
+            last_hidden_state, trend = (None, None)
 
         if not return_dict:
-            return (last_hidden_state, trend) + decoder_outputs[2:] + encoder_outputs + (loc, scale, static_feat)
+            return (last_hidden_state, trend) +  decoder_outputs[2:] + encoder_outputs + (loc, scale, static_feat)
 
         return AutoformerModelOutput(
             last_hidden_state=last_hidden_state,
@@ -1936,7 +1938,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             prediction_loss = weighted_average(loss, weights=loss_weights)
 
         if not return_dict:
-            outputs = ((params,) + outputs[1:-1]) if params is not None else outputs[1:-1]
+            outputs = ((params,) + outputs[2:]) if params is not None else outputs[2:]
             return ((prediction_loss,) + outputs) if prediction_loss is not None else outputs
 
         return Seq2SeqTSPredictionOutput(

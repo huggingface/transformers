@@ -240,10 +240,6 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="Result of the model has randomness")
-    def test_model_outputs_equivalence(self):
-        pass
-
     # # Input is 'static_categorical_features' not 'input_ids'
     def test_model_main_input_name(self):
         model_signature = inspect.signature(getattr(AutoformerModel, "forward"))
