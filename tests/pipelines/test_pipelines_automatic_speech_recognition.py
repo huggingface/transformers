@@ -316,6 +316,32 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 "chunks": [{"text": " Conquered returned to its place amidst the tents.", "timestamp": (0.0, 3.36)}],
             },
         )
+        res = pipe(sample["audio"]["array"], return_timestamps="word")
+        # fmt: off
+        # Note that the word-level timestamps predicted here are pretty bad.
+        self.assertEqual(
+            res,
+            {
+                "text": " Conquered returned to its place amidst the tents.",
+                "chunks": [
+                    {
+                        'timestamp': (0.0, 3.36),
+                        'text': ' Conquered returned to its place amidst the tents.',
+                        'words': [
+                            {'text': ' Conquered', 'tokens': [2656, 358, 4073], 'timestamp': (29.78, 29.9)},
+                            {'text': ' returned', 'tokens': [8752], 'timestamp': (29.9, 29.9)},
+                            {'text': ' to', 'tokens': [281], 'timestamp': (29.9, 29.9)},
+                            {'text': ' its', 'tokens': [1080], 'timestamp': (29.9, 29.9)},
+                            {'text': ' place', 'tokens': [1081], 'timestamp': (29.9, 29.9)},
+                            {'text': ' amidst', 'tokens': [30153, 372], 'timestamp': (29.9, 29.9)},
+                            {'text': ' the', 'tokens': [264], 'timestamp': (29.9, 29.9)},
+                            {'text': ' tents.', 'tokens': [39283, 13], 'timestamp': (29.9, 29.9)}
+                        ]
+                    }
+                ]
+            }
+        )
+        # fmt: on
 
     @require_torch
     @slow
@@ -699,6 +725,38 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 ],
             },
         )
+        output = speech_recognizer(filename, return_timestamps="word")
+        # fmt: off
+        self.assertEqual(
+            output,
+            {
+                "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+                "chunks": [{
+                    "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+                    "timestamp": (0.0, 5.44),
+                    "words": [
+                        {'text': ' Mr.', 'tokens': [1770, 13], 'timestamp': (0.0, 1.02)},
+                        {'text': ' Quilter', 'tokens': [2264, 346, 353], 'timestamp': (1.02, 1.18)},
+                        {'text': ' is', 'tokens': [318], 'timestamp': (1.18, 1.44)},
+                        {'text': ' the', 'tokens': [262], 'timestamp': (1.44, 1.58)},
+                        {'text': ' apostle', 'tokens': [46329], 'timestamp': (1.58, 1.98)},
+                        {'text': ' of', 'tokens': [286], 'timestamp': (1.98, 2.3)},
+                        {'text': ' the', 'tokens': [262], 'timestamp': (2.3, 2.46)},
+                        {'text': ' middle', 'tokens': [3504], 'timestamp': (2.46, 2.56)},
+                        {'text': ' classes,', 'tokens': [6097, 11], 'timestamp': (2.56, 3.38)},
+                        {'text': ' and', 'tokens': [290], 'timestamp': (3.38, 3.52)},
+                        {'text': ' we', 'tokens': [356], 'timestamp': (3.52, 3.6)},
+                        {'text': ' are', 'tokens': [389], 'timestamp': (3.6, 3.72)},
+                        {'text': ' glad', 'tokens': [9675], 'timestamp': (3.72, 4.0)},
+                        {'text': ' to', 'tokens': [284], 'timestamp': (4.0, 4.26)},
+                        {'text': ' welcome', 'tokens': [7062], 'timestamp': (4.26, 4.54)},
+                        {'text': ' his', 'tokens': [465], 'timestamp': (4.54, 4.92)},
+                        {'text': ' gospel.', 'tokens': [21443, 13], 'timestamp': (4.92, 6.66)},
+                    ],
+                }],
+            },
+        )
+        # fmt: on
 
     @slow
     @require_torch
