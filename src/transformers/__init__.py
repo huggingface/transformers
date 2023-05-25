@@ -122,6 +122,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.intern_image": ["INTERN_IMAGE_PRETRAINED_CONFIG_ARCHIVE_MAP", "InternImageConfig", "InternImageTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -734,6 +735,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
+    _import_structure["models.intern_image"].append("InternImageTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -972,6 +974,22 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.intern_image"].extend(
+        [
+            "INTERN_IMAGE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "InternImageForMaskedLM",
+            "InternImageForCausalLM",
+            "InternImageForMultipleChoice",
+            "InternImageForQuestionAnswering",
+            "InternImageForSequenceClassification",
+            "InternImageForTokenClassification",
+            "InternImageLayer",
+            "InternImageModel",
+            "InternImagePreTrainedModel",
+            "load_tf_weights_in_intern_image",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3914,6 +3932,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.intern_image import INTERN_IMAGE_PRETRAINED_CONFIG_ARCHIVE_MAP, InternImageConfig, InternImageTokenizer
     from .models.align import (
         ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AlignConfig,
@@ -4485,6 +4504,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
+        from .models.intern_image import InternImageTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -4684,6 +4704,20 @@ if TYPE_CHECKING:
         from .modeling_utils import PreTrainedModel
 
         # PyTorch model imports
+
+        from .models.intern_image import (
+            INTERN_IMAGE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            InternImageForMaskedLM,
+            InternImageForCausalLM,
+            InternImageForMultipleChoice,
+            InternImageForQuestionAnswering,
+            InternImageForSequenceClassification,
+            InternImageForTokenClassification,
+            InternImageLayer,
+            InternImageModel,
+            InternImagePreTrainedModel,
+            load_tf_weights_in_intern_image,
+        )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,

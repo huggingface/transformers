@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from . import (
+    intern_image,
     albert,
     align,
     altclip,
