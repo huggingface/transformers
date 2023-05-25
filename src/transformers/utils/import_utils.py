@@ -450,9 +450,9 @@ def is_apex_available():
 
 def is_ninja_available():
     r"""
-    Code below comes from `torch.utils.cpp_extension.is_ninja_available()`
-    Returns ``True`` if the `ninja <https://ninja-build.org/>`_ build system is
-    available on the system, ``False`` otherwise.
+    Code below comes from *torch.utils.cpp_extension.is_ninja_available()*
+    Returns `True` if the [ninja](https://ninja-build.org/) build system is
+    available on the system, `False` otherwise.
     """
     try:
         subprocess.check_output("ninja --version".split())
