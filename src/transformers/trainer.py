@@ -3699,9 +3699,10 @@ class Trainer:
                 commit_message = f"Training in progress, step {self.state.global_step}"
             else:
                 commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
-            _, self.push_in_progress = self.repo.push_to_hub(
-                commit_message=commit_message, blocking=False, auto_lfs_prune=True
-            )
+            push_work = self.repo.push_to_hub(commit_message=commit_message, blocking=False, auto_lfs_prune=True)
+            # Return type of `Repository.push_to_hub` is either None or a tuple.
+            if push_work is not None:
+                self.push_in_progress = push_work[1]
         except Exception as e:
             logger.error(f"Error when pushing to hub: {e}")
         finally:
