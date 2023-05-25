@@ -1104,8 +1104,6 @@ def _combine_tokens_into_words(
     else:
         words, word_tokens, token_indices = _split_tokens_on_spaces(tokenizer, tokens)
 
-    words[:] = [word.strip() for word in words]
-
     _merge_punctuations(words, word_tokens, token_indices, prepend_punctuations, append_punctuations)
     return words, word_tokens, token_indices
 
@@ -1170,7 +1168,7 @@ def _merge_punctuations(words, tokens, indices, prepended, appended):
     i = len(words) - 2
     j = len(words) - 1
     while i >= 0:
-        if words[i] in prepended:
+        if words[i].startswith(" ") and words[i].strip() in prepended:
             words[j] = words[i] + words[j]
             tokens[j] = tokens[i] + tokens[j]
             indices[j] = indices[i] + indices[j]
@@ -1185,7 +1183,7 @@ def _merge_punctuations(words, tokens, indices, prepended, appended):
     i = 0
     j = 1
     while j < len(words):
-        if words[j] in appended:
+        if not words[i].endswith(" ") and words[j] in appended:
             words[i] += words[j]
             tokens[i] += tokens[j]
             indices[i] += indices[j]

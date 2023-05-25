@@ -260,7 +260,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         # 'whatever "whatever" said someone, clever!?'
         encoded_input = [1363, 7969, 503, 1363, 7969, 1, 848, 1580, 11, 13494, 7323]
-        expected_words = ["whatever", '"whatever"', "said", "someone,", "clever!?"]
+        expected_words = ['whatever', ' "whatever"', ' said', ' someone,', ' clever!?']
         expected_tokens = [[1363, 7969], [503, 1363, 7969, 1], [848], [1580, 11], [13494, 7323]]
         expected_indices = [[0, 1], [2, 3, 4, 5], [6], [7, 8], [9, 10]]
         output = _combine_tokens_into_words(tokenizer, encoded_input)
