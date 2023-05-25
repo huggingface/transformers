@@ -14,9 +14,12 @@
 # limitations under the License.
 """TF 2.0 LayoutLMv3 model."""
 
+
+from __future__ import annotations
+
 import collections
 import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -36,6 +39,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
+from ...tf_utils import check_embeddings_within_bounds
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
@@ -221,11 +225,11 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
 
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
         bbox: tf.Tensor = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         training: bool = False,
     ) -> tf.Tensor:
         if position_ids is None:
@@ -240,16 +244,7 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
             token_type_ids = tf.zeros(input_shape, dtype=position_ids.dtype)
 
         if inputs_embeds is None:
-            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-            tf.debugging.assert_less(
-                input_ids,
-                tf.cast(self.word_embeddings.input_dim, dtype=input_ids.dtype),
-                message=(
-                    "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.word_embeddings.input_dim})"
-                ),
-            )
+            check_embeddings_within_bounds(input_ids, self.word_embeddings.input_dim)
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
@@ -327,11 +322,11 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[tf.Tensor],
-        head_mask: Optional[tf.Tensor],
+        attention_mask: tf.Tensor | None,
+        head_mask: tf.Tensor | None,
         output_attentions: bool,
-        rel_pos: Optional[tf.Tensor] = None,
-        rel_2d_pos: Optional[tf.Tensor] = None,
+        rel_pos: tf.Tensor | None = None,
+        rel_2d_pos: tf.Tensor | None = None,
         training: bool = False,
     ) -> Union[Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor]]:
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -406,11 +401,11 @@ class TFLayoutLMv3Attention(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[tf.Tensor],
-        head_mask: Optional[tf.Tensor],
+        attention_mask: tf.Tensor | None,
+        head_mask: tf.Tensor | None,
         output_attentions: bool,
-        rel_pos: Optional[tf.Tensor] = None,
-        rel_2d_pos: Optional[tf.Tensor] = None,
+        rel_pos: tf.Tensor | None = None,
+        rel_2d_pos: tf.Tensor | None = None,
         training: bool = False,
     ) -> Union[Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor]]:
         self_outputs = self.self_attention(
@@ -477,11 +472,11 @@ class TFLayoutLMv3Layer(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[tf.Tensor],
-        head_mask: Optional[tf.Tensor],
+        attention_mask: tf.Tensor | None,
+        head_mask: tf.Tensor | None,
         output_attentions: bool,
-        rel_pos: Optional[tf.Tensor] = None,
-        rel_2d_pos: Optional[tf.Tensor] = None,
+        rel_pos: tf.Tensor | None = None,
+        rel_2d_pos: tf.Tensor | None = None,
         training: bool = False,
     ) -> Union[Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor]]:
         self_attention_outputs = self.attention(
@@ -601,13 +596,13 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        bbox: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
+        bbox: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-        position_ids: Optional[tf.Tensor] = None,
+        position_ids: tf.Tensor | None = None,
         training: bool = False,
     ) -> Union[
         TFBaseModelOutput,
@@ -786,7 +781,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
 
         return extended_attention_mask
 
-    def get_head_mask(self, head_mask: Optional[tf.Tensor]) -> Union[tf.Tensor, List[Optional[tf.Tensor]]]:
+    def get_head_mask(self, head_mask: tf.Tensor | None) -> Union[tf.Tensor, List[tf.Tensor | None]]:
         if head_mask is None:
             return [None] * self.config.num_hidden_layers
 
@@ -814,14 +809,14 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
-        bbox: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        pixel_values: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
+        bbox: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        pixel_values: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -985,37 +980,10 @@ class TFLayoutLMv3PreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "layoutlmv3"
 
     @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        size = self.config.input_size
-        image_shape = (2, self.config.num_channels, size, size)
-        pixel_values = tf.random.uniform(shape=image_shape, minval=-1, maxval=1)
-        return {
-            "input_ids": tf.constant(_DUMMY_INPUT_IDS, dtype=tf.int32),
-            "bbox": tf.constant(_DUMMY_BBOX, dtype=tf.int32),
-            "pixel_values": pixel_values,
-        }
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "bbox": tf.TensorSpec((None, None, 4), tf.int32, name="bbox"),
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-
-        return self.serving_output(output)
+    def input_signature(self):
+        sig = super().input_signature
+        sig["bbox"] = tf.TensorSpec((None, None, 4), tf.int32, name="bbox")
+        return sig
 
 
 LAYOUTLMV3_START_DOCSTRING = r"""
@@ -1153,14 +1121,14 @@ class TFLayoutLMv3Model(TFLayoutLMv3PreTrainedModel):
     @replace_return_docstrings(output_type=TFBaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
-        bbox: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        pixel_values: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
+        bbox: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        pixel_values: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1211,16 +1179,6 @@ class TFLayoutLMv3Model(TFLayoutLMv3PreTrainedModel):
         )
 
         return outputs
-
-    def serving_output(self, output: TFBaseModelOutput) -> TFBaseModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutput(
-            last_hidden_state=output.last_hidden_state,
-            hidden_states=hs,
-            attentions=attns,
-        )
 
 
 class TFLayoutLMv3ClassificationHead(tf.keras.layers.Layer):
@@ -1280,18 +1238,18 @@ class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSeque
     @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        labels: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        labels: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        bbox: Optional[tf.Tensor] = None,
-        pixel_values: Optional[tf.Tensor] = None,
+        bbox: tf.Tensor | None = None,
+        pixel_values: tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[
         TFSequenceClassifierOutput,
@@ -1359,13 +1317,6 @@ class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSeque
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
-    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
-
 
 @add_start_docstrings(
     """
@@ -1400,18 +1351,18 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
     @replace_return_docstrings(output_type=TFTokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
-        bbox: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        labels: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
+        bbox: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        labels: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        pixel_values: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[
         TFTokenClassifierOutput,
@@ -1489,13 +1440,6 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
-    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
-
 
 @add_start_docstrings(
     """
@@ -1522,18 +1466,18 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
     @replace_return_docstrings(output_type=TFQuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        start_positions: Optional[tf.Tensor] = None,
-        end_positions: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        start_positions: tf.Tensor | None = None,
+        end_positions: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        bbox: Optional[tf.Tensor] = None,
-        pixel_values: Optional[tf.Tensor] = None,
+        bbox: tf.Tensor | None = None,
+        pixel_values: tf.Tensor | None = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[
@@ -1622,13 +1566,4 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
             end_logits=end_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-        )
-
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
-    def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFQuestionAnsweringModelOutput(
-            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
         )

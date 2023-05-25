@@ -81,9 +81,15 @@ class BackboneTesterMixin:
             out_channels = [num_features[idx] for idx in out_indices]
             self.assertListEqual(model.channels, out_channels)
 
-            config.out_features = None
-            config.out_indices = None
-            model = model_class(config)
+            new_config = copy.deepcopy(config)
+            new_config.out_features = None
+            model = model_class(new_config)
+            self.assertEqual(len(model.channels), 1)
+            self.assertListEqual(model.channels, [num_features[-1]])
+
+            new_config = copy.deepcopy(config)
+            new_config.out_indices = None
+            model = model_class(new_config)
             self.assertEqual(len(model.channels), 1)
             self.assertListEqual(model.channels, [num_features[-1]])
 
@@ -102,6 +108,15 @@ class BackboneTesterMixin:
             # Check output of last stage is taken if out_features=None, out_indices=None
             modified_config = copy.deepcopy(config)
             modified_config.out_features = None
+            model = model_class(modified_config)
+            model.to(torch_device)
+            model.eval()
+            result = model(**inputs_dict)
+
+            self.assertEqual(len(result.feature_maps), 1)
+            self.assertEqual(len(model.channels), 1)
+
+            modified_config = copy.deepcopy(config)
             modified_config.out_indices = None
             model = model_class(modified_config)
             model.to(torch_device)

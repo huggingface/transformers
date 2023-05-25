@@ -391,8 +391,8 @@ class Trainer:
             )
 
         # At this stage the model is already loaded
-        if getattr(model, "is_loaded_in_8bit", False):
-            if getattr(model, "_is_int8_training_enabled", False):
+        if getattr(model, "is_loaded_in_kbit", False):
+            if getattr(model, "_is_kbit_training_enabled", False):
                 logger.info(
                     "The model is loaded in 8-bit precision. To train this model you need to add additional modules"
                     " inside the model such as adapters using `peft` library and freeze the model weights. Please"
@@ -1105,10 +1105,10 @@ class Trainer:
                     for module in opt_model.modules():
                         if isinstance(module, nn.Embedding):
                             skipped += sum({p.data_ptr(): p.numel() for p in module.parameters()}.values())
-                            print(f"skipped {module}: {skipped/2**20}M params")
+                            logger.info(f"skipped {module}: {skipped/2**20}M params")
                             manager.register_module_override(module, "weight", {"optim_bits": 32})
                             logger.debug(f"bitsandbytes: will optimize {module} in fp32")
-                    print(f"skipped: {skipped/2**20}M params")
+                    logger.info(f"skipped: {skipped/2**20}M params")
 
         if is_sagemaker_mp_enabled():
             self.optimizer = smp.DistributedOptimizer(self.optimizer)
@@ -1170,6 +1170,38 @@ class Trainer:
                 optimizer_kwargs.update(adam_kwargs)
             except ImportError:
                 raise ValueError("Trainer tried to instantiate apex FusedAdam but apex is not installed!")
+        elif args.optim in [
+            OptimizerNames.ADAMW_BNB,
+            OptimizerNames.ADAMW_8BIT,
+            OptimizerNames.PAGED_ADAMW,
+            OptimizerNames.PAGED_ADAMW_8BIT,
+            OptimizerNames.LION,
+            OptimizerNames.LION_8BIT,
+            OptimizerNames.PAGED_LION,
+            OptimizerNames.PAGED_LION_8BIT,
+        ]:
+            try:
+                from bitsandbytes.optim import AdamW, Lion
+
+                is_paged = False
+                optim_bits = 32
+                optimizer_cls = None
+                additional_optim_kwargs = adam_kwargs
+                if "paged" in args.optim:
+                    is_paged = True
+                if "8bit" in args.optim:
+                    optim_bits = 8
+                if "adam" in args.optim:
+                    optimizer_cls = AdamW
+                elif "lion" in args.optim:
+                    optimizer_cls = Lion
+                    additional_optim_kwargs = {"betas": (args.adam_beta1, args.adam_beta2)}
+
+                bnb_kwargs = {"is_paged": is_paged, "optim_bits": optim_bits}
+                optimizer_kwargs.update(additional_optim_kwargs)
+                optimizer_kwargs.update(bnb_kwargs)
+            except ImportError:
+                raise ValueError("Trainer tried to instantiate bnb optimizer but bnb is not installed!")
         elif args.optim == OptimizerNames.ADAMW_BNB:
             try:
                 from bitsandbytes.optim import Adam8bit
@@ -1712,6 +1744,14 @@ class Trainer:
                 f" {args.max_steps}"
             )
 
+        # Compute absolute values for logging, eval, and save if given as ratio
+        if args.logging_steps and args.logging_steps < 1:
+            args.logging_steps = math.ceil(max_steps * args.logging_steps)
+        if args.eval_steps and args.eval_steps < 1:
+            args.eval_steps = math.ceil(max_steps * args.eval_steps)
+        if args.save_steps and args.save_steps < 1:
+            args.save_steps = math.ceil(max_steps * args.save_steps)
+
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
                 # nn.DataParallel(model) replicates the model, creating new variables and module
@@ -2114,7 +2154,7 @@ class Trainer:
         safe_weights_index_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_INDEX_NAME)
 
         if not any(
-            [os.path.isfile(f) for f in [weights_file, safe_weights_file, weights_index_file, safe_weights_index_file]]
+            os.path.isfile(f) for f in [weights_file, safe_weights_file, weights_index_file, safe_weights_index_file]
         ):
             raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
@@ -2218,16 +2258,35 @@ class Trainer:
                         state_dict["_smp_is_partial"] = False
                         load_result = model.load_state_dict(state_dict, strict=True)
                 else:
-                    # We load the model state dict on the CPU to avoid an OOM error.
-                    if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
-                        state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
-                    else:
-                        state_dict = torch.load(best_model_path, map_location="cpu")
+                    if hasattr(model, "base_model") and getattr(model.base_model, "is_8bit_serializable", False):
+                        # If train base_8_bit_models using PEFT & LoRA, assume that adapter have been saved properly.
+                        if hasattr(model, "active_adapter") and hasattr(model, "load_adapter"):
+                            if os.path.exists(os.path.join(self.state.best_model_checkpoint, "adapter_model.bin")):
+                                model.load_adapter(self.state.best_model_checkpoint, model.active_adapter)
+                                # Load_adapter has no return value present, modify it when appropriate.
+                                from torch.nn.modules.module import _IncompatibleKeys
 
-                    # If the model is on the GPU, it still works!
-                    # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
-                    # which takes *args instead of **kwargs
-                    load_result = model.load_state_dict(state_dict, False)
+                                load_result = _IncompatibleKeys([], [])
+                            else:
+                                logger.warning(
+                                    "The intermediate checkpoints of PEFT may not be saved correctly, "
+                                    "using `TrainerCallback` to save adapter_model.bin in corresponding folders, "
+                                    "here are some examples https://github.com/huggingface/peft/issues/96"
+                                )
+                        else:
+                            # We can't do pure 8bit training using transformers.
+                            logger.warning("Could not loading a quantized checkpoint.")
+                    else:
+                        # We load the model state dict on the CPU to avoid an OOM error.
+                        if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
+                            state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
+                        else:
+                            state_dict = torch.load(best_model_path, map_location="cpu")
+
+                        # If the model is on the GPU, it still works!
+                        # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
+                        # which takes *args instead of **kwargs
+                        load_result = model.load_state_dict(state_dict, False)
                 if not is_sagemaker_mp_enabled():
                     self._issue_warnings_after_load(load_result)
         elif os.path.exists(os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
@@ -2364,6 +2423,12 @@ class Trainer:
         if self.sharded_ddp == ShardedDDPOption.SIMPLE:
             self.optimizer.consolidate_state_dict()
 
+        if self.fsdp:
+            # FSDP has a different interface for saving optimizer states.
+            # Needs to be called on all ranks to gather all states.
+            # full_optim_state_dict will be deprecated after Pytorch 2.2!
+            full_osd = self.model.__class__.full_optim_state_dict(self.model, self.optimizer)
+
         if is_torch_tpu_available():
             xm.rendezvous("saving_optimizer_states")
             xm.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
@@ -2388,7 +2453,11 @@ class Trainer:
                     torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
         elif self.args.should_save and not self.deepspeed:
             # deepspeed.save_checkpoint above saves model/optim/sched
-            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
+            if self.fsdp:
+                torch.save(full_osd, os.path.join(output_dir, OPTIMIZER_NAME))
+            else:
+                torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
+
             with warnings.catch_warnings(record=True) as caught_warnings:
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
             reissue_pt_warnings(caught_warnings)
@@ -2498,9 +2567,18 @@ class Trainer:
                     # In distributed training however, we load directly on each GPU and risk the GPU OOM as it's more
                     # likely to get OOM on CPU (since we load num_gpu times the optimizer state
                     map_location = self.args.device if self.args.world_size > 1 else "cpu"
-                    self.optimizer.load_state_dict(
-                        torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
-                    )
+                    if self.fsdp:
+                        full_osd = None
+                        # In FSDP, we need to load the full optimizer state dict on rank 0 and then shard it
+                        if self.args.process_index == 0:
+                            full_osd = torch.load(os.path.join(checkpoint, OPTIMIZER_NAME))
+                        # call scatter_full_optim_state_dict on all ranks
+                        sharded_osd = self.model.__class__.scatter_full_optim_state_dict(full_osd, self.model)
+                        self.optimizer.load_state_dict(sharded_osd)
+                    else:
+                        self.optimizer.load_state_dict(
+                            torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
+                        )
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, SCHEDULER_NAME)))
                 reissue_pt_warnings(caught_warnings)
@@ -3320,7 +3398,9 @@ class Trainer:
             tensors = nested_xla_mesh_reduce(tensors, name)
         elif is_sagemaker_mp_enabled():
             tensors = smp_gather(tensors)
-        elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
+        elif (self.args.distributed_state is not None and self.args.distributed_state.distributed_type != "NO") or (
+            self.args.distributed_state is None and self.local_rank != -1
+        ):
             tensors = distributed_concat(tensors)
         return tensors
 
@@ -3622,6 +3702,8 @@ class Trainer:
             _, self.push_in_progress = self.repo.push_to_hub(
                 commit_message=commit_message, blocking=False, auto_lfs_prune=True
             )
+        except Exception as e:
+            logger.error(f"Error when pushing to hub: {e}")
         finally:
             if self.args.hub_strategy == HubStrategy.CHECKPOINT:
                 # Move back the checkpoint to its place

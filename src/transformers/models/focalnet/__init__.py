@@ -30,6 +30,7 @@ else:
         "FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FocalNetForImageClassification",
         "FocalNetForMaskedImageModeling",
+        "FocalNetBackbone",
         "FocalNetModel",
         "FocalNetPreTrainedModel",
     ]
@@ -45,6 +46,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_focalnet import (
             FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FocalNetBackbone,
             FocalNetForImageClassification,
             FocalNetForMaskedImageModeling,
             FocalNetModel,
