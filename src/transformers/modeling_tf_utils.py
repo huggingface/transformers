@@ -1114,7 +1114,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         sig = self._prune_signature(self.input_signature)
-        dummies = {key: tf.keras.Input(shape=spec.shape[1:], dtype=spec.dtype) for key, spec in sig.items()}
+        dummies = {key: tf.keras.Input(shape=spec.shape[1:], dtype=spec.dtype, name=key) for key, spec in sig.items()}
         return dummies
 
     @property
