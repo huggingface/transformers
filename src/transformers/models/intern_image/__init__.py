@@ -13,24 +13,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import  _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
+from ...utils import _LazyModule, OptionalDependencyNotAvailable
 from ...utils import is_torch_available
-
-
 
 
 _import_structure = {
     "configuration_intern_image": ["INTERN_IMAGE_PRETRAINED_CONFIG_ARCHIVE_MAP", "InternImageConfig"],
-    "tokenization_intern_image": ["InternImageTokenizer"],
 }
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_intern_image_fast"] = ["InternImageTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -40,12 +29,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_intern_image"] = [
         "INTERN_IMAGE_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "InternImageForMaskedLM",
-        "InternImageForCausalLM",
-        "InternImageForMultipleChoice",
-        "InternImageForQuestionAnswering",
-        "InternImageForSequenceClassification",
-        "InternImageForTokenClassification",
         "InternImageLayer",
         "InternImageModel",
         "InternImagePreTrainedModel",
@@ -53,19 +36,8 @@ else:
     ]
 
 
-
-
 if TYPE_CHECKING:
     from .configuration_intern_image import INTERN_IMAGE_PRETRAINED_CONFIG_ARCHIVE_MAP, InternImageConfig
-    from .tokenization_intern_image import InternImageTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_intern_image_fast import InternImageTokenizerFast
 
     try:
         if not is_torch_available():
@@ -75,18 +47,11 @@ if TYPE_CHECKING:
     else:
         from .modeling_intern_image import (
             INTERN_IMAGE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            InternImageForMaskedLM,
-            InternImageForCausalLM,
-            InternImageForMultipleChoice,
-            InternImageForQuestionAnswering,
-            InternImageForSequenceClassification,
-            InternImageForTokenClassification,
             InternImageLayer,
             InternImageModel,
             InternImagePreTrainedModel,
             load_tf_weights_in_intern_image,
         )
-
 
 
 else:
