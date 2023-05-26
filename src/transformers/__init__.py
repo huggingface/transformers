@@ -4703,7 +4703,7 @@ if TYPE_CHECKING:
             INTERN_IMAGE_PRETRAINED_MODEL_ARCHIVE_LIST,
             InternImageModelForImageClassification,
             InternImageLayer,
-            InternImageModel
+            InternImageModel,
         )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
