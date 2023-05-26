@@ -158,8 +158,8 @@
     title: (번역중) Glossary
   - local: in_translation
     title: (번역중) What 🤗 Transformers can do
-  - local: in_translation
-    title: (번역중) How 🤗 Transformers solve tasks
+  - local: tasks_explained
+    title: 🤗 Transformers로 작업을 해결하는 방법
   - local: in_translation
     title: (번역중) The Transformer model family
   - local: in_translation
