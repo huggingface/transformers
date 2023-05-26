@@ -581,6 +581,7 @@ class TFSamPositionalEmbedding(tf.keras.layers.Layer):
             initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=self.scale),
             trainable=False,
         )
+        super().build(input_shape)
 
     def call(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""

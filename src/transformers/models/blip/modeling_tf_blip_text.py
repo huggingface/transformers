@@ -543,8 +543,9 @@ class TFBlipTextLMPredictionHead(tf.keras.layers.Layer):
         )
         self.config = config
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         self.bias = self.add_weight(name="bias", shape=(self.config.vocab_size,), initializer="zeros", trainable=True)
+        super().build(input_shape)
 
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
