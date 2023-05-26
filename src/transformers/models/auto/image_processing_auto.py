@@ -361,6 +361,7 @@ class AutoImageProcessor:
                 image_processor_class = get_class_from_dynamic_module(
                     image_processor_auto_map, pretrained_model_name_or_path, **kwargs
                 )
+                _ = kwargs.pop("code_revision", None)
             else:
                 image_processor_class = image_processor_class_from_name(image_processor_class)
 
