@@ -1587,11 +1587,15 @@ class FlyteCallback(TrainerCallback):
             self.cp.save(artifact_path)
 
     def on_train_end(self, args, state, control, **kwargs):
-        if self.save_log_history and is_pandas_available():
+        if self.save_log_history:
             import pandas as pd
             from flytekit import Deck
 
-            Deck("Log History", pd.DataFrame(state.log_history).to_html())
+            if is_pandas_available():
+                Deck("Log History", pd.DataFrame(state.log_history).to_html())
+            else:
+                logger.warning("Install pandas for optimal Flyte log formatting.")
+                Deck("Log History", str(state.log_history))
 
 
 INTEGRATION_TO_CALLBACK = {
