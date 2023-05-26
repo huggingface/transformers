@@ -39,38 +39,38 @@ class InternImageConfig(PretrainedConfig):
 
 
     Args:
-        # vocab_size (`int`, *optional*, defaults to 30522):
-        #     Vocabulary size of the internimage model. Defines the number of different tokens that can be represented by the
-        #     `inputs_ids` passed when calling [`~InternImageModel`] or
-        #     [`~TFInternImageModel`].
-        # hidden_size (`int`, *optional*, defaults to 768):
-        #     Dimension of the encoder layers and the pooler layer.
-        # num_hidden_layers (`int`, *optional*, defaults to 12):
-        #     Number of hidden layers in the Transformer encoder.
-        # num_attention_heads (`int`, *optional*, defaults to 12):
-        #     Number of attention heads for each attention layer in the Transformer encoder.
-        # intermediate_size (`int`, *optional*, defaults to 3072):
-        #     Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        # hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-        #     The non-linear activation function (function or string) in the encoder and pooler.
-        #     If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        # hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-        #     The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        # attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-        #     The dropout ratio for the attention probabilities.
-        # max_position_embeddings (`int`, *optional*, defaults to 512):
-        #     The maximum sequence length that this model might ever be used with.
-        #     Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
-        # type_vocab_size (`int`, *optional*, defaults to 2):
-        #     The vocabulary size of the `token_type_ids` passed when calling [`~InternImageModel`] or
-        #     [`~TFInternImageModel`].
-        # initializer_range (`float`, *optional*, defaults to 0.02):
-        #     The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        # layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-        #     The epsilon used by the layer normalization layers.
-        # use_cache (`bool`, *optional*, defaults to `True`):
-        #     Whether or not the model should return the last key/values attentions (not used by all models). Only
-        #     relevant if `config.is_decoder=True`.
+        core_op (`str`, *optional*, defaults to `"DCNv3_pytorch"`):
+            Core operation used in the InternImageModel.
+        channels (`int`, *optional*, defaults to 64):
+            Number of channels in the InternImageModel.
+        depths (`tuple`, *optional*, defaults to `(4, 4, 18, 4)`):
+            Tuple specifying the depth of layers in the InternImageModel.
+        groups (`tuple`, *optional*, defaults to `(4, 8, 16, 32)`):
+            Tuple specifying the group of layers in the InternImageModel.
+        num_classes (`int`, *optional*, defaults to 1000):
+            Number of classes for the model output.
+        mlp_ratio (`float`, *optional*, defaults to 4.0):
+            Ratio of mlp layers in the InternImageModel.
+        drop_rate (`float`, *optional*, defaults to 0.0):
+            Dropout rate in the model.
+        drop_path_rate (`float`, *optional*, defaults to 0.1):
+            Dropout path rate in the model.
+        drop_path_type (`str`, *optional*, defaults to `"linear"`):
+            Type of dropout path used in the model.
+        act_layer (`str`, *optional*, defaults to `"GELU"`):
+            Activation function used in the model.
+        norm_layer (`str`, *optional*, defaults to `"LN"`):
+            Normalization layer used in the model.
+        layer_scale (`str`, *optional*, defaults to `None`):
+            Scale of the layers in the model.
+        offset_scale (`float`, *optional*, defaults to 1.0):
+            Offset scale in the model.
+        post_norm (`bool`, *optional*, defaults to `False`):
+            Whether to use post normalization in the model.
+        cls_scale (`float`, *optional*, defaults to 1.5):
+            Scale of the classification layer in the model.
+        with_cp (`bool`, *optional*, defaults to `False`):
+            Whether to use checkpointing in the model.
         Example:
 
     ```python
