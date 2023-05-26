@@ -81,7 +81,7 @@ class TFConvBertEmbeddings(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def build(self, input_shape: tf.TensorShape = None):
+    def build(self, input_shape: tf.TensorShape):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
