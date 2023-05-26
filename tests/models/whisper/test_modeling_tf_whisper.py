@@ -281,7 +281,7 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         for model_class in self.all_model_classes:
             model = model_class(config)
 
-            model(model.dummy_inputs)
+            model.build()
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=False)

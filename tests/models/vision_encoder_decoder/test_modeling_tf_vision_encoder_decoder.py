@@ -729,9 +729,9 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
         # create two random ViT/GPT2 models for vit-gpt2 & initialize weights (+cross_attention weights)
         encoder = TFViTModel(config.encoder)
-        encoder(encoder.dummy_inputs)
+        encoder.build()
         decoder = TFGPT2LMHeadModel(config.decoder)
-        decoder(decoder.dummy_inputs)
+        decoder.build()
 
         encoder_decoder_orig = TFVisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
 

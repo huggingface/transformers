@@ -335,6 +335,7 @@ def convert_pt_checkpoint_to_tf(
         )
 
         with torch.no_grad():
+            # TODO Matt: This needs to be replaced with something actually numerical
             pto = pt_model(**pt_model.dummy_inputs)
 
         np_pt = pto[0].numpy()
