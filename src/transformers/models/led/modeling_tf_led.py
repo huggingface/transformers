@@ -135,6 +135,7 @@ class TFLEDLearnedPositionalEmbedding(tf.keras.layers.Embedding):
 class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, layer_id, **kwargs):
         super().__init__(**kwargs)
+        self.config = config
 
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
@@ -190,6 +191,16 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         ), f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
 
         self.one_sided_attn_window_size = attention_window // 2
+
+    def build(self, input_shape=None):
+        if not self.built:
+            with tf.name_scope("query_global"):
+                self.query_global.build((self.config.hidden_size,))
+            with tf.name_scope("key_global"):
+                self.key_global.build((self.config.hidden_size,))
+            with tf.name_scope("value_global"):
+                self.value_global.build((self.config.hidden_size,))
+        self.built = True
 
     def call(
         self,
@@ -281,6 +292,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
                 is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
                 is_local_index_no_global_attn_nonzero=is_local_index_no_global_attn_nonzero,
             )
+
         attn_probs = stable_softmax(attn_scores, axis=-1)
 
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
@@ -320,6 +332,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         value_vectors = tf.reshape(value_vectors, (batch_size, seq_len, self.num_heads, self.head_dim))
 
         # if global attention, compute sum of global and local attn
+
         if is_global_attn:
             attn_output = self._compute_attn_output_with_global_indices(
                 value_vectors=value_vectors,
@@ -353,13 +366,13 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
                 training=training,
             )
         else:
+            # Leave attn_output unchanged
             global_attn_probs = tf.zeros((batch_size, self.num_heads, max_num_global_attn_indices, seq_len))
 
         # make sure that local attention probabilities are set to 0 for indices of global attn
         # Make sure to create a mask with the proper shape:
         # if is_global_attn==True => [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + max_num_global_attn_indices + 1]
         # if is_global_attn==False => [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + 1]
-
         if is_global_attn:
             masked_global_attn_index = tf.tile(
                 is_index_global_attn[:, :, None, None],
@@ -370,7 +383,6 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
                 is_index_global_attn[:, :, None, None],
                 (1, 1, self.num_heads, self.one_sided_attn_window_size * 2 + 1),
             )
-
         attn_probs = tf.where(
             masked_global_attn_index,
             tf.zeros(shape_list(masked_global_attn_index), dtype=attn_probs.dtype),
