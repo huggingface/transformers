@@ -613,7 +613,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
                 Mask with ones indicating tokens to attend to, zeros for tokens to ignore.
             input_shape (`Tuple[int]`):
                 The shape of the input to the model.
-            device: (`torch.device`):
+            device (`torch.device`):
                 The device of the input to the model.
 
         Returns:
