@@ -105,23 +105,6 @@ def functional_layernorm(inputs, weight, bias, epsilon=1e-5, axis=-1):
     return outputs
 
 
-def in_build_context():
-    if getattr(build_context, "in_build", False):
-        return True
-    return False
-
-
-class BuildContext:
-    def __enter__(self):
-        if getattr(build_context, "in_build", False):
-            raise ValueError("Attempted to enter another build context while already in a build context!")
-        build_context.in_build = True
-        return self
-
-    def __exit__(self, type, value, tb):
-        build_context.in_build = False
-
-
 def flatten(input, start_dim=0, end_dim=-1):
     # Replicates the behavior of torch.flatten in TF
 

@@ -41,9 +41,7 @@ from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, TFGenerationMixin
 from .tf_utils import (
-    BuildContext,
     expand_1d,
-    in_build_context,
     load_attributes_from_hdf5_group,
     save_attributes_to_hdf5_group,
     shape_list,
@@ -76,11 +74,14 @@ from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 if parse(tf.__version__).minor >= 13:
     from keras import backend as K
     from keras.__internal__ import KerasTensor
+    from keras.engine.base_layer_utils import call_context
 elif parse(tf.__version__).minor >= 11:
     from keras import backend as K
+    from keras.engine.base_layer_utils import call_context
     from keras.engine.keras_tensor import KerasTensor
 else:
     from tensorflow.python.keras import backend as K
+    from tensorflow.python.keras.engine import call_context
     from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 
 
@@ -1147,15 +1148,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         return "tf"
 
-    def build(self, input_shape=None):
-        if not self.built:
-            self.built = True  # We have to set this first or we enter an infinite recursion
-            # If we're already in a build context then dummy inputs are going to pass through and
-            # build the layers of this model anyway, so we should mark self.built as True without
-            # actually doing the build ourselves.
-            if not in_build_context():
-                with BuildContext():
-                    self(self.dummy_inputs, training=False)
+    def build(self, input_shape=None, force_build=False):
+        if self.built or call_context().in_call:
+            self.built = True  # We assume (i.e. pray) that the call inputs will handle everything for us
+            return
+        self(self.dummy_inputs, training=False)
+        self.built = True
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
