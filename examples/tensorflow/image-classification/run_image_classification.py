@@ -543,6 +543,7 @@ def main():
                 logging.info(f"{metric_name}: {value:.3f}")
 
         if training_args.output_dir is not None:
+            os.makedirs(training_args.output_dir, exist_ok=True)
             with open(os.path.join(training_args.output_dir, "all_results.json"), "w") as f:
                 f.write(json.dumps(eval_metrics))
 
