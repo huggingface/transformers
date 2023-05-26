@@ -10,19 +10,22 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# internimage
+# InternImage
 
 ## Overview
 
-The internimage model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>)  by <INSERT AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
+The InternImage model was proposed in [InternImage: Exploring Large-Scale Vision Foundation Models with Deformable Convolutions
+](https://doi.org/10.48550/arXiv.2211.05778) by Wenhai Wang, Jifeng Dai, Zhe Chen, Zhenhang Huang, Zhiqi Li, Xizhou Zhu, Xiaowei Hu, Tong Lu, Lewei Lu, Hongsheng Li, Xiaogang Wang, Yu Qiao. The proposed model, InternImage, is a large-scale vision foundation model designed for computer vision tasks. InternImage, incorporates the use of deformable convolutions. Deformable convolutions are a type of convolutional operation that allow the receptive field of each convolutional filter to be adjusted dynamically based on the input data. This enables the model to effectively capture spatially-varying patterns and improve its ability to handle objects with non-rigid or deformable structures. By utilizing deformable convolutions, InternImage enhances its capacity to accurately represent and analyze complex visual information, leading to improved performance in various computer vision tasks. InternImage outperforms existing models in tasks such as object detection and image classification and can be fine-tuned with small amounts of labeled data for specific applications.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+Compared to the great progress of large-scale vision transformers (ViTs) in recent years, large-scale models based on convolutional neural networks (CNNs) are still in an early state. This work presents a new large-scale CNN-based foundation model, termed InternImage, which can obtain the gain from increasing parameters and training data like ViTs. Different from the recent CNNs that focus on large dense kernels, InternImage takes deformable convolution as the core operator, so that our model not only has the large effective receptive field required for downstream tasks such as detection and segmentation, but also has the adaptive spatial aggregation conditioned by input and task information. As a result, the proposed InternImage reduces the strict inductive bias of traditional CNNs and makes it possible to learn stronger and more robust patterns with large-scale parameters from massive data like ViTs. The effectiveness of our model is proven on challenging benchmarks including ImageNet, COCO, and ADE20K. It is worth mentioning that InternImage-H achieved a new record 65.4 mAP on COCO test-dev and 62.9 mIoU on ADE20K, outperforming current leading CNNs and ViTs.
 
+<!--
 Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
+-->
 
 This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
@@ -30,57 +33,14 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingfac
 
 [[autodoc]] InternImageConfig
 
-
-## InternImageTokenizer
-
-[[autodoc]] InternImageTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-
-
-## InternImageTokenizerFast
-
-[[autodoc]] InternImageTokenizerFast
-
-
 ## InternImageModel
 
 [[autodoc]] InternImageModel
-    - forward
 
+- forward
 
-## InternImageForCausalLM
+## InternImageModelForImageClassification
 
-[[autodoc]] InternImageForCausalLM
-    - forward
+[[autodoc]] InternImageModelForImageClassification
 
-
-## InternImageForMaskedLM
-
-[[autodoc]] InternImageForMaskedLM
-    - forward
-
-
-## InternImageForSequenceClassification
-
-[[autodoc]] transformers.InternImageForSequenceClassification
-    - forward
-
-## InternImageForMultipleChoice
-
-[[autodoc]] transformers.InternImageForMultipleChoice
-    - forward
-
-
-## InternImageForTokenClassification
-
-[[autodoc]] transformers.InternImageForTokenClassification
-    - forward
-
-
-## InternImageForQuestionAnswering
-
-[[autodoc]] InternImageForQuestionAnswering
-    - forward
+- forward
