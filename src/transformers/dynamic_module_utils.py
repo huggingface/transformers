@@ -420,8 +420,6 @@ def get_class_from_dynamic_module(
     # Catch the name of the repo if it's specified in `class_reference`
     if "--" in class_reference:
         repo_id, class_reference = class_reference.split("--")
-        # Invalidate revision since it's not relevant for this repo
-        revision = "main"
     else:
         repo_id = pretrained_model_name_or_path
     module_file, class_name = class_reference.split(".")
