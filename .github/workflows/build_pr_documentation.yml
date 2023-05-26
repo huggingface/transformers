@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs_on: [self-hosted, multi-gpu, docker-gpu]
+    runs-on: [self-hosted, multi-gpu, docker-gpu]
     steps:
       - name: build_pr_documentation
         run: |
