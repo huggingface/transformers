@@ -1200,6 +1200,10 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
             return_dict=return_dict,
         )
 
+        if labels is not None and decoder_input_ids is None:
+            # labels are already shifted right, see: https://github.com/huggingface/transformers/pull/23153
+            decoder_input_ids = labels
+
         question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
 
         answer_output = self.text_decoder(
