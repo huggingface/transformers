@@ -150,6 +150,12 @@ def is_flytekit_available():
     return importlib.util.find_spec("flytekit") is not None
 
 
+def is_flyte_deck_standard_available():
+    if not is_flytekit_available():
+        return False
+    return importlib.util.find_spec("flytekitplugins.deck") is not None
+
+
 def hp_params(trial):
     if is_optuna_available():
         import optuna
@@ -1547,10 +1553,10 @@ class FlyteCallback(TrainerCallback):
 
     Args:
         save_log_history (bool, optional, defaults to `True`):
-            Determines whether or not to save the training logs to the task's Flyte Deck.
+            When set to True, the training logs are saved as a Flyte Deck.
 
         sync_checkpoints (bool, optional, defaults to `True`):
-            When set to True, checkpoints are synced to Flyte and can be used to resume training in the case of an
+            When set to True, checkpoints are synced with Flyte and can be used to resume training in the case of an
             interruption.
 
     Example:
@@ -1572,6 +1578,13 @@ class FlyteCallback(TrainerCallback):
         if not is_flytekit_available():
             raise ImportError("FlyteCallback requires flytekit to be installed. Run `pip install flytekit`.")
 
+        if not is_flyte_deck_standard_available() or not is_pandas_available():
+            logger.warning(
+                "Syncing log history requires both flytekitplugins-deck-standard and pandas to be installed. "
+                "Run `pip install flytekitplugins-deck-standard pandas` to enable this feature."
+            )
+            save_log_history = False
+
         from flytekit import current_context
 
         self.cp = current_context().checkpoint
@@ -1583,19 +1596,17 @@ class FlyteCallback(TrainerCallback):
             ckpt_dir = f"checkpoint-{state.global_step}"
             artifact_path = os.path.join(args.output_dir, ckpt_dir)
 
-            logger.info(f"Saving checkpoint in {ckpt_dir} to Flyte. This may take time.")
+            logger.info(f"Syncing checkpoint in {ckpt_dir} to Flyte. This may take time.")
             self.cp.save(artifact_path)
 
     def on_train_end(self, args, state, control, **kwargs):
         if self.save_log_history:
             import pandas as pd
             from flytekit import Deck
+            from flytekitplugins.deck.renderer import TableRenderer
 
-            if is_pandas_available():
-                Deck("Log History", pd.DataFrame(state.log_history).to_html())
-            else:
-                logger.warning("Install pandas for optimal Flyte log formatting.")
-                Deck("Log History", str(state.log_history))
+            log_history_df = pd.DataFrame(state.log_history)
+            Deck("Log History", TableRenderer().to_html(log_history_df))
 
 
 INTEGRATION_TO_CALLBACK = {
