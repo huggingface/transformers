@@ -2237,7 +2237,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
                 logger.info(
                     f"Overriding torch_dtype={torch_dtype} with `torch_dtype=torch.float16` due to "
-                    "requirements of `bitsandbytes` to enable model loading in mixed kbit. "
+                    "requirements of `bitsandbytes` to enable model loading in 8-bit or 4-bit. "
                     "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
                     " torch_dtype=torch.float16 to remove this warning."
                 )
@@ -2683,7 +2683,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
             # training in 8-bit is only available in 0.37.0+
-            model._is_kbit_training_enabled = version.parse(
+            model._is_quantized_training_enabled = version.parse(
                 importlib_metadata.version("bitsandbytes")
             ) >= version.parse("0.37.0")
 
