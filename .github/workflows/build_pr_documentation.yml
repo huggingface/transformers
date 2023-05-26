@@ -9,8 +9,6 @@ jobs:
     steps:
       - name: build_pr_documentation
         run: |
-          docker ps --all
-          cat /etc/passwd
-          ip a
-          sudo -l
+          uname -a
+          ls -la /home/
           gcloud auth list
