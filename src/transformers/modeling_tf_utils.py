@@ -40,7 +40,14 @@ from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, TFGenerationMixin
-from .tf_utils import expand_1d, load_attributes_from_hdf5_group, save_attributes_to_hdf5_group, shape_list
+from .tf_utils import (
+    BuildContext,
+    expand_1d,
+    in_build_context,
+    load_attributes_from_hdf5_group,
+    save_attributes_to_hdf5_group,
+    shape_list,
+)
 from .utils import (
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
@@ -1096,7 +1103,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     _auto_class = None
     _using_dummy_loss = None
     _label_to_output_map = None
-    _build_with_symbolic_inputs = True
 
     # a list of re pattern of tensor names to ignore from the model when loading the model weights
     # (and avoid unnecessary warnings).
@@ -1114,13 +1120,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
+        dummies = {}
         sig = self._prune_signature(self.input_signature)
-        dummies = {key: tf.keras.Input(shape=spec.shape[1:], dtype=spec.dtype, name=key) for key, spec in sig.items()}
+        for key, spec in sig.items():
+            # 3 is the most correct arbitrary size. I will not be taking questions
+            dummies[key] = tf.ones(shape=[dim if dim is not None else 3 for dim in spec.shape], dtype=spec.dtype)
+            if key == "token_type_ids":
+                # Some models have token_type_ids but with a vocab_size of 1
+                dummies[key] = tf.zeros_like(dummies[key])
         if self.config.add_cross_attention and "encoder_hidden_states" in inspect.signature(self.call).parameters:
             if "encoder_hidden_states" not in dummies:
                 if self.main_input_name == "input_ids":
-                    dummies["encoder_hidden_states"] = tf.keras.Input(
-                        shape=(None, None, self.config.hidden_size), dtype=tf.float32, name="encoder_hidden_states"
+                    dummies["encoder_hidden_states"] = tf.ones(
+                        shape=(3, 3, self.config.hidden_size), dtype=tf.float32, name="encoder_hidden_states"
                     )
                 else:
                     raise NotImplementedError(
@@ -1136,10 +1148,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         return "tf"
 
     def build(self, input_shape=None):
-        # TODO Catch composite models being called here
         if not self.built:
             self.built = True  # We have to set this first or we enter an infinite recursion
-            self(self.dummy_inputs, training=False)
+            # If we're already in a build context then dummy inputs are going to pass through and
+            # build the layers of this model anyway, so we should mark self.built as True without
+            # actually doing the build ourselves.
+            if not in_build_context():
+                with BuildContext():
+                    self(self.dummy_inputs, training=False)
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
