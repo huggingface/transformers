@@ -27,35 +27,35 @@
 - sections:
     - sections:
         - local: tasks/sequence_classification
-          title: Text classification
+          title: Klasifikasi teks
         - local: tasks/token_classification
-          title: Token classification
+          title: Klasifikasi token
         - local: tasks/question_answering
-          title: Question answering
+          title: Soalan menjawab
         - local: tasks/language_modeling
-          title: Causal language modeling
+          title: Pemodelan bahasa sebab-akibat
         - local: tasks/masked_language_modeling
-          title: Masked language modeling
+          title: Pemodelan bahasa Masked
         - local: tasks/translation
-          title: Translation
+          title: Terjemahan
         - local: tasks/summarization
-          title: Summarization
+          title: Rumusan
         - local: tasks/multiple_choice
-          title: Multiple choice
+          title: Pilihan
       title: Natural Language Processing
       isExpanded: false
     - sections:
         - local: tasks/audio_classification
-          title: Audio classification
+          title: Klasifikasi audio
         - local: tasks/asr
-          title: Automatic speech recognition
+          title: Pengecaman pertuturan automatik
       title: Audio
       isExpanded: false
     - sections:
         - local: tasks/image_classification
-          title: Image classification
+          title: Klasifikasi imej
         - local: tasks/semantic_segmentation
-          title: Semantic segmentation
+          title: Segmentasi semantik
         - local: tasks/video_classification
           title: Video classification
         - local: tasks/object_detection
