@@ -15,6 +15,8 @@
 """ Testing suite for the TensorFlow SAM model. """
 
 
+from __future__ import annotations
+
 import inspect
 import unittest
 

@@ -139,10 +139,17 @@ class OptimizerNames(ExplicitEnum):
     ADAMW_TORCH_XLA = "adamw_torch_xla"
     ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
-    ADAMW_BNB = "adamw_bnb_8bit"
     ADAMW_ANYPRECISION = "adamw_anyprecision"
     SGD = "sgd"
     ADAGRAD = "adagrad"
+    ADAMW_BNB = "adamw_bnb_8bit"
+    ADAMW_8BIT = "adamw_8bit"  # just an alias for adamw_bnb_8bit
+    LION_8BIT = "lion_8bit"
+    LION = "lion_32bit"
+    PAGED_ADAMW = "paged_adamw_32bit"
+    PAGED_ADAMW_8BIT = "paged_adamw_8bit"
+    PAGED_LION = "paged_lion_32bit"
+    PAGED_LION_8BIT = "paged_lion_8bit"
 
 
 @dataclass
@@ -1622,6 +1629,9 @@ class TrainingArguments:
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
             torch.cuda.set_device(device)
+        elif is_sagemaker_dp_enabled():
+            self.distributed_state = PartialState(_use_sagemaker_dp=True)
+            self._n_gpu = 1
         elif self.deepspeed:
             # Need to do similar for Accelerator init
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"
@@ -1646,8 +1656,9 @@ class TrainingArguments:
         if is_torch_tpu_available():
             device = self.distributed_state.device
             self._n_gpu = 0
-        elif is_sagemaker_dp_enabled():
-            self._n_gpu = 1
+        elif is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled():
+            # Already set _n_gpu
+            pass
         elif self.distributed_state.distributed_type == DistributedType.NO:
             if self.use_mps_device:
                 if not torch.backends.mps.is_available():
@@ -1673,7 +1684,9 @@ class TrainingArguments:
                         )
                     device = torch.device("mps")
                     self._n_gpu = 1
-
+            elif self.no_cuda:
+                device = torch.device("cpu")
+                self._n_gpu = 0
             else:
                 # if n_gpu is > 1 we'll use nn.DataParallel.
                 # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`

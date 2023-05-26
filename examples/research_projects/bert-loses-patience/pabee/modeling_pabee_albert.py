@@ -253,7 +253,7 @@ class AlbertForSequenceClassificationWithPabee(AlbertPreTrainedModel):
 
         Returns:
             :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
-            loss: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            loss (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
                 Classification (or regression if config.num_labels==1) loss.
             logits ``torch.FloatTensor`` of shape ``(batch_size, config.num_labels)``
                 Classification (or regression if config.num_labels==1) scores (before SoftMax).
