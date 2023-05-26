@@ -481,6 +481,8 @@
       - local: model_doc/imagegpt
         title: ImageGPT
       - local: model_doc/levit
+        title: InternImage
+      - local: model_doc/intern_image
         title: LeViT
       - local: model_doc/mask2former
         title: Mask2Former
