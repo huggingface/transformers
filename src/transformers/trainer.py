@@ -1704,7 +1704,7 @@ class Trainer:
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
     ):
         self._train_batch_size = batch_size
-        logger.debug(f"Training with a batch size of {self._train_batch_size}")
+        logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
 
