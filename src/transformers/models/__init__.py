@@ -43,6 +43,7 @@ from . import (
     chinese_clip,
     clap,
     clip,
+    clip_vip,
     clipseg,
     codegen,
     conditional_detr,

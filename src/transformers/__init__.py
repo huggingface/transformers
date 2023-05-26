@@ -230,6 +230,14 @@ _import_structure = {
         "CLIPTokenizer",
         "CLIPVisionConfig",
     ],
+    "models.clip_vip": [
+        "CLIP_VIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CLIPViPConfig",
+       
+        "CLIPViPTextConfig",
+       
+        "CLIPViPVisionConfig",
+    ],
     "models.clipseg": [
         "CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPSegConfig",
@@ -1292,6 +1300,17 @@ else:
             "CLIPTextModelWithProjection",
             "CLIPVisionModel",
             "CLIPVisionModelWithProjection",
+        ]
+    )
+    _import_structure["models.clip_vip"].extend(
+        [
+            "CLIP_VIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CLIPViPModel",
+            "CLIPViPPreTrainedModel",
+            "CLIPViPTextModel",
+            "CLIPViPTextModelWithProjection",
+            "CLIPViPVisionModel",
+            "CLIPViPVisionModelWithProjection",
         ]
     )
     _import_structure["models.clipseg"].extend(
@@ -4015,6 +4034,14 @@ if TYPE_CHECKING:
         CLIPTokenizer,
         CLIPVisionConfig,
     )
+    from .models.clip_vip import (
+        CLIP_VIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CLIPViPConfig,
+       
+        CLIPViPTextConfig,
+       
+        CLIPViPVisionConfig,
+    )
     from .models.clipseg import (
         CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPSegConfig,
@@ -4957,6 +4984,15 @@ if TYPE_CHECKING:
             CLIPTextModelWithProjection,
             CLIPVisionModel,
             CLIPVisionModelWithProjection,
+        )
+        from .models.clip_vip import (
+            CLIP_VIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CLIPViPModel,
+            CLIPViPPreTrainedModel,
+            CLIPViPTextModel,
+            CLIPViPTextModelWithProjection,
+            CLIPViPVisionModel,
+            CLIPViPVisionModelWithProjection,
         )
         from .models.clipseg import (
             CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST,

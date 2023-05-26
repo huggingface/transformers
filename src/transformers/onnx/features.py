@@ -214,6 +214,10 @@ class FeaturesManager:
             "default",
             onnx_config_cls="models.clip.CLIPOnnxConfig",
         ),
+        "clip_vip": supported_features_mapping(
+            "default",
+            onnx_config_cls="models.clip_vip.CLIPViPOnnxConfig",
+        ),
         "codegen": supported_features_mapping(
             "default",
             "causal-lm",
