@@ -445,8 +445,6 @@ class LongformerEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
