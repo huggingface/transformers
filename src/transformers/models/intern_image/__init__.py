@@ -31,8 +31,7 @@ else:
         "INTERN_IMAGE_PRETRAINED_MODEL_ARCHIVE_LIST",
         "InternImageLayer",
         "InternImageModel",
-        "InternImagePreTrainedModel",
-        "load_tf_weights_in_intern_image",
+        "InternImageModelForImageClassification",
     ]
 
 
@@ -49,8 +48,7 @@ if TYPE_CHECKING:
             INTERN_IMAGE_PRETRAINED_MODEL_ARCHIVE_LIST,
             InternImageLayer,
             InternImageModel,
-            InternImagePreTrainedModel,
-            load_tf_weights_in_intern_image,
+            InternImageModelForImageClassification,
         )
 
 
