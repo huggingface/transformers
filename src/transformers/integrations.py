@@ -1560,17 +1560,18 @@ class FlyteCallback(TrainerCallback):
             interruption.
 
     Example:
-        ```python
-        # Note: This example skips over some setup steps for brevity.
-        from flytekit import current_context, task
+
+    ```python
+    # Note: This example skips over some setup steps for brevity.
+    from flytekit import current_context, task
 
 
-        @task
-        def train_hf_transformer():
-            cp = current_context().checkpoint
-            trainer = Trainer(..., callbacks=[FlyteCallback()])
-            output = trainer.train(resume_from_checkpoint=cp.restore())
-        ```
+    @task
+    def train_hf_transformer():
+        cp = current_context().checkpoint
+        trainer = Trainer(..., callbacks=[FlyteCallback()])
+        output = trainer.train(resume_from_checkpoint=cp.restore())
+    ```
     """
 
     def __init__(self, save_log_history: bool = True, sync_checkpoints: bool = True):
