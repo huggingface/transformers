@@ -29,6 +29,7 @@ if is_torch_available():
     from transformers import (
         Adafactor,
         AdamW,
+        Lion,
         get_constant_schedule,
         get_constant_schedule_with_warmup,
         get_cosine_schedule_with_warmup,
@@ -100,6 +101,20 @@ class OptimizationTest(unittest.TestCase):
             scale_parameter=False,
             warmup_init=False,
         )
+        for _ in range(1000):
+            loss = criterion(w, target)
+            loss.backward()
+            optimizer.step()
+            w.grad.detach_()  # No zero_grad() function on simple tensors. we do it ourselves.
+            w.grad.zero_()
+        self.assertListAlmostEqual(w.tolist(), [0.4, 0.2, -0.5], tol=1e-2)
+    
+    def test_lion(self):
+        w = torch.tensor([0.1, -0.2, -0.1], requires_grad=True)
+        target = torch.tensor([0.4, 0.2, -0.5])
+        criterion = nn.MSELoss()
+        # No warmup, constant schedule, no gradient clipping
+        optimizer = Lion(params=[w], lr=5e-2, weight_decay=0.0)
         for _ in range(1000):
             loss = criterion(w, target)
             loss.backward()
