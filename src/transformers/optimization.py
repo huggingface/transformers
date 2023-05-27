@@ -484,9 +484,10 @@ class AdamW(Optimizer):
 
         return loss
 
+
 class Lion(Optimizer):
     """
-    Lion is a drop-in replacement for Adam as shown in the Google Brain paper https://arxiv.org/abs/2302.06675. 
+    Lion is a drop-in replacement for Adam as shown in the Google Brain paper https://arxiv.org/abs/2302.06675.
 
     Parameters:
         params (`Iterable[nn.parameter.Parameter]`):
@@ -559,14 +560,14 @@ class Lion(Optimizer):
 
                 state["step"] += 1
 
-                # stepweight decay 
-                p.data.mul_(1 - group['lr'] * group['weight_decay'])
+                # stepweight decay
+                p.data.mul_(1 - group["lr"] * group["weight_decay"])
 
                 # weight update
                 update = exp_avg * beta1 + grad * (1 - beta1)
-                p.add_(torch.sign(update), alpha=-group['lr'])
+                p.add_(torch.sign(update), alpha=-group["lr"])
 
-                # in-place operation to update the exp_avg 
+                # in-place operation to update the exp_avg
                 exp_avg.mul_(beta2).add_(grad, alpha=(1.0 - beta2))
 
                 step_size = group["lr"]
@@ -574,7 +575,6 @@ class Lion(Optimizer):
                     bias_correction1 = 1.0 - beta1 ** state["step"]
                     bias_correction2 = 1.0 - beta2 ** state["step"]
                     step_size = step_size * math.sqrt(bias_correction2) / bias_correction1
-
 
                 # Just adding the square of the weights to the loss function is *not*
                 # the correct way of using L2 regularization/weight decay with Adam,
@@ -588,6 +588,7 @@ class Lion(Optimizer):
                     p.add_(p, alpha=(-group["lr"] * group["weight_decay"]))
 
         return loss
+
 
 class Adafactor(Optimizer):
     """
@@ -857,7 +858,8 @@ class AdafactorSchedule(LambdaLR):
         ]
         if len(lrs) == 0:
             lrs = self.base_lrs  # if called before stepping
-        return lrs    
+        return lrs
+
 
 def get_adafactor_schedule(optimizer, initial_lr=0.0):
     """

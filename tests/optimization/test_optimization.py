@@ -108,7 +108,7 @@ class OptimizationTest(unittest.TestCase):
             w.grad.detach_()  # No zero_grad() function on simple tensors. we do it ourselves.
             w.grad.zero_()
         self.assertListAlmostEqual(w.tolist(), [0.4, 0.2, -0.5], tol=1e-2)
-    
+
     def test_lion(self):
         w = torch.tensor([0.1, -0.2, -0.1], requires_grad=True)
         target = torch.tensor([0.4, 0.2, -0.5])
