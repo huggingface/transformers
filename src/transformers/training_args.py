@@ -422,6 +422,8 @@ class TrainingArguments:
             - `"offload"`: Offload parameters and gradients to CPUs (only compatible with `"full_shard"` and
               `"shard_grad_op"`).
             - `"auto_wrap"`: Automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`.
+            - `"hybrid_shard"`: Apply `full_shard` within a node, and replicate parameters across nodes`.
+            - `"_hybrid_shard_zero2"`: Apply `shard_grad_op` within a node, and replicate parameters across nodes.
         fsdp_config (`str` or `dict`, *optional*):
             Config to be used with fsdp (Pytorch Distributed Parallel Training). The value is either a location of
             deepspeed json config file (e.g., `ds_config.json`) or an already loaded json file as `dict`.
@@ -953,10 +955,10 @@ class TrainingArguments:
         metadata={
             "help": (
                 "Whether or not to use PyTorch Fully Sharded Data Parallel (FSDP) training (in distributed training"
-                " only). The base option should be `full_shard`, `shard_grad_op` or `no_shard` and you can add"
-                " CPU-offload to `full_shard` or `shard_grad_op` like this: full_shard offload` or `shard_grad_op"
-                " offload`. You can add auto-wrap to `full_shard` or `shard_grad_op` with the same syntax: full_shard"
-                " auto_wrap` or `shard_grad_op auto_wrap`."
+                " only). The base option should be `full_shard`, `shard_grad_op` or `no_shard` , hybrid_shard,"
+                " _hybrid_shard_zero2 and you can add CPU-offload to `full_shard` or `shard_grad_op` like this: "
+                "full_shard offload` or `shard_grad_op offload`. You can add auto-wrap to `full_shard` or "
+                "`shard_grad_op` with the same syntax: full_shard auto_wrap` or `shard_grad_op auto_wrap`."
             ),
         },
     )
