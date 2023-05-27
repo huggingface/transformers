@@ -55,10 +55,10 @@ sudo apt install tesseract-ocr
 pip install -q pytesseract
 ```
 
-Once you have installed all of the dependencies, restart your runtime.
+필요한 라이브러리들을 모두 설치한 후 런타임을 다시 시작합니다.
 
-We encourage you to share your model with the community. Log in to your Hugging Face account to upload it to the 🤗 Hub.
-When prompted, enter your token to log in:
+커뮤니티에 당신의 모델을 공유하는 것을 권장합니다. Hugging Face 계정에 로그인해서 모델을 🤗 Hub에 업로드하세요.
+프롬프트가 실행되면, 로그인을 위해 토큰을 입력하세요:
 
 ```py
 >>> from huggingface_hub import notebook_login
@@ -66,18 +66,18 @@ When prompted, enter your token to log in:
 >>> notebook_login()
 ```
 
-Let's define some global variables.
+몇 가지 전역 변수를 정의해 보겠습니다.
 
 ```py
 >>> model_checkpoint = "microsoft/layoutlmv2-base-uncased"
 >>> batch_size = 4
 ```
 
-## Load the data
+## 데이터 불러오기 [[load-the-data]]
 
-In this guide we use a small sample of preprocessed DocVQA that you can find on 🤗 Hub. If you'd like to use the full
-DocVQA dataset, you can register and download it on [DocVQA homepage](https://rrc.cvc.uab.es/?ch=17). If you do so, to
-proceed with this guide check out [how to load files into a 🤗 dataset](https://huggingface.co/docs/datasets/loading#local-and-remote-files).
+이 가이드에서는 🤗 Hub에서 찾을 수 있는 사전 처리된 DocVQA의 작은 샘플을 사용합니다.
+DocVQA의 전체 데이터 세트를 사용하고 싶다면, [DocVQA homepage](https://rrc.cvc.uab.es/?ch=17)에서 가입 후 다운로드 할 수 있습니다.
+전체 데이터 세트를 다운로드 했다면, 이 가이드를 계속 진행하기 위해 [🤗 dataset에 파일을 로드하는 방법](https://huggingface.co/docs/datasets/loading#local-and-remote-files)을 확인하세요.
 
 ```py
 >>> from datasets import load_dataset
