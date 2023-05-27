@@ -180,6 +180,9 @@ class Wav2Vec2Config(PretrainedConfig):
         num_adapter_layers (`int`, *optional*, defaults to 3):
             Number of convolutional layers that should be used in the adapter network. Only relevant if `add_adapter is
             True`.
+        num_attn_adapters (`int`, *optional*):
+            Number of adapter weights to be used in each attention block. An example of a model using attention
+            adapters is XXX.
         output_hidden_size (`int`, *optional*):
             Dimensionality of the encoder output layer. If not defined, this defaults to *hidden-size*. Only relevant
             if `add_adapter is True`.
@@ -256,6 +259,7 @@ class Wav2Vec2Config(PretrainedConfig):
         adapter_stride=2,
         num_adapter_layers=3,
         output_hidden_size=None,
+        num_attn_adapters=None,
         **kwargs,
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
@@ -326,6 +330,7 @@ class Wav2Vec2Config(PretrainedConfig):
         self.adapter_stride = adapter_stride
         self.num_adapter_layers = num_adapter_layers
         self.output_hidden_size = output_hidden_size or hidden_size
+        self.num_attn_adapters = num_attn_adapters
 
         # SequenceClassification-specific parameter. Feel free to ignore for other classes.
         self.classifier_proj_size = classifier_proj_size

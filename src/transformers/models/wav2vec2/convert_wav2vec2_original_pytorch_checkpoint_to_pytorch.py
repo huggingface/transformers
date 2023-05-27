@@ -49,6 +49,7 @@ MAPPING = {
     "fc2": "encoder.layers.*.feed_forward.output_dense",
     "final_layer_norm": "encoder.layers.*.final_layer_norm",
     "encoder.layer_norm": "encoder.layer_norm",
+    "adapter_layer": "encoder.layers.*.adapter_layer",
     "w2v_model.layer_norm": "feature_projection.layer_norm",
     "quantizer.weight_proj": "quantizer.weight_proj",
     "quantizer.vars": "quantizer.codevectors",
@@ -70,8 +71,16 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     for attribute in key.split("."):
         hf_pointer = getattr(hf_pointer, attribute)
 
-    if weight_type is not None:
+    hf_param_name = None
+    for param_key in PARAM_MAPPING.keys():
+        if full_name.endswith(param_key):
+            hf_param_name = PARAM_MAPPING[full_name.split(".")[-1]]
+            weight_type = "param"
+
+    if weight_type is not None and weight_type != "param":
         hf_shape = getattr(hf_pointer, weight_type).shape
+    elif weight_type is not None and weight_type == "param":
+        hf_shape = getattr(hf_pointer, hf_param_name).shape
     else:
         hf_shape = hf_pointer.shape
 
@@ -89,10 +98,23 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
         hf_pointer.weight_v.data = value
     elif weight_type == "bias":
         hf_pointer.bias.data = value
+    elif weight_type == "param":
+        hf_pointer = getattr(hf_pointer, hf_param_name)
+        hf_pointer.data = value
     else:
         hf_pointer.data = value
 
     logger.info(f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}.")
+
+
+PARAM_MAPPING = {
+    "W_a": "weight_1",
+    "W_b": "weight_2",
+    "b_a": "bias_1",
+    "b_b": "bias_2",
+    "ln_W": "layer_norm_weight",
+    "ln_b": "layer_norm_bias",
+}
 
 
 def recursively_load_weights(fairseq_model, hf_model, is_headless):
