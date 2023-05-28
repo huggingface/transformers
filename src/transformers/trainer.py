@@ -2739,7 +2739,19 @@ class Trainer:
             or ShardedDDPOption.ZERO_DP_3 in self.args.sharded_ddp
             or self.fsdp is not None
         ):
-            state_dict = self.model.state_dict()
+            if self.fsdp is not None:
+                from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, ShardedStateDictConfig
+
+                # Saving the state_dict can cause OOM when saving with FSDP so we offload to CPU.
+                # https://discuss.pytorch.org/t/fsdp-failed-to-save-model-checkpoints/178232/3
+                FSDP.set_state_dict_type(
+                    self.model,
+                    StateDictType.SHARDED_STATE_DICT,
+                    state_dict_config=ShardedStateDictConfig(offload_to_cpu=True),
+                )
+                state_dict = self.model.state_dict()
+            else:
+                state_dict = self.model.state_dict()
 
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
