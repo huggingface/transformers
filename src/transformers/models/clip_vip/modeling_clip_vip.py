@@ -150,7 +150,8 @@ class CLIPViPOutput(ModelOutput):
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`CLIPViPTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`CLIPViPVisionModel`].
+            The image embeddings obtained by applying the projection layer to the pooled output of
+            [`CLIPViPVisionModel`].
         text_model_output(`BaseModelOutputWithPooling`):
             The output of the [`CLIPViPTextModel`].
         vision_model_output(`BaseModelOutputWithPooling`):
@@ -417,8 +418,7 @@ class CLIPViPAttention(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """
-        hidden_states: [B, M+N*L, C]
-        inputs_size: (M, N, L)
+        hidden_states: [B, M+N*L, C] inputs_size: (M, N, L)
         """
         if inputs_size is None:
             return self.text_encoding(hidden_states, attention_mask, causal_attention_mask, output_attentions)

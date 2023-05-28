@@ -38,9 +38,9 @@ CLIP_VIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CLIPViPTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLIPViPTextModel`]. It is used to instantiate a CLIPViP
-    text encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the text encoder of the CLIPViP
+    This is the configuration class to store the configuration of a [`CLIPViPTextModel`]. It is used to instantiate a
+    CLIPViP text encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the text encoder of the CLIPViP
     [tensorpro/clip_vip](https://huggingface.co/tensorpro/clip_vip) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -48,8 +48,8 @@ class CLIPViPTextConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the CLIPViP text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`CLIPViPModel`].
+            Vocabulary size of the CLIPViP text model. Defines the number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`CLIPViPModel`].
         hidden_size (`int`, *optional*, defaults to 512):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 2048):
@@ -254,9 +254,9 @@ class CLIPViPVisionConfig(PretrainedConfig):
 
 class CLIPViPConfig(PretrainedConfig):
     r"""
-    [`CLIPViPConfig`] is the configuration class to store the configuration of a [`CLIPViPModel`]. It is used to instantiate
-    a CLIPViP model according to the specified arguments, defining the text model and vision model configs. Instantiating
-    a configuration with the defaults will yield a similar configuration to that of the CLIPViP
+    [`CLIPViPConfig`] is the configuration class to store the configuration of a [`CLIPViPModel`]. It is used to
+    instantiate a CLIPViP model according to the specified arguments, defining the text model and vision model configs.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the CLIPViP
     [tensorpro/clip_vip](https://huggingface.co/tensorpro/clip_vip) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -324,8 +324,8 @@ class CLIPViPConfig(PretrainedConfig):
     @classmethod
     def from_text_vision_configs(cls, text_config: CLIPViPTextConfig, vision_config: CLIPViPVisionConfig, **kwargs):
         r"""
-        Instantiate a [`CLIPViPConfig`] (or a derived class) from clip_vip text model configuration and clip_vip vision model
-        configuration.
+        Instantiate a [`CLIPViPConfig`] (or a derived class) from clip_vip text model configuration and clip_vip vision
+        model configuration.
 
         Returns:
             [`CLIPViPConfig`]: An instance of a configuration object
