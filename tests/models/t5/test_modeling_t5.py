@@ -716,6 +716,7 @@ class T5EncoderOnlyModelTester:
         pad_token_id=0,
         scope=None,
         num_labels=3,
+        type_sequence_label_size=2,
     ):
         self.parent = parent
         self.batch_size = batch_size

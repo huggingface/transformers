@@ -2084,6 +2084,7 @@ class T5EncoderForSequenceClassification(T5PreTrainedModel):
     T5_START_DOCSTRING,
 )
 class T5EncoderForTokenClassification(T5PreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -2170,6 +2171,7 @@ class T5EncoderForTokenClassification(T5PreTrainedModel):
     T5_START_DOCSTRING,
 )
 class T5EncoderForQuestionAnswering(T5PreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
