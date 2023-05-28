@@ -7942,6 +7942,13 @@ class AdamW(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Lion(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 def get_constant_schedule(*args, **kwargs):
     requires_backends(get_constant_schedule, ["torch"])
 
