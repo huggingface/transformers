@@ -738,6 +738,7 @@ class T5EncoderOnlyModelTester:
         self.scope = None
         self.is_training = is_training
         self.num_labels = num_labels
+        self.type_sequence_label_size = type_sequence_label_size
 
     def get_large_model_config(self):
         return T5Config.from_pretrained("t5-base")
