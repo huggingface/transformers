@@ -305,10 +305,10 @@ class CLIPViPTextEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->CLIPViP
 class CLIPViPAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
+    # Copied from transformers.models.clip.modeling_clip.CLIPAttention.__init__
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -328,10 +328,11 @@ class CLIPViPAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
+    # Copied from transformers.models.clip.modeling_clip.CLIPAttention._shape
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    # Copied from transformers.models.clip.modeling_clip.ClipAttention.forward with forward->text_enoding
+    # Copied from transformers.models.clip.modeling_clip.CLIPAttention.forward with forward->text_encoding
     def text_encoding(
         self,
         hidden_states: torch.Tensor,
@@ -340,6 +341,7 @@ class CLIPViPAttention(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
+
         bsz, tgt_len, embed_dim = hidden_states.size()
 
         # get query proj
@@ -486,7 +488,6 @@ class CLIPViPMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->CLIPViP
 class CLIPViPEncoderLayer(nn.Module):
     def __init__(self, config: CLIPViPConfig):
         super().__init__()
@@ -539,7 +540,6 @@ class CLIPViPEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPPreTrainedModel with CLIP->CLIPViP,clip->clip_vip
 class CLIPViPPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -700,7 +700,6 @@ CLIP_VIP_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->CLIPViP
 class CLIPViPEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a

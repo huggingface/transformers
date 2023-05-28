@@ -1640,6 +1640,37 @@ class CLIPVisionModelWithProjection(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+CLIP_VIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class CLIPViPModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CLIPViPPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CLIPViPTextModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CLIPViPVisionModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
