@@ -24,7 +24,6 @@ from transformers.testing_utils import (
     require_tf,
     require_vision,
     slow,
-    torch_device,
 )
 from transformers.utils import cached_property, is_tf_available, is_vision_available
 
@@ -177,7 +176,7 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            signature = inspect.signature(model.forward)
+            signature = inspect.signature(model.call)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
@@ -282,13 +281,11 @@ class SwiftFormerModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFSwiftFormerForImageClassification.from_pretrained("MBZUAI/swiftformer-xs", from_pt=True).to(
-            torch_device
-        )
+        model = TFSwiftFormerForImageClassification.from_pretrained("MBZUAI/swiftformer-xs", from_pt=True)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = feature_extractor(images=image, return_tensors="pt")
 
         # forward pass
         outputs = model(**inputs)
