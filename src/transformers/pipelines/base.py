@@ -514,7 +514,7 @@ class PipelineDataFormat:
         Creates an instance of the right subclass of [`~pipelines.PipelineDataFormat`] depending on `format`.
 
         Args:
-            format: (`str`):
+            format (`str`):
                 The format of the desired pipeline. Acceptable values are `"json"`, `"csv"` or `"pipe"`.
             output_path (`str`, *optional*):
                 Where to save the outgoing data.
