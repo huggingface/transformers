@@ -25,7 +25,6 @@ import requests
 
 from transformers import CLIPViPConfig, CLIPViPTextConfig, CLIPViPVisionConfig
 from transformers.testing_utils import (
-    is_flax_available,
     require_torch,
     require_vision,
     slow,
