@@ -49,7 +49,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("chinese_clip", "ChineseCLIPProcessor"),
         ("clap", "ClapProcessor"),
         ("clip", "CLIPProcessor"),
-        ("clip_vip", "CLIPViPProcessor"),
+        ("clip_vip", "CLIPProcessor"),
         ("clipseg", "CLIPSegProcessor"),
         ("flava", "FlavaProcessor"),
         ("git", "GitProcessor"),
