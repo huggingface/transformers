@@ -1767,7 +1767,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
     of the predicted mask for each query, instead of attending to the full feature map.
 
     Args:
-        config: (`Mask2FormerConfig`):
+        config (`Mask2FormerConfig`):
             Configuration used to instantiate Mask2FormerMaskedAttentionDecoder.
     """
 
@@ -2003,7 +2003,7 @@ class Mask2FormerMaskPredictor(nn.Module):
                 The feature dimension of the Mask2FormerMaskedAttentionDecoder
             num_heads (`int`):
                 The number of heads used in the Mask2FormerMaskedAttentionDecoder
-            mask_feature_size: (`torch.Tensor`):
+            mask_feature_size (`torch.Tensor`):
                 one of the output dimensions of the predicted masks for each query
         """
         super().__init__()

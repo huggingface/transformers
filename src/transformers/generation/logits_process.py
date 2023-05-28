@@ -678,7 +678,7 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     generation. See [Autoregressive Entity Retrieval](https://arxiv.org/abs/2010.00904) for more information.
 
     Args:
-        prefix_allowed_tokens_fn: (`Callable[[int, torch.Tensor], List[int]]`):
+        prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`):
             This function constraints the beam search to allowed tokens only at each step. This function takes 2
             arguments `inputs_ids` and the batch ID `batch_id`. It has to return a list with the allowed tokens for the
             next generation step conditioned on the previously generated tokens `inputs_ids` and the batch ID
