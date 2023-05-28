@@ -117,7 +117,9 @@ class CLIPViPVisionModelTester:
         self.seq_length = num_patches + 1 + add_cls_num
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.temporal_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.temporal_size, self.num_channels, self.image_size, self.image_size]
+        )
         config = self.get_config()
 
         return config, pixel_values
@@ -174,7 +176,9 @@ class CLIPViPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = CLIPViPVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CLIPViPVisionConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=CLIPViPVisionConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -398,7 +402,6 @@ class CLIPViPTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-
     def test_training(self):
         pass
 
@@ -422,7 +425,6 @@ class CLIPViPTextModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in CLIP_VIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = CLIPViPTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
 
 
 class CLIPViPModelTester:
@@ -597,7 +599,6 @@ class CLIPViPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             text_config = CLIPViPTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in CLIP_VIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -619,15 +620,15 @@ class CLIPViPModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
         model_name = "tensorpro/clip_vip"
         model = CLIPViPModel.from_pretrained(model_name).to(torch_device)
-        processor = CLIPProcessor.from_pretrained('openai/clip-vit-base-patch16')
+        processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch16")
 
         image = prepare_img()
         print(image)
         inputs = processor(
             text=["a photo of a cat", "a photo of a dog"], images=image, padding=True, return_tensors="pt"
         ).to(torch_device)
-        inputs['pixel_values'] = inputs['pixel_values'].unsqueeze(1) # add a temporal dimension
-        print(f'{inputs.keys()=}')
+        inputs["pixel_values"] = inputs["pixel_values"].unsqueeze(1)  # add a temporal dimension
+        print(f"{inputs.keys()=}")
 
         # forward pass
         with torch.no_grad():
@@ -642,6 +643,6 @@ class CLIPViPModelIntegrationTest(unittest.TestCase):
             outputs.logits_per_text.shape,
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
-        expected_logits = torch.tensor([[15.6374,  8.8812]], device=torch_device)
+        expected_logits = torch.tensor([[15.6374, 8.8812]], device=torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))

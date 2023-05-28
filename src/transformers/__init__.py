@@ -233,9 +233,7 @@ _import_structure = {
     "models.clip_vip": [
         "CLIP_VIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPViPConfig",
-       
         "CLIPViPTextConfig",
-       
         "CLIPViPVisionConfig",
     ],
     "models.clipseg": [
@@ -4037,9 +4035,7 @@ if TYPE_CHECKING:
     from .models.clip_vip import (
         CLIP_VIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPViPConfig,
-       
         CLIPViPTextConfig,
-       
         CLIPViPVisionConfig,
     )
     from .models.clipseg import (
