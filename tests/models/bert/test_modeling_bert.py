@@ -23,6 +23,7 @@ from transformers.testing_utils import require_torch, require_torch_gpu, slow, t
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -426,7 +427,7 @@ class BertModelTester:
 
 
 @require_torch
-class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             BertModel,
@@ -443,6 +444,19 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (BertLMHeadModel,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": BertModel,
+            "fill-mask": BertForMaskedLM,
+            "question-answering": BertForQuestionAnswering,
+            "text-classification": BertForSequenceClassification,
+            "text-generation": BertLMHeadModel,
+            "token-classification": BertForTokenClassification,
+            "zero-shot": BertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = True
 
     # special case for ForPreTraining model

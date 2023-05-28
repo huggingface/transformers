@@ -19,12 +19,15 @@ specific language governing permissions and limitations under the License.
 <a href="https://huggingface.co/spaces/docs-demos/t5-base">
 <img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
 </a>
+<a href="https://huggingface.co/papers/1910.10683">
+<img alt="Paper page" src="https://img.shields.io/badge/Paper%20page-1910.10683-green">
+</a>
 </div>
 
 ## Overview
 
-The T5 model was presented in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer](https://arxiv.org/pdf/1910.10683.pdf) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
-Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu.
+The T5 model was presented in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer](https://arxiv.org/pdf/1910.10683.pdf) by [Colin Raffel](https://huggingface.co/craffel), Noam Shazeer, [Adam Roberts](https://huggingface.co/adarob), Katherine Lee, Sharan Narang,
+Michael Matena, Yanqi Zhou, Wei Li, [Peter J. Liu](https://huggingface.co/peterjliu).
 
 The abstract from the paper is the following:
 
@@ -73,6 +76,14 @@ Based on the original T5 model, Google has released some follow-up works:
 
 - **byT5**: byT5 is a T5 model pre-trained on byte sequences rather than SentencePiece subword token sequences. Refer
   to the documentation of byT5 which can be found [here](byt5).
+
+- **UL2**: UL2 is a T5 like model pretrained on various denoising objectives
+
+- **Flan-T5**: Flan is a pretraining methods that is based on prompting. The Flan-T5 are T5 models trained on the Flan collection of 
+    datasets which include: `taskmaster2`, `djaym7/wiki_dialog`, `deepmind/code_contests`, `lambada`, `gsm8k`, `aqua_rat`, `esnli`, `quasc` and `qed`.
+
+- **FLan-UL2** : the UL2 model finetuned using the "Flan" prompt tuning and dataset collection.
+
 
 All checkpoints can be found on the [hub](https://huggingface.co/models?search=t5).
 
@@ -329,10 +340,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - A notebook to [Finetune T5-base-dutch to perform Dutch abstractive summarization on a TPU](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/T5/Fine_tuning_Dutch_T5_base_on_CNN_Daily_Mail_for_summarization_(on_TPU_using_HuggingFace_Accelerate).ipynb).
 - A notebook for how to [finetune T5 for summarization in PyTorch and track experiments with WandB](https://colab.research.google.com/github/abhimishra91/transformers-tutorials/blob/master/transformers_summarization_wandb.ipynb#scrollTo=OKRpFvYhBauC). 🌎
 - A blog post on [Distributed Training: Train BART/T5 for Summarization using 🤗 Transformers and Amazon SageMaker](https://huggingface.co/blog/sagemaker-distributed-training-seq2seq).
-- [`T5ForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization) and [noteboook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb).
+- [`T5ForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb).
 - [`TFT5ForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb).
 - [`FlaxT5ForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/summarization).
 - [Summarization](https://huggingface.co/course/chapter7/5?fw=pt#summarization) chapter of the 🤗 Hugging Face course.
+- [Summarization task guide](../tasks/summarization)
 
 <PipelineTag pipeline="fill-mask"/>
 
@@ -342,6 +354,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 - [`T5ForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/translation) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb).
 - [`TFT5ForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/translation) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb).
+- [Translation task guide](../tasks/translation)
 
 <PipelineTag pipeline="question-answering"/>
 

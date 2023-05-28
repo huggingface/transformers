@@ -1688,7 +1688,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         for col_index in range(num_columns):
             for row_index in range(num_rows):
-                indices = [index for index in self._get_cell_token_indexes(column_ids, row_ids, col_index, row_index)]
+                indices = list(self._get_cell_token_indexes(column_ids, row_ids, col_index, row_index))
                 num_indices = len(indices)
                 if num_indices > 1:
                     for index in indices:

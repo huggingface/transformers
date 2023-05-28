@@ -41,17 +41,16 @@ repo-consistency:
 	python utils/check_config_docstrings.py
 	python utils/check_config_attributes.py
 	python utils/check_doctest_list.py
-	python utils/tests_fetcher.py --sanity_check
 	python utils/update_metadata.py --check-only
 	python utils/check_task_guides.py
 
 # this target runs checks on all files
 
 quality:
-	black --check $(check_dirs)
+	black --check $(check_dirs) setup.py conftest.py
 	python utils/custom_init_isort.py --check_only
 	python utils/sort_auto_mappings.py --check_only
-	ruff $(check_dirs)
+	ruff $(check_dirs) setup.py conftest.py
 	doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
 	python utils/check_doc_toc.py
 
@@ -66,8 +65,8 @@ extra_style_checks:
 # this target runs checks on all files and potentially modifies some of them
 
 style:
-	black $(check_dirs)
-	ruff $(check_dirs) --fix
+	black $(check_dirs) setup.py conftest.py
+	ruff $(check_dirs) setup.py conftest.py --fix
 	${MAKE} autogenerate_code
 	${MAKE} extra_style_checks
 
@@ -112,3 +111,10 @@ post-release:
 
 post-patch:
 	python utils/release.py --post_release --patch
+
+build-release:
+	rm -rf dist
+	rm -rf build
+	python setup.py bdist_wheel
+	python setup.py sdist
+	python utils/check_build.py

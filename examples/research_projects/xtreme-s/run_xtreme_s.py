@@ -400,7 +400,7 @@ def create_vocabulary_from_data(
         | (set(vocabs["predict"]["vocab"][0]) if "predict" in vocabs else set())
     )
 
-    vocab_dict = {v: k for k, v in enumerate(sorted(list(vocab_set)))}
+    vocab_dict = {v: k for k, v in enumerate(sorted(vocab_set))}
 
     # replace white space with delimiter token
     if word_delimiter_token is not None:

@@ -155,21 +155,21 @@ class TestTrainerExt(TestCasePlus):
     @require_torch_multi_gpu
     def test_trainer_log_level_replica(self, experiment_id):
         # as each sub-test is slow-ish split into multiple sub-tests to avoid CI timeout
-        experiments = dict(
+        experiments = {
             # test with the default log_level - should be info and thus log info once
-            base=dict(extra_args_str="", n_matches=1),
+            "base": {"extra_args_str": "", "n_matches": 1},
             # test with low log_level and log_level_replica - should be noisy on all processes
             # now the info string should appear twice on 2 processes
-            low=dict(extra_args_str="--log_level debug --log_level_replica debug", n_matches=2),
+            "low": {"extra_args_str": "--log_level debug --log_level_replica debug", "n_matches": 2},
             # test with high log_level and low log_level_replica
             # now the info string should appear once only on the replica
-            high=dict(extra_args_str="--log_level error --log_level_replica debug", n_matches=1),
+            "high": {"extra_args_str": "--log_level error --log_level_replica debug", "n_matches": 1},
             # test with high log_level and log_level_replica - should be quiet on all processes
-            mixed=dict(extra_args_str="--log_level error --log_level_replica error", n_matches=0),
-        )
+            "mixed": {"extra_args_str": "--log_level error --log_level_replica error", "n_matches": 0},
+        }
 
         data = experiments[experiment_id]
-        kwargs = dict(distributed=True, predict_with_generate=False, do_eval=False, do_predict=False)
+        kwargs = {"distributed": True, "predict_with_generate": False, "do_eval": False, "do_predict": False}
         log_info_string = "Running training"
         with CaptureStderr() as cl:
             self.run_seq2seq_quick(**kwargs, extra_args_str=data["extra_args_str"])
@@ -366,7 +366,7 @@ class TestTrainerExt(TestCasePlus):
                 n_gpus_to_use = get_gpu_count()
             master_port = get_torch_dist_unique_port()
             distributed_args = f"""
-                -m torch.distributed.launch
+                -m torch.distributed.run
                 --nproc_per_node={n_gpus_to_use}
                 --master_port={master_port}
                 {self.examples_dir_str}/pytorch/translation/run_translation.py

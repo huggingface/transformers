@@ -21,6 +21,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -190,7 +191,7 @@ class MPNetModelTester:
 
 
 @require_torch
-class MPNetModelTest(ModelTesterMixin, unittest.TestCase):
+class MPNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             MPNetForMaskedLM,
@@ -202,6 +203,18 @@ class MPNetModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": MPNetModel,
+            "fill-mask": MPNetForMaskedLM,
+            "question-answering": MPNetForQuestionAnswering,
+            "text-classification": MPNetForSequenceClassification,
+            "token-classification": MPNetForTokenClassification,
+            "zero-shot": MPNetForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
     test_pruning = False
     test_resize_embeddings = True

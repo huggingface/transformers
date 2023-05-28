@@ -71,7 +71,7 @@ def layer_name_mapping(key, file):
 def get_dtype_size(dtype):
     if dtype == torch.bool:
         return 1 / 8
-    bit_search = re.search("[^\d](\d+)$", str(dtype))
+    bit_search = re.search(r"[^\d](\d+)$", str(dtype))
     if bit_search is None:
         raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
     bit_size = int(bit_search.groups()[0])
@@ -89,7 +89,7 @@ def convert_bloom_checkpoint_to_pytorch(
 
     if shard_model:
         file_names = os.listdir(bloom_checkpoint_path)
-        file_names = list(sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names)))
+        file_names = sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names))
 
         index_dict = {"weight_map": {}, "metadata": {}}
         total_size = 0
@@ -157,7 +157,7 @@ def convert_bloom_checkpoint_to_pytorch(
         model = BloomModel(config)
 
         file_names = os.listdir(bloom_checkpoint_path)
-        file_names = list(sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names)))
+        file_names = sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names))
 
         missing_keys = None
         for i, file in enumerate(file_names):

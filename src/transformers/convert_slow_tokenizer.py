@@ -22,7 +22,7 @@ allow to make our dependency on SentencePiece optional.
 import warnings
 from typing import Dict, List, Tuple
 
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
 from .utils import requires_backends
@@ -40,21 +40,28 @@ class SentencePieceExtractor:
         self.sp = SentencePieceProcessor()
         self.sp.Load(model)
 
-    def extract(self) -> Tuple[Dict[str, int], List[Tuple]]:
+    def extract(self, vocab_scores=None) -> Tuple[Dict[str, int], List[Tuple]]:
+        """
+        By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
+        order the merges with respect to the piece scores instead.
+        """
         sp = self.sp
         vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
+        if vocab_scores is not None:
+            vocab_scores, reverse = dict(vocab_scores), True
+        else:
+            vocab_scores, reverse = vocab, False
 
         # Merges
         merges = []
         for piece_l in vocab.keys():
             for piece_r in vocab.keys():
                 merge = f"{piece_l}{piece_r}"
-                piece_id = vocab.get(merge, None)
-                if piece_id:
-                    merges += [(piece_l, piece_r, piece_id)]
-        merges = sorted(merges, key=lambda val: val[2])
+                piece_score = vocab_scores.get(merge, None)
+                if piece_score:
+                    merges += [(piece_l, piece_r, piece_score)]
+        merges = sorted(merges, key=lambda val: val[2], reverse=reverse)
         merges = [(val[0], val[1]) for val in merges]
-
         return vocab, merges
 
 
@@ -286,7 +293,7 @@ class GPT2Converter(Converter):
             bos = self.original_tokenizer.bos_token
             bos_token_id = self.original_tokenizer.bos_token_id
             tokenizer.post_processor = processors.TemplateProcessing(
-                single=f"{bos}:0 $A:0",  # token_type_id is 2 for Funnel transformer
+                single=f"{bos}:0 $A:0",
                 pair=f"{bos}:0 $A:0 $B:1",
                 special_tokens=[
                     (bos, bos_token_id),
@@ -443,12 +450,13 @@ class SpmConverter(Converter):
         self.proto = m
 
         if self.proto.trainer_spec.byte_fallback:
-            warnings.warn(
-                "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
-                " which is not implemented in the fast tokenizers. In practice this means that the fast version of the"
-                " tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these "
-                "unknown tokens into a sequence of byte tokens matching the original piece of text."
-            )
+            if not getattr(self, "handle_byte_fallback", None):
+                warnings.warn(
+                    "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
+                    " which is not implemented in the fast tokenizers. In practice this means that the fast version of the"
+                    " tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these "
+                    "unknown tokens into a sequence of byte tokens matching the original piece of text."
+                )
 
     def vocab(self, proto):
         return [(piece.piece, piece.score) for piece in proto.pieces]
@@ -458,14 +466,14 @@ class SpmConverter(Converter):
 
     def tokenizer(self, proto):
         model_type = proto.trainer_spec.model_type
-        vocab = self.vocab(proto)
+        vocab_scores = self.vocab(proto)
         unk_id = self.unk_id(proto)
 
         if model_type == 1:
-            tokenizer = Tokenizer(Unigram(vocab, unk_id))
+            tokenizer = Tokenizer(Unigram(vocab_scores, unk_id))
         elif model_type == 2:
             _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract()
-            bpe_vocab = {word: i for i, (word, score) in enumerate(vocab)}
+            bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
             tokenizer = Tokenizer(
                 BPE(
                     bpe_vocab,
@@ -496,16 +504,24 @@ class SpmConverter(Converter):
     def post_processor(self):
         return None
 
+    def decoder(self, replacement, add_prefix_space):
+        return decoders.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
+
     def converted(self) -> Tokenizer:
         tokenizer = self.tokenizer(self.proto)
 
         # Tokenizer assemble
-        tokenizer.normalizer = self.normalizer(self.proto)
+        normalizer = self.normalizer(self.proto)
+        if normalizer is not None:
+            tokenizer.normalizer = normalizer
 
         replacement = "▁"
         add_prefix_space = True
-        tokenizer.pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)
-        tokenizer.decoder = decoders.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
+        pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)
+        if pre_tokenizer is not None:
+            tokenizer.pre_tokenizer = pre_tokenizer
+
+        tokenizer.decoder = self.decoder(replacement, add_prefix_space)
         post_processor = self.post_processor()
         if post_processor:
             tokenizer.post_processor = post_processor
@@ -891,6 +907,42 @@ class T5Converter(SpmConverter):
         )
 
 
+class WhisperConverter(Converter):
+    def converted(self) -> Tokenizer:
+        vocab = self.original_tokenizer.encoder
+        merges = list(self.original_tokenizer.bpe_ranks.keys())
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab=vocab,
+                merges=merges,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+            )
+        )
+
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.original_tokenizer.add_prefix_space)
+        tokenizer.decoder = decoders.ByteLevel()
+
+        prefix_token_ids = self.original_tokenizer.prefix_tokens
+        prefixes = self.original_tokenizer.convert_ids_to_tokens(prefix_token_ids)
+        eos = self.original_tokenizer.eos_token
+        eos_token_id = self.original_tokenizer.eos_token_id
+        prefix_template = " ".join([f"{token}:0" for token in prefixes])
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{prefix_template} $A:0 {eos}:0",
+            pair=f"{prefix_template} $A:0 $B:1 {eos}:1",
+            special_tokens=[
+                (eos, eos_token_id),
+                *zip(prefixes, prefix_token_ids),
+            ],
+        )
+
+        return tokenizer
+
+
 class BigBirdConverter(SpmConverter):
     def post_processor(self):
         return processors.TemplateProcessing(
@@ -1043,6 +1095,97 @@ class XGLMConverter(SpmConverter):
         )
 
 
+class LlamaConverter(SpmConverter):
+    handle_byte_fallback = True
+
+    def vocab(self, proto):
+        vocab = [
+            ("<unk>", 0.0),
+            ("<s>", 0.0),
+            ("</s>", 0.0),
+        ]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        return vocab
+
+    def unk_id(self, proto):
+        unk_id = 0
+        return unk_id
+
+    def decoder(self, replacement, add_prefix_space):
+        return decoders.Sequence(
+            [
+                decoders.Replace("▁", " "),
+                decoders.ByteFallback(),
+                decoders.Fuse(),
+                decoders.Strip(content=" ", left=1),
+            ]
+        )
+
+    def tokenizer(self, proto):
+        model_type = proto.trainer_spec.model_type
+        vocab_scores = self.vocab(proto)
+        if model_type == 1:
+            raise RuntimeError("Llama is supposed to be a BPE model!")
+        elif model_type == 2:
+            _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
+            bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
+            tokenizer = Tokenizer(
+                BPE(bpe_vocab, merges, unk_token=proto.trainer_spec.unk_piece, fuse_unk=True, byte_fallback=True)
+            )
+            tokenizer.add_special_tokens(
+                [
+                    AddedToken("<unk>", normalized=True),
+                    AddedToken("<s>", normalized=True),
+                    AddedToken("</s>", normalized=True),
+                ]
+            )
+        else:
+            raise Exception(
+                "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
+            )
+
+        return tokenizer
+
+    def normalizer(self, proto):
+        return normalizers.Sequence(
+            [
+                normalizers.Prepend(prepend="▁"),
+                normalizers.Replace(pattern=" ", content="▁"),
+            ]
+        )
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        return None
+
+    def post_processor(self):
+        # 3 possible case :
+        # - add_bos and add_eos : '<s>:0 $A:0 </s>:0' and '<s>:0 $A:0 </s>:0 <s>:1 $B:1 </s>:1'
+        # - add_bos: '<s>:0 $A:0' and '<s>:0 $A:0 <s>:1 $B:1'
+        # - add_eos: '$A:0 </s>:0' and '$A:0 </s>:0 $B:1 </s>:1'
+
+        add_bos = self.original_tokenizer.add_bos_token
+        add_eos = self.original_tokenizer.add_eos_token
+        if add_bos or add_eos:
+            bos = self.original_tokenizer.bos_token
+            bos_token_id = self.original_tokenizer.bos_token_id
+
+            eos = self.original_tokenizer.eos_token
+            eos_token_id = self.original_tokenizer.eos_token_id
+
+            single = f"{(bos+':0 ') * add_bos}$A:0{(' '+eos+':0') * add_eos}"
+            pair = f"{single}{(' '+bos+':1') * add_bos} $B:1{(' '+eos+':1') * add_eos}"
+
+            special_tokens = []
+            if add_bos:
+                special_tokens.append((bos, bos_token_id))
+            if add_eos:
+                special_tokens.append((eos, eos_token_id))
+            return processors.TemplateProcessing(single=single, pair=pair, special_tokens=special_tokens)
+
+        else:
+            return None
+
+
 class MarkupLMConverter(Converter):
     def converted(self) -> Tokenizer:
         ot = self.original_tokenizer
@@ -1127,10 +1270,12 @@ SLOW_TO_FAST_CONVERTERS = {
     "RoFormerTokenizer": RoFormerConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
+    "WhisperTokenizer": WhisperConverter,
     "XLMRobertaTokenizer": XLMRobertaConverter,
     "XLNetTokenizer": XLNetConverter,
     "SplinterTokenizer": SplinterConverter,
     "XGLMTokenizer": XGLMConverter,
+    "LlamaTokenizer": LlamaConverter,
 }
 
 

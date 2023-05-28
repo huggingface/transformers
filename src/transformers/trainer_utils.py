@@ -192,7 +192,7 @@ class HubStrategy(ExplicitEnum):
 
 class BestRun(NamedTuple):
     """
-    The best run found by an hyperparameter search (see [`~Trainer.hyperparameter_search`]).
+    The best run found by a hyperparameter search (see [`~Trainer.hyperparameter_search`]).
 
     Parameters:
         run_id (`str`):
@@ -202,11 +202,14 @@ class BestRun(NamedTuple):
             The objective that was obtained for this run.
         hyperparameters (`Dict[str, Any]`):
             The hyperparameters picked to get this run.
+        run_summary (`Optional[Any]`):
+            A summary of tuning experiments. `ray.tune.ExperimentAnalysis` object for Ray backend.
     """
 
     run_id: str
     objective: float
     hyperparameters: Dict[str, Any]
+    run_summary: Optional[Any] = None
 
 
 def default_compute_objective(metrics: Dict[str, float]) -> float:
@@ -364,6 +367,7 @@ class SchedulerType(ExplicitEnum):
     CONSTANT = "constant"
     CONSTANT_WITH_WARMUP = "constant_with_warmup"
     INVERSE_SQRT = "inverse_sqrt"
+    REDUCE_ON_PLATEAU = "reduce_lr_on_plateau"
 
 
 class TrainerMemoryTracker:
@@ -505,21 +509,21 @@ class TrainerMemoryTracker:
         if self.torch is not None:
             self.gpu_mem_used_now = self.torch.cuda.memory_allocated()
             self.gpu_mem_used_peak = self.torch.cuda.max_memory_allocated()
-            self.gpu[self.cur_stage] = dict(
-                begin=self.gpu_mem_used_at_start,
-                end=self.gpu_mem_used_now,
-                alloc=(self.gpu_mem_used_now - self.gpu_mem_used_at_start),
-                peaked=max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now),
-            )
+            self.gpu[self.cur_stage] = {
+                "begin": self.gpu_mem_used_at_start,
+                "end": self.gpu_mem_used_now,
+                "alloc": (self.gpu_mem_used_now - self.gpu_mem_used_at_start),
+                "peaked": max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now),
+            }
 
         # cpu
         self.cpu_mem_used_now = self.cpu_mem_used()
-        self.cpu[self.cur_stage] = dict(
-            begin=self.cpu_mem_used_at_start,
-            end=self.cpu_mem_used_now,
-            alloc=(self.cpu_mem_used_now - self.cpu_mem_used_at_start),
-            peaked=max(0, self.cpu_mem_used_peak - self.cpu_mem_used_now),
-        )
+        self.cpu[self.cur_stage] = {
+            "begin": self.cpu_mem_used_at_start,
+            "end": self.cpu_mem_used_now,
+            "alloc": (self.cpu_mem_used_now - self.cpu_mem_used_at_start),
+            "peaked": max(0, self.cpu_mem_used_peak - self.cpu_mem_used_now),
+        }
 
         # reset - cycle finished
         self.cur_stage = None

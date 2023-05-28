@@ -29,7 +29,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import BackboneMixin, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -37,6 +37,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.backbone_utils import BackboneMixin, get_aligned_output_features_output_indices
 from .configuration_convnext import ConvNextConfig
 
 
@@ -485,27 +486,19 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
         self.embeddings = ConvNextEmbeddings(config)
         self.encoder = ConvNextEncoder(config)
 
-        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
-
-        out_feature_channels = {}
-        out_feature_channels["stem"] = config.hidden_sizes[0]
-        for idx, stage in enumerate(self.stage_names[1:]):
-            out_feature_channels[stage] = config.hidden_sizes[idx]
-
-        self.out_feature_channels = out_feature_channels
+        self.num_features = [config.hidden_sizes[0]] + config.hidden_sizes
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            config.out_features, config.out_indices, self.stage_names
+        )
 
         # Add layer norms to hidden states of out_features
-        hidden_states_norms = dict()
-        for stage, num_channels in zip(self.out_features, self.channels):
+        hidden_states_norms = {}
+        for stage, num_channels in zip(self._out_features, self.channels):
             hidden_states_norms[stage] = ConvNextLayerNorm(num_channels, data_format="channels_first")
         self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
 
         # initialize weights and apply final processing
         self.post_init()
-
-    @property
-    def channels(self):
-        return [self.out_feature_channels[name] for name in self.out_features]
 
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)

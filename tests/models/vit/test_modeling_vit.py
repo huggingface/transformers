@@ -31,6 +31,7 @@ from transformers.utils import cached_property, is_torch_available, is_vision_av
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -133,7 +134,7 @@ class ViTModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+            result.reconstruction.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
         )
 
         # test greyscale images
@@ -144,7 +145,7 @@ class ViTModelTester:
 
         pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
+        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, 1, self.image_size, self.image_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -176,7 +177,7 @@ class ViTModelTester:
 
 
 @require_torch
-class ViTModelTest(ModelTesterMixin, unittest.TestCase):
+class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ViT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -190,6 +191,11 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": ViTModel, "image-classification": ViTForImageClassification}
+        if is_torch_available()
+        else {}
     )
     fx_compatible = True
 

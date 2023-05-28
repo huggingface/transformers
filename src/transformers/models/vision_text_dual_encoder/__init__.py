@@ -13,7 +13,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_flax_available,
+    is_tf_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
@@ -39,10 +45,18 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_flax_vision_text_dual_encoder"] = ["FlaxVisionTextDualEncoderModel"]
 
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_vision_text_dual_encoder"] = ["TFVisionTextDualEncoderModel"]
+
 
 if TYPE_CHECKING:
     from .configuration_vision_text_dual_encoder import VisionTextDualEncoderConfig
-    from .processing_visiotn_text_dual_encoder import VisionTextDualEncoderProcessor
+    from .processing_vision_text_dual_encoder import VisionTextDualEncoderProcessor
 
     try:
         if not is_torch_available():
@@ -58,7 +72,15 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
+        from .modeling_flax_vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
+
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_vision_text_dual_encoder import TFVisionTextDualEncoderModel
 
 
 else:

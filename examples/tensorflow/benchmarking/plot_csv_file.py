@@ -83,7 +83,7 @@ def can_convert_to_float(string):
 class Plot:
     def __init__(self, args):
         self.args = args
-        self.result_dict = defaultdict(lambda: dict(bsz=[], seq_len=[], result={}))
+        self.result_dict = defaultdict(lambda: {"bsz": [], "seq_len": [], "result": {}})
 
         with open(self.args.csv_file, newline="") as csv_file:
             reader = csv.DictReader(csv_file)
@@ -116,8 +116,8 @@ class Plot:
             axis.set_major_formatter(ScalarFormatter())
 
         for model_name_idx, model_name in enumerate(self.result_dict.keys()):
-            batch_sizes = sorted(list(set(self.result_dict[model_name]["bsz"])))
-            sequence_lengths = sorted(list(set(self.result_dict[model_name]["seq_len"])))
+            batch_sizes = sorted(set(self.result_dict[model_name]["bsz"]))
+            sequence_lengths = sorted(set(self.result_dict[model_name]["seq_len"]))
             results = self.result_dict[model_name]["result"]
 
             (x_axis_array, inner_loop_array) = (

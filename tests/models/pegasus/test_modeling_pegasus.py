@@ -24,6 +24,7 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 from ..mbart.test_modeling_mbart import AbstractSeq2SeqIntegrationTest
 
 
@@ -233,9 +234,21 @@ class PegasusModelTester:
 
 
 @require_torch
-class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusModel, PegasusForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (PegasusForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": PegasusForConditionalGeneration,
+            "feature-extraction": PegasusModel,
+            "summarization": PegasusForConditionalGeneration,
+            "text-generation": PegasusForCausalLM,
+            "text2text-generation": PegasusForConditionalGeneration,
+            "translation": PegasusForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     fx_compatible = True
     test_resize_position_embeddings = True
@@ -560,3 +573,7 @@ class PegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
     def test_retain_grad_hidden_states_attentions(self):
         # decoder cannot keep gradients
         return
+
+    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
+    def test_left_padding_compatibility(self):
+        pass

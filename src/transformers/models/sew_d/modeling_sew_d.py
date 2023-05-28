@@ -25,12 +25,11 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 
-from transformers.deepspeed import is_deepspeed_zero3_enabled
-
 from ...activations import ACT2FN
+from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import softmax_backward_data, torch_int_div
+from ...pytorch_utils import softmax_backward_data
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_sew_d import SEWDConfig
 
@@ -560,13 +559,13 @@ class XSoftmax(torch.autograd.Function):
         r_mask = g.op(
             "Cast",
             g.op("Sub", g.op("Constant", value_t=torch.tensor(1, dtype=torch.int64)), mask_cast_value),
-            to_i=sym_help.cast_pytorch_to_onnx["Byte"],
+            to_i=sym_help.cast_pytorch_to_onnx["Bool"],
         )
         output = masked_fill(
             g, self, r_mask, g.op("Constant", value_t=torch.tensor(torch.finfo(self.type().dtype()).min))
         )
         output = softmax(g, output, dim)
-        return masked_fill(g, output, r_mask, g.op("Constant", value_t=torch.tensor(0, dtype=torch.uint8)))
+        return masked_fill(g, output, r_mask, g.op("Constant", value_t=torch.tensor(0, dtype=torch.bool)))
 
 
 # Copied from transformers.models.deberta.modeling_deberta.DropoutContext
@@ -755,7 +754,7 @@ class DisentangledSelfAttention(nn.Module):
                 Input states to the module usually the output from previous layer, it will be the Q,K and V in
                 *Attention(Q,K,V)*
 
-            attention_mask (`torch.ByteTensor`):
+            attention_mask (`torch.BoolTensor`):
                 An attention mask matrix of shape [*B*, *N*, *N*] where *B* is the batch size, *N* is the maximum
                 sequence length in which element [i,j] = *1* means the *i* th token in the input can attend to the *j*
                 th token.
@@ -1087,7 +1086,6 @@ class SEWDTransformerEncoder(nn.Module):
         if attention_mask.dim() <= 2:
             extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
             attention_mask = extended_attention_mask * extended_attention_mask.squeeze(-2).unsqueeze(-1)
-            attention_mask = attention_mask.byte()
         elif attention_mask.dim() == 3:
             attention_mask = attention_mask.unsqueeze(1)
 
@@ -1118,7 +1116,7 @@ class SEWDTransformerEncoder(nn.Module):
         if attention_mask.dim() <= 2:
             input_mask = attention_mask
         else:
-            input_mask = (attention_mask.sum(-2) > 0).byte()
+            input_mask = attention_mask.sum(-2) > 0
         attention_mask = self.get_attention_mask(attention_mask)
         relative_pos = self.get_rel_pos(hidden_states, query_states, relative_pos)
 
@@ -1306,7 +1304,7 @@ class SEWDPreTrainedModel(PreTrainedModel):
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch_int_div(input_length - kernel_size, stride) + 1
+            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)

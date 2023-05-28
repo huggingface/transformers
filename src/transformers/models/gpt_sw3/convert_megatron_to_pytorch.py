@@ -78,7 +78,7 @@ def convert_megatron_checkpoint(sd_megatron, config):
 
     pf = "model.language_model.encoder.layers."
     for i in range(layers):
-        causal_mask = torch.tril(torch.ones((n_positions, n_positions), dtype=torch.uint8))
+        causal_mask = torch.tril(torch.ones((n_positions, n_positions), dtype=torch.bool))
         causal_mask = causal_mask.view(1, 1, n_positions, n_positions)
         sd_hf[f"transformer.h.{i}.attn.bias"] = causal_mask
         sd_hf[f"transformer.h.{i}.attn.masked_bias"] = torch.tensor(-1e4, dtype=torch.bfloat16)

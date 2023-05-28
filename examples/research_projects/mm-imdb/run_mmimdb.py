@@ -554,9 +554,9 @@ def main():
     if args.do_eval and args.local_rank in [-1, 0]:
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
-            checkpoints = list(
+            checkpoints = [
                 os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
-            )
+            ]
 
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
@@ -566,7 +566,7 @@ def main():
             model.load_state_dict(torch.load(checkpoint))
             model.to(args.device)
             result = evaluate(args, model, tokenizer, criterion, prefix=prefix)
-            result = dict((k + "_{}".format(global_step), v) for k, v in result.items())
+            result = {k + "_{}".format(global_step): v for k, v in result.items()}
             results.update(result)
 
     return results

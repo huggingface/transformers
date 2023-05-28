@@ -37,6 +37,7 @@ logger = logging.get_logger(__name__)
 
 IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
+        ("align", "EfficientNetImageProcessor"),
         ("beit", "BeitImageProcessor"),
         ("bit", "BitImageProcessor"),
         ("blip", "BlipImageProcessor"),
@@ -47,6 +48,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("clipseg", "ViTImageProcessor"),
         ("conditional_detr", "ConditionalDetrImageProcessor"),
         ("convnext", "ConvNextImageProcessor"),
+        ("convnextv2", "ConvNextImageProcessor"),
         ("cvt", "ConvNextImageProcessor"),
         ("data2vec-vision", "BeitImageProcessor"),
         ("deformable_detr", "DeformableDetrImageProcessor"),
@@ -59,6 +61,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("efficientformer", "EfficientFormerImageProcessor"),
         ("efficientnet", "EfficientNetImageProcessor"),
         ("flava", "FlavaImageProcessor"),
+        ("focalnet", "BitImageProcessor"),
         ("git", "CLIPImageProcessor"),
         ("glpn", "GLPNImageProcessor"),
         ("groupvit", "CLIPImageProcessor"),
@@ -68,6 +71,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("levit", "LevitImageProcessor"),
         ("mask2former", "Mask2FormerImageProcessor"),
         ("maskformer", "MaskFormerImageProcessor"),
+        ("mgp-str", "ViTImageProcessor"),
         ("mobilenet_v1", "MobileNetV1ImageProcessor"),
         ("mobilenet_v2", "MobileNetV2ImageProcessor"),
         ("mobilenet_v2", "MobileNetV2ImageProcessor"),
@@ -77,15 +81,19 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("oneformer", "OneFormerImageProcessor"),
         ("owlvit", "OwlViTImageProcessor"),
         ("perceiver", "PerceiverImageProcessor"),
+        ("pix2struct", "Pix2StructImageProcessor"),
         ("poolformer", "PoolFormerImageProcessor"),
         ("regnet", "ConvNextImageProcessor"),
         ("resnet", "ConvNextImageProcessor"),
+        ("sam", "SamImageProcessor"),
         ("segformer", "SegformerImageProcessor"),
+        ("swiftformer", "ViTImageProcessor"),
         ("swin", "ViTImageProcessor"),
         ("swin2sr", "Swin2SRImageProcessor"),
         ("swinv2", "ViTImageProcessor"),
         ("table-transformer", "DetrImageProcessor"),
         ("timesformer", "VideoMAEImageProcessor"),
+        ("tvlt", "TvltImageProcessor"),
         ("upernet", "SegformerImageProcessor"),
         ("van", "ConvNextImageProcessor"),
         ("videomae", "VideoMAEImageProcessor"),
@@ -302,7 +310,7 @@ class AutoImageProcessor:
         >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
 
         >>> # If image processor files are in a directory (e.g. image processor was saved using *save_pretrained('./test/saved_model/')*)
-        >>> image_processor = AutoImageProcessor.from_pretrained("./test/saved_model/")
+        >>> # image_processor = AutoImageProcessor.from_pretrained("./test/saved_model/")
         ```"""
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", False)
@@ -350,17 +358,10 @@ class AutoImageProcessor:
                         "in that repo on your local machine. Make sure you have read the code there to avoid "
                         "malicious use, then set the option `trust_remote_code=True` to remove this error."
                     )
-                if kwargs.get("revision", None) is None:
-                    logger.warning(
-                        "Explicitly passing a `revision` is encouraged when loading a image processor with custom "
-                        "code to ensure no malicious code has been contributed in a newer revision."
-                    )
-
-                module_file, class_name = image_processor_auto_map.split(".")
                 image_processor_class = get_class_from_dynamic_module(
-                    pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
+                    image_processor_auto_map, pretrained_model_name_or_path, **kwargs
                 )
-                image_processor_class.register_for_auto_class()
+                _ = kwargs.pop("code_revision", None)
             else:
                 image_processor_class = image_processor_class_from_name(image_processor_class)
 

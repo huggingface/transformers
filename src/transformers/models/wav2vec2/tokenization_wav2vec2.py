@@ -373,7 +373,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
+        clean_up_tokenization_spaces: bool = None,
         group_tokens: bool = True,
         spaces_between_special_tokens: bool = False,
         output_word_offsets: Optional[bool] = False,
@@ -402,6 +402,11 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         text = string_output["text"]
 
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
         if clean_up_tokenization_spaces:
             text = self.clean_up_tokenization(text)
 
@@ -421,7 +426,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self,
         sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
+        clean_up_tokenization_spaces: bool = None,
         output_char_offsets: bool = False,
         output_word_offsets: bool = False,
         **kwargs,
@@ -434,7 +439,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
+            clean_up_tokenization_spaces (`bool`, *optional*):
                 Whether or not to clean up the tokenization spaces.
             output_char_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output character offsets. Character offsets can be used in combination with the
@@ -491,7 +496,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
+        clean_up_tokenization_spaces: bool = None,
         output_char_offsets: bool = False,
         output_word_offsets: bool = False,
         **kwargs,
@@ -507,7 +512,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
+            clean_up_tokenization_spaces (`bool`, *optional*):
                 Whether or not to clean up the tokenization spaces.
             output_char_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output character offsets. Character offsets can be used in combination with the
@@ -648,7 +653,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 if self.verbose:
                     logger.info(f"Adding {token} to the vocabulary")
 
-        added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(tokens_to_add))
+        added_tok_encoder = {tok: len(self) + i for i, tok in enumerate(tokens_to_add)}
         added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
         self.added_tokens_encoder.update(added_tok_encoder)
         self.added_tokens_decoder.update(added_tok_decoder)
@@ -812,12 +817,15 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         Args:
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrayr or a list of list of float values.
+                values, a list of numpy array or a list of list of float values. Must be mono channel audio, not
+                stereo, i.e. single float per timestep.
         """
 
-        is_batched = bool(
-            isinstance(raw_speech, (list, tuple))
-            and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
+        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        if is_batched_numpy and len(raw_speech.shape) > 2:
+            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+        is_batched = is_batched_numpy or (
+            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
         )
 
         # make sure input is in list format
@@ -887,7 +895,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
+        clean_up_tokenization_spaces: bool = None,
         **kwargs,
     ) -> str:
         """
@@ -905,6 +913,11 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
 
         text = self.convert_tokens_to_string(result)
 
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
         if clean_up_tokenization_spaces:
             clean_text = self.clean_up_tokenization(text)
             return clean_text

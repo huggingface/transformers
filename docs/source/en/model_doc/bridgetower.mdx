@@ -42,6 +42,28 @@ In principle, one can apply any visual, textual or cross-modal encoder in the pr
 The [`BridgeTowerProcessor`] wraps [`RobertaTokenizer`] and [`BridgeTowerImageProcessor`] into a single instance to both
 encode the text and prepare the images respectively.
 
+The following example shows how to run contrastive learning using [`BridgeTowerProcessor`] and [`BridgeTowerForContrastiveLearning`].
+```python
+>>> from transformers import BridgeTowerProcessor, BridgeTowerForContrastiveLearning
+>>> import requests
+>>> from PIL import Image
+
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image = Image.open(requests.get(url, stream=True).raw)
+>>> texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
+
+>>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
+>>> model = BridgeTowerForContrastiveLearning.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
+
+>>> # forward pass
+>>> scores = dict()
+>>> for text in texts:
+...     # prepare inputs
+...     encoding = processor(image, text, return_tensors="pt")
+...     outputs = model(**encoding)
+...     scores[text] = outputs
+```
+
 The following example shows how to run image-text retrieval using [`BridgeTowerProcessor`] and [`BridgeTowerForImageAndTextRetrieval`].
 ```python
 >>> from transformers import BridgeTowerProcessor, BridgeTowerForImageAndTextRetrieval
@@ -126,6 +148,11 @@ Tips:
 ## BridgeTowerModel
 
 [[autodoc]] BridgeTowerModel
+    - forward
+
+## BridgeTowerForContrastiveLearning
+
+[[autodoc]] BridgeTowerForContrastiveLearning
     - forward
 
 ## BridgeTowerForMaskedLM

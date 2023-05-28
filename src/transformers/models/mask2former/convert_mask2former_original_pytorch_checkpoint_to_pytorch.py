@@ -76,7 +76,7 @@ class TrackedStateDict:
         Returns:
             List[str]: List of keys not yet updated
         """
-        return set(list(self.to_track.keys())) - self._seen
+        return set(self.to_track.keys()) - self._seen
 
     def copy(self) -> Dict:
         # proxy the call to the internal dictionary

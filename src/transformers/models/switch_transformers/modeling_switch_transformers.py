@@ -272,7 +272,11 @@ class SwitchTransformersDenseActDense(nn.Module):
         hidden_states = self.wi(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        if hidden_states.dtype != self.wo.weight.dtype and self.wo.weight.dtype != torch.int8:
+        if (
+            isinstance(self.wo.weight, torch.Tensor)
+            and hidden_states.dtype != self.wo.weight.dtype
+            and self.wo.weight.dtype != torch.int8
+        ):
             hidden_states = hidden_states.to(self.wo.weight.dtype)
         hidden_states = self.wo(hidden_states)
         return hidden_states
@@ -511,9 +515,10 @@ class SwitchTransformersAttention(nn.Module):
         real_seq_length = seq_length
 
         if past_key_value is not None:
-            assert (
-                len(past_key_value) == 2
-            ), f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
+            if len(past_key_value) != 2:
+                raise ValueError(
+                    f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
+                )
             real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
 
         key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
@@ -1035,6 +1040,13 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         else:
             encoder_extended_attention_mask = None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
         cross_attn_head_mask = self.get_head_mask(cross_attn_head_mask, self.config.num_layers)
@@ -1056,11 +1068,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -1694,6 +1701,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
                 decoder_router_probs = nn.Softmax(dim=-1)(decoder_router_logits)
                 decoder_aux_loss = load_balancing_loss_func(decoder_router_probs, decoder_expert_indexes)
 
+            # move labels to correct device to enable PP
+            labels = labels.to(lm_logits.device)
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
 
             if output_router_logits and labels is not None:

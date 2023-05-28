@@ -18,9 +18,6 @@ from typing import Dict, Optional, Union
 
 import numpy as np
 
-from transformers.utils import is_vision_available
-from transformers.utils.generic import TensorType
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import resize, to_channel_dimension_format, to_pil_image
 from ...image_utils import (
@@ -32,7 +29,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import is_pytesseract_available, logging, requires_backends
+from ...utils import TensorType, is_pytesseract_available, is_vision_available, logging, requires_backends
 
 
 if is_vision_available():

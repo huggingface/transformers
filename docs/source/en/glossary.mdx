@@ -73,13 +73,13 @@ by the tokenizer under the key "attention_mask":
 [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]
 ```
 
-### autoencoding models 
+### autoencoding models
 
-see [masked language modeling](#masked-language-modeling)
+See [encoder models](#encoder-models) and [masked language modeling](#masked-language-modeling-mlm)
 
 ### autoregressive models
 
-see [causal language modeling](#causal-language-modeling)
+See [causal language modeling](#causal-language-modeling) and [decoder models](#decoder-models)
 
 ## B
 
@@ -89,14 +89,14 @@ The backbone is the network (embeddings and layers) that outputs the raw hidden 
 
 ## C
 
-### channel
-
-Color images are made up of some combination of values in three channels - red, green, and blue (RGB) - and grayscale images only have one channel. In 🤗 Transformers, the channel can be the first or last dimension of an image's tensor: [`n_channels`, `height`, `width`] or [`height`, `width`, `n_channels`].
-
 ### causal language modeling
 
 A pretraining task where the model reads the texts in order and has to predict the next word. It's usually done by
 reading the whole sentence but using a mask inside the model to hide the future tokens at a certain timestep.
+
+### channel
+
+Color images are made up of some combination of values in three channels - red, green, and blue (RGB) - and grayscale images only have one channel. In 🤗 Transformers, the channel can be the first or last dimension of an image's tensor: [`n_channels`, `height`, `width`] or [`height`, `width`, `n_channels`].
 
 ### connectionist temporal classification (CTC)
 
@@ -119,11 +119,30 @@ passing the `labels` is the preferred way to handle training.
 
 Please check each model's docs to see how they handle these input IDs for sequence to sequence training.
 
-### deep learning
+### decoder models
+
+Also referred to as autoregressive models, decoder models involve a pretraining task (called causal language modeling) where the model reads the texts in order and has to predict the next word. It's usually done by
+reading the whole sentence with a mask to hide future tokens at a certain timestep.
+
+<Youtube id="d_ixlCubqQw"/>
+
+### deep learning (DL)
 
 Machine learning algorithms which uses neural networks with several layers.
 
+## E
+
+### encoder models
+
+Also known as autoencoding models, encoder models take an input (such as text or images) and transform them into a condensed numerical representation called an embedding. Oftentimes, encoder models are pretrained using techniques like [masked language modeling](#masked-language-modeling-mlm), which masks parts of the input sequence and forces the model to create more meaningful representations.
+
+<Youtube id="H39Z_720T5s"/>
+
 ## F
+
+### feature extraction
+
+The process of selecting and transforming raw data into a set of features that are more informative and useful for machine learning algorithms. Some examples of feature extraction include transforming raw text into word embeddings and extracting important features such as edges or shapes from image/video data.
 
 ### feed forward chunking
 
@@ -144,6 +163,12 @@ For models employing the function [`apply_chunking_to_forward`], the `chunk_size
 embeddings that are computed in parallel and thus defines the trade-off between memory and time complexity. If
 `chunk_size` is set to 0, no feed forward chunking is done.
 
+### finetuned models
+
+Finetuning is a form of transfer learning which involves taking a pretrained model, freezing its weights, and replacing the output layer with a newly added [model head](#head). The model head is trained on your target dataset.
+
+See the [Fine-tune a pretrained model](https://huggingface.co/docs/transformers/training) tutorial for more details, and learn how to fine-tune models with 🤗 Transformers.
+
 ## H
 
 ### head
@@ -159,6 +184,10 @@ The model head refers to the last layer of a neural network that accepts the raw
 ### image patch
 
 Vision-based Transformers models split an image into smaller patches which are linearly embedded, and then passed as a sequence to the model. You can find the `patch_size` - or resolution - of the model in it's configuration.
+
+### inference
+
+Inference is the process of evaluating a model on new data after training is complete. See the [Pipeline for inference](https://huggingface.co/docs/transformers/pipeline_tutorial) tutorial to learn how to perform inference with 🤗 Transformers.
 
 ### input IDs
 
@@ -269,9 +298,13 @@ about their specific labels!
 The base models ([`BertModel`]) do not accept labels, as these are the base transformer models, simply outputting
 features.
 
+### large language models (LLM)
+
+A generic term that refers to transformer language models (GPT-3, BLOOM, OPT) that were trained on a large quantity of data. These models also tend to have a large number of learnable parameters (e.g. 175 billion for GPT-3).
+
 ## M
 
-### masked language modeling
+### masked language modeling (MLM)
 
 A pretraining task where the model sees a corrupted version of the texts, usually done by
 masking some tokens randomly, and has to predict the original text.
@@ -282,20 +315,26 @@ A task that combines texts with another kind of inputs (for instance images).
 
 ## N
 
-### Natural language generation
+### Natural language generation (NLG)
 
-All tasks related to generating text (for instance talk with transformers, translation).
+All tasks related to generating text (for instance, [Write With Transformers](https://transformer.huggingface.co/), translation).
 
-### Natural language processing
+### Natural language processing (NLP)
 
 A generic way to say "deal with texts".
 
-### Natural language understanding
+### Natural language understanding (NLU)
 
 All tasks related to understanding what is in a text (for instance classifying the
 whole text, individual words).
 
 ## P
+
+### pipeline
+
+A pipeline in 🤗 Transformers is an abstraction referring to a series of steps that are executed in a specific order to preprocess and transform data and return a prediction from a model. Some example stages found in a pipeline might be data preprocessing, feature extraction, and normalization.
+
+For more details, see [Pipelines for inference](https://huggingface.co/docs/transformers/pipeline_tutorial).
 
 ### pixel values
 
@@ -317,21 +356,28 @@ absolute positional embeddings.
 Absolute positional embeddings are selected in the range `[0, config.max_position_embeddings - 1]`. Some models use
 other types of positional embeddings, such as sinusoidal position embeddings or relative position embeddings.
 
+### preprocessing
+
+The task of preparing raw data into a format that can be easily consumed by machine learning models. For example, text is typically preprocessed by tokenization. To gain a better idea of what preprocessing looks like for other input types, check out the [Preprocess](https://huggingface.co/docs/transformers/preprocessing) tutorial.
 
 ### pretrained model
 
 A model that has been pretrained on some data (for instance all of Wikipedia). Pretraining methods involve a
 self-supervised objective, which can be reading the text and trying to predict the next word (see [causal language
 modeling](#causal-language-modeling)) or masking some words and trying to predict them (see [masked language
-modeling](#masked-language-modeling)). 
+modeling](#masked-language-modeling-mlm)). 
 
   Speech and vision models have their own pretraining objectives. For example, Wav2Vec2 is a speech model pretrained on a contrastive task which requires the model to identify the "true" speech representation from a set of "false" speech representations. On the other hand, BEiT is a vision model pretrained on a masked image modeling task which masks some of the image patches and requires the model to predict the masked patches (similar to the masked language modeling objective).
 
 ## R
 
-### recurrent neural network
+### recurrent neural network (RNN)
 
 A type of model that uses a loop over a layer to process texts.
+
+### representation learning
+
+A subfield of machine learning which focuses on learning meaningful representations of raw data. Some examples of representation learning techniques include word embeddings, autoencoders, and Generative Adversarial Networks (GANs).
 
 ## S
 
@@ -343,6 +389,18 @@ A measurement in hertz of the number of samples (the audio signal) taken per sec
 
 Each element of the input finds out which other elements of the input they should attend to.
 
+### self-supervised learning 
+
+A category of machine learning techniques in which a model creates its own learning objective from unlabeled data. It differs from [unsupervised learning](#unsupervised-learning) and [supervised learning](#supervised-learning) in that the learning process is supervised, but not explicitly from the user. 
+
+One example of self-supervised learning is [masked language modeling](#masked-language-modeling-mlm), where a model is passed sentences with a proportion of its tokens removed and learns to predict the missing tokens.
+
+### semi-supervised learning
+
+A broad category of machine learning training techniques that leverages a small amount of labeled data with a larger quantity of unlabeled data to improve the accuracy of a model, unlike [supervised learning](#supervised-learning) and [unsupervised learning](#unsupervised-learning).
+
+An example of a semi-supervised learning approach is "self-training", in which a model is trained on labeled data, and then used to make predictions on the unlabeled data. The portion of the unlabeled data that the model predicts with the most confidence gets added to the labeled dataset and used to retrain the model.
+
 ### sequence-to-sequence (seq2seq)
 
 Models that generate a new sequence from an input, like translation models, or summarization models (such as
@@ -351,6 +409,10 @@ Models that generate a new sequence from an input, like translation models, or s
 ### stride
 
 In [convolution](#convolution) or [pooling](#pooling), the stride refers to the distance the kernel is moved over a matrix. A stride of 1 means the kernel is moved one pixel over at a time, and a stride of 2 means the kernel is moved two pixels over at a time.
+
+### supervised learning
+
+A form of model training that directly uses labeled data to correct and instruct model performance. Data is fed into the model being trained, and its predictions are compared to the known labels. The model updates its weights based on how incorrect its predictions were, and the process is repeated to optimize model performance.
 
 ## T
 
@@ -410,6 +472,16 @@ sequence, corresponding to the "question", has all its tokens represented by a `
 
 Some models, like [`XLNetModel`] use an additional token represented by a `2`.
 
+### transfer learning
+
+A technique that involves taking a pretrained model and adapting it to a dataset specific to your task. Instead of training a model from scratch, you can leverage knowledge obtained from an existing model as a starting point. This speeds up the learning process and reduces the amount of training data needed.
+
 ### transformer
 
 Self-attention based deep learning model architecture.
+
+## U
+
+### unsupervised learning
+
+A form of model training in which data provided to the model is not labeled. Unsupervised learning techniques leverage statistical information of the data distribution to find patterns useful for the task at hand.

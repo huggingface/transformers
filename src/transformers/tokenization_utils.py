@@ -425,7 +425,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 if self.verbose:
                     logger.info(f"Adding {token} to the vocabulary")
 
-        added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(tokens_to_add))
+        added_tok_encoder = {tok: len(self) + i for i, tok in enumerate(tokens_to_add)}
         added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
         self.added_tokens_encoder.update(added_tok_encoder)
         self.added_tokens_decoder.update(added_tok_decoder)
@@ -495,9 +495,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             `List[str]`: The list of tokens.
         """
         # Simple mapping string => AddedToken for special tokens with specific tokenization behaviors
-        all_special_tokens_extended = dict(
-            (str(t), t) for t in self.all_special_tokens_extended if isinstance(t, AddedToken)
-        )
+        all_special_tokens_extended = {
+            str(t): t for t in self.all_special_tokens_extended if isinstance(t, AddedToken)
+        }
 
         text, kwargs = self.prepare_for_tokenization(text, **kwargs)
 
@@ -922,7 +922,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
+        clean_up_tokenization_spaces: bool = None,
         spaces_between_special_tokens: bool = True,
         **kwargs,
     ) -> str:
@@ -953,6 +953,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         else:
             text = "".join(sub_texts)
 
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
         if clean_up_tokenization_spaces:
             clean_text = self.clean_up_tokenization(text)
             return clean_text

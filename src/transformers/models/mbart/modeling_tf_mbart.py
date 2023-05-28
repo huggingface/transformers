@@ -15,6 +15,8 @@
 """ TF 2.0 MBart model."""
 
 
+from __future__ import annotations
+
 import random
 from typing import Optional, Tuple, Union
 
@@ -30,14 +32,13 @@ from ...modeling_tf_outputs import (
 
 # Public API
 from ...modeling_tf_utils import (
-    DUMMY_INPUTS,
     TFCausalLanguageModelingLoss,
     TFModelInputType,
     TFPreTrainedModel,
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list, stable_softmax
+from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
     ContextManagers,
     add_code_sample_docstrings,
@@ -131,7 +132,7 @@ class TFMBartLearnedPositionalEmbedding(tf.keras.layers.Embedding):
         self,
         input_shape: Optional[tf.TensorShape] = None,
         past_key_values_length: int = 0,
-        position_ids: Optional[tf.Tensor] = None,
+        position_ids: tf.Tensor | None = None,
     ):
         """Input is expected to be of size [bsz x seqlen]."""
         if position_ids is None:
@@ -181,12 +182,12 @@ class TFMBartAttention(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        key_value_states: Optional[tf.Tensor] = None,
-        past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        layer_head_mask: Optional[tf.Tensor] = None,
+        key_value_states: tf.Tensor | None = None,
+        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
+        attention_mask: tf.Tensor | None = None,
+        layer_head_mask: tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
+    ) -> Tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -384,12 +385,12 @@ class TFMBartDecoderLayer(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[tf.Tensor] = None,
-        encoder_hidden_states: Optional[tf.Tensor] = None,
-        encoder_attention_mask: Optional[tf.Tensor] = None,
-        layer_head_mask: Optional[tf.Tensor] = None,
-        cross_attn_layer_head_mask: Optional[tf.Tensor] = None,
-        past_key_value: Optional[Tuple[tf.Tensor]] = None,
+        attention_mask: tf.Tensor | None = None,
+        encoder_hidden_states: tf.Tensor | None = None,
+        encoder_attention_mask: tf.Tensor | None = None,
+        layer_head_mask: tf.Tensor | None = None,
+        cross_attn_layer_head_mask: tf.Tensor | None = None,
+        past_key_value: Tuple[tf.Tensor] | None = None,
         training: Optional[bool] = False,
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
         """
@@ -465,34 +466,6 @@ class TFMBartDecoderLayer(tf.keras.layers.Layer):
 class TFMBartPreTrainedModel(TFPreTrainedModel):
     config_class = MBartConfig
     base_model_prefix = "model"
-
-    @property
-    def dummy_inputs(self):
-        pad_token = 1
-        input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
-        decoder_input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
-        dummy_inputs = {
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": tf.cast(input_ids != pad_token, tf.int32),
-            "input_ids": input_ids,
-        }
-        return dummy_inputs
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
-            }
-        ]
-    )
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartPretrainedModel.serving
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
 
 
 MBART_START_DOCSTRING = r"""
@@ -619,37 +592,44 @@ MBART_INPUTS_DOCSTRING = r"""
 """
 
 MBART_GENERATION_EXAMPLE = r"""
-    Summarization example:
+    Translation example:
 
     ```python
-    >>> from transformers import AutoTokenizer, TFMBartForConditionalGeneration, MBartConfig
+    >>> from transformers import AutoTokenizer, TFMBartForConditionalGeneration
 
-    >>> model = TFMBartForConditionalGeneration.from_pretrained("facebook/mbart-large-cc25")
-    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
+    >>> model = TFMBartForConditionalGeneration.from_pretrained("facebook/mbart-large-en-ro")
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-en-ro")
 
-    >>> ARTICLE_TO_SUMMARIZE = "Meine Freunde sind cool, aber sie essen zu viel Kuchen."
-    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="tf")
+    >>> example_english_phrase = "42 is the answer"
+    >>> inputs = tokenizer(example_english_phrase, return_tensors="tf")
 
-    >>> # Generate Summary
-    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
-    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    >>> # Translate
+    >>> generated_ids = model.generate(**inputs, num_beams=4, max_length=5)
+    >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+    '42 este răspuns'
     ```
 
     Mask filling example:
 
     ```python
     >>> from transformers import AutoTokenizer, TFMBartForConditionalGeneration
+    >>> import tensorflow as tf
 
-    >>> model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-cc25")
+    >>> model = TFMBartForConditionalGeneration.from_pretrained("facebook/mbart-large-cc25")
     >>> tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
 
     >>> # de_DE is the language symbol id <LID> for German
     >>> TXT = "</s> Meine Freunde sind <mask> nett aber sie essen zu viel Kuchen. </s> de_DE"
-    >>> input_ids = tokenizer([TXT], add_special_tokens=False, return_tensors="tf")["input_ids"]
 
+    >>> input_ids = tokenizer([TXT], add_special_tokens=False, return_tensors="tf")["input_ids"]
     >>> logits = model(input_ids).logits
-    >>> probs = tf.nn.softmax(logits[0])
-    >>> # probs[5] is associated with the mask token
+
+    >>> masked_index = tf.where(input_ids[0] == tokenizer.mask_token_id)[0, 0]
+    >>> probs = tf.nn.softmax(logits[0, masked_index], axis=0)
+    >>> values, predictions = tf.math.top_k(probs, 5)
+
+    >>> tokenizer.decode(predictions).split()
+    ['nett', 'sehr', 'ganz', 'nicht', 'so']
     ```
 """
 
@@ -693,10 +673,10 @@ class TFMBartEncoder(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
+        input_ids: TFModelInputType | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -763,16 +743,7 @@ class TFMBartEncoder(tf.keras.layers.Layer):
             if hasattr(self.embed_tokens, "load_weight_prefix"):
                 context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
             with ContextManagers(context):
-                # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-                # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-                tf.debugging.assert_less(
-                    input_ids,
-                    tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
-                    message=(
-                        "input_ids must be smaller than the embedding layer's input dimension (got"
-                        f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
-                    ),
-                )
+                check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
                 inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         embed_pos = self.embed_positions(input_shape)
@@ -870,14 +841,14 @@ class TFMBartDecoder(tf.keras.layers.Layer):
     def call(
         self,
         input_ids: TFModelInputType = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        encoder_hidden_states: Optional[tf.Tensor] = None,
-        encoder_attention_mask: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        cross_attn_head_mask: Optional[tf.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None,
+        inputs_embeds: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        encoder_hidden_states: tf.Tensor | None = None,
+        encoder_attention_mask: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        cross_attn_head_mask: tf.Tensor | None = None,
+        past_key_values: Tuple[Tuple[tf.Tensor]] | None = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -982,16 +953,7 @@ class TFMBartDecoder(tf.keras.layers.Layer):
             if hasattr(self.embed_tokens, "load_weight_prefix"):
                 context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
             with ContextManagers(context):
-                # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-                # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-                tf.debugging.assert_less(
-                    input_ids,
-                    tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
-                    message=(
-                        "input_ids must be smaller than the embedding layer's input dimension (got"
-                        f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
-                    ),
-                )
+                check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
                 inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         hidden_states = inputs_embeds
@@ -1111,17 +1073,17 @@ class TFMBartMainLayer(tf.keras.layers.Layer):
     def call(
         self,
         input_ids: TFModelInputType = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        decoder_input_ids: Optional[tf.Tensor] = None,
-        decoder_attention_mask: Optional[tf.Tensor] = None,
-        decoder_position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        decoder_head_mask: Optional[tf.Tensor] = None,
-        cross_attn_head_mask: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        decoder_input_ids: tf.Tensor | None = None,
+        decoder_attention_mask: tf.Tensor | None = None,
+        decoder_position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        decoder_head_mask: tf.Tensor | None = None,
+        cross_attn_head_mask: tf.Tensor | None = None,
         encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
-        past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        decoder_inputs_embeds: Optional[tf.Tensor] = None,
+        past_key_values: Tuple[Tuple[tf.Tensor]] | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        decoder_inputs_embeds: tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1219,17 +1181,17 @@ class TFMBartModel(TFMBartPreTrainedModel):
     def call(
         self,
         input_ids: TFModelInputType = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        decoder_input_ids: Optional[tf.Tensor] = None,
-        decoder_attention_mask: Optional[tf.Tensor] = None,
-        decoder_position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        decoder_head_mask: Optional[tf.Tensor] = None,
-        cross_attn_head_mask: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        decoder_input_ids: tf.Tensor | None = None,
+        decoder_attention_mask: tf.Tensor | None = None,
+        decoder_position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        decoder_head_mask: tf.Tensor | None = None,
+        cross_attn_head_mask: tf.Tensor | None = None,
         encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
-        past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        decoder_inputs_embeds: Optional[tf.Tensor] = None,
+        past_key_values: Tuple[Tuple[tf.Tensor]] | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        decoder_inputs_embeds: tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1299,7 +1261,7 @@ class BiasLayer(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    "The MBART Model with a language modeling head. Can be used for summarization.",
+    "The MBART Model with a language modeling head. Can be used for summarization, after fine-tuning the pretrained models.",
     MBART_START_DOCSTRING,
 )
 class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageModelingLoss):
@@ -1347,22 +1309,22 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
     def call(
         self,
         input_ids: TFModelInputType = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        decoder_input_ids: Optional[tf.Tensor] = None,
-        decoder_attention_mask: Optional[tf.Tensor] = None,
-        decoder_position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        decoder_head_mask: Optional[tf.Tensor] = None,
-        cross_attn_head_mask: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        decoder_input_ids: tf.Tensor | None = None,
+        decoder_attention_mask: tf.Tensor | None = None,
+        decoder_position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        decoder_head_mask: tf.Tensor | None = None,
+        cross_attn_head_mask: tf.Tensor | None = None,
         encoder_outputs: Optional[TFBaseModelOutput] = None,
         past_key_values: Tuple[Tuple[tf.Tensor]] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        decoder_inputs_embeds: Optional[tf.Tensor] = None,
+        inputs_embeds: tf.Tensor | None = None,
+        decoder_inputs_embeds: tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[tf.Tensor] = None,
+        labels: tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFSeq2SeqLMOutput, Tuple[tf.Tensor]]:
         """

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team.
+# Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,15 +33,15 @@ logger = logging.get_logger(__name__)
 
 
 def get_detr_config(model_name):
-    config = DetrConfig(use_timm_backbone=False)
-
-    # set backbone attributes
-    if "resnet50" in model_name:
-        pass
-    elif "resnet101" in model_name:
-        config.backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-101")
+    # initialize config
+    if "resnet-50" in model_name:
+        backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-50")
+    elif "resnet-101" in model_name:
+        backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-101")
     else:
         raise ValueError("Model name should include either resnet50 or resnet101")
+
+    config = DetrConfig(use_timm_backbone=False, backbone_config=backbone_config)
 
     # set label attributes
     is_panoptic = "panoptic" in model_name
@@ -286,7 +286,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
+def convert_detr_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
     """
     Copy/paste/tweak model's weights to our DETR structure.
     """
@@ -295,8 +295,12 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
     config, is_panoptic = get_detr_config(model_name)
 
     # load original model from torch hub
+    model_name_to_original_name = {
+        "detr-resnet-50": "detr_resnet50",
+        "detr-resnet-101": "detr_resnet101",
+    }
     logger.info(f"Converting model {model_name}...")
-    detr = torch.hub.load("facebookresearch/detr", model_name, pretrained=True).eval()
+    detr = torch.hub.load("facebookresearch/detr", model_name_to_original_name[model_name], pretrained=True).eval()
     state_dict = detr.state_dict()
     # rename keys
     for src, dest in create_rename_keys(config):
@@ -344,9 +348,6 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
     original_outputs = detr(pixel_values)
     outputs = model(pixel_values)
 
-    print("Logits:", outputs.logits[0, :3, :3])
-    print("Original logits:", original_outputs["pred_logits"][0, :3, :3])
-
     assert torch.allclose(outputs.logits, original_outputs["pred_logits"], atol=1e-3)
     assert torch.allclose(outputs.pred_boxes, original_outputs["pred_boxes"], atol=1e-3)
     if is_panoptic:
@@ -360,15 +361,26 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
         model.save_pretrained(pytorch_dump_folder_path)
         processor.save_pretrained(pytorch_dump_folder_path)
 
+    if push_to_hub:
+        # Upload model and image processor to the hub
+        logger.info("Uploading PyTorch model and image processor to the hub...")
+        model.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--model_name", default="detr_resnet50", type=str, help="Name of the DETR model you'd like to convert."
+        "--model_name",
+        default="detr-resnet-50",
+        type=str,
+        choices=["detr-resnet-50", "detr-resnet-101"],
+        help="Name of the DETR model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
     )
+    parser.add_argument("--push_to_hub", action="store_true", help="Whether to push the model to the hub or not.")
     args = parser.parse_args()
-    convert_detr_checkpoint(args.model_name, args.pytorch_dump_folder_path)
+    convert_detr_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)

@@ -24,6 +24,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -303,7 +304,7 @@ class RealmModelTester:
 
 
 @require_torch
-class RealmModelTest(ModelTesterMixin, unittest.TestCase):
+class RealmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             RealmEmbedder,
@@ -316,6 +317,7 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = ()
+    pipeline_model_mapping = {} if is_torch_available() else {}
 
     # disable these tests because there is no base_model in Realm
     test_save_load_fast_init_from_base = False

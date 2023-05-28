@@ -106,12 +106,12 @@ class MinLengthLogitsProcessor(LogitsProcessor):
 
     def __init__(self, min_length: int, eos_token_id: Union[int, List[int]]):
         if not isinstance(min_length, int) or min_length < 0:
-            raise ValueError(f"`min_length` has to be a positive integer, but is {min_length}")
+            raise ValueError(f"`min_length` has to be a non-negative integer, but is {min_length}")
 
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
         if not all([isinstance(i, int) for i in eos_token_id]) or any([i < 0 for i in eos_token_id]):
-            raise ValueError(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
+            logger.warning(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
 
         self.min_length = min_length
         self.eos_token_id = eos_token_id
@@ -133,18 +133,22 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
             The input tokens length.
         min_new_tokens (`int`):
             The minimum *new* tokens length below which the score of `eos_token_id` is set to `-float("Inf")`.
-        eos_token_id (`int`):
-            The id of the *end-of-sequence* token.
+        eos_token_id (`Union[int, List[int]]`):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
     """
 
-    def __init__(self, prompt_length_to_skip: int, min_new_tokens: int, eos_token_id: int):
+    def __init__(self, prompt_length_to_skip: int, min_new_tokens: int, eos_token_id: Union[int, List[int]]):
         for arg_name, arg_value in [
             ("prompt_length_to_skip", prompt_length_to_skip),
             ("min_new_tokens", min_new_tokens),
-            ("eos_token_id", eos_token_id),
         ]:
             if not isinstance(arg_value, int) or arg_value < 0:
                 raise ValueError(f"`{arg_name}` has to be a positive integer, but is {arg_value}")
+
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
+        if not all([isinstance(i, int) for i in eos_token_id]) or any([i < 0 for i in eos_token_id]):
+            logger.warning(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
 
         self.prompt_length_to_skip = prompt_length_to_skip
         self.min_new_tokens = min_new_tokens
@@ -153,7 +157,8 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         new_tokens_length = input_ids.shape[-1] - self.prompt_length_to_skip
         if new_tokens_length < self.min_new_tokens:
-            scores[:, self.eos_token_id] = -float("inf")
+            for i in self.eos_token_id:
+                scores[:, i] = -float("inf")
 
         return scores
 
@@ -673,7 +678,7 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     generation. See [Autoregressive Entity Retrieval](https://arxiv.org/abs/2010.00904) for more information.
 
     Args:
-        prefix_allowed_tokens_fn: (`Callable[[int, torch.Tensor], List[int]]`):
+        prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`):
             This function constraints the beam search to allowed tokens only at each step. This function takes 2
             arguments `inputs_ids` and the batch ID `batch_id`. It has to return a list with the allowed tokens for the
             next generation step conditioned on the previously generated tokens `inputs_ids` and the batch ID
@@ -951,7 +956,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
         for k in range(input_ids.shape[0]):
-            seq = [t for t in input_ids[k, self.begin_index :].tolist()]
+            seq = list(input_ids[k, self.begin_index :].tolist())
             last_was_timestamp = len(seq) >= 1 and seq[-1] >= self.timestamp_begin
             penultimate_was_timestamp = len(seq) < 2 or seq[-2] >= self.timestamp_begin
 

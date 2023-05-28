@@ -20,12 +20,13 @@ import math
 import unittest
 
 from transformers import DetrConfig, is_timm_available, is_vision_available
-from transformers.testing_utils import require_timm, require_vision, slow, torch_device
+from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_timm_available():
@@ -174,7 +175,7 @@ class DetrModelTester:
 
 
 @require_timm
-class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DetrModel,
@@ -183,6 +184,15 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         )
         if is_timm_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": DetrModel,
+            "image-segmentation": DetrForSegmentation,
+            "object-detection": DetrForObjectDetection,
+        }
+        if is_timm_available()
+        else {}
     )
     is_encoder_decoder = True
     test_torchscript = False
@@ -235,6 +245,11 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_detr_no_timm_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_no_timm_backbone(*config_and_inputs)
+
+    # TODO: check if this works again for PyTorch 2.x.y
+    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
 
     @unittest.skip(reason="DETR does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -495,7 +510,7 @@ def prepare_img():
 @require_timm
 @require_vision
 @slow
-class DetrModelIntegrationTests(unittest.TestCase):
+class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
@@ -529,6 +544,7 @@ class DetrModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             outputs = model(pixel_values, pixel_mask)
 
+        # verify outputs
         expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels + 1))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
         expected_slice_logits = torch.tensor(
@@ -543,6 +559,19 @@ class DetrModelIntegrationTests(unittest.TestCase):
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
+        # verify postprocessing
+        results = feature_extractor.post_process_object_detection(
+            outputs, threshold=0.3, target_sizes=[image.size[::-1]]
+        )[0]
+        expected_scores = torch.tensor([0.9982, 0.9960, 0.9955, 0.9988, 0.9987]).to(torch_device)
+        expected_labels = [75, 75, 63, 17, 17]
+        expected_slice_boxes = torch.tensor([40.1633, 70.8115, 175.5471, 117.9841]).to(torch_device)
+
+        self.assertEqual(len(results["scores"]), 5)
+        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
+        self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
+        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
+
     def test_inference_panoptic_segmentation_head(self):
         model = DetrForSegmentation.from_pretrained("facebook/detr-resnet-50-panoptic").to(torch_device)
 
@@ -555,6 +584,7 @@ class DetrModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             outputs = model(pixel_values, pixel_mask)
 
+        # verify outputs
         expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels + 1))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
         expected_slice_logits = torch.tensor(
@@ -575,3 +605,54 @@ class DetrModelIntegrationTests(unittest.TestCase):
             [[-7.7558, -10.8788, -11.9797], [-11.8881, -16.4329, -17.7451], [-14.7316, -19.7383, -20.3004]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.pred_masks[0, 0, :3, :3], expected_slice_masks, atol=1e-3))
+
+        # verify postprocessing
+        results = feature_extractor.post_process_panoptic_segmentation(
+            outputs, threshold=0.3, target_sizes=[image.size[::-1]]
+        )[0]
+
+        expected_shape = torch.Size([480, 640])
+        expected_slice_segmentation = torch.tensor([[4, 4, 4], [4, 4, 4], [4, 4, 4]], dtype=torch.int32).to(
+            torch_device
+        )
+        expected_number_of_segments = 5
+        expected_first_segment = {"id": 1, "label_id": 17, "was_fused": False, "score": 0.994096}
+
+        number_of_unique_segments = len(torch.unique(results["segmentation"]))
+        self.assertTrue(
+            number_of_unique_segments, expected_number_of_segments + 1
+        )  # we add 1 for the background class
+        self.assertTrue(results["segmentation"].shape, expected_shape)
+        self.assertTrue(torch.allclose(results["segmentation"][:3, :3], expected_slice_segmentation, atol=1e-4))
+        self.assertTrue(len(results["segments_info"]), expected_number_of_segments)
+        self.assertDictEqual(results["segments_info"][0], expected_first_segment)
+
+
+@require_vision
+@require_torch
+@slow
+class DetrModelIntegrationTests(unittest.TestCase):
+    @cached_property
+    def default_feature_extractor(self):
+        return (
+            DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50", revision="no_timm")
+            if is_vision_available()
+            else None
+        )
+
+    def test_inference_no_head(self):
+        model = DetrModel.from_pretrained("facebook/detr-resnet-50", revision="no_timm").to(torch_device)
+
+        feature_extractor = self.default_feature_extractor
+        image = prepare_img()
+        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**encoding)
+
+        expected_shape = torch.Size((1, 100, 256))
+        assert outputs.last_hidden_state.shape == expected_shape
+        expected_slice = torch.tensor(
+            [[0.0616, -0.5146, -0.4032], [-0.7629, -0.4934, -1.7153], [-0.4768, -0.6403, -0.7826]]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))

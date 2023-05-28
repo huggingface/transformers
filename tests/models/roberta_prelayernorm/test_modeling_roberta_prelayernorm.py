@@ -22,6 +22,7 @@ from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -365,7 +366,7 @@ class RobertaPreLayerNormModelTester:
 
 @require_torch
 # Copied from tests.models.roberta.test_modelling_roberta.RobertaPreLayerNormModelTest with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm
-class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             RobertaPreLayerNormForCausalLM,
@@ -380,6 +381,19 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, unit
         else ()
     )
     all_generative_model_classes = (RobertaPreLayerNormForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": RobertaPreLayerNormModel,
+            "fill-mask": RobertaPreLayerNormForMaskedLM,
+            "question-answering": RobertaPreLayerNormForQuestionAnswering,
+            "text-classification": RobertaPreLayerNormForSequenceClassification,
+            "text-generation": RobertaPreLayerNormForCausalLM,
+            "token-classification": RobertaPreLayerNormForTokenClassification,
+            "zero-shot": RobertaPreLayerNormForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
 
     def setUp(self):

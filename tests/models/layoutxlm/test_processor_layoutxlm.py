@@ -228,7 +228,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify image
@@ -250,7 +250,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify images
@@ -300,7 +300,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -339,7 +339,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids", "labels"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -361,7 +361,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids", "labels"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -402,7 +402,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -421,7 +421,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -455,7 +455,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -471,7 +471,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids

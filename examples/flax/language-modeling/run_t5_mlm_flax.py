@@ -418,13 +418,14 @@ class FlaxDataCollatorForT5MLM:
         orig_length = length
 
         num_noise_tokens = int(np.round(length * self.noise_density))
+        num_nonnoise_tokens = length - num_noise_tokens
         # avoid degeneracy by ensuring positive numbers of noise and nonnoise tokens.
         num_noise_tokens = min(max(num_noise_tokens, 1), length - 1)
-        num_noise_spans = int(np.round(num_noise_tokens / self.mean_noise_span_length))
+        # num_noise_tokens should be less than num_noise_tokens and num_nonnoise_tokens
+        num_noise_spans = int(np.round(min(num_noise_tokens, num_nonnoise_tokens) / self.mean_noise_span_length))
 
         # avoid degeneracy by ensuring positive number of noise spans
         num_noise_spans = max(num_noise_spans, 1)
-        num_nonnoise_tokens = length - num_noise_tokens
 
         # pick the lengths of the noise spans and the non-noise spans
         def _random_segmentation(num_items, num_segments):
@@ -791,14 +792,12 @@ def main():
         flat_params = traverse_util.flatten_dict(params)
         # find out all LayerNorm parameters
         layer_norm_candidates = ["layernorm", "layer_norm", "ln"]
-        layer_norm_named_params = set(
-            [
-                layer[-2:]
-                for layer_norm_name in layer_norm_candidates
-                for layer in flat_params.keys()
-                if layer_norm_name in "".join(layer).lower()
-            ]
-        )
+        layer_norm_named_params = {
+            layer[-2:]
+            for layer_norm_name in layer_norm_candidates
+            for layer in flat_params.keys()
+            if layer_norm_name in "".join(layer).lower()
+        }
         flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}
         return traverse_util.unflatten_dict(flat_mask)
 

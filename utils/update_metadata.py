@@ -93,11 +93,12 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("image-to-text", "MODEL_FOR_FOR_VISION_2_SEQ_MAPPING_NAMES", "AutoModelForVision2Seq"),
     (
         "zero-shot-image-classification",
-        "_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES",
-        "AutoModel",
+        "MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES",
+        "AutoModelForZeroShotImageClassification",
     ),
     ("depth-estimation", "MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES", "AutoModelForDepthEstimation"),
     ("video-classification", "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES", "AutoModelForVideoClassification"),
+    ("mask-generation", "MODEL_FOR_MASK_GENERATION_MAPPING_NAMES", "AutoModelForMaskGeneration"),
 ]
 
 
@@ -223,7 +224,7 @@ def update_metadata(token, commit_sha):
         table = update_pipeline_and_auto_class_table(table)
 
         # Sort the model classes to avoid some nondeterministic updates to create false update commits.
-        model_classes = sorted(list(table.keys()))
+        model_classes = sorted(table.keys())
         tags_table = pd.DataFrame(
             {
                 "model_class": model_classes,

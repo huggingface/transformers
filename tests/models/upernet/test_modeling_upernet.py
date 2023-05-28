@@ -26,6 +26,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -138,13 +139,14 @@ class UperNetModelTester:
 
 
 @require_torch
-class UperNetModelTest(ModelTesterMixin, unittest.TestCase):
+class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as UperNet does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (UperNetForSemanticSegmentation,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-segmentation": UperNetForSemanticSegmentation} if is_torch_available() else {}
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False

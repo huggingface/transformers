@@ -132,8 +132,8 @@ class BioGptTokenizer(PreTrainedTokenizer):
         self.lang = "en"
         self.sm = sacremoses
         # cache of sm.MosesTokenizer instance
-        self.cache_moses_tokenizer = dict()
-        self.cache_moses_detokenizer = dict()
+        self.cache_moses_tokenizer = {}
+        self.cache_moses_detokenizer = {}
 
         """ Initialisation"""
         with open(vocab_file, encoding="utf-8") as vocab_handle:
@@ -221,7 +221,7 @@ class BioGptTokenizer(PreTrainedTokenizer):
         split_tokens = []
         for token in text:
             if token:
-                split_tokens.extend([t for t in self.bpe(token).split(" ")])
+                split_tokens.extend(list(self.bpe(token).split(" ")))
 
         return split_tokens
 

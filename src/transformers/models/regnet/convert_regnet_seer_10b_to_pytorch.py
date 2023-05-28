@@ -60,7 +60,7 @@ class Tracker:
         for name, m in self.module.named_modules():
             self.handles.append(m.register_forward_hook(partial(self._forward_hook, name=name)))
         self.module(x)
-        list(map(lambda x: x.remove(), self.handles))
+        [x.remove() for x in self.handles]
         return self
 
     @property

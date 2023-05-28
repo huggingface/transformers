@@ -12,7 +12,7 @@ jobs:
     # Ensure running with CircleCI/huggingface
     check_circleci_user:
         docker:
-            - image: cimg/python:3.7.12
+            - image: cimg/python:3.8.12
         parallelism: 1
         steps:
             - run: echo $CIRCLE_PROJECT_USERNAME
@@ -26,7 +26,7 @@ jobs:
     fetch_tests:
         working_directory: ~/transformers
         docker:
-            - image: cimg/python:3.7.12
+            - image: cimg/python:3.8.12
         parallelism: 1
         steps:
             - checkout
@@ -44,6 +44,18 @@ jobs:
                     touch test_preparation/test_list.txt
                 fi
             - run: |
+                  if [ -f examples_test_list.txt ]; then
+                      mv examples_test_list.txt test_preparation/examples_test_list.txt
+                  else
+                      touch test_preparation/examples_test_list.txt
+                  fi
+            - run: |
+                if [ -f doctest_list.txt ]; then
+                    cp doctest_list.txt test_preparation/doctest_list.txt
+                else
+                    touch test_preparation/doctest_list.txt
+                fi
+            - run: |
                 if [ -f test_repo_utils.txt ]; then
                     mv test_repo_utils.txt test_preparation/test_repo_utils.txt
                 else
@@ -56,15 +68,10 @@ jobs:
                 else
                     touch test_preparation/filtered_test_list.txt
                 fi
-            - run: python utils/tests_fetcher.py --filters tests examples | tee examples_tests_fetched_summary.txt
-            - run: |
-                  if [ -f test_list.txt ]; then
-                      mv test_list.txt test_preparation/examples_test_list.txt
-                  else
-                      touch test_preparation/examples_test_list.txt
-                  fi
             - store_artifacts:
                   path: test_preparation/test_list.txt
+            - store_artifacts:
+                  path: test_preparation/doctest_list.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation/filtered_test_list.txt
             - store_artifacts:
@@ -78,6 +85,8 @@ jobs:
             - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
             - store_artifacts:
                   path: test_preparation/generated_config.txt
+            - store_artifacts:
+                  path: test_preparation/filtered_test_list_cross_tests.txt
             - continuation/continue:
                   configuration_path: test_preparation/generated_config.yml
 
@@ -85,7 +94,7 @@ jobs:
     fetch_all_tests:
         working_directory: ~/transformers
         docker:
-            - image: cimg/python:3.7.12
+            - image: cimg/python:3.8.12
         parallelism: 1
         steps:
             - checkout
@@ -95,7 +104,7 @@ jobs:
             - run: |
                   mkdir test_preparation
                   echo -n "tests" > test_preparation/test_list.txt
-                  echo -n "tests" > test_preparation/examples_test_list.txt
+                  echo -n "all" > test_preparation/examples_test_list.txt
                   echo -n "tests/repo_utils" > test_preparation/test_repo_utils.txt
             - run: |
                   echo -n "tests" > test_list.txt
@@ -111,7 +120,7 @@ jobs:
     check_code_quality:
         working_directory: ~/transformers
         docker:
-            - image: cimg/python:3.7.12
+            - image: cimg/python:3.8.12
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
@@ -121,8 +130,8 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.5-code_quality-{{ checksum "setup.py" }}
-                      - v0.5-code-quality
+                      - v0.6-code_quality-{{ checksum "setup.py" }}
+                      - v0.6-code-quality
             - run: pip install --upgrade pip
             - run: pip install .[all,quality]
             - save_cache:
@@ -144,7 +153,7 @@ jobs:
     check_repository_consistency:
         working_directory: ~/transformers
         docker:
-            - image: cimg/python:3.7.12
+            - image: cimg/python:3.8.12
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
@@ -154,8 +163,8 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.5-repository_consistency-{{ checksum "setup.py" }}
-                      - v0.5-repository_consistency
+                      - v0.6-repository_consistency-{{ checksum "setup.py" }}
+                      - v0.6-repository_consistency
             - run: pip install --upgrade pip
             - run: pip install .[all,quality]
             - save_cache:
@@ -176,7 +185,6 @@ jobs:
             - run: python utils/check_config_attributes.py
             - run: python utils/check_doctest_list.py
             - run: make deps_table_check_updated
-            - run: python utils/tests_fetcher.py --sanity_check
             - run: python utils/update_metadata.py --check-only
             - run: python utils/check_task_guides.py
 

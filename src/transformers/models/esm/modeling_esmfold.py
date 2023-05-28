@@ -201,9 +201,9 @@ def collate_dense_tensors(samples: List[torch.Tensor], pad_v: float = 0) -> torc
     """
     if len(samples) == 0:
         return torch.Tensor()
-    if len(set(x.dim() for x in samples)) != 1:
+    if len({x.dim() for x in samples}) != 1:
         raise RuntimeError(f"Samples has varying dimensions: {[x.dim() for x in samples]}")
-    (device,) = tuple(set(x.device for x in samples))  # assumes all on same device
+    (device,) = tuple({x.device for x in samples})  # assumes all on same device
     max_shape = [max(lst) for lst in zip(*[x.shape for x in samples])]
     result = torch.empty(len(samples), *max_shape, dtype=samples[0].dtype, device=device)
     result.fill_(pad_v)

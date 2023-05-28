@@ -22,6 +22,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -218,7 +219,7 @@ class LiltModelTester:
 
 
 @require_torch
-class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             LiltModel,
@@ -229,8 +230,25 @@ class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": LiltModel,
+            "question-answering": LiltForQuestionAnswering,
+            "text-classification": LiltForSequenceClassification,
+            "token-classification": LiltForTokenClassification,
+            "zero-shot": LiltForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_pruning = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return True
 
     def setUp(self):
         self.model_tester = LiltModelTester(self)

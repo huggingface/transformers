@@ -87,7 +87,7 @@ El pipeline descarga y almacena en caché el [modelo preentrenado](https://huggi
 
 ```py
 >>> clasificador("Estamos muy felices de mostrarte la biblioteca de 🤗 Transformers.")
-[{'label': 'POS', 'score': 0.9916}]
+[{'label': 'POS', 'score': 0.9320}]
 ```
 
 Para más de un enunciado, entrega una lista al [`pipeline`] que devolverá una lista de diccionarios:
@@ -129,7 +129,7 @@ Extraigamos las matrices de onda cruda (raw waveform, en inglés) de las primera
 ```py
 >>> resultado = reconocedor_de_voz(dataset[:4]["audio"])
 >>> print([d["text"] for d in resultado])
-['ahora buenas eh a ver tengo un problema con vuestra aplicación resulta que que quiero hacer una transferencia bancaria a una cuenta conocida pero me da error la aplicación a ver que a ver que puede ser', 'la aplicación no cargue saldo de mi nueva cuenta', 'hola tengo un problema con la aplicación no carga y y tampoco veo que carga el saldo de mi cuenta nueva dice que la aplicación está siendo reparada y ahora no puedo acceder a mi cuenta no necesito inmediatamente', 'hora buena la aplicación no se carga la vileza no carga el saldo de mi cuenta nueva dice que la villadenta siendo reparada y oro no puedo hacer a mi cuenta']
+['ahora buenas eh a ver tengo un problema con vuestra aplicación resulta que que quiero hacer una transferencia bancaria a una cuenta conocida pero me da error la aplicación a ver que a ver que puede ser', 'la aplicación no cargue saldo de mi nueva cuenta', 'hola tengo un problema con la aplicación no carga y y tampoco veo que carga el saldo de mi cuenta nueva dice que la aplicación está siendo reparada y ahora no puedo acceder a mi cuenta no necesito inmediatamente', 'hora buena la aplicación no se carga la vida no carga el saldo de mi cuenta nueva dice que la villadenta siendo reparada y oro no puedo hacer a mi cuenta']
 ```
 
 Para un dataset más grande, donde los inputs son de mayor tamaño (como en habla/audio o visión), querrás pasar un generador en lugar de una lista que carga todos los inputs en memoria. Ve la [documentación del pipeline](./main_classes/pipelines) para más información.

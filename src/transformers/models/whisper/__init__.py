@@ -18,6 +18,7 @@ from ...utils import (
     _LazyModule,
     is_flax_available,
     is_tf_available,
+    is_tokenizers_available,
     is_torch_available,
 )
 
@@ -29,6 +30,13 @@ _import_structure = {
     "tokenization_whisper": ["WhisperTokenizer"],
 }
 
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_whisper_fast"] = ["WhisperTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -41,6 +49,7 @@ else:
         "WhisperForConditionalGeneration",
         "WhisperModel",
         "WhisperPreTrainedModel",
+        "WhisperForAudioClassification",
     ]
 
 try:
@@ -66,6 +75,7 @@ else:
         "FlaxWhisperForConditionalGeneration",
         "FlaxWhisperModel",
         "FlaxWhisperPreTrainedModel",
+        "FlaxWhisperForAudioClassification",
     ]
 
 
@@ -76,6 +86,14 @@ if TYPE_CHECKING:
     from .tokenization_whisper import WhisperTokenizer
 
     try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_whisper_fast import WhisperTokenizerFast
+
+    try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
@@ -83,6 +101,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_whisper import (
             WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            WhisperForAudioClassification,
             WhisperForConditionalGeneration,
             WhisperModel,
             WhisperPreTrainedModel,
@@ -108,6 +127,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_flax_whisper import (
+            FlaxWhisperForAudioClassification,
             FlaxWhisperForConditionalGeneration,
             FlaxWhisperModel,
             FlaxWhisperPreTrainedModel,

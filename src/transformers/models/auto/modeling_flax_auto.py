@@ -48,6 +48,8 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("mt5", "FlaxMT5Model"),
         ("opt", "FlaxOPTModel"),
         ("pegasus", "FlaxPegasusModel"),
+        ("regnet", "FlaxRegNetModel"),
+        ("resnet", "FlaxResNetModel"),
         ("roberta", "FlaxRobertaModel"),
         ("roberta-prelayernorm", "FlaxRobertaPreLayerNormModel"),
         ("roformer", "FlaxRoFormerModel"),
@@ -119,6 +121,8 @@ FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image-classsification
         ("beit", "FlaxBeitForImageClassification"),
+        ("regnet", "FlaxRegNetForImageClassification"),
+        ("resnet", "FlaxResNetForImageClassification"),
         ("vit", "FlaxViTForImageClassification"),
     ]
 )
@@ -225,6 +229,11 @@ FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+FLAX_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    [
+        ("whisper", "FlaxWhisperForAudioClassification"),
+    ]
+)
 
 FLAX_MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FLAX_MODEL_MAPPING_NAMES)
 FLAX_MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_PRETRAINING_MAPPING_NAMES)

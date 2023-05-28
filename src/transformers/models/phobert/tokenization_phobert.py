@@ -297,7 +297,7 @@ class PhobertTokenizer(PreTrainedTokenizer):
         words = re.findall(r"\S+\n?", text)
 
         for token in words:
-            split_tokens.extend([t for t in self.bpe(token).split(" ")])
+            split_tokens.extend(list(self.bpe(token).split(" ")))
         return split_tokens
 
     def _convert_token_to_id(self, token):

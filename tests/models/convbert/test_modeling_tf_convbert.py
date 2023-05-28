@@ -12,6 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
+
 import os
 import tempfile
 import unittest
@@ -21,6 +23,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -223,7 +226,7 @@ class TFConvBertModelTester:
 
 
 @require_tf
-class TFConvBertModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFConvBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFConvBertModel,
@@ -235,6 +238,18 @@ class TFConvBertModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFConvBertModel,
+            "fill-mask": TFConvBertForMaskedLM,
+            "question-answering": TFConvBertForQuestionAnswering,
+            "text-classification": TFConvBertForSequenceClassification,
+            "token-classification": TFConvBertForTokenClassification,
+            "zero-shot": TFConvBertForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
     )
     test_pruning = False
     test_head_masking = False

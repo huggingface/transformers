@@ -34,9 +34,17 @@ from transformers import (
     is_vision_available,
     pipeline,
 )
-from transformers.testing_utils import nested_simplify, require_tf, require_timm, require_torch, require_vision, slow
+from transformers.testing_utils import (
+    is_pipeline_test,
+    nested_simplify,
+    require_tf,
+    require_timm,
+    require_torch,
+    require_vision,
+    slow,
+)
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -67,18 +75,16 @@ def mask_to_test_readable_only_shape(mask: Image) -> Dict:
     return {"shape": shape}
 
 
+@is_pipeline_test
 @require_vision
 @require_timm
 @require_torch
-class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
-    model_mapping = {
-        k: v
-        for k, v in (
-            list(MODEL_FOR_IMAGE_SEGMENTATION_MAPPING.items()) if MODEL_FOR_IMAGE_SEGMENTATION_MAPPING else []
-        )
+class ImageSegmentationPipelineTests(unittest.TestCase):
+    model_mapping = dict(
+        (list(MODEL_FOR_IMAGE_SEGMENTATION_MAPPING.items()) if MODEL_FOR_IMAGE_SEGMENTATION_MAPPING else [])
         + (MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING.items() if MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING else [])
         + (MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING.items() if MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING else [])
-    }
+    )
 
     def get_test_pipeline(self, model, tokenizer, processor):
         image_segmenter = ImageSegmentationPipeline(model=model, image_processor=processor)

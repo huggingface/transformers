@@ -18,6 +18,7 @@ import warnings
 from typing import Optional, Tuple, Union
 
 import torch
+import torch.fx
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -30,7 +31,13 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_torch_fx_proxy,
+    logging,
+)
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gptj import GPTJConfig
 
@@ -48,39 +55,28 @@ GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def fixed_pos_embedding(x, seq_dim=1, seq_len=None):
-    dim = x.shape[-1]
-    if seq_len is None:
-        seq_len = x.shape[seq_dim]
+def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
     inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2) / dim))
-    sinusoid_inp = (
-        torch.einsum("i , j -> i j", torch.arange(seq_len, dtype=torch.float), inv_freq).to(x.device).float()
-    )
-    return torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)
+    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.float), inv_freq).float()
+    return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
 
 
-def rotate_every_two(x):
+@torch.fx.wrap
+def get_embed_positions(embed_positions, position_ids):
+    return embed_positions.to(position_ids.device).repeat(position_ids.shape[0], 1, 1)
+
+
+def rotate_every_two(x: torch.Tensor) -> torch.Tensor:
     x1 = x[:, :, :, ::2]
     x2 = x[:, :, :, 1::2]
     x = torch.stack((-x2, x1), dim=-1)
     return x.flatten(-2)  # in einsum notation: rearrange(x, '... d j -> ... (d j)')
 
 
-def duplicate_interleave(m):
-    """
-    A simple version of `torch.repeat_interleave` for duplicating a matrix while interleaving the copy.
-    """
-    dim0 = m.shape[0]
-    m = m.view(-1, 1)  # flatten the matrix
-    m = m.repeat(1, 2)  # repeat all elements into the 2nd dimension
-    m = m.view(dim0, -1)  # reshape into a matrix, interleaving the copy
-    return m
-
-
-def apply_rotary_pos_emb(x, sincos, offset=0):
-    sin, cos = map(lambda t: duplicate_interleave(t)[None, offset : x.shape[1] + offset, None, :], sincos)
-    # einsum notation for lambda t: repeat(t[offset:x.shape[1]+offset,:], "n d -> () n () (d j)", j=2)
-    return (x * cos) + (rotate_every_two(x) * sin)
+def apply_rotary_pos_emb(tensor: torch.Tensor, sin: torch.Tensor, cos: torch.Tensor) -> torch.Tensor:
+    sin = torch.repeat_interleave(sin[:, :, None, :], 2, 3)
+    cos = torch.repeat_interleave(cos[:, :, None, :], 2, 3)
+    return (tensor * cos) + (rotate_every_two(tensor) * sin)
 
 
 class GPTJAttention(nn.Module):
@@ -90,11 +86,12 @@ class GPTJAttention(nn.Module):
         max_positions = config.max_position_embeddings
         self.register_buffer(
             "bias",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
+            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
                 1, 1, max_positions, max_positions
             ),
+            persistent=False,
         )
-        self.register_buffer("masked_bias", torch.tensor(-1e9))
+        self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
@@ -113,9 +110,9 @@ class GPTJAttention(nn.Module):
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-        self.rotary_dim = None
-        if config.rotary_dim is not None:
-            self.rotary_dim = config.rotary_dim
+        self.rotary_dim = config.rotary_dim
+        pos_embd_dim = self.rotary_dim or self.embed_dim
+        self.embed_positions = create_sinusoidal_positions(max_positions, pos_embd_dim)
 
     def _split_heads(self, tensor, num_attention_heads, attn_head_size, rotary):
         """
@@ -155,7 +152,7 @@ class GPTJAttention(nn.Module):
     ):
         # compute causal mask from causal mask buffer
         query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].to(torch.bool)
+        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
 
         # Keep the attention weights computation in fp32 to avoid overflow issues
         query = query.to(torch.float32)
@@ -187,11 +184,19 @@ class GPTJAttention(nn.Module):
 
         return attn_output, attn_weights
 
+    def _get_embed_positions(self, position_ids):
+        embed_positions = self.embed_positions
+        if embed_positions.device != position_ids.device:
+            embed_positions = embed_positions.to(position_ids.device)
+            self.embed_positions = embed_positions
+        return embed_positions.repeat(position_ids.shape[0], 1, 1)
+
     def forward(
         self,
-        hidden_states: Optional[torch.FloatTensor],
-        attention_mask: Optional[torch.FloatTensor] = None,
+        hidden_states: torch.FloatTensor,
         layer_past: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
@@ -207,12 +212,16 @@ class GPTJAttention(nn.Module):
         key = self._split_heads(key, self.num_attention_heads, self.head_dim, True)
         value = self._split_heads(value, self.num_attention_heads, self.head_dim, False)
 
-        seq_len = key.shape[1]
-        offset = 0
+        if is_torch_fx_proxy(position_ids) or torch.jit.is_tracing():
+            # The logic to conditionally copy to GPU could not be traced, so we do this
+            # every time in the torch.fx case
+            embed_positions = get_embed_positions(self.embed_positions, position_ids)
+        else:
+            embed_positions = self._get_embed_positions(position_ids)
 
-        if layer_past is not None:
-            offset = layer_past[0].shape[-2]
-            seq_len += offset
+        repeated_position_ids = position_ids.unsqueeze(-1).repeat(1, 1, embed_positions.shape[-1])
+        sincos = torch.gather(embed_positions, 1, repeated_position_ids)
+        sin, cos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
 
         if self.rotary_dim is not None:
             k_rot = key[:, :, :, : self.rotary_dim]
@@ -221,16 +230,14 @@ class GPTJAttention(nn.Module):
             q_rot = query[:, :, :, : self.rotary_dim]
             q_pass = query[:, :, :, self.rotary_dim :]
 
-            sincos = fixed_pos_embedding(k_rot, 1, seq_len=seq_len)
-            k_rot = apply_rotary_pos_emb(k_rot, sincos, offset=offset)
-            q_rot = apply_rotary_pos_emb(q_rot, sincos, offset=offset)
+            k_rot = apply_rotary_pos_emb(k_rot, sin, cos)
+            q_rot = apply_rotary_pos_emb(q_rot, sin, cos)
 
             key = torch.cat([k_rot, k_pass], dim=-1)
             query = torch.cat([q_rot, q_pass], dim=-1)
         else:
-            sincos = fixed_pos_embedding(key, 1, seq_len=seq_len)
-            key = apply_rotary_pos_emb(key, sincos, offset=offset)
-            query = apply_rotary_pos_emb(query, sincos, offset=offset)
+            key = apply_rotary_pos_emb(key, sin, cos)
+            query = apply_rotary_pos_emb(query, sin, cos)
 
         key = key.permute(0, 2, 1, 3)
         query = query.permute(0, 2, 1, 3)
@@ -292,6 +299,7 @@ class GPTJBlock(nn.Module):
         hidden_states: Optional[torch.FloatTensor],
         layer_past: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
@@ -299,9 +307,10 @@ class GPTJBlock(nn.Module):
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
         attn_outputs = self.attn(
-            hidden_states,
+            hidden_states=hidden_states,
             layer_past=layer_past,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -582,7 +591,7 @@ class GPTJModel(GPTJPreTrainedModel):
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
 
         if position_ids is not None:
-            position_ids = position_ids.view(-1, input_shape[-1])
+            position_ids = position_ids.view(-1, input_shape[-1]).long()
 
         if past_key_values is None:
             past_length = 0
@@ -633,6 +642,13 @@ class GPTJModel(GPTJPreTrainedModel):
 
         output_shape = input_shape + (hidden_states.size(-1),)
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
@@ -652,11 +668,6 @@ class GPTJModel(GPTJPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -670,13 +681,15 @@ class GPTJModel(GPTJPreTrainedModel):
                     hidden_states,
                     None,
                     attention_mask,
+                    position_ids,
                     head_mask[i],
                 )
             else:
                 outputs = block(
-                    hidden_states,
+                    hidden_states=hidden_states,
                     layer_past=layer_past,
                     attention_mask=attention_mask,
+                    position_ids=position_ids,
                     head_mask=head_mask[i],
                     use_cache=use_cache,
                     output_attentions=output_attentions,
@@ -720,7 +733,7 @@ class GPTJModel(GPTJPreTrainedModel):
     GPTJ_START_DOCSTRING,
 )
 class GPTJForCausalLM(GPTJPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias"]
+    _keys_to_ignore_on_load_unexpected = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -788,8 +801,6 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
                 position_ids = position_ids[:, -1].unsqueeze(-1)
-        else:
-            position_ids = None
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -866,6 +877,8 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
 
         loss = None
         if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(lm_logits.device)
             # Shift so that tokens < n predict n
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -1002,6 +1015,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
 
         loss = None
         if labels is not None:
+            labels = labels.to(pooled_logits.device)
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
@@ -1114,9 +1128,9 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
             if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
+                start_positions = start_positions.squeeze(-1).to(start_logits.device)
             if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
+                end_positions = end_positions.squeeze(-1).to(end_logits.device)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
             start_positions = start_positions.clamp(0, ignored_index)

@@ -15,12 +15,12 @@
 """ TF 2.0 ConvNext model."""
 
 
-from typing import Dict, Optional, Tuple, Union
+from __future__ import annotations
+
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
-
-from transformers import shape_list
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling, TFSequenceClassifierOutput
@@ -32,6 +32,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
+from ...tf_utils import shape_list
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_convnext import ConvNextConfig
 
@@ -298,7 +299,7 @@ class TFConvNextMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
+        pixel_values: TFModelInputType | None = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
@@ -349,43 +350,6 @@ class TFConvNextPreTrainedModel(TFPreTrainedModel):
     config_class = ConvNextConfig
     base_model_prefix = "convnext"
     main_input_name = "pixel_values"
-
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(
-                3,
-                self.config.num_channels,
-                self.config.image_size,
-                self.config.image_size,
-            ),
-            dtype=tf.float32,
-        )
-        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
-
-    @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-        return self.serving_output(output)
 
 
 CONVNEXT_START_DOCSTRING = r"""
@@ -459,7 +423,7 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
+        pixel_values: TFModelInputType | None = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
@@ -508,14 +472,6 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
-    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
-        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
-        return TFBaseModelOutputWithPooling(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            hidden_states=output.hidden_states,
-        )
-
 
 @add_start_docstrings(
     """
@@ -544,10 +500,10 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
     @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
+        pixel_values: TFModelInputType | None = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
@@ -608,7 +564,3 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
-
-    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=output.hidden_states)

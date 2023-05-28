@@ -31,7 +31,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Regex pattern used to find the checkpoint mentioned in the docstring of `config_class`.
 # For example, `[bert-base-uncased](https://huggingface.co/bert-base-uncased)`
-_re_checkpoint = re.compile("\[(.+?)\]\((https://huggingface\.co/.+?)\)")
+_re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
 
 
 CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
@@ -41,6 +41,7 @@ CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
     "SpeechEncoderDecoderConfig",
     "VisionEncoderDecoderConfig",
     "VisionTextDualEncoderConfig",
+    "LlamaConfig",
 }
 
 
@@ -51,10 +52,12 @@ def get_checkpoint_from_config_class(config_class):
     config_source = inspect.getsource(config_class)
     checkpoints = _re_checkpoint.findall(config_source)
 
-    for checkpoint in checkpoints:
-        # Each `checkpoint` is a tuple of a checkpoint name and a checkpoint link.
-        # For example, `('bert-base-uncased', 'https://huggingface.co/bert-base-uncased')`
-        ckpt_name, ckpt_link = checkpoint
+    # Each `checkpoint` is a tuple of a checkpoint name and a checkpoint link.
+    # For example, `('bert-base-uncased', 'https://huggingface.co/bert-base-uncased')`
+    for ckpt_name, ckpt_link in checkpoints:
+        # allow the link to end with `/`
+        if ckpt_link.endswith("/"):
+            ckpt_link = ckpt_link[:-1]
 
         # verify the checkpoint name corresponds to the checkpoint link
         ckpt_link_from_name = f"https://huggingface.co/{ckpt_name}"

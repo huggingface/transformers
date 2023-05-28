@@ -34,7 +34,7 @@ from PIL import Image
 
 import transformers
 from transformers import (
-    MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+    TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     AutoConfig,
     AutoImageProcessor,
     DefaultDataCollator,
@@ -54,11 +54,11 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.24.0.dev0")
+check_min_version("4.30.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-classification/requirements.txt")
 
-MODEL_CONFIG_CLASSES = list(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING.keys())
+MODEL_CONFIG_CLASSES = list(TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
@@ -262,11 +262,6 @@ def main():
         transformers.utils.logging.set_verbosity_info()
         transformers.utils.logging.enable_default_handler()
         transformers.utils.logging.enable_explicit_format()
-    # Log on each process the small summary:
-    logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
-    )
     logger.info(f"Training/evaluation parameters {training_args}")
 
     # region Dataset and labels
@@ -300,7 +295,7 @@ def main():
     # Prepare label mappings.
     # We'll include these in the model's config to get human readable labels in the Inference API.
     labels = dataset["train"].features["labels"].names
-    label2id, id2label = dict(), dict()
+    label2id, id2label = {}, {}
     for i, label in enumerate(labels):
         label2id[label] = str(i)
         id2label[str(i)] = label
@@ -548,6 +543,7 @@ def main():
                 logging.info(f"{metric_name}: {value:.3f}")
 
         if training_args.output_dir is not None:
+            os.makedirs(training_args.output_dir, exist_ok=True)
             with open(os.path.join(training_args.output_dir, "all_results.json"), "w") as f:
                 f.write(json.dumps(eval_metrics))
 

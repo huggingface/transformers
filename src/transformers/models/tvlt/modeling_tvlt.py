@@ -153,7 +153,7 @@ def generate_pixel_mask_noise(pixel_values, pixel_mask=None, mask_ratio=0.75):
     """Generate noise for audio masking."""
 
     batch_size, seq_len = pixel_values.shape[:2]
-    noise = torch.rand((batch_size, seq_len))  # noise in [0, 1]
+    noise = torch.rand((batch_size, seq_len), device=pixel_values.device)  # noise in [0, 1]
     len_keep = int(seq_len * (1 - mask_ratio))
     return noise, len_keep
 
@@ -165,10 +165,13 @@ def generate_audio_mask_noise(audio_values, audio_mask=None, mask_ratio=0.75, ma
     if mask_type == "frame-level":
         num_time_patches = seq_len // freq_len
         noise = (
-            torch.rand(batch_size, num_time_patches).unsqueeze(-1).repeat(1, 1, freq_len).view(batch_size, seq_len)
+            torch.rand(batch_size, num_time_patches, device=audio_values.device)
+            .unsqueeze(-1)
+            .repeat(1, 1, freq_len)
+            .view(batch_size, seq_len)
         )  # noise in [0, 1]
     elif mask_type == "patch-level":
-        noise = torch.rand(batch_size, seq_len)  # noise in [0, 1]
+        noise = torch.rand(batch_size, seq_len, device=audio_values.device)  # noise in [0, 1]
     len_keep = int(seq_len * (1 - mask_ratio))
     return noise, len_keep
 

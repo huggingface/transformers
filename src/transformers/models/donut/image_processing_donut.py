@@ -63,12 +63,14 @@ class DonutImageProcessor(BaseImageProcessor):
             method.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
-            Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
-            `preprocess` method.
-        crop_size (`Dict[str, int]` *optional*, defaults to 224):
-            Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
-            method.
+        do_thumbnail (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image using thumbnail method.
+        do_align_long_axis (`bool`, *optional*, defaults to `False`):
+            Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to pad the image. If `random_padding` is set to `True` in `preprocess`, each image is padded with a
+            random amont of padding on each size, up to the largest image size in the batch. Otherwise, all images are
+            padded to the largest image size in the batch.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
             the `preprocess` method.
@@ -82,9 +84,6 @@ class DonutImageProcessor(BaseImageProcessor):
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Image standard deviation.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]

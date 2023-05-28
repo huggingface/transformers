@@ -219,6 +219,13 @@ class LEDTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class LlamaTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class LongformerTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
@@ -360,6 +367,13 @@ class SqueezeBertTokenizerFast(metaclass=DummyObject):
 
 
 class T5TokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
+class WhisperTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):

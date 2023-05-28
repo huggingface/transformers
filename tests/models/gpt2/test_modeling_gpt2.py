@@ -24,6 +24,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -32,6 +33,7 @@ if is_torch_available():
     from transformers import (
         GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2DoubleHeadsModel,
+        GPT2ForQuestionAnswering,
         GPT2ForSequenceClassification,
         GPT2ForTokenClassification,
         GPT2LMHeadModel,
@@ -376,6 +378,17 @@ class GPT2ModelTester:
         )
         self.parent.assertEqual(result.mc_logits.shape, (self.batch_size, self.num_choices))
 
+    def create_and_check_gpt2_for_question_answering(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+    ):
+        config.num_labels = self.num_labels
+        model = GPT2ForQuestionAnswering(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+
     def create_and_check_gpt2_for_sequence_classification(
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
@@ -429,13 +442,32 @@ class GPT2ModelTester:
 
 
 @require_torch
-class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel, GPT2ForSequenceClassification, GPT2ForTokenClassification)
+        (
+            GPT2Model,
+            GPT2LMHeadModel,
+            GPT2DoubleHeadsModel,
+            GPT2ForQuestionAnswering,
+            GPT2ForSequenceClassification,
+            GPT2ForTokenClassification,
+        )
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": GPT2Model,
+            "question-answering": GPT2ForQuestionAnswering,
+            "text-classification": GPT2ForSequenceClassification,
+            "text-generation": GPT2LMHeadModel,
+            "token-classification": GPT2ForTokenClassification,
+            "zero-shot": GPT2ForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     all_parallelizable_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
     fx_compatible = True
     test_missing_keys = False
@@ -494,6 +526,10 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_gpt2_double_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_double_lm_head_model(*config_and_inputs)
+
+    def test_gpt2_question_answering_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt2_for_question_answering(*config_and_inputs)
 
     def test_gpt2_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

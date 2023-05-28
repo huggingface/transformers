@@ -166,8 +166,8 @@ def make_task_cmds():
     # but need a tiny model for each
     #
     # should have "{model_type.upper()}_TINY" corresponding vars defined, e.g., T5_TINY, etc.
-    tasks2models = dict(
-        trans=[
+    tasks2models = {
+        "trans": [
             "bart",
             "fsmt",
             "m2m_100",
@@ -177,10 +177,10 @@ def make_task_cmds():
             "t5_v1",
             # "mt5", missing model files
         ],
-        sum=[
+        "sum": [
             "pegasus",
         ],
-        clm=[
+        "clm": [
             "big_bird",
             "bigbird_pegasus",
             "blenderbot",
@@ -192,7 +192,7 @@ def make_task_cmds():
             "prophetnet",
             # "camembert", missing model files
         ],
-        mlm=[
+        "mlm": [
             "albert",
             "deberta",
             "deberta-v2",
@@ -203,7 +203,7 @@ def make_task_cmds():
             "layoutlm",
             # "reformer", # multiple issues with either mlm/qa/clas
         ],
-        qa=[
+        "qa": [
             "led",
             "longformer",
             "mobilebert",
@@ -213,7 +213,7 @@ def make_task_cmds():
             # "convbert", # missing tokenizer files
             # "layoutlmv2", missing model files
         ],
-        clas=[
+        "clas": [
             "bert",
             "xlnet",
             # "hubert", # missing tokenizer files
@@ -223,54 +223,54 @@ def make_task_cmds():
             # "openai-gpt", missing model files
             # "tapas", multiple issues
         ],
-        img_clas=[
+        "img_clas": [
             "vit",
         ],
-    )
+    }
 
     scripts_dir = f"{ROOT_DIRECTORY}/examples/pytorch"
 
-    tasks = dict(
-        trans=f"""
+    tasks = {
+        "trans": f"""
         {scripts_dir}/translation/run_translation.py
         --train_file {data_dir_wmt}/train.json
         --source_lang en
         --target_lang ro
         """,
-        sum=f"""
+        "sum": f"""
         {scripts_dir}/summarization/run_summarization.py
         --train_file {data_dir_xsum}/sample.json
         --max_source_length 12
         --max_target_length 12
         --lang en
         """,
-        clm=f"""
+        "clm": f"""
         {scripts_dir}/language-modeling/run_clm.py
         --train_file {FIXTURE_DIRECTORY}/sample_text.txt
         --block_size 8
         """,
-        mlm=f"""
+        "mlm": f"""
         {scripts_dir}/language-modeling/run_mlm.py
         --train_file {FIXTURE_DIRECTORY}/sample_text.txt
         """,
-        qa=f"""
+        "qa": f"""
         {scripts_dir}/question-answering/run_qa.py
         --train_file {data_dir_samples}/SQUAD/sample.json
         """,
-        clas=f"""
+        "clas": f"""
         {scripts_dir}/text-classification/run_glue.py
         --train_file {data_dir_samples}/MRPC/train.csv
         --max_seq_length 12
         --task_name MRPC
         """,
-        img_clas=f"""
+        "img_clas": f"""
         {scripts_dir}/image-classification/run_image_classification.py
             --dataset_name hf-internal-testing/cats_vs_dogs_sample
             --remove_unused_columns False
             --max_steps 10
             --image_processor_name {DS_TESTS_DIRECTORY}/vit_feature_extractor.json
         """,
-    )
+    }
 
     launcher = get_launcher(distributed=True)
 

@@ -455,7 +455,7 @@ class TFGenerationMixin:
         - *beam-search decoding* by calling [`~generation.TFGenerationMixin.beam_search`] if `num_beams>1`
 
     You do not need to call any of the above methods directly. Pass custom parameter values to 'generate' instead. To
-    learn more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
+    learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
     """
 
     _seed_generator = None
@@ -681,7 +681,7 @@ class TFGenerationMixin:
         parameters to generate, e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
 
         For an overview of generation strategies and code examples, check out the [following
-        guide](./generation_strategies).
+        guide](../generation_strategies).
 
         </Tip>
 
@@ -837,12 +837,12 @@ class TFGenerationMixin:
 
         # 6. Prepare model inputs which will be used for auto-regressive generation
         if self.config.is_encoder_decoder:
-            # if encoder-decoder then `input_ids` come from `decoder_start_token_id`
-            input_ids = self._prepare_decoder_input_ids_for_generation(
-                batch_size,
+            input_ids, model_kwargs = self._prepare_decoder_input_ids_for_generation(
+                batch_size=batch_size,
+                model_input_name=model_input_name,
+                model_kwargs=model_kwargs,
                 decoder_start_token_id=generation_config.decoder_start_token_id,
                 bos_token_id=generation_config.bos_token_id,
-                model_kwargs=model_kwargs,
             )
         else:
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
@@ -858,15 +858,14 @@ class TFGenerationMixin:
                 UserWarning,
             )
         elif generation_config.max_new_tokens is not None:
-            generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
             if not has_default_max_length:
-                logger.warn(
+                logger.warning(
                     f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
                     f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
                     "Please refer to the documentation for more information. "
-                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)",
-                    UserWarning,
+                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
+            generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
 
         # If the input length is a tensor (i.e. dynamic length), skip length checks
         if not isinstance(input_ids_seq_length, tf.Tensor):
@@ -1095,16 +1094,41 @@ class TFGenerationMixin:
     def _prepare_decoder_input_ids_for_generation(
         self,
         batch_size: int,
+        model_input_name: str,
+        model_kwargs: Dict[str, tf.Tensor],
         decoder_start_token_id: int = None,
         bos_token_id: int = None,
-        model_kwargs: Optional[Dict[str, tf.Tensor]] = None,
-    ) -> tf.Tensor:
-        # prepare `input_ids` for decoder if model is encoder-decoder
+    ) -> Tuple[tf.Tensor, Dict[str, tf.Tensor]]:
+        """Prepares `decoder_input_ids` for generation with encoder-decoder models"""
+        # 1. Check whether the user has defined `decoder_input_ids` manually. To facilitate in terms of input naming,
+        # we also allow the user to pass it under `input_ids`, if the encoder does not use it as the main input.
         if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
-            return model_kwargs.pop("decoder_input_ids")
+            decoder_input_ids = model_kwargs.pop("decoder_input_ids")
+        elif "input_ids" in model_kwargs and model_input_name != "input_ids":
+            decoder_input_ids = model_kwargs.pop("input_ids")
         else:
-            decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
-            return tf.ones((batch_size, 1), dtype=tf.int32) * decoder_start_token_id
+            decoder_input_ids = None
+
+        # 2. Encoder-decoder models expect the `decoder_input_ids` to start with a special token. Let's ensure that.
+        decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
+        decoder_input_ids_start = tf.ones((batch_size, 1), dtype=tf.int32) * decoder_start_token_id
+
+        # no user input -> use decoder_start_token_id as decoder_input_ids
+        if decoder_input_ids is None:
+            decoder_input_ids = decoder_input_ids_start
+        # user input but doesn't start with decoder_start_token_id -> prepend decoder_start_token_id (and adjust
+        # decoder_attention_mask if provided)
+        elif tf.reduce_all(decoder_input_ids[:, 0] != decoder_start_token_id):
+            decoder_input_ids = tf.concat([decoder_input_ids_start, decoder_input_ids], axis=-1)
+            if "decoder_attention_mask" in model_kwargs:
+                decoder_attention_mask = model_kwargs["decoder_attention_mask"]
+                decoder_attention_mask = tf.concat(
+                    (tf.ones_like(decoder_attention_mask)[:, :1], decoder_attention_mask),
+                    axis=-1,
+                )
+                model_kwargs["decoder_attention_mask"] = decoder_attention_mask
+
+        return decoder_input_ids, model_kwargs
 
     def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
         # retrieve decoder_start_token_id for encoder-decoder models
@@ -1217,7 +1241,7 @@ class TFGenerationMixin:
                 # In this case, `input_ids` is moved to the `model_kwargs`, so a few automations (like the creation of
                 # the attention mask) can rely on the actual model input.
                 model_kwargs["input_ids"] = self._maybe_initialize_input_ids_for_generation(
-                    inputs, bos_token_id, batch_size=model_kwargs["inputs_embeds"].shape[0]
+                    inputs, bos_token_id, model_kwargs=model_kwargs
                 )
             else:
                 if inputs is not None:
@@ -1225,9 +1249,7 @@ class TFGenerationMixin:
             inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
 
         # 4. if `inputs` is still None, try to create `input_ids` from BOS token
-        inputs = self._maybe_initialize_input_ids_for_generation(
-            inputs, bos_token_id, model_kwargs.get("encoder_outputs")
-        )
+        inputs = self._maybe_initialize_input_ids_for_generation(inputs, bos_token_id, model_kwargs)
 
         return inputs, input_name, model_kwargs
 
@@ -1235,13 +1257,13 @@ class TFGenerationMixin:
         self,
         inputs: Optional[tf.Tensor] = None,
         bos_token_id: Optional[int] = None,
-        encoder_outputs: Optional[ModelOutput] = None,
-        batch_size: Optional[int] = None,
+        model_kwargs: Optional[Dict[str, tf.Tensor]] = None,
     ) -> tf.Tensor:
         """Initializes input ids for generation, if necessary."""
         if inputs is not None:
             return inputs
 
+        encoder_outputs = model_kwargs.get("encoder_outputs")
         if self.config.is_encoder_decoder and encoder_outputs is not None:
             # make dummy input_ids with value -100, as a sanity check ensuring that they won't be used for encoding
             shape = encoder_outputs.last_hidden_state.shape[:-1]
@@ -1250,7 +1272,13 @@ class TFGenerationMixin:
         if bos_token_id is None:
             raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
 
-        batch_size = batch_size if batch_size is not None else 1
+        # If there is some tensor in `model_kwargs`, we can infer the batch size from it. This is helpful with
+        # soft-prompting or in multimodal implementations built on top of decoder-only language models.
+        batch_size = 1
+        for value in model_kwargs.values():
+            if isinstance(value, tf.Tensor):
+                batch_size = value.shape[0]
+                break
         return tf.ones((batch_size, 1), dtype=tf.int32) * bos_token_id
 
     @staticmethod
@@ -1721,14 +1749,13 @@ class TFGenerationMixin:
 
         # 2-to-n generation steps can then be run in autoregressive fashion
         # only in case 1st generation step does NOT yield EOS token though
-        if greedy_search_cond_fn(generated, finished_sequences, cur_len, model_kwargs):
-            maximum_iterations = max_length - cur_len
-            generated, _, cur_len, _ = tf.while_loop(
-                greedy_search_cond_fn,
-                greedy_search_body_fn,
-                (generated, finished_sequences, cur_len, model_kwargs),
-                maximum_iterations=maximum_iterations,
-            )
+        maximum_iterations = max_length - cur_len
+        generated, _, cur_len, _ = tf.while_loop(
+            greedy_search_cond_fn,
+            greedy_search_body_fn,
+            (generated, finished_sequences, cur_len, model_kwargs),
+            maximum_iterations=maximum_iterations,
+        )
 
         # 6. prepare outputs
         if not use_xla:
@@ -2012,14 +2039,13 @@ class TFGenerationMixin:
 
         # 2-to-n generation steps can then be run in autoregressive fashion
         # only in case 1st generation step does NOT yield EOS token though
-        if sample_cond_fn(generated, finished_sequences, cur_len, model_kwargs):
-            maximum_iterations = max_length - cur_len
-            generated, _, cur_len, _ = tf.while_loop(
-                sample_cond_fn,
-                sample_body_fn,
-                (generated, finished_sequences, cur_len, model_kwargs),
-                maximum_iterations=maximum_iterations,
-            )
+        maximum_iterations = max_length - cur_len
+        generated, _, cur_len, _ = tf.while_loop(
+            sample_cond_fn,
+            sample_body_fn,
+            (generated, finished_sequences, cur_len, model_kwargs),
+            maximum_iterations=maximum_iterations,
+        )
 
         # 6. prepare outputs
         if not use_xla:
@@ -2561,7 +2587,8 @@ class TFGenerationMixin:
 
         # 2-to-n generation steps can then be run in autoregressive fashion (only in case 1st generation step does
         # NOT yield EOS token though)
-        if beam_search_cond_fn(
+        maximum_iterations = max_length - cur_len
+        (
             cur_len,
             running_sequences,
             running_scores,
@@ -2570,9 +2597,10 @@ class TFGenerationMixin:
             scores,
             beam_indices,
             is_sent_finished,
-            model_kwargs,
-        ):
-            maximum_iterations = max_length - cur_len
+            _,
+        ) = tf.while_loop(
+            beam_search_cond_fn,
+            beam_search_body_fn,
             (
                 cur_len,
                 running_sequences,
@@ -2582,23 +2610,10 @@ class TFGenerationMixin:
                 scores,
                 beam_indices,
                 is_sent_finished,
-                _,
-            ) = tf.while_loop(
-                beam_search_cond_fn,
-                beam_search_body_fn,
-                (
-                    cur_len,
-                    running_sequences,
-                    running_scores,
-                    running_beam_indices,
-                    sequences,
-                    scores,
-                    beam_indices,
-                    is_sent_finished,
-                    model_kwargs,
-                ),
-                maximum_iterations=maximum_iterations,
-            )
+                model_kwargs,
+            ),
+            maximum_iterations=maximum_iterations,
+        )
 
         # 6. prepare outputs
         # Account for the edge-case where there are no finished sequences for a particular batch item. If so, return
@@ -3015,22 +3030,13 @@ class TFGenerationMixin:
 
         # 2-to-n generation steps can then be run in autoregressive fashion
         # only in case 1st generation step does NOT yield EOS token though
-        if contrastive_search_cond_fn(
-            generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables
-        ):
-            maximum_iterations = max_length - cur_len
-            (
-                generated,
-                _,
-                cur_len,
-                _,
-                _,
-            ) = tf.while_loop(
-                contrastive_search_cond_fn,
-                contrastive_search_body_fn,
-                (generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables),
-                maximum_iterations=maximum_iterations,
-            )
+        maximum_iterations = max_length - cur_len
+        generated, _, cur_len, _, _ = tf.while_loop(
+            contrastive_search_cond_fn,
+            contrastive_search_body_fn,
+            (generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables),
+            maximum_iterations=maximum_iterations,
+        )
 
         # 6. prepare outputs
         if not use_xla:

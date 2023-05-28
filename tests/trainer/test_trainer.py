@@ -25,11 +25,12 @@ import sys
 import tempfile
 import time
 import unittest
+from itertools import product
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import numpy as np
-from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub import HfFolder, Repository, delete_repo
 from parameterized import parameterized
 from requests.exceptions import HTTPError
 
@@ -54,6 +55,7 @@ from transformers.testing_utils import (
     require_intel_extension_for_pytorch,
     require_optuna,
     require_ray,
+    require_safetensors,
     require_sentencepiece,
     require_sigopt,
     require_tokenizers,
@@ -73,10 +75,13 @@ from transformers.testing_utils import (
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
+    SAFE_WEIGHTS_INDEX_NAME,
+    SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     is_apex_available,
     is_bitsandbytes_available,
+    is_safetensors_available,
     is_torchdistx_available,
 )
 from transformers.utils.hp_naming import TrialShortNamer
@@ -101,6 +106,9 @@ if is_torch_available():
         TrainerState,
     )
     from transformers.modeling_utils import unwrap_model
+
+    if is_safetensors_available():
+        import safetensors.torch
 
 
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
@@ -345,8 +353,9 @@ if is_torch_available():
 
 
 class TrainerIntegrationCommon:
-    def check_saved_checkpoints(self, output_dir, freq, total, is_pretrained=True):
-        file_list = [WEIGHTS_NAME, "training_args.bin", "optimizer.pt", "scheduler.pt", "trainer_state.json"]
+    def check_saved_checkpoints(self, output_dir, freq, total, is_pretrained=True, safe_weights=False):
+        weights_file = WEIGHTS_NAME if not safe_weights else SAFE_WEIGHTS_NAME
+        file_list = [weights_file, "training_args.bin", "optimizer.pt", "scheduler.pt", "trainer_state.json"]
         if is_pretrained:
             file_list.append("config.json")
         for step in range(freq, total, freq):
@@ -356,7 +365,7 @@ class TrainerIntegrationCommon:
                 self.assertTrue(os.path.isfile(os.path.join(checkpoint, filename)))
 
     def check_best_model_has_been_loaded(
-        self, output_dir, freq, total, trainer, metric, greater_is_better=False, is_pretrained=True
+        self, output_dir, freq, total, trainer, metric, greater_is_better=False, is_pretrained=True, safe_weights=False
     ):
         checkpoint = os.path.join(output_dir, f"checkpoint-{(total // freq) * freq}")
         log_history = TrainerState.load_from_json(os.path.join(checkpoint, "trainer_state.json")).log_history
@@ -370,7 +379,10 @@ class TrainerIntegrationCommon:
             best_model.to(trainer.args.device)
         else:
             best_model = RegressionModel()
-            state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
+            if not safe_weights:
+                state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
+            else:
+                state_dict = safetensors.torch.load_file(os.path.join(checkpoint, SAFE_WEIGHTS_NAME))
             best_model.load_state_dict(state_dict)
             best_model.to(trainer.args.device)
         self.assertTrue(torch.allclose(best_model.a, trainer.model.a))
@@ -394,24 +406,43 @@ class TrainerIntegrationCommon:
                 _ = log1.pop(key, None)
             self.assertEqual(log, log1)
 
-    def convert_to_sharded_checkpoint(self, folder):
+    def convert_to_sharded_checkpoint(self, folder, save_safe=False, load_safe=False):
         # Converts a checkpoint of a regression model to a sharded checkpoint.
-        state_dict = torch.load(os.path.join(folder, WEIGHTS_NAME))
-        os.remove(os.path.join(folder, WEIGHTS_NAME))
+        if load_safe:
+            loader = safetensors.torch.load_file
+            weights_file = os.path.join(folder, SAFE_WEIGHTS_NAME)
+        else:
+            loader = torch.load
+            weights_file = os.path.join(folder, WEIGHTS_NAME)
+
+        if save_safe:
+            extension = "safetensors"
+            saver = safetensors.torch.save_file
+            index_file = os.path.join(folder, SAFE_WEIGHTS_INDEX_NAME)
+            shard_name = SAFE_WEIGHTS_NAME
+        else:
+            extension = "bin"
+            saver = torch.save
+            index_file = os.path.join(folder, WEIGHTS_INDEX_NAME)
+            shard_name = WEIGHTS_NAME
+
+        state_dict = loader(weights_file)
+
+        os.remove(weights_file)
         keys = list(state_dict.keys())
 
         shard_files = [
-            WEIGHTS_NAME.replace(".bin", f"-{idx+1:05d}-of-{len(keys):05d}.bin") for idx in range(len(keys))
+            shard_name.replace(f".{extension}", f"-{idx+1:05d}-of-{len(keys):05d}.{extension}")
+            for idx in range(len(keys))
         ]
         index = {"metadata": {}, "weight_map": {key: shard_files[i] for i, key in enumerate(keys)}}
 
-        save_index_file = os.path.join(folder, WEIGHTS_INDEX_NAME)
-        with open(save_index_file, "w", encoding="utf-8") as f:
+        with open(index_file, "w", encoding="utf-8") as f:
             content = json.dumps(index, indent=2, sort_keys=True) + "\n"
             f.write(content)
 
         for param_name, shard_file in zip(keys, shard_files):
-            torch.save({param_name: state_dict[param_name]}, os.path.join(folder, shard_file))
+            saver({param_name: state_dict[param_name]}, os.path.join(folder, shard_file))
 
 
 @require_torch
@@ -543,6 +574,74 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(torch.allclose(trainer.model.a, a))
         self.assertFalse(torch.allclose(trainer.model.b, b))
         self.assertEqual(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 1.0)
+
+    def test_reduce_lr_on_plateau_args(self):
+        # test passed arguments for a custom ReduceLROnPlateau scheduler
+        train_dataset = RegressionDataset(length=64)
+        eval_dataset = RegressionDataset(length=64)
+        args = TrainingArguments(
+            "./regression",
+            evaluation_strategy="epoch",
+            metric_for_best_model="eval_loss",
+        )
+        model = RegressionModel()
+        optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=5, cooldown=2)
+        trainer = Trainer(
+            model, args, train_dataset=train_dataset, eval_dataset=eval_dataset, optimizers=(optimizer, lr_scheduler)
+        )
+        trainer.train()
+
+        self.assertIsInstance(trainer.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
+        self.assertEqual(trainer.lr_scheduler.factor, 0.2)
+        self.assertEqual(trainer.lr_scheduler.patience, 5)
+        self.assertEqual(trainer.lr_scheduler.cooldown, 2)
+
+    def test_reduce_lr_on_plateau(self):
+        # test the ReduceLROnPlateau scheduler
+
+        class TrainerWithLRLogs(Trainer):
+            def log(self, logs):
+                # the LR is computed after metrics and does not exist for the first epoch
+                if hasattr(self.lr_scheduler, "_last_lr"):
+                    logs["learning_rate"] = self.lr_scheduler._last_lr
+                super().log(logs)
+
+        train_dataset = RegressionDataset(length=64)
+        eval_dataset = RegressionDataset(length=64)
+
+        args = TrainingArguments(
+            "./regression",
+            lr_scheduler_type="reduce_lr_on_plateau",
+            evaluation_strategy="epoch",
+            metric_for_best_model="eval_loss",
+            num_train_epochs=10,
+            learning_rate=0.2,
+        )
+        model = RegressionModel()
+        trainer = TrainerWithLRLogs(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+        trainer.train()
+
+        self.assertIsInstance(trainer.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
+        patience = trainer.lr_scheduler.patience
+
+        logs = trainer.state.log_history[1:]
+        best_loss = logs[0]["eval_loss"]
+        bad_epochs = 0
+        for i, log in enumerate(logs[:-1]):  # Compare learning rate to next epoch's
+            loss = log["eval_loss"]
+            just_decreased = False
+            if loss > best_loss:
+                bad_epochs += 1
+                if bad_epochs > patience:
+                    self.assertLess(logs[i + 1]["learning_rate"][0], log["learning_rate"][0])
+                    just_decreased = True
+                    bad_epochs = 0
+            else:
+                best_loss = loss
+                bad_epochs = 0
+            if not just_decreased:
+                self.assertEqual(logs[i + 1]["learning_rate"][0], log["learning_rate"][0])
 
     def test_adafactor_lr_none(self):
         # test the special case where lr=None, since Trainer can't not have lr_scheduler
@@ -1098,11 +1197,15 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         logger = logging.get_logger()
         log_info_string = "Running training"
 
-        # test with the default log_level - should be info and thus log on the main process
+        # test with the default log_level - should be the same as before and thus we test depending on is_info
+        is_info = logging.get_verbosity() <= 20
         with CaptureLogger(logger) as cl:
             trainer = get_regression_trainer()
             trainer.train()
-        self.assertIn(log_info_string, cl.out)
+        if is_info:
+            self.assertIn(log_info_string, cl.out)
+        else:
+            self.assertNotIn(log_info_string, cl.out)
 
         # test with low log_level - lower than info
         with CaptureLogger(logger) as cl:
@@ -1128,6 +1231,26 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.check_saved_checkpoints(tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), False)
 
+    @require_safetensors
+    def test_safe_checkpoints(self):
+        for save_safetensors in [True, False]:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, save_safetensors=save_safetensors)
+                trainer.train()
+                self.check_saved_checkpoints(
+                    tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), safe_weights=save_safetensors
+                )
+
+            # With a regular model that is not a PreTrainedModel
+            with tempfile.TemporaryDirectory() as tmpdir:
+                trainer = get_regression_trainer(
+                    output_dir=tmpdir, save_steps=5, pretrained=False, save_safetensors=save_safetensors
+                )
+                trainer.train()
+                self.check_saved_checkpoints(
+                    tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), False, safe_weights=save_safetensors
+                )
+
     @require_torch_multi_gpu
     def test_run_seq2seq_double_train_wrap_once(self):
         # test that we don't wrap the model more than once
@@ -1148,7 +1271,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # won't be the same since the training dataloader is shuffled).
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            kwargs = dict(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, logging_steps=5)
+            kwargs = {
+                "output_dir": tmpdir,
+                "train_len": 128,
+                "save_steps": 5,
+                "learning_rate": 0.1,
+                "logging_steps": 5,
+            }
             trainer = get_regression_trainer(**kwargs)
             trainer.train()
             (a, b) = trainer.model.a.item(), trainer.model.b.item()
@@ -1181,7 +1310,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         # With a regular model that is not a PreTrainedModel
         with tempfile.TemporaryDirectory() as tmpdir:
-            kwargs = dict(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, pretrained=False)
+            kwargs = {
+                "output_dir": tmpdir,
+                "train_len": 128,
+                "save_steps": 5,
+                "learning_rate": 0.1,
+                "pretrained": False,
+            }
 
             trainer = get_regression_trainer(**kwargs)
             trainer.train()
@@ -1357,6 +1492,42 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
 
+    @require_safetensors
+    @require_torch_up_to_2_gpus
+    def test_resume_training_with_safe_checkpoint(self):
+        # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
+        # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
+        # won't be the same since the training dataloader is shuffled).
+
+        for initial_safe in [False, True]:
+            for loaded_safe in [False, True]:
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    trainer = get_regression_trainer(
+                        output_dir=tmpdir,
+                        train_len=128,
+                        save_steps=5,
+                        learning_rate=0.1,
+                        save_safetensors=initial_safe,
+                    )
+                    trainer.train()
+                    (a, b) = trainer.model.a.item(), trainer.model.b.item()
+                    state = dataclasses.asdict(trainer.state)
+
+                    checkpoint = os.path.join(tmpdir, "checkpoint-5")
+                    self.convert_to_sharded_checkpoint(checkpoint, load_safe=initial_safe, save_safe=loaded_safe)
+
+                    # Reinitialize trainer
+                    trainer = get_regression_trainer(
+                        output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, save_safetensors=loaded_safe
+                    )
+
+                    trainer.train(resume_from_checkpoint=checkpoint)
+                    (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+                    state1 = dataclasses.asdict(trainer.state)
+                    self.assertEqual(a, a1)
+                    self.assertEqual(b, b1)
+                    self.check_trainer_state_are_the_same(state, state1)
+
     @require_torch_up_to_2_gpus
     def test_resume_training_with_gradient_accumulation(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
@@ -1505,6 +1676,30 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.check_saved_checkpoints(tmpdir, 5, total, is_pretrained=False)
             self.check_best_model_has_been_loaded(tmpdir, 5, total, trainer, "eval_loss", is_pretrained=False)
+
+    @require_safetensors
+    def test_load_best_model_from_safetensors(self):
+        total = int(self.n_epochs * 64 / self.batch_size)
+        for save_safetensors, pretrained in product([False, True], [False, True]):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                trainer = get_regression_trainer(
+                    a=1.5,
+                    b=2.5,
+                    output_dir=tmpdir,
+                    learning_rate=0.1,
+                    eval_steps=5,
+                    evaluation_strategy="steps",
+                    save_steps=5,
+                    load_best_model_at_end=True,
+                    save_safetensors=save_safetensors,
+                    pretrained=pretrained,
+                )
+                self.assertFalse(trainer.args.greater_is_better)
+                trainer.train()
+                self.check_saved_checkpoints(tmpdir, 5, total, is_pretrained=pretrained, safe_weights=save_safetensors)
+                self.check_best_model_has_been_loaded(
+                    tmpdir, 5, total, trainer, "eval_loss", is_pretrained=pretrained, safe_weights=save_safetensors
+                )
 
     @slow
     def test_trainer_eval_mrpc(self):
@@ -1839,6 +2034,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
         torchdynamo.reset()
 
+    @unittest.skip("torch 2.0.0 gives `ModuleNotFoundError: No module named 'torchdynamo'`.")
     @require_torch_non_multi_gpu
     @require_torchdynamo
     def test_torchdynamo_memory(self):
@@ -1989,7 +2185,6 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod
@@ -2279,6 +2474,11 @@ if is_torch_available():
         "lr": TrainingArguments.learning_rate,
     }
 
+    default_lion_kwargs = {
+        "betas": (TrainingArguments.adam_beta1, TrainingArguments.adam_beta2),
+        "lr": TrainingArguments.learning_rate,
+    }
+
     default_anyprecision_kwargs = {
         "use_kahan_summation": False,
         "momentum_dtype": torch.float32,
@@ -2330,8 +2530,56 @@ if is_torch_available():
         optim_test_params.append(
             (
                 TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None"),
-                bnb.optim.Adam8bit,
+                bnb.optim.AdamW,
                 default_adam_kwargs,
+            )
+        )
+
+        optim_test_params.append(
+            (
+                TrainingArguments(optim=OptimizerNames.ADAMW_8BIT, output_dir="None"),
+                bnb.optim.AdamW,
+                default_adam_kwargs,
+            )
+        )
+
+        optim_test_params.append(
+            (
+                TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir="None"),
+                bnb.optim.AdamW,
+                default_adam_kwargs,
+            )
+        )
+
+        optim_test_params.append(
+            (
+                TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir="None"),
+                bnb.optim.AdamW,
+                default_adam_kwargs,
+            )
+        )
+
+        optim_test_params.append(
+            (
+                TrainingArguments(optim=OptimizerNames.LION, output_dir="None"),
+                bnb.optim.Lion,
+                default_lion_kwargs,
+            )
+        )
+
+        optim_test_params.append(
+            (
+                TrainingArguments(optim=OptimizerNames.LION_8BIT, output_dir="None"),
+                bnb.optim.Lion,
+                default_lion_kwargs,
+            )
+        )
+
+        optim_test_params.append(
+            (
+                TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir="None"),
+                bnb.optim.Lion,
+                default_lion_kwargs,
             )
         )
 
@@ -2403,17 +2651,151 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         modules = {
             "bitsandbytes": mock,
             "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.Adam8bit": mock.optim.Adam8bit,
+            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
         }
         with patch.dict("sys.modules", modules):
             self.check_optim_and_kwargs(
                 TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None"),
-                mock.optim.Adam8bit,
+                mock.optim.AdamW,
                 default_adam_kwargs,
+            )
+
+    def test_bnb_paged_adam8bit_alias(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.ADAMW_8BIT, output_dir="None"),
+                mock.optim.AdamW,
+                default_adam_kwargs,
+            )
+
+    def test_bnb_paged_adam(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir="None"),
+                mock.optim.AdamW,
+                default_adam_kwargs,
+            )
+
+    def test_bnb_paged_adam8bit(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir="None"),
+                mock.optim.AdamW,
+                default_adam_kwargs,
+            )
+
+    def test_bnb_lion(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.Lion": mock.optim.Lion,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.LION, output_dir="None"),
+                mock.optim.Lion,
+                default_lion_kwargs,
+            )
+
+    def test_bnb_lion8bit(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.Lion": mock.optim.Lion,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.LION_8BIT, output_dir="None"),
+                mock.optim.Lion,
+                default_lion_kwargs,
+            )
+
+    def test_bnb_paged_lion8bit(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.Lion": mock.optim.Lion,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir="None"),
+                mock.optim.Lion,
+                default_lion_kwargs,
+            )
+
+    def test_bnb_paged_lion(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.Lion": mock.optim.Lion,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.PAGED_LION, output_dir="None"),
+                mock.optim.Lion,
+                default_lion_kwargs,
             )
 
     def test_bnb_adam8bit_no_bnb(self):
         args = TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None")
+
+        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+        # bnb will fail even if bnb is installed.
+        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_bnb_paged_adam_no_bnb(self):
+        args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir="None")
+
+        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+        # bnb will fail even if bnb is installed.
+        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_bnb_paged_adam8bit_no_bnb(self):
+        args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir="None")
+
+        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+        # bnb will fail even if bnb is installed.
+        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_bnb_paged_lion_no_bnb(self):
+        args = TrainingArguments(optim=OptimizerNames.PAGED_LION, output_dir="None")
+
+        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+        # bnb will fail even if bnb is installed.
+        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_bnb_paged_lion8bit_no_bnb(self):
+        args = TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir="None")
 
         # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
         # bnb will fail even if bnb is installed.

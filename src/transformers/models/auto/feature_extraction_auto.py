@@ -78,10 +78,12 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("sew-d", "Wav2Vec2FeatureExtractor"),
         ("speech_to_text", "Speech2TextFeatureExtractor"),
         ("speecht5", "SpeechT5FeatureExtractor"),
+        ("swiftformer", "ViTFeatureExtractor"),
         ("swin", "ViTFeatureExtractor"),
         ("swinv2", "ViTFeatureExtractor"),
         ("table-transformer", "DetrFeatureExtractor"),
         ("timesformer", "VideoMAEFeatureExtractor"),
+        ("tvlt", "TvltFeatureExtractor"),
         ("unispeech", "Wav2Vec2FeatureExtractor"),
         ("unispeech-sat", "Wav2Vec2FeatureExtractor"),
         ("van", "ConvNextFeatureExtractor"),
@@ -302,7 +304,7 @@ class AutoFeatureExtractor:
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
 
         >>> # If feature extractor files are in a directory (e.g. feature extractor was saved using *save_pretrained('./test/saved_model/')*)
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("./test/saved_model/")
+        >>> # feature_extractor = AutoFeatureExtractor.from_pretrained("./test/saved_model/")
         ```"""
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", False)
@@ -332,17 +334,10 @@ class AutoFeatureExtractor:
                         "in that repo on your local machine. Make sure you have read the code there to avoid "
                         "malicious use, then set the option `trust_remote_code=True` to remove this error."
                     )
-                if kwargs.get("revision", None) is None:
-                    logger.warning(
-                        "Explicitly passing a `revision` is encouraged when loading a feature extractor with custom "
-                        "code to ensure no malicious code has been contributed in a newer revision."
-                    )
-
-                module_file, class_name = feature_extractor_auto_map.split(".")
                 feature_extractor_class = get_class_from_dynamic_module(
-                    pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
+                    feature_extractor_auto_map, pretrained_model_name_or_path, **kwargs
                 )
-                feature_extractor_class.register_for_auto_class()
+                _ = kwargs.pop("code_revision", None)
             else:
                 feature_extractor_class = feature_extractor_class_from_name(feature_extractor_class)
 

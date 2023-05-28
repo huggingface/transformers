@@ -109,6 +109,7 @@ class HfArgumentParserTest(unittest.TestCase):
 
     def test_advisory_warnings(self):
         # testing `logger.warning_advice()`
+        transformers.utils.logging._reset_library_root_logger()
 
         logger = logging.get_logger("transformers.models.bart.tokenization_bart")
         msg = "Testing 1, 2, 3"

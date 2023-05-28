@@ -1328,7 +1328,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
         batch_outputs = {}
         for i in range(batch_size):
-            inputs = dict((k, v[i]) for k, v in encoded_inputs.items())
+            inputs = {k: v[i] for k, v in encoded_inputs.items()}
             outputs = self._pad(
                 inputs,
                 max_length=max_length,

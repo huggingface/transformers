@@ -56,7 +56,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.27.0.dev0")
+check_min_version("4.30.0.dev0")
 
 logger = get_logger(__name__)
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
@@ -159,15 +159,6 @@ def parse_args():
             "target text after tokenization.Sequences longer than this will be truncated, sequences shorter will be "
             "padded. Will default to `max_target_length`.This argument is also used to override the ``max_length`` "
             "param of ``model.generate``, which is used during ``evaluate`` and ``predict``."
-        ),
-    )
-    parser.add_argument(
-        "--max_length",
-        type=int,
-        default=128,
-        help=(
-            "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-            " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
         ),
     )
     parser.add_argument(
@@ -473,6 +464,9 @@ def main():
                 f"--summary_column' value '{args.summary_column}' needs to be one of: {', '.join(column_names)}"
             )
 
+    if args.val_max_target_length is None:
+        args.val_max_target_length = args.max_target_length
+
     # Temporarily set max_target_length for training.
     max_target_length = args.max_target_length
     padding = "max_length" if args.pad_to_max_length else False
@@ -497,7 +491,7 @@ def main():
         return model_inputs
 
     with accelerator.main_process_first():
-        processed_datasets = raw_datasets.map(
+        train_dataset = raw_datasets["train"].map(
             preprocess_function,
             batched=True,
             num_proc=args.preprocessing_num_workers,
@@ -506,8 +500,16 @@ def main():
             desc="Running tokenizer on dataset",
         )
 
-    train_dataset = processed_datasets["train"]
-    eval_dataset = processed_datasets["validation"]
+        # Temporarily set max_target_length for validation.
+        max_target_length = args.val_max_target_length
+        eval_dataset = raw_datasets["validation"].map(
+            preprocess_function,
+            batched=True,
+            num_proc=args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not args.overwrite_cache,
+            desc="Running tokenizer on dataset",
+        )
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 1):
@@ -624,22 +626,26 @@ def main():
         if "epoch" in training_difference:
             starting_epoch = int(training_difference.replace("epoch_", "")) + 1
             resume_step = None
+            completed_steps = starting_epoch * num_update_steps_per_epoch
         else:
             resume_step = int(training_difference.replace("step_", ""))
             starting_epoch = resume_step // len(train_dataloader)
             resume_step -= starting_epoch * len(train_dataloader)
+            completed_steps = resume_step
+
+    # update the progress_bar if load from checkpoint
+    progress_bar.update(completed_steps)
 
     for epoch in range(starting_epoch, args.num_train_epochs):
         model.train()
         if args.with_tracking:
             total_loss = 0
-        for step, batch in enumerate(train_dataloader):
-            # We need to skip steps until we reach the resumed step
-            if args.resume_from_checkpoint and epoch == starting_epoch:
-                if resume_step is not None and step < resume_step:
-                    completed_steps += 1
-                    continue
-
+        if args.resume_from_checkpoint and epoch == starting_epoch and resume_step is not None:
+            # We skip the first `n` batches in the dataloader when resuming from a checkpoint
+            active_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
+        else:
+            active_dataloader = train_dataloader
+        for step, batch in enumerate(active_dataloader):
             with accelerator.accumulate(model):
                 outputs = model(**batch)
                 loss = outputs.loss
@@ -667,11 +673,9 @@ def main():
                 break
 
         model.eval()
-        if args.val_max_target_length is None:
-            args.val_max_target_length = args.max_target_length
 
         gen_kwargs = {
-            "max_length": args.val_max_target_length if args is not None else config.max_length,
+            "max_length": args.val_max_target_length,
             "num_beams": args.num_beams,
         }
         for step, batch in enumerate(eval_dataloader):

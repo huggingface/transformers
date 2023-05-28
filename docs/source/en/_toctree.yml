@@ -8,45 +8,24 @@
   title: Get started
 - sections:
   - local: pipeline_tutorial
-    title: Pipelines for inference
+    title: Run inference with pipelines
   - local: autoclass_tutorial
-    title: Load pretrained instances with an AutoClass
+    title: Write portable code with AutoClass
   - local: preprocessing
-    title: Preprocess
+    title: Preprocess data
   - local: training
     title: Fine-tune a pretrained model
+  - local: run_scripts
+    title: Train with a script
   - local: accelerate
-    title: Distributed training with 🤗 Accelerate
+    title: Set up distributed training with 🤗 Accelerate
   - local: model_sharing
-    title: Share a model
+    title: Share your model
+  - local: transformers_agents
+    title: Agents
   title: Tutorials
 - sections:
   - sections:
-    - local: create_a_model
-      title: Create a custom architecture
-    - local: custom_models
-      title: Sharing custom models
-    - local: run_scripts
-      title: Train with a script
-    - local: sagemaker
-      title: Run training on Amazon SageMaker
-    - local: converting_tensorflow_models
-      title: Converting from TensorFlow checkpoints
-    - local: serialization
-      title: Export to ONNX
-    - local: torchscript
-      title: Export to TorchScript
-    - local: troubleshooting
-      title: Troubleshoot
-    title: General usage
-  - sections:
-    - local: fast_tokenizers
-      title: Use tokenizers from 🤗 Tokenizers
-    - local: multilingual
-      title: Inference for multilingual models
-    - local: generation_strategies
-      title: Text generation strategies
-    - sections:
       - local: tasks/sequence_classification
         title: Text classification
       - local: tasks/token_classification
@@ -63,32 +42,73 @@
         title: Summarization
       - local: tasks/multiple_choice
         title: Multiple choice
-      title: Task guides
-      isExpanded: false
     title: Natural Language Processing
+    isExpanded: false
   - sections:
-    - local: tasks/audio_classification
-      title: Audio classification
-    - local: tasks/asr
-      title: Automatic speech recognition
+      - local: tasks/audio_classification
+        title: Audio classification
+      - local: tasks/asr
+        title: Automatic speech recognition
     title: Audio
+    isExpanded: false
   - sections:
-    - local: tasks/image_classification
-      title: Image classification
-    - local: tasks/semantic_segmentation
-      title: Semantic segmentation
-    - local: tasks/video_classification
-      title: Video classification
-    - local: tasks/object_detection
-      title: Object detection
+      - local: tasks/image_classification
+        title: Image classification
+      - local: tasks/semantic_segmentation
+        title: Semantic segmentation
+      - local: tasks/video_classification
+        title: Video classification
+      - local: tasks/object_detection
+        title: Object detection
+      - local: tasks/zero_shot_object_detection
+        title: Zero-shot object detection
+      - local: tasks/zero_shot_image_classification
+        title: Zero-shot image classification
+      - local: tasks/monocular_depth_estimation
+        title: Depth estimation
     title: Computer Vision
+    isExpanded: false
   - sections:
-    - local: tasks/image_captioning
-      title: Image captioning
-    - local: tasks/document_question_answering
-      title: Document Question Answering
+      - local: tasks/image_captioning
+        title: Image captioning
+      - local: tasks/document_question_answering
+        title: Document Question Answering
+      - local: tasks/text-to-speech
+        title: Text to speech
     title: Multimodal
-  - sections:
+    isExpanded: false
+  title: Task Guides
+- sections:
+    - local: fast_tokenizers
+      title: Use fast tokenizers from 🤗 Tokenizers
+    - local: multilingual
+      title: Run inference with multilingual models
+    - local: generation_strategies
+      title: Customize text generation strategy
+    - local: create_a_model
+      title: Use model-specific APIs
+    - local: custom_models
+      title: Share a custom model
+    - local: sagemaker
+      title: Run training on Amazon SageMaker
+    - local: serialization
+      title: Export to ONNX
+    - local: tflite
+      title: Export to TFLite
+    - local: torchscript
+      title: Export to TorchScript
+    - local: benchmarks
+      title: Benchmarks
+    - local: notebooks
+      title: Notebooks with examples
+    - local: community
+      title: Community resources
+    - local: custom_tools
+      title: Custom Tools and Prompts
+    - local: troubleshooting
+      title: Troubleshoot
+  title: Developer guides
+- sections:
     - local: performance
       title: Overview
     - local: perf_train_gpu_one
@@ -123,8 +143,8 @@
       title: Hyperparameter Search using Trainer API
     - local: tf_xla
       title: XLA Integration for TensorFlow Models
-    title: Performance and scalability
-  - sections:
+  title: Performance and scalability
+- sections:
     - local: contributing
       title: How to contribute to transformers?
     - local: add_new_model
@@ -137,16 +157,8 @@
       title: Testing
     - local: pr_checks
       title: Checks on a Pull Request
-    title: Contribute
-  - local: notebooks
-    title: 🤗 Transformers Notebooks
-  - local: community
-    title: Community resources
-  - local: benchmarks
-    title: Benchmarks
-  - local: migration
-    title: Migrating from previous packages
-  title: How-to guides
+  title: Contribute
+
 - sections:
   - local: philosophy
     title: Philosophy
@@ -173,6 +185,8 @@
   title: Conceptual guides
 - sections:
   - sections:
+    - local: main_classes/agent
+      title: Agents and Tools
     - local: model_doc/auto
       title: Auto Classes
     - local: main_classes/callback
@@ -257,6 +271,8 @@
         title: ConvBERT
       - local: model_doc/cpm
         title: CPM
+      - local: model_doc/cpmant
+        title: CPMANT
       - local: model_doc/ctrl
         title: CTRL
       - local: model_doc/deberta
@@ -281,6 +297,8 @@
         title: ESM
       - local: model_doc/flan-t5
         title: FLAN-T5
+      - local: model_doc/flan-ul2
+        title: FLAN-UL2
       - local: model_doc/flaubert
         title: FlauBERT
       - local: model_doc/fnet
@@ -301,6 +319,8 @@
         title: GPT-J
       - local: model_doc/gpt2
         title: GPT2
+      - local: model_doc/gpt_bigcode
+        title: GPTBigCode
       - local: model_doc/gptsan-japanese
         title: GPTSAN Japanese
       - local: model_doc/gpt-sw3
@@ -313,6 +333,8 @@
         title: Jukebox
       - local: model_doc/led
         title: LED
+      - local: model_doc/llama
+        title: LLaMA
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
@@ -327,6 +349,8 @@
         title: MarkupLM
       - local: model_doc/mbart
         title: MBart and MBart-50
+      - local: model_doc/mega
+        title: MEGA
       - local: model_doc/megatron-bert
         title: MegatronBERT
       - local: model_doc/megatron_gpt2
@@ -345,8 +369,12 @@
         title: NEZHA
       - local: model_doc/nllb
         title: NLLB
+      - local: model_doc/nllb-moe
+        title: NLLB-MoE
       - local: model_doc/nystromformer
         title: Nyströmformer
+      - local: model_doc/open-llama
+        title: Open-Llama
       - local: model_doc/opt
         title: OPT
       - local: model_doc/pegasus
@@ -379,6 +407,8 @@
         title: RoCBert
       - local: model_doc/roformer
         title: RoFormer
+      - local: model_doc/rwkv
+        title: RWKV
       - local: model_doc/splinter
         title: Splinter
       - local: model_doc/squeezebert
@@ -424,6 +454,8 @@
         title: Conditional DETR
       - local: model_doc/convnext
         title: ConvNeXT
+      - local: model_doc/convnextv2
+        title: ConvNeXTV2
       - local: model_doc/cvt
         title: CvT
       - local: model_doc/deformable_detr
@@ -444,6 +476,8 @@
         title: EfficientFormer
       - local: model_doc/efficientnet
         title: EfficientNet
+      - local: model_doc/focalnet
+        title: FocalNet
       - local: model_doc/glpn
         title: GLPN
       - local: model_doc/imagegpt
@@ -470,6 +504,8 @@
         title: ResNet
       - local: model_doc/segformer
         title: SegFormer
+      - local: model_doc/swiftformer
+        title: SwiftFormer
       - local: model_doc/swin
         title: Swin Transformer
       - local: model_doc/swinv2
@@ -538,6 +574,8 @@
       title: Audio models
     - isExpanded: false
       sections:
+      - local: model_doc/align
+        title: ALIGN
       - local: model_doc/altclip
         title: AltCLIP
       - local: model_doc/blip
@@ -554,6 +592,8 @@
         title: CLIPSeg
       - local: model_doc/data2vec
         title: Data2Vec
+      - local: model_doc/deplot
+        title: DePlot
       - local: model_doc/donut
         title: Donut
       - local: model_doc/flava
@@ -574,12 +614,20 @@
         title: LiLT
       - local: model_doc/lxmert
         title: LXMERT
+      - local: model_doc/matcha
+        title: MatCha
+      - local: model_doc/mgp-str
+        title: MGP-STR
       - local: model_doc/oneformer
         title: OneFormer
       - local: model_doc/owlvit
         title: OWL-ViT
       - local: model_doc/perceiver
         title: Perceiver
+      - local: model_doc/pix2struct
+        title: Pix2Struct
+      - local: model_doc/sam
+        title: Segment Anything
       - local: model_doc/speech-encoder-decoder
         title: Speech Encoder Decoder Models
       - local: model_doc/tapas
@@ -608,6 +656,8 @@
       title: Reinforcement learning models
     - isExpanded: false
       sections:
+      - local: model_doc/informer
+        title: Informer
       - local: model_doc/time_series_transformer
         title: Time Series Transformer
       title: Time series models
@@ -634,5 +684,7 @@
       title: Utilities for Audio processing
     - local: internal/file_utils
       title: General Utilities
+    - local: internal/time_series_utils
+      title: Utilities for Time Series
     title: Internal Helpers
   title: API

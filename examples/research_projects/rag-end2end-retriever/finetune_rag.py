@@ -164,11 +164,11 @@ class GenerativeQAModule(BaseTransformer):
         self.step_count = 0
         self.metrics = defaultdict(list)
 
-        self.dataset_kwargs: dict = dict(
-            data_dir=self.hparams.data_dir,
-            max_source_length=self.hparams.max_source_length,
-            prefix=prefix or "",
-        )
+        self.dataset_kwargs: dict = {
+            "data_dir": self.hparams.data_dir,
+            "max_source_length": self.hparams.max_source_length,
+            "prefix": prefix or "",
+        }
         n_observations_per_split = {
             "train": self.hparams.n_train,
             "val": self.hparams.n_val,
@@ -360,7 +360,7 @@ class GenerativeQAModule(BaseTransformer):
 
         loss_tensors = self._step(batch)
 
-        logs = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
+        logs = dict(zip(self.loss_names, loss_tensors))
         # tokens per batch
         tgt_pad_token_id = (
             self.tokenizer.generator.pad_token_id
@@ -434,7 +434,7 @@ class GenerativeQAModule(BaseTransformer):
         target: List[str] = self.ids_to_clean_text(batch["decoder_input_ids"])
         # print(preds,target)
         loss_tensors = self._step(batch)
-        base_metrics = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
+        base_metrics = dict(zip(self.loss_names, loss_tensors))
         gen_metrics: Dict = self.calc_generative_metrics(preds, target)
 
         summ_len = np.mean(lmap(len, generated_ids))

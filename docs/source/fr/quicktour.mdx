@@ -23,7 +23,6 @@ Avant de commencer, assurez-vous que vous avez installé toutes les bibliothèqu
 ```
 
 Vous aurez aussi besoin d'installer votre bibliothèque d'apprentissage profond favorite :
-You'll also need to install your preferred machine learning framework:
 
 <frameworkcontent>
 <pt>
@@ -46,19 +45,19 @@ Le [`pipeline`] est le moyen le plus simple d'utiliser un modèle pré-entraîn�
 
 | **Tâche**                     | **Description**                                                                                              | **Modalité**        | **Identifiant du pipeline**                   |
 |------------------------------|--------------------------------------------------------------------------------------------------------------|----------------------|-----------------------------------------------|
-| Classification de texte      | Attribut une catégorie à une séquence de texte donnée                                                        | Texte                | pipeline(task="sentiment-analysis")           |
+| Classification de texte      | Attribue une catégorie à une séquence de texte donnée                                                        | Texte                | pipeline(task="sentiment-analysis")           |
 | Génération de texte          | Génère du texte à partir d'une consigne donnée                                                               | Texte                | pipeline(task="text-generation")              |
-| Reconnaissance de token nommé      | Attribut une catégorie à chaque token dans une séquence (personnes, organisation, localisation, etc.)                            | Texte                | pipeline(task="ner")                          |
+| Reconnaissance de token nommé      | Attribue une catégorie à chaque token dans une séquence (personnes, organisation, localisation, etc.)                            | Texte                | pipeline(task="ner")                          |
 | Question réponse             | Extrait une réponse du texte en fonction du contexte et d'une question                                       | Texte                | pipeline(task="question-answering")           |
 | Prédiction de token masqué                    | Prédit correctement le token masqué dans une séquence                                                               | Texte                | pipeline(task="fill-mask")                    |
 | Génération de résumé                | Génère un résumé d'une séquence de texte donnée ou d'un document                                                         | Texte                | pipeline(task="summarization")                |
 | Traduction                  | Traduit du texte d'un langage à un autre                                                                      | Texte                | pipeline(task="translation")                  |
-| Classification d'image       | Attribut une catégorie à une image                                                                           | Image                | pipeline(task="image-classification")         |
-| Segmentation d'image           | Attribut une catégorie à chaque pixel d'une image (supporte la segmentation sémantique, panoptique et d'instance) | Image                | pipeline(task="image-segmentation")           |
-| Détection d'objects             | Prédit les delimitations et catégories d'objects dans une image                                                | Image                | pipeline(task="object-detection")             |
-| Classification d'audio       | Attribut une catégorie à un fichier audio                                                                    | Audio                | pipeline(task="audio-classification")         |
+| Classification d'image       | Attribue une catégorie à une image                                                                           | Image                | pipeline(task="image-classification")         |
+| Segmentation d'image           | Attribue une catégorie à chaque pixel d'une image (supporte la segmentation sémantique, panoptique et d'instance) | Image                | pipeline(task="image-segmentation")           |
+| Détection d'objects             | Prédit les délimitations et catégories d'objects dans une image                                                | Image                | pipeline(task="object-detection")             |
+| Classification d'audio       | Attribue une catégorie à un fichier audio                                                                    | Audio                | pipeline(task="audio-classification")         |
 | Reconnaissance automatique de la parole | Extrait le discours d'un fichier audio en texte                                                                  | Audio                | pipeline(task="automatic-speech-recognition") |
-| Question réponse visuels    | Etant donné une image et une question, répond correctement à une question sur l'image                                   | Modalités multiples  | pipeline(task="vqa")                          |
+| Question réponse visuels    | Etant données une image et une question, répond correctement à une question sur l'image                                   | Modalités multiples  | pipeline(task="vqa")                          |
 
 Commencez par créer une instance de [`pipeline`] et spécifiez la tâche pour laquelle vous souhaitez l'utiliser. Vous pouvez utiliser le [`pipeline`] pour n'importe laquelle des tâches mentionnées dans le tableau précédent. Pour obtenir une liste complète des tâches prises en charge, consultez la documentation de l'[API pipeline](./main_classes/pipelines). Dans ce guide, nous utiliserons le [`pipeline`] pour l'analyse des sentiments à titre d'exemple :
 
@@ -68,7 +67,7 @@ Commencez par créer une instance de [`pipeline`] et spécifiez la tâche pour l
 >>> classifier = pipeline("sentiment-analysis")
 ```
 
-Le [`pipeline`] télécharge et cache un [modèle pré-entraîné](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english) et un tokenizer par défaut pour l'analyse des sentiments. Vous pouvez maintenant utiliser le `classifier` sur le texte de votre choix :
+Le [`pipeline`] télécharge et stocke en cache un [modèle pré-entraîné](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english) et un tokenizer par défaut pour l'analyse des sentiments. Vous pouvez maintenant utiliser le `classifier` sur le texte de votre choix :
 
 ```py
 >>> classifier("We are very happy to show you the 🤗 Transformers library.")
@@ -85,7 +84,7 @@ label: POSITIVE, avec le score de: 0.9998
 label: NEGATIVE, avec le score de: 0.5309
 ```
 
-Le [`pipeline`] peut aussi itérer sur un jeu de données entier pour n'importe quelle tâche. Prenons la reconnaissance automatique de la parole pour example :
+Le [`pipeline`] peut aussi itérer sur un jeu de données entier pour n'importe quelle tâche. Prenons par exemple la reconnaissance automatique de la parole :
 
 ```py
 >>> import torch
@@ -109,7 +108,7 @@ Vous devez vous assurer que le taux d'échantillonnage de l'ensemble de données
 ```
 
 Les fichiers audio sont automatiquement chargés et rééchantillonnés lors de l'appel de la colonne `"audio"`.
-Extrayez les tableaux de formes d'ondes brutes des 4 premiers échantillons et passez-les comme une liste au pipeline :
+Extrayez les tableaux de formes d'ondes brutes des quatre premiers échantillons et passez-les comme une liste au pipeline :
 
 ```py
 >>> result = speech_recognizer(dataset[:4]["audio"])
@@ -117,11 +116,11 @@ Extrayez les tableaux de formes d'ondes brutes des 4 premiers échantillons et p
 ['I WOULD LIKE TO SET UP A JOINT ACCOUNT WITH MY PARTNER HOW DO I PROCEED WITH DOING THAT', "FODING HOW I'D SET UP A JOIN TO HET WITH MY WIFE AND WHERE THE AP MIGHT BE", "I I'D LIKE TOY SET UP A JOINT ACCOUNT WITH MY PARTNER I'M NOT SEEING THE OPTION TO DO IT ON THE AP SO I CALLED IN TO GET SOME HELP CAN I JUST DO IT OVER THE PHONE WITH YOU AND GIVE YOU THE INFORMATION OR SHOULD I DO IT IN THE AP AND I'M MISSING SOMETHING UQUETTE HAD PREFERRED TO JUST DO IT OVER THE PHONE OF POSSIBLE THINGS", 'HOW DO I THURN A JOIN A COUNT']
 ```
 
-Pour les ensembles de données plus importants où les entrées sont volumineuses (comme dans les domaines de la parole ou de la vision), vous devriez utiliser un générateur au lieu d'une liste pour charger toutes les entrées en mémoire. Pour plus d'informations, consultez la documentation de l'[API pipeline](./main_classes/pipelines).
+Pour les ensembles de données plus importants où les entrées sont volumineuses (comme dans les domaines de la parole ou de la vision), utilisez plutôt un générateur au lieu d'une liste pour charger toutes les entrées en mémoire. Pour plus d'informations, consultez la documentation de l'[API pipeline](./main_classes/pipelines).
 
 ### Utiliser une autre modèle et tokenizer dans le pipeline
 
-Le [`pipeline`] peut être utiliser avec n'importe quel modèle du [Hub](https://huggingface.co/models), ce qui permet d'adapter facilement le [`pipeline`] à d'autres cas d'utilisation. Par exemple, si vous souhaitez un modèle capable de traiter du texte français, utilisez les filtres du Hub pour trouver un modèle approprié. Le premier résultat renvoie un [modèle BERT](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment) multilingue finetuné pour l'analyse des sentiments que vous pouvez utiliser pour le texte français :
+Le [`pipeline`] peut être utilisé avec n'importe quel modèle du [Hub](https://huggingface.co/models), ce qui permet d'adapter facilement le [`pipeline`] à d'autres cas d'utilisation. Par exemple, si vous souhaitez un modèle capable de traiter du texte français, utilisez les filtres du Hub pour trouver un modèle approprié. Le premier résultat renvoie un [modèle BERT](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment) multilingue finetuné pour l'analyse des sentiments que vous pouvez utiliser pour le texte français :
 
 ```py
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
@@ -164,13 +163,13 @@ Si vous ne parvenez pas à trouver un modèle adapté à votre cas d'utilisation
 
 <Youtube id="AhChOFRegn4"/>
 
-Les classes [`AutoModelForSequenceClassification`] et [`AutoTokenizer`] fonctionnent ensemble pour créer un [`pipeline`] comme ceux que vous avez utilisé ci-dessus. Une [AutoClass](./model_doc/auto) est un raccourci qui récupère automatiquement l'architecture d'un modèle pré-entraîné à partir de son nom ou de son emplacement. Il vous suffit de sélectionner l'`AutoClass` appropriée à votre tâche et la classe de prétraitement qui lui est associée. 
+Les classes [`AutoModelForSequenceClassification`] et [`AutoTokenizer`] fonctionnent ensemble pour créer un [`pipeline`] comme celui que vous avez utilisé ci-dessus. Une [AutoClass](./model_doc/auto) est un raccourci qui récupère automatiquement l'architecture d'un modèle pré-entraîné à partir de son nom ou de son emplacement. Il vous suffit de sélectionner l'`AutoClass` appropriée à votre tâche et la classe de prétraitement qui lui est associée. 
 
 Reprenons l'exemple de la section précédente et voyons comment vous pouvez utiliser l'`AutoClass` pour reproduire les résultats du [`pipeline`].
 
 ### AutoTokenizer
 
-Un tokenizer est chargé de prétraiter le texte pour en faire un tableau de chiffres qui servira d'entrée à un modèle. De nombreuses règles régissent le processus de tokenisation, notamment la manière de diviser un mot et le niveau auquel les mots doivent être divisés (pour en savoir plus sur la tokenisation, consultez le [résumé](./tokenizer_summary)). La chose la plus importante à retenir est que vous devez instancier un tokenizer avec le même nom de modèle pour vous assurer que vous utilisez les mêmes règles de tokenisation que celles avec lesquelles un modèle a été pré-entra^né.
+Un tokenizer est chargé de prétraiter le texte pour en faire un tableau de chiffres qui servira d'entrée à un modèle. De nombreuses règles régissent le processus de tokenisation, notamment la manière de diviser un mot et le niveau auquel les mots doivent être divisés (pour en savoir plus sur la tokenisation, consultez le [résumé](./tokenizer_summary)). La chose la plus importante à retenir est que vous devez instancier un tokenizer avec le même nom de modèle pour vous assurer que vous utilisez les mêmes règles de tokenisation que celles avec lesquelles un modèle a été pré-entraîné.
 
 Chargez un tokenizer avec [`AutoTokenizer`] :
 
@@ -225,7 +224,7 @@ Un tokenizer peut également accepter une liste de textes, et remplir et tronque
 
 <Tip>
 
-Consultez le tutoriel [prétraitement](./preprocessing) pour plus de détails sur la tokenisation, et sur la manière d'utiliser un [`AutoImageProcessor`], un [`AutoFeatureExtractor`] et un [`AutoProcessor`] pour prétraiter les image, l'audio et les contenus multimodaux.
+Consultez le tutoriel [prétraitement](./preprocessing) pour plus de détails sur la tokenisation, et sur la manière d'utiliser un [`AutoImageProcessor`], un [`AutoFeatureExtractor`] et un [`AutoProcessor`] pour prétraiter les images, l'audio et les contenus multimodaux.
 
 </Tip>
 
@@ -233,7 +232,7 @@ Consultez le tutoriel [prétraitement](./preprocessing) pour plus de détails su
 
 <frameworkcontent>
 <pt>
-🤗 Transformers fournit un moyen simple et unifié de charger des instances pré-entraînés. Cela signifie que vous pouvez charger un [`AutoModel`] comme vous chargeriez un [`AutoTokenizer`]. La seule différence est de sélectionner l'[`AutoModel`] approprié pour la tâche. Pour une classification de texte (ou de séquence de textes), vous devez charger [`AutoModelForSequenceClassification`] :
+🤗 Transformers fournit un moyen simple et unifié de charger des instances pré-entraînées. Cela signifie que vous pouvez charger un [`AutoModel`] comme vous chargeriez un [`AutoTokenizer`]. La seule différence est de sélectionner l'[`AutoModel`] approprié pour la tâche. Pour une classification de texte (ou de séquence de textes), vous devez charger [`AutoModelForSequenceClassification`] :
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -446,7 +445,7 @@ En fonction de votre tâche, vous passerez généralement les paramètres suivan
    ...     return tokenizer(dataset["text"])
    ```
 
-   Then apply it over the entire dataset with [`~datasets.Dataset.map`]:
+   Puis appliquez-la à l'intégralité du jeu de données avec [`~datasets.Dataset.map`]:
 
    ```py
    >>> dataset = dataset.map(tokenize_dataset, batched=True)
@@ -475,7 +474,7 @@ Maintenant, rassemblez tous ces éléments dans un [`Trainer`] :
 ... )  # doctest: +SKIP
 ```
 
-Une fois que vous êtes prêt, vous appelez la fonction [`~Trainer.train`] pour commencer l'entraînement :
+Une fois que vous êtes prêt, appelez la fonction [`~Trainer.train`] pour commencer l'entraînement :
 
 ```py
 >>> trainer.train()  # doctest: +SKIP
@@ -487,7 +486,7 @@ Pour les tâches - comme la traduction ou la génération de résumé - qui util
 
 </Tip>
 
-Vous pouvez personnaliser le comportement de la boucle d'apprentissage en redéfinissant les méthodes à l'intérieur de [`Trainer`]. Cela vous permet de personnaliser des caractéristiques telles que la fonction de perte, l'optimiseur et le planificateur. Consultez la documentation de [`Trainer`] pour savoir quelles méthodes peuvent être redéfinites. 
+Vous pouvez personnaliser le comportement de la boucle d'apprentissage en redéfinissant les méthodes à l'intérieur de [`Trainer`]. Cela vous permet de personnaliser des caractéristiques telles que la fonction de perte, l'optimiseur et le planificateur. Consultez la documentation de [`Trainer`] pour savoir quelles méthodes peuvent être redéfinies. 
 
 L'autre moyen de personnaliser la boucle d'apprentissage est d'utiliser les [Callbacks](./main_classes/callbacks). Vous pouvez utiliser les callbacks pour intégrer d'autres bibliothèques et inspecter la boucle d'apprentissage afin de suivre la progression ou d'arrêter l'apprentissage plus tôt. Les callbacks ne modifient rien dans la boucle d'apprentissage elle-même. Pour personnaliser quelque chose comme la fonction de perte, vous devez redéfinir le [`Trainer`] à la place.
 
@@ -518,7 +517,7 @@ Tous les modèles sont des modèles standard [`tf.keras.Model`](https://www.tens
    ...     return tokenizer(dataset["text"])  # doctest: +SKIP
    ```
 
-4. Appliquez le tokenizer sur l'ensemble du jeu de données avec [`~datasets.Dataset.map`] et passez ensuite le jeu de données et le tokenizer à [`~TFPreTrainedModel.prepare_tf_dataset`]. Vous pouvez également modifier la taille de l'échantillon et mélanger le jeu de données ici si vous le souhaitez :
+4. Appliquez le tokenizer à l'ensemble du jeu de données avec [`~datasets.Dataset.map`] et passez ensuite le jeu de données et le tokenizer à [`~TFPreTrainedModel.prepare_tf_dataset`]. Vous pouvez également modifier la taille de l'échantillon et mélanger le jeu de données ici si vous le souhaitez :
 
    ```py
    >>> dataset = dataset.map(tokenize_dataset)  # doctest: +SKIP
@@ -527,7 +526,7 @@ Tous les modèles sont des modèles standard [`tf.keras.Model`](https://www.tens
    ... )  # doctest: +SKIP
    ```
 
-5. Une fois que vous êtes prêt, vous appelez les fonctions `compile` et `fit` pour commencer l'entraînement :
+5. Une fois que vous êtes prêt, appelez les fonctions `compile` et `fit` pour commencer l'entraînement :
 
    ```py
    >>> from tensorflow.keras.optimizers import Adam

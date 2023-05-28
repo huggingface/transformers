@@ -202,7 +202,15 @@ source .env/bin/activate
 pip install -e ".[dev]"
 ```
 
-and return to the parent directory
+Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
+failure with this command. If that's the case make sure to install the Deep Learning framework you are working with
+(PyTorch, TensorFlow and/or Flax) then do:
+
+```bash
+pip install -e ".[quality]"
+```
+
+which should be enough for most use cases. You can then return to the parent directory
 
 ```bash
 cd ..
@@ -670,7 +678,7 @@ model.save_pretrained("/path/to/converted/checkpoint/folder")
 **7. Implement the forward pass**
 
 Having managed to correctly load the pretrained weights into the 🤗 Transformers implementation, you should now make
-sure that the forward pass is correctly implemented. In [Get familiar with the original repository](#run-a-pretrained-checkpoint-using-the-original-repository), you have already created a script that runs a forward
+sure that the forward pass is correctly implemented. In [Get familiar with the original repository](#34-run-a-pretrained-checkpoint-using-the-original-repository), you have already created a script that runs a forward
 pass of the model using the original repository. Now you should write an analogous script using the 🤗 Transformers
 implementation instead of the original one. It should look as follows:
 

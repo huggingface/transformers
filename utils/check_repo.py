@@ -23,6 +23,11 @@ from pathlib import Path
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
 from transformers.models.auto import get_values
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
+from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
+from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
+from transformers.models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
+from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
 from transformers.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import
 
 
@@ -52,6 +57,9 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "NllbMoeDecoder",
+    "NllbMoeEncoder",
+    "LlamaDecoder",  # Building part of bigger (tested) model.
     "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "DetaEncoder",  # Building part of bigger (tested) model.
     "DetaDecoder",  # Building part of bigger (tested) model.
@@ -63,6 +71,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TableTransformerDecoder",  # Building part of bigger (tested) model.
     "TimeSeriesTransformerEncoder",  # Building part of bigger (tested) model.
     "TimeSeriesTransformerDecoder",  # Building part of bigger (tested) model.
+    "InformerEncoder",  # Building part of bigger (tested) model.
+    "InformerDecoder",  # Building part of bigger (tested) model.
     "JukeboxVQVAE",  # Building part of bigger (tested) model.
     "JukeboxPrior",  # Building part of bigger (tested) model.
     "DeformableDetrEncoder",  # Building part of bigger (tested) model.
@@ -88,6 +98,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "M2M100Encoder",  # Building part of bigger (tested) model.
     "M2M100Decoder",  # Building part of bigger (tested) model.
     "MCTCTEncoder",  # Building part of bigger (tested) model.
+    "MgpstrModel",  # Building part of bigger (tested) model.
     "Speech2TextEncoder",  # Building part of bigger (tested) model.
     "Speech2TextDecoder",  # Building part of bigger (tested) model.
     "LEDEncoder",  # Building part of bigger (tested) model.
@@ -134,6 +145,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TFSegformerDecodeHead",  # Not a regular model.
     "AltRobertaModel",  # Building part of bigger (tested) model.
     "BlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
+    "TFBlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
     "BridgeTowerTextModel",  # No need to test it as it is tested by BridgeTowerModel model.
     "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
     "SpeechT5Decoder",  # Building part of bigger (tested) model.
@@ -166,6 +178,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/xlm_prophetnet/test_modeling_xlm_prophetnet.py",
     "models/xlm_roberta/test_modeling_xlm_roberta.py",
     "models/vision_text_dual_encoder/test_modeling_vision_text_dual_encoder.py",
+    "models/vision_text_dual_encoder/test_modeling_tf_vision_text_dual_encoder.py",
     "models/vision_text_dual_encoder/test_modeling_flax_vision_text_dual_encoder.py",
     "models/decision_transformer/test_modeling_decision_transformer.py",
 ]
@@ -174,6 +187,8 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "AlignTextModel",
+    "AlignVisionModel",
     "ClapTextModel",
     "ClapTextModelWithProjection",
     "ClapAudioModel",
@@ -191,15 +206,23 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BlipVisionModel",
     "BlipTextLMHeadModel",
     "BlipTextModel",
+    "TFBlipForConditionalGeneration",
+    "TFBlipForImageTextRetrieval",
+    "TFBlipForQuestionAnswering",
+    "TFBlipVisionModel",
+    "TFBlipTextLMHeadModel",
+    "TFBlipTextModel",
     "Swin2SRForImageSuperResolution",
     "BridgeTowerForImageAndTextRetrieval",
     "BridgeTowerForMaskedLM",
+    "BridgeTowerForContrastiveLearning",
     "CLIPSegForImageSegmentation",
     "CLIPSegVisionModel",
     "CLIPSegTextModel",
     "EsmForProteinFolding",
     "GPTSanJapaneseModel",
     "TimeSeriesTransformerForPrediction",
+    "InformerForPrediction",
     "JukeboxVQVAE",
     "JukeboxPrior",
     "PegasusXEncoder",
@@ -208,6 +231,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "PegasusXEncoder",
     "PegasusXDecoder",
     "PegasusXDecoderWrapper",
+    "SamModel",
     "DPTForDepthEstimation",
     "DecisionTransformerGPT2Model",
     "GLPNForDepthEstimation",
@@ -243,6 +267,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "FlaxCLIPVisionModel",
     "FlaxWav2Vec2ForCTC",
     "DetrForSegmentation",
+    "Pix2StructVisionModel",
+    "Pix2StructTextModel",
+    "Pix2StructForConditionalGeneration",
     "ConditionalDetrForSegmentation",
     "DPRReader",
     "FlaubertForQuestionAnswering",
@@ -257,6 +284,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "LukeForEntityClassification",
     "LukeForEntityPairClassification",
     "LukeForEntitySpanClassification",
+    "MgpstrModel",
     "OpenAIGPTDoubleHeadsModel",
     "OwlViTTextModel",
     "OwlViTVisionModel",
@@ -315,6 +343,30 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
 transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
 
+def check_missing_backends():
+    missing_backends = []
+    if not is_torch_available():
+        missing_backends.append("PyTorch")
+    if not is_tf_available():
+        missing_backends.append("TensorFlow")
+    if not is_flax_available():
+        missing_backends.append("Flax")
+    if len(missing_backends) > 0:
+        missing = ", ".join(missing_backends)
+        if os.getenv("TRANSFORMERS_IS_CI", "").upper() in ENV_VARS_TRUE_VALUES:
+            raise Exception(
+                "Full repo consistency checks require all backends to be installed (with `pip install -e .[dev]` in the "
+                f"Transformers repo, the following are missing: {missing}."
+            )
+        else:
+            warnings.warn(
+                "Full repo consistency checks require all backends to be installed (with `pip install -e .[dev]` in the "
+                f"Transformers repo, the following are missing: {missing}. While it's probably fine as long as you "
+                "didn't make any change in one of those backends modeling files, you should probably execute the "
+                "command above to be on the safe side."
+            )
+
+
 def check_model_list():
     """Check the model list inside the transformers library."""
     # Get the models from the directory structure of `src/transformers/models/`
@@ -328,7 +380,7 @@ def check_model_list():
     # Get the models from the directory structure of `src/transformers/models/`
     models = [model for model in dir(transformers.models) if not model.startswith("__")]
 
-    missing_models = sorted(list(set(_models).difference(models)))
+    missing_models = sorted(set(_models).difference(models))
     if missing_models:
         raise Exception(
             f"The following models should be included in {models_dir}/__init__.py: {','.join(missing_models)}."
@@ -540,7 +592,7 @@ def get_all_auto_configured_models():
         for attr_name in dir(transformers.models.auto.modeling_flax_auto):
             if attr_name.startswith("FLAX_MODEL_") and attr_name.endswith("MAPPING_NAMES"):
                 result = result | set(get_values(getattr(transformers.models.auto.modeling_flax_auto, attr_name)))
-    return [cls for cls in result]
+    return list(result)
 
 
 def ignore_unautoclassed(model_name):
@@ -570,27 +622,7 @@ def check_models_are_auto_configured(module, all_auto_models):
 
 def check_all_models_are_auto_configured():
     """Check all models are each in an auto class."""
-    missing_backends = []
-    if not is_torch_available():
-        missing_backends.append("PyTorch")
-    if not is_tf_available():
-        missing_backends.append("TensorFlow")
-    if not is_flax_available():
-        missing_backends.append("Flax")
-    if len(missing_backends) > 0:
-        missing = ", ".join(missing_backends)
-        if os.getenv("TRANSFORMERS_IS_CI", "").upper() in ENV_VARS_TRUE_VALUES:
-            raise Exception(
-                "Full quality checks require all backends to be installed (with `pip install -e .[dev]` in the "
-                f"Transformers repo, the following are missing: {missing}."
-            )
-        else:
-            warnings.warn(
-                "Full quality checks require all backends to be installed (with `pip install -e .[dev]` in the "
-                f"Transformers repo, the following are missing: {missing}. While it's probably fine as long as you "
-                "didn't make any change in one of those backends modeling files, you should probably execute the "
-                "command above to be on the safe side."
-            )
+    check_missing_backends()
     modules = get_model_modules()
     all_auto_models = get_all_auto_configured_models()
     failures = []
@@ -598,6 +630,79 @@ def check_all_models_are_auto_configured():
         new_failures = check_models_are_auto_configured(module, all_auto_models)
         if new_failures is not None:
             failures += new_failures
+    if len(failures) > 0:
+        raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
+
+
+def check_all_auto_object_names_being_defined():
+    """Check all names defined in auto (name) mappings exist in the library."""
+    check_missing_backends()
+
+    failures = []
+    mappings_to_check = {
+        "TOKENIZER_MAPPING_NAMES": TOKENIZER_MAPPING_NAMES,
+        "IMAGE_PROCESSOR_MAPPING_NAMES": IMAGE_PROCESSOR_MAPPING_NAMES,
+        "FEATURE_EXTRACTOR_MAPPING_NAMES": FEATURE_EXTRACTOR_MAPPING_NAMES,
+        "PROCESSOR_MAPPING_NAMES": PROCESSOR_MAPPING_NAMES,
+    }
+
+    # Each auto modeling files contains multiple mappings. Let's get them in a dynamic way.
+    for module_name in ["modeling_auto", "modeling_tf_auto", "modeling_flax_auto"]:
+        module = getattr(transformers.models.auto, module_name, None)
+        if module is None:
+            continue
+        # all mappings in a single auto modeling file
+        mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES")]
+        mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
+
+    for name, mapping in mappings_to_check.items():
+        for model_type, class_names in mapping.items():
+            if not isinstance(class_names, tuple):
+                class_names = (class_names,)
+                for class_name in class_names:
+                    if class_name is None:
+                        continue
+                    # dummy object is accepted
+                    if not hasattr(transformers, class_name):
+                        # If the class name is in a model name mapping, let's not check if there is a definition in any modeling
+                        # module, if it's a private model defined in this file.
+                        if name.endswith("MODEL_MAPPING_NAMES") and is_a_private_model(class_name):
+                            continue
+                        failures.append(
+                            f"`{class_name}` appears in the mapping `{name}` but it is not defined in the library."
+                        )
+    if len(failures) > 0:
+        raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
+
+
+def check_all_auto_mapping_names_in_config_mapping_names():
+    """Check all keys defined in auto mappings (mappings of names) appear in `CONFIG_MAPPING_NAMES`."""
+    check_missing_backends()
+
+    failures = []
+    # `TOKENIZER_PROCESSOR_MAPPING_NAMES` and `AutoTokenizer` is special, and don't need to follow the rule.
+    mappings_to_check = {
+        "IMAGE_PROCESSOR_MAPPING_NAMES": IMAGE_PROCESSOR_MAPPING_NAMES,
+        "FEATURE_EXTRACTOR_MAPPING_NAMES": FEATURE_EXTRACTOR_MAPPING_NAMES,
+        "PROCESSOR_MAPPING_NAMES": PROCESSOR_MAPPING_NAMES,
+    }
+
+    # Each auto modeling files contains multiple mappings. Let's get them in a dynamic way.
+    for module_name in ["modeling_auto", "modeling_tf_auto", "modeling_flax_auto"]:
+        module = getattr(transformers.models.auto, module_name, None)
+        if module is None:
+            continue
+        # all mappings in a single auto modeling file
+        mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES")]
+        mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
+
+    for name, mapping in mappings_to_check.items():
+        for model_type, class_names in mapping.items():
+            if model_type not in CONFIG_MAPPING_NAMES:
+                failures.append(
+                    f"`{model_type}` appears in the mapping `{name}` but it is not defined in the keys of "
+                    "`CONFIG_MAPPING_NAMES`."
+                )
     if len(failures) > 0:
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
@@ -650,7 +755,7 @@ def find_all_documented_objects():
     for doc_file in Path(PATH_TO_DOC).glob("**/*.mdx"):
         with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
             content = f.read()
-        raw_doc_objs = re.findall("\[\[autodoc\]\]\s+(\S+)\s+", content)
+        raw_doc_objs = re.findall(r"\[\[autodoc\]\]\s+(\S+)\s+", content)
         documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
     return documented_obj
 
@@ -729,7 +834,9 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "AutoBackbone",
     "BitBackbone",
     "ConvNextBackbone",
+    "ConvNextV2Backbone",
     "DinatBackbone",
+    "FocalNetBackbone",
     "MaskFormerSwinBackbone",
     "MaskFormerSwinConfig",
     "MaskFormerSwinModel",
@@ -876,6 +983,10 @@ def check_repo_quality():
     check_all_objects_are_documented()
     print("Checking all models are in at least one auto class.")
     check_all_models_are_auto_configured()
+    print("Checking all names in auto name mappings are defined.")
+    check_all_auto_object_names_being_defined()
+    print("Checking all keys in auto name mappings are defined in `CONFIG_MAPPING_NAMES`.")
+    check_all_auto_mapping_names_in_config_mapping_names()
 
 
 if __name__ == "__main__":

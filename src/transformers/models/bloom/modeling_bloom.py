@@ -256,7 +256,7 @@ class BloomAttention(nn.Module):
         Merge heads together over the last dimenstion
 
         Args:
-            x: (`torch.tensor`, *required*): [batch_size * num_heads, seq_length, head_dim]
+            x (`torch.tensor`, *required*): [batch_size * num_heads, seq_length, head_dim]
 
         Returns:
             torch.tensor: [batch_size, seq_length, num_heads * head_dim]
@@ -641,6 +641,9 @@ class BloomModel(BloomPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def build_alibi_tensor(self, attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
+        return build_alibi_tensor(attention_mask, num_heads, dtype)
+
     def get_input_embeddings(self):
         return self.word_embeddings
 
@@ -732,6 +735,13 @@ class BloomModel(BloomPreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         # Compute alibi tensor: check build_alibi_tensor documentation
         seq_length_with_past = seq_length
         past_key_values_length = 0
@@ -743,7 +753,7 @@ class BloomModel(BloomPreTrainedModel):
         else:
             attention_mask = attention_mask.to(hidden_states.device)
 
-        alibi = build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
+        alibi = self.build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
 
         causal_mask = self._prepare_attn_mask(
             attention_mask,
@@ -756,11 +766,6 @@ class BloomModel(BloomPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -922,6 +927,8 @@ class BloomForCausalLM(BloomPreTrainedModel):
 
         loss = None
         if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(lm_logits.device)
             # Shift so that tokens < n predict n
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -1189,6 +1196,8 @@ class BloomForTokenClassification(BloomPreTrainedModel):
 
         loss = None
         if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(logits.device)
             batch_size, seq_length = labels.shape
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(
