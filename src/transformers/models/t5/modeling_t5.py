@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
     SequenceClassifierOutputWithPast,
-    TokenClassifierOutput
+    TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
@@ -1955,6 +1955,7 @@ class T5EncoderModel(T5PreTrainedModel):
 
         return encoder_outputs
 
+
 @add_start_docstrings(
     """
     The encoder part of the T5 Model transformer with a sequence classification head on top (linear layer).
@@ -2075,6 +2076,7 @@ class T5EncoderForSequenceClassification(T5PreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 @add_start_docstrings(
     """
     The encoder part of the T5 Model transformer with a token classification head on top (linear layer).
@@ -2158,15 +2160,16 @@ class T5EncoderForTokenClassification(T5PreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 @add_start_docstrings(
     """
-    The encoder part of the T5 Model transformer with a span classification head on top for extractive question-answering tasks like
-    SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    The encoder part of the T5 Model transformer with a span classification head on top for extractive
+    question-answering tasks like SQuAD (a linear layer on top of the hidden-states output to compute `span start
+    logits` and `span end logits`).
     """,
     T5_START_DOCSTRING,
 )
 class T5EncoderForQuestionAnswering(T5PreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

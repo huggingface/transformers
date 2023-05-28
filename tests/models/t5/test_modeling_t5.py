@@ -41,6 +41,9 @@ if is_torch_available():
     from transformers import (
         AutoTokenizer,
         ByT5Tokenizer,
+        T5EncoderForQuestionAnswering,
+        T5EncoderForSequenceClassification,
+        T5EncoderForTokenClassification,
         T5EncoderModel,
         T5ForConditionalGeneration,
         T5Model,
@@ -712,6 +715,7 @@ class T5EncoderOnlyModelTester:
         eos_token_id=1,
         pad_token_id=0,
         scope=None,
+        num_labels=3,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -732,11 +736,12 @@ class T5EncoderOnlyModelTester:
         self.is_encoder_decoder = is_encoder_decoder
         self.scope = None
         self.is_training = is_training
+        self.num_labels = num_labels
 
     def get_large_model_config(self):
         return T5Config.from_pretrained("t5-base")
 
-    def prepare_config_and_inputs(self):
+    def prepare_config_and_inputs(self, use_labels=False):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
 
         attention_mask = None
@@ -758,6 +763,16 @@ class T5EncoderOnlyModelTester:
             pad_token_id=self.pad_token_id,
             is_encoder_decoder=self.is_encoder_decoder,
         )
+
+        token_labels = None
+        if use_labels:
+            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            return (
+                config,
+                input_ids,
+                attention_mask,
+                token_labels,
+            )
 
         return (
             config,
@@ -793,6 +808,32 @@ class T5EncoderOnlyModelTester:
         output = model(input_ids, attention_mask=attention_mask)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
+    def create_and_check_for_question_answering(self, config, input_ids, attention_mask):
+        config.num_labels = self.num_labels
+        model = T5EncoderForQuestionAnswering(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask)
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+
+    def create_and_check_for_sequence_classification(self, config, input_ids, attention_mask):
+        config.num_labels = self.num_labels
+        model = T5EncoderForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
+    def create_and_check_for_token_classification(self, config, input_ids, attention_mask, token_labels):
+        config.num_labels = self.num_labels
+        model = T5EncoderForTokenClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -808,8 +849,26 @@ class T5EncoderOnlyModelTester:
         return config, inputs_dict
 
 
-class T5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (T5EncoderModel,) if is_torch_available() else ()
+class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (
+        (
+            T5EncoderForQuestionAnswering,
+            T5EncoderForSequenceClassification,
+            T5EncoderForTokenClassification,
+            T5EncoderModel,
+        )
+        if is_torch_available()
+        else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "question-answering": T5EncoderForQuestionAnswering,
+            "text-classification": T5EncoderForSequenceClassification,
+            "token-classification": T5EncoderForTokenClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_resize_embeddings = False
     test_model_parallel = True
@@ -825,6 +884,18 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_for_question_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
+
+    def test_model_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+
+    def test_model_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(use_labels=True)
+        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
     @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
     def test_model_fp16_forward(self):

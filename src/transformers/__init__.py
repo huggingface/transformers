@@ -2514,6 +2514,9 @@ else:
     _import_structure["models.t5"].extend(
         [
             "T5_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "T5EncoderForQuestionAnswering",
+            "T5EncoderForSequenceClassification",
+            "T5EncoderForTokenClassification",
             "T5EncoderModel",
             "T5ForConditionalGeneration",
             "T5Model",
@@ -5942,10 +5945,10 @@ if TYPE_CHECKING:
         )
         from .models.t5 import (
             T5_PRETRAINED_MODEL_ARCHIVE_LIST,
-            T5EncoderModel,
             T5EncoderForQuestionAnswering,
             T5EncoderForSequenceClassification,
             T5EncoderForTokenClassification,
+            T5EncoderModel,
             T5ForConditionalGeneration,
             T5Model,
             T5PreTrainedModel,
