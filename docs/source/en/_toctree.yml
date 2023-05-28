@@ -590,7 +590,7 @@
         title: CLIP
       - local: model_doc/clipseg
         title: CLIPSeg
-      - local: model_doc/clip-vip
+      - local: model_doc/clip_vip
         title: CLIPViP
       - local: model_doc/data2vec
         title: Data2Vec
