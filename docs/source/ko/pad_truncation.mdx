@@ -12,56 +12,53 @@ specific language governing permissions and limitations under the License.
 
 # 패딩과 잘라내기[[padding-and-truncation]]
 
-Batched inputs are often different lengths, so they can't be converted to fixed-size tensors. Padding and truncation are strategies for dealing with this problem, to create rectangular tensors from batches of varying lengths. Padding adds a special **padding token** to ensure shorter sequences will have the same length as either the longest sequence in a batch or the maximum length accepted by the model. Truncation works in the other direction by truncating long sequences.
+배치 입력은 길이가 다른 경우가 많아서 고정 크기 텐서로 변환할 수 없습니다. 패딩과 잘라내기는 다양한 길이의 배치에서 직사각형 텐서를 생성할 수 있도록 이 문제를 해결하는 전략입니다. 패딩은 특수한 **패딩 토큰**을 추가하여 짧은 시퀀스가 배치에서 가장 긴 시퀀스 또는 모델에서 허용하는 최대 길이와 동일한 길이를 갖도록 합니다. 잘라내기는 긴 시퀀스를 잘라내어 패딩과 다른 방식으로 시퀀스의 길이를 동일하게 합니다.
 
-In most cases, padding your batch to the length of the longest sequence and truncating to the maximum length a model can accept works pretty well. However, the API supports more strategies if you need them. The three arguments you need to are: `padding`, `truncation` and `max_length`.
+대부분의 경우 배치에 가장 긴 시퀀스의 길이로 패딩하고 모델이 허용할 수 있는 최대 길이로 잘라내는 것이 잘 작동합니다. 그러나 필요하다면 API가 지원하는 더 많은 전략을 사용할 수 있습니다. 필요한 인수는 `padding`, `truncation`, `max_length` 세 가지입니다.
 
-The `padding` argument controls padding. It can be a boolean or a string:
+`padding` 인수는 패딩을 제어합니다. 불리언 또는 문자열일 수 있습니다:
 
-  - `True` or `'longest'`: pad to the longest sequence in the batch (no padding is applied if you only provide
-    a single sequence).
-  - `'max_length'`: pad to a length specified by the `max_length` argument or the maximum length accepted
-    by the model if no `max_length` is provided (`max_length=None`). Padding will still be applied if you only provide a single sequence.
-  - `False` or `'do_not_pad'`: no padding is applied. This is the default behavior.
+  - `True` 또는 `'longest'`: 배치에서 가장 긴 시퀀스로 패딩합니다(단일 시퀀스만 제공하면 패딩이 적용되지 않습니다).
+  - `'max_length'`: `max_length` 인수가 지정한 길이로 패딩하거나, `max_length`가 제공되지 않은 경우(`max_length=None`) 모델에서 허용되는 최대 길이로 패딩합니다. 단일 시퀀스만 제공하는 경우에도 패딩이 적용됩니다.
+  - `False` 또는 `'do_not_pad'`: 패딩이 적용되지 않습니다. 이것이 기본 동작입니다.
 
-The `truncation` argument controls truncation. It can be a boolean or a string:
+`truncation` 인수는 잘라낼 방법을 정합니다. 불리언 또는 문자열일 수 있습니다:
 
-  - `True` or `'longest_first'`: truncate to a maximum length specified by the `max_length` argument or
-    the maximum length accepted by the model if no `max_length` is provided (`max_length=None`). This will
-    truncate token by token, removing a token from the longest sequence in the pair until the proper length is
-    reached.
-  - `'only_second'`: truncate to a maximum length specified by the `max_length` argument or the maximum
-    length accepted by the model if no `max_length` is provided (`max_length=None`). This will only truncate
-    the second sentence of a pair if a pair of sequences (or a batch of pairs of sequences) is provided.
-  - `'only_first'`: truncate to a maximum length specified by the `max_length` argument or the maximum
-    length accepted by the model if no `max_length` is provided (`max_length=None`). This will only truncate
-    the first sentence of a pair if a pair of sequences (or a batch of pairs of sequences) is provided.
-  - `False` or `'do_not_truncate'`: no truncation is applied. This is the default behavior.
+  - `True` 또는 `longest_first`: `max_length` 인수가 지정한 최대 길이로 잘라내거나, 
+    `max_length`가 제공되지 않은 경우(`max_length=None`) 모델에서 허용되는 최대 길이로 잘라냅니다. 
+    이렇게 하면 적절한 길이에 도달할 때까지 시퀀스 쌍에서 가장 긴 시퀀스의 토큰을 제거하며 토큰을 하나씩 잘라냅니다.
+  - `'only_second'`: `max_length` 인수가 지정한 최대 길이로 잘라내거나, 
+    `max_length`가 제공되지 않은 경우(`max_length=None`) 모델에서 허용되는 최대 길이로 잘라냅니다.
+    이것은 시퀀스 쌍(또는 시퀀스 쌍의 배치)가 제공된 경우 쌍의 두 번째 문장만 잘라냅니다.
+  - `'only_first'`: `max_length` 인수가 지정한 최대 길이로 잘라내거나, 
+    `max_length`가 제공되지 않은 경우(`max_length=None`) 모델에서 허용되는 최대 길이로 잘라냅니다. 
+    이것은 시퀀스 쌍(또는 시퀀스 쌍의 배치)가 제공된 경우 쌍의 첫 번째 문장만 잘라냅니다.
+  - `False` 또는 `'do_not_truncate'`: 잘라내기를 적용하지 않습니다. 이것이 기본 동작입니다.
 
-The `max_length` argument controls the length of the padding and truncation. It can be an integer or `None`, in which case it will default to the maximum length the model can accept. If the model has no specific maximum input length, truncation or padding to `max_length` is deactivated.
+`max_length` 인수는 패딩 및 잘라내기를 적용할 길이를 제어합니다. 이 인수는 정수 또는 `None`일 수 있으며, `None`일 경우 모델이 허용할 수 있는 최대 길이로 기본값이 설정됩니다. 모델에 특정한 최대 입력 길이가 없는 경우 `max_length`에 대한 잘라내기 또는 패딩이 비활성화됩니다.
 
-The following table summarizes the recommended way to setup padding and truncation. If you use pairs of input sequences in any of the following examples, you can replace `truncation=True` by a `STRATEGY` selected in
-`['only_first', 'only_second', 'longest_first']`, i.e. `truncation='only_second'` or `truncation='longest_first'` to control how both sequences in the pair are truncated as detailed before.
+다음 표에는 패딩 및 잘라내기를 설정하는 권장 방법이 요약되어 있습니다. 
+입력으로 시퀀스 쌍을 사용하는 경우, 다음 예제에서 `truncation=True`를 `['only_first', 'only_second', 'longest_first']`에서 선택한 `STRATEGY`, 즉 `truncation='only_second'` 또는 `truncation='longest_first'`로 바꾸면 앞서 설명한 대로 쌍의 두 시퀀스가 잘리는 방식을 제어할 수 있습니다.
 
-| Truncation                           | Padding                           | Instruction                                                                                 |
-|--------------------------------------|-----------------------------------|---------------------------------------------------------------------------------------------|
-| no truncation                        | no padding                        | `tokenizer(batch_sentences)`                                                           |
-|                                      | padding to max sequence in batch  | `tokenizer(batch_sentences, padding=True)` or                                          |
-|                                      |                                   | `tokenizer(batch_sentences, padding='longest')`                                        |
-|                                      | padding to max model input length | `tokenizer(batch_sentences, padding='max_length')`                                     |
-|                                      | padding to specific length        | `tokenizer(batch_sentences, padding='max_length', max_length=42)`                      |
-|                                      | padding to a multiple of a value  | `tokenizer(batch_sentences, padding=True, pad_to_multiple_of=8)                        |
-| truncation to max model input length | no padding                        | `tokenizer(batch_sentences, truncation=True)` or                                       |
-|                                      |                                   | `tokenizer(batch_sentences, truncation=STRATEGY)`                                      |
-|                                      | padding to max sequence in batch  | `tokenizer(batch_sentences, padding=True, truncation=True)` or                         |
-|                                      |                                   | `tokenizer(batch_sentences, padding=True, truncation=STRATEGY)`                        |
-|                                      | padding to max model input length | `tokenizer(batch_sentences, padding='max_length', truncation=True)` or                 |
-|                                      |                                   | `tokenizer(batch_sentences, padding='max_length', truncation=STRATEGY)`                |
-|                                      | padding to specific length        | Not possible                                                                                |
-| truncation to specific length        | no padding                        | `tokenizer(batch_sentences, truncation=True, max_length=42)` or                        |
-|                                      |                                   | `tokenizer(batch_sentences, truncation=STRATEGY, max_length=42)`                       |
-|                                      | padding to max sequence in batch  | `tokenizer(batch_sentences, padding=True, truncation=True, max_length=42)` or          |
-|                                      |                                   | `tokenizer(batch_sentences, padding=True, truncation=STRATEGY, max_length=42)`         |
-|                                      | padding to max model input length | Not possible                                                                                |
-|                                      | padding to specific length        | `tokenizer(batch_sentences, padding='max_length', truncation=True, max_length=42)` or  |
-|                                      |                                   | `tokenizer(batch_sentences, padding='max_length', truncation=STRATEGY, max_length=42)` |
+| 잘라내기                             | 패딩                              | 사용 방법                                                                                 |
+|--------------------------------------|-----------------------------------|------------------------------------------------------------------------------------------|
+| 잘라내기 없음                        | 패딩 없음                          | `tokenizer(batch_sentences)`                                                             |
+|                                      | 배치 내 최대 길이로 패딩           | `tokenizer(batch_sentences, padding=True)` 또는                                          |
+|                                      |                                   | `tokenizer(batch_sentences, padding='longest')`                                          |
+|                                      | 모델의 최대 입력 길이로 패딩      | `tokenizer(batch_sentences, padding='max_length')`                                        |
+|                                      | 특정 길이로 패딩                  | `tokenizer(batch_sentences, padding='max_length', max_length=42)`                         |
+|                                      | 다양한 길이로 패딩                | `tokenizer(batch_sentences, padding=True, pad_to_multiple_of=8)                           |
+| 모델의 최대 입력 길이로 잘라내기      | 패딩 없음                         | `tokenizer(batch_sentences, truncation=True)` 또는                                        |
+|                                      |                                   | `tokenizer(batch_sentences, truncation=STRATEGY)`                                         |
+|                                      | 배치 내 최대 길이로 패딩          | `tokenizer(batch_sentences, padding=True, truncation=True)` 또는                          |
+|                                      |                                   | `tokenizer(batch_sentences, padding=True, truncation=STRATEGY)`                           |
+|                                      | 모델의 최대 입력 길이로 패딩      | `tokenizer(batch_sentences, padding='max_length', truncation=True)` 또는                  |
+|                                      |                                   | `tokenizer(batch_sentences, padding='max_length', truncation=STRATEGY)`                   |
+|                                      | 특정 길이로 패딩                  | Not possible                                                                              |
+| 특정 길이로 잘라내기                 | 패딩 없음                         | `tokenizer(batch_sentences, truncation=True, max_length=42)` 또는                         |
+|                                      |                                   | `tokenizer(batch_sentences, truncation=STRATEGY, max_length=42)`                         |
+|                                      | 배치 내 최대 길이로 패딩          | `tokenizer(batch_sentences, padding=True, truncation=True, max_length=42)` 또는           |
+|                                      |                                   | `tokenizer(batch_sentences, padding=True, truncation=STRATEGY, max_length=42)`           |
+|                                      | 모델의 최대 입력 길이로 패딩       | Not possible                                                                             |
+|                                      | 특정 길이로 패딩                   | `tokenizer(batch_sentences, padding='max_length', truncation=True, max_length=42)` 또는  |
+|                                      |                                   | `tokenizer(batch_sentences, padding='max_length', truncation=STRATEGY, max_length=42)`   |
