@@ -257,6 +257,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "CLIPTextModelWithProjection",
     "CLIPVisionModel",
     "CLIPVisionModelWithProjection",
+    "CLIPViPVisionModel",
+    "CLIPViPTextModel",
     "GroupViTTextModel",
     "GroupViTVisionModel",
     "TFCLIPTextModel",
