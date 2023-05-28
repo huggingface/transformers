@@ -857,7 +857,6 @@ class CLIPViPTextTransformer(nn.Module):
         bsz, seq_len = input_shape
         # CLIP_VIP's text model uses causal mask, prepare it here.
         # https://github.com/openai/CLIP_VIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip_vip/model.py#L324
-        if_fp16 = hidden_states.dtype == torch.float16
         causal_attention_mask = self._build_causal_attention_mask(
             bsz, seq_len, hidden_states.dtype, device=hidden_states.device
         )
