@@ -1306,9 +1306,7 @@ else:
             "CLIPViPModel",
             "CLIPViPPreTrainedModel",
             "CLIPViPTextModel",
-            "CLIPViPTextModelWithProjection",
             "CLIPViPVisionModel",
-            "CLIPViPVisionModelWithProjection",
         ]
     )
     _import_structure["models.clipseg"].extend(
@@ -4986,9 +4984,7 @@ if TYPE_CHECKING:
             CLIPViPModel,
             CLIPViPPreTrainedModel,
             CLIPViPTextModel,
-            CLIPViPTextModelWithProjection,
             CLIPViPVisionModel,
-            CLIPViPVisionModelWithProjection,
         )
         from .models.clipseg import (
             CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST,

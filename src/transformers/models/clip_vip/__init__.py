@@ -41,9 +41,7 @@ else:
         "CLIPViPModel",
         "CLIPViPPreTrainedModel",
         "CLIPViPTextModel",
-        "CLIPViPTextModelWithProjection",
         "CLIPViPVisionModel",
-        "CLIPViPVisionModelWithProjection",
     ]
 
 if TYPE_CHECKING:
@@ -66,9 +64,7 @@ if TYPE_CHECKING:
             CLIPViPModel,
             CLIPViPPreTrainedModel,
             CLIPViPTextModel,
-            CLIPViPTextModelWithProjection,
             CLIPViPVisionModel,
-            CLIPViPVisionModelWithProjection,
         )
 
 else:
