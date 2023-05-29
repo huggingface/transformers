@@ -1964,8 +1964,9 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         prediction_loss = None
         params = None
         if future_values is not None:
-            params = self.output_params(outputs[0] + outputs[1])  # outputs.last_hidden_state and trend
-            # loc is 4rd last and scale is 3nd last output
+            # outputs.last_hidden_state and trend
+            # loc is 4rd last and scale is 3rd last output
+            params = self.output_params(outputs[0] + outputs[1])
             distribution = self.output_distribution(params, loc=outputs[-3], scale=outputs[-2])
 
             loss = self.loss(distribution, future_values)
