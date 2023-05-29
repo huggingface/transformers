@@ -259,6 +259,7 @@ class AutoProcessor:
                 processor_class = get_class_from_dynamic_module(
                     processor_auto_map, pretrained_model_name_or_path, **kwargs
                 )
+                _ = kwargs.pop("code_revision", None)
             else:
                 processor_class = processor_class_from_name(processor_class)
 
