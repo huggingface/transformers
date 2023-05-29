@@ -1591,14 +1591,14 @@ class AutoformerModel(AutoformerPreTrainedModel):
 
         Returns:
             A tuple containing the following tensors:
-            - reshaped_lagged_sequence (torch.Tensor): A tensor of shape `(batch_size, sequence_length, num_lags *
+            - reshaped_lagged_sequence (`torch.Tensor`): A tensor of shape `(batch_size, sequence_length, num_lags *
               input_size)` containing the lagged subsequences of the inputs.
-            - features (torch.Tensor): A tensor of shape `(batch_size, sequence_length, num_features)` containing the
+            - features (`torch.Tensor`): A tensor of shape `(batch_size, sequence_length, num_features)` containing the
               concatenated static and time features.
-            - loc (torch.Tensor): A tensor of shape `(batch_size, input_size)` containing the mean of the input values.
-            - scale (torch.Tensor): A tensor of shape `(batch_size, input_size)` containing the std of the input
+            - loc (`torch.Tensor`): A tensor of shape `(batch_size, input_size)` containing the mean of the input values.
+            - scale (`torch.Tensor`): A tensor of shape `(batch_size, input_size)` containing the std of the input
               values.
-            - static_feat (torch.Tensor): A tensor of shape `(batch_size, num_static_features)` containing the
+            - static_feat (`torch.Tensor`): A tensor of shape `(batch_size, num_static_features)` containing the
               concatenated static features.
         """
         # time feature
