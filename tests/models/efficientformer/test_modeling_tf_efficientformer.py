@@ -378,9 +378,7 @@ class EfficientFormerModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head_with_teacher(self):
-        TFEfficientFormerForImageClassificationWithTeacher.from_pretrained(
-            "snap-research/efficientformer-l1-300"
-        )
+        TFEfficientFormerForImageClassificationWithTeacher.from_pretrained("snap-research/efficientformer-l1-300")
         image_processor = self.default_image_processor
         image = prepare_img()
         image_processor(images=image, return_tensors="tf")
