@@ -78,9 +78,7 @@ class GPTNeoXJapaneseAttention(nn.Module):
         self.head_size = self.hidden_size // self.num_attention_heads
 
         self.rotary_ndims = int(self.head_size * config.rotary_pct)
-        self.rotary_emb = RotaryEmbedding(
-            self.rotary_ndims, base=config.rotary_emb_base
-        )
+        self.rotary_emb = RotaryEmbedding(self.rotary_ndims, base=config.rotary_emb_base)
         self.max_positions = config.max_position_embeddings
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.norm_factor = torch.sqrt(torch.tensor(self.head_size, dtype=torch.float32)).to(torch.get_default_dtype())

@@ -97,9 +97,7 @@ class GPTNeoXAttention(nn.Module):
             ),
         )
         self.register_buffer("masked_bias", torch.tensor(-1e9))
-        self.rotary_emb = RotaryEmbedding(
-            self.rotary_ndims, base=config.rotary_emb_base
-        )
+        self.rotary_emb = RotaryEmbedding(self.rotary_ndims, base=config.rotary_emb_base)
         self.register_buffer(
             "norm_factor",
             torch.sqrt(torch.tensor(self.head_size, dtype=torch.float32)).to(torch.get_default_dtype()),
