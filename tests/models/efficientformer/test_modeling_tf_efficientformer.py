@@ -361,6 +361,7 @@ class EfficientFormerModelIntegrationTest(unittest.TestCase):
             if is_vision_available()
             else None
         )
+
     @slow
     def test_inference_image_classification_head(self):
         model = TFEfficientFormerForImageClassification.from_pretrained("snap-research/efficientformer-l1-300")
@@ -374,11 +375,12 @@ class EfficientFormerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
         expected_slice = tf.constant([-0.0555, 0.4825, -0.0852])
         self.assertTrue(np.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
     @slow
     def test_inference_image_classification_head_with_teacher(self):
-        model = TFEfficientFormerForImageClassificationWithTeacher.from_pretrained(
+        TFEfficientFormerForImageClassificationWithTeacher.from_pretrained(
             "snap-research/efficientformer-l1-300"
         )
         image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="tf")
+        image_processor(images=image, return_tensors="tf")

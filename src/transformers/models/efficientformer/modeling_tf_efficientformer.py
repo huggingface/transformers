@@ -692,7 +692,7 @@ class TFEfficientFormerMainLayer(tf.keras.layers.Layer):
 
         # When running on CPU, tf.keras.layers.Conv2D and tf.keras.layers.AveragePool2D do not
         # support channels first NCHW format. A number of blocks contain both.
-        # So change the input format from (batch_size, num_channels, height, width) to 
+        # So change the input format from (batch_size, num_channels, height, width) to
         # (batch_size, height, width, num_channels) here.
         # shape = (batch_size, in_height, in_width, in_channels=num_channels)
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
@@ -709,7 +709,7 @@ class TFEfficientFormerMainLayer(tf.keras.layers.Layer):
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output, training=training)
 
-        # Change the hidden states from (batch_size, height, width, num_channels) to 
+        # Change the hidden states from (batch_size, height, width, num_channels) to
         # (batch_size, num_channels, height, width).
         # The hidden states are in (batch_size, height, width, num_channels)
         # shape after all stages except the MB3D blocks.
@@ -874,7 +874,6 @@ class TFEfficientFormerForImageClassification(TFEfficientFormerPreTrainedModel, 
         )
 
 
-
 @dataclass
 class TFEfficientFormerForImageClassificationWithTeacherOutput(ModelOutput):
     """
@@ -985,4 +984,3 @@ class TFEfficientFormerForImageClassificationWithTeacher(TFEfficientFormerPreTra
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
