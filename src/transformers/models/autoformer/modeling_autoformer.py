@@ -1530,13 +1530,13 @@ class AutoformerModel(AutoformerPreTrainedModel):
             containing lagged subsequences. Specifically, lagged[i, j, :, k] = sequence[i, -indices[k]-S+j, :].
 
         Args:
-            sequence: Tensor
-                The sequence from which lagged subsequences should be extracted. Shape: (batch_size, context_length,
-                feature_size).
-            subsequences_length : int
+            sequence (`torch.Tensor` or shape `(batch_size, context_length,
+                feature_size)`):
+                The sequence from which lagged subsequences should be extracted.
+            subsequences_length (`int`):
                 Length of the subsequences to be extracted.
-            shift: int
-                Shift the lags by this amount back in the time index. Default is 0.
+            shift (`int`, *optional* defaults to 0):
+                Shift the lags by this amount back in the time index.
         """
 
         # calculates the indices of the lags by subtracting the shift value from the given lags_sequence
