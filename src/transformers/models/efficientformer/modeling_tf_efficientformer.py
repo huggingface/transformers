@@ -690,9 +690,10 @@ class TFEfficientFormerMainLayer(tf.keras.layers.Layer):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # When running on CPU, `tf.keras.layers.Conv2D` and tf.keras.layers.AveragePool2D" do not
-        # support `NCHW` format. A number of blocks contain both.
-        # So change the input format from `NCHW` to `NHWC` here.
+        # When running on CPU, tf.keras.layers.Conv2D and tf.keras.layers.AveragePool2D do not
+        # support channels first NCHW format. A number of blocks contain both.
+        # So change the input format from (batch_size, num_channels, height, width) to 
+        # (batch_size, height, width, num_channels) here.
         # shape = (batch_size, in_height, in_width, in_channels=num_channels)
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
         embedding_output = self.patch_embed(pixel_values, training=training)

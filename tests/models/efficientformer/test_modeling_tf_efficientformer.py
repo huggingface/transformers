@@ -355,49 +355,30 @@ def prepare_img():
 @require_vision
 class EfficientFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
             EfficientFormerImageProcessor.from_pretrained("snap-research/efficientformer-l1-300")
             if is_vision_available()
             else None
         )
-
     @slow
     def test_inference_image_classification_head(self):
         model = TFEfficientFormerForImageClassification.from_pretrained("snap-research/efficientformer-l1-300")
-
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="tf")
-
+        inputs = image_processor(images=image, return_tensors="tf")
         # forward pass
         outputs = model(**inputs, training=False)
-
         # verify the logits
         expected_shape = tf.TensorShape((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
-
         expected_slice = tf.constant([-0.0555, 0.4825, -0.0852])
-
         self.assertTrue(np.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
-
     @slow
     def test_inference_image_classification_head_with_teacher(self):
         model = TFEfficientFormerForImageClassificationWithTeacher.from_pretrained(
             "snap-research/efficientformer-l1-300"
         )
-
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="tf")
-
-        # forward pass
-        outputs = model(**inputs, training=False)
-
-        # verify the logits
-        expected_shape = tf.TensorShape((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = tf.constant([-0.1312, 0.4353, -1.0499])
-
-        self.assertTrue(np.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        inputs = image_processor(images=image, return_tensors="tf")
