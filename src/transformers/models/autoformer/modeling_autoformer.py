@@ -1304,7 +1304,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, DecoderOutputWithPastAndCrossAttentions]:
+    ) -> Union[Tuple, AutoFormerDecoderOutput]:
         r"""
         Args:
             trend (`torch.FloatTensor` of shape `(batch_size, prediction_length, feature_size)`, *optional*):
@@ -1477,7 +1477,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                 for v in [hidden_states, trend, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
                 if v is not None
             )
-        return DecoderOutputWithPastAndCrossAttentions(
+        return AutoFormerDecoderOutput(
             last_hidden_state=hidden_states,
             trend=trend,
             past_key_values=next_cache,
@@ -1531,8 +1531,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
 
         Args:
             sequence (`torch.Tensor` or shape `(batch_size, context_length,
-                feature_size)`):
-                The sequence from which lagged subsequences should be extracted.
+                feature_size)`): The sequence from which lagged subsequences should be extracted.
             subsequences_length (`int`):
                 Length of the subsequences to be extracted.
             shift (`int`, *optional* defaults to 0):
@@ -1595,7 +1594,8 @@ class AutoformerModel(AutoformerPreTrainedModel):
               input_size)` containing the lagged subsequences of the inputs.
             - features (`torch.Tensor`): A tensor of shape `(batch_size, sequence_length, num_features)` containing the
               concatenated static and time features.
-            - loc (`torch.Tensor`): A tensor of shape `(batch_size, input_size)` containing the mean of the input values.
+            - loc (`torch.Tensor`): A tensor of shape `(batch_size, input_size)` containing the mean of the input
+              values.
             - scale (`torch.Tensor`): A tensor of shape `(batch_size, input_size)` containing the std of the input
               values.
             - static_feat (`torch.Tensor`): A tensor of shape `(batch_size, num_static_features)` containing the
@@ -1802,7 +1802,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
                 return_dict=return_dict,
             )
         else:
-            decoder_outputs = DecoderOutputWithPastAndCrossAttentions()
+            decoder_outputs = AutoFormerDecoderOutput()
 
         if not return_dict:
             return decoder_outputs + encoder_outputs + (loc, scale, static_feat)
