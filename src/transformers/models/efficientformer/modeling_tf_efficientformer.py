@@ -16,7 +16,7 @@
 
 import itertools
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -709,8 +709,10 @@ class TFEfficientFormerMainLayer(tf.keras.layers.Layer):
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output, training=training)
 
-        # Change the hidden states from NHWC to NCHW; the hidden states are
-        # in NHWC shape after all stages except the MB3D blocks
+        # Change the hidden states from (batch_size, height, width, num_channels) to 
+        # (batch_size, num_channels, height, width).
+        # The hidden states are in (batch_size, height, width, num_channels)
+        # shape after all stages except the MB3D blocks.
         if output_hidden_states:
             hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1][:-1]]) + (
                 encoder_outputs[1][-1],
@@ -736,35 +738,6 @@ class TFEfficientFormerPreTrainedModel(TFPreTrainedModel):
     config_class = EfficientFormerConfig
     base_model_prefix = "efficientformer"
     main_input_name = "pixel_values"
-
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network. Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32
-        )
-        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
-
-    @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        """
-        Args:
-        Method used for serving the model.
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-
-        return self.serving_output(output)
 
 
 EFFICIENTFORMER_START_DOCSTRING = r"""
@@ -830,16 +803,6 @@ class TFEfficientFormerModel(TFEfficientFormerPreTrainedModel):
             training=training,
         )
         return outputs
-
-    def serving_output(self, output: TFBaseModelOutput) -> TFBaseModelOutput:
-        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
-        hidden_states = output.hidden_states if self.config.output_hidden_states else None
-        attentions = output.attentions if self.config.output_attentions else None
-        return TFBaseModelOutput(
-            last_hidden_state=output.last_hidden_state,
-            hidden_states=hidden_states,
-            attentions=attentions,
-        )
 
 
 @add_start_docstrings(
@@ -910,11 +873,6 @@ class TFEfficientFormerForImageClassification(TFEfficientFormerPreTrainedModel, 
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
 
-    def serving_output(self, output: TFImageClassifierOutput) -> TFImageClassifierOutput:
-        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
-        hidden_states = output.hidden_states if self.config.output_hidden_states else None
-        attentions = output.attentions if self.config.output_attentions else None
-        return TFImageClassifierOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
 
 
 @dataclass
@@ -1028,16 +986,3 @@ class TFEfficientFormerForImageClassificationWithTeacher(TFEfficientFormerPreTra
             attentions=outputs.attentions,
         )
 
-    def serving_output(
-        self, output: TFEfficientFormerForImageClassificationWithTeacherOutput
-    ) -> TFEfficientFormerForImageClassificationWithTeacherOutput:
-        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
-        hidden_states = output.hidden_states if self.config.output_hidden_states else None
-        attentions = output.attentions if self.config.output_attentions else None
-        return TFEfficientFormerForImageClassificationWithTeacherOutput(
-            logits=output.logits,
-            cls_logits=output.cls_logits,
-            distillation_logits=output.distillation_logits,
-            hidden_states=hidden_states,
-            attentions=attentions,
-        )
