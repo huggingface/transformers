@@ -44,7 +44,7 @@ _CONFIG_FOR_DOC = "AutoformerConfig"
 
 
 @dataclass
-class DecoderOutputWithPastAndCrossAttentions(ModelOutput):
+class AutoFormerDecoderOutput(ModelOutput):
     """
     Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
 
