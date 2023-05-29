@@ -1684,7 +1684,9 @@ class TrainingArguments:
                         )
                     device = torch.device("mps")
                     self._n_gpu = 1
-
+            elif self.no_cuda:
+                device = torch.device("cpu")
+                self._n_gpu = 0
             else:
                 # if n_gpu is > 1 we'll use nn.DataParallel.
                 # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
