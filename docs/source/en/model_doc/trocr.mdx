@@ -50,6 +50,27 @@ Tips:
   information, see the [official models](https://huggingface.co/models?other=trocr>).
 - TrOCR is always used within the [VisionEncoderDecoder](vision-encoder-decoder) framework.
 
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with TrOCR. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+
+<PipelineTag pipeline="text-classification"/>
+
+- A blog post on [Accelerating Document AI](https://huggingface.co/blog/document-ai) with TrOCR.
+- A blog post on how to [Document AI](https://github.com/philschmid/document-ai-transformers) with TrOCR.
+- A notebook on how to [finetune TrOCR on IAM Handwriting Database using Seq2SeqTrainer](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/TrOCR/Fine_tune_TrOCR_on_IAM_Handwriting_Database_using_Seq2SeqTrainer.ipynb).
+- A notebook on [inference with TrOCR](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/TrOCR/Inference_with_TrOCR_%2B_Gradio_demo.ipynb) and Gradio demo.
+- A notebook on [finetune TrOCR on the IAM Handwriting Database](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/TrOCR/Fine_tune_TrOCR_on_IAM_Handwriting_Database_using_native_PyTorch.ipynb) using native PyTorch.
+- A notebook on [evaluating TrOCR on the IAM test set](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/TrOCR/Evaluating_TrOCR_base_handwritten_on_the_IAM_test_set.ipynb).
+
+<PipelineTag pipeline="text-generation"/>
+
+- [Casual language modeling](https://huggingface.co/docs/transformers/tasks/language_modeling) task guide.
+
+⚡️ Inference
+
+- An interactive-demo on [TrOCR handwritten character recognition](https://huggingface.co/spaces/nielsr/TrOCR-handwritten).
+
 ## Inference
 
 TrOCR's [`VisionEncoderDecoder`] model accepts images as input and makes use of

@@ -502,7 +502,7 @@ class FeaturesManager:
             onnx_config_cls="models.squeezebert.SqueezeBertOnnxConfig",
         ),
         "swin": supported_features_mapping(
-            "default", "image-classification", "masked-im", onnx_config_cls="models.swin.SwinOnnxConfig"
+            "default", "image-classification", onnx_config_cls="models.swin.SwinOnnxConfig"
         ),
         "t5": supported_features_mapping(
             "default",

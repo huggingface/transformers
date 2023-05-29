@@ -39,6 +39,7 @@ from .generic import (
     expand_dims,
     find_labels,
     flatten_dict,
+    infer_framework,
     is_jax_tensor,
     is_numpy_array,
     is_tensor,
@@ -99,6 +100,7 @@ from .import_utils import (
     _LazyModule,
     ccl_version,
     direct_transformers_import,
+    get_torch_version,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
@@ -121,7 +123,10 @@ from .import_utils import (
     is_natten_available,
     is_ninja_available,
     is_onnx_available,
+    is_openai_available,
+    is_optimum_available,
     is_pandas_available,
+    is_peft_available,
     is_phonemizer_available,
     is_protobuf_available,
     is_psutil_available,
@@ -167,7 +172,6 @@ from .import_utils import (
     is_vision_available,
     requires_backends,
     torch_only_method,
-    torch_version,
 )
 
 

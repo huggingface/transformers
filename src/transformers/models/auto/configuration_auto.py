@@ -140,6 +140,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("nllb-moe", "NllbMoeConfig"),
         ("nystromformer", "NystromformerConfig"),
         ("oneformer", "OneFormerConfig"),
+        ("open-llama", "OpenLlamaConfig"),
         ("openai-gpt", "OpenAIGPTConfig"),
         ("opt", "OPTConfig"),
         ("owlvit", "OwlViTConfig"),
@@ -162,6 +163,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("roberta-prelayernorm", "RobertaPreLayerNormConfig"),
         ("roc_bert", "RoCBertConfig"),
         ("roformer", "RoFormerConfig"),
+        ("rwkv", "RwkvConfig"),
         ("sam", "SamConfig"),
         ("segformer", "SegformerConfig"),
         ("sew", "SEWConfig"),
@@ -172,6 +174,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("speecht5", "SpeechT5Config"),
         ("splinter", "SplinterConfig"),
         ("squeezebert", "SqueezeBertConfig"),
+        ("swiftformer", "SwiftFormerConfig"),
         ("swin", "SwinConfig"),
         ("swin2sr", "Swin2SRConfig"),
         ("swinv2", "Swinv2Config"),
@@ -321,6 +324,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("nllb-moe", "NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("nystromformer", "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("oneformer", "ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("open-llama", "OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("openai-gpt", "OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("opt", "OPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("owlvit", "OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -341,6 +345,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("roberta-prelayernorm", "ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("roc_bert", "ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("roformer", "ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("rwkv", "RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sam", "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("segformer", "SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew", "SEW_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -350,6 +355,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("speecht5", "SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("splinter", "SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("squeezebert", "SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("swiftformer", "SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin", "SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin2sr", "SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swinv2", "SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -519,6 +525,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("nllb-moe", "NLLB-MOE"),
         ("nystromformer", "Nyströmformer"),
         ("oneformer", "OneFormer"),
+        ("open-llama", "OpenLlama"),
         ("openai-gpt", "OpenAI GPT"),
         ("opt", "OPT"),
         ("owlvit", "OWL-ViT"),
@@ -542,6 +549,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("roberta-prelayernorm", "RoBERTa-PreLayerNorm"),
         ("roc_bert", "RoCBert"),
         ("roformer", "RoFormer"),
+        ("rwkv", "RWKV"),
         ("sam", "SAM"),
         ("segformer", "SegFormer"),
         ("sew", "SEW"),
@@ -552,6 +560,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("speecht5", "SpeechT5"),
         ("splinter", "Splinter"),
         ("squeezebert", "SqueezeBERT"),
+        ("swiftformer", "SwiftFormer"),
         ("swin", "Swin Transformer"),
         ("swin2sr", "Swin2SR"),
         ("swinv2", "Swin Transformer V2"),
@@ -929,6 +938,7 @@ class AutoConfig:
                 )
             class_ref = config_dict["auto_map"]["AutoConfig"]
             config_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
+            _ = kwargs.pop("code_revision", None)
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]

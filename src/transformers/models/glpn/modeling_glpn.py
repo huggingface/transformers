@@ -632,7 +632,7 @@ class GLPNDecoder(nn.Module):
 
 
 class SiLogLoss(nn.Module):
-    """
+    r"""
     Implements the Scale-invariant log scale loss [Eigen et al., 2014](https://arxiv.org/abs/1406.2283).
 
     $$L=\frac{1}{n} \sum_{i} d_{i}^{2}-\frac{1}{2 n^{2}}\left(\sum_{i} d_{i}^{2}\right)$$ where $d_{i}=\log y_{i}-\log

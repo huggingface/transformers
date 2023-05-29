@@ -194,6 +194,25 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         merge = _find_longest_common_sequence([seq1, seq2, seq3])
         self.assertEqual(merge, [1, 2, 3, 4, 5, 6, 7, 8])
 
+    def test_skip_special_tokens_skips_prompt_ids(self):
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+        # fmt: off
+        encoded_input = [
+            50361, 2221, 13, 2326, 388, 391, 50258, 50259, 50359,
+            50363, 1282, 264, 2674, 9156, 295, 1523, 11, 2221, 13,
+            2326, 388, 391, 13657, 365, 2681, 21296, 17711, 13, 50257,
+        ]
+        # fmt: on
+        expected_with_special_tokens = "<|startofprev|> Mr. Quilter<|startoftranscript|><|en|><|transcribe|><|notimestamps|> On the general principles of art, Mr. Quilter writes with equal lucidity.<|endoftext|>"
+        expected_without_special_tokens = " On the general principles of art, Mr. Quilter writes with equal lucidity."
+        self.assertEqual(tokenizer.decode(encoded_input, skip_special_tokens=False), expected_with_special_tokens)
+        self.assertEqual(tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens)
+        self.assertEqual(rust_tokenizer.decode(encoded_input, skip_special_tokens=False), expected_with_special_tokens)
+        self.assertEqual(
+            rust_tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens
+        )
+
 
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     checkpoint_name = "openai/whisper-small.en"
