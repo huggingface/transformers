@@ -1240,7 +1240,7 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
 
 class AutoformerDecoder(AutoformerPreTrainedModel):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`AutoformerDecoderLayer`]
+    Transformer decoder consisting of `config.decoder_layers` layers. Each layer is a [`AutoformerDecoderLayer`]
 
     Args:
         config: AutoformerConfig
