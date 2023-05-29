@@ -1526,8 +1526,8 @@ class AutoformerModel(AutoformerPreTrainedModel):
     ) -> torch.Tensor:
         """
         Returns lagged subsequences of a given sequence. Returns a tensor of shape (batch_size, subsequences_length,
-        feature_size, indices_length),
-            containing lagged subsequences. Specifically, lagged[i, j, :, k] = sequence[i, -indices[k]-S+j, :].
+        feature_size, indices_length), containing lagged subsequences. Specifically, lagged[i, j, :, k] = sequence[i,
+        -indices[k]-subsequences_length+j, :].
 
         Args:
             sequence (`torch.Tensor` or shape `(batch_size, context_length,
