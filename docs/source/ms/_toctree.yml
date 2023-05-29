@@ -57,91 +57,91 @@
         - local: tasks/semantic_segmentation
           title: Segmentasi semantik
         - local: tasks/video_classification
-          title: Video classification
+          title: Klasifikasi video
         - local: tasks/object_detection
-          title: Object detection
+          title: Pengesanan objek
         - local: tasks/zero_shot_object_detection
-          title: Zero-shot object detection
+          title: Pengesanan objek Zero-Shot
         - local: tasks/zero_shot_image_classification
-          title: Zero-shot image classification
+          title: Klasifikasi imej tangkapan Zero-Shot
         - local: tasks/monocular_depth_estimation
-          title: Depth estimation
-      title: Computer Vision
+          title: Anggaran kedalaman
+      title: Visi komputer
       isExpanded: false
     - sections:
         - local: tasks/image_captioning
-          title: Image captioning
+          title: Kapsyen imej
         - local: tasks/document_question_answering
-          title: Document Question Answering
+          title: Menjawab Soalan Dokumen
         - local: tasks/text-to-speech
-          title: Text to speech
+          title: Teks kepada ucapan
       title: Multimodal
       isExpanded: false
-  title: Task Guides
+  title: Panduan Tugasan
 - sections:
     - local: fast_tokenizers
-      title: Use fast tokenizers from 🤗 Tokenizers
+      title: Gunakan tokenizer cepat dari 🤗 Tokenizers
     - local: multilingual
-      title: Run inference with multilingual models
+      title: Jalankan inferens dengan model berbilang bahasa
     - local: generation_strategies
-      title: Customize text generation strategy
+      title: Sesuaikan strategi penjanaan teks
     - local: create_a_model
-      title: Use model-specific APIs
+      title: Gunakan API khusus model
     - local: custom_models
-      title: Share a custom model
+      title: Kongsi model tersuai
     - local: sagemaker
-      title: Run training on Amazon SageMaker
+      title: Jalankan latihan di Amazon SageMaker
     - local: serialization
-      title: Export to ONNX
+      title: Eksport ke ONNX
     - local: torchscript
-      title: Export to TorchScript
+      title: Eksport ke TorchScript
     - local: benchmarks
-      title: Benchmarks
-    - local: notebooks
+      title: Penanda aras
+    - local: Buku nota dengan contoh
       title: Notebooks with examples
-    - local: community
+    - local: Sumber komuniti
       title: Community resources
-    - local: custom_tools
+    - local: Sumber komuniti
       title: Custom Tools and Prompts
-    - local: troubleshooting
-      title: Troubleshoot
-  title: Developer guides
+    - local: Alat dan Gesaan Tersuai
+      title: Selesaikan masalah
+  title: Panduan Developer
 - sections:
     - local: performance
-      title: Overview
+      title: Gambaran keseluruhan
     - local: perf_train_gpu_one
-      title: Training on one GPU
+      title: Latihan pada satu GPU
     - local: perf_train_gpu_many
-      title: Training on many GPUs
+      title: Latihan pada banyak GPU
     - local: perf_train_cpu
-      title: Training on CPU
+      title: Latihan mengenai CPU
     - local: perf_train_cpu_many
-      title: Training on many CPUs
+      title: Latihan pada banyak CPU
     - local: perf_train_tpu
-      title: Training on TPUs
+      title: Latihan mengenai TPU
     - local: perf_train_tpu_tf
-      title: Training on TPU with TensorFlow
+      title: Latihan tentang TPU dengan TensorFlow
     - local: perf_train_special
-      title: Training on Specialized Hardware
+      title: Latihan mengenai Perkakasan Khusus
     - local: perf_infer_cpu
-      title: Inference on CPU
+      title: Inferens pada CPU
     - local: perf_infer_gpu_one
-      title: Inference on one GPU
+      title: Inferens pada satu GPU
     - local: perf_infer_gpu_many
-      title: Inference on many GPUs
+      title: Inferens pada banyak GPUs
     - local: perf_infer_special
-      title: Inference on Specialized Hardware
+      title: Inferens pada Perkakasan Khusus
     - local: perf_hardware
-      title: Custom hardware for training
+      title: Perkakasan tersuai untuk latihan
     - local: big_models
-      title: Instantiating a big model
+      title: Menghidupkan model besar
     - local: debugging
-      title: Debugging
+      title: Penyahpepijatan
     - local: hpo_train
-      title: Hyperparameter Search using Trainer API
+      title: Carian Hiperparameter menggunakan API Pelatih
     - local: tf_xla
-      title: XLA Integration for TensorFlow Models
-  title: Performance and scalability
+      title: Penyepaduan XLA untuk Model TensorFlow
+  title: Prestasi dan kebolehskalaan
 - sections:
     - local: contributing
       title: How to contribute to transformers?
