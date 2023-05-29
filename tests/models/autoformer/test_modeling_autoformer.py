@@ -262,21 +262,23 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
                 "future_time_features",
             ]
 
-            if model.__class__.__name__ in ['AutoformerForPrediction']:
+            if model.__class__.__name__ in ["AutoformerForPrediction"]:
                 expected_arg_names.append("future_observed_mask")
-            
-            expected_arg_names.extend([
-                "decoder_attention_mask",
-                "head_mask",
-                "decoder_head_mask",
-                "cross_attn_head_mask",
-                "encoder_outputs",
-                "past_key_values",
-                "output_hidden_states",
-                "output_attentions",
-                "use_cache",
-                "return_dict",
-            ])
+
+            expected_arg_names.extend(
+                [
+                    "decoder_attention_mask",
+                    "head_mask",
+                    "decoder_head_mask",
+                    "cross_attn_head_mask",
+                    "encoder_outputs",
+                    "past_key_values",
+                    "output_hidden_states",
+                    "output_attentions",
+                    "use_cache",
+                    "return_dict",
+                ]
+            )
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
