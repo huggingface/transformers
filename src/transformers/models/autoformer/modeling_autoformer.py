@@ -1574,19 +1574,19 @@ class AutoformerModel(AutoformerPreTrainedModel):
         Creates the inputs for the network given the past and future values, time features, and static features.
 
         Args:
-            past_values (torch.Tensor):
+            past_values (`torch.Tensor`):
                 A tensor of shape `(batch_size, past_length, input_size)` containing the past values.
-            past_time_features (torch.Tensor):
+            past_time_features (`torch.Tensor`):
                 A tensor of shape `(batch_size, past_length, num_features)` containing the past time features.
-            static_categorical_features (Optional[torch.Tensor]):
+            static_categorical_features (`Optional[torch.Tensor]`):
                 An optional tensor of shape `(batch_size, num_categorical_features)` containing the static categorical
                 features.
-            static_real_features (Optional[torch.Tensor]):
+            static_real_features (`Optional[torch.Tensor]`):
                 An optional tensor of shape `(batch_size, num_real_features)` containing the static real features.
-            past_observed_mask (Optional[torch.Tensor]):
+            past_observed_mask (`Optional[torch.Tensor]`):
                 An optional tensor of shape `(batch_size, past_length, input_size)` containing the mask of observed
                 values in the past.
-            future_values (Optional[torch.Tensor]):
+            future_values (`Optional[torch.Tensor]`):
                 An optional tensor of shape `(batch_size, future_length, input_size)` containing the future values.
 
         Returns:
