@@ -300,7 +300,6 @@ class TFEfficientFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
     def test_model_from_pretrained(self):
         for model_name in TF_EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFEfficientFormerModel.from_pretrained(model_name)
-            print(model.summary())
             self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
