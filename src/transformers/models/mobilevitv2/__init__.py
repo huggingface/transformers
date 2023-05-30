@@ -29,13 +29,6 @@ _import_structure = {
     ],
 }
 
-try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    pass
 
 try:
     if not is_torch_available():
@@ -57,14 +50,6 @@ if TYPE_CHECKING:
         MobileViTV2Config,
         MobileViTV2OnnxConfig,
     )
-
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        pass
 
     try:
         if not is_torch_available():

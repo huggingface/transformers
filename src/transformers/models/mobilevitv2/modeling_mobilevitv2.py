@@ -227,21 +227,13 @@ class MobileViTV2LinearSelfAttention(nn.Module):
     https://arxiv.org/abs/2206.02680
 
     Args:
-        config: MobileVitv2Config
-        embed_dim (int):
-            :math:`input_channels` from an expected input of size :math:`(batch_size, input_channels, height, width)`
-
-    Shape:
-        - Input: :math:`(batch_size, input_channels, num_pixels_in_patch, num_patches)`
-        - Output: same as the input
-
+        config (`MobileVitv2Config`):
+             Model configuration object
+        embed_dim (`int`):
+            `input_channels` from an expected input of size :math:`(batch_size, input_channels, height, width)`
     """
 
-    def __init__(
-        self,
-        config: MobileViTV2Config,
-        embed_dim: int,
-    ) -> None:
+    def __init__(self, config: MobileViTV2Config, embed_dim: int) -> None:
         super().__init__()
 
         self.qkv_proj = MobileViTV2ConvLayer(
@@ -265,12 +257,13 @@ class MobileViTV2LinearSelfAttention(nn.Module):
             use_activation=False,
         )
         self.embed_dim = embed_dim
+      
 
-    def _forward_self_attn(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # (batch_size, embed_dim, num_pixels_in_patch, num_patches) --> (batch_size, 1+2*embed_dim, num_pixels_in_patch, num_patches)
-        qkv = self.qkv_proj(x)
+        qkv = self.qkv_proj(hidden_states)
 
-        # Project x into query, key and value
+        # Project hidden_states into query, key and value
         # Query --> [batch_size, 1, num_pixels_in_patch, num_patches]
         # value, key --> [batch_size, embed_dim, num_pixels_in_patch, num_patches]
         query, key, value = torch.split(qkv, split_size_or_sections=[1, self.embed_dim, self.embed_dim], dim=1)
@@ -290,9 +283,6 @@ class MobileViTV2LinearSelfAttention(nn.Module):
         out = torch.nn.functional.relu(value) * context_vector.expand_as(value)
         out = self.out_proj(out)
         return out
-
-    def forward(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
-        return self._forward_self_attn(x, *args, **kwargs)
 
 
 class MobileViTV2FFN(nn.Module):
@@ -345,13 +335,9 @@ class MobileViTV2TransformerLayer(nn.Module):
         dropout: float = 0.0,
     ) -> None:
         super().__init__()
-        # pre_norm_attn
-        # self.layernorm_before = MobileViTV2LayerNorm2D(embed_dim, eps=config.layer_norm_eps)
         self.layernorm_before = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=config.layer_norm_eps)
         self.attention = MobileViTV2LinearSelfAttention(config, embed_dim)
         self.dropout1 = nn.Dropout(p=dropout)
-        # pre_norm_ffn
-        # self.layernorm_after = MobileViTV2LayerNorm2D(embed_dim, eps=config.layer_norm_eps)
         self.layernorm_after = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=config.layer_norm_eps)
         self.ffn = MobileViTV2FFN(config, embed_dim, ffn_latent_dim, config.ffn_dropout)
 
@@ -368,24 +354,10 @@ class MobileViTV2TransformerLayer(nn.Module):
 
 
 class MobileViTV2Transformer(nn.Module):
-    def __init__(
-        self,
-        config: MobileViTV2Config,
-        n_layers: int,
-        d_model: int,
-    ) -> None:
+    def __init__(self, config: MobileViTV2Config, n_layers: int, d_model: int) -> None:
         super().__init__()
 
         ffn_multiplier = config.ffn_multiplier
-
-        # if isinstance(ffn_multiplier, Sequence) and len(ffn_multiplier) == 2:
-        #     ffn_dims = torch.linspace(ffn_multiplier[0], ffn_multiplier[1], n_layers, dtype=float) * d_model
-        # elif isinstance(ffn_multiplier, Sequence) and len(ffn_multiplier) == 1:
-        #     ffn_dims = [ffn_multiplier[0] * d_model] * n_layers
-        # elif isinstance(ffn_multiplier, (int, float)):
-        #     ffn_dims = [ffn_multiplier * d_model] * n_layers
-        # else:
-        #     raise NotImplementedError
 
         ffn_dims = [ffn_multiplier * d_model] * n_layers
 
@@ -407,7 +379,7 @@ class MobileViTV2Transformer(nn.Module):
 
 class MobileViTV2Layer(nn.Module):
     """
-    MobileViTV2 block: https://arxiv.org/abs/2206.02680
+    MobileViTV2 layer: https://arxiv.org/abs/2206.02680
     """
 
     def __init__(
@@ -416,9 +388,9 @@ class MobileViTV2Layer(nn.Module):
         in_channels: int,
         out_channels: int,
         attn_unit_dim: int,
-        stride: Optional[int] = 2,
-        n_attn_blocks: Optional[int] = 2,
+        n_attn_blocks: int = 2,
         dilation: int = 1,
+        stride: Optional[int] = 2,
     ) -> None:
         super().__init__()
         self.patch_width = config.patch_size
@@ -472,7 +444,7 @@ class MobileViTV2Layer(nn.Module):
         )
 
     def unfolding(self, feature_map: torch.Tensor) -> Tuple[torch.Tensor, Tuple[int, int]]:
-        batch_size, in_channels, img_h, img_w = feature_map.shape
+        batch_size, in_channels, img_height, img_width = feature_map.shape
         patches = nn.functional.unfold(
             feature_map,
             kernel_size=(self.patch_height, self.patch_width),
@@ -480,7 +452,7 @@ class MobileViTV2Layer(nn.Module):
         )
         patches = patches.reshape(batch_size, in_channels, self.patch_height * self.patch_width, -1)
 
-        return patches, (img_h, img_w)
+        return patches, (img_height, img_width)
 
     def folding(self, patches: torch.Tensor, output_size: Tuple[int, int]) -> torch.Tensor:
         batch_size, in_dim, patch_size, n_patches = patches.shape
@@ -512,7 +484,7 @@ class MobileViTV2Layer(nn.Module):
         patches = self.layernorm(patches)
 
         # convert patches back to feature maps
-        # [B x Patch x Patches x C] --> [B x C x Patches x Patch]
+        # [batch_size, patch_height, patch_width, input_dim] --> [batch_size, input_dim, patch_height, patch_width]
         features = self.folding(patches, output_size)
 
         features = self.conv_projection(features)
