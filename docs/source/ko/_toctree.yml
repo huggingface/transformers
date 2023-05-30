@@ -75,8 +75,8 @@
     isExpanded: false
   title: 태스크 가이드
 - sections:
-    - local: in_translation
-      title: (번역중) Use fast tokenizers from 🤗 Tokenizers
+    - local: fast_tokenizers
+      title: 🤗 Tokenizers 라이브러리에서 토크나이저 사용하기
     - local: multilingual
       title: 다국어 모델 추론하기
     - local: in_translation
