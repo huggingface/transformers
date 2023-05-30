@@ -18,6 +18,7 @@ from . import (
     altclip,
     audio_spectrogram_transformer,
     auto,
+    autoformer,
     bart,
     barthez,
     bartpho,

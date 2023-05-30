@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import BertConfig, is_tf_available

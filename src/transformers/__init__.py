@@ -155,6 +155,10 @@ _import_structure = {
         "AutoProcessor",
         "AutoTokenizer",
     ],
+    "models.autoformer": [
+        "AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "AutoformerConfig",
+    ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
     "models.bartpho": [],
@@ -1080,6 +1084,14 @@ else:
             "AutoModelForZeroShotImageClassification",
             "AutoModelForZeroShotObjectDetection",
             "AutoModelWithLMHead",
+        ]
+    )
+    _import_structure["models.autoformer"].extend(
+        [
+            "AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "AutoformerForPrediction",
+            "AutoformerModel",
+            "AutoformerPreTrainedModel",
         ]
     )
     _import_structure["models.bart"].extend(
@@ -3946,6 +3958,10 @@ if TYPE_CHECKING:
         AutoProcessor,
         AutoTokenizer,
     )
+    from .models.autoformer import (
+        AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        AutoformerConfig,
+    )
     from .models.bart import BartConfig, BartTokenizer
     from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
     from .models.bert import (
@@ -4783,6 +4799,12 @@ if TYPE_CHECKING:
             AutoModelForZeroShotImageClassification,
             AutoModelForZeroShotObjectDetection,
             AutoModelWithLMHead,
+        )
+        from .models.autoformer import (
+            AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            AutoformerForPrediction,
+            AutoformerModel,
+            AutoformerPreTrainedModel,
         )
         from .models.bart import (
             BART_PRETRAINED_MODEL_ARCHIVE_LIST,

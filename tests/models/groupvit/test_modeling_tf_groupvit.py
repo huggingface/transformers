@@ -15,6 +15,8 @@
 """ Testing suite for the TensorFlow GroupViT model. """
 
 
+from __future__ import annotations
+
 import inspect
 import os
 import random

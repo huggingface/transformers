@@ -19,6 +19,7 @@ import importlib.util
 import json
 import os
 import shutil
+import subprocess
 import sys
 import warnings
 from collections import OrderedDict
@@ -94,7 +95,6 @@ _kenlm_available = _is_package_available("kenlm")
 _keras_nlp_available = _is_package_available("keras_nlp")
 _librosa_available = _is_package_available("librosa")
 _natten_available = _is_package_available("natten")
-_ninja_available = _is_package_available("ninja")
 _onnx_available = _is_package_available("onnx")
 _openai_available = _is_package_available("openai")
 _optimum_available = _is_package_available("optimum")
@@ -449,7 +449,16 @@ def is_apex_available():
 
 
 def is_ninja_available():
-    return _ninja_available
+    r"""
+    Code comes from *torch.utils.cpp_extension.is_ninja_available()*. Returns `True` if the
+    [ninja](https://ninja-build.org/) build system is available on the system, `False` otherwise.
+    """
+    try:
+        subprocess.check_output("ninja --version".split())
+    except Exception:
+        return False
+    else:
+        return True
 
 
 def is_ipex_available():

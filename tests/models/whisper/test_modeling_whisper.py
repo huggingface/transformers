@@ -94,7 +94,7 @@ class WhisperModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         seq_length=1500,
         is_training=True,
         use_labels=False,
@@ -1477,7 +1477,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
         input_speech = self._load_datasamples(4)[-1:]
-        input_features = processor(input_speech, return_tensors="pt").input_features
+        input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
 
         output_without_prompt = model.generate(input_features)
         prompt_ids = processor.get_prompt_ids("Leighton")
@@ -1494,7 +1494,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
         input_speech = self._load_datasamples(1)
-        input_features = processor(input_speech, return_tensors="pt").input_features
+        input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
         task = "translate"
         language = "de"
         expected_tokens = [f"<|{task}|>", f"<|{language}|>"]
@@ -1513,7 +1513,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model.to(torch_device)
         input_speech = self._load_datasamples(1)
-        input_features = processor(input_speech, return_tensors="pt").input_features
+        input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
         prompt = "test prompt"
         prompt_ids = processor.get_prompt_ids(prompt)
 
@@ -1537,7 +1537,7 @@ class WhisperEncoderModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         seq_length=3000,
         is_training=True,
         use_labels=True,

@@ -32,6 +32,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("align", "AlignModel"),
         ("altclip", "AltCLIPModel"),
         ("audio-spectrogram-transformer", "ASTModel"),
+        ("autoformer", "AutoformerModel"),
         ("bart", "BartModel"),
         ("beit", "BeitModel"),
         ("bert", "BertModel"),
@@ -529,6 +530,8 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
         ("blip", "BlipForConditionalGeneration"),
         ("blip-2", "Blip2ForConditionalGeneration"),
+        ("git", "GitForCausalLM"),
+        ("pix2struct", "Pix2StructForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
     ]
 )
