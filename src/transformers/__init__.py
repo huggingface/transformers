@@ -3251,13 +3251,6 @@ else:
             "TFDeiTPreTrainedModel",
         ]
     )
-    _import_structure["models.dinov2"].extend(
-        [
-            "TFDinov2ForImageClassification",
-            "TFDinov2Model",
-            "TFDinov2PreTrainedModel",
-        ]
-    )
     _import_structure["models.distilbert"].extend(
         [
             "TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3971,9 +3964,6 @@ else:
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
     _import_structure["models.vision_text_dual_encoder"].extend(["FlaxVisionTextDualEncoderModel"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
-    _import_structure["models.dinov2"].extend(
-        ["FlaxDinov2ForImageClassification", "FlaxDinov2Model", "FlaxDinov2PreTrainedModel"]
-    )
     _import_structure["models.wav2vec2"].extend(
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
     )
@@ -6730,7 +6720,6 @@ if TYPE_CHECKING:
             TFDeiTModel,
             TFDeiTPreTrainedModel,
         )
-        from .models.dinov2 import TFDinov2ForImageClassification, TFDinov2Model, TFDinov2PreTrainedModel
         from .models.distilbert import (
             TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDistilBertForMaskedLM,
@@ -7206,7 +7195,6 @@ if TYPE_CHECKING:
             FlaxCLIPVisionModel,
             FlaxCLIPVisionPreTrainedModel,
         )
-        from .models.dinov2 import FlaxDinov2ForImageClassification, FlaxDinov2Model, FlaxDinov2PreTrainedModel
         from .models.distilbert import (
             FlaxDistilBertForMaskedLM,
             FlaxDistilBertForMultipleChoice,

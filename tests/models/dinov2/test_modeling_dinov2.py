@@ -20,9 +20,7 @@ import unittest
 
 from transformers import Dinov2Config
 from transformers.testing_utils import (
-    require_accelerate,
     require_torch,
-    require_torch_gpu,
     require_vision,
     slow,
     torch_device,
@@ -38,14 +36,14 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import Dinov2ForImageClassification, Dinov2ForMaskedImageModeling, Dinov2Model
+    from transformers import Dinov2ForImageClassification, Dinov2Model
     from transformers.models.dinov2.modeling_dinov2 import DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import ViTImageProcessor
 
 
 class Dinov2ModelTester:
@@ -68,7 +66,6 @@ class Dinov2ModelTester:
         type_sequence_label_size=10,
         initializer_range=0.02,
         scope=None,
-        encoder_stride=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -87,7 +84,6 @@ class Dinov2ModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
-        self.encoder_stride = encoder_stride
 
         # in Dinov2, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -118,7 +114,6 @@ class Dinov2ModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            encoder_stride=self.encoder_stride,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -127,25 +122,6 @@ class Dinov2ModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_for_masked_image_modeling(self, config, pixel_values, labels):
-        model = Dinov2ForMaskedImageModeling(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-        self.parent.assertEqual(
-            result.reconstruction.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
-        )
-
-        # test greyscale images
-        config.num_channels = 1
-        model = Dinov2ForMaskedImageModeling(config)
-        model.to(torch_device)
-        model.eval()
-
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
-        result = model(pixel_values)
-        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, 1, self.image_size, self.image_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -183,14 +159,11 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (
-            Dinov2Model,
-            Dinov2ForImageClassification,
-            Dinov2ForMaskedImageModeling,
-        )
+    all_model_classes = (Dinov2Model, Dinov2ForImageClassification) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": Dinov2Model, "image-classification": Dinov2ForImageClassification}
         if is_torch_available()
-        else ()
+        else {}
     )
     fx_compatible = False
 
@@ -234,10 +207,6 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_masked_image_modeling(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
-
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
@@ -259,70 +228,45 @@ def prepare_img():
 @require_vision
 class Dinov2ModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("google/dinov2-base-patch16-224") if is_vision_available() else None
+    def default_image_processor(self):
+        return ViTImageProcessor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
 
     @slow
-    def test_inference_image_classification_head(self):
-        model = Dinov2ForImageClassification.from_pretrained("google/dinov2-base-patch16-224").to(torch_device)
+    def test_inference_no_head(self):
+        # TODO update organization
+        model = Dinov2Model.from_pretrained("nielsr/dinov2-base").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        # TODO replace by image processor class
+        from torchvision import transforms
+
+        transformations = transforms.Compose(
+            [
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406],  # these are RGB mean+std values
+                    std=[0.229, 0.224, 0.225],  # across a large photo dataset.
+                ),
+            ]
+        )
+
+        pixel_values = transformations(image).unsqueeze(0).to(torch_device)  # insert batch dimension
 
         # forward pass
         with torch.no_grad():
-            outputs = model(**inputs)
+            outputs = model(pixel_values)
 
-        # verify the logits
-        expected_shape = torch.Size((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
-
-    @slow
-    def test_inference_interpolate_pos_encoding(self):
-        # Dinov2 models have an `interpolate_pos_encoding` argument in their forward method,
-        # allowing to interpolate the pre-trained position embeddings in order to use
-        # the model on higher resolutions. The DINO model by Facebook AI leverages this
-        # to visualize self-attention on higher resolution images.
-        model = Dinov2Model.from_pretrained("facebook/dino-dinov2s8").to(torch_device)
-
-        feature_extractor = ViTFeatureExtractor.from_pretrained("facebook/dino-dinov2s8", size=480)
-        image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(pixel_values, interpolate_pos_encoding=True)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 3601, 384))
+        # verify the last hidden states
+        expected_shape = torch.Size((1, 257, 768))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[4.2340, 4.3906, -6.6692], [4.5463, 1.8928, -6.7257], [4.4429, 0.8496, -5.8585]]
-        ).to(torch_device)
-
+            [[-2.1849, -0.3433, 1.0913], [-3.2696, -0.7386, -0.8044], [-3.0603, 1.2498, -0.7685]],
+            device=torch_device,
+        )
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
-
-    @slow
-    @require_accelerate
-    @require_torch_gpu
-    def test_inference_fp16(self):
-        r"""
-        A small test to make sure that inference work in half precision without any problem.
-        """
-        model = Dinov2Model.from_pretrained("facebook/dino-dinov2s8", torch_dtype=torch.float16, device_map="auto")
-        feature_extractor = self.default_feature_extractor
-
-        image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device)
-
-        # forward pass to make sure inference works in fp16
-        with torch.no_grad():
-            _ = model(pixel_values)

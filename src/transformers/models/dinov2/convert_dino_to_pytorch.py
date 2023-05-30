@@ -74,8 +74,8 @@ def create_rename_keys(config):
         rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"encoder.layer.{i}.mlp.fc2.weight"))
         rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"encoder.layer.{i}.mlp.fc2.bias"))
         # layerscale
-        rename_keys.append((f"blocks.{i}.ls1.gamma", f"encoder.layer.{i}.layer_scale1.gamma"))
-        rename_keys.append((f"blocks.{i}.ls2.gamma", f"encoder.layer.{i}.layer_scale2.gamma"))
+        rename_keys.append((f"blocks.{i}.ls1.gamma", f"encoder.layer.{i}.layer_scale1.lambda1"))
+        rename_keys.append((f"blocks.{i}.ls2.gamma", f"encoder.layer.{i}.layer_scale2.lambda1"))
         # attention projection layer
         rename_keys.append((f"blocks.{i}.attn.proj.weight", f"encoder.layer.{i}.attention.output.dense.weight"))
         rename_keys.append((f"blocks.{i}.attn.proj.bias", f"encoder.layer.{i}.attention.output.dense.bias"))
@@ -120,7 +120,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path):
+def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
     """
     Copy/paste/tweak model's weights to our DINOv2 structure.
     """
@@ -188,6 +188,18 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path):
         # print(f"Saving image processor to {pytorch_dump_folder_path}")
         # processor.save_pretrained(pytorch_dump_folder_path)
 
+    if push_to_hub:
+        model_name_to_hf_name = {
+            "dinov2_vits14": "dinov2-small",
+            "dinov2_vitb14": "dinov2-base",
+            "dinov2_vitl14": "dinov2-large",
+            "dinov2_vitg14": "dinov2-giant",
+        }
+
+        name = model_name_to_hf_name[model_name]
+        model.push_to_hub(f"nielsr/{name}")
+        # processor.push_to_hub(f"nielsr/{name}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -202,6 +214,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+    )
 
     args = parser.parse_args()
-    convert_dinov2_checkpoint(args.model_name, args.pytorch_dump_folder_path)
+    convert_dinov2_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)

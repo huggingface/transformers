@@ -56,7 +56,6 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("deta", "DetaImageProcessor"),
         ("detr", "DetrImageProcessor"),
         ("dinat", "ViTImageProcessor"),
-        ("dinov2", "Dinov2ImageProcessor"),
         ("donut-swin", "DonutImageProcessor"),
         ("dpt", "DPTImageProcessor"),
         ("efficientformer", "EfficientFormerImageProcessor"),

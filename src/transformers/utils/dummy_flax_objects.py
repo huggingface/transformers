@@ -1157,27 +1157,6 @@ class FlaxViTPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
-class FlaxDinov2ForImageClassification(metaclass=DummyObject):
-    _backends = ["flax"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
-class FlaxDinov2Model(metaclass=DummyObject):
-    _backends = ["flax"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
-class FlaxDinov2PreTrainedModel(metaclass=DummyObject):
-    _backends = ["flax"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
 class FlaxWav2Vec2ForCTC(metaclass=DummyObject):
     _backends = ["flax"]
 

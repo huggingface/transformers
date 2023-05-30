@@ -24,6 +24,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -286,10 +287,10 @@ class Dinov2LayerScale(nn.Module):
     ) -> None:
         super().__init__()
         self.inplace = inplace
-        self.gamma = nn.Parameter(init_values * torch.ones(dim))
+        self.lambda1 = nn.Parameter(init_values * torch.ones(dim))
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        return hidden_state.mul_(self.gamma) if self.inplace else hidden_state * self.gamma
+        return hidden_state.mul_(self.lambda1) if self.inplace else hidden_state * self.lambda1
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -331,6 +332,7 @@ class Dinov2DropPath:
 class Dinov2MLP(nn.Module):
     def __init__(
         self,
+        config,
         in_features: int,
         hidden_features: Optional[int] = None,
         out_features: Optional[int] = None,
@@ -341,13 +343,16 @@ class Dinov2MLP(nn.Module):
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
         self.fc1 = nn.Linear(in_features, hidden_features, bias=bias)
-        self.act = nn.GELU()
+        if isinstance(config.hidden_act, str):
+            self.activation = ACT2FN[config.hidden_act]
+        else:
+            self.activation = config.hidden_act
         self.fc2 = nn.Linear(hidden_features, out_features, bias=bias)
         self.drop = nn.Dropout(drop)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.fc1(hidden_state)
-        hidden_state = self.act(hidden_state)
+        hidden_state = self.activation(hidden_state)
         hidden_state = self.drop(hidden_state)
         hidden_state = self.fc2(hidden_state)
         hidden_state = self.drop(hidden_state)
@@ -367,7 +372,7 @@ class Dinov2Layer(nn.Module):
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         mlp_hidden_size = int(config.hidden_size * config.mlp_ratio)
-        self.mlp = Dinov2MLP(config.hidden_size, mlp_hidden_size)
+        self.mlp = Dinov2MLP(config, config.hidden_size, mlp_hidden_size)
         self.layer_scale2 = Dinov2LayerScale(config.hidden_size, init_values=config.layerscale_value)
         self.drop_path2 = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
@@ -461,7 +466,6 @@ class Dinov2Encoder(nn.Module):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->Dinov2,vit->dinov2
 class Dinov2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -472,7 +476,6 @@ class Dinov2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "dinov2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = []
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""

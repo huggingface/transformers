@@ -322,7 +322,7 @@ Flax), PyTorch, and/or TensorFlow.
 |             DETA              |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |             DETR              |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |             DiNAT             |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
-|            DINOv2             |       ❌       |       ❌       |       ✅        |         ✅         |      ✅      |
+|            DINOv2             |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |          DistilBERT           |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
 |           DonutSwin           |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |              DPR              |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |

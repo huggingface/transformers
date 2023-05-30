@@ -52,7 +52,6 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("deit", "DeiTFeatureExtractor"),
         ("detr", "DetrFeatureExtractor"),
         ("dinat", "ViTFeatureExtractor"),
-        ("dinov2", "Dinov2FeatureExtractor"),
         ("donut-swin", "DonutFeatureExtractor"),
         ("dpt", "DPTFeatureExtractor"),
         ("encodec", "EncodecFeatureExtractor"),
