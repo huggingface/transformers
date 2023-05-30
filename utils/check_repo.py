@@ -73,6 +73,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TimeSeriesTransformerDecoder",  # Building part of bigger (tested) model.
     "InformerEncoder",  # Building part of bigger (tested) model.
     "InformerDecoder",  # Building part of bigger (tested) model.
+    "AutoformerEncoder",  # Building part of bigger (tested) model.
+    "AutoformerDecoder",  # Building part of bigger (tested) model.
     "JukeboxVQVAE",  # Building part of bigger (tested) model.
     "JukeboxPrior",  # Building part of bigger (tested) model.
     "DeformableDetrEncoder",  # Building part of bigger (tested) model.
@@ -223,6 +225,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "GPTSanJapaneseModel",
     "TimeSeriesTransformerForPrediction",
     "InformerForPrediction",
+    "AutoformerForPrediction",
     "JukeboxVQVAE",
     "JukeboxPrior",
     "PegasusXEncoder",
