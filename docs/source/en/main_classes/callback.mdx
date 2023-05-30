@@ -39,6 +39,7 @@ By default a [`Trainer`] will use the following callbacks:
   installed.
 - [`~integrations.ClearMLCallback`] if [clearml](https://github.com/allegroai/clearml) is installed.
 - [`~integrations.DagsHubCallback`] if [dagshub](https://dagshub.com/) is installed.
+- [`~integrations.FlyteCallback`] if [flyte](https://flyte.org/) is installed.
 
 The main class that implements callbacks is [`TrainerCallback`]. It gets the
 [`TrainingArguments`] used to instantiate the [`Trainer`], can access that
@@ -78,6 +79,8 @@ Here is the list of the available [`TrainerCallback`] in the library:
 [[autodoc]] integrations.ClearMLCallback
 
 [[autodoc]] integrations.DagsHubCallback
+
+[[autodoc]] integrations.FlyteCallback
 
 ## TrainerCallback
 
