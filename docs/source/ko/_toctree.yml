@@ -97,8 +97,8 @@
       title: (번역중) Notebooks with examples
     - local: in_translation
       title: (번역중) Community resources
-    - local: in_translation
-      title: (번역중) Troubleshoot
+    - local: troubleshooting
+      title: 문제 해결
   title: (번역중) 개발자 가이드
 - sections:
     - local: in_translation
