@@ -2727,14 +2727,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     raise ValueError(
                         "You are using `device_map='auto'` on a 4bit loaded version of the model. To automatically compute"
                         " the appropriate device map, you should upgrade your `accelerate` library,"
-                        "`pip install --upgrade accelerare` or install it from source to support fp4 auto device map"
+                        "`pip install --upgrade accelerate` or install it from source to support fp4 auto device map"
                         "calculation. You may encounter unexpected behavior, or pass your own device map"
                     )
             elif load_in_8bit:
                 target_dtype = torch.int8
 
             if model._no_split_modules is None:
-                raise ValueError(f"{model.__class__.__name__} does not support `device_map='{device_map}'` yet.")
+                raise ValueError(
+                    f"{model.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model"
+                    "class needs to implement the `_no_split_modules` attribute."
+                )
             no_split_modules = model._no_split_modules
             if device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
                 raise ValueError(

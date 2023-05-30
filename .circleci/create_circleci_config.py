@@ -342,7 +342,6 @@ examples_torch_job = CircleCIJob(
         "pip install .[sklearn,torch,sentencepiece,testing,torch-speech]",
         "pip install -r examples/pytorch/_tests_requirements.txt",
     ],
-    tests_to_run="./examples/pytorch/",
 )
 
 
@@ -355,7 +354,6 @@ examples_tensorflow_job = CircleCIJob(
         "pip install .[sklearn,tensorflow,sentencepiece,testing]",
         "pip install -r examples/tensorflow/_tests_requirements.txt",
     ],
-    tests_to_run="./examples/tensorflow/",
 )
 
 
@@ -367,7 +365,6 @@ examples_flax_job = CircleCIJob(
         "pip install .[flax,testing,sentencepiece]",
         "pip install -r examples/flax/_tests_requirements.txt",
     ],
-    tests_to_run="./examples/flax/",
 )
 
 
@@ -551,7 +548,17 @@ def create_circleci_config(folder=None):
 
     example_file = os.path.join(folder, "examples_test_list.txt")
     if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
-        jobs.extend(EXAMPLES_TESTS)
+        with open(example_file, "r", encoding="utf-8") as f:
+            example_tests = f.read().split(" ")
+        for job in EXAMPLES_TESTS:
+            framework = job.name.replace("examples_", "").replace("torch", "pytorch")
+            if example_tests == "all":
+                job.tests_to_run = [f"examples/{framework}"]
+            else:
+                job.tests_to_run = [f for f in example_tests if f.startswith(f"examples/{framework}")]
+            
+            if len(job.tests_to_run) > 0:
+                jobs.append(job)
 
     doctest_file = os.path.join(folder, "doctest_list.txt")
     if os.path.exists(doctest_file):

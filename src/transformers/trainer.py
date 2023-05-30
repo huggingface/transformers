@@ -1704,6 +1704,7 @@ class Trainer:
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
     ):
         self._train_batch_size = batch_size
+        logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
 
@@ -1811,7 +1812,7 @@ class Trainer:
         logger.info("***** Running training *****")
         logger.info(f"  Num examples = {num_examples:,}")
         logger.info(f"  Num Epochs = {num_train_epochs:,}")
-        logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size:,}")
+        logger.info(f"  Instantaneous batch size per device = {self._train_batch_size:,}")
         logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size:,}")
         logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
         logger.info(f"  Total optimization steps = {max_steps:,}")
@@ -3699,9 +3700,10 @@ class Trainer:
                 commit_message = f"Training in progress, step {self.state.global_step}"
             else:
                 commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
-            _, self.push_in_progress = self.repo.push_to_hub(
-                commit_message=commit_message, blocking=False, auto_lfs_prune=True
-            )
+            push_work = self.repo.push_to_hub(commit_message=commit_message, blocking=False, auto_lfs_prune=True)
+            # Return type of `Repository.push_to_hub` is either None or a tuple.
+            if push_work is not None:
+                self.push_in_progress = push_work[1]
         except Exception as e:
             logger.error(f"Error when pushing to hub: {e}")
         finally:
