@@ -15,11 +15,13 @@
 import os
 from shutil import copyfile
 from typing import Optional, Tuple
+
 from tokenizers import processors
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
 from ...utils.versions import require_version
+
 
 require_version("tokenizers>=0.13.3")
 
@@ -100,7 +102,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         self._add_bos_token = add_bos_token
         self._add_eos_token = add_eos_token
         self._tokenizer.post_processor = self.update_post_processor()
-        
 
         self.vocab_file = vocab_file
         self.can_save_slow_tokenizer = False if not self.vocab_file else True
@@ -120,26 +121,28 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             special_tokens.append((bos, bos_token_id))
         if self.add_eos_token:
             special_tokens.append((eos, eos_token_id))
-        self._tokenizer.post_processor = processors.TemplateProcessing(single=single, pair=pair, special_tokens=special_tokens)
-    
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=single, pair=pair, special_tokens=special_tokens
+        )
+
     @property
     def add_eos_token(self):
         return self._add_eos_token
-    
+
     @property
     def add_bos_token(self):
         return self._add_bos_token
-    
+
     @add_eos_token.setter
     def add_eos_token(self, value):
         self._add_eos_token = value
         self.update_post_processor()
-    
+
     @add_bos_token.setter
     def add_bos_token(self, value):
         self._add_bos_token = value
         self.update_post_processor()
-        
+
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
