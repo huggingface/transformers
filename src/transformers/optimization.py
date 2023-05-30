@@ -41,9 +41,9 @@ def get_constant_lambda(_=None):
             Placeholder to argument, used to consistency with args in LambdaLR
     
     Return:
-        1 : int - constanct lambda for constant scheduler
+        1 : int - constant lambda for constant scheduler
     """
-    
+
     return 1
 
 
