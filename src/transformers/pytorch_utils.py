@@ -277,3 +277,10 @@ def meshgrid(
         if indexing != "ij":
             raise ValueError('torch.meshgrid only supports `indexing="ij"` for torch<1.10.')
         return torch.meshgrid(*tensors)
+
+def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
+    """
+    Unique identifier to a tensor storage. This identifier is guaranteed to be unique and constant for this tensor's storage during its lifetime. Two tensor storages with non-overlapping lifetimes may have the same id.
+    """
+    storage = tensor.storage()
+    return tensor.device, storage.data_ptr(), storage.nbytes()

@@ -43,7 +43,7 @@ from .pytorch_utils import (  # noqa: F401
     find_pruneable_heads_and_indices,
     prune_conv1d_layer,
     prune_layer,
-    prune_linear_layer,
+    prune_linear_layer, id_tensor_storage,
 )
 from .utils import (
     DUMMY_INPUTS,
@@ -304,43 +304,31 @@ def shard_checkpoint(
     """
     max_shard_size = convert_file_size_to_int(max_shard_size)
 
-    sharded_state_dicts = []
-    current_block = {}
-    current_block_size = 0
+    sharded_state_dicts = [{}]
+    last_block_size = 0
     total_size = 0
+    storage_id_to_block = {}
 
-    unique_storage_to_save = {
-        (weight.storage().data_ptr(), weight.storage().nbytes()): key for key, weight in state_dict.items()
-    }
-    key_to_block = {}
+    for key, weight in state_dict.items():
+        storage_id = id_tensor_storage(weight)
 
-    for key in unique_storage_to_save.values():
-        weight = state_dict[key]
+        # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
+        if storage_id in storage_id_to_block:
+            block_id = storage_id_to_block[storage_id]
+            sharded_state_dicts[block_id][key] = weight
+            continue
+
         weight_size = weight.numel() * dtype_byte_size(weight.dtype)
 
         # If this weight is going to tip up over the maximal size, we split.
-        if current_block_size + weight_size > max_shard_size:
-            sharded_state_dicts.append(current_block)
-            current_block = {}
-            current_block_size = 0
+        if last_block_size + weight_size > max_shard_size:
+            sharded_state_dicts.append({})
+            last_block_size = 0
 
-        current_block[key] = weight
-        current_block_size += weight_size
+        sharded_state_dicts[-1][key] = weight
+        last_block_size += weight_size
         total_size += weight_size
-        key_to_block[key] = len(sharded_state_dicts)
-
-    # Add the last block
-    sharded_state_dicts.append(current_block)
-
-    # Handle tensor that share same underlying storage as other tensors within `state_dict`
-    for key, weight in state_dict.items():
-        storage = weight.storage()
-        unique_storage_key = unique_storage_to_save[(storage.data_ptr(), storage.nbytes())]
-        if key == unique_storage_key:
-            continue
-        block_id = key_to_block[unique_storage_key]
-        # Add a tensor that share underlying storage with another tensor within the block
-        sharded_state_dicts[block_id][key] = weight
+        storage_id_to_block[storage_id] = len(sharded_state_dicts) - 1
 
     # If we only have one shard, we return it
     if len(sharded_state_dicts) == 1:
