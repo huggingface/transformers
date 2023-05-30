@@ -595,7 +595,7 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
             def linear(w, b, x):
                 out = tf.matmul(x, w, transpose_b=True)
                 if b is not None:
-                    out += b
+                    out += tf.transpose(b)
                 return out
 
             ws = tf.split(
