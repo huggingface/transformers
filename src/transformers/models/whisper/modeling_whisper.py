@@ -16,7 +16,6 @@
 
 import math
 import random
-import warnings
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -227,7 +226,7 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-def median_filter(inputs: torch.Tensor, filter_width: int) -> torch.Tensor:
+def _median_filter(inputs: torch.Tensor, filter_width: int) -> torch.Tensor:
     """
     Applies a median filter of width `filter_width` along the last dimension of the input.
 
@@ -248,9 +247,10 @@ def median_filter(inputs: torch.Tensor, filter_width: int) -> torch.Tensor:
     return result
 
 
-def dtw(x: np.ndarray):
+def _dynamic_time_warping(x: np.ndarray):
     """
-    Dynamic time warping. Used to generate token-level timestamps.
+    Measures similarity between two temporal sequences: the input audio and the output tokens. Used to generate
+    token-level timestamps.
     """
     N, M = x.shape
     cost = np.ones((N + 1, M + 1), dtype=np.float32) * np.inf
@@ -292,7 +292,9 @@ def dtw(x: np.ndarray):
         elif trace[i, j] == 2:
             j -= 1
         else:
-            raise ValueError("Unexpected trace[i, j]")
+            raise RuntimeError(
+                f"Internal error in dynamic time warping. Unexpected trace[{i}, {j}]. Please file a bug report."
+            )
 
     text_indices = np.array(text_indices)[::-1]
     time_indices = np.array(time_indices)[::-1]
@@ -1743,6 +1745,14 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             kwargs["output_attentions"] = True
             kwargs["return_dict_in_generate"] = True
 
+        if return_token_timestamps:
+            if getattr(generation_config, "task", None) == "translate":
+                logger.warning("Token-level timestamps may not be reliable for task 'translate'.")
+            if not hasattr(self.config, "alignment_heads"):
+                logger.warning(
+                    "Model configuration has no `alignment_heads`, token-level timestamps not available. See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the model config."
+                )
+
         outputs = super().generate(
             inputs,
             generation_config,
@@ -1753,14 +1763,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             **kwargs,
         )
 
-        if return_token_timestamps:
-            if getattr(generation_config, "task", None) == "translate":
-                warnings.warn("Token-level timestamps may not be reliable for task 'translate'.")
-
-            if hasattr(self.config, "alignment_heads"):
-                outputs["token_timestamps"] = self._extract_token_timestamps(outputs)
-            else:
-                warnings.warn("Model configuration has no `alignment_heads`, token-level timestamps not available.")
+        if return_token_timestamps and hasattr(self.config, "alignment_heads"):
+            outputs["token_timestamps"] = self._extract_token_timestamps(outputs)
 
         return outputs
 
@@ -1814,7 +1818,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         # Normalize and smoothen the weights.
         std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
         weights = (weights - mean) / std
-        weights = median_filter(weights, 7)
+        weights = _median_filter(weights, 7)
 
         # Average the different cross-attention heads.
         matrix = weights.mean(dim=1)
@@ -1823,7 +1827,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         # Perform dynamic time warping on each element of the batch.
         for batch_idx in range(timestamps.shape[0]):
-            text_indices, time_indices = dtw(-matrix[batch_idx].double().cpu().numpy())
+            text_indices, time_indices = _dynamic_time_warping(-matrix[batch_idx].double().cpu().numpy())
             jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
             jump_times = time_indices[jumps] * time_precision
             timestamps[batch_idx, 1:] = torch.tensor(jump_times)

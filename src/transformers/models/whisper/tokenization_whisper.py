@@ -915,7 +915,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                     if i + 1 < len(token_timestamps):
                         end_time = round(token_timestamps[i + 1] + time_offset, 2)
                     else:
-                        end_time = np.inf  # should never happen
+                        end_time = None  # should never happen
                     current_token_timestamps.append((start_time, end_time))
 
         if "stride" in output:

@@ -172,7 +172,7 @@ class WhisperConfig(PretrainedConfig):
             step, irrespectively of `mask_feature_prob`. Only relevant if
             `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`.
         alignment_heads (`List[List[int]]`, *optional*):
-            List of [layer index, head index] tuples selecting the cross-attention heads that are highly correlated to
+            List of [layer index, head index] pairs selecting the cross-attention heads that are highly correlated to
             word-level timing, i.e. the alignment between audio and text tokens.
 
     Example:
