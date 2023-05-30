@@ -309,7 +309,9 @@ def shard_checkpoint(
     current_block_size = 0
     total_size = 0
 
-    unique_storage_to_save = {(weight.storage().data_ptr(), weight.storage().nbytes()): key for key, weight in state_dict.items()}
+    unique_storage_to_save = {
+        (weight.storage().data_ptr(), weight.storage().nbytes()): key for key, weight in state_dict.items()
+    }
     key_to_block = {}
 
     for key in unique_storage_to_save.values():
