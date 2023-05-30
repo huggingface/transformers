@@ -309,7 +309,7 @@ def shard_checkpoint(
     current_block_size = 0
     total_size = 0
 
-    unique_storage_to_save = {weight.storage().data_ptr(): key for key, weight in state_dict.items()}
+    unique_storage_to_save = {(weight.storage().data_ptr(), weight.storage().nbytes()): key for key, weight in state_dict.items()}
     key_to_block = {}
 
     for key in unique_storage_to_save.values():
@@ -332,7 +332,8 @@ def shard_checkpoint(
 
     # Handle tensor that share same underlying storage as other tensors within `state_dict`
     for key, weight in state_dict.items():
-        unique_storage_key = unique_storage_to_save[weight.storage().data_ptr()]
+        storage = weight.storage()
+        unique_storage_key = unique_storage_to_save[(storage.data_ptr(), storage.nbytes())]
         if key == unique_storage_key:
             continue
         block_id = key_to_block[unique_storage_key]
