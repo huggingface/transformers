@@ -558,6 +558,7 @@ class TFSwiftFormerMainLayer(tf.keras.layers.Layer):
         self.patch_embed = TFSwiftFormerPatchEmbedding(config, name="patch_embed")
         self.encoder = TFSwiftFormerEncoder(config, name="encoder")
 
+    @unpack_inputs
     def call(
         self,
         pixel_values: Optional[tf.Tensor] = None,
@@ -609,7 +610,6 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
         output_type=TFBaseModelOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         pixel_values: Optional[tf.Tensor] = None,
@@ -673,6 +673,7 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         self.head = tf.keras.layers.Dense(self.num_labels) if self.num_labels > 0 else tf.keras.layers.Identity()
         self.dist_head = tf.keras.layers.Dense(self.num_labels) if self.num_labels > 0 else tf.keras.layers.Identity()
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(SWIFTFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
@@ -680,7 +681,6 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
-    @unpack_inputs
     def call(
         self,
         pixel_values: Optional[tf.Tensor] = None,
@@ -712,7 +712,7 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         # FIXME: review this conversion
         sequence_output = tf.transpose(sequence_output, perm=[0, 3, 1, 2])
         _, c, h, w = sequence_output.shape
-        sequence_output = tf.reshape(sequence_output, [-1, c, h*w])
+        sequence_output = tf.reshape(sequence_output, [-1, c, h * w])
         sequence_output = tf.reduce_mean(sequence_output, axis=-1)
         cls_out = self.head(sequence_output)
         distillation_out = self.dist_head(sequence_output)
