@@ -152,8 +152,8 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path):
     # load HuggingFace model
     model = Dinov2Model(config, add_pooling_layer=False).eval()
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    print("Missing keys:", missing_keys)
-    print("Unexpected keys:", unexpected_keys)
+    assert len(missing_keys) == 0
+    assert unexpected_keys == ["mask_token"]
 
     # Check outputs on an image, prepared by ViTImageProcessor
     # processor = ViTImageProcessor()
@@ -181,11 +181,13 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path):
         outputs = model(pixel_values)
 
     last_hidden_state = outputs.last_hidden_state
-    print("Shape of final hidden states:", last_hidden_state.shape)
-    print("First values of final hidden states:", last_hidden_state[0,:3,:3])
 
-    # TODO assert values
-    # assert torch.allclose(final_hidden_state_cls_token, outputs.last_hidden_state[:, 0, :], atol=1e-1)
+    # assert values
+    expected_slice = torch.tensor([[-2.1849, -0.3433,  1.0913],
+        [-3.2696, -0.7386, -0.8044],
+        [-3.0603,  1.2498, -0.7685]])
+    assert torch.allclose(last_hidden_state[0,:3,:3], expected_slice, atol=1e-4)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
