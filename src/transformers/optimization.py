@@ -32,6 +32,21 @@ from .utils.versions import require_version
 logger = logging.get_logger(__name__)
 
 
+def get_constant_lambda(_=None):
+    """
+    Return 1, independent from args.
+
+    Args:
+        _ ( *optional*, defaults to None):
+            Placeholder to argument, used to consistency with args in LambdaLR
+    
+    Return:
+        1 : int - constanct lambda for constant scheduler
+    """
+    
+    return 1
+
+
 def get_constant_schedule(optimizer: Optimizer, last_epoch: int = -1):
     """
     Create a schedule with a constant learning rate, using the learning rate set in optimizer.
@@ -46,7 +61,7 @@ def get_constant_schedule(optimizer: Optimizer, last_epoch: int = -1):
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
-    return LambdaLR(optimizer, lambda _: 1, last_epoch=last_epoch)
+    return LambdaLR(optimizer, get_constant_lambda, last_epoch=last_epoch)
 
 
 def get_reduce_on_plateau_schedule(optimizer: Optimizer):
