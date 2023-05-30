@@ -1505,7 +1505,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         text = processor.decode(output[0])
 
         self.assertTrue(prompt in text)
-        self.assertTrue(all([token in text for token in expected_tokens]))
+        self.assertTrue(all(token in text for token in expected_tokens))
 
     @slow
     def test_generate_with_prompt_ids_and_no_non_prompt_forced_decoder_ids(self):

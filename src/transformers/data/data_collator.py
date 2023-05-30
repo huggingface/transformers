@@ -37,8 +37,7 @@ DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str
 
 def pad_without_pad_fast_tokenizer_warning(tokenizer: PreTrainedTokenizerBase, *pad_args, **pad_kwargs):
     """
-    Pads without triggering the warning about how using the pad function
-    is sub-optimal when using a fast tokenizer.
+    Pads without triggering the warning about how using the pad function is sub-optimal when using a fast tokenizer.
     """
 
     # Save the state of the warning, then disable it
