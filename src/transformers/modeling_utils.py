@@ -2734,7 +2734,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 target_dtype = torch.int8
 
             if model._no_split_modules is None:
-                raise ValueError(f"{model.__class__.__name__} does not support `device_map='{device_map}'` yet.")
+                raise ValueError(
+                    f"{model.__class__.__name__} does not have a `_no_split_modules` attribute, thus it does not support `device_map='{device_map}'` yet. If you are using a model on the hub, we recommend to open a pull request to make sure they implement the `_no_split_modules` attribute."
+                )
             no_split_modules = model._no_split_modules
             if device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
                 raise ValueError(
