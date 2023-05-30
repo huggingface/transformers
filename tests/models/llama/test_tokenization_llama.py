@@ -315,6 +315,36 @@ class LlamaIntegrationTest(unittest.TestCase):
             },
         )
 
+    def test_fast_special_tokens(self):
+        slow_tokenizer = self.tokenizer
+        fast_tokenzier = self.rust_tokenizer
+        slow = slow_tokenizer.encode("A sample test", add_special_tokens=True)
+        assert slow == [1, 319, 4559, 1243]
+
+        fast_tokenzier.add_eos_token = False
+        fast = fast_tokenzier.encode("A sample test", add_special_tokens=True)
+        assert fast == [1, 319, 4559, 1243]
+
+        fast_tokenzier.add_eos_token = True
+        fast = fast_tokenzier.encode("A sample test", add_special_tokens=True)
+        assert fast == [1, 319, 4559, 1243, 2]
+
+        slow_tokenizer.add_eos_token = True
+        slow = slow_tokenizer.encode("A sample test", add_special_tokens=True)
+        assert slow == [1, 319, 4559, 1243, 2]
+
+        fast_tokenzier = LlamaTokenizerFast.from_pretrained(
+            "hf-internal-testing/llama-tokenizer", add_eos_token=True, add_bos_token=False
+        )
+        fast = fast_tokenzier.encode("A sample test", add_special_tokens=True)
+        assert fast == [319, 4559, 1243, 2]
+
+        slow_tokenzier = LlamaTokenizer.from_pretrained(
+            "hf-internal-testing/llama-tokenizer", add_eos_token=True, add_bos_token=False
+        )
+        slow = slow_tokenzier.encode("A sample test", add_special_tokens=True)
+        assert slow == [319, 4559, 1243, 2]
+
     @slow
     def test_conversion(self):
         # This is excruciatingly slow since it has to recreate the entire merge
