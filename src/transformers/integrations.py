@@ -1552,10 +1552,10 @@ class FlyteCallback(TrainerCallback):
     NOTE: This callback only works within a Flyte task.
 
     Args:
-        save_log_history (bool, optional, defaults to `True`):
+        save_log_history (`bool`, *optional*, defaults to `True`):
             When set to True, the training logs are saved as a Flyte Deck.
 
-        sync_checkpoints (bool, optional, defaults to `True`):
+        sync_checkpoints (`bool`, *optional*, defaults to `True`):
             When set to True, checkpoints are synced with Flyte and can be used to resume training in the case of an
             interruption.
 
