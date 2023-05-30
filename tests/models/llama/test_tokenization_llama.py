@@ -344,10 +344,9 @@ class LlamaIntegrationTest(unittest.TestCase):
         )
         slow = slow_tokenzier.encode("A sample test", add_special_tokens=True)
         assert slow == [319, 4559, 1243, 2]
-        
+
         self.tokenizer.add_eos_token = False
         self.rust_tokenizer.add_eos_token = False
-        
 
     @slow
     def test_conversion(self):
