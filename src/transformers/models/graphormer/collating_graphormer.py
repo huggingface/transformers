@@ -129,6 +129,6 @@ class GraphormerDataCollator:
             else:  # binary classification
                 batch["labels"] = torch.from_numpy(np.concatenate([i["labels"] for i in features]))
         else:  # multi task classification, left to float to keep the NaNs
-            batch["labels"] = torch.from_numpy(np.stack([i["labels"] for i in features], dim=0))
+            batch["labels"] = torch.from_numpy(np.stack([i["labels"] for i in features], axis=0))
 
         return batch
