@@ -18,7 +18,10 @@ import torch
 from packaging import version
 from torch import nn
 
+from . import is_safetensors_available
 from .utils import logging
+
+from safetensors.torch import storage_ptr, storage_size
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
@@ -281,8 +284,11 @@ def meshgrid(
 
 def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
     """
-    Unique identifier to a tensor storage. This identifier is guaranteed to be unique and constant for this tensor's
+    Unique identifier to a tensor storage.
+    Multiple different tensors can share the same underlying storage. For example, "meta" tensors all share the same storage, and thus their identifier will all be equal.
+    This identifier is guaranteed to be unique and constant for this tensor's
     storage during its lifetime. Two tensor storages with non-overlapping lifetimes may have the same id.
+
+    Warning
     """
-    storage = tensor.storage()
-    return tensor.device, storage.data_ptr(), storage.nbytes()
+    return tensor.device, storage_ptr(tensor), storage_size(tensor)
