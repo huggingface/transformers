@@ -384,13 +384,27 @@ class Dinov2Layer(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        print_values = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        
+        if print_values:
+            print("Hidden states before first layernorm:", hidden_states[0,:3,:3])
+            print("Mean of hidden states before first layernorm:", hidden_states.mean())
+
+        if print_values:
+            print("Hidden states after first layernorm:", self.norm1(hidden_states)[0,:3,:3])
+            print("Mean of hidden states before first layernorm:", self.norm1(hidden_states).mean())
+
         self_attention_outputs = self.attention(
             self.norm1(hidden_states),  # in Dinov2, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
+
+        if print_values:
+            print("Hidden states after attention:", attention_output[0,:3,:3])
+
         attention_output = self.layer_scale1(attention_output)
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
@@ -435,6 +449,9 @@ class Dinov2Encoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
+            if i == 0:
+                print("Hidden states before first Transformer layer:", hidden_states[0,:3,:3])
+
             if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
@@ -449,9 +466,12 @@ class Dinov2Encoder(nn.Module):
                     layer_head_mask,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
+                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, i==0)
 
             hidden_states = layer_outputs[0]
+
+            if i == 0:
+                print("Hidden states after first Transformer layer:", hidden_states[0,:3,:3])
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)

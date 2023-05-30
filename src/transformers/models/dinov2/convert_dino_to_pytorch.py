@@ -81,7 +81,9 @@ def create_rename_keys(config):
         rename_keys.append((f"blocks.{i}.attn.proj.weight", f"encoder.layer.{i}.attention.output.dense.weight"))
         rename_keys.append((f"blocks.{i}.attn.proj.bias", f"encoder.layer.{i}.attention.output.dense.bias"))
 
-        # TODO attention qkv
+    # final layernorm
+    rename_keys.append(("norm.weight", "layernorm.weight"))
+    rename_keys.append(("norm.bias", "layernorm.bias"))
 
     # fmt: on
     return rename_keys
@@ -178,7 +180,9 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path):
     with torch.no_grad():
         outputs = model(pixel_values)
 
-    print("Outputs:", outputs.last_hidden_state.shape)
+    last_hidden_state = outputs.last_hidden_state
+    print("Shape of final hidden states:", last_hidden_state.shape)
+    print("First values of final hidden states:", last_hidden_state[0,:3,:3])
 
     # TODO assert values
     # assert torch.allclose(final_hidden_state_cls_token, outputs.last_hidden_state[:, 0, :], atol=1e-1)

@@ -61,7 +61,7 @@ class Dinov2Config(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
         image_size (`int`, *optional*, defaults to `224`):
             The size (resolution) of each image.
@@ -102,7 +102,7 @@ class Dinov2Config(PretrainedConfig):
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
+        layer_norm_eps=1e-6,
         image_size=224,
         patch_size=16,
         num_channels=3,
