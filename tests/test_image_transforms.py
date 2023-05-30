@@ -39,6 +39,7 @@ if is_vision_available():
         center_to_corners_format,
         convert_to_rgb,
         corners_to_center_format,
+        crop,
         get_resize_output_image_size,
         id_to_rgb,
         normalize,
@@ -305,6 +306,110 @@ class ImageTransformsTester(unittest.TestCase):
         cropped_image = center_crop(image, (300, 260), data_format="channels_last")
         self.assertIsInstance(cropped_image, np.ndarray)
         self.assertEqual(cropped_image.shape, (300, 260, 3))
+        self.assertTrue(np.allclose(cropped_image, expected_image))
+
+    def test_crop(self):
+        image = np.random.randint(0, 256, (3, 224, 224))
+
+        # Test that exception is raised if crop out of bounds and padding is not specified
+        with self.assertRaises(ValueError):
+            crop(image, 0, 0, 300, 300, data_format="channels_last")
+
+        # Crop box within the image bounds
+        # *-----------*
+        # |   +----+  |
+        # |   ||||||  |
+        # |   +----+  |
+        # |           |
+        # *-----------*
+        image = np.arange(3 * 10 * 10).reshape(3, 10, 10)
+        top, left, height, width = 2, 1, 4, 5
+        expected_image = image[:, top : top + height, left : left + width]
+        cropped_image = crop(image, top, left, height, width)
+        self.assertIsInstance(cropped_image, np.ndarray)
+        self.assertEqual(cropped_image.shape, (3, 4, 5))
+        self.assertTrue(np.allclose(cropped_image, expected_image))
+
+        # Crop box outside the image bounds
+        # +-----------+
+        # |00000000000|
+        # |000*----*00|
+        # |000||||||00|
+        # |000*----*00|
+        # +-----------+
+        image = np.arange(1 * 10 * 10).reshape(1, 10, 10)
+        top, left, height, width = -2, -3, 12, 10
+        expected_image = np.zeros((12, 10, 1))
+        expected_image[2:12, 3:, :] = image.transpose((1, 2, 0))[:10, :7, :]
+        cropped_image = crop(image, top, left, height, width, padding=0, data_format="channels_last")
+        self.assertIsInstance(cropped_image, np.ndarray)
+        self.assertEqual(cropped_image.shape, (12, 10, 1))
+        self.assertTrue(np.allclose(cropped_image, expected_image))
+
+        # Negative top, left indices with box outside of images
+        # +-----+
+        # |55555|
+        # |55555|
+        # +-----+
+        #         *----*
+        #         ||||||
+        #         *----*
+        top, left, height, width = -2, -2, 2, 2
+        image = np.arange(10 * 10 * 1).reshape(10, 10, 1)
+        expected_image = np.full((1, 2, 2), 5)
+        cropped_image = crop(image, top, left, height, width, padding=5)
+        self.assertIsInstance(cropped_image, np.ndarray)
+        self.assertEqual(cropped_image.shape, (2, 2, 1))
+        self.assertTrue(np.allclose(cropped_image, expected_image))
+
+        # Positive top, left indices with box outside of image
+        # *----*
+        # ||||||
+        # *----*
+        #     +-----+
+        #     |00000|
+        #     |00000|
+        #     +-----+
+        top, left, height, width = 12, 8, 4, 4
+        image = np.arange(3 * 10 * 10).reshape(3, 10, 10)
+        expected_image = np.zeros((3, 4, 4))
+        cropped_image = crop(image, top, left, height, width, padding=0)
+        self.assertIsInstance(cropped_image, np.ndarray)
+        self.assertEqual(cropped_image.shape, (3, 4, 4))
+        self.assertTrue(np.allclose(cropped_image, expected_image))
+
+        # Negative top, left with image in bottom right corner
+        # +--------+
+        # |00000000|
+        # |0000*---|-*
+        # |0000|||||||
+        # +--------+ |
+        #      |||||||
+        #      *-----*
+        top, left, height, width = -2, -2, 6, 6
+        image = np.arange(10 * 10 * 3).reshape(10, 10, 3)
+        expected_image = np.zeros((3, 6, 6))
+        expected_image[:, 2:, 2:] = image.transpose(2, 0, 1)[:, :4, :4]
+        cropped_image = crop(image, top, left, height, width, padding=0, data_format="channels_first")
+        self.assertIsInstance(cropped_image, np.ndarray)
+        self.assertEqual(cropped_image.shape, (3, 6, 6))
+        self.assertTrue(np.allclose(cropped_image, expected_image))
+
+        # Positive top, left with image in top left corner
+        # *-----*
+        # |||||||
+        # ||+--------+
+        # |||||||0000|
+        # +-|---*0000|
+        #   |00000000|
+        #   +--------+
+        top, left, height, width = 2, 0, 4, 5
+        image = np.arange(10 * 10 * 1).reshape(10, 10, 1)
+        expected_image = np.zeros((4, 5, 1))
+        expected_image[:4, :5, :] = image[2:6, :5, :]
+        cropped_image = crop(image, top, left, height, width, padding=0)
+        self.assertIsInstance(cropped_image, np.ndarray)
+        self.assertEqual(cropped_image.shape, (4, 5, 1))
         self.assertTrue(np.allclose(cropped_image, expected_image))
 
     def test_center_to_corners_format(self):

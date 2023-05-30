@@ -14,14 +14,14 @@
 # limitations under the License.
 """Image processor class for CLIP."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
-    center_crop,
     convert_to_rgb,
+    crop,
     get_resize_output_image_size,
     normalize,
     rescale,
@@ -34,6 +34,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    get_image_size,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -46,6 +47,46 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
+
+
+def center_crop(
+    image: np.ndarray,
+    size: Tuple[int, int],
+    data_format: Optional[Union[str, ChannelDimension]] = None,
+) -> np.ndarray:
+    """
+    Crops the `image` to the specified `size` using a center crop. Note that if the image is too small to be cropped to
+    the size given, it will be padded (so the returned result will always be of size `size`).
+
+    Args:
+        image (`np.ndarray`):
+            The image to crop.
+        size (`Tuple[int, int]`):
+            The target size for the cropped image.
+        data_format (`str` or `ChannelDimension`, *optional*):
+            The channel dimension format for the output image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            If unset, will use the inferred format of the input image.
+    Returns:
+        `np.ndarray`: The cropped image.
+    """
+    if not isinstance(size, Iterable) or len(size) != 2:
+        raise ValueError("size must have 2 elements representing the height and width of the output image")
+
+    orig_height, orig_width = get_image_size(image)
+    crop_height, crop_width = size
+    crop_height, crop_width = int(crop_height), int(crop_width)
+
+    # In case size is odd, (image_shape[0] + size[0]) // 2 won't give the proper result.
+    top = int((orig_height - crop_height + 1) * 0.5)
+    # In case size is odd, (image_shape[1] + size[1]) // 2 won't give the proper result.
+    left = int((orig_width - crop_width + 1) * 0.5)
+    new_image = crop(
+        image, top=top, left=left, height=crop_height, width=crop_width, padding=0, data_format=data_format
+    )
+
+    return new_image
 
 
 class CLIPImageProcessor(BaseImageProcessor):
