@@ -20,7 +20,9 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_dinov2": ["DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Dinov2Config", "Dinov2OnnxConfig"]}
+_import_structure = {
+    "configuration_dinov2": ["DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Dinov2Config", "Dinov2OnnxConfig"]
+}
 
 try:
     if not is_torch_available():

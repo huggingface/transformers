@@ -24,10 +24,9 @@ from pathlib import Path
 import requests
 import torch
 from PIL import Image
-
 from torchvision import transforms
 
-from transformers import Dinov2Config, ViTImageProcessor, Dinov2Model
+from transformers import Dinov2Config, Dinov2Model
 from transformers.utils import logging
 
 
@@ -101,9 +100,7 @@ def read_in_q_k_v(state_dict, config):
         in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
-            : config.hidden_size, :
-        ]
+        state_dict[f"encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: config.hidden_size, :]
         state_dict[f"encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
         state_dict[f"encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
             config.hidden_size : config.hidden_size * 2, :
@@ -111,15 +108,8 @@ def read_in_q_k_v(state_dict, config):
         state_dict[f"encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
             config.hidden_size : config.hidden_size * 2
         ]
-        state_dict[f"encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
-            -config.hidden_size :, :
-        ]
+        state_dict[f"encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-config.hidden_size :, :]
         state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
-
-
-def rename_key(dct, old, new):
-    val = dct.pop(old)
-    dct[new] = val
 
 
 # We will verify our results on an image of cute cats
@@ -139,7 +129,7 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path):
     config = get_dinov2_config(model_name)
 
     # load original model from torch hub
-    original_model = torch.hub.load('facebookresearch/dinov2', model_name)
+    original_model = torch.hub.load("facebookresearch/dinov2", model_name)
     original_model.eval()
 
     # load state_dict of original model, remove and rename some keys
@@ -161,19 +151,21 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path):
     # pixel_values = encoding["pixel_values"]
 
     # load image
-    url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
 
     # preprocess image
-    transformations = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],  # these are RGB mean+std values
-            std=[0.229, 0.224, 0.225]  # across a large photo dataset.
-        )
-    ])
+    transformations = transforms.Compose(
+        [
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],  # these are RGB mean+std values
+                std=[0.229, 0.224, 0.225],  # across a large photo dataset.
+            ),
+        ]
+    )
 
     pixel_values = transformations(image).unsqueeze(0)  # insert batch dimension
 
@@ -183,10 +175,10 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path):
     last_hidden_state = outputs.last_hidden_state
 
     # assert values
-    expected_slice = torch.tensor([[-2.1849, -0.3433,  1.0913],
-        [-3.2696, -0.7386, -0.8044],
-        [-3.0603,  1.2498, -0.7685]])
-    assert torch.allclose(last_hidden_state[0,:3,:3], expected_slice, atol=1e-4)
+    expected_slice = torch.tensor(
+        [[-2.1849, -0.3433, 1.0913], [-3.2696, -0.7386, -0.8044], [-3.0603, 1.2498, -0.7685]]
+    )
+    assert torch.allclose(last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:

@@ -24,12 +24,10 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
     ImageClassifierOutput,
-    MaskedImageModelingOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
@@ -38,7 +36,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
 from .configuration_dinov2 import Dinov2Config
 
@@ -61,7 +58,6 @@ DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/dinov2-base",
     # See all DINOv2 models at https://huggingface.co/models?filter=dinov2
 ]
-
 
 
 class Dinov2Embeddings(nn.Module):
@@ -111,7 +107,7 @@ class Dinov2Embeddings(nn.Module):
         assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
-    
+
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values)
@@ -122,9 +118,6 @@ class Dinov2Embeddings(nn.Module):
 
         # add positional encoding to each token
         embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-
-        print("Shape of embeddings:", embeddings.shape)
-        print("First values of embeddings:", embeddings[0,:3,:3])
 
         embeddings = self.dropout(embeddings)
 
@@ -321,7 +314,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 
 
 # Copied from transformers.models.beit.modeling_beit.BeitDropPath
-class Dinov2DropPath():
+class Dinov2DropPath:
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
@@ -333,7 +326,6 @@ class Dinov2DropPath():
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
-
 
 
 class Dinov2MLP(nn.Module):
@@ -378,32 +370,19 @@ class Dinov2Layer(nn.Module):
         self.mlp = Dinov2MLP(config.hidden_size, mlp_hidden_size)
         self.layer_scale2 = Dinov2LayerScale(config.hidden_size, init_values=config.layerscale_value)
         self.drop_path2 = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-        
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        print_values = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        
-        if print_values:
-            print("Hidden states before first layernorm:", hidden_states[0,:3,:3])
-            print("Mean of hidden states before first layernorm:", hidden_states.mean())
-
-        if print_values:
-            print("Hidden states after first layernorm:", self.norm1(hidden_states)[0,:3,:3])
-            print("Mean of hidden states before first layernorm:", self.norm1(hidden_states).mean())
-
         self_attention_outputs = self.attention(
             self.norm1(hidden_states),  # in Dinov2, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
-
-        if print_values:
-            print("Hidden states after attention:", attention_output[0,:3,:3])
 
         attention_output = self.layer_scale1(attention_output)
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -449,9 +428,6 @@ class Dinov2Encoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if i == 0:
-                print("Hidden states before first Transformer layer:", hidden_states[0,:3,:3])
-
             if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
@@ -466,12 +442,9 @@ class Dinov2Encoder(nn.Module):
                     layer_head_mask,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, i==0)
+                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
-
-            if i == 0:
-                print("Hidden states after first Transformer layer:", hidden_states[0,:3,:3])
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -675,8 +648,8 @@ class Dinov2Pooler(nn.Module):
 
 @add_start_docstrings(
     """
-    Dinov2 Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
+    Dinov2 Model transformer with an image classification head on top (a linear layer on top of the final hidden state
+    of the [CLS] token) e.g. for ImageNet.
     """,
     DINOV2_START_DOCSTRING,
 )

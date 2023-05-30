@@ -31,12 +31,11 @@ DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class Dinov2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Dinov2Model`]. It is used to instantiate an Dinov2
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Dinov2
+    This is the configuration class to store the configuration of a [`Dinov2Model`]. It is used to instantiate an
+    Dinov2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Dinov2
     [google/dinov2-base-patch16-224](https://huggingface.co/google/dinov2-base-patch16-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the

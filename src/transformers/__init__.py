@@ -286,6 +286,7 @@ _import_structure = {
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
     "models.dialogpt": [],
     "models.dinat": ["DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DinatConfig"],
+    "models.dinov2": ["DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Dinov2Config"],
     "models.distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig", "DistilBertTokenizer"],
     "models.dit": [],
     "models.donut": ["DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "DonutProcessor", "DonutSwinConfig"],
@@ -559,7 +560,6 @@ _import_structure = {
     "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
-    "models.dinov2": ["DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Dinov2Config"],
     "models.vit_hybrid": ["VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTHybridConfig"],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
@@ -1559,6 +1559,14 @@ else:
             "DinatForImageClassification",
             "DinatModel",
             "DinatPreTrainedModel",
+        ]
+    )
+    _import_structure["models.dinov2"].extend(
+        [
+            "DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Dinov2ForImageClassification",
+            "Dinov2Model",
+            "Dinov2PreTrainedModel",
         ]
     )
     _import_structure["models.distilbert"].extend(
@@ -2792,14 +2800,6 @@ else:
             "ViTPreTrainedModel",
         ]
     )
-    _import_structure["models.dinov2"].extend(
-        [
-            "DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Dinov2ForImageClassification",
-            "Dinov2Model",
-            "Dinov2PreTrainedModel",
-        ]
-    )
     _import_structure["models.vit_hybrid"].extend(
         [
             "VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3251,6 +3251,13 @@ else:
             "TFDeiTPreTrainedModel",
         ]
     )
+    _import_structure["models.dinov2"].extend(
+        [
+            "TFDinov2ForImageClassification",
+            "TFDinov2Model",
+            "TFDinov2PreTrainedModel",
+        ]
+    )
     _import_structure["models.distilbert"].extend(
         [
             "TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3635,13 +3642,6 @@ else:
             "TFViTPreTrainedModel",
         ]
     )
-    _import_structure["models.dinov2"].extend(
-        [
-            "TFDinov2ForImageClassification",
-            "TFDinov2Model",
-            "TFDinov2PreTrainedModel",
-        ]
-    )
     _import_structure["models.vit_mae"].extend(
         [
             "TFViTMAEForPreTraining",
@@ -3971,7 +3971,9 @@ else:
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
     _import_structure["models.vision_text_dual_encoder"].extend(["FlaxVisionTextDualEncoderModel"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
-    _import_structure["models.dinov2"].extend(["FlaxDinov2ForImageClassification", "FlaxDinov2Model", "FlaxDinov2PreTrainedModel"])
+    _import_structure["models.dinov2"].extend(
+        ["FlaxDinov2ForImageClassification", "FlaxDinov2Model", "FlaxDinov2PreTrainedModel"]
+    )
     _import_structure["models.wav2vec2"].extend(
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
     )
@@ -4235,6 +4237,7 @@ if TYPE_CHECKING:
     from .models.deta import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP, DetaConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DinatConfig
+    from .models.dinov2 import DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Dinov2Config
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
     from .models.donut import DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, DonutProcessor, DonutSwinConfig
     from .models.dpr import (
@@ -4481,7 +4484,6 @@ if TYPE_CHECKING:
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
-    from .models.dinov2 import DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Dinov2Config
     from .models.vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
@@ -5341,6 +5343,12 @@ if TYPE_CHECKING:
             DinatForImageClassification,
             DinatModel,
             DinatPreTrainedModel,
+        )
+        from .models.dinov2 import (
+            DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Dinov2ForImageClassification,
+            Dinov2Model,
+            Dinov2PreTrainedModel,
         )
         from .models.distilbert import (
             DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6342,12 +6350,6 @@ if TYPE_CHECKING:
             ViTModel,
             ViTPreTrainedModel,
         )
-        from .models.dinov2 import (
-            DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Dinov2ForImageClassification,
-            Dinov2Model,
-            Dinov2PreTrainedModel,
-        )
         from .models.vit_hybrid import (
             VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTHybridForImageClassification,
@@ -6728,6 +6730,7 @@ if TYPE_CHECKING:
             TFDeiTModel,
             TFDeiTPreTrainedModel,
         )
+        from .models.dinov2 import TFDinov2ForImageClassification, TFDinov2Model, TFDinov2PreTrainedModel
         from .models.distilbert import (
             TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDistilBertForMaskedLM,
@@ -7025,7 +7028,6 @@ if TYPE_CHECKING:
         from .models.vision_encoder_decoder import TFVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import TFVisionTextDualEncoderModel
         from .models.vit import TFViTForImageClassification, TFViTModel, TFViTPreTrainedModel
-        from .models.dinov2 import TFDinov2ForImageClassification, TFDinov2Model, TFDinov2PreTrainedModel
         from .models.vit_mae import TFViTMAEForPreTraining, TFViTMAEModel, TFViTMAEPreTrainedModel
         from .models.wav2vec2 import (
             TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7204,6 +7206,7 @@ if TYPE_CHECKING:
             FlaxCLIPVisionModel,
             FlaxCLIPVisionPreTrainedModel,
         )
+        from .models.dinov2 import FlaxDinov2ForImageClassification, FlaxDinov2Model, FlaxDinov2PreTrainedModel
         from .models.distilbert import (
             FlaxDistilBertForMaskedLM,
             FlaxDistilBertForMultipleChoice,
@@ -7276,7 +7279,6 @@ if TYPE_CHECKING:
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
-        from .models.dinov2 import FlaxDinov2ForImageClassification, FlaxDinov2Model, FlaxDinov2PreTrainedModel
         from .models.wav2vec2 import (
             FlaxWav2Vec2ForCTC,
             FlaxWav2Vec2ForPreTraining,
