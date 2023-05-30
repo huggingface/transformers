@@ -35,14 +35,12 @@ of PyTorch/TensorFlow tensors or NumPy arrays.
 DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str, Any]])
 
 
-def pad_without_pad_fast_tokenizer_warning(
-        tokenizer: PreTrainedTokenizerBase, *pad_args, **pad_kwargs
-    ):
-    """ 
-    Pads without triggering the warning about how using the pad function
-    is sub-optimal when using a fast tokenizer. 
+def pad_without_pad_fast_tokenizer_warning(tokenizer: PreTrainedTokenizerBase, *pad_args, **pad_kwargs):
     """
-    
+    Pads without triggering the warning about how using the pad function
+    is sub-optimal when using a fast tokenizer.
+    """
+
     # Save the state of the warning, then disable it
     warning_state = tokenizer.deprecation_warnings.get("Asking-to-pad-a-fast-tokenizer", False)
     tokenizer.deprecation_warnings["Asking-to-pad-a-fast-tokenizer"] = True
@@ -52,9 +50,9 @@ def pad_without_pad_fast_tokenizer_warning(
     finally:
         # Restore the state of the warning.
         tokenizer.deprecation_warnings["Asking-to-pad-a-fast-tokenizer"] = warning_state
-    
+
     return padded
-    
+
 
 class DataCollatorMixin:
     def __call__(self, features, return_tensors=None):
@@ -337,7 +335,7 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
-        
+
         if labels is None:
             return batch
 
@@ -366,7 +364,7 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
 
         label_name = "label" if "label" in features[0].keys() else "labels"
         labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
-        
+
         batch = pad_without_pad_fast_tokenizer_warning(
             self.tokenizer,
             features,
@@ -397,7 +395,7 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
     def numpy_call(self, features):
         label_name = "label" if "label" in features[0].keys() else "labels"
         labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
-        
+
         batch = pad_without_pad_fast_tokenizer_warning(
             self.tokenizer,
             features,
@@ -407,7 +405,7 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
             # Conversion to tensors will fail if we have labels as they are not of the same length yet.
             return_tensors="np" if labels is None else None,
         )
-        
+
         if labels is None:
             return batch
 
@@ -720,7 +718,9 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], Mapping):
-            batch = pad_without_pad_fast_tokenizer_warning(self.tokenizer, examples, return_tensors="tf", pad_to_multiple_of=self.pad_to_multiple_of)
+            batch = pad_without_pad_fast_tokenizer_warning(
+                self.tokenizer, examples, return_tensors="tf", pad_to_multiple_of=self.pad_to_multiple_of
+            )
         else:
             batch = {
                 "input_ids": _tf_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
@@ -757,7 +757,9 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], Mapping):
-            batch = pad_without_pad_fast_tokenizer_warning(self.tokenizer, examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of)
+            batch = pad_without_pad_fast_tokenizer_warning(
+                self.tokenizer, examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of
+            )
         else:
             batch = {
                 "input_ids": _torch_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
@@ -812,7 +814,9 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], Mapping):
-            batch = pad_without_pad_fast_tokenizer_warning(self.tokenizer, examples, return_tensors="np", pad_to_multiple_of=self.pad_to_multiple_of)
+            batch = pad_without_pad_fast_tokenizer_warning(
+                self.tokenizer, examples, return_tensors="np", pad_to_multiple_of=self.pad_to_multiple_of
+            )
         else:
             batch = {
                 "input_ids": _numpy_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
