@@ -389,7 +389,7 @@ class MobileViTV2Layer(nn.Module):
         attn_unit_dim: int,
         n_attn_blocks: int = 2,
         dilation: int = 1,
-        stride: Optional[int] = 2,
+        stride: int = 2,
     ) -> None:
         super().__init__()
         self.patch_width = config.patch_size
