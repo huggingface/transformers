@@ -257,7 +257,6 @@ class MobileViTV2LinearSelfAttention(nn.Module):
             use_activation=False,
         )
         self.embed_dim = embed_dim
-      
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # (batch_size, embed_dim, num_pixels_in_patch, num_patches) --> (batch_size, 1+2*embed_dim, num_pixels_in_patch, num_patches)
