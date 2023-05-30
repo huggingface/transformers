@@ -101,7 +101,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         )
         self._add_bos_token = add_bos_token
         self._add_eos_token = add_eos_token
-        self._tokenizer.post_processor = self.update_post_processor()
+        self.update_post_processor()
 
         self.vocab_file = vocab_file
         self.can_save_slow_tokenizer = False if not self.vocab_file else True
