@@ -284,53 +284,101 @@ class Dinov2Attention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->Dinov2
-class Dinov2Intermediate(nn.Module):
-    def __init__(self, config: Dinov2Config) -> None:
+class Dinov2LayerScale(nn.Module):
+    def __init__(
+        self,
+        dim: int,
+        init_values: Union[float, torch.Tensor] = 1e-5,
+        inplace: bool = False,
+    ) -> None:
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
+        self.inplace = inplace
+        self.gamma = nn.Parameter(init_values * torch.ones(dim))
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        return hidden_state.mul_(self.gamma) if self.inplace else hidden_state * self.gamma
+
+
+# Copied from transformers.models.beit.modeling_beit.drop_path
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+    """
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
+    """
+    if drop_prob == 0.0 or not training:
+        return input
+    keep_prob = 1 - drop_prob
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    random_tensor.floor_()  # binarize
+    output = input.div(keep_prob) * random_tensor
+    return output
+
+
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath
+class Dinov2DropPath():
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob: Optional[float] = None) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
+        return drop_path(hidden_states, self.drop_prob, self.training)
 
-        return hidden_states
+    def extra_repr(self) -> str:
+        return "p={}".format(self.drop_prob)
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->Dinov2
-class Dinov2Output(nn.Module):
-    def __init__(self, config: Dinov2Config) -> None:
+
+class Dinov2MLP(nn.Module):
+    def __init__(
+        self,
+        in_features: int,
+        hidden_features: Optional[int] = None,
+        out_features: Optional[int] = None,
+        drop: float = 0.0,
+        bias: bool = True,
+    ) -> None:
         super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        self.fc1 = nn.Linear(in_features, hidden_features, bias=bias)
+        self.act = nn.GELU()
+        self.fc2 = nn.Linear(hidden_features, out_features, bias=bias)
+        self.drop = nn.Dropout(drop)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.fc1(hidden_state)
+        hidden_state = self.act(hidden_state)
+        hidden_state = self.drop(hidden_state)
+        hidden_state = self.fc2(hidden_state)
+        hidden_state = self.drop(hidden_state)
+        return hidden_state
 
-        hidden_states = hidden_states + input_tensor
 
-        return hidden_states
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->Dinov2
 class Dinov2Layer(nn.Module):
-    """This corresponds to the Block class in the timm implementation."""
+    """This corresponds to the Block class in the original implementation."""
 
     def __init__(self, config: Dinov2Config) -> None:
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
-        self.attention = Dinov2Attention(config)
-        self.intermediate = Dinov2Intermediate(config)
-        self.output = Dinov2Output(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
+        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attention = Dinov2Attention(config)
+        self.layer_scale1 = Dinov2LayerScale(config.hidden_size, init_values=config.layerscale_value)
+        self.drop_path1 = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+
+        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        mlp_hidden_size = int(config.hidden_size * config.mlp_ratio)
+        self.mlp = Dinov2MLP(config.hidden_size, mlp_hidden_size)
+        self.layer_scale2 = Dinov2LayerScale(config.hidden_size, init_values=config.layerscale_value)
+        self.drop_path2 = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -338,22 +386,24 @@ class Dinov2Layer(nn.Module):
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in Dinov2, layernorm is applied before self-attention
+            self.norm1(hidden_states),  # in Dinov2, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
+        attention_output = self.layer_scale1(attention_output)
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
         hidden_states = attention_output + hidden_states
 
         # in Dinov2, layernorm is also applied after self-attention
-        layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.intermediate(layer_output)
+        layer_output = self.norm2(hidden_states)
+        layer_output = self.mlp(layer_output)
+        layer_output = self.layer_scale2(layer_output)
 
-        # second residual connection is done here
-        layer_output = self.output(layer_output, hidden_states)
+        # second residual connection
+        layer_output = layer_output + hidden_states
 
         outputs = (layer_output,) + outputs
 
