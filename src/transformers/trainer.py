@@ -391,8 +391,8 @@ class Trainer:
             )
 
         # At this stage the model is already loaded
-        if getattr(model, "is_loaded_in_8bit", False):
-            if getattr(model, "_is_int8_training_enabled", False):
+        if getattr(model, "is_loaded_in_kbit", False):
+            if getattr(model, "_is_kbit_training_enabled", False):
                 logger.info(
                     "The model is loaded in 8-bit precision. To train this model you need to add additional modules"
                     " inside the model such as adapters using `peft` library and freeze the model weights. Please"
@@ -1170,6 +1170,38 @@ class Trainer:
                 optimizer_kwargs.update(adam_kwargs)
             except ImportError:
                 raise ValueError("Trainer tried to instantiate apex FusedAdam but apex is not installed!")
+        elif args.optim in [
+            OptimizerNames.ADAMW_BNB,
+            OptimizerNames.ADAMW_8BIT,
+            OptimizerNames.PAGED_ADAMW,
+            OptimizerNames.PAGED_ADAMW_8BIT,
+            OptimizerNames.LION,
+            OptimizerNames.LION_8BIT,
+            OptimizerNames.PAGED_LION,
+            OptimizerNames.PAGED_LION_8BIT,
+        ]:
+            try:
+                from bitsandbytes.optim import AdamW, Lion
+
+                is_paged = False
+                optim_bits = 32
+                optimizer_cls = None
+                additional_optim_kwargs = adam_kwargs
+                if "paged" in args.optim:
+                    is_paged = True
+                if "8bit" in args.optim:
+                    optim_bits = 8
+                if "adam" in args.optim:
+                    optimizer_cls = AdamW
+                elif "lion" in args.optim:
+                    optimizer_cls = Lion
+                    additional_optim_kwargs = {"betas": (args.adam_beta1, args.adam_beta2)}
+
+                bnb_kwargs = {"is_paged": is_paged, "optim_bits": optim_bits}
+                optimizer_kwargs.update(additional_optim_kwargs)
+                optimizer_kwargs.update(bnb_kwargs)
+            except ImportError:
+                raise ValueError("Trainer tried to instantiate bnb optimizer but bnb is not installed!")
         elif args.optim == OptimizerNames.ADAMW_BNB:
             try:
                 from bitsandbytes.optim import Adam8bit
@@ -1672,6 +1704,7 @@ class Trainer:
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
     ):
         self._train_batch_size = batch_size
+        logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
 
@@ -1779,7 +1812,7 @@ class Trainer:
         logger.info("***** Running training *****")
         logger.info(f"  Num examples = {num_examples:,}")
         logger.info(f"  Num Epochs = {num_train_epochs:,}")
-        logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size:,}")
+        logger.info(f"  Instantaneous batch size per device = {self._train_batch_size:,}")
         logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size:,}")
         logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
         logger.info(f"  Total optimization steps = {max_steps:,}")
@@ -3366,7 +3399,9 @@ class Trainer:
             tensors = nested_xla_mesh_reduce(tensors, name)
         elif is_sagemaker_mp_enabled():
             tensors = smp_gather(tensors)
-        elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
+        elif (self.args.distributed_state is not None and self.args.distributed_state.distributed_type != "NO") or (
+            self.args.distributed_state is None and self.local_rank != -1
+        ):
             tensors = distributed_concat(tensors)
         return tensors
 
@@ -3665,9 +3700,10 @@ class Trainer:
                 commit_message = f"Training in progress, step {self.state.global_step}"
             else:
                 commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
-            _, self.push_in_progress = self.repo.push_to_hub(
-                commit_message=commit_message, blocking=False, auto_lfs_prune=True
-            )
+            push_work = self.repo.push_to_hub(commit_message=commit_message, blocking=False, auto_lfs_prune=True)
+            # Return type of `Repository.push_to_hub` is either None or a tuple.
+            if push_work is not None:
+                self.push_in_progress = push_work[1]
         except Exception as e:
             logger.error(f"Error when pushing to hub: {e}")
         finally:
