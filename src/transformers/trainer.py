@@ -405,12 +405,12 @@ class Trainer:
         else:
             self.is_model_parallel = False
 
-        if (
-            getattr(model, "hf_device_map", None) is not None
-            and len([device for device in set(model.hf_device_map.values()) if device not in ["cpu", "disk"]]) > 1
-            and not self.is_model_parallel
-        ):
-            self.is_model_parallel = True
+        if getattr(model, "hf_device_map", None) is not None:
+            devices = [device for device in set(model.hf_device_map.values()) if device not in ["cpu", "disk"]]
+            if len(devices) > 1:
+                self.is_model_parallel = True
+            else:
+                self.is_model_parallel = self.args.device != torch.device(devices[0])
 
             # warn users
             logger.info(
