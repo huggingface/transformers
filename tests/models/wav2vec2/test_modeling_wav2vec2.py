@@ -1865,6 +1865,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         # TODO: update the tolerance after the CI moves to torch 1.10
         self.assertAlmostEqual(outputs.loss.item(), 17.7963, 2)
 
+    @require_torchaudio
     def test_inference_mms_1b_all(self):
         model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/mms-1b-all").to(torch_device)
         processor = Wav2Vec2Processor.from_pretrained("patrickvonplaten/mms-1b-all")
