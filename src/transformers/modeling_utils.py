@@ -2678,9 +2678,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     " make sure you have the latest version of `bitsandbytes` installed"
                 )
 
-            model = replace_with_bnb_linear(
+            model, has_been_replaced = replace_with_bnb_linear(
                 model, modules_to_not_convert=modules_to_not_convert, quantization_config=quantization_config
             )
+
+            if not has_been_replaced:
+                logger.warning(
+                    "You are loading your model in 8bit but no linear modules were found in your model."
+                    " this can happen for some architectures such as gpt2 that uses Conv1D instead of Linear layers."
+                    " Please double check your model architecture, or submit an issue on github if you think this is"
+                    " a bug."
+                )
 
             # training in 8-bit is only available in 0.37.0+
             model._is_kbit_training_enabled = version.parse(
@@ -2693,8 +2701,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if load_in_8bit and torch_dtype is None:
             logger.warning(
                 "You are loading your model in 8bit but you did not specify a `torch_dtype` attribute."
-                "All non-linear modules will be loaded in full precision.",
-                " If you want to load the other modules in other precision, please specify a `torch_dtype` attribute.",
+                "All non-linear modules will be loaded in full precision."
+                " If you want to load the other modules in other precision, please specify a `torch_dtype` attribute."
             )
 
         if isinstance(device_map, str):

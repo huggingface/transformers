@@ -132,6 +132,7 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
             it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
             `disk`).
     """
+    has_been_replaced = False
     modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
     for name, module in model.named_children():
         if current_key_name is None:
@@ -149,6 +150,7 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
                             has_fp16_weights=quantization_config.llm_int8_has_fp16_weight,
                             threshold=quantization_config.llm_int8_threshold,
                         )
+                        has_been_replaced = True
                     else:
                         if (
                             quantization_config.llm_int8_skip_modules is not None
@@ -164,17 +166,18 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
                                 compress_statistics=quantization_config.bnb_4bit_use_double_quant,
                                 quant_type=quantization_config.bnb_4bit_quant_type,
                             )
+                            has_been_replaced = True
                     # Force requires grad to False to avoid unexpected errors
                     model._modules[name].requires_grad_(False)
         # Remove the last key for recursion
         if len(list(module.children())) > 0:
-            replace_with_bnb_linear(
+            _, has_been_replaced = replace_with_bnb_linear(
                 module,
                 modules_to_not_convert,
                 current_key_name,
                 quantization_config,
             )
-    return model
+    return model, has_been_replaced
 
 
 # For backward compatibility
