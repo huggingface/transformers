@@ -2937,6 +2937,23 @@ class TokenizerTesterMixin:
 
                 self.assertEqual(len(tokenizer_r), vocab_size + 8)
 
+    def test_added_tokens_behaviour(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_s = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                
+                new_tokens = AddedToken("<a_new_token>", single_word = False, lstrip = False, rstrip = False)
+                tokenizer_s.add_tokens([new_tokens])
+                tokenizer_r.add_tokens([new_tokens])
+                
+                assert tokenizer_r.tokenize("This sentence is<a_new_token>a test") == tokenizer_s.tokenize("This sentence is<a_new_token>a test")
+                assert tokenizer_r.encode("This sentence is<a_new_token> a test") == tokenizer_s.tokenize("This sentence is<a_new_token> a test")
+                assert tokenizer_r.encode("This sentence is <a_new_token>a test") == tokenizer_s.tokenize("This sentence is <a_new_token>a test")
+                assert tokenizer_r.encode("This sentence is <a_new_token> a test") == tokenizer_s.tokenize("This sentence is <a_new_token> a test")
+                
+                
+
     def test_offsets_mapping(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -3604,7 +3621,8 @@ class TokenizerTesterMixin:
                 )
                 for key in python_output:
                     self.assertEqual(python_output[key], rust_output[key])
-
+    
+    
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
