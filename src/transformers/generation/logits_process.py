@@ -657,7 +657,7 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
                 # [ 1  0  0 ]
 
                 banned_mask = (
-                    torch.sparse.LongTensor(banned_mask.t(), indices, scores.size())
+                    torch.sparse.LongTensor(banned_mask.to(indices.device).t(), indices, scores.size())
                     .to(scores.device)
                     .to_dense()
                     .bool()
