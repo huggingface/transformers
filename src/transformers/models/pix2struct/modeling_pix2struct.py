@@ -479,10 +479,11 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
 
-        assert decoder_start_token_id is not None, (
-            "self.model.config.decoder_start_token_id has to be defined. In Pix2Struct it is usually set to the pad_token_id."
-            " See Pix2Struct docs for more information"
-        )
+        if decoder_start_token_id is None:
+            raise ValueError(
+                "self.model.config.decoder_start_token_id has to be defined. In Pix2Struct it is usually set to the pad_token_id."
+                "See Pix2Struct docs for more information."
+            )
 
         # shift inputs to the right
         if is_torch_fx_proxy(input_ids):
@@ -494,7 +495,8 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
             shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
             shifted_input_ids[..., 0] = decoder_start_token_id
 
-        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+        if pad_token_id is None:
+            raise ValueError("self.model.config.pad_token_id has to be defined.")
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
@@ -1356,8 +1358,14 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
                     layer_past_state.index_select(0, beam_idx.to(layer_past_state.device)),
                 )
 
-            assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
-            assert len(reordered_layer_past_states) == len(layer_past_states)
+            if reordered_layer_past_states[0].shape != layer_past_states[0].shape:
+                raise ValueError(
+                    f"reordered_layer_past_states[0] shape {reordered_layer_past_states[0].shape} and layer_past_states[0] shape {layer_past_states[0].shape} mismatched"
+                )
+            if len(reordered_layer_past_states) != len(layer_past_states):
+                raise ValueError(
+                    f"length of reordered_layer_past_states {len(reordered_layer_past_states)} and length of layer_past_states {len(layer_past_states)} mismatched"
+                )
 
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
         return reordered_decoder_past
@@ -1552,10 +1560,11 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = nn.CrossEntropyLoss(ignore_index=-100, reduction="mean", label_smoothing=0.1)
-            masked_labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(logits.device)
+            loss_fct = nn.CrossEntropyLoss(ignore_index=-100, reduction="mean")
 
-            loss = loss_fct(logits.contiguous().view(-1, logits.size(-1)), masked_labels.contiguous().view(-1))
+            loss = loss_fct(logits.contiguous().view(-1, logits.size(-1)), labels.contiguous().view(-1))
 
         if not return_dict:
             return tuple(
@@ -1678,6 +1687,15 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> print(generated_text)
         A stop sign is on a street corner.
+
+        >>> # conditional generation
+        >>> text = "A picture of"
+        >>> inputs = processor(text=text, images=image, return_tensors="pt", add_special_tokens=False)
+
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=50)
+        >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        >>> print(generated_text)
+        A picture of a stop sign with a red stop sign on it.
         ```
 
         Training:
@@ -1700,8 +1718,8 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         >>> # forward pass
         >>> outputs = model(**inputs, labels=labels)
         >>> loss = outputs.loss
-        >>> print(loss.item())
-        5.239729881286621
+        >>> print(f"{loss.item():.5f}")
+        5.95566
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.text_config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1776,35 +1794,6 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         encoder_outputs=None,
         **kwargs,
     ):
-        if isinstance(input_ids, torch.Tensor):
-            # check if the first element of `input_ids` is equal to `input_ids`:
-            if (input_ids[:, 0] != self.config.decoder_start_token_id).all().item():
-                # add `input_ids` as first token to `input_ids`
-                input_ids = torch.cat(
-                    [
-                        torch.ones((input_ids.shape[0], 1), dtype=torch.long, device=input_ids.device)
-                        * self.config.decoder_start_token_id,
-                        input_ids,
-                    ],
-                    dim=-1,
-                )
-
-                if decoder_attention_mask is not None:
-                    decoder_attention_mask = torch.cat(
-                        [
-                            torch.ones(
-                                (decoder_attention_mask.shape[0], 1),
-                                dtype=torch.long,
-                                device=decoder_attention_mask.device,
-                            ),
-                            decoder_attention_mask,
-                        ],
-                        dim=-1,
-                    )
-        elif input_ids is None:
-            batch_size = flattened_patches.shape[0]
-            input_ids = torch.LongTensor([[self.input_ids]]).repeat(batch_size, 1).to(input_ids.device)
-
         if decoder_attention_mask is None:
             decoder_attention_mask = torch.ones_like(input_ids).to(input_ids.device)
 

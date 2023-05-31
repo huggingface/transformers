@@ -73,6 +73,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TimeSeriesTransformerDecoder",  # Building part of bigger (tested) model.
     "InformerEncoder",  # Building part of bigger (tested) model.
     "InformerDecoder",  # Building part of bigger (tested) model.
+    "AutoformerEncoder",  # Building part of bigger (tested) model.
+    "AutoformerDecoder",  # Building part of bigger (tested) model.
     "JukeboxVQVAE",  # Building part of bigger (tested) model.
     "JukeboxPrior",  # Building part of bigger (tested) model.
     "DeformableDetrEncoder",  # Building part of bigger (tested) model.
@@ -223,6 +225,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "GPTSanJapaneseModel",
     "TimeSeriesTransformerForPrediction",
     "InformerForPrediction",
+    "AutoformerForPrediction",
     "JukeboxVQVAE",
     "JukeboxPrior",
     "PegasusXEncoder",
@@ -231,6 +234,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "PegasusXEncoder",
     "PegasusXDecoder",
     "PegasusXDecoderWrapper",
+    "SamModel",
     "DPTForDepthEstimation",
     "DecisionTransformerGPT2Model",
     "GLPNForDepthEstimation",
@@ -754,7 +758,7 @@ def find_all_documented_objects():
     for doc_file in Path(PATH_TO_DOC).glob("**/*.mdx"):
         with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
             content = f.read()
-        raw_doc_objs = re.findall("\[\[autodoc\]\]\s+(\S+)\s+", content)
+        raw_doc_objs = re.findall(r"\[\[autodoc\]\]\s+(\S+)\s+", content)
         documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
     return documented_obj
 
@@ -835,6 +839,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "ConvNextBackbone",
     "ConvNextV2Backbone",
     "DinatBackbone",
+    "FocalNetBackbone",
     "MaskFormerSwinBackbone",
     "MaskFormerSwinConfig",
     "MaskFormerSwinModel",

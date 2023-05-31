@@ -128,6 +128,11 @@ FROM_PRETRAINED_TORCH_DOCSTRING = """
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
                 execute code present on the Hub on your local machine.
+            code_revision (`str`, *optional*, defaults to `"main"`):
+                The specific revision to use for the code on the Hub, if the code leaves in a different repository than
+                the rest of the model. It can be a branch name, a tag name, or a commit id, since we use a git-based
+                system for storing models and other artifacts on huggingface.co, so `revision` can be any identifier
+                allowed by git.
             kwargs (additional keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 `output_attentions=True`). Behaves differently depending on whether a `config` is provided or
@@ -224,6 +229,11 @@ FROM_PRETRAINED_TF_DOCSTRING = """
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
                 execute code present on the Hub on your local machine.
+            code_revision (`str`, *optional*, defaults to `"main"`):
+                The specific revision to use for the code on the Hub, if the code leaves in a different repository than
+                the rest of the model. It can be a branch name, a tag name, or a commit id, since we use a git-based
+                system for storing models and other artifacts on huggingface.co, so `revision` can be any identifier
+                allowed by git.
             kwargs (additional keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 `output_attentions=True`). Behaves differently depending on whether a `config` is provided or
@@ -320,6 +330,11 @@ FROM_PRETRAINED_FLAX_DOCSTRING = """
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
                 execute code present on the Hub on your local machine.
+            code_revision (`str`, *optional*, defaults to `"main"`):
+                The specific revision to use for the code on the Hub, if the code leaves in a different repository than
+                the rest of the model. It can be a branch name, a tag name, or a commit id, since we use a git-based
+                system for storing models and other artifacts on huggingface.co, so `revision` can be any identifier
+                allowed by git.
             kwargs (additional keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 `output_attentions=True`). Behaves differently depending on whether a `config` is provided or
@@ -403,8 +418,12 @@ class _BaseAutoModelClass:
                     "no malicious code has been contributed in a newer revision."
                 )
             class_ref = config.auto_map[cls.__name__]
-            module_file, class_name = class_ref.split(".")
-            model_class = get_class_from_dynamic_module(config.name_or_path, module_file + ".py", class_name, **kwargs)
+            if "--" in class_ref:
+                repo_id, class_ref = class_ref.split("--")
+            else:
+                repo_id = config.name_or_path
+            model_class = get_class_from_dynamic_module(class_ref, repo_id, **kwargs)
+            _ = kwargs.pop("code_revision", None)
             return model_class._from_config(config, **kwargs)
         elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
@@ -422,6 +441,7 @@ class _BaseAutoModelClass:
         kwargs["_from_auto"] = True
         hub_kwargs_names = [
             "cache_dir",
+            "code_revision",
             "force_download",
             "local_files_only",
             "proxies",
@@ -432,19 +452,24 @@ class _BaseAutoModelClass:
         ]
         hub_kwargs = {name: kwargs.pop(name) for name in hub_kwargs_names if name in kwargs}
         if not isinstance(config, PretrainedConfig):
-            kwargs_copy = copy.deepcopy(kwargs)
+            kwargs_orig = copy.deepcopy(kwargs)
             # ensure not to pollute the config object with torch_dtype="auto" - since it's
             # meaningless in the context of the config object - torch.dtype values are acceptable
-            if kwargs_copy.get("torch_dtype", None) == "auto":
-                _ = kwargs_copy.pop("torch_dtype")
+            if kwargs.get("torch_dtype", None) == "auto":
+                _ = kwargs.pop("torch_dtype")
 
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path,
                 return_unused_kwargs=True,
                 trust_remote_code=trust_remote_code,
                 **hub_kwargs,
-                **kwargs_copy,
+                **kwargs,
             )
+
+            # if torch_dtype=auto was passed here, ensure to pass it on
+            if kwargs_orig.get("torch_dtype", None) == "auto":
+                kwargs["torch_dtype"] = "auto"
+
         if hasattr(config, "auto_map") and cls.__name__ in config.auto_map:
             if not trust_remote_code:
                 raise ValueError(
@@ -452,17 +477,11 @@ class _BaseAutoModelClass:
                     "on your local machine. Make sure you have read the code there to avoid malicious use, then set "
                     "the option `trust_remote_code=True` to remove this error."
                 )
-            if hub_kwargs.get("revision", None) is None:
-                logger.warning(
-                    "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure "
-                    "no malicious code has been contributed in a newer revision."
-                )
             class_ref = config.auto_map[cls.__name__]
-            module_file, class_name = class_ref.split(".")
             model_class = get_class_from_dynamic_module(
-                pretrained_model_name_or_path, module_file + ".py", class_name, **hub_kwargs, **kwargs
+                class_ref, pretrained_model_name_or_path, **hub_kwargs, **kwargs
             )
-            model_class.register_for_auto_class(cls.__name__)
+            _ = hub_kwargs.pop("code_revision", None)
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )

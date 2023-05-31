@@ -15,6 +15,8 @@
 # limitations under the License.
 """TF general model utils."""
 
+from __future__ import annotations
+
 import functools
 import gc
 import inspect
@@ -38,9 +40,8 @@ from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, TFGenerationMixin
-from .tf_utils import shape_list
+from .tf_utils import expand_1d, load_attributes_from_hdf5_group, save_attributes_to_hdf5_group, shape_list
 from .utils import (
-    DUMMY_INPUTS,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
     TF2_WEIGHTS_INDEX_NAME,
@@ -57,6 +58,7 @@ from .utils import (
     is_offline_mode,
     is_remote_url,
     is_safetensors_available,
+    is_tf_symbolic_tensor,
     logging,
     requires_backends,
     working_or_temp_dir,
@@ -64,16 +66,15 @@ from .utils import (
 from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 
 
-if parse(tf.__version__) >= parse("2.11.0"):
+if parse(tf.__version__).minor >= 13:
     from keras import backend as K
-    from keras.engine import data_adapter
+    from keras.__internal__ import KerasTensor
+elif parse(tf.__version__).minor >= 11:
+    from keras import backend as K
     from keras.engine.keras_tensor import KerasTensor
-    from keras.saving.legacy import hdf5_format
 else:
     from tensorflow.python.keras import backend as K
-    from tensorflow.python.keras.engine import data_adapter
     from tensorflow.python.keras.engine.keras_tensor import KerasTensor
-    from tensorflow.python.keras.saving import hdf5_format
 
 
 if is_safetensors_available():
@@ -511,7 +512,7 @@ def input_processing(func, config, **kwargs):
     if isinstance(main_input, (tuple, list)):
         for i, input in enumerate(main_input):
             # EagerTensors don't allow to use the .name property so we check for a real Tensor
-            if type(input) == tf.Tensor:
+            if is_tf_symbolic_tensor(input):
                 # Tensor names have always the pattern `name:id` then we check only the
                 # `name` part
                 tensor_name = input.name.split(":")[0]
@@ -572,7 +573,7 @@ def input_processing(func, config, **kwargs):
     # When creating a SavedModel TF calls the method with LayerCall.__call__(args, **kwargs)
     # So to respect the proper output we have to add this exception
     if "args" in output:
-        if output["args"] is not None and type(output["args"]) == tf.Tensor:
+        if output["args"] is not None and is_tf_symbolic_tensor(output["args"]):
             tensor_name = output["args"].name.split(":")[0]
             output[tensor_name] = output["args"]
         else:
@@ -796,9 +797,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
     try:
         with h5py.File(resolved_archive_file, "r") as sharded_checkpoint_file:
             # Retrieve the name of each layer from the H5 file
-            saved_h5_model_layers_name = set(
-                hdf5_format.load_attributes_from_hdf5_group(sharded_checkpoint_file, "layer_names")
-            )
+            saved_h5_model_layers_name = set(load_attributes_from_hdf5_group(sharded_checkpoint_file, "layer_names"))
             weight_value_tuples = []
 
             # Compute missing and unexpected sub layers
@@ -897,9 +896,7 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
     # Read the H5 file
     with h5py.File(resolved_archive_file, "r") as sharded_checkpoint_file:
         # Retrieve the name of each layer from the H5 file
-        saved_h5_model_layers_name = set(
-            hdf5_format.load_attributes_from_hdf5_group(sharded_checkpoint_file, "layer_names")
-        )
+        saved_h5_model_layers_name = set(load_attributes_from_hdf5_group(sharded_checkpoint_file, "layer_names"))
 
         # Find the missing layers from the high level list of layers
         missing_layers = list({layer.name for layer in model.layers} - saved_h5_model_layers_name)
@@ -923,7 +920,7 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
 
                 # Create a dict from the H5 saved model that looks like {"weight_name": weight_value}
                 # And a set with only the names
-                for weight_name in hdf5_format.load_attributes_from_hdf5_group(h5_layer_object, "weight_names"):
+                for weight_name in load_attributes_from_hdf5_group(h5_layer_object, "weight_names"):
                     # TF names always start with the model name so we ignore it
                     name = "/".join(weight_name.split("/")[1:])
 
@@ -1116,9 +1113,25 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        return {
-            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32),
-        }
+        dummies = {}
+        sig = self._prune_signature(self.input_signature)
+        for key, spec in sig.items():
+            # 3 is the most correct arbitrary size. I will not be taking questions
+            dummies[key] = tf.ones(shape=[dim if dim is not None else 3 for dim in spec.shape], dtype=spec.dtype)
+            if key == "token_type_ids":
+                # Some models have token_type_ids but with a vocab_size of 1
+                dummies[key] = tf.zeros_like(dummies[key])
+        if self.config.add_cross_attention and "encoder_hidden_states" in inspect.signature(self.call).parameters:
+            if "encoder_hidden_states" not in dummies:
+                if self.main_input_name == "input_ids":
+                    dummies["encoder_hidden_states"] = tf.ones(
+                        shape=(3, 3, self.config.hidden_size), dtype=tf.float32, name="encoder_hidden_states"
+                    )
+                else:
+                    raise NotImplementedError(
+                        "Model has cross-attention but we couldn't infer the shape for the encoder hidden states. Please manually override dummy_inputs!"
+                    )
+        return dummies
 
     @property
     def framework(self) -> str:
@@ -1139,6 +1152,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         self.config = config
         self.name_or_path = config.name_or_path
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
+        if not hasattr(self, "serving"):  # Don't overwrite existing serving signatures
+            self.serving = tf.function(
+                self.eager_serving, input_signature=[self._prune_signature(self.input_signature)]
+            )
         # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
         self._set_save_spec(self.serving.input_signature[0])
 
@@ -1158,7 +1175,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         return cls(config, **kwargs)
 
-    def get_head_mask(self, head_mask: Optional[tf.Tensor], num_hidden_layers: int) -> tf.Tensor:
+    def get_head_mask(self, head_mask: tf.Tensor | None, num_hidden_layers: int) -> tf.Tensor:
         """
         Prepare the head mask if needed.
 
@@ -1203,36 +1220,82 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         return self.serving_output(output)
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
-            }
-        ]
-    )
-    def serving(self, inputs):
+    @property
+    def input_signature(self) -> Dict[str, tf.TensorSpec]:
         """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
+        This property should return a dict mapping input names to tf.TensorSpec objects, representing the expected
+        shape and dtype for model inputs. It is used for both serving and for generating the dummy inputs used to build
+        the model.
         """
-        output = self.call(inputs)
+        model_inputs = list(inspect.signature(self.call).parameters)
+        sig = {}
+        if "input_ids" in model_inputs:
+            if self.__class__.__name__.endswith("ForMultipleChoice"):
+                text_dims = 3
+            else:
+                text_dims = 2
+            for input_name in (
+                "input_ids",
+                "attention_mask",
+                "token_type_ids",
+                "decoder_input_ids",
+                "decoder_attention_mask",
+            ):
+                if input_name in model_inputs:
+                    sig[input_name] = tf.TensorSpec([None] * text_dims, tf.int32, name=input_name)
+        if "pixel_values" in model_inputs:
+            pixel_values_shape = [None, None, None, None]
+            if hasattr(self.config, "vision_config"):
+                vision_config = self.config.vision_config
+            else:
+                vision_config = self.config
+            if hasattr(vision_config, "num_channels"):
+                pixel_values_shape[1] = vision_config.num_channels
+            else:
+                raise NotImplementedError(
+                    "Could not infer number of channels from config, please override input_signature to specify input shapes."
+                )
+            if hasattr(vision_config, "image_size"):
+                pixel_values_shape[2] = pixel_values_shape[3] = vision_config.image_size
+            elif hasattr(vision_config, "input_size"):
+                pixel_values_shape[2] = pixel_values_shape[3] = vision_config.input_size
+            else:
+                raise NotImplementedError(
+                    "Could not infer input image shape from config, please override input_signature to specify input shapes."
+                )
+            sig["pixel_values"] = tf.TensorSpec(pixel_values_shape, tf.float32, name="pixel_values")
+        if "input_features" in model_inputs:
+            raise NotImplementedError("Audio models need a manually defined input_signature")
+        return sig
 
-        return self.serving_output(output)
+    def _prune_signature(self, signature):
+        """Keeps only the keys of a given input signature that are valid for this model."""
+        model_inputs = list(inspect.signature(self.call).parameters)
+        return {key: val for key, val in signature.items() if key in model_inputs}
 
     def serving_output(self, output):
         """
-        Prepare the output of the saved model. Each model must implement this function.
-
-        Args:
-            output ([`TFBaseModelOutput`]):
-                The output returned by the model.
+        Prepare the output of the saved model. Can be overridden if specific serving modifications are required.
         """
-        raise NotImplementedError
+        if not isinstance(output, ModelOutput):
+            return output
+        for key in output:
+            if key.endswith("hidden_states") and not getattr(self.config, "output_hidden_states", False):
+                output[key] = None
+            elif key.endswith("attentions") and not getattr(self.config, "output_attentions", False):
+                output[key] = None
+            elif key == "past_key_values" and not getattr(self.config, "use_cache", False):
+                output[key] = None
+            elif key == "cross_attentions" and not (
+                getattr(self.config, "output_attentions", False) and getattr(self.config, "add_cross_attention", False)
+            ):
+                output[key] = None
+            if isinstance(output[key], (tuple, list)):
+                try:
+                    output[key] = tf.convert_to_tensor(output[key])
+                except (ValueError, tf.errors.InvalidArgumentError):
+                    pass  # Layers may not have the same dimensions
+        return output
 
     def can_generate(self) -> bool:
         """
@@ -1242,7 +1305,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
         # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation
-        if "GenerationMixin" in str(self.prepare_inputs_for_generation):
+        if "GenerationMixin" in str(self.prepare_inputs_for_generation.__func__):
             return False
         return True
 
@@ -1386,7 +1449,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if not isinstance(dataset, datasets.Dataset):
             raise TypeError("Dataset argument should be a datasets.Dataset!")
-        model_inputs = list(dict(inspect.signature(self.call).parameters).keys())
+        model_inputs = list(inspect.signature(self.call).parameters)
         model_labels = find_labels(self.__class__)
         if "cols_to_retain" in list(inspect.signature(dataset._get_output_signature).parameters.keys()):
             output_signature, _ = dataset._get_output_signature(
@@ -1411,6 +1474,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         output_columns = list(output_signature.keys())
         feature_cols = [col for col in output_columns if col in model_inputs and col not in model_labels]
         label_cols = [col for col in output_columns if col in model_labels]
+
+        # Backwards compatibility for older versions of datasets. Previously, if `columns` or `label_cols`
+        # were a single element list, the returned element spec would be a single element. Now, passing [feature]
+        # will return a dict structure {"feature": feature}, and passing a single string will return a single element.
+        feature_cols = feature_cols[0] if len(feature_cols) == 1 else feature_cols
+        label_cols = label_cols[0] if len(label_cols) == 1 else label_cols
 
         if drop_remainder is None:
             drop_remainder = shuffle
@@ -1492,7 +1561,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             return self.hf_compute_loss(*args, **kwargs)
 
     def get_label_to_output_name_mapping(self):
-        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+        arg_names = list(inspect.signature(self.call).parameters)
         if self._label_to_output_map is not None:
             return self._label_to_output_map
         elif "start_positions" in arg_names:
@@ -1515,14 +1584,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
 
         # We hardcode the most common renamings; models with weirder names can set `self._label_to_output_map`
-        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+        arg_names = list(inspect.signature(self.call).parameters)
         label_kwargs = find_labels(self.__class__)
         label_to_output = self.get_label_to_output_name_mapping()
         output_to_label = {val: key for key, val in label_to_output.items()}
         if not self._using_dummy_loss and parse(tf.__version__) < parse("2.11.0"):
             # Newer TF train steps leave this out
-            data = data_adapter.expand_1d(data)
-        x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+            data = expand_1d(data)
+        x, y, sample_weight = tf.keras.utils.unpack_x_y_sample_weight(data)
         # If the inputs are mutable dictionaries, make a shallow copy of them because we will modify
         # them during input/label pre-processing. This avoids surprising the user by wrecking their data.
         # In addition, modifying mutable Python inputs makes XLA compilation impossible.
@@ -1622,14 +1691,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         that they are available to the model during the forward pass.
         """
         # We hardcode the most common renamings; models with weirder names can set `self._label_to_output_map`
-        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+        arg_names = list(inspect.signature(self.call).parameters)
         label_kwargs = find_labels(self.__class__)
         label_to_output = self.get_label_to_output_name_mapping()
         output_to_label = {val: key for key, val in label_to_output.items()}
         if not self._using_dummy_loss and parse(tf.__version__) < parse("2.11.0"):
             # Newer versions leave this out
-            data = data_adapter.expand_1d(data)
-        x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+            data = expand_1d(data)
+        x, y, sample_weight = tf.keras.utils.unpack_x_y_sample_weight(data)
         # If the inputs are mutable dictionaries, make a shallow copy of them because we will modify
         # them during input/label pre-processing. This avoids surprising the user by wrecking their data.
         # In addition, modifying mutable Python inputs makes XLA compilation impossible.
@@ -1641,7 +1710,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # When using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
         # if those keys are not already present in the input dict
         if self._using_dummy_loss and y is not None:
-            arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+            arg_names = list(inspect.signature(self.call).parameters)
             # If y is a tensor and the model only has one label-like input, map y to that input
             if len(label_kwargs) == 1 and isinstance(y, tf.Tensor):
                 if isinstance(x, tf.Tensor):
@@ -2313,6 +2382,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             files_timestamps = self._get_files_timestamps(save_directory)
 
         if saved_model:
+            # If `torch_dtype` is in the config with a torch dtype class as the value, we need to change it to string.
+            # (Although TF doesn't care about this attribute, we can't just remove it or set it to `None`.)
+            if getattr(self.config, "torch_dtype", None) is not None and not isinstance(self.config.torch_dtype, str):
+                self.config.torch_dtype = str(self.config.torch_dtype).split(".")[1]
             if signatures is None:
                 if any(spec.dtype == tf.int32 for spec in self.serving.input_signature[0].values()):
                     int64_spec = {
@@ -2391,7 +2464,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         )
                         param_dset[:] = layer.numpy()
                         layers.append(layer_name.encode("utf8"))
-                    hdf5_format.save_attributes_to_hdf5_group(shard_file, "layer_names", layers)
+                    save_attributes_to_hdf5_group(shard_file, "layer_names", layers)
 
         if push_to_hub:
             self._upload_modified_files(
@@ -2809,6 +2882,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 allow_missing_keys=True,
                 output_loading_info=output_loading_info,
                 _prefix=load_weight_prefix,
+                ignore_mismatched_sizes=ignore_mismatched_sizes,
             )
 
         # 'by_name' allow us to do transfer learning by skipping/adding layers
@@ -3120,6 +3194,10 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.initializer_range = hidden_size**-0.5 if initializer_range is None else initializer_range
+        warnings.warn(
+            "`TFSharedEmbeddings` is scheduled for deletion in v4.32, use `tf.keras.layers.Embedding` instead.",
+            DeprecationWarning,
+        )
 
     def build(self, input_shape):
         """

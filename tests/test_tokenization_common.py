@@ -23,6 +23,7 @@ import re
 import shutil
 import sys
 import tempfile
+import traceback
 import unittest
 import unittest.mock as mock
 from collections import OrderedDict
@@ -64,6 +65,7 @@ from transformers.testing_utils import (
     require_tf,
     require_tokenizers,
     require_torch,
+    run_test_in_subprocess,
     slow,
 )
 from transformers.tokenization_utils import AddedToken, Trie
@@ -129,6 +131,71 @@ def merge_model_tokenizer_mappings(
                     model_tokenizer_mapping.update({tokenizer_fast: (configuration, model)})
 
     return model_tokenizer_mapping
+
+
+def _test_subword_regularization_tokenizer(in_queue, out_queue, timeout):
+    error = None
+
+    try:
+        inputs = in_queue.get(timeout=timeout)
+        tokenizer = inputs["tokenizer"]
+        sp_model_kwargs = inputs["sp_model_kwargs"]
+        test_sentencepiece_ignore_case = inputs["test_sentencepiece_ignore_case"]
+
+        unittest.TestCase().assertTrue(hasattr(tokenizer, "sp_model_kwargs"))
+        unittest.TestCase().assertIsNotNone(tokenizer.sp_model_kwargs)
+        unittest.TestCase().assertTrue(isinstance(tokenizer.sp_model_kwargs, dict))
+        unittest.TestCase().assertDictEqual(tokenizer.sp_model_kwargs, sp_model_kwargs)
+        check_subword_sampling(tokenizer, test_sentencepiece_ignore_case=test_sentencepiece_ignore_case)
+
+    except Exception:
+        error = f"{traceback.format_exc()}"
+
+    results = {"error": error}
+    out_queue.put(results, timeout=timeout)
+    out_queue.join()
+
+
+def check_subword_sampling(
+    tokenizer: PreTrainedTokenizer,
+    text: str = None,
+    test_sentencepiece_ignore_case: bool = True,
+) -> None:
+    """
+    Check if the tokenizer generates different results when subword regularization is enabled.
+
+    Subword regularization augments training data with subword sampling.
+    This has a random component.
+
+    Args:
+        tokenizer: The tokenizer to check.
+        text: The text to use for the checks.
+        test_sentencepiece_ignore_case: See `TokenizerTesterMixin.test_sentencepiece_ignore_case`.
+    """
+    text = "This is a test for subword regularization." if text is None else text
+    if test_sentencepiece_ignore_case:
+        text = text.lower()
+
+    tokens_list = []
+    for _ in range(5):
+        tokens_list.append(tokenizer.tokenize(text))
+
+    # the list of different pairs of tokens_list
+    combinations = itertools.combinations(tokens_list, 2)
+
+    # check of sampling is done
+    subword_sampling_found = False
+    for combination in combinations:
+        if combination[0] != combination[1]:
+            subword_sampling_found = True
+    unittest.TestCase().assertTrue(subword_sampling_found)
+
+    # check if converting back to original text works
+    for tokens in tokens_list:
+        if test_sentencepiece_ignore_case:
+            unittest.TestCase().assertEqual(text, tokenizer.convert_tokens_to_string(tokens).lower())
+        else:
+            unittest.TestCase().assertEqual(text, tokenizer.convert_tokens_to_string(tokens))
 
 
 class TokenizerTesterMixin:
@@ -420,11 +487,15 @@ class TokenizerTesterMixin:
         sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
         tokenizer = self.get_tokenizer(sp_model_kwargs=sp_model_kwargs)
 
-        self.assertTrue(hasattr(tokenizer, "sp_model_kwargs"))
-        self.assertIsNotNone(tokenizer.sp_model_kwargs)
-        self.assertTrue(isinstance(tokenizer.sp_model_kwargs, dict))
-        self.assertEqual(tokenizer.sp_model_kwargs, sp_model_kwargs)
-        self.check_subword_sampling(tokenizer)
+        run_test_in_subprocess(
+            test_case=self,
+            target_func=_test_subword_regularization_tokenizer,
+            inputs={
+                "tokenizer": tokenizer,
+                "sp_model_kwargs": sp_model_kwargs,
+                "test_sentencepiece_ignore_case": self.test_sentencepiece_ignore_case,
+            },
+        )
 
     def test_pickle_subword_regularization_tokenizer(self) -> None:
         if not self.test_sentencepiece:
@@ -438,11 +509,15 @@ class TokenizerTesterMixin:
         del tokenizer
         tokenizer_new = pickle.loads(tokenizer_bin)
 
-        self.assertTrue(hasattr(tokenizer_new, "sp_model_kwargs"))
-        self.assertIsNotNone(tokenizer_new.sp_model_kwargs)
-        self.assertTrue(isinstance(tokenizer_new.sp_model_kwargs, dict))
-        self.assertEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
-        self.check_subword_sampling(tokenizer_new)
+        run_test_in_subprocess(
+            test_case=self,
+            target_func=_test_subword_regularization_tokenizer,
+            inputs={
+                "tokenizer": tokenizer_new,
+                "sp_model_kwargs": sp_model_kwargs,
+                "test_sentencepiece_ignore_case": self.test_sentencepiece_ignore_case,
+            },
+        )
 
     def test_save_sentencepiece_tokenizer(self) -> None:
         if not self.test_sentencepiece or not self.test_slow_tokenizer:
@@ -2317,46 +2392,6 @@ class TokenizerTesterMixin:
             # add pad_token_id to pass subsequent tests
             tokenizer.add_special_tokens({"pad_token": "<PAD>"})
 
-    def check_subword_sampling(
-        self,
-        tokenizer: PreTrainedTokenizer,
-        text: str = None,
-    ) -> None:
-        """
-        Check if the tokenizer generates different results when subword regularization is enabled.
-
-        Subword regularization augments training data with subword sampling.
-        This has a random component.
-
-        Args:
-            tokenizer: The tokenizer to check.
-            text: The text to use for the checks.
-        """
-        text = "This is a test for subword regularization." if text is None else text
-        if self.test_sentencepiece_ignore_case:
-            text = text.lower()
-
-        tokens_list = []
-        for _ in range(5):
-            tokens_list.append(tokenizer.tokenize(text))
-
-        # the list of different pairs of tokens_list
-        combinations = itertools.combinations(tokens_list, 2)
-
-        # check of sampling is done
-        subword_sampling_found = False
-        for combination in combinations:
-            if combination[0] != combination[1]:
-                subword_sampling_found = True
-        self.assertTrue(subword_sampling_found)
-
-        # check if converting back to original text works
-        for tokens in tokens_list:
-            if self.test_sentencepiece_ignore_case:
-                self.assertEqual(text, tokenizer.convert_tokens_to_string(tokens).lower())
-            else:
-                self.assertEqual(text, tokenizer.convert_tokens_to_string(tokens))
-
     @require_torch
     @slow
     def test_torch_encode_plus_sent_to_model(self):
@@ -3954,7 +3989,7 @@ class TokenizerUtilTester(unittest.TestCase):
         _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the tokenizer.
-        with mock.patch("requests.request", return_value=response_mock) as mock_head:
+        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
             _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -3972,7 +4007,7 @@ class TokenizerUtilTester(unittest.TestCase):
         _ = GPT2TokenizerFast.from_pretrained("gpt2")
 
         # Under the mock environment we get a 500 error when trying to reach the tokenizer.
-        with mock.patch("requests.request", return_value=response_mock) as mock_head:
+        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
             _ = GPT2TokenizerFast.from_pretrained("gpt2")
             # This check we did call the fake head request
             mock_head.assert_called()

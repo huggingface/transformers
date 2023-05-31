@@ -40,6 +40,7 @@ from .utils import (
     PushToHubMixin,
     TensorType,
     add_end_docstrings,
+    add_model_info_to_auto_map,
     cached_file,
     copy_func,
     download_url,
@@ -1817,6 +1818,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             cache_dir=cache_dir,
             local_files_only=local_files_only,
             _commit_hash=commit_hash,
+            _is_local=is_local,
             **kwargs,
         )
 
@@ -1831,6 +1833,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         cache_dir=None,
         local_files_only=False,
         _commit_hash=None,
+        _is_local=False,
         **kwargs,
     ):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
@@ -1861,13 +1864,20 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # First attempt. We get tokenizer_class from tokenizer_config to check mismatch between tokenizers.
             config_tokenizer_class = init_kwargs.get("tokenizer_class")
             init_kwargs.pop("tokenizer_class", None)
-            init_kwargs.pop("auto_map", None)
             saved_init_inputs = init_kwargs.pop("init_inputs", ())
             if not init_inputs:
                 init_inputs = saved_init_inputs
         else:
             config_tokenizer_class = None
             init_kwargs = init_configuration
+
+        if "auto_map" in init_kwargs and not _is_local:
+            # For backward compatibility with odl format.
+            if isinstance(init_kwargs["auto_map"], (tuple, list)):
+                init_kwargs["auto_map"] = {"AutoTokenizer": init_kwargs["auto_map"]}
+            init_kwargs["auto_map"] = add_model_info_to_auto_map(
+                init_kwargs["auto_map"], pretrained_model_name_or_path
+            )
 
         if config_tokenizer_class is None:
             from .models.auto.configuration_auto import AutoConfig  # tests_ignore
@@ -2083,7 +2093,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
                 If `True`, will save the tokenizer in legacy format. If the "slow" tokenizer doesn't exits, a value
                 error is raised.
-            filename_prefix: (`str`, *optional*):
+            filename_prefix (`str`, *optional*):
                 A prefix to add to the names of the files saved by the tokenizer.
             push_to_hub (`bool`, *optional*, defaults to `False`):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the

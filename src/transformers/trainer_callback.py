@@ -534,7 +534,8 @@ class EarlyStoppingCallback(TrainerCallback):
             specified metric must improve to satisfy early stopping conditions. `
 
     This callback depends on [`TrainingArguments`] argument *load_best_model_at_end* functionality to set best_metric
-    in [`TrainerState`].
+    in [`TrainerState`]. Note that if the [`TrainingArguments`] argument *save_steps* differs from *eval_steps*, the
+    early stopping will not occur until the next save step.
     """
 
     def __init__(self, early_stopping_patience: int = 1, early_stopping_threshold: Optional[float] = 0.0):

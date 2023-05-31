@@ -33,14 +33,17 @@ from .generic import (
     ModelOutput,
     PaddingStrategy,
     TensorType,
+    add_model_info_to_auto_map,
     cached_property,
     can_return_loss,
     expand_dims,
     find_labels,
     flatten_dict,
+    infer_framework,
     is_jax_tensor,
     is_numpy_array,
     is_tensor,
+    is_tf_symbolic_tensor,
     is_tf_tensor,
     is_torch_device,
     is_torch_dtype,
@@ -83,6 +86,7 @@ from .hub import (
     is_remote_url,
     move_cache,
     send_example_telemetry,
+    try_to_load_from_cache,
 )
 from .import_utils import (
     ENV_VARS_TRUE_AND_AUTO_VALUES,
@@ -96,6 +100,7 @@ from .import_utils import (
     _LazyModule,
     ccl_version,
     direct_transformers_import,
+    get_torch_version,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
@@ -118,7 +123,10 @@ from .import_utils import (
     is_natten_available,
     is_ninja_available,
     is_onnx_available,
+    is_openai_available,
+    is_optimum_available,
     is_pandas_available,
+    is_peft_available,
     is_phonemizer_available,
     is_protobuf_available,
     is_psutil_available,
@@ -164,7 +172,6 @@ from .import_utils import (
     is_vision_available,
     requires_backends,
     torch_only_method,
-    torch_version,
 )
 
 

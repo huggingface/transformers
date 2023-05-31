@@ -460,7 +460,7 @@ class NllbMoeSparseMLP(nn.Module):
                 Attention mask. Can be in the causal form or not.
 
         Returns:
-            hidden_states (`torch.Tensor` of shape `(batch_size, sequence_lenght, hidden_dim)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_dim)`):
                 Updated hidden states
             router_logits (`torch.Tensor` of shape `(batch_size, sequence_length, num_experts)`):
                 Needed for computing the loss
@@ -856,7 +856,7 @@ class NllbMoePreTrainedModel(PreTrainedModel):
     config_class = NllbMoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["NllbMoeAttention"]
+    _no_split_modules = ["NllbMoeEncoderLayer", "NllbMoeDecoderLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

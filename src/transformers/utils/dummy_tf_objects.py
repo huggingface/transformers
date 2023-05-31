@@ -2317,6 +2317,23 @@ class TFRoFormerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+TF_SAM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFSamModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSamPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -2584,6 +2601,13 @@ TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class TFWav2Vec2ForCTC(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFWav2Vec2ForSequenceClassification(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
