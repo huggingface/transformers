@@ -37,7 +37,7 @@ DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
 
 class EmptyJob:
-    name = "empty"
+    job_name = "empty"
 
     def to_dict():
         return {
