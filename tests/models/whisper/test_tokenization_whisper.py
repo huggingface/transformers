@@ -213,6 +213,16 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             rust_tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens
         )
 
+    def test_fast_tokenizer_get_prompt_ids(self):
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        prompt = "This is test prompt text."
+        tokenizer_prompt_ids = tokenizer.get_prompt_ids(prompt)
+        fast_tokenizer_prompt_ids = rust_tokenizer.get_prompt_ids(prompt)
+
+        self.assertListEqual(tokenizer_prompt_ids.tolist(), fast_tokenizer_prompt_ids.tolist())
+
 
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     checkpoint_name = "openai/whisper-small.en"
