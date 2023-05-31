@@ -2948,10 +2948,36 @@ class TokenizerTesterMixin:
                 tokenizer_r.add_tokens([new_tokens])
                 
                 assert tokenizer_r.tokenize("This sentence is<a_new_token>a test") == tokenizer_s.tokenize("This sentence is<a_new_token>a test")
-                assert tokenizer_r.encode("This sentence is<a_new_token> a test") == tokenizer_s.tokenize("This sentence is<a_new_token> a test")
-                assert tokenizer_r.encode("This sentence is <a_new_token>a test") == tokenizer_s.tokenize("This sentence is <a_new_token>a test")
-                assert tokenizer_r.encode("This sentence is <a_new_token> a test") == tokenizer_s.tokenize("This sentence is <a_new_token> a test")
+                assert tokenizer_r.tokenize("This sentence is<a_new_token> a test") == tokenizer_s.tokenize("This sentence is<a_new_token> a test")
+                assert tokenizer_r.tokenize("This sentence is <a_new_token>a test") == tokenizer_s.tokenize("This sentence is <a_new_token>a test")
+                assert tokenizer_r.tokenize("This sentence is <a_new_token> a test") == tokenizer_s.tokenize("This sentence is <a_new_token> a test")
                 
+                new_tokens = AddedToken("<a_new_token_1>", single_word = False, lstrip = True, rstrip = False)
+                tokenizer_s.add_tokens([new_tokens])
+                tokenizer_r.add_tokens([new_tokens])
+                
+                assert tokenizer_r.tokenize("This sentence is<a_new_token_1>a test") == tokenizer_s.tokenize("This sentence is<a_new_token_1>a test")
+                assert tokenizer_r.tokenize("This sentence is<a_new_token_1> a test") == tokenizer_s.tokenize("This sentence is<a_new_token_1> a test")
+                assert tokenizer_r.tokenize("This sentence is <a_new_token_1>a test") == tokenizer_s.tokenize("This sentence is <a_new_token_1>a test")
+                assert tokenizer_r.tokenize("This sentence is <a_new_token_1> a test") == tokenizer_s.tokenize("This sentence is <a_new_token_1> a test")
+                
+                new_tokens = AddedToken("<a_new_token_2>", single_word = False, lstrip = True, rstrip = True)
+                tokenizer_s.add_tokens([new_tokens])
+                tokenizer_r.add_tokens([new_tokens])
+                
+                assert tokenizer_r.tokenize("This sentence is<a_new_token_2>a test") == tokenizer_s.tokenize("This sentence is<a_new_token_2>a test")
+                assert tokenizer_r.tokenize("This sentence is<a_new_token_2> a test") == tokenizer_s.tokenize("This sentence is<a_new_token_2> a test")
+                assert tokenizer_r.tokenize("This sentence is <a_new_token_2>a test") == tokenizer_s.tokenize("This sentence is <a_new_token_2>a test")
+                assert tokenizer_r.tokenize("This sentence is <a_new_token_2> a test") == tokenizer_s.tokenize("This sentence is <a_new_token_2> a test")
+                
+                new_tokens = AddedToken("<a_new_token_3>", single_word = True, lstrip = True, rstrip = True)
+                tokenizer_s.add_tokens([new_tokens])
+                tokenizer_r.add_tokens([new_tokens])
+                
+                assert tokenizer_r.tokenize("This sentence is<a_new_token_3>a test") == tokenizer_s.tokenize("This sentence is<a_new_token_3>a test")
+                assert tokenizer_r.tokenize("This sentence is<a_new_token_3> a test") == tokenizer_s.tokenize("This sentence is<a_new_token_3> a test")
+                assert tokenizer_r.tokenize("This sentence is <a_new_token_3>a test") == tokenizer_s.tokenize("This sentence is <a_new_token_3>a test")
+                assert tokenizer_r.tokenize("This sentence is <a_new_token_3> a test") == tokenizer_s.tokenize("This sentence is <a_new_token_3> a test")
                 
 
     def test_offsets_mapping(self):

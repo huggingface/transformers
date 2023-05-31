@@ -51,7 +51,9 @@ if is_torch_available():
 @require_tokenizers
 class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = LlamaTokenizer
-    test_rust_tokenizer = False
+    rust_tokenizer_class = LlamaTokenizerFast
+    
+    test_rust_tokenizer = True
     test_sentencepiece = True
     from_pretrained_kwargs = {}
 
