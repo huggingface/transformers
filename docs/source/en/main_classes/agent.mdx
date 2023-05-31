@@ -19,16 +19,20 @@ can vary as the APIs or underlying models are prone to change.
 
 </Tip>
 
-To learn more about agents and tools make sure to read the [introductory guide](../agents_and_tools). This page
+To learn more about agents and tools make sure to read the [introductory guide](../transformers_agents). This page
 contains the API docs for the underlying classes.
 
 ## Agents
 
-We provide two types of agents: [`HfAgent`] uses inference endpoints for opensource models and [`OpenAiAgent`] uses OpenAI closed models.
+We provide three types of agents: [`HfAgent`] uses inference endpoints for opensource models, [`LocalAgent`] uses a model of your choice locally and [`OpenAiAgent`] uses OpenAI closed models.
 
 ### HfAgent
 
 [[autodoc]] HfAgent
+
+### LocalAgent
+
+[[autodoc]] LocalAgent
 
 ### OpenAiAgent
 
