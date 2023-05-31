@@ -36,6 +36,17 @@ COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "s": None}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
 
+class EmptyJob:
+    name = "empty"
+
+    def to_dict():
+        return {
+            "working_directory": "~/transformers",
+            "docker": copy.deepcopy(DEFAULT_DOCKER_IMAGE),
+            "steps":["checkout"],
+        }
+
+
 @dataclass
 class CircleCIJob:
     name: str
@@ -573,6 +584,8 @@ def create_circleci_config(folder=None):
     if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
         jobs.extend(REPO_UTIL_TESTS)
 
+    if len(jobs) == 0:
+        jobs = [EmptyJob()]
     config = {"version": "2.1"}
     config["parameters"] = {
         # Only used to accept the parameters from the trigger
