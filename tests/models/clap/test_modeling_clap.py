@@ -489,9 +489,7 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ClapModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=ClapConfig, common_properties=[], has_text_modality=False
-        )
+        self.config_tester = ConfigTester(self, config_class=ClapConfig, common_properties=[], has_text_modality=False)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
