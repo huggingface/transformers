@@ -649,15 +649,15 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
 
         else:
             if banned_mask_list:
-                banned_mask = torch.LongTensor(banned_mask_list)
-                indices = torch.ones(len(banned_mask))
+                indices = torch.ones(len(banned_mask_list))
+                banned_mask = torch.LongTensor(banned_mask_list, device=indices.device)
                 # A sparse tensor is generated from a list of coordinates: [[0, 1], [0, 2], [2, 0]]. A conversion to dense tensor generates:
                 # [ 0  1  1 ]
                 # [ 0  0  0 ]
                 # [ 1  0  0 ]
 
                 banned_mask = (
-                    torch.sparse.LongTensor(banned_mask.to(indices.device).t(), indices, scores.size())
+                    torch.sparse.LongTensor(banned_mask.t(), indices, scores.size())
                     .to(scores.device)
                     .to_dense()
                     .bool()
