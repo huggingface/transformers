@@ -773,6 +773,7 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
                 self.assertIsInstance(output["text"], str)
 
+    @require_torchaudio
     def test_nested_vocab(self):
         eng_vocab = {"a": 7, "b": 8}
         spa_vocab = {"a": 23, "c": 88}
