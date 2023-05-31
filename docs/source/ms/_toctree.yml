@@ -144,51 +144,51 @@
   title: Prestasi dan kebolehskalaan
 - sections:
     - local: contributing
-      title: How to contribute to transformers?
+      title: Bagaimana untuk menyumbang kepada transformer?
     - local: add_new_model
-      title: How to add a model to 🤗 Transformers?
+      title: Bagaimana untuk menambah model pada 🤗 Transformers?
     - local: add_tensorflow_model
-      title: How to convert a 🤗 Transformers model to TensorFlow?
+      title: Bagaimana untuk menukar model Transformers kepada TensorFlow?
     - local: add_new_pipeline
-      title: How to add a pipeline to 🤗 Transformers?
+      title: Bagaimana untuk menambah saluran paip ke 🤗 Transformers?
     - local: testing
-      title: Testing
+      title: Ujian
     - local: pr_checks
-      title: Checks on a Pull Request
-  title: Contribute
+      title: Menyemak Permintaan Tarik
+  title: Sumbangkan
 
 - sections:
     - local: philosophy
-      title: Philosophy
+      title: Falsafah
     - local: glossary
-      title: Glossary
+      title: Glosari
     - local: task_summary
-      title: What 🤗 Transformers can do
+      title: Apa 🤗 Transformers boleh buat
     - local: tasks_explained
-      title: How 🤗 Transformers solve tasks
+      title: Bagaimana 🤗 Transformers menyelesaikan tugasan
     - local: model_summary
-      title: The Transformer model family
+      title: Keluarga model Transformer
     - local: tokenizer_summary
-      title: Summary of the tokenizers
+      title: Ringkasan tokenizer
     - local: attention
-      title: Attention mechanisms
+      title: Mekanisme perhatian
     - local: pad_truncation
-      title: Padding and truncation
+      title: Padding dan pemotongan
     - local: bertology
       title: BERTology
     - local: perplexity
-      title: Perplexity of fixed-length models
+      title: Kekeliruan model panjang tetap
     - local: pipeline_webserver
-      title: Pipelines for webserver inference
-  title: Conceptual guides
+      title: Saluran paip untuk inferens pelayan web
+  title: Panduan konsep
 - sections:
     - sections:
         - local: main_classes/agent
-          title: Agents and Tools
+          title: Ejen dan Alat
         - local: model_doc/auto
-          title: Auto Classes
+          title: Kelas Auto
         - local: main_classes/callback
-          title: Callbacks
+          title: Panggilan balik
         - local: main_classes/configuration
           title: Configuration
         - local: main_classes/data_collator
