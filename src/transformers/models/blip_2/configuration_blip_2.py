@@ -317,7 +317,7 @@ class Blip2Config(PretrainedConfig):
     model_type = "blip-2"
     is_composition = True
 
-    def __init__(self, vision_config=None, qformer_config=None, text_config=None, num_query_tokens=32, **kwargs):
+    def __init__(self, vision_config=None, qformer_config=None, text_config=None, num_query_tokens=32, tie_word_embeddings = None, **kwargs):
         super().__init__(**kwargs)
 
         if vision_config is None:
@@ -337,7 +337,7 @@ class Blip2Config(PretrainedConfig):
         text_model_type = text_config["model_type"] if "model_type" in text_config else "opt"
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
-        self.tie_word_embeddings = self.text_config.tie_word_embeddings
+        self.tie_word_embeddings = self.text_config.tie_word_embeddings if tie_word_embeddings is None else tie_word_embeddings
         self.is_encoder_decoder = self.text_config.is_encoder_decoder
 
         self.num_query_tokens = num_query_tokens
