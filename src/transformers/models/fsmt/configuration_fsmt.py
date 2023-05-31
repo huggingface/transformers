@@ -227,4 +227,5 @@ class FSMTConfig(PretrainedConfig):
         output = copy.deepcopy(self.__dict__)
         output["decoder"] = self.decoder.to_dict()
         output["model_type"] = self.__class__.model_type
+        self.dict_torch_dtype_to_str(output)
         return output

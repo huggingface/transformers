@@ -257,6 +257,7 @@ class DetrConfig(PretrainedConfig):
         if output["backbone_config"] is not None:
             output["backbone_config"] = self.backbone_config.to_dict()
         output["model_type"] = self.__class__.model_type
+        self.dict_torch_dtype_to_str(output)
         return output
 
 
