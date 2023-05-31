@@ -78,7 +78,7 @@ class CLIPViPVisionModelTester:
         dropout=0.1,
         attention_dropout=0.1,
         initializer_range=0.02,
-        temporal_size=1,
+        temporal_size=8,
         add_cls_num=1,
         scope=None,
     ):
@@ -102,7 +102,8 @@ class CLIPViPVisionModelTester:
 
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1 + add_cls_num
+        # self.seq_length = num_patches + 1 + add_cls_num
+        self.seq_length = num_patches * temporal_size + 1 + add_cls_num
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
@@ -139,7 +140,10 @@ class CLIPViPVisionModelTester:
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 2, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, num_patches * self.temporal_size + self.add_cls_num + 1, self.hidden_size),
+        )
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
@@ -216,63 +220,6 @@ class CLIPViPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_attention_outputs(self):
-        for model_name in CLIP_VIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLIPViPVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-
-    @slow
-    def test2_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
-
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            if hasattr(self.model_tester, "encoder_seq_length"):
-                seq_length = self.model_tester.encoder_seq_length
-                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
-                    seq_length = seq_length * self.model_tester.chunk_length
-            else:
-                seq_length = self.model_tester.seq_length
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
-            )
-
-            if config.is_encoder_decoder:
-                hidden_states = outputs.decoder_hidden_states
-
-                self.assertIsInstance(hidden_states, (list, tuple))
-                self.assertEqual(len(hidden_states), expected_num_layers)
-                seq_len = getattr(self.model_tester, "seq_length", None)
-                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
-
-                self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
-                    [decoder_seq_length, self.model_tester.hidden_size],
-                )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
         for model_name in CLIP_VIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = CLIPViPVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

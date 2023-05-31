@@ -240,31 +240,30 @@ class CLIPViPVisionEmbeddings(nn.Module):
             self.temporal_embedding = nn.Parameter(torch.zeros(1, self.temporal_size, self.embed_dim))
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-        B, T, C, H, W = pixel_values.shape
-        if self.use_temporal_embed:
-            if T != self.temporal_embedding.shape[1]:
-                time_embed = self.temporal_embedding.transpose(1, 2)
-                time_embed = F.interpolate(time_embed, size=(T), mode="linear")
-                time_embed = time_embed.transpose(1, 2)
-            else:
-                time_embed = self.temporal_embedding
+        bsz, num_frames, in_channels, height, width = pixel_values.shape
+        if num_frames != self.temporal_embedding.shape[1]:
+            time_embed = self.temporal_embedding.transpose(1, 2)
+            time_embed = F.interpolate(time_embed, size=(num_frames), mode="linear")
+            time_embed = time_embed.transpose(1, 2)
+        else:
+            time_embed = self.temporal_embedding
 
-        patch_embeds = self.patch_embedding(pixel_values.reshape(-1, C, H, W))
-        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)  # [B*T, H*W, C]
-        C = patch_embeds.shape[-1]
-        patch_embeds = patch_embeds.reshape(B, T, -1, C)
-
-        if self.use_temporal_embed:
-            patch_embeds = patch_embeds + time_embed.unsqueeze(2)  # [B, T, H*W, C]
+        patch_embeds = self.patch_embedding(pixel_values.reshape(-1, in_channels, height, width))
+        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)  # [bsz*num_frames, height * width, out_channels]
+        out_channels = patch_embeds.shape[-1]
+        patch_embeds = patch_embeds.reshape(bsz, num_frames, -1, out_channels)
+        patch_embeds = patch_embeds + time_embed.unsqueeze(2)  # [bsz, num_frames, height * width, out_channels]
         patch_embeds = patch_embeds + self.position_embedding(self.position_ids[:, 1:]).unsqueeze(1)
 
-        class_embeds = self.class_embedding.expand(B, 1, -1)
+        class_embeds = self.class_embedding.expand(bsz, 1, -1)
         class_embeds = class_embeds + self.position_embedding(self.position_ids[:, 0:1])
 
-        added_cls = self.added_cls.expand(B, self.config.add_cls_num, -1)
+        added_cls = self.added_cls.expand(bsz, self.config.add_cls_num, -1)
         added_cls = added_cls + self.position_embedding(self.position_ids[:, 0:1])
 
-        N, L = patch_embeds.shape[1], patch_embeds.shape[2]
+        # N, L = patch_embeds.shape[1], patch_embeds.shape[2]
+        N = num_frames
+        L = height // self.config.patch_size * width // self.config.patch_size
 
         embeds = torch.cat(
             [class_embeds, added_cls, patch_embeds.reshape(patch_embeds.shape[0], -1, patch_embeds.shape[-1])], dim=1
