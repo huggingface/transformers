@@ -641,7 +641,7 @@ class BigBirdBlockSparseAttention(nn.Module):
         np.random.seed(seed)
         if from_seq_len in [1024, 3072, 4096]:  # old plans used in paper
             rand_attn = self._bigbird_block_rand_mask_fast(
-                from_seq_len, self.max_seqlen, from_block_size, to_block_size, n_rand_blocks, 1024, n_heads
+                from_seq_len, from_block_size, n_rand_blocks, n_heads
             )
         else:
             if plan_from_length is None:
