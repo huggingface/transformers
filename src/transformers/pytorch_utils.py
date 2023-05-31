@@ -16,6 +16,7 @@ from typing import Callable, List, Optional, Set, Tuple, Union
 
 import torch
 from packaging import version
+from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
 from .utils import logging
@@ -277,3 +278,13 @@ def meshgrid(
         if indexing != "ij":
             raise ValueError('torch.meshgrid only supports `indexing="ij"` for torch<1.10.')
         return torch.meshgrid(*tensors)
+
+
+def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
+    """
+    Unique identifier to a tensor storage. Multiple different tensors can share the same underlying storage. For
+    example, "meta" tensors all share the same storage, and thus their identifier will all be equal. This identifier is
+    guaranteed to be unique and constant for this tensor's storage during its lifetime. Two tensor storages with
+    non-overlapping lifetimes may have the same id.
+    """
+    return tensor.device, storage_ptr(tensor), storage_size(tensor)
