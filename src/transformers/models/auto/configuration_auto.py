@@ -33,6 +33,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("align", "AlignConfig"),
         ("altclip", "AltCLIPConfig"),
         ("audio-spectrogram-transformer", "ASTConfig"),
+        ("autoformer", "AutoformerConfig"),
         ("bart", "BartConfig"),
         ("beit", "BeitConfig"),
         ("bert", "BertConfig"),
@@ -225,6 +226,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("align", "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("altclip", "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("audio-spectrogram-transformer", "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("autoformer", "AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bart", "BART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bert", "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -399,6 +401,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),
         ("audio-spectrogram-transformer", "Audio Spectrogram Transformer"),
+        ("autoformer", "Autoformer"),
         ("bart", "BART"),
         ("barthez", "BARThez"),
         ("bartpho", "BARTpho"),
@@ -938,6 +941,7 @@ class AutoConfig:
                 )
             class_ref = config_dict["auto_map"]["AutoConfig"]
             config_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
+            _ = kwargs.pop("code_revision", None)
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]
