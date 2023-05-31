@@ -45,8 +45,14 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    is_safetensors_available,
+    cached_file,
 )
 from .configuration_wav2vec2 import Wav2Vec2Config
+
+if is_safetensors_available():
+    from safetensors.torch import load_file as safe_load_file
+
 
 
 logger = logging.get_logger(__name__)
@@ -1174,6 +1180,179 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         if isinstance(module, (Wav2Vec2Encoder, Wav2Vec2EncoderStableLayerNorm, Wav2Vec2FeatureEncoder)):
             module.gradient_checkpointing = value
 
+    @property
+    def _adapters(self):
+        if self.config.num_attn_adapters is None:
+            raise ValueError(f"{self.__class__} has no adapter layers. Make sure to define `config.num_attn_adapters`.")
+
+        adapter_weights = {}
+        for name, module in self.named_modules():
+            if isinstance(module, Wav2Vec2AttnAdapterLayer):
+                for param_name, param in module.named_parameters():
+                    adapter_weights['.'.join([name, param_name])] = param
+
+        if isinstance(self, Wav2Vec2ForCTC):
+            for name, param in self.lm_head.named_parameters():
+                adapter_weights['.'.join(["lm_head", name])] = param
+
+        return adapter_weights
+
+    def load_adapter(self, target_lang: str, **kwargs):
+        r"""
+        Load a language adapter model from a pre-trained adapter model.
+
+        Parameters:
+            target_lang (`str`):
+                Has to be a language id of an existing adapter weight. Adapter weights are stored in the format adapter.<lang>.safetensors or adapter.<lang>.bin
+            cache_dir (`Union[str, os.PathLike]`, *optional*):
+                Path to a directory in which a downloaded pretrained model configuration should be cached if the
+                standard cache should not be used.
+            force_download (`bool`, *optional*, defaults to `False`):
+                Whether or not to force the (re-)download of the model weights and configuration files, overriding the
+                cached versions if they exist.
+            resume_download (`bool`, *optional*, defaults to `False`):
+                Whether or not to delete incompletely received files. Will attempt to resume the download if such a
+                file exists.
+            proxies (`Dict[str, str]`, *optional*):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+            local_files_only(`bool`, *optional*, defaults to `False`):
+                Whether or not to only look at local files (i.e., do not try to download the model).
+            use_auth_token (`str` or `bool`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+            revision (`str`, *optional*, defaults to `"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
+                identifier allowed by git.
+
+                <Tip>
+
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+
+                </Tip>
+
+            mirror (`str`, *optional*):
+                Mirror source to accelerate downloads in China. If you are from China and have an accessibility
+                problem, you can set this option to resolve it. Note that we do not guarantee the timeliness or safety.
+                Please refer to the mirror site for more information.
+
+        <Tip>
+
+        Activate the special ["offline-mode"](https://huggingface.co/transformers/installation.html#offline-mode) to
+        use this method in a firewalled environment.
+
+        </Tip>
+
+        Examples:
+
+        ```python
+        >>> from transformers import Wav2Vec2ForCTC, AutoProcessor
+
+        >>> ckpt = "facebook/mms-1b-all"
+        >>> processor = AutoProcessor.from_pretrained(ckpt)
+        >>> model = Wav2Vec2ForCTC.from_pretrained(ckpt, target_lang="eng")
+
+        >>> # set specific language
+        >>> processor.tokenizer.set_target_lang("spa")
+        >>> model.load_adapter("spa")
+    """
+        if self.config.num_attn_adapters is None:
+            raise ValueError(f"Cannot load_adapter for {target_lang} if `config.num_attn_adapters` is not defined.")
+
+        cache_dir = kwargs.pop("cache_dir", None)
+        force_download = kwargs.pop("force_download", False)
+        resume_download = kwargs.pop("resume_download", False)
+        proxies = kwargs.pop("proxies", None)
+        local_files_only = kwargs.pop("local_files_only", False)
+        use_auth_token = kwargs.pop("use_auth_token", None)
+        revision = kwargs.pop("revision", None)
+        use_safetensors = kwargs.pop("use_safetensors", None if is_safetensors_available() else False)
+
+        model_path_or_id = self.config._name_or_path
+        state_dict = None
+
+        # 1. Let's first try loading a safetensors adapter weight
+        if use_safetensors is not False:
+            filepath = f"adapter.{target_lang}.safetensors"
+
+            try:
+                weight_path = cached_file(
+                    model_path_or_id,
+                    filename=filepath,
+                    force_download=force_download,
+                    resume_download=resume_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    use_auth_token=use_auth_token,
+                    revision=revision,
+                    cache_dir=cache_dir,
+                )
+
+                state_dict = safe_load_file(weight_path)
+
+            except EnvironmentError:
+                if use_safetensors:
+                    # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
+                    # to the original exception.
+                    raise
+
+            except Exception:
+                # For any other exception, we throw a generic error.
+                if use_safetensors:
+                    raise EnvironmentError(
+                        f"Can't load the model for '{model_path_or_id}'. If you were trying to load it"
+                        " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
+                        f" same name. Otherwise, make sure '{model_path_or_id}' is the correct path to a"
+                        f" directory containing a file named {filepath}."
+                    )
+
+        # 2. If this didn't work let's try loading a PyTorch adapter weight
+        if state_dict is None:
+            filepath = f"adapter.{target_lang}.bin"
+
+            try:
+                weight_path = cached_file(
+                    model_path_or_id,
+                    filename=filepath,
+                    force_download=force_download,
+                    resume_download=resume_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    use_auth_token=use_auth_token,
+                    revision=revision,
+                    cache_dir=cache_dir,
+                )
+
+                state_dict = torch.load(weight_path, map_location="cpu")
+
+            except EnvironmentError:
+                # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
+                # to the original exception.
+                raise
+
+            except Exception:
+                # For any other exception, we throw a generic error.
+                raise EnvironmentError(
+                    f"Can't load the model for '{model_path_or_id}'. If you were trying to load it"
+                    " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
+                    f" same name. Otherwise, make sure '{model_path_or_id}' is the correct path to a"
+                    f" directory containing a file named {filepath}."
+                )
+
+        adapter_weights = self._adapters
+        unexpected_keys = set(state_dict.keys()) - set(adapter_weights.keys())
+        missing_keys = set(adapter_weights.keys()) - set(state_dict.keys())
+
+        if len(unexpected_keys) > 0:
+            raise ValueError(f"The adapter weights {weight_path} has unexpected keys: {', '.join(unexpected_keys)}.")
+        elif len(missing_keys) > 0:
+            raise ValueError(f"The adapter weights {weight_path} has missing keys: {', '.join(missing_keys)}.")
+
+        # make sure that adapter weights are put in exactly the same precision and device placement and overwritten adapter weights
+        state_dict = {k: v.to(adapter_weights[k]) for k,v in state_dict.items()}
+        self.load_state_dict(state_dict, strict=False)
+
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
     Wav2Vec2 was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech
@@ -1656,7 +1835,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
     WAV_2_VEC_2_START_DOCSTRING,
 )
 class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config, target_lang=None):
         super().__init__(config)
 
         self.wav2vec2 = Wav2Vec2Model(config)
@@ -1673,6 +1852,13 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
             config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
         )
         self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
+
+        if target_lang is not None and self.config.num_attn_adapters is None:
+            raise ValueError(f"Cannot pass `target_lang`: {target_lang} if `config.num_attn_adapters` is not defined.")
+        elif target_lang is None and self.config.num_attn_adapters is not None:
+            logger.info("By default `target_lang` is set to 'eng'.")
+        elif target_lang is not None:
+            self.load_adapter(target_lang)
 
         # Initialize weights and apply final processing
         self.post_init()
