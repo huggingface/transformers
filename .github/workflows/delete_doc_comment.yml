@@ -1,7 +1,7 @@
 name: Delete dev documentation
 
 on:
-  pull_request:
+  pull_request_target:
     types: [ closed ]
 
 
@@ -11,3 +11,5 @@ jobs:
     with:
       pr_number: ${{ github.event.number }}
       package: transformers
+    secrets:
+      hf_token: ${{ secrets.HF_DOC_BUILD_PUSH }}
