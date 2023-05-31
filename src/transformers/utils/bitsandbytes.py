@@ -241,6 +241,6 @@ def get_keys_to_not_convert(model):
         for name_to_remove in names_to_remove:
             if name_to_remove in name:
                 name = name.replace(name_to_remove, "")
-        filtered_module_names.append(name)
+        filtered_module_names.append(name.split(".")[-1])
 
     return filtered_module_names
