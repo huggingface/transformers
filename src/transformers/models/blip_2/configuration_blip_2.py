@@ -381,4 +381,5 @@ class Blip2Config(PretrainedConfig):
         output["qformer_config"] = self.qformer_config.to_dict()
         output["text_config"] = self.text_config.to_dict()
         output["model_type"] = self.__class__.model_type
+        self.dict_torch_dtype_to_str(output)
         return output

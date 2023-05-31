@@ -402,4 +402,5 @@ class AltCLIPConfig(PretrainedConfig):
         output["text_config"] = self.text_config.to_dict()
         output["vision_config"] = self.vision_config.to_dict()
         output["model_type"] = self.__class__.model_type
+        self.dict_torch_dtype_to_str(output)
         return output

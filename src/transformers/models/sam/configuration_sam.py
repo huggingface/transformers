@@ -341,4 +341,5 @@ class SamConfig(PretrainedConfig):
         output["prompt_encoder_config"] = self.prompt_encoder_config.to_dict()
         output["mask_decoder_config"] = self.mask_decoder_config.to_dict()
         output["model_type"] = self.__class__.model_type
+        self.dict_torch_dtype_to_str(output)
         return output

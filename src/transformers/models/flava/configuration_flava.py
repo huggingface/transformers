@@ -770,4 +770,5 @@ class FlavaConfig(PretrainedConfig):
         output["multimodal_config"] = self.multimodal_config.to_dict()
         output["image_codebook_config"] = self.image_codebook_config.to_dict()
         output["model_type"] = self.__class__.model_type
+        self.dict_torch_dtype_to_str(output)
         return output

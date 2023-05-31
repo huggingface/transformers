@@ -447,4 +447,5 @@ class ClapConfig(PretrainedConfig):
         output["text_config"] = self.text_config.to_dict()
         output["audio_config"] = self.audio_config.to_dict()
         output["model_type"] = self.__class__.model_type
+        self.dict_torch_dtype_to_str(output)
         return output

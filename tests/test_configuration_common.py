@@ -155,6 +155,12 @@ class ConfigTester(object):
             config_second = self.config_class.from_json_file(json_file_path)
 
         self.parent.assertEqual(config_second.to_dict(), config_first.to_dict())
+        
+        if is_torch_available():
+            import torch
+            json_data = self.config_class(torch_dtype = torch.float16).to_dict()
+            json.dumps(json_data, indent=4)
+
 
     def create_and_test_config_from_and_save_pretrained(self):
         config_first = self.config_class(**self.inputs_dict)

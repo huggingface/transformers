@@ -630,4 +630,5 @@ class JukeboxConfig(PretrainedConfig):
 
         output["vqvae_config"] = self.vqvae_config.to_dict()
         output["model_type"] = self.__class__.model_type
+        self.dict_torch_dtype_to_str(output)
         return output
