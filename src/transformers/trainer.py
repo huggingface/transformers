@@ -1783,19 +1783,6 @@ class Trainer:
         if resume_from_checkpoint is not None and self.is_deepspeed_enabled:
             deepspeed_load_checkpoint(self.model_wrapped, resume_from_checkpoint)
 
-        # prepare using `accelerator` prepare
-        if use_accelerator_prepare:
-            model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
-                self.model, self.optimizer, self.lr_scheduler
-            )
-
-        if getattr(self.accelerator.state, "fsdp_plugin", None) is not None:
-            self.model = model
-
-        # for the rest of this function `model` is the outside model, whether it was wrapped or not
-        if model is not self.model:
-            self.model_wrapped = model
-
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
 
