@@ -2687,7 +2687,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model = replace_with_bnb_linear(
                 model, modules_to_not_convert=modules_to_not_convert, quantization_config=quantization_config
             )
-
             # training in 8-bit is only available in 0.37.0+
             model._is_quantized_training_enabled = version.parse(
                 importlib_metadata.version("bitsandbytes")
@@ -2699,8 +2698,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if load_in_8bit and torch_dtype is None:
             logger.warning(
                 "You are loading your model in 8bit but you did not specify a `torch_dtype` attribute."
-                "All non-linear modules will be loaded in full precision.",
-                " If you want to load the other modules in other precision, please specify a `torch_dtype` attribute.",
+                "All non-linear modules will be loaded in full precision."
+                " If you want to load the other modules in other precision, please specify a `torch_dtype` attribute."
             )
 
         if isinstance(device_map, str):
