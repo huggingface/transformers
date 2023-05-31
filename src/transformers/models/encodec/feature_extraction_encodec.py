@@ -168,8 +168,14 @@ class EnCodecFeatureExtractor(SequenceFeatureExtractor):
             **kwargs,
         )
 
+        # output shape is (batch, channels, num_samples)
+        input_values = []
+        for example in padded_inputs["input_values"]:
+            if example.ndim == 1:
+                example = example[..., None]  # add mono channel dimension
+            input_values.append(example.T)
+
         # convert input values to correct format
-        input_values = padded_inputs["input_values"]
         if not isinstance(input_values[0], np.ndarray):
             padded_inputs["input_values"] = [np.asarray(array, dtype=np.float32) for array in input_values]
         elif (
@@ -180,13 +186,8 @@ class EnCodecFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["input_values"] = [array.astype(np.float32) for array in input_values]
         elif isinstance(input_values, np.ndarray) and input_values.dtype is np.dtype(np.float64):
             padded_inputs["input_values"] = input_values.astype(np.float32)
-
-        # add mono channel dimension
-        if padded_inputs["input_values"].ndim == 2:
-            padded_inputs["input_values"] = padded_inputs["input_values"][..., None]
-
-        # output shape is (batch, channels, num_samples)
-        padded_inputs["input_values"] = padded_inputs["input_values"].transpose(0, 2, 1)
+        else:
+            padded_inputs["input_values"] = input_values
 
         # convert attention_mask to correct format
         attention_mask = padded_inputs.get("attention_mask")
