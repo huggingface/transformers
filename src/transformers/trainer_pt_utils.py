@@ -838,7 +838,7 @@ class IterableDatasetShard(IterableDataset):
 
 
 def _get_learning_rate(self):
-    if self.deepspeed:
+    if self.is_deepspeed_enabled:
         # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
         # not run for the first few dozen steps while loss scale is too large, and thus during
         # that time `get_last_lr` will fail if called during that warm up stage, so work around it:
