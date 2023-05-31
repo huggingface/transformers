@@ -286,7 +286,5 @@ def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
     example, "meta" tensors all share the same storage, and thus their identifier will all be equal. This identifier is
     guaranteed to be unique and constant for this tensor's storage during its lifetime. Two tensor storages with
     non-overlapping lifetimes may have the same id.
-
-    Warning
     """
     return tensor.device, storage_ptr(tensor), storage_size(tensor)
