@@ -19,7 +19,6 @@ import json
 import logging
 import os
 import sys
-import unittest
 from unittest.mock import patch
 
 import torch
@@ -240,7 +239,6 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
             self.assertLess(result["eval_loss"], 0.5)
 
-    @unittest.skip("Broken, fix me Sourab")
     def test_run_squad(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
