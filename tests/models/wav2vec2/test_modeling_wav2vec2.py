@@ -21,10 +21,10 @@ import pickle
 import tempfile
 import traceback
 import unittest
-from safetensors.torch import save_file as safe_save_file
 
 import numpy as np
 from datasets import load_dataset
+from safetensors.torch import save_file as safe_save_file
 
 from transformers import Wav2Vec2Config, is_torch_available
 from transformers.testing_utils import (
@@ -68,11 +68,11 @@ if is_torch_available():
         Wav2Vec2Processor,
     )
     from transformers.models.wav2vec2.modeling_wav2vec2 import (
+        WAV2VEC2_ADAPTER_PT_FILE,
+        WAV2VEC2_ADAPTER_SAFE_FILE,
         Wav2Vec2GumbelVectorQuantizer,
         _compute_mask_indices,
         _sample_negative_indices,
-        WAV2VEC2_ADAPTER_PT_FILE,
-        WAV2VEC2_ADAPTER_SAFE_FILE,
     )
 
 
@@ -302,9 +302,7 @@ class Wav2Vec2ModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_values, attention_mask=attention_mask)
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.output_seq_length, self.vocab_size)
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.output_seq_length, self.vocab_size))
 
     def create_and_check_batch_inference(self, config, input_values, *args):
         # test does not pass for models making use of `group_norm`
@@ -821,8 +819,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             self.clear_torch_jit_class_registry()
 
 
-
-
 @require_torch
 class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
@@ -1124,10 +1120,14 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         processor = Wav2Vec2Processor.from_pretrained(
             "hf-internal-testing/tiny-random-wav2vec2", return_attention_mask=True
         )
+
         def get_logits(model, input_features):
             model = model.to(torch_device)
             batch = processor(
-                input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+                input_features,
+                padding=True,
+                sampling_rate=processor.feature_extractor.sampling_rate,
+                return_tensors="pt",
             )
 
             with torch.no_grad():
@@ -1139,9 +1139,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         input_features = [np.random.random(16_000 * s) for s in [1, 3, 2, 6]]
 
-        model = Wav2Vec2ForCTC.from_pretrained(
-            "hf-internal-testing/tiny-random-wav2vec2", num_attn_adapters=1
-        )
+        model = Wav2Vec2ForCTC.from_pretrained("hf-internal-testing/tiny-random-wav2vec2", num_attn_adapters=1)
 
         with tempfile.TemporaryDirectory() as tempdir:
             model.save_pretrained(tempdir)
@@ -1195,7 +1193,6 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         logits_2 = get_logits(model, input_features)
 
         torch.allclose(logits, logits_2, atol=1e-3)
-
 
     @slow
     def test_model_from_pretrained(self):

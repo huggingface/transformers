@@ -133,6 +133,7 @@ PARAM_MAPPING = {
     "ln_b": "layer_norm_bias",
 }
 
+
 def load_wav2vec2_layer(name, value, hf_model=None, hf_dict=None):
     is_used = False
     for key, mapped_key in MAPPING.items():
@@ -159,6 +160,7 @@ def load_wav2vec2_layer(name, value, hf_model=None, hf_dict=None):
                 set_recursively(mapped_key, value, name, weight_type, hf_model)
         continue
     return is_used
+
 
 def recursively_load_weights(fairseq_model, hf_model, is_headless):
     unused_weights = []

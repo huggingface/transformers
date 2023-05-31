@@ -43,19 +43,19 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    cached_file,
+    is_safetensors_available,
     logging,
     replace_return_docstrings,
-    is_safetensors_available,
-    cached_file,
 )
 from .configuration_wav2vec2 import Wav2Vec2Config
+
 
 WAV2VEC2_ADAPTER_PT_FILE = "adapter.{}.bin"
 WAV2VEC2_ADAPTER_SAFE_FILE = "adapter.{}.safetensors"
 
 if is_safetensors_available():
     from safetensors.torch import load_file as safe_load_file
-
 
 
 logger = logging.get_logger(__name__)
@@ -1060,7 +1060,7 @@ class Wav2Vec2AttnAdapterLayer(nn.Module):
         self.weight_1 = nn.Parameter(torch.empty(self.adapter_num, self.input_dim, self.hidden_dim))
         self.weight_2 = nn.Parameter(torch.empty(self.adapter_num, self.hidden_dim, self.input_dim))
         self.bias_1 = nn.Parameter(torch.empty(self.adapter_num, self.input_dim))
-        self.bias_2  = nn.Parameter(torch.empty(self.adapter_num, self.hidden_dim))
+        self.bias_2 = nn.Parameter(torch.empty(self.adapter_num, self.hidden_dim))
 
         self.layer_norm_weight = nn.Parameter(torch.empty(self.adapter_num, self.hidden_dim))
         self.layer_norm_bias = nn.Parameter(torch.empty(self.adapter_num, self.hidden_dim))
@@ -1186,17 +1186,19 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
     @property
     def _adapters(self):
         if self.config.num_attn_adapters is None:
-            raise ValueError(f"{self.__class__} has no adapter layers. Make sure to define `config.num_attn_adapters`.")
+            raise ValueError(
+                f"{self.__class__} has no adapter layers. Make sure to define `config.num_attn_adapters`."
+            )
 
         adapter_weights = {}
         for name, module in self.named_modules():
             if isinstance(module, Wav2Vec2AttnAdapterLayer):
                 for param_name, param in module.named_parameters():
-                    adapter_weights['.'.join([name, param_name])] = param
+                    adapter_weights[".".join([name, param_name])] = param
 
         if isinstance(self, Wav2Vec2ForCTC):
             for name, param in self.lm_head.named_parameters():
-                adapter_weights['.'.join(["lm_head", name])] = param
+                adapter_weights[".".join(["lm_head", name])] = param
 
         return adapter_weights
 
@@ -1206,7 +1208,8 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
         Parameters:
             target_lang (`str`):
-                Has to be a language id of an existing adapter weight. Adapter weights are stored in the format adapter.<lang>.safetensors or adapter.<lang>.bin
+                Has to be a language id of an existing adapter weight. Adapter weights are stored in the format
+                adapter.<lang>.safetensors or adapter.<lang>.bin
             cache_dir (`Union[str, os.PathLike]`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
@@ -1250,16 +1253,9 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import Wav2Vec2ForCTC, AutoProcessor
-
-        >>> ckpt = "facebook/mms-1b-all"
-        >>> processor = AutoProcessor.from_pretrained(ckpt)
-        >>> model = Wav2Vec2ForCTC.from_pretrained(ckpt, target_lang="eng")
-
-        >>> # set specific language
-        >>> processor.tokenizer.set_target_lang("spa")
-        >>> model.load_adapter("spa")
-    """
+        >>> from transformers import Wav2Vec2ForCTC, AutoProcessor >>> ckpt = "facebook/mms-1b-all" >>> processor =
+        AutoProcessor.from_pretrained(ckpt) >>> model = Wav2Vec2ForCTC.from_pretrained(ckpt, target_lang="eng") >>> #
+        set specific language >>> processor.tokenizer.set_target_lang("spa") >>> model.load_adapter("spa")"""
         if self.config.num_attn_adapters is None:
             raise ValueError(f"Cannot load_adapter for {target_lang} if `config.num_attn_adapters` is not defined.")
 
@@ -1277,7 +1273,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
         # 1. Let's first try loading a safetensors adapter weight
         if use_safetensors is not False:
-            filepath = WAV2VEC2_ADAPTER_SAFE_FILE .format(target_lang)
+            filepath = WAV2VEC2_ADAPTER_SAFE_FILE.format(target_lang)
 
             try:
                 weight_path = cached_file(
@@ -1312,7 +1308,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
         # 2. If this didn't work let's try loading a PyTorch adapter weight
         if state_dict is None:
-            filepath = WAV2VEC2_ADAPTER_PT_FILE .format(target_lang)
+            filepath = WAV2VEC2_ADAPTER_PT_FILE.format(target_lang)
 
             try:
                 weight_path = cached_file(
@@ -1355,11 +1351,13 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         # make sure now vocab size is correct
         target_vocab_size = state_dict["lm_head.weight"].shape[0]
         if target_vocab_size != self.config.vocab_size:
-            self.lm_head = nn.Linear(self.config.output_hidden_size, target_vocab_size, device=self.device, dtype=self.dtype)
+            self.lm_head = nn.Linear(
+                self.config.output_hidden_size, target_vocab_size, device=self.device, dtype=self.dtype
+            )
             self.config.vocab_size = target_vocab_size
 
         # make sure that adapter weights are put in exactly the same precision and device placement and overwritten adapter weights
-        state_dict = {k: v.to(adapter_weights[k]) for k,v in state_dict.items()}
+        state_dict = {k: v.to(adapter_weights[k]) for k, v in state_dict.items()}
         self.load_state_dict(state_dict, strict=False)
 
 

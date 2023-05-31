@@ -803,7 +803,7 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tempdir:
             tempfile_path = os.path.join(tempdir, "vocab.json")
-            with open(tempfile_path, 'w') as temp_file:
+            with open(tempfile_path, "w") as temp_file:
                 json.dump(nested_vocab, temp_file)
 
             tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(tempdir, target_lang="eng")
