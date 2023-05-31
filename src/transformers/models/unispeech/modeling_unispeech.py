@@ -654,6 +654,9 @@ class UniSpeechEncoderLayerStableLayerNorm(nn.Module):
         self.feed_forward = UniSpeechFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
+        if config.num_attn_adapters is not None:
+            self.adapter_layer = UniSpeechAttnAdapterLayer(config)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1340,7 +1343,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->UniSpeech, wav2vec2->unispeech, WAV_2_VEC_2->UNISPEECH
 class UniSpeechForCTC(UniSpeechPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config, target_lang=None):
         super().__init__(config)
 
         self.unispeech = UniSpeechModel(config)
@@ -1357,6 +1360,13 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
             config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
         )
         self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
+
+        if target_lang is not None and self.config.num_attn_adapters is None:
+            raise ValueError(f"Cannot pass `target_lang`: {target_lang} if `config.num_attn_adapters` is not defined.")
+        elif target_lang is None and self.config.num_attn_adapters is not None:
+            logger.info("By default `target_lang` is set to 'eng'.")
+        elif target_lang is not None:
+            self.load_adapter(target_lang)
 
         # Initialize weights and apply final processing
         self.post_init()
