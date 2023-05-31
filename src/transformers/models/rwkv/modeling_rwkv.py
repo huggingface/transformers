@@ -710,6 +710,13 @@ class RwkvModel(RwkvPreTrainedModel):
                         if hasattr(block.attention.output.weight, "SCB"):
                             block.attention.output.weight.SCB.div_(2 ** int(block_id // self.config.rescale_every))
                             block.feed_forward.value.weight.SCB.div_(2 ** int(block_id // self.config.rescale_every))
+                        elif hasattr(block.attention.output.weight, "quant_state"):
+                            block.attention.output.weight.quant_state[0].div_(
+                                2 ** int(block_id // self.config.rescale_every)
+                            )
+                            block.feed_forward.value.weight.quant_state[0].div_(
+                                2 ** int(block_id // self.config.rescale_every)
+                            )
                         else:
                             block.attention.output.weight.div_(2 ** int(block_id // self.config.rescale_every))
                             block.feed_forward.value.weight.div_(2 ** int(block_id // self.config.rescale_every))
