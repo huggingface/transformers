@@ -318,11 +318,15 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.mask_decoder_config_tester = ConfigTester(
             self, config_class=SamMaskDecoderConfig, has_text_modality=False
         )
+        self.config_tester = ConfigTester(
+            self, config_class=SamConfig, hidden_size=37, common_properties=[], has_text_modality=False
+        )
 
     def test_config(self):
         self.vision_config_tester.run_common_tests()
         self.prompt_encoder_config_tester.run_common_tests()
         self.mask_decoder_config_tester.run_common_tests()
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="SAM's vision encoder does not use inputs_embeds")
     def test_inputs_embeds(self):

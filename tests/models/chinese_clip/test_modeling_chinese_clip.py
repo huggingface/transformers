@@ -547,6 +547,12 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         text_kwargs = {"use_labels": False, "batch_size": 12}
         vision_kwargs = {"batch_size": 12}
         self.model_tester = ChineseCLIPModelTester(self, text_kwargs, vision_kwargs)
+        self.config_tester = ConfigTester(
+            self, config_class=ChineseCLIPConfig, hidden_size=37, common_properties=[], has_text_modality=False
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -520,6 +520,12 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = XCLIPModelTester(self)
+        self.config_tester = ConfigTester(
+            self, config_class=XCLIPConfig, hidden_size=37, common_properties=[], has_text_modality=False
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

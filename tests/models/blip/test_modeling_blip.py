@@ -409,8 +409,10 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_attention_outputs = False
 
     def setUp(self):
-        self.model_tester = BlipModelTester(self)        
-        self.config_tester = ConfigTester(self, config_class=BlipConfig, hidden_size=37, common_properties=[], has_text_modality = False)
+        self.model_tester = BlipModelTester(self)
+        self.config_tester = ConfigTester(
+            self, config_class=BlipConfig, hidden_size=37, common_properties=[], has_text_modality=False
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()

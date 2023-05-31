@@ -402,6 +402,12 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Pix2StructTextImageModelsModelTester(self)
+        self.config_tester = ConfigTester(
+            self, config_class=Pix2StructConfig, hidden_size=37, common_properties=[], has_text_modality=False
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
