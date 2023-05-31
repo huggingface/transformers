@@ -160,7 +160,7 @@ class TvltFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
 
         # create three inputs of length 800, 1000, and 1200
-        speech_inputs = [floats_list((1, x))[0] for x in range(8000, 14000, 20000)]
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
 
         # Test not batched input
@@ -184,6 +184,15 @@ class TvltFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
             np_speech_inputs, return_tensors="np", sampling_rate=44100, mask_audio=True
         ).audio_values
 
+        self.assertTrue(encoded_audios.ndim == 4)
+        self.assertTrue(encoded_audios.shape[-1] == feature_extractor.feature_size)
+        self.assertTrue(encoded_audios.shape[-2] <= feature_extractor.spectrogram_length)
+        self.assertTrue(encoded_audios.shape[-3] == feature_extractor.num_channels)
+
+        # Test 2-D numpy arrays are batched.
+        speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
+        np_speech_inputs = np.asarray(speech_inputs)
+        encoded_audios = feature_extractor(np_speech_inputs, return_tensors="np", sampling_rate=44100).audio_values
         self.assertTrue(encoded_audios.ndim == 4)
         self.assertTrue(encoded_audios.shape[-1] == feature_extractor.feature_size)
         self.assertTrue(encoded_audios.shape[-2] <= feature_extractor.spectrogram_length)

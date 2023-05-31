@@ -139,10 +139,17 @@ class OptimizerNames(ExplicitEnum):
     ADAMW_TORCH_XLA = "adamw_torch_xla"
     ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
-    ADAMW_BNB = "adamw_bnb_8bit"
     ADAMW_ANYPRECISION = "adamw_anyprecision"
     SGD = "sgd"
     ADAGRAD = "adagrad"
+    ADAMW_BNB = "adamw_bnb_8bit"
+    ADAMW_8BIT = "adamw_8bit"  # just an alias for adamw_bnb_8bit
+    LION_8BIT = "lion_8bit"
+    LION = "lion_32bit"
+    PAGED_ADAMW = "paged_adamw_32bit"
+    PAGED_ADAMW_8BIT = "paged_adamw_8bit"
+    PAGED_LION = "paged_lion_32bit"
+    PAGED_LION_8BIT = "paged_lion_8bit"
 
 
 @dataclass
@@ -1655,8 +1662,9 @@ class TrainingArguments:
         logger.info("PyTorch: setting up devices")
         if not is_sagemaker_mp_enabled() and not is_accelerate_available(check_partial_state=True):
             raise ImportError(
-                "Using the `Trainer` with `PyTorch` requires `accelerate`: Run `pip install --upgrade accelerate`"
+                "Using the `Trainer` with `PyTorch` requires `accelerate>=0.19.0`: Please run `pip install transformers[torch]` or `pip install accelerate -U`"
             )
+        self.distributed_state = None
         if self.no_cuda:
             self.distributed_state = PartialState(cpu=True, backend=self.ddp_backend)
             self._n_gpu = 0
@@ -1665,6 +1673,9 @@ class TrainingArguments:
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
             torch.cuda.set_device(device)
+        elif is_sagemaker_dp_enabled():
+            self.distributed_state = PartialState(_use_sagemaker_dp=True)
+            self._n_gpu = 1
         elif self.deepspeed:
             # Need to do similar for Accelerator init
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"
@@ -1680,7 +1691,7 @@ class TrainingArguments:
         if (
             torch.distributed.is_available()
             and torch.distributed.is_initialized()
-            and self.distributed_state.distributed_type == DistributedType.NO
+            and self.parallel_mode != ParallelMode.DISTRIBUTED
         ):
             logger.warning(
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
@@ -1689,8 +1700,9 @@ class TrainingArguments:
         if is_torch_tpu_available():
             device = self.distributed_state.device
             self._n_gpu = 0
-        elif is_sagemaker_dp_enabled():
-            self._n_gpu = 1
+        elif is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled():
+            # Already set _n_gpu
+            pass
         elif self.distributed_state.distributed_type == DistributedType.NO:
             if self.use_mps_device:
                 if not torch.backends.mps.is_available():
@@ -1716,7 +1728,9 @@ class TrainingArguments:
                         )
                     device = torch.device("mps")
                     self._n_gpu = 1
-
+            elif self.no_cuda:
+                device = torch.device("cpu")
+                self._n_gpu = 0
             else:
                 # if n_gpu is > 1 we'll use nn.DataParallel.
                 # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
@@ -1751,7 +1765,8 @@ class TrainingArguments:
         """
         requires_backends(self, ["torch"])
         # Make sure `self._n_gpu` is properly setup.
-        _ = self._setup_devices
+        if not hasattr(self, "_n_gpu"):
+            _ = self._setup_devices
         return self._n_gpu
 
     @property
@@ -1772,7 +1787,9 @@ class TrainingArguments:
             return ParallelMode.SAGEMAKER_MODEL_PARALLEL
         elif is_sagemaker_dp_enabled():
             return ParallelMode.SAGEMAKER_DATA_PARALLEL
-        elif hasattr(self, "distributed_state") and self.distributed_state.distributed_type != DistributedType.NO:
+        elif (
+            self.distributed_state is not None and self.distributed_state.distributed_type != DistributedType.NO
+        ) or (self.distributed_state is None and self.local_rank != -1):
             return ParallelMode.DISTRIBUTED
         elif self.n_gpu > 1:
             return ParallelMode.NOT_DISTRIBUTED

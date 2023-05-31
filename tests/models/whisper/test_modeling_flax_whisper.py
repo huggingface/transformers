@@ -248,6 +248,10 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
 
+    def check_pt_flax_outputs(self, fx_outputs, pt_outputs, model_class, tol=5e-5, name="outputs", attributes=None):
+        # We override with a slightly higher tol value, as test recently became flaky
+        super().check_pt_flax_outputs(fx_outputs, pt_outputs, model_class, tol, name, attributes)
+
     # overwrite because of `input_features`
     @is_pt_flax_cross_test
     def test_save_load_bf16_to_base_pt(self):

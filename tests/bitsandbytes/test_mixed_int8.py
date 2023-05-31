@@ -29,6 +29,7 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import (
+    is_accelerate_available,
     is_torch_available,
     require_accelerate,
     require_bitsandbytes,
@@ -39,6 +40,13 @@ from transformers.testing_utils import (
 )
 from transformers.utils.versions import importlib_metadata
 
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.logging import get_logger
+
+    logger = get_logger(__name__)
+    _ = PartialState()
 
 if is_torch_available():
     import torch
@@ -123,6 +131,21 @@ class MixedInt8Test(BaseMixedInt8Test):
         self.assertAlmostEqual(mem_fp16 / mem_8bit, self.EXPECTED_RELATIVE_DIFFERENCE)
         self.assertTrue(self.model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
 
+    def test_linear_are_8bit(self):
+        r"""
+        A simple test to check if the model conversion has been done correctly by checking on the
+        memory footprint of the converted model and the class type of the linear layers of the converted models
+        """
+        from transformers import T5PreTrainedModel
+
+        self.model_fp16.get_memory_footprint()
+        self.model_8bit.get_memory_footprint()
+
+        for name, module in self.model_8bit.named_modules():
+            if isinstance(module, torch.nn.Linear):
+                if name not in ["lm_head"] + T5PreTrainedModel._keep_in_fp32_modules:
+                    self.assertTrue(module.weight.dtype == torch.int8)
+
     def test_generate_quality(self):
         r"""
         Test the generation quality of the quantized model and see that we are matching the expected output.
@@ -139,6 +162,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         Test that loading the model with the config is equivalent
         """
         bnb_config = BitsAndBytesConfig()
+        bnb_config.load_in_8bit = True
 
         model_8bit_from_config = AutoModelForCausalLM.from_pretrained(
             self.model_name, quantization_config=bnb_config, device_map="auto"
@@ -321,6 +345,7 @@ class MixedInt8T5Test(unittest.TestCase):
         """
         from transformers import T5ForConditionalGeneration
 
+        modules = T5ForConditionalGeneration._keep_in_fp32_modules
         T5ForConditionalGeneration._keep_in_fp32_modules = None
 
         # test with `t5-small`
@@ -334,6 +359,7 @@ class MixedInt8T5Test(unittest.TestCase):
         )
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
         _ = model.generate(**encoded_input)
+        T5ForConditionalGeneration._keep_in_fp32_modules = modules
 
     def test_inference_with_keep_in_fp32(self):
         r"""

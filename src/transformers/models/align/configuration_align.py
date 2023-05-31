@@ -184,7 +184,7 @@ class AlignVisionConfig(PretrainedConfig):
             List of output channel sizes to be used in each block for convolutional layers.
         depthwise_padding (`List[int]`, *optional*, defaults to `[]`):
             List of block indices with square padding.
-        strides: (`List[int]`, *optional*, defaults to `[1, 2, 2, 2, 1, 2, 1]`):
+        strides (`List[int]`, *optional*, defaults to `[1, 2, 2, 2, 1, 2, 1]`):
             List of stride sizes to be used in each block for convolutional layers.
         num_block_repeats (`List[int]`, *optional*, defaults to `[1, 2, 2, 3, 3, 4, 1]`):
             List of the number of times each block is to repeated.
