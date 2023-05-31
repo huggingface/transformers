@@ -31,6 +31,8 @@ transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 SPECIAL_CASES_TO_ALLOW = {
+    # used to update the text config
+    "Blip2Config": ["is_encoder_decoder", "tie_word_embeddings"],
     # used as `self.bert_model = BertModel(config, ...)`
     "DPRConfig": True,
     # not used in modeling files, but it's an important information
