@@ -182,7 +182,7 @@ class Wav2Vec2Config(PretrainedConfig):
             True`.
         num_attn_adapters (`int`, *optional*):
             Number of adapter weights to be used in each attention block. An example of a model using attention
-            adapters is XXX.
+            adapters is [facebook/mms-1b-all](https://huggingface.co/facebook/mms-1b-all).
         output_hidden_size (`int`, *optional*):
             Dimensionality of the encoder output layer. If not defined, this defaults to *hidden-size*. Only relevant
             if `add_adapter is True`.
