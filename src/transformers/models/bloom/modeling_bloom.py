@@ -481,6 +481,7 @@ class BloomPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BloomBlock"]
+    _skip_keys_device_placement = "past_key_values"
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)

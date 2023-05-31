@@ -982,6 +982,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "bridgetower"
     supports_gradient_checkpointing = False
     _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
+    _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
         if isinstance(module, BridgeTowerVisionModel):
