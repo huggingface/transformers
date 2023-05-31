@@ -1252,9 +1252,16 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import Wav2Vec2ForCTC, AutoProcessor >>> ckpt = "facebook/mms-1b-all" >>> processor =
-        AutoProcessor.from_pretrained(ckpt) >>> model = Wav2Vec2ForCTC.from_pretrained(ckpt, target_lang="eng") >>> #
-        set specific language >>> processor.tokenizer.set_target_lang("spa") >>> model.load_adapter("spa")"""
+        >>> from transformers import Wav2Vec2ForCTC, AutoProcessor
+
+        >>> ckpt = "facebook/mms-1b-all"
+        >>> processor = AutoProcessor.from_pretrained(ckpt)
+        >>> model = Wav2Vec2ForCTC.from_pretrained(ckpt, target_lang="eng")
+        >>> # set specific language
+        >>> processor.tokenizer.set_target_lang("spa")
+        >>> model.load_adapter("spa")
+        ```
+        """
         if self.config.num_attn_adapters is None:
             raise ValueError(f"Cannot load_adapter for {target_lang} if `config.num_attn_adapters` is not defined.")
 
