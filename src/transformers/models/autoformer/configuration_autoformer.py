@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,9 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Time Series Transformer model configuration"""
+""" Autoformer model configuration"""
 
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -22,21 +22,17 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "huggingface/time-series-transformer-tourism-monthly": (
-        "https://huggingface.co/huggingface/time-series-transformer-tourism-monthly/resolve/main/config.json"
-    ),
-    # See all TimeSeriesTransformer models at https://huggingface.co/models?filter=time_series_transformer
+AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "huggingface/autoformer-tourism-monthly": "https://huggingface.co/huggingface/autoformer-tourism-monthly/resolve/main/config.json",
 }
 
 
-class TimeSeriesTransformerConfig(PretrainedConfig):
+class AutoformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`TimeSeriesTransformerModel`]. It is used to
-    instantiate a Time Series Transformer model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the Time Series
-    Transformer
-    [huggingface/time-series-transformer-tourism-monthly](https://huggingface.co/huggingface/time-series-transformer-tourism-monthly)
+    This is the configuration class to store the configuration of an [`AutoformerModel`]. It is used to instantiate an
+    Autoformer model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the Autoformer
+    [huggingface/autoformer-tourism-monthly](https://huggingface.co/huggingface/autoformer-tourism-monthly)
     architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
@@ -44,10 +40,9 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
 
     Args:
         prediction_length (`int`):
-            The prediction length for the decoder. In other words, the prediction horizon of the model. This value is
-            typically dictated by the dataset and we recommend to set it appropriately.
+            The prediction length for the decoder. In other words, the prediction horizon of the model.
         context_length (`int`, *optional*, defaults to `prediction_length`):
-            The context length for the encoder. If `None`, the context length will be the same as the
+            The context length for the encoder. If unset, the context length will be the same as the
             `prediction_length`.
         distribution_output (`string`, *optional*, defaults to `"student_t"`):
             The distribution emission head for the model. Could be either "student_t", "normal" or "negative_binomial".
@@ -57,12 +52,11 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         input_size (`int`, *optional*, defaults to 1):
             The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
             multivariate targets.
-        scaling (`string` or `bool`, *optional* defaults to `"mean"`):
-            Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
-            scaler is set to "mean".
         lags_sequence (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`):
-            The lags of the input time series as covariates often dictated by the frequency of the data. Default is
-            `[1, 2, 3, 4, 5, 6, 7]` but we recommend to change it based on the dataset appropriately.
+            The lags of the input time series as covariates often dictated by the frequency. Default is `[1, 2, 3, 4,
+            5, 6, 7]`.
+        scaling (`bool`, *optional* defaults to `True`):
+            Whether to scale the input targets.
         num_time_features (`int`, *optional*, defaults to 0):
             The number of time features in the input time series.
         num_dynamic_real_features (`int`, *optional*, defaults to 0):
@@ -112,22 +106,32 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             The standard deviation of the truncated normal weight initialization distribution.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
+        label_length (`int`, *optional*, defaults to 10):
+            Start token length of the Autoformer decoder, which is used for direct multi-step prediction (i.e.
+            non-autoregressive generation).
+        moving_average (`int`, defaults to 25):
+            The window size of the moving average. In practice, it's the kernel size in AvgPool1d of the Decomposition
+            Layer.
+        autocorrelation_factor (`int`, defaults to 3):
+            "Attention" (i.e. AutoCorrelation mechanism) factor which is used to find top k autocorrelations delays.
+            It's recommended in the paper to set it to a number between 1 and 5.
+
 
         Example:
 
     ```python
-    >>> from transformers import TimeSeriesTransformerConfig, TimeSeriesTransformerModel
+    >>> from transformers import AutoformerConfig, AutoformerModel
 
-    >>> # Initializing a Time Series Transformer configuration with 12 time steps for prediction
-    >>> configuration = TimeSeriesTransformerConfig(prediction_length=12)
+    >>> # Initializing a default Autoformer configuration
+    >>> configuration = AutoformerConfig()
 
     >>> # Randomly initializing a model (with random weights) from the configuration
-    >>> model = TimeSeriesTransformerModel(configuration)
+    >>> model = AutoformerModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "time_series_transformer"
+    model_type = "autoformer"
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
@@ -142,22 +146,21 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         loss: str = "nll",
         input_size: int = 1,
         lags_sequence: List[int] = [1, 2, 3, 4, 5, 6, 7],
-        scaling: Optional[Union[str, bool]] = "mean",
+        scaling: bool = True,
+        num_time_features: int = 0,
         num_dynamic_real_features: int = 0,
         num_static_categorical_features: int = 0,
         num_static_real_features: int = 0,
-        num_time_features: int = 0,
         cardinality: Optional[List[int]] = None,
         embedding_dimension: Optional[List[int]] = None,
-        encoder_ffn_dim: int = 32,
-        decoder_ffn_dim: int = 32,
+        d_model: int = 64,
         encoder_attention_heads: int = 2,
         decoder_attention_heads: int = 2,
         encoder_layers: int = 2,
         decoder_layers: int = 2,
-        is_encoder_decoder: bool = True,
+        encoder_ffn_dim: int = 32,
+        decoder_ffn_dim: int = 32,
         activation_function: str = "gelu",
-        d_model: int = 64,
         dropout: float = 0.1,
         encoder_layerdrop: float = 0.1,
         decoder_layerdrop: float = 0.1,
@@ -165,12 +168,17 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         activation_dropout: float = 0.1,
         num_parallel_samples: int = 100,
         init_std: float = 0.02,
-        use_cache=True,
+        use_cache: bool = True,
+        is_encoder_decoder=True,
+        # Autoformer arguments
+        label_length: int = 10,
+        moving_average: int = 25,
+        autocorrelation_factor: int = 3,
         **kwargs,
     ):
         # time series specific configuration
         self.prediction_length = prediction_length
-        self.context_length = context_length or prediction_length
+        self.context_length = context_length if context_length is not None else prediction_length
         self.distribution_output = distribution_output
         self.loss = loss
         self.input_size = input_size
@@ -180,7 +188,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.num_dynamic_real_features = num_dynamic_real_features
         self.num_static_real_features = num_static_real_features
         self.num_static_categorical_features = num_static_categorical_features
-        if cardinality and num_static_categorical_features > 0:
+        if cardinality is not None and num_static_categorical_features > 0:
             if len(cardinality) != num_static_categorical_features:
                 raise ValueError(
                     "The cardinality should be a list of the same length as `num_static_categorical_features`"
@@ -188,7 +196,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             self.cardinality = cardinality
         else:
             self.cardinality = [0]
-        if embedding_dimension and num_static_categorical_features > 0:
+        if embedding_dimension is not None and num_static_categorical_features > 0:
             if len(embedding_dimension) != num_static_categorical_features:
                 raise ValueError(
                     "The embedding dimension should be a list of the same length as `num_static_categorical_features`"
@@ -199,7 +207,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.num_parallel_samples = num_parallel_samples
 
         # Transformer architecture configuration
-        self.feature_size = input_size * len(lags_sequence) + self._number_of_features
+        self.feature_size = input_size * len(self.lags_sequence) + self._number_of_features
         self.d_model = d_model
         self.encoder_attention_heads = encoder_attention_heads
         self.decoder_attention_heads = decoder_attention_heads
@@ -218,6 +226,11 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.init_std = init_std
 
         self.use_cache = use_cache
+
+        # Autoformer
+        self.label_length = label_length
+        self.moving_average = moving_average
+        self.autocorrelation_factor = autocorrelation_factor
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
