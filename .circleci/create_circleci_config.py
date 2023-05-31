@@ -39,7 +39,7 @@ DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 class EmptyJob:
     job_name = "empty"
 
-    def to_dict():
+    def to_dict(self):
         return {
             "working_directory": "~/transformers",
             "docker": copy.deepcopy(DEFAULT_DOCKER_IMAGE),
