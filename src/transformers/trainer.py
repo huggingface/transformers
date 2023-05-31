@@ -67,7 +67,7 @@ from . import __version__
 from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
-from .deepspeed import deepspeed_init, is_deepspeed_zero3_enabled
+from .deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
@@ -212,6 +212,9 @@ if is_accelerate_available():
     if version.parse(accelerate_version) >= version.parse("0.16"):
         from accelerate import skip_first_batches
 
+    from accelerate import Accelerator
+    from accelerate.utils import DistributedDataParallelKwargs
+
 
 if TYPE_CHECKING:
     import optuna
@@ -334,8 +337,33 @@ class Trainer:
         # Seed must be set before instantiating the model when using model
         enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
         self.hp_name = None
-        self.deepspeed = None
         self.is_in_train = False
+
+        # create accelerator object
+        self.accelerator = Accelerator(
+            deepspeed_plugin=self.args.deepspeed_plugin,
+            gradient_accumulation_steps=self.args.gradient_accumulation_steps,
+        )
+
+        # deepspeed and accelerate flags covering both trainer args and accelerate launcher
+        self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
+        self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
+
+        # post accelerator creation setup
+        if self.is_fsdp_enabled:
+            fsdp_plugin = self.accelerator.state.fsdp_plugin
+            fsdp_plugin.limit_all_gathers = self.args.fsdp_config.get("limit_all_gathers", False)
+            fsdp_plugin.use_orig_params = self.args.fsdp_config.get("use_orig_params", False)
+
+        if self.is_deepspeed_enabled:
+            if getattr(self.args, "hf_deepspeed_config", None) is None:
+                from transformers.deepspeed import HfTrainerDeepSpeedConfig
+
+                ds_plugin = self.accelerator.state.deepspeed_plugin
+
+                ds_plugin.hf_ds_config = HfTrainerDeepSpeedConfig(ds_plugin.hf_ds_config.config)
+                ds_plugin.deepspeed_config = ds_plugin.hf_ds_config.config
+                ds_plugin.hf_ds_config.trainer_config_process(self.args)
 
         # memory metrics - must set up as early as possible
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
@@ -377,12 +405,12 @@ class Trainer:
         else:
             self.is_model_parallel = False
 
-        if (
-            getattr(model, "hf_device_map", None) is not None
-            and len([device for device in set(model.hf_device_map.values()) if device not in ["cpu", "disk"]]) > 1
-            and not self.is_model_parallel
-        ):
-            self.is_model_parallel = True
+        if getattr(model, "hf_device_map", None) is not None:
+            devices = [device for device in set(model.hf_device_map.values()) if device not in ["cpu", "disk"]]
+            if len(devices) > 1:
+                self.is_model_parallel = True
+            else:
+                self.is_model_parallel = self.args.device != torch.device(devices[0])
 
             # warn users
             logger.info(
@@ -391,8 +419,8 @@ class Trainer:
             )
 
         # At this stage the model is already loaded
-        if getattr(model, "is_loaded_in_kbit", False):
-            if getattr(model, "_is_kbit_training_enabled", False):
+        if getattr(model, "is_quantized", False):
+            if getattr(model, "_is_quantized_training_enabled", False):
                 logger.info(
                     "The model is loaded in 8-bit precision. To train this model you need to add additional modules"
                     " inside the model such as adapters using `peft` library and freeze the model weights. Please"
@@ -408,7 +436,7 @@ class Trainer:
         # Setup Sharded DDP training
         self.sharded_ddp = None
         if len(args.sharded_ddp) > 0:
-            if args.deepspeed:
+            if self.is_deepspeed_enabled:
                 raise ValueError(
                     "Using --sharded_ddp xxx together with --deepspeed is not possible, deactivate one of those flags."
                 )
@@ -434,7 +462,7 @@ class Trainer:
 
         self.fsdp = None
         if len(args.fsdp) > 0:
-            if args.deepspeed:
+            if self.is_deepspeed_enabled:
                 raise ValueError(
                     "Using --fsdp xxx together with --deepspeed is not possible, deactivate one of those flags."
                 )
@@ -458,7 +486,7 @@ class Trainer:
                 self.fsdp = ShardingStrategy.NO_SHARD
 
             self.backward_prefetch = BackwardPrefetch.BACKWARD_PRE
-            if "backward_prefetch" in self.args.fsdp_config and "backward_pos" in self.args.fsdp_config.get(
+            if "backward_prefetch" in self.args.fsdp_config and "backward_post" in self.args.fsdp_config.get(
                 "backward_prefetch", []
             ):
                 self.backward_prefetch = BackwardPrefetch.BACKWARD_POST
@@ -482,10 +510,11 @@ class Trainer:
         self.place_model_on_device = args.place_model_on_device
         if (
             self.is_model_parallel
-            or args.deepspeed
+            or self.is_deepspeed_enabled
             or ((args.fp16_full_eval or args.bf16_full_eval) and not args.do_train)
             or (self.sharded_ddp in [ShardedDDPOption.ZERO_DP_2, ShardedDDPOption.ZERO_DP_3])
             or (self.fsdp is not None)
+            or self.is_fsdp_enabled
         ):
             self.place_model_on_device = False
 
@@ -529,7 +558,7 @@ class Trainer:
                     " `Trainer`. Make sure the lines `import torch_xla.core.xla_model as xm` and"
                     " `model.to(xm.xla_device())` is performed before the optimizer creation in your script."
                 )
-        if ((self.sharded_ddp is not None) or args.deepspeed or (self.fsdp is not None)) and (
+        if ((self.sharded_ddp is not None) or self.is_deepspeed_enabled or (self.fsdp is not None)) and (
             self.optimizer is not None or self.lr_scheduler is not None
         ):
             raise RuntimeError(
@@ -607,7 +636,7 @@ class Trainer:
                         "but SageMaker Model Parallelism < 1.10 does not support FP16 in trainer."
                     )
 
-        if args.fp16 or args.bf16:
+        if (args.fp16 or args.bf16) and self.sharded_ddp is not None:
             if args.half_precision_backend == "auto":
                 if args.device == torch.device("cpu"):
                     if args.fp16:
@@ -622,32 +651,33 @@ class Trainer:
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
         self.do_grad_scaling = False
-        if (args.fp16 or args.bf16) and not (args.deepspeed or is_sagemaker_mp_enabled()):
+        if (args.fp16 or args.bf16) and not (self.is_deepspeed_enabled or is_sagemaker_mp_enabled()):
             # deepspeed and SageMaker Model Parallel manage their own half precision
-            if args.half_precision_backend == "cuda_amp":
-                self.use_cuda_amp = True
-                self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
-                #  bf16 does not need grad scaling
-                self.do_grad_scaling = self.amp_dtype == torch.float16
-                if self.do_grad_scaling:
-                    if self.sharded_ddp is not None:
-                        self.scaler = ShardedGradScaler()
-                    elif self.fsdp is not None:
-                        from torch.distributed.fsdp.sharded_grad_scaler import (
-                            ShardedGradScaler as FSDPShardedGradScaler,
-                        )
+            if self.sharded_ddp is not None:
+                if args.half_precision_backend == "cuda_amp":
+                    self.use_cuda_amp = True
+                    self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
+                    #  bf16 does not need grad scaling
+                    self.do_grad_scaling = self.amp_dtype == torch.float16
+                    if self.do_grad_scaling:
+                        if self.sharded_ddp is not None:
+                            self.scaler = ShardedGradScaler()
+                        elif self.fsdp is not None:
+                            from torch.distributed.fsdp.sharded_grad_scaler import (
+                                ShardedGradScaler as FSDPShardedGradScaler,
+                            )
 
-                        self.scaler = FSDPShardedGradScaler()
-                    elif is_torch_tpu_available():
-                        from torch_xla.amp import GradScaler
+                            self.scaler = FSDPShardedGradScaler()
+                        elif is_torch_tpu_available():
+                            from torch_xla.amp import GradScaler
 
-                        self.scaler = GradScaler()
-                    else:
-                        self.scaler = torch.cuda.amp.GradScaler()
-            elif args.half_precision_backend == "cpu_amp":
-                self.use_cpu_amp = True
-                self.amp_dtype = torch.bfloat16
-            else:
+                            self.scaler = GradScaler()
+                        else:
+                            self.scaler = torch.cuda.amp.GradScaler()
+                elif args.half_precision_backend == "cpu_amp":
+                    self.use_cpu_amp = True
+                    self.amp_dtype = torch.bfloat16
+            elif args.half_precision_backend == "apex":
                 if not is_apex_available():
                     raise ImportError(
                         "Using FP16 with APEX but APEX is not installed, please refer to"
@@ -1303,12 +1333,17 @@ class Trainer:
             logger.info(f"SigOpt Assignments: {trial.assignments}")
         if self.hp_search_backend == HPSearchBackend.WANDB:
             logger.info(f"W&B Sweep parameters: {trial}")
-        if self.args.deepspeed:
+        if self.is_deepspeed_enabled:
+            if self.args.deepspeed is None:
+                raise ValueError("For sweeps with deepspeed, `args.deepspeed` must be set")
             # Rebuild the deepspeed config to reflect the updated training parameters
+            from accelerate.utils import DeepSpeedPlugin
+
             from transformers.deepspeed import HfTrainerDeepSpeedConfig
 
             self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
             self.args.hf_deepspeed_config.trainer_config_process(self.args)
+            self.accelerator.state.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.hf_deepspeed_config)
 
     def _report_to_hp_search(self, trial: Union["optuna.Trial", Dict[str, Any]], step: int, metrics: Dict[str, float]):
         if self.hp_search_backend is None or trial is None:
@@ -1427,10 +1462,6 @@ class Trainer:
                 return self.model_wrapped
             return smp.DistributedModel(model, backward_passes_per_step=self.args.gradient_accumulation_steps)
 
-        # already initialized its own DDP and AMP
-        if self.deepspeed:
-            return self.deepspeed
-
         # train/eval could be run multiple-times - if already wrapped, don't re-wrap it again
         if unwrap_model(model) is not model:
             return model
@@ -1472,119 +1503,65 @@ class Trainer:
                     cpu_offload=cpu_offload,
                 ).to(self.args.device)
         # Distributed training using PyTorch FSDP
-        elif self.fsdp is not None:
-            if not self.args.fsdp_config["xla"]:
-                # PyTorch FSDP!
-                from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload, MixedPrecision
-                from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
-                from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
-
-                if FSDPOption.OFFLOAD in self.args.fsdp:
-                    cpu_offload = CPUOffload(offload_params=True)
-                else:
-                    cpu_offload = CPUOffload(offload_params=False)
-
-                auto_wrap_policy = None
-
-                if FSDPOption.AUTO_WRAP in self.args.fsdp:
-                    if self.args.fsdp_config["fsdp_min_num_params"] > 0:
-                        auto_wrap_policy = functools.partial(
-                            size_based_auto_wrap_policy, min_num_params=self.args.fsdp_config["fsdp_min_num_params"]
-                        )
-                    elif self.args.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None) is not None:
-                        transformer_cls_to_wrap = set()
-                        for layer_class in self.args.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]:
-                            transformer_cls = get_module_class_from_name(model, layer_class)
-                            if transformer_cls is None:
-                                raise Exception("Could not find the transformer layer class to wrap in the model.")
-                            else:
-                                transformer_cls_to_wrap.add(transformer_cls)
-                        auto_wrap_policy = functools.partial(
-                            transformer_auto_wrap_policy,
-                            # Transformer layer class to wrap
-                            transformer_layer_cls=transformer_cls_to_wrap,
-                        )
-                mixed_precision_policy = None
-                dtype = None
-                if self.args.fp16:
-                    dtype = torch.float16
-                elif self.args.bf16:
-                    dtype = torch.bfloat16
-                if dtype is not None:
-                    mixed_precision_policy = MixedPrecision(param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=dtype)
-                if type(model) != FSDP:
-                    # XXX: Breaking the self.model convention but I see no way around it for now.
-                    signature = inspect.signature(FSDP.__init__).parameters.keys()
-                    kwargs = {}
-                    for arg in ["limit_all_gathers", "forward_prefetch", "backward_prefetch"]:
-                        if arg in signature:
-                            kwargs[arg] = getattr(self, arg)
-                    self.model = model = FSDP(
-                        model,
-                        sharding_strategy=self.fsdp,
-                        cpu_offload=cpu_offload,
-                        auto_wrap_policy=auto_wrap_policy,
-                        mixed_precision=mixed_precision_policy,
-                        device_id=self.args.device,
-                        **kwargs,
-                    )
-            else:
-                try:
-                    from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP
-                    from torch_xla.distributed.fsdp import checkpoint_module
-                    from torch_xla.distributed.fsdp.wrap import (
-                        size_based_auto_wrap_policy,
-                        transformer_auto_wrap_policy,
-                    )
-                except ImportError:
-                    raise ImportError("Missing XLA FSDP related module; please make sure to use torch-xla >= 2.0.")
-                auto_wrap_policy = None
-                auto_wrapper_callable = None
-                if self.args.fsdp_config["fsdp_min_num_params"] > 0:
-                    auto_wrap_policy = functools.partial(
-                        size_based_auto_wrap_policy, min_num_params=self.args.fsdp_config["fsdp_min_num_params"]
-                    )
-                elif self.args.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None) is not None:
-                    transformer_cls_to_wrap = set()
-                    for layer_class in self.args.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]:
-                        transformer_cls = get_module_class_from_name(model, layer_class)
-                        if transformer_cls is None:
-                            raise Exception("Could not find the transformer layer class to wrap in the model.")
-                        else:
-                            transformer_cls_to_wrap.add(transformer_cls)
-                    auto_wrap_policy = functools.partial(
-                        transformer_auto_wrap_policy,
-                        # Transformer layer class to wrap
-                        transformer_layer_cls=transformer_cls_to_wrap,
-                    )
-                fsdp_kwargs = self.args.xla_fsdp_config
-                if self.args.fsdp_config["xla_fsdp_grad_ckpt"]:
-                    # Apply gradient checkpointing to auto-wrapped sub-modules if specified
-                    def auto_wrapper_callable(m, *args, **kwargs):
-                        return FSDP(checkpoint_module(m), *args, **kwargs)
-
-                # Wrap the base model with an outer FSDP wrapper
-                self.model = model = FSDP(
-                    model,
-                    auto_wrap_policy=auto_wrap_policy,
-                    auto_wrapper_callable=auto_wrapper_callable,
-                    **fsdp_kwargs,
+        elif self.fsdp is not None and self.args.fsdp_config["xla"]:
+            try:
+                from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP
+                from torch_xla.distributed.fsdp import checkpoint_module
+                from torch_xla.distributed.fsdp.wrap import (
+                    size_based_auto_wrap_policy,
+                    transformer_auto_wrap_policy,
                 )
+            except ImportError:
+                raise ImportError("Missing XLA FSDP related module; please make sure to use torch-xla >= 2.0.")
+            auto_wrap_policy = None
+            auto_wrapper_callable = None
+            if self.args.fsdp_config["fsdp_min_num_params"] > 0:
+                auto_wrap_policy = functools.partial(
+                    size_based_auto_wrap_policy, min_num_params=self.args.fsdp_config["fsdp_min_num_params"]
+                )
+            elif self.args.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None) is not None:
+                transformer_cls_to_wrap = set()
+                for layer_class in self.args.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]:
+                    transformer_cls = get_module_class_from_name(model, layer_class)
+                    if transformer_cls is None:
+                        raise Exception("Could not find the transformer layer class to wrap in the model.")
+                    else:
+                        transformer_cls_to_wrap.add(transformer_cls)
+                auto_wrap_policy = functools.partial(
+                    transformer_auto_wrap_policy,
+                    # Transformer layer class to wrap
+                    transformer_layer_cls=transformer_cls_to_wrap,
+                )
+            fsdp_kwargs = self.args.xla_fsdp_config
+            if self.args.fsdp_config["xla_fsdp_grad_ckpt"]:
+                # Apply gradient checkpointing to auto-wrapped sub-modules if specified
+                def auto_wrapper_callable(m, *args, **kwargs):
+                    return FSDP(checkpoint_module(m), *args, **kwargs)
 
-                # Patch `xm.optimizer_step` should not reduce gradients in this case,
-                # as FSDP does not need gradient reduction over sharded parameters.
-                def patched_optimizer_step(optimizer, barrier=False, optimizer_args={}):
-                    loss = optimizer.step(**optimizer_args)
-                    if barrier:
-                        xm.mark_step()
-                    return loss
+            # Wrap the base model with an outer FSDP wrapper
+            self.model = model = FSDP(
+                model,
+                auto_wrap_policy=auto_wrap_policy,
+                auto_wrapper_callable=auto_wrapper_callable,
+                **fsdp_kwargs,
+            )
 
-                xm.optimizer_step = patched_optimizer_step
+            # Patch `xm.optimizer_step` should not reduce gradients in this case,
+            # as FSDP does not need gradient reduction over sharded parameters.
+            def patched_optimizer_step(optimizer, barrier=False, optimizer_args={}):
+                loss = optimizer.step(**optimizer_args)
+                if barrier:
+                    xm.mark_step()
+                return loss
+
+            xm.optimizer_step = patched_optimizer_step
         elif is_sagemaker_dp_enabled():
             model = nn.parallel.DistributedDataParallel(
                 model, device_ids=[int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))]
             )
         elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
+            if is_torch_neuroncore_available():
+                return model
             kwargs = {}
             if self.args.ddp_find_unused_parameters is not None:
                 kwargs["find_unused_parameters"] = self.args.ddp_find_unused_parameters
@@ -1597,20 +1574,8 @@ class Trainer:
 
             if self.args.ddp_bucket_cap_mb is not None:
                 kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
-            if is_torch_neuroncore_available():
-                return model
-            if any(p.requires_grad for p in model.parameters()):
-                model = nn.parallel.DistributedDataParallel(
-                    model,
-                    device_ids=[self.args.local_rank] if self.args._n_gpu != 0 else None,
-                    output_device=self.args.local_rank if self.args._n_gpu != 0 else None,
-                    **kwargs,
-                )
 
-        # torch.compile() needs to be called after wrapping the model with FSDP or DDP
-        # to ensure that it accounts for the graph breaks required by those wrappers
-        if self.args.torch_compile:
-            model = torch.compile(model, backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode)
+            self.accelerator.ddp_handler = DistributedDataParallelKwargs(**kwargs)
 
         return model
 
@@ -1681,7 +1646,7 @@ class Trainer:
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
-        if resume_from_checkpoint is not None and not is_sagemaker_mp_enabled() and args.deepspeed is None:
+        if resume_from_checkpoint is not None and not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled:
             self._load_from_checkpoint(resume_from_checkpoint)
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
@@ -1770,16 +1735,11 @@ class Trainer:
             or is_sagemaker_mp_enabled()
             or self.fsdp is not None
         )
-        if args.deepspeed:
-            deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
-                self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
-            )
-            self.model = deepspeed_engine.module
-            self.model_wrapped = deepspeed_engine
-            self.deepspeed = deepspeed_engine
-            self.optimizer = optimizer
-            self.lr_scheduler = lr_scheduler
-        elif not delay_optimizer_creation:
+
+        if self.is_deepspeed_enabled:
+            self.optimizer, self.lr_scheduler = deepspeed_init(self, num_training_steps=max_steps)
+
+        if not delay_optimizer_creation:
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
         self.state = TrainerState()
@@ -1794,12 +1754,47 @@ class Trainer:
         if is_sagemaker_mp_enabled() and resume_from_checkpoint is not None:
             self._load_from_checkpoint(resume_from_checkpoint, model)
 
+        # as the model is wrapped, don't use `accelerator.prepare`
+        # this is for unhandled cases such as
+        # Fairscale Sharded DDP, FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
+        use_accelerator_prepare = True if model is self.model else False
+
+        if delay_optimizer_creation:
+            self.create_optimizer_and_scheduler(num_training_steps=max_steps)
+
+        # prepare using `accelerator` prepare
+        if use_accelerator_prepare:
+            model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
+                self.model, self.optimizer, self.lr_scheduler
+            )
+
+        if self.is_fsdp_enabled:
+            self.model = model
+
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
             self.model_wrapped = model
 
-        if delay_optimizer_creation:
-            self.create_optimizer_and_scheduler(num_training_steps=max_steps)
+        # backward compatibility
+        if self.is_deepspeed_enabled:
+            self.deepspeed = self.model_wrapped
+
+        # deepspeed ckpt loading
+        if resume_from_checkpoint is not None and self.is_deepspeed_enabled:
+            deepspeed_load_checkpoint(self.model_wrapped, resume_from_checkpoint)
+
+        # prepare using `accelerator` prepare
+        if use_accelerator_prepare:
+            model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
+                self.model, self.optimizer, self.lr_scheduler
+            )
+
+        if getattr(self.accelerator.state, "fsdp_plugin", None) is not None:
+            self.model = model
+
+        # for the rest of this function `model` is the outside model, whether it was wrapped or not
+        if model is not self.model:
+            self.model_wrapped = model
 
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
@@ -1960,16 +1955,7 @@ class Trainer:
                 if step % args.gradient_accumulation_steps == 0:
                     self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
-                if (
-                    (total_batched_samples % args.gradient_accumulation_steps != 0)
-                    and args.parallel_mode == ParallelMode.DISTRIBUTED
-                    and args._no_sync_in_gradient_accumulation
-                    and hasattr(model, "no_sync")
-                ):
-                    # Avoid unnecessary DDP synchronization since there will be no backward pass on this example.
-                    with model.no_sync():
-                        tr_loss_step = self.training_step(model, inputs)
-                else:
+                with self.accelerator.accumulate(model):
                     tr_loss_step = self.training_step(model, inputs)
 
                 if (
@@ -1984,17 +1970,16 @@ class Trainer:
 
                 self.current_flos += float(self.floating_point_ops(inputs))
 
-                # Optimizer step for deepspeed must be called on every step regardless of the value of gradient_accumulation_steps
-                if self.deepspeed:
-                    self.deepspeed.step()
-
+                # should this be under the accumulate context manager?
+                # the `or` condition of `steps_in_epoch <= args.gradient_accumulation_steps` is not covered
+                # in accelerate
                 if total_batched_samples % args.gradient_accumulation_steps == 0 or (
                     # last step in epoch but step is always smaller than gradient_accumulation_steps
                     steps_in_epoch <= args.gradient_accumulation_steps
                     and (step + 1) == steps_in_epoch
                 ):
                     # Gradient clipping
-                    if args.max_grad_norm is not None and args.max_grad_norm > 0 and not self.deepspeed:
+                    if args.max_grad_norm is not None and args.max_grad_norm > 0:
                         # deepspeed does its own clipping
 
                         if self.do_grad_scaling:
@@ -2013,18 +1998,21 @@ class Trainer:
                         elif hasattr(model, "clip_grad_norm_"):
                             # Some models (like FullyShardedDDP) have a specific way to do gradient clipping
                             model.clip_grad_norm_(args.max_grad_norm)
-                        else:
+                        elif self.use_apex:
                             # Revert to normal clipping otherwise, handling Apex or full precision
                             nn.utils.clip_grad_norm_(
-                                amp.master_params(self.optimizer) if self.use_apex else model.parameters(),
+                                amp.master_params(self.optimizer),
+                                args.max_grad_norm,
+                            )
+                        else:
+                            self.accelerator.clip_grad_norm_(
+                                model.parameters(),
                                 args.max_grad_norm,
                             )
 
                     # Optimizer step
                     optimizer_was_run = True
-                    if self.deepspeed:
-                        pass  # called outside the loop
-                    elif is_torch_tpu_available():
+                    if is_torch_tpu_available():
                         if self.do_grad_scaling:
                             self.scaler.step(self.optimizer)
                             self.scaler.update()
@@ -2039,7 +2027,7 @@ class Trainer:
                     else:
                         self.optimizer.step()
 
-                    if optimizer_was_run and not self.deepspeed:
+                    if optimizer_was_run:
                         # Delay optimizer scheduling until metrics are generated
                         if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                             self.lr_scheduler.step()
@@ -2193,6 +2181,8 @@ class Trainer:
                     load_result = model.load_state_dict(state_dict, strict=True)
                     # release memory
                     del state_dict
+            elif self.is_fsdp_enabled:
+                self.accelerator.state.fsdp_plugin.load_model(self.accelerator, model, resume_from_checkpoint)
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
                 if self.args.save_safetensors and os.path.isfile(safe_weights_file):
@@ -2220,23 +2210,8 @@ class Trainer:
         best_safe_model_path = os.path.join(self.state.best_model_checkpoint, SAFE_WEIGHTS_NAME)
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if os.path.exists(best_model_path) or os.path.exists(best_safe_model_path):
-            if self.deepspeed:
-                if self.model_wrapped is not None:
-                    # this removes the pre-hooks from the previous engine
-                    self.model_wrapped.destroy()
-                    self.model_wrapped = None
-
-                # temp hack until Deepspeed fixes the problem with resume from an existing engine that did some stepping
-                deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
-                    self,
-                    num_training_steps=self.args.max_steps,
-                    resume_from_checkpoint=self.state.best_model_checkpoint,
-                )
-                self.model = deepspeed_engine.module
-                self.model_wrapped = deepspeed_engine
-                self.deepspeed = deepspeed_engine
-                self.optimizer = optimizer
-                self.lr_scheduler = lr_scheduler
+            if self.is_deepspeed_enabled:
+                deepspeed_load_checkpoint(self.model_wrapped, self.state.best_model_checkpoint)
             else:
                 if is_sagemaker_mp_enabled():
                     if os.path.isfile(os.path.join(self.state.best_model_checkpoint, "user_content.pt")):
@@ -2258,6 +2233,10 @@ class Trainer:
 
                         state_dict["_smp_is_partial"] = False
                         load_result = model.load_state_dict(state_dict, strict=True)
+                elif self.is_fsdp_enabled:
+                    self.accelerator.state.fsdp_plugin.load_model(
+                        self.accelerator, model, self.state.best_model_checkpoint
+                    )
                 else:
                     if hasattr(model, "base_model") and getattr(model.base_model, "is_8bit_serializable", False):
                         # If train base_8_bit_models using PEFT & LoRA, assume that adapter have been saved properly.
@@ -2415,10 +2394,10 @@ class Trainer:
         run_dir = self._get_output_dir(trial=trial)
         output_dir = os.path.join(run_dir, checkpoint_folder)
         self.save_model(output_dir, _internal_call=True)
-        if self.deepspeed:
+        if self.is_deepspeed_enabled:
             # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
             # config `stage3_gather_16bit_weights_on_model_save` is True
-            self.deepspeed.save_checkpoint(output_dir)
+            self.model_wrapped.save_checkpoint(output_dir)
 
         # Save optimizer and scheduler
         if self.sharded_ddp == ShardedDDPOption.SIMPLE:
@@ -2452,7 +2431,7 @@ class Trainer:
                 reissue_pt_warnings(caught_warnings)
                 if self.do_grad_scaling:
                     torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
-        elif self.args.should_save and not self.deepspeed:
+        elif self.args.should_save and not self.is_deepspeed_enabled:
             # deepspeed.save_checkpoint above saves model/optim/sched
             if self.fsdp:
                 torch.save(full_osd, os.path.join(output_dir, OPTIMIZER_NAME))
@@ -2522,7 +2501,7 @@ class Trainer:
         if checkpoint is None:
             return
 
-        if self.deepspeed:
+        if self.is_deepspeed_enabled:
             # deepspeed loads optimizer/lr_scheduler together with the model in deepspeed_init
             return
 
@@ -2709,11 +2688,11 @@ class Trainer:
             return type(data)(self._prepare_input(v) for v in data)
         elif isinstance(data, torch.Tensor):
             kwargs = {"device": self.args.device}
-            if self.deepspeed and (torch.is_floating_point(data) or torch.is_complex(data)):
+            if self.is_deepspeed_enabled and (torch.is_floating_point(data) or torch.is_complex(data)):
                 # NLP models inputs are int/uint and those get adjusted to the right dtype of the
                 # embedding. Other models such as wav2vec2's inputs are already float and thus
                 # may need special handling to match the dtypes of the model
-                kwargs.update({"dtype": self.args.hf_deepspeed_config.dtype()})
+                kwargs.update({"dtype": self.accelerator.state.deepspeed_plugin.hf_ds_config.dtype()})
             return data.to(**kwargs)
         return data
 
@@ -2789,22 +2768,15 @@ class Trainer:
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
-        if self.args.gradient_accumulation_steps > 1 and not self.deepspeed:
-            # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
-            loss = loss / self.args.gradient_accumulation_steps
-
         if self.do_grad_scaling:
             self.scaler.scale(loss).backward()
         elif self.use_apex:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
-        elif self.deepspeed:
-            # loss gets scaled under gradient_accumulation_steps in deepspeed
-            loss = self.deepspeed.backward(loss)
         else:
-            loss.backward()
+            self.accelerator.backward(loss)
 
-        return loss.detach()
+        return loss.detach() / self.args.gradient_accumulation_steps
 
     def compute_loss(self, model, inputs, return_outputs=False):
         """
@@ -2882,12 +2854,16 @@ class Trainer:
             ShardedDDPOption.ZERO_DP_2 in self.args.sharded_ddp
             or ShardedDDPOption.ZERO_DP_3 in self.args.sharded_ddp
             or self.fsdp is not None
+            or self.is_fsdp_enabled
         ):
-            state_dict = self.model.state_dict()
+            if self.is_fsdp_enabled:
+                self.accelerator.state.fsdp_plugin.save_model(self.accelerator, self.model, output_dir)
+            else:
+                state_dict = self.model.state_dict()
 
-            if self.args.should_save:
-                self._save(output_dir, state_dict=state_dict)
-        elif self.deepspeed:
+                if self.args.should_save:
+                    self._save(output_dir, state_dict=state_dict)
+        elif self.is_deepspeed_enabled:
             # this takes care of everything as long as we aren't under zero3
             if self.args.should_save:
                 self._save(output_dir)
@@ -2906,13 +2882,13 @@ class Trainer:
                 # now save the real model if stage3_gather_16bit_weights_on_model_save=True
                 # if false it will not be saved.
                 # This must be called on all ranks
-                if not self.deepspeed.save_16bit_model(output_dir, WEIGHTS_NAME):
+                if not self.model_wrapped.save_16bit_model(output_dir, WEIGHTS_NAME):
                     logger.warning(
                         "deepspeed.save_16bit_model didn't save the model, since"
                         " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
                         " zero_to_fp32.py to recover weights"
                     )
-                    self.deepspeed.save_checkpoint(output_dir)
+                    self.model_wrapped.save_checkpoint(output_dir)
 
         elif self.args.should_save:
             self._save(output_dir)
@@ -3192,15 +3168,10 @@ class Trainer:
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
         # if eval is called w/o train init deepspeed here
-        if args.deepspeed and not self.deepspeed:
-            # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
-            # from the checkpoint eventually
-            deepspeed_engine, _, _ = deepspeed_init(
-                self, num_training_steps=0, resume_from_checkpoint=None, inference=True
-            )
-            self.model = deepspeed_engine.module
-            self.model_wrapped = deepspeed_engine
-            self.deepspeed = deepspeed_engine
+        if self.is_deepspeed_enabled and self.model_wrapped is self.model:
+            _, _ = deepspeed_init(self, num_training_steps=0, inference=True)
+            model = self.accelerator.prepare(self.model)
+            self.model_wrapped = self.deepspeed = model
 
         model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
@@ -3792,18 +3763,10 @@ class Trainer:
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
         # if eval is called w/o train init deepspeed here
-        if args.deepspeed and not self.deepspeed:
-            # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
-            # from the checkpoint eventually
-            deepspeed_engine, _, _ = deepspeed_init(self, num_training_steps=0, resume_from_checkpoint=None)
-            self.model = deepspeed_engine.module
-            self.model_wrapped = deepspeed_engine
-            self.deepspeed = deepspeed_engine
-            # XXX: we don't need optim/sched for inference, but this needs to be sorted out, since
-            # for example the Z3-optimizer is a must for zero3 to work even for inference - what we
-            # don't need is the deepspeed basic optimizer which is self.optimizer.optimizer
-            deepspeed_engine.optimizer.optimizer = None
-            deepspeed_engine.lr_scheduler = None
+        if self.is_deepspeed_enabled and self.model_wrapped is self.model:
+            _, _ = deepspeed_init(self, num_training_steps=0, inference=True)
+            model = self.accelerator.prepare(self.model)
+            self.model_wrapped = self.deepspeed = model
 
         model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 

@@ -41,6 +41,7 @@ from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
+    id_tensor_storage,
     prune_conv1d_layer,
     prune_layer,
     prune_linear_layer,
@@ -304,26 +305,31 @@ def shard_checkpoint(
     """
     max_shard_size = convert_file_size_to_int(max_shard_size)
 
-    sharded_state_dicts = []
-    current_block = {}
-    current_block_size = 0
+    sharded_state_dicts = [{}]
+    last_block_size = 0
     total_size = 0
+    storage_id_to_block = {}
 
     for key, weight in state_dict.items():
+        storage_id = id_tensor_storage(weight)
+
+        # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
+        if storage_id in storage_id_to_block:
+            block_id = storage_id_to_block[storage_id]
+            sharded_state_dicts[block_id][key] = weight
+            continue
+
         weight_size = weight.numel() * dtype_byte_size(weight.dtype)
 
         # If this weight is going to tip up over the maximal size, we split.
-        if current_block_size + weight_size > max_shard_size:
-            sharded_state_dicts.append(current_block)
-            current_block = {}
-            current_block_size = 0
+        if last_block_size + weight_size > max_shard_size:
+            sharded_state_dicts.append({})
+            last_block_size = 0
 
-        current_block[key] = weight
-        current_block_size += weight_size
+        sharded_state_dicts[-1][key] = weight
+        last_block_size += weight_size
         total_size += weight_size
-
-    # Add the last block
-    sharded_state_dicts.append(current_block)
+        storage_id_to_block[storage_id] = len(sharded_state_dicts) - 1
 
     # If we only have one shard, we return it
     if len(sharded_state_dicts) == 1:
@@ -2237,7 +2243,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
                 logger.info(
                     f"Overriding torch_dtype={torch_dtype} with `torch_dtype=torch.float16` due to "
-                    "requirements of `bitsandbytes` to enable model loading in mixed kbit. "
+                    "requirements of `bitsandbytes` to enable model loading in 8-bit or 4-bit. "
                     "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
                     " torch_dtype=torch.float16 to remove this warning."
                 )
@@ -2683,7 +2689,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
             # training in 8-bit is only available in 0.37.0+
-            model._is_kbit_training_enabled = version.parse(
+            model._is_quantized_training_enabled = version.parse(
                 importlib_metadata.version("bitsandbytes")
             ) >= version.parse("0.37.0")
 
@@ -2734,7 +2740,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 target_dtype = torch.int8
 
             if model._no_split_modules is None:
-                raise ValueError(f"{model.__class__.__name__} does not support `device_map='{device_map}'` yet.")
+                raise ValueError(
+                    f"{model.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model"
+                    "class needs to implement the `_no_split_modules` attribute."
+                )
             no_split_modules = model._no_split_modules
             if device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
                 raise ValueError(

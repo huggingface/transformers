@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,36 +12,33 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch EfficientFormer model. """
-
+""" Testing suite for the TensorFlow EfficientFormer model. """
 
 import inspect
 import unittest
-import warnings
 from typing import List
 
+import numpy as np
+
 from transformers import EfficientFormerConfig
-from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import require_tf, require_vision, slow
+from transformers.utils import cached_property, is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-if is_torch_available():
-    import torch
+if is_tf_available():
+    import tensorflow as tf
 
     from transformers import (
-        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-        MODEL_MAPPING,
-        EfficientFormerForImageClassification,
-        EfficientFormerForImageClassificationWithTeacher,
-        EfficientFormerModel,
+        TFEfficientFormerForImageClassification,
+        TFEfficientFormerForImageClassificationWithTeacher,
+        TFEfficientFormerModel,
     )
-    from transformers.models.efficientformer.modeling_efficientformer import (
-        EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+    from transformers.models.efficientformer.modeling_tf_efficientformer import (
+        TF_EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
 
@@ -51,7 +48,7 @@ if is_vision_available():
     from transformers import EfficientFormerImageProcessor
 
 
-class EfficientFormerModelTester:
+class TFEfficientFormerModelTester:
     def __init__(
         self,
         parent,
@@ -113,6 +110,7 @@ class EfficientFormerModelTester:
             labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
         config = self.get_config()
+
         return config, pixel_values, labels
 
     def get_config(self):
@@ -138,76 +136,68 @@ class EfficientFormerModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = EfficientFormerModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
+        model = TFEfficientFormerModel(config=config)
+        result = model(pixel_values, training=False)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
-        model = EfficientFormerForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values, labels=labels)
+        model = TFEfficientFormerForImageClassification(config)
+        result = model(pixel_values, labels=labels, training=False)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
         # test greyscale images
         config.num_channels = 1
-        model = EfficientFormerForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
+        model = TFEfficientFormerForImageClassification(config)
 
         pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
-        result = model(pixel_values)
+        result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        config, pixel_values, labels = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
 
-@require_torch
-class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+@require_tf
+class TFEfficientFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as EfficientFormer does not use input_ids, inputs_embeds,
-    attention_mask and seq_length.
+    Here we also overwrite some of the tests of test_modeling_tf_common.py, as EfficientFormer does not use input_ids,
+    inputs_embeds, attention_mask and seq_length.
     """
 
     all_model_classes = (
         (
-            EfficientFormerModel,
-            EfficientFormerForImageClassificationWithTeacher,
-            EfficientFormerForImageClassification,
+            TFEfficientFormerModel,
+            TFEfficientFormerForImageClassificationWithTeacher,
+            TFEfficientFormerForImageClassification,
         )
-        if is_torch_available()
+        if is_tf_available()
         else ()
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": EfficientFormerModel,
+            "feature-extraction": TFEfficientFormerModel,
             "image-classification": (
-                EfficientFormerForImageClassification,
-                EfficientFormerForImageClassificationWithTeacher,
+                TFEfficientFormerForImageClassification,
+                TFEfficientFormerForImageClassificationWithTeacher,
             ),
         }
-        if is_torch_available()
+        if is_tf_available()
         else {}
     )
+
     fx_compatible = False
 
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
-        self.model_tester = EfficientFormerModelTester(self)
+        self.model_tester = TFEfficientFormerModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=EfficientFormerConfig, has_text_modality=False, hidden_size=37
         )
@@ -228,7 +218,7 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            signature = inspect.signature(model.forward)
+            signature = inspect.signature(model.call)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
@@ -238,12 +228,8 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
-            model.to(torch_device)
-            model.eval()
 
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
             expected_num_layers = getattr(
@@ -266,7 +252,7 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
             if config.is_encoder_decoder:
                 hidden_states = outputs.decoder_hidden_states
 
-                self.assertIsInstance(hidden_states, (list, tuple))
+                self.asseretIsInstance(hidden_states, (list, tuple))
                 self.assertEqual(len(hidden_states), expected_num_layers)
                 seq_len = getattr(self.model_tester, "seq_length", None)
                 decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
@@ -292,7 +278,7 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ == "EfficientFormerForImageClassificationWithTeacher":
+            if model_class.__name__ == "TFEfficientFormerForImageClassificationWithTeacher":
                 del inputs_dict["labels"]
 
         return inputs_dict
@@ -310,81 +296,10 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
-    # special case for EfficientFormerForImageClassificationWithTeacher model
-    def test_training(self):
-        if not self.model_tester.is_training:
-            return
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        for model_class in self.all_model_classes:
-            # EfficientFormerForImageClassificationWithTeacher supports inference-only
-            if (
-                model_class in get_values(MODEL_MAPPING)
-                or model_class.__name__ == "EfficientFormerForImageClassificationWithTeacher"
-            ):
-                continue
-            model = model_class(config)
-            model.to(torch_device)
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
-
-    def test_problem_types(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        problem_types = [
-            {"title": "multi_label_classification", "num_labels": 2, "dtype": torch.float},
-            {"title": "single_label_classification", "num_labels": 1, "dtype": torch.long},
-            {"title": "regression", "num_labels": 1, "dtype": torch.float},
-        ]
-
-        for model_class in self.all_model_classes:
-            if (
-                model_class
-                not in [
-                    *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
-                ]
-                or model_class.__name__ == "EfficientFormerForImageClassificationWithTeacher"
-            ):
-                continue
-
-            for problem_type in problem_types:
-                with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
-                    config.problem_type = problem_type["title"]
-                    config.num_labels = problem_type["num_labels"]
-
-                    model = model_class(config)
-                    model.to(torch_device)
-                    model.train()
-
-                    inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-
-                    if problem_type["num_labels"] > 1:
-                        inputs["labels"] = inputs["labels"].unsqueeze(1).repeat(1, problem_type["num_labels"])
-
-                    inputs["labels"] = inputs["labels"].to(problem_type["dtype"])
-
-                    # This tests that we do not trigger the warning form PyTorch "Using a target size that is different
-                    # to the input size. This will likely lead to incorrect results due to broadcasting. Please ensure
-                    # they have the same size." which is a symptom something in wrong for the regression problem.
-                    # See https://github.com/huggingface/transformers/issues/11780
-                    with warnings.catch_warnings(record=True) as warning_list:
-                        loss = model(**inputs).loss
-                    for w in warning_list:
-                        if "Using a target size that is different to the input size" in str(w.message):
-                            raise ValueError(
-                                f"Something is going wrong in the regression problem: intercepted {w.message}"
-                            )
-
-                    loss.backward()
-
     @slow
     def test_model_from_pretrained(self):
-        for model_name in EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = EfficientFormerModel.from_pretrained(model_name)
+        for model_name in TF_EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFEfficientFormerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
@@ -404,10 +319,8 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
             model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_attention_outputs)
 
@@ -415,10 +328,8 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
             del inputs_dict["output_attentions"]
             config.output_attentions = True
             model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
+
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_attention_outputs)
 
@@ -440,11 +351,11 @@ def prepare_img():
     return image
 
 
-@require_torch
+@require_tf
 @require_vision
 class EfficientFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
             EfficientFormerImageProcessor.from_pretrained("snap-research/efficientformer-l1-300")
             if is_vision_available()
@@ -453,42 +364,30 @@ class EfficientFormerModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = EfficientFormerForImageClassification.from_pretrained("snap-research/efficientformer-l1-300").to(
-            torch_device
-        )
-
-        feature_extractor = self.default_feature_extractor
+        model = TFEfficientFormerForImageClassification.from_pretrained("snap-research/efficientformer-l1-300")
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-
+        inputs = image_processor(images=image, return_tensors="tf")
         # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-
+        outputs = model(**inputs, training=False)
         # verify the logits
-        expected_shape = (1, 1000)
+        expected_shape = tf.TensorShape((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor([-0.0555, 0.4825, -0.0852]).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0][:3], expected_slice, atol=1e-4))
+        expected_slice = tf.constant([-0.0555, 0.4825, -0.0852])
+        self.assertTrue(np.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
 
     @slow
     def test_inference_image_classification_head_with_teacher(self):
-        model = EfficientFormerForImageClassificationWithTeacher.from_pretrained(
+        model = TFEfficientFormerForImageClassificationWithTeacher.from_pretrained(
             "snap-research/efficientformer-l1-300"
-        ).to(torch_device)
-
-        feature_extractor = self.default_feature_extractor
+        )
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-
+        inputs = image_processor(images=image, return_tensors="tf")
         # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-
+        outputs = model(**inputs, training=False)
         # verify the logits
-        expected_shape = (1, 1000)
+        expected_shape = tf.TensorShape((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor([-0.1312, 0.4353, -1.0499]).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0][:3], expected_slice, atol=1e-4))
+        expected_slice = tf.constant([-0.1312, 0.4353, -1.0499])
+        self.assertTrue(np.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
