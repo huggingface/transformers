@@ -2168,6 +2168,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
         use_safetensors = kwargs.pop("use_safetensors", None if is_safetensors_available() else False)
+        no_split_modules = kwargs.pop("no_split_modules", None)
 
         if is_bitsandbytes_available():
             is_8bit_serializable = version.parse(importlib_metadata.version("bitsandbytes")) > version.parse("0.37.2")
@@ -2733,12 +2734,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             elif load_in_8bit:
                 target_dtype = torch.int8
 
-            if model._no_split_modules is None:
+            if no_split_modules is None:
+                no_split_modules = model._no_split_modules
+            elif no_split_modules is not None and model._no_split_modules is not None:
+                logger.info(
+                    "You have manually specified `no_split_modules` when calling from_pretrained"
+                    " where the model already has a `_no_split_modules` attribute. The model will use the"
+                    " `no_split_modules` you have passed."
+                )
+
+            if no_split_modules is None:
                 raise ValueError(
                     f"{model.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model"
                     "class needs to implement the `_no_split_modules` attribute."
                 )
-            no_split_modules = model._no_split_modules
             if device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
                 raise ValueError(
                     "If passing a string for `device_map`, please choose 'auto', 'balanced', 'balanced_low_0' or "
