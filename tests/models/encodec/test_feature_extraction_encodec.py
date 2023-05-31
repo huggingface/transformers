@@ -87,18 +87,18 @@ class EnCodecFeatureExtractionTester(unittest.TestCase):
             return list(itertools.chain(*list_of_lists))
 
         if equal_length:
-            speech_inputs = floats_list((self.batch_size, self.max_seq_length))
+            audio_inputs = floats_list((self.batch_size, self.max_seq_length))
         else:
             # make sure that inputs increase in size
-            speech_inputs = [
+            audio_inputs = [
                 _flatten(floats_list((x, self.feature_size)))
                 for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
             ]
 
         if numpify:
-            speech_inputs = [np.asarray(x) for x in speech_inputs]
+            audio_inputs = [np.asarray(x) for x in audio_inputs]
 
-        return speech_inputs
+        return audio_inputs
 
 
 @require_torch
@@ -112,26 +112,26 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         # Tests that all call wrap to encode_plus and batch_encode_plus
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         # create three inputs of length 800, 1000, and 1200
-        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
-        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+        audio_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        np_audio_inputs = [np.asarray(audio_input) for audio_input in audio_inputs]
 
         # Test not batched input
-        encoded_sequences_1 = feat_extract(speech_inputs[0], return_tensors="np").input_values
-        encoded_sequences_2 = feat_extract(np_speech_inputs[0], return_tensors="np").input_values
+        encoded_sequences_1 = feat_extract(audio_inputs[0], return_tensors="np").input_values
+        encoded_sequences_2 = feat_extract(np_audio_inputs[0], return_tensors="np").input_values
         self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
 
         # Test batched
-        encoded_sequences_1 = feat_extract(speech_inputs, padding=True, return_tensors="np").input_values
-        encoded_sequences_2 = feat_extract(np_speech_inputs, padding=True, return_tensors="np").input_values
+        encoded_sequences_1 = feat_extract(audio_inputs, padding=True, return_tensors="np").input_values
+        encoded_sequences_2 = feat_extract(np_audio_inputs, padding=True, return_tensors="np").input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
     def test_double_precision_pad(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        np_speech_inputs = np.random.rand(100).astype(np.float64)
-        py_speech_inputs = np_speech_inputs.tolist()
+        np_audio_inputs = np.random.rand(100).astype(np.float64)
+        py_audio_inputs = np_audio_inputs.tolist()
 
-        for inputs in [py_speech_inputs, np_speech_inputs]:
+        for inputs in [py_audio_inputs, np_audio_inputs]:
             np_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="np")
             self.assertTrue(np_processed.input_values.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="pt")
@@ -142,9 +142,9 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        audio_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
-        return [x["array"] for x in speech_samples]
+        return [x["array"] for x in audio_samples]
 
     def test_integration(self):
         # fmt: off
@@ -157,9 +157,9 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
              4.2725e-04, 4.8828e-04, 7.3242e-04, 1.0986e-03, 2.1057e-03]
         )
         # fmt: on
-        input_speech = self._load_datasamples(1)
+        input_audio = self._load_datasamples(1)
         feature_extractor = EnCodecFeatureExtractor()
-        input_values = feature_extractor(input_speech, return_tensors="pt").input_values
+        input_values = feature_extractor(input_audio, return_tensors="pt").input_values
         self.assertEquals(input_values.shape, (1, 1, 93680))
         self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-6))
 
@@ -174,11 +174,11 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
              4.2725e-04, 4.8828e-04, 7.3242e-04, 1.0986e-03, 2.1057e-03]
         )
         # fmt: on
-        input_speech = self._load_datasamples(1)
-        input_speech = [np.tile(input_speech[0][None], reps=(2, 1))]
-        input_speech[0][1] *= 0.5
+        input_audio = self._load_datasamples(1)
+        input_audio = [np.tile(input_audio[0][None], reps=(2, 1))]
+        input_audio[0][1] *= 0.5
         feature_extractor = EnCodecFeatureExtractor(feature_size=2)
-        input_values = feature_extractor(input_speech, return_tensors="pt").input_values
+        input_values = feature_extractor(input_audio, return_tensors="pt").input_values
         self.assertEquals(input_values.shape, (1, 2, 93680))
         self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-6))
         self.assertTrue(torch.allclose(input_values[0, 1, :30], EXPECTED_INPUT_VALUES * 0.5, atol=1e-6))
