@@ -82,6 +82,7 @@ src/transformers/models/dpt/modeling_dpt.py
 src/transformers/models/electra/configuration_electra.py
 src/transformers/models/electra/modeling_electra.py
 src/transformers/models/electra/modeling_tf_electra.py
+src/transformers/models/efficientformer/modeling_tf_efficientformer.py
 src/transformers/models/ernie/configuration_ernie.py
 src/transformers/models/ernie_m/configuration_ernie_m.py
 src/transformers/models/ernie_m/modeling_ernie_m.py
