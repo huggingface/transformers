@@ -164,8 +164,8 @@
     title: (번역중) The Transformer model family
   - local: in_translation
     title: (번역중) Summary of the tokenizers
-  - local: in_translation
-    title: (번역중) Attention mechanisms
+  - local: attention
+    title: (번역중) 어텐션 메카니즘
   - local: in_translation
     title: (번역중) Padding and truncation
   - local: in_translation
