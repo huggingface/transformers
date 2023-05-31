@@ -490,7 +490,7 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = ClapModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=ClapConfig, hidden_size=37, common_properties=[], has_text_modality=False
+            self, config_class=ClapConfig, common_properties=[], has_text_modality=False
         )
 
     def test_model(self):
