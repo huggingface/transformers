@@ -66,7 +66,7 @@ def load_vocab_and_emoji(vocab_file, emoji_file):
     ids_to_tokens = collections.OrderedDict()
     with open(vocab_file, "r", encoding="utf-8") as f:
         token = f.readlines()
-    token = [[t.rstrip("\n")] if (t == "," or "," not in t) else t.rstrip("\n").split(",") for t in token]
+    token = [[t.rstrip("\n")] if (t == ",\n" or "," not in t) else t.rstrip("\n").split(",") for t in token]
     for idx, b in enumerate(token):
         ids_to_tokens[idx] = b
         raw_vocab[",".join(b)] = idx
