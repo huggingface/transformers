@@ -392,7 +392,7 @@ class RealmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 b"This is the fourth record.",
                 b"This is the fifth record.",
             ],
-            dtype=np.object,
+            dtype=object,
         )
         retriever = RealmRetriever(block_records, tokenizer)
         model = RealmForOpenQA(openqa_config, retriever)
