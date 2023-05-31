@@ -150,7 +150,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             Whether or not to accept lowercase input and lowercase the output when decoding.
         target_lang (`str`, *optional*):
             A target language the tokenizer should set by default. `target_lang` has to be defined for multi-lingual,
-            nested vocabulary such as [mms-1b-all]( ).
+            nested vocabulary such as [facebook/mms-1b-all](https://huggingface.co/facebook/mms-1b-all).
 
         **kwargs
             Additional keyword arguments passed along to [`PreTrainedTokenizer`]
