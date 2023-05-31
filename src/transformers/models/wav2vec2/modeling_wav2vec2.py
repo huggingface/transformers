@@ -1860,9 +1860,9 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         )
         self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
 
-        if target_lang is not None and self.config.num_attn_adapters is None:
+        if target_lang is not None and getattr(self.config, "num_attn_adapters", None) is None:
             raise ValueError(f"Cannot pass `target_lang`: {target_lang} if `config.num_attn_adapters` is not defined.")
-        elif target_lang is None and self.config.num_attn_adapters is not None:
+        elif target_lang is None and getattr(self.config, "num_attn_adapters", None) is not None:
             logger.info("By default `target_lang` is set to 'eng'.")
         elif target_lang is not None:
             self.load_adapter(target_lang)
