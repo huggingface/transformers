@@ -21,6 +21,7 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
@@ -650,6 +651,45 @@ class UniSpeechSatEncoderLayer(nn.Module):
         if output_attentions:
             outputs += (attn_weights,)
 
+        return outputs
+
+
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2AttnAdapterLayer with Wav2Vec2->UniSpeechSat
+class UniSpeechSatAttnAdapterLayer(nn.Module):
+    def __init__(self, config):
+        """
+        Implements adapter modules directly with 3D tensor weight as parameters and without using ModuleList orto speed
+        up training throughput.
+        """
+        super().__init__()
+        self.adapter_num = config.num_attn_adapters
+        self.input_dim = 16
+        self.hidden_dim = config.hidden_size
+        self.weight_1 = nn.Parameter(torch.empty(self.adapter_num, self.input_dim, self.hidden_dim))
+        self.weight_2 = nn.Parameter(torch.empty(self.adapter_num, self.hidden_dim, self.input_dim))
+        self.bias_1 = nn.Parameter(torch.empty(self.adapter_num, self.input_dim))
+        self.bias_2 = nn.Parameter(torch.empty(self.adapter_num, self.hidden_dim))
+
+        self.layer_norm_weight = nn.Parameter(torch.empty(self.adapter_num, self.hidden_dim))
+        self.layer_norm_bias = nn.Parameter(torch.empty(self.adapter_num, self.hidden_dim))
+
+        act_fn = "relu"
+        if act_fn == "relu":
+            self.act_fn = nn.ReLU()
+        elif act_fn == "gelu":
+            self.act_fn = nn.GELU()
+        elif act_fn == "selu":
+            self.act_fn = nn.SELU()
+        else:
+            raise ValueError(f"unsupported {act_fn}")
+
+    def forward(self, hidden_states: torch.FloatTensor, adapter_id: int = 0):
+        hidden_states = hidden_states
+        hidden_states = F.layer_norm(hidden_states, (self.input_dim,), self.ln_W[adapter_id], self.ln_b[adapter_id])
+        hidden_states = F.linear(hidden_states, self.W_a[adapter_id], self.b_a[adapter_id])
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = F.linear(hidden_states, self.W_b[adapter_id], self.b_b[adapter_id])
+        outputs = hidden_states
         return outputs
 
 
