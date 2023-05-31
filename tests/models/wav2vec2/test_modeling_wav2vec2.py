@@ -24,7 +24,6 @@ import unittest
 
 import numpy as np
 from datasets import load_dataset
-from safetensors.torch import save_file as safe_save_file
 
 from transformers import Wav2Vec2Config, is_torch_available
 from transformers.testing_utils import (
@@ -55,6 +54,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    from safetensors.torch import save_file as safe_save_file
 
     from transformers import (
         Wav2Vec2FeatureExtractor,
