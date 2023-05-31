@@ -44,6 +44,7 @@ from ...utils import (
 )
 from .configuration_beit import BeitConfig
 
+
 logger = logging.get_logger(__name__)
 
 # General docstring
