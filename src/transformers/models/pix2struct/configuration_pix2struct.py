@@ -361,9 +361,9 @@ class Pix2StructConfig(PretrainedConfig):
         is_vqa=False,
         tie_word_embeddings=False,
         is_encoder_decoder=True,
-        decoder_start_token_id = None,
-        pad_token_id = None,
-        eos_token_id = None,
+        decoder_start_token_id=None,
+        pad_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
         super().__init__(tie_word_embeddings=tie_word_embeddings, is_encoder_decoder=is_encoder_decoder, **kwargs)
@@ -382,11 +382,11 @@ class Pix2StructConfig(PretrainedConfig):
         if decoder_start_token_id is not None:
             self.text_config.decoder_start_token_id = decoder_start_token_id
         self.decoder_start_token_id = self.text_config.decoder_start_token_id
-        
+
         if decoder_start_token_id is not None:
             self.text_config.pad_token_id = pad_token_id
         self.pad_token_id = self.text_config.pad_token_id
-        
+
         if eos_token_id is not None:
             self.text_config.eos_token_id = eos_token_id
         self.eos_token_id = self.text_config.eos_token_id
