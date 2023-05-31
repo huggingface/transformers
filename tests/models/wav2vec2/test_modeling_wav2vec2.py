@@ -1900,7 +1900,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             "it": "mi hanno fatto un'offerta che non potevo proprio rifiutare",
             "es": "bien y qué regalo vas a abrir primero",
             "fr": "un vrai travail intéressant va enfin être mené sur ce sujet",
-            "en": "twas the time of day and ollof spen slept during the summer",
+            "en": "twas the time of day and olof spen slept during the summer",
         }
 
         for lang in LANG_MAP.keys():

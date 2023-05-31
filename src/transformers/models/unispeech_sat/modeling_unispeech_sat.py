@@ -673,22 +673,16 @@ class UniSpeechSatAttnAdapterLayer(nn.Module):
         self.layer_norm_weight = nn.Parameter(torch.empty(self.adapter_num, self.hidden_dim))
         self.layer_norm_bias = nn.Parameter(torch.empty(self.adapter_num, self.hidden_dim))
 
-        act_fn = "relu"
-        if act_fn == "relu":
-            self.act_fn = nn.ReLU()
-        elif act_fn == "gelu":
-            self.act_fn = nn.GELU()
-        elif act_fn == "selu":
-            self.act_fn = nn.SELU()
-        else:
-            raise ValueError(f"unsupported {act_fn}")
+        self.act_fn = nn.ReLU()
 
     def forward(self, hidden_states: torch.FloatTensor, adapter_id: int = 0):
         hidden_states = hidden_states
-        hidden_states = F.layer_norm(hidden_states, (self.input_dim,), self.ln_W[adapter_id], self.ln_b[adapter_id])
-        hidden_states = F.linear(hidden_states, self.W_a[adapter_id], self.b_a[adapter_id])
+        hidden_states = F.layer_norm(
+            hidden_states, (self.hidden_dim,), self.layer_norm_weight[adapter_id], self.layer_norm_bias[adapter_id]
+        )
+        hidden_states = F.linear(hidden_states, self.weight_1[adapter_id], self.bias_1[adapter_id])
         hidden_states = self.act_fn(hidden_states)
-        hidden_states = F.linear(hidden_states, self.W_b[adapter_id], self.b_b[adapter_id])
+        hidden_states = F.linear(hidden_states, self.weight_2[adapter_id], self.bias_2[adapter_id])
         outputs = hidden_states
         return outputs
 
@@ -708,8 +702,10 @@ class UniSpeechSatEncoderLayerStableLayerNorm(nn.Module):
         self.feed_forward = UniSpeechSatFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        if config.num_attn_adapters is not None:
+        if getattr(config, "num_attn_adapters", None) is not None:
             self.adapter_layer = UniSpeechSatAttnAdapterLayer(config)
+        else:
+            self.adapter_layer = None
 
     def forward(
         self,
@@ -725,6 +721,9 @@ class UniSpeechSatEncoderLayerStableLayerNorm(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
         hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
+
+        if self.adapter_layer is not None:
+            hidden_states = hidden_states + self.adapter_layer(hidden_states)
 
         outputs = (hidden_states,)
 
