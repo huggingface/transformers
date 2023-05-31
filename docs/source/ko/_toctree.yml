@@ -45,8 +45,8 @@
   - sections:
       - local: in_translation
         title: (번역중) Audio classification
-      - local: in_translation
-        title: (번역중) Automatic speech recognition
+      - local: tasks/asr
+        title: 자동 음성 인식
     title: (번역중) 오디오
     isExpanded: false
   - sections:
@@ -54,16 +54,16 @@
         title: 이미지 분류
       - local: in_translation
         title: (번역중) Semantic segmentation
-      - local: in_translation
-        title: (번역중) Video classification
+      - local: tasks/video_classification
+        title: 영상 분류
       - local: in_translation
         title: (번역중) Object detection
-      - local: in_translation
-        title: (번역중) Zero-shot object detection
+      - local: tasks/zero_shot_object_detection
+        title: 제로샷(zero-shot) 객체 탐지
       - local: tasks/zero_shot_image_classification
         title: 제로샷(zero-shot) 이미지 분류
-      - local: in_translation
-        title: (번역중) Depth estimation
+      - local: tasks/monocular_depth_estimation
+        title: 단일 영상 기반 깊이 추정
     title: (번역중) 컴퓨터 비전
     isExpanded: false
   - sections:
@@ -75,8 +75,8 @@
     isExpanded: false
   title: 태스크 가이드
 - sections:
-    - local: in_translation
-      title: (번역중) Use fast tokenizers from 🤗 Tokenizers
+    - local: fast_tokenizers
+      title: 🤗 Tokenizers 라이브러리에서 토크나이저 사용하기
     - local: multilingual
       title: 다국어 모델 추론하기
     - local: in_translation
@@ -97,8 +97,8 @@
       title: (번역중) Notebooks with examples
     - local: in_translation
       title: (번역중) Community resources
-    - local: in_translation
-      title: (번역중) Troubleshoot
+    - local: troubleshooting
+      title: 문제 해결
   title: (번역중) 개발자 가이드
 - sections:
     - local: in_translation
@@ -166,8 +166,8 @@
     title: (번역중) Summary of the tokenizers
   - local: in_translation
     title: (번역중) Attention mechanisms
-  - local: in_translation
-    title: (번역중) Padding and truncation
+  - local: pad_truncation
+    title: 패딩과 잘라내기
   - local: in_translation
     title: (번역중) BERTology
   - local: in_translation
