@@ -341,8 +341,6 @@ class Trainer:
 
         # create accelerator object
         self.accelerator = Accelerator()
-        self.accelerator.print(f"{self.accelerator=}")
-        self.accelerator.print(f"{self.accelerator.state=}")
 
         # memory metrics - must set up as early as possible
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
@@ -1780,8 +1778,6 @@ class Trainer:
         model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
             self.model, self.optimizer, self.lr_scheduler
         )
-        self.accelerator.print(f"{model=}\n{self.optimizer=}\n{self.lr_scheduler=}")
-        self.accelerator.print(f"{model.forward=}")
 
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
