@@ -50,6 +50,9 @@ from ...utils import (
 )
 from .configuration_wav2vec2 import Wav2Vec2Config
 
+WAV2VEC2_ADAPTER_PT_FILE = "adapter.{}.bin"
+WAV2VEC2_ADAPTER_SAFE_FILE = "adapter.{}.safetensors"
+
 if is_safetensors_available():
     from safetensors.torch import load_file as safe_load_file
 
@@ -1274,7 +1277,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
         # 1. Let's first try loading a safetensors adapter weight
         if use_safetensors is not False:
-            filepath = f"adapter.{target_lang}.safetensors"
+            filepath = WAV2VEC2_ADAPTER_SAFE_FILE .format(target_lang)
 
             try:
                 weight_path = cached_file(
@@ -1309,7 +1312,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
         # 2. If this didn't work let's try loading a PyTorch adapter weight
         if state_dict is None:
-            filepath = f"adapter.{target_lang}.bin"
+            filepath = WAV2VEC2_ADAPTER_PT_FILE .format(target_lang)
 
             try:
                 weight_path = cached_file(
@@ -1348,6 +1351,12 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             raise ValueError(f"The adapter weights {weight_path} has unexpected keys: {', '.join(unexpected_keys)}.")
         elif len(missing_keys) > 0:
             raise ValueError(f"The adapter weights {weight_path} has missing keys: {', '.join(missing_keys)}.")
+
+        # make sure now vocab size is correct
+        target_vocab_size = state_dict["lm_head.weight"].shape[0]
+        if target_vocab_size != self.config.vocab_size:
+            self.lm_head = nn.Linear(self.config.output_hidden_size, target_vocab_size, device=self.device, dtype=self.dtype)
+            self.config.vocab_size = target_vocab_size
 
         # make sure that adapter weights are put in exactly the same precision and device placement and overwritten adapter weights
         state_dict = {k: v.to(adapter_weights[k]) for k,v in state_dict.items()}

@@ -21,6 +21,7 @@ import pickle
 import tempfile
 import traceback
 import unittest
+from safetensors.torch import save_file as safe_save_file
 
 import numpy as np
 from datasets import load_dataset
@@ -70,6 +71,8 @@ if is_torch_available():
         Wav2Vec2GumbelVectorQuantizer,
         _compute_mask_indices,
         _sample_negative_indices,
+        WAV2VEC2_ADAPTER_PT_FILE,
+        WAV2VEC2_ADAPTER_SAFE_FILE,
     )
 
 
@@ -288,6 +291,19 @@ class Wav2Vec2ModelTester:
         self.parent.assertEqual(
             result.last_hidden_state.shape,
             (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size),
+        )
+
+    def create_and_check_model_with_attn_adapter(self, config, input_values, attention_mask):
+        config.num_attn_adapters = 1
+        model = Wav2Vec2ForCTC(config=config)
+
+        assert model._adapters is not None, "Attention adapters have to be defined."
+
+        model.to(torch_device)
+        model.eval()
+        result = model(input_values, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.output_seq_length, self.vocab_size)
         )
 
     def create_and_check_batch_inference(self, config, input_values, *args):
@@ -805,6 +821,8 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             self.clear_torch_jit_class_registry()
 
 
+
+
 @require_torch
 class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
@@ -843,6 +861,10 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_with_adapter_proj_dim(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_adapter_proj_dim(*config_and_inputs)
+
+    def test_model_with_attn_adapter(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_attn_adapter(*config_and_inputs)
 
     def test_batched_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -1097,6 +1119,83 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
+
+    def test_load_attn_adapter(self):
+        processor = Wav2Vec2Processor.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2", return_attention_mask=True
+        )
+        def get_logits(model, input_features):
+            model = model.to(torch_device)
+            batch = processor(
+                input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+            )
+
+            with torch.no_grad():
+                logits = model(
+                    input_values=batch["input_values"].to(torch_device),
+                    attention_mask=batch["attention_mask"].to(torch_device),
+                ).logits
+            return logits
+
+        input_features = [np.random.random(16_000 * s) for s in [1, 3, 2, 6]]
+
+        model = Wav2Vec2ForCTC.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2", num_attn_adapters=1
+        )
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            model.save_pretrained(tempdir)
+            model = Wav2Vec2ForCTC.from_pretrained(tempdir)
+
+            logits = get_logits(model, input_features)
+            adapter_weights = model._adapters
+
+            # save safe weights
+            safe_filepath = os.path.join(tempdir, WAV2VEC2_ADAPTER_SAFE_FILE.format("eng"))
+            safe_save_file(adapter_weights, safe_filepath, metadata={"format": "pt"})
+
+            model.load_adapter("eng")
+            model.load_adapter("eng", use_safetensors=True)
+
+            with self.assertRaises(OSError):
+                model.load_adapter("eng", use_safetensors=False)
+
+            logits_2 = get_logits(model, input_features)
+
+            torch.allclose(logits, logits_2, atol=1e-3)
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            model.save_pretrained(tempdir)
+            model = Wav2Vec2ForCTC.from_pretrained(tempdir)
+
+            logits = get_logits(model, input_features)
+            adapter_weights = model._adapters
+
+            # save pt weights
+            pt_filepath = os.path.join(tempdir, WAV2VEC2_ADAPTER_PT_FILE.format("eng"))
+            torch.save(adapter_weights, pt_filepath)
+
+            model.load_adapter("eng")
+            model.load_adapter("eng", use_safetensors=False)
+
+            with self.assertRaises(OSError):
+                model.load_adapter("eng", use_safetensors=True)
+
+            logits_2 = get_logits(model, input_features)
+
+            torch.allclose(logits, logits_2, atol=1e-3)
+
+        model = Wav2Vec2ForCTC.from_pretrained("hf-internal-testing/tiny-random-wav2vec2-adapter")
+        logits = get_logits(model, input_features)
+
+        model.load_adapter("eng")
+        model.load_adapter("eng", use_safetensors=False)
+        model.load_adapter("eng", use_safetensors=True)
+
+        logits_2 = get_logits(model, input_features)
+
+        torch.allclose(logits, logits_2, atol=1e-3)
+
 
     @slow
     def test_model_from_pretrained(self):
@@ -1768,3 +1867,44 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         # TODO: update the tolerance after the CI moves to torch 1.10
         self.assertAlmostEqual(outputs.loss.item(), 17.7963, 2)
+
+    def test_inference_mms_1b_all(self):
+        model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/mms-1b-all").to(torch_device)
+        processor = Wav2Vec2Processor.from_pretrained("patrickvonplaten/mms-1b-all")
+
+        LANG_MAP = {"it": "ita", "es": "spa", "fr": "fra", "en": "eng"}
+
+        def run_model(lang):
+            ds = load_dataset("common_voice", lang, split="test", streaming=True)
+            sample = next(iter(ds))
+
+            wav2vec2_lang = LANG_MAP[lang]
+
+            model.load_adapter(wav2vec2_lang)
+            processor.tokenizer.set_target_lang(wav2vec2_lang)
+
+            resampled_audio = torchaudio.functional.resample(
+                torch.tensor(sample["audio"]["array"]), 48_000, 16_000
+            ).numpy()
+
+            inputs = processor(resampled_audio, sampling_rate=16_000, return_tensors="pt")
+            input_values = inputs.input_values.to(torch_device)
+            attention_mask = inputs.attention_mask.to(torch_device)
+
+            with torch.no_grad():
+                outputs = model(input_values, attention_mask=attention_mask).logits
+
+            ids = torch.argmax(outputs, dim=-1)[0]
+
+            transcription = processor.decode(ids)
+            return transcription
+
+        TRANSCRIPTIONS = {
+            "it": "mi hanno fatto un'offerta che non potevo proprio rifiutare",
+            "es": "bien y qué regalo vas a abrir primero",
+            "fr": "un vrai travail intéressant va enfin être mené sur ce sujet",
+            "en": "twas the time of day and ollof spen slept during the summer",
+        }
+
+        for lang in LANG_MAP.keys():
+            assert run_model(lang) == TRANSCRIPTIONS[lang]
