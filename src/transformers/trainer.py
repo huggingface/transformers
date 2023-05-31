@@ -1559,11 +1559,6 @@ class Trainer:
 
             self.accelerator.ddp_handler = DistributedDataParallelKwargs(**kwargs)
 
-        # torch.compile() needs to be called after wrapping the model with FSDP or DDP
-        # to ensure that it accounts for the graph breaks required by those wrappers
-        if self.args.torch_compile:
-            model = torch.compile(model, backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode)
-
         return model
 
     def train(
