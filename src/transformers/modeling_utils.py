@@ -1052,6 +1052,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     main_input_name = "input_ids"
     _auto_class = None
     _no_split_modules = None
+    _skip_keys_device_placement = None
     _keep_in_fp32_modules = None
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
@@ -2887,7 +2888,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:
-            dispatch_model(model, device_map=device_map, offload_dir=offload_folder, offload_index=offload_index)
+            kwargs = {"device_map": device_map, "offload_dir": offload_folder, "offload_index": offload_index}
+            if "skip_keys" in inspect.signature(dispatch_model).parameters:
+                kwargs["skip_keys"] = model._skip_keys_device_placement
+            dispatch_model(model, **kwargs)
 
         if output_loading_info:
             if loading_info is None:
