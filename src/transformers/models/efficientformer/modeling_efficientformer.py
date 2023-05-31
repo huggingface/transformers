@@ -43,7 +43,7 @@ _CONFIG_FOR_DOC = "EfficientFormerConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "snap-research/efficientformer-l1-300"
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+_EXPECTED_OUTPUT_SHAPE = [1, 49, 448]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "snap-research/efficientformer-l1-300"
@@ -73,7 +73,7 @@ class EfficientFormerPatchEmbeddings(nn.Module):
             stride=config.downsample_stride,
             padding=config.downsample_pad,
         )
-        self.norm = nn.BatchNorm2d(embed_dim) if apply_norm else nn.Identity()
+        self.norm = nn.BatchNorm2d(embed_dim, eps=config.batch_norm_eps) if apply_norm else nn.Identity()
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
@@ -157,10 +157,10 @@ class EfficientFormerConvStem(nn.Module):
         super().__init__()
 
         self.convolution1 = nn.Conv2d(config.num_channels, out_channels // 2, kernel_size=3, stride=2, padding=1)
-        self.batchnorm_before = nn.BatchNorm2d(out_channels // 2)
+        self.batchnorm_before = nn.BatchNorm2d(out_channels // 2, eps=config.batch_norm_eps)
 
         self.convolution2 = nn.Conv2d(out_channels // 2, out_channels, kernel_size=3, stride=2, padding=1)
-        self.batchnorm_after = nn.BatchNorm2d(out_channels)
+        self.batchnorm_after = nn.BatchNorm2d(out_channels, eps=config.batch_norm_eps)
 
         self.activation = nn.ReLU()
 
@@ -224,24 +224,24 @@ class EfficientFormerConvMlp(nn.Module):
         hidden_features = hidden_features or in_features
 
         self.convolution1 = nn.Conv2d(in_features, hidden_features, 1)
-        self.actvation = ACT2FN[config.hidden_act]
+        self.activation = ACT2FN[config.hidden_act]
         self.convolution2 = nn.Conv2d(hidden_features, out_features, 1)
         self.dropout = nn.Dropout(drop)
 
-        self.batchnorm_before = nn.BatchNorm2d(hidden_features)
-        self.batchnorm_after = nn.BatchNorm2d(out_features)
+        self.batchnorm_before = nn.BatchNorm2d(hidden_features, eps=config.batch_norm_eps)
+        self.batchnorm_after = nn.BatchNorm2d(out_features, eps=config.batch_norm_eps)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.convolution1(hidden_state)
         hidden_state = self.batchnorm_before(hidden_state)
 
-        hidden_state = self.actvation(hidden_state)
+        hidden_state = self.activation(hidden_state)
         hidden_state = self.dropout(hidden_state)
         hidden_state = self.convolution2(hidden_state)
 
         hidden_state = self.batchnorm_after(hidden_state)
-
         hidden_state = self.dropout(hidden_state)
+
         return hidden_state
 
 
@@ -266,7 +266,7 @@ def drop_path(input, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Bit
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->EfficientFormer
 class EfficientFormerDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
@@ -301,8 +301,10 @@ class EfficientFormerMeta3D(nn.Module):
             attention_ratio=config.attention_ratio,
             resolution=config.resolution,
         )
-        self.layernorm1 = nn.LayerNorm(dim)
-        self.layernorm2 = nn.LayerNorm(dim)
+
+        self.layernorm1 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
+        self.layernorm2 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
+
         mlp_hidden_dim = int(dim * config.mlp_expansion_ratio)
         self.mlp = EfficientFormerDenseMlp(config, in_features=dim, hidden_features=mlp_hidden_dim)
 
@@ -346,15 +348,20 @@ class EfficientFormerMeta3DLayers(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor]:
         all_attention_outputs = () if output_attentions else None
+
         for layer_module in self.blocks:
             if isinstance(hidden_states, tuple):
                 hidden_states = hidden_states[0]
+
             hidden_states = layer_module(hidden_states, output_attentions)
+
             if output_attentions:
                 all_attention_outputs = all_attention_outputs + (hidden_states[1],)
+
         if output_attentions:
             outputs = (hidden_states[0],) + all_attention_outputs
             return outputs
+
         return hidden_states
 
 
@@ -379,6 +386,7 @@ class EfficientFormerMeta4D(nn.Module):
 
         if self.use_layer_scale:
             layer_output = hidden_states + self.drop_path(self.layer_scale_1.unsqueeze(-1).unsqueeze(-1) * outputs)
+
             layer_output = layer_output + self.drop_path(
                 self.layer_scale_2.unsqueeze(-1).unsqueeze(-1) * self.mlp(layer_output)
             )
@@ -398,6 +406,7 @@ class EfficientFormerMeta4DLayers(nn.Module):
         drop_paths = [
             config.drop_path_rate * (block_idx + sum(config.depths[:stage_idx])) for block_idx in range(num_layers)
         ]
+
         self.blocks = nn.ModuleList(
             [
                 EfficientFormerMeta4D(config, config.hidden_sizes[stage_idx], drop_path=drop_path)
@@ -446,6 +455,7 @@ class EfficientFormerEncoder(nn.Module):
             for i in range(num_intermediate_stages)
         ]
         intermediate_stages = []
+
         for i in range(num_intermediate_stages):
             intermediate_stages.append(EfficientFormerIntermediateStage(config, i))
             if downsamples[i]:
@@ -475,6 +485,7 @@ class EfficientFormerEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
         layer_output = self.last_stage(hidden_states, output_attentions=output_attentions)
+
         if output_attentions:
             all_self_attentions = all_self_attentions + layer_output[1:]
 
@@ -482,7 +493,7 @@ class EfficientFormerEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (layer_output[0],)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(v for v in [layer_output[0], all_hidden_states, all_self_attentions] if v is not None)
 
         return BaseModelOutput(
             last_hidden_state=layer_output[0],
