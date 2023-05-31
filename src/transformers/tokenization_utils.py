@@ -408,10 +408,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
         model.resize_token_embeddings(len(tokenizer))
         ```"""
-        new_tokens = [str(tok) for tok in new_tokens]
+        token_contents = [str(tok) for tok in new_tokens]
 
         tokens_to_add = []
-        for token in new_tokens:
+        for i, token in enumerate(token_contents):
             if not isinstance(token, str):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
             if not special_tokens and hasattr(self, "do_lower_case") and self.do_lower_case:
@@ -422,6 +422,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 and token not in tokens_to_add
             ):
                 tokens_to_add.append(token)
+                self.additional_special_tokens.append(new_tokens[i])
                 if self.verbose:
                     logger.info(f"Adding {token} to the vocabulary")
 
@@ -432,10 +433,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         # Make sure we don't split on any special tokens (even they were already in the vocab before e.g. for Albert)
         if special_tokens:
-            if len(new_tokens) == 1:
-                _insert_one_token_to_ordered_list(self.unique_no_split_tokens, new_tokens[0])
+            if len(token_contents) == 1:
+                _insert_one_token_to_ordered_list(self.unique_no_split_tokens, token_contents[0])
             else:
-                self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(new_tokens)))
+                self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(token_contents)))
         else:
             # Or on the newly added tokens
             if len(tokens_to_add) == 1:
