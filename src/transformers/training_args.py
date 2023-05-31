@@ -64,7 +64,7 @@ if is_torch_available():
     import torch.distributed as dist
 
 if is_accelerate_available():
-    from accelerate import PartialState
+    from accelerate.state import AcceleratorState, PartialState
     from accelerate.utils import DistributedType
 
 if is_torch_tpu_available(check_device=False):
@@ -1550,6 +1550,7 @@ class TrainingArguments:
         if isinstance(self.debug, str):
             self.debug = [DebugOption(s) for s in self.debug.split()]
 
+        self.deepspeed_plugin = None
         if self.deepspeed:
             # - must be run very last in arg parsing, since it will use a lot of these settings.
             # - must be run before the model is created.
@@ -1561,6 +1562,12 @@ class TrainingArguments:
             # note: leave self.deepspeed unmodified in case a user relies on it not to be modified)
             self.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.deepspeed)
             self.hf_deepspeed_config.trainer_config_process(self)
+
+            # Accelerate DeepSpeed Plugin
+            from accelerate.utils import DeepSpeedPlugin
+
+            os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"
+            self.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.hf_deepspeed_config)
 
         if self.push_to_hub_token is not None:
             warnings.warn(
@@ -1660,6 +1667,8 @@ class TrainingArguments:
     def _setup_devices(self) -> "torch.device":
         requires_backends(self, ["torch"])
         logger.info("PyTorch: setting up devices")
+        AcceleratorState._reset_state()
+        PartialState._reset_state()
         if not is_sagemaker_mp_enabled() and not is_accelerate_available(check_partial_state=True):
             raise ImportError(
                 "Using the `Trainer` with `PyTorch` requires `accelerate>=0.19.0`: Please run `pip install transformers[torch]` or `pip install accelerate -U`"
