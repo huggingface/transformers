@@ -2746,7 +2746,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if no_split_modules is None:
                 raise ValueError(
                     f"{model.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model"
-                    "class needs to implement the `_no_split_modules` attribute."
+                    "class needs to implement the `_no_split_modules` attribute, or directly pass `no_split_modules` to "
+                    "`from_pretrained`."
                 )
             if device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
                 raise ValueError(
