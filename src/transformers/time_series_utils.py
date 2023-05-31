@@ -171,7 +171,7 @@ class StudentTOutput(DistributionOutput):
 
     @classmethod
     def domain_map(cls, df: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor):
-        scale = cls.squareplus(scale)
+        scale = cls.squareplus(scale).clamp_min(torch.finfo(scale.dtype).eps)
         df = 2.0 + cls.squareplus(df)
         return df.squeeze(-1), loc.squeeze(-1), scale.squeeze(-1)
 
@@ -186,7 +186,7 @@ class NormalOutput(DistributionOutput):
 
     @classmethod
     def domain_map(cls, loc: torch.Tensor, scale: torch.Tensor):
-        scale = cls.squareplus(scale)
+        scale = cls.squareplus(scale).clamp_min(torch.finfo(scale.dtype).eps)
         return loc.squeeze(-1), scale.squeeze(-1)
 
 
