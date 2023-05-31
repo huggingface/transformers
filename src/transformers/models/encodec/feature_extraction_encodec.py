@@ -59,7 +59,7 @@ class EnCodecFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        audio: Optional[Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]]] = None,
+        audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
         truncation: bool = False,
@@ -76,8 +76,8 @@ class EnCodecFeatureExtractor(SequenceFeatureExtractor):
             audio (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, *optional*):
                 The sequence or batch of sequences to be processed. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values.
-                The numpy array miust be of shape `(num_samples,)` for mono audio (`audio_channels = 1`), or `(2, num_samples)` for
-                stereo audio (`audio_channels = 2`).
+                The numpy array must be of shape `(num_samples,)` for mono audio (`feature_size = 1`),
+                or `(2, num_samples)` for stereo audio (`feature_size = 2`).
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
@@ -130,40 +130,30 @@ class EnCodecFeatureExtractor(SequenceFeatureExtractor):
             isinstance(audio, (list, tuple))
             and (isinstance(audio[0], np.ndarray) or isinstance(audio[0], (tuple, list)))
         )
-        print("is_batched", is_batched)
-
-        # TODO: should verify that input is mono when audio_channels = 1
-        #   (in which case there should not be an initial dimension)
-        # and stereo when audio_channels = 2 (also when using Lists, so two Lists)
 
         if is_batched:
-            audio = [np.asarray(audio, dtype=np.float32) for audio in audio]
+            audio = [np.asarray(audio, dtype=np.float32).T for audio in audio]
         elif not is_batched and not isinstance(audio, np.ndarray):
             audio = np.asarray(audio, dtype=np.float32)
         elif isinstance(audio, np.ndarray) and audio.dtype is np.dtype(np.float64):
             audio = audio.astype(np.float32)
 
-        # TODO: do we expect audio input as (channels, samples) or (samples, channels)?
-        # in the latter case a list would be [[l, r], [l, r], [l, r], ...] rather than
-        # [[llllll], [rrrrrr]]
-        audio = audio.T  # TODO: doesnt work on lists
-
-        # if self.audio_channels > 1:
-        #     features = [x for x in audio]
-        # else:
-        #     features = audio
-
         # always return batch
         if not is_batched:
-            audio = [audio]
+            audio = [np.asarray(audio).T]
 
-        #print(features)
-
-        # # needed to make pad() work on stereo inputs
-        # feature_size_hack = self.feature_size
-
-        # self.feature_size = self.audio_channels
-        # print("self.feature_size", self.feature_size)
+        # verify inputs are valid
+        for idx, example in enumerate(audio):
+            if example.ndim == 1:
+                example = example[..., None]
+            if example.ndim > 2:
+                raise ValueError(f"Expected input shape (channels, length) but got shape {example.T.shape}")
+            if self.feature_size == 1 and example.shape[-1] != 1:
+                raise ValueError(f"Expected mono audio but example has {example.shape[-1]} channels")
+            if self.feature_size == 2 and example.shape[-1] != 2:
+                raise ValueError(f"Expected stereo audio but example has {example.shape[-1]} channels")
+            if example.shape[-1] == 1:
+                audio[idx] = example[..., 0]  # strip off mono channel dimension
 
         # convert into correct format for padding
         encoded_inputs = BatchFeature({"input_values": audio})
@@ -178,25 +168,30 @@ class EnCodecFeatureExtractor(SequenceFeatureExtractor):
             **kwargs,
         )
 
-        # self.feature_size = feature_size_hack
+        # convert input values to correct format
+        input_values = padded_inputs["input_values"]
+        if not isinstance(input_values[0], np.ndarray):
+            padded_inputs["input_values"] = [np.asarray(array, dtype=np.float32) for array in input_values]
+        elif (
+            not isinstance(input_values, np.ndarray)
+            and isinstance(input_values[0], np.ndarray)
+            and input_values[0].dtype is np.dtype(np.float64)
+        ):
+            padded_inputs["input_values"] = [array.astype(np.float32) for array in input_values]
+        elif isinstance(input_values, np.ndarray) and input_values.dtype is np.dtype(np.float64):
+            padded_inputs["input_values"] = input_values.astype(np.float32)
 
-        # # convert input values to correct format
-        # input_values = padded_inputs["input_values"]
-        # if not isinstance(input_values[0], np.ndarray):
-        #     padded_inputs["input_values"] = [np.asarray(array, dtype=np.float32) for array in input_values]
-        # elif (
-        #     not isinstance(input_values, np.ndarray)
-        #     and isinstance(input_values[0], np.ndarray)
-        #     and input_values[0].dtype is np.dtype(np.float64)
-        # ):
-        #     padded_inputs["input_values"] = [array.astype(np.float32) for array in input_values]
-        # elif isinstance(input_values, np.ndarray) and input_values.dtype is np.dtype(np.float64):
-        #     padded_inputs["input_values"] = input_values.astype(np.float32)
+        # add mono channel dimension
+        if padded_inputs["input_values"].ndim == 2:
+            padded_inputs["input_values"] = padded_inputs["input_values"][..., None]
 
-        # # convert attention_mask to correct format
-        # attention_mask = padded_inputs.get("attention_mask")
-        # if attention_mask is not None:
-        #     padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
+        # output shape is (batch, channels, num_samples)
+        padded_inputs["input_values"] = padded_inputs["input_values"].transpose(0, 2, 1)
+
+        # convert attention_mask to correct format
+        attention_mask = padded_inputs.get("attention_mask")
+        if attention_mask is not None:
+            padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

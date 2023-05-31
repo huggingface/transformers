@@ -187,7 +187,7 @@ class EnCodecConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
     model_type = "encodec"
-    #attribute_map = {"num_attention_heads": "encoder_attention_heads", "num_hidden_layers": "encoder_layers"}
+    # attribute_map = {"num_attention_heads": "encoder_attention_heads", "num_hidden_layers": "encoder_layers"}
 
     def __init__(
         self,
