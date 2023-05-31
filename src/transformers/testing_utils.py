@@ -14,6 +14,7 @@
 
 import collections
 import contextlib
+import doctest
 import functools
 import inspect
 import logging
@@ -30,11 +31,23 @@ import unittest
 from collections.abc import Mapping
 from io import StringIO
 from pathlib import Path
-from typing import Iterator, List, Optional, Union
+from typing import Iterable, Iterator, List, Optional, Union
 from unittest import mock
 
 import huggingface_hub
 import requests
+from _pytest.doctest import (
+    Module,
+    _get_checker,
+    _get_continue_on_failure,
+    _get_runner,
+    _is_mocked,
+    _patch_unwrap_mock_aware,
+    get_optionflags,
+    import_path,
+)
+from _pytest.outcomes import skip
+from pytest import DoctestItem
 
 from transformers import logging as transformers_logging
 
@@ -1812,3 +1825,162 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
 
     if results["error"] is not None:
         test_case.fail(f'{results["error"]}')
+
+
+"""
+The following contains utils to run the documentation tests without having to overwrite any files.
+
+The `preprocess_string` function adds `# doctest: +IGNORE_RESULT` markers on the fly anywhere a `load_dataset` call is
+made as a print would otherwise fail the corresonding line.
+
+To skip cuda tests, make sure to call `SKIP_CUDA_DOCTEST=1 pytest --doctest-modules <path_to_files_to_test>
+"""
+
+
+def preprocess_string(string, skip_cuda_tests):
+    """Prepare a docstring or a `.mdx` file to be run by doctest.
+
+    The argument `string` would be the whole file content if it is a `.mdx` file. For a python file, it would be one of
+    its docstring. In each case, it may contain multiple python code examples. If `skip_cuda_tests` is `True` and a
+    cuda stuff is detective (with a heuristic), this method will return an empty string so no doctest will be run for
+    `string`.
+    """
+    codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )((?:.*?\n)*?.*?```)"
+    codeblocks = re.split(re.compile(codeblock_pattern, flags=re.MULTILINE | re.DOTALL), string)
+    is_cuda_found = False
+    for i, codeblock in enumerate(codeblocks):
+        if "load_dataset(" in codeblock and "# doctest: +IGNORE_RESULT" not in codeblock:
+            codeblocks[i] = re.sub(r"(>>> .*load_dataset\(.*)", r"\1 # doctest: +IGNORE_RESULT", codeblock)
+        if (
+            (">>>" in codeblock or "..." in codeblock)
+            and re.search(r"cuda|to\(0\)|device=0", codeblock)
+            and skip_cuda_tests
+        ):
+            is_cuda_found = True
+            break
+    modified_string = ""
+    if not is_cuda_found:
+        modified_string = "".join(codeblocks)
+    return modified_string
+
+
+class HfDocTestParser(doctest.DocTestParser):
+    """
+    Overwrites the DocTestParser from doctest to properly parse the codeblocks that are formatted with black. This
+    means that there are no extra lines at the end of our snippets. The `# doctest: +IGNORE_RESULT` marker is also
+    added anywhere a `load_dataset` call is made as a print would otherwise fail the corresponding line.
+
+    Tests involving cuda are skipped base on a naive pattern that should be updated if it is not enough.
+    """
+
+    # This regular expression is used to find doctest examples in a
+    # string.  It defines three groups: `source` is the source code
+    # (including leading indentation and prompts); `indent` is the
+    # indentation of the first (PS1) line of the source code; and
+    # `want` is the expected output (including leading indentation).
+    # fmt: off
+    _EXAMPLE_RE = re.compile(r'''
+        # Source consists of a PS1 line followed by zero or more PS2 lines.
+        (?P<source>
+            (?:^(?P<indent> [ ]*) >>>    .*)    # PS1 line
+            (?:\n           [ ]*  \.\.\. .*)*)  # PS2 lines
+        \n?
+        # Want consists of any non-blank lines that do not start with PS1.
+        (?P<want> (?:(?![ ]*$)    # Not a blank line
+             (?![ ]*>>>)          # Not a line starting with PS1
+             # !!!!!!!!!!! HF Specific !!!!!!!!!!!
+             (?:(?!```).)*        # Match any character except '`' until a '```' is found (this is specific to HF because black removes the last line)
+             # !!!!!!!!!!! HF Specific !!!!!!!!!!!
+             (?:\n|$)  # Match a new line or end of string
+          )*)
+        ''', re.MULTILINE | re.VERBOSE
+    )
+    # fmt: on
+
+    # !!!!!!!!!!! HF Specific !!!!!!!!!!!
+    skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", False))
+    # !!!!!!!!!!! HF Specific !!!!!!!!!!!
+
+    def parse(self, string, name="<string>"):
+        """
+        Overwrites the `parse` method to incorporate a skip for CUDA tests, and remove logs and dataset prints before
+        calling `super().parse`
+        """
+        string = preprocess_string(string, self.skip_cuda_tests)
+        return super().parse(string, name)
+
+
+class HfDoctestModule(Module):
+    """
+    Overwrites the `DoctestModule` of the pytest package to make sure the HFDocTestParser is used when discovering
+    tests.
+    """
+
+    def collect(self) -> Iterable[DoctestItem]:
+        class MockAwareDocTestFinder(doctest.DocTestFinder):
+            """A hackish doctest finder that overrides stdlib internals to fix a stdlib bug.
+
+            https://github.com/pytest-dev/pytest/issues/3456 https://bugs.python.org/issue25532
+            """
+
+            def _find_lineno(self, obj, source_lines):
+                """Doctest code does not take into account `@property`, this
+                is a hackish way to fix it. https://bugs.python.org/issue17446
+
+                Wrapped Doctests will need to be unwrapped so the correct line number is returned. This will be
+                reported upstream. #8796
+                """
+                if isinstance(obj, property):
+                    obj = getattr(obj, "fget", obj)
+
+                if hasattr(obj, "__wrapped__"):
+                    # Get the main obj in case of it being wrapped
+                    obj = inspect.unwrap(obj)
+
+                # Type ignored because this is a private function.
+                return super()._find_lineno(  # type:ignore[misc]
+                    obj,
+                    source_lines,
+                )
+
+            def _find(self, tests, obj, name, module, source_lines, globs, seen) -> None:
+                if _is_mocked(obj):
+                    return
+                with _patch_unwrap_mock_aware():
+                    # Type ignored because this is a private function.
+                    super()._find(  # type:ignore[misc]
+                        tests, obj, name, module, source_lines, globs, seen
+                    )
+
+        if self.path.name == "conftest.py":
+            module = self.config.pluginmanager._importconftest(
+                self.path,
+                self.config.getoption("importmode"),
+                rootpath=self.config.rootpath,
+            )
+        else:
+            try:
+                module = import_path(
+                    self.path,
+                    root=self.config.rootpath,
+                    mode=self.config.getoption("importmode"),
+                )
+            except ImportError:
+                if self.config.getvalue("doctest_ignore_import_errors"):
+                    skip("unable to import module %r" % self.path)
+                else:
+                    raise
+
+        # !!!!!!!!!!! HF Specific !!!!!!!!!!!
+        finder = MockAwareDocTestFinder(parser=HfDocTestParser())
+        # !!!!!!!!!!! HF Specific !!!!!!!!!!!
+        optionflags = get_optionflags(self)
+        runner = _get_runner(
+            verbose=False,
+            optionflags=optionflags,
+            checker=_get_checker(),
+            continue_on_failure=_get_continue_on_failure(self.config),
+        )
+        for test in finder.find(module, module.__name__):
+            if test.examples:  # skip empty doctests and cuda
+                yield DoctestItem.from_parent(self, name=test.name, runner=runner, dtest=test)
