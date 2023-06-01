@@ -58,7 +58,7 @@ deps = {
     "ray[tune]": "ray[tune]",
     "regex": "regex!=2019.12.17",
     "requests": "requests",
-    "rhoknp": "rhoknp>=1.1.0",
+    "rhoknp": "rhoknp>=1.1.0,<1.3.1",
     "rjieba": "rjieba",
     "rouge-score": "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff": "ruff>=0.0.241,<=0.0.259",
