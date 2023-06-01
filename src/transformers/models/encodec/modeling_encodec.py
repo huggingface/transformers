@@ -15,8 +15,7 @@
 """ PyTorch EnCodec model."""
 
 import math
-import random
-from typing import List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -26,25 +25,12 @@ from torch import nn
 
 # TODO: their stuff
 from dataclasses import dataclass, field
-import math
-from pathlib import Path
-import typing as tp
-import warnings
 import einops
 from einops import rearrange, repeat
-import numpy as np
-import torch
-from torch import nn
-from torch.nn import functional as F
-from torch.nn.utils import spectral_norm, weight_norm
 
 
 from ...deepspeed import is_deepspeed_zero3_enabled
-from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPastAndCrossAttentions,
-    Seq2SeqModelOutput,
-)
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_encodec import EnCodecConfig
@@ -66,13 +52,18 @@ ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 # ROOT_URL = 'https://dl.fbaipublicfiles.com/encodec/v0/'
 
-EncodedFrame = tp.Tuple[torch.Tensor, tp.Optional[torch.Tensor]]
+EncodedFrame = Tuple[torch.Tensor, Optional[torch.Tensor]]
 
 CONV_NORMALIZATIONS = frozenset(['none', 'weight_norm', 'spectral_norm',
                                  'time_layer_norm', 'layer_norm', 'time_group_norm'])
 
 
-def _linear_overlap_add(frames: tp.List[torch.Tensor], stride: int):
+#TODO: get rid of this
+def _default(val: Any, d: Any) -> Any:
+    return val if val is not None else d
+
+
+def _linear_overlap_add(frames: List[torch.Tensor], stride: int):
     # Generic overlap add, with linear fade-in/fade-out, supporting complex scenario
     # e.g., more than 2 frames per position.
     # The core idea is to use a weight function that is a triangle,
@@ -114,19 +105,19 @@ def _linear_overlap_add(frames: tp.List[torch.Tensor], stride: int):
     return out / sum_weight
 
 
-def apply_parametrization_norm(module: nn.Module, norm: str = 'none') -> nn.Module:
+def _apply_parametrization_norm(module: nn.Module, norm: str = 'none') -> nn.Module:
     assert norm in CONV_NORMALIZATIONS
     if norm == 'weight_norm':
-        return weight_norm(module)
+        return nn.utils.weight_norm(module)
     elif norm == 'spectral_norm':
-        return spectral_norm(module)
+        return nn.utils.spectral_norm(module)
     else:
         # We already check was in CONV_NORMALIZATION, so any other choice
         # doesn't need reparametrization.
         return module
 
 
-def get_norm_module(module: nn.Module, causal: bool = False, norm: str = 'none', **norm_kwargs) -> nn.Module:
+def _get_norm_module(module: nn.Module, causal: bool = False, norm: str = 'none', **norm_kwargs) -> nn.Module:
     """Return the proper normalization module. If causal is True, this will ensure the returned
     module is causal, or return an error if the normalization doesn't support causal evaluation.
     """
@@ -143,7 +134,7 @@ def get_norm_module(module: nn.Module, causal: bool = False, norm: str = 'none',
         return nn.Identity()
 
 
-def get_extra_padding_for_conv1d(x: torch.Tensor, kernel_size: int, stride: int,
+def _get_extra_padding_for_conv1d(x: torch.Tensor, kernel_size: int, stride: int,
                                  padding_total: int = 0) -> int:
     """See `pad_for_conv1d`.
     """
@@ -153,8 +144,8 @@ def get_extra_padding_for_conv1d(x: torch.Tensor, kernel_size: int, stride: int,
     return ideal_length - length
 
 
-def pad1d(x: torch.Tensor, paddings: tp.Tuple[int, int], mode: str = 'zero', value: float = 0.):
-    """Tiny wrapper around F.pad, just to allow for reflect padding on small input.
+def _pad1d(x: torch.Tensor, paddings: Tuple[int, int], mode: str = 'zero', value: float = 0.):
+    """Tiny wrapper around torch.nn.functional.pad, just to allow for reflect padding on small input.
     If this is the case, we insert extra 0 padding to the right before the reflection happen.
     """
     length = x.shape[-1]
@@ -165,15 +156,15 @@ def pad1d(x: torch.Tensor, paddings: tp.Tuple[int, int], mode: str = 'zero', val
         extra_pad = 0
         if length <= max_pad:
             extra_pad = max_pad - length + 1
-            x = F.pad(x, (0, extra_pad))
-        padded = F.pad(x, paddings, mode, value)
+            x = nn.functional.pad(x, (0, extra_pad))
+        padded = nn.functional.pad(x, paddings, mode, value)
         end = padded.shape[-1] - extra_pad
         return padded[..., :end]
     else:
-        return F.pad(x, paddings, mode, value)
+        return nn.functional.pad(x, paddings, mode, value)
 
 
-def unpad1d(x: torch.Tensor, paddings: tp.Tuple[int, int]):
+def _unpad1d(x: torch.Tensor, paddings: Tuple[int, int]):
     """Remove padding from x, handling properly zero padding. Only for 1d!"""
     padding_left, padding_right = paddings
     assert padding_left >= 0 and padding_right >= 0, (padding_left, padding_right)
@@ -182,12 +173,55 @@ def unpad1d(x: torch.Tensor, paddings: tp.Tuple[int, int]):
     return x[..., padding_left: end]
 
 
+def _uniform_init(*shape: int):
+    t = torch.empty(shape)
+    nn.init.kaiming_uniform_(t)
+    return t
+
+
+def _sample_vectors(samples, num: int):
+    num_samples, device = samples.shape[0], samples.device
+
+    if num_samples >= num:
+        indices = torch.randperm(num_samples, device=device)[:num]
+    else:
+        indices = torch.randint(0, num_samples, (num,), device=device)
+
+    return samples[indices]
+
+
+def _kmeans(samples, num_clusters: int, num_iters: int = 10):
+    dim, dtype = samples.shape[-1], samples.dtype
+
+    means = _sample_vectors(samples, num_clusters)
+
+    for _ in range(num_iters):
+        diffs = rearrange(samples, "n d -> n () d") - rearrange(
+            means, "c d -> () c d"
+        )
+        dists = -(diffs ** 2).sum(dim=-1)
+
+        buckets = dists.max(dim=-1).indices
+        bins = torch.bincount(buckets, minlength=num_clusters)
+        zero_mask = bins == 0
+        bins_min_clamped = bins.masked_fill(zero_mask, 1)
+
+        new_means = buckets.new_zeros(num_clusters, dim, dtype=dtype)
+        new_means.scatter_add_(0, repeat(buckets, "n -> n d", d=dim), samples)
+        new_means = new_means / bins_min_clamped[..., None]
+
+        means = torch.where(zero_mask[..., None], means, new_means)
+
+    return means, bins
+
+
+
 class ConvLayerNorm(nn.LayerNorm):
     """
     Convolution-friendly LayerNorm that moves channels to last dimensions
     before running the normalization and moves them back to original position right after.
     """
-    def __init__(self, normalized_shape: tp.Union[int, tp.List[int], torch.Size], **kwargs):
+    def __init__(self, normalized_shape: Union[int, List[int], torch.Size], **kwargs):
         super().__init__(normalized_shape, **kwargs)
 
     def forward(self, x):
@@ -202,10 +236,10 @@ class NormConv1d(nn.Module):
     to provide a uniform interface across normalization approaches.
     """
     def __init__(self, *args, causal: bool = False, norm: str = 'none',
-                 norm_kwargs: tp.Dict[str, tp.Any] = {}, **kwargs):
+                 norm_kwargs: Dict[str, Any] = {}, **kwargs):
         super().__init__()
-        self.conv = apply_parametrization_norm(nn.Conv1d(*args, **kwargs), norm)
-        self.norm = get_norm_module(self.conv, causal, norm, **norm_kwargs)
+        self.conv = _apply_parametrization_norm(nn.Conv1d(*args, **kwargs), norm)
+        self.norm = _get_norm_module(self.conv, causal, norm, **norm_kwargs)
         self.norm_type = norm
 
     def forward(self, x):
@@ -219,10 +253,10 @@ class NormConvTranspose1d(nn.Module):
     to provide a uniform interface across normalization approaches.
     """
     def __init__(self, *args, causal: bool = False, norm: str = 'none',
-                 norm_kwargs: tp.Dict[str, tp.Any] = {}, **kwargs):
+                 norm_kwargs: Dict[str, Any] = {}, **kwargs):
         super().__init__()
-        self.convtr = apply_parametrization_norm(nn.ConvTranspose1d(*args, **kwargs), norm)
-        self.norm = get_norm_module(self.convtr, causal, norm, **norm_kwargs)
+        self.convtr = _apply_parametrization_norm(nn.ConvTranspose1d(*args, **kwargs), norm)
+        self.norm = _get_norm_module(self.convtr, causal, norm, **norm_kwargs)
         self.norm_type = norm
 
     def forward(self, x):
@@ -238,12 +272,12 @@ class SConv1d(nn.Module):
     def __init__(self, in_channels: int, out_channels: int,
                  kernel_size: int, stride: int = 1, dilation: int = 1,
                  groups: int = 1, bias: bool = True, causal: bool = False,
-                 norm: str = 'none', norm_kwargs: tp.Dict[str, tp.Any] = {},
+                 norm: str = 'none', norm_kwargs: Dict[str, Any] = {},
                  pad_mode: str = 'reflect'):
         super().__init__()
         # warn user on unusual setup between dilation and stride
         if stride > 1 and dilation > 1:
-            warnings.warn('SConv1d has been initialized with stride > 1 and dilation > 1'
+            logger.warning('SConv1d has been initialized with stride > 1 and dilation > 1'
                           f' (kernel_size={kernel_size} stride={stride}, dilation={dilation}).')
         self.conv = NormConv1d(in_channels, out_channels, kernel_size, stride,
                                dilation=dilation, groups=groups, bias=bias, causal=causal,
@@ -258,15 +292,15 @@ class SConv1d(nn.Module):
         dilation = self.conv.conv.dilation[0]
         kernel_size = (kernel_size - 1) * dilation + 1  # effective kernel size with dilations
         padding_total = kernel_size - stride
-        extra_padding = get_extra_padding_for_conv1d(x, kernel_size, stride, padding_total)
+        extra_padding = _get_extra_padding_for_conv1d(x, kernel_size, stride, padding_total)
         if self.causal:
             # Left padding for causal
-            x = pad1d(x, (padding_total, extra_padding), mode=self.pad_mode)
+            x = _pad1d(x, (padding_total, extra_padding), mode=self.pad_mode)
         else:
             # Asymmetric padding required for odd strides
             padding_right = padding_total // 2
             padding_left = padding_total - padding_right
-            x = pad1d(x, (padding_left, padding_right + extra_padding), mode=self.pad_mode)
+            x = _pad1d(x, (padding_left, padding_right + extra_padding), mode=self.pad_mode)
         return self.conv(x)
 
 
@@ -277,7 +311,7 @@ class SConvTranspose1d(nn.Module):
     def __init__(self, in_channels: int, out_channels: int,
                  kernel_size: int, stride: int = 1, causal: bool = False,
                  norm: str = 'none', trim_right_ratio: float = 1.,
-                 norm_kwargs: tp.Dict[str, tp.Any] = {}):
+                 norm_kwargs: Dict[str, Any] = {}):
         super().__init__()
         self.convtr = NormConvTranspose1d(in_channels, out_channels, kernel_size, stride,
                                           causal=causal, norm=norm, norm_kwargs=norm_kwargs)
@@ -303,12 +337,12 @@ class SConvTranspose1d(nn.Module):
             # if trim_right_ratio = 1.0, trim everything from right
             padding_right = math.ceil(padding_total * self.trim_right_ratio)
             padding_left = padding_total - padding_right
-            y = unpad1d(y, (padding_left, padding_right))
+            y = _unpad1d(y, (padding_left, padding_right))
         else:
             # Asymmetric padding required for odd strides
             padding_right = padding_total // 2
             padding_left = padding_total - padding_right
-            y = unpad1d(y, (padding_left, padding_right))
+            y = _unpad1d(y, (padding_left, padding_right))
         return y
 
 
@@ -346,9 +380,9 @@ class SEANetResnetBlock(nn.Module):
         compress (int): Reduced dimensionality in residual branches (from Demucs v3)
         true_skip (bool): Whether to use true skip connection or a simple convolution as the skip connection.
     """
-    def __init__(self, dim: int, kernel_sizes: tp.List[int] = [3, 1], dilations: tp.List[int] = [1, 1],
+    def __init__(self, dim: int, kernel_sizes: List[int] = [3, 1], dilations: List[int] = [1, 1],
                  activation: str = 'ELU', activation_params: dict = {'alpha': 1.0},
-                 norm: str = 'weight_norm', norm_params: tp.Dict[str, tp.Any] = {}, causal: bool = False,
+                 norm: str = 'weight_norm', norm_params: Dict[str, Any] = {}, causal: bool = False,
                  pad_mode: str = 'reflect', compress: int = 2, true_skip: bool = True):
         super().__init__()
         assert len(kernel_sizes) == len(dilations), 'Number of kernel sizes should match number of dilations'
@@ -409,11 +443,11 @@ class SEANetEncoder(nn.Module):
         dimension: int = 128
         n_filters: int = 32
         n_residual_layers: int = 1
-        ratios: tp.List[int] = [8, 5, 4, 2]
+        ratios: List[int] = [8, 5, 4, 2]
         activation: str = 'ELU'
         activation_params: dict = {'alpha': 1.0}
         norm: str = 'weight_norm'
-        norm_params: tp.Dict[str, tp.Any] = {}
+        norm_params: Dict[str, Any] = {}
         kernel_size: int = 7
         last_kernel_size: int = 7
         residual_kernel_size: int = 3
@@ -438,7 +472,7 @@ class SEANetEncoder(nn.Module):
 
         act = getattr(nn, activation)
         mult = 1
-        model: tp.List[nn.Module] = [
+        model: List[nn.Module] = [
             SConv1d(channels, mult * n_filters, kernel_size, norm=norm, norm_kwargs=norm_params,
                     causal=causal, pad_mode=pad_mode)
         ]
@@ -513,13 +547,13 @@ class SEANetDecoder(nn.Module):
         dimension: int = 128
         n_filters: int = 32
         n_residual_layers: int = 1
-        ratios: tp.List[int] = [8, 5, 4, 2]
+        ratios: List[int] = [8, 5, 4, 2]
         activation: str = 'ELU'
         activation_params: dict = {'alpha': 1.0}
-        final_activation: tp.Optional[str] = None
-        final_activation_params: tp.Optional[dict] = None
+        final_activation: Optional[str] = None
+        final_activation_params: Optional[dict] = None
         norm: str = 'weight_norm'
-        norm_params: tp.Dict[str, tp.Any] = {}
+        norm_params: Dict[str, Any] = {}
         kernel_size: int = 7
         last_kernel_size: int = 7
         residual_kernel_size: int = 3
@@ -545,7 +579,7 @@ class SEANetDecoder(nn.Module):
 
         act = getattr(nn, activation)
         mult = int(2 ** len(self.ratios))
-        model: tp.List[nn.Module] = [
+        model: List[nn.Module] = [
             SConv1d(dimension, mult * n_filters, kernel_size, norm=norm, norm_kwargs=norm_params,
                     causal=causal, pad_mode=pad_mode)
         ]
@@ -594,48 +628,6 @@ class SEANetDecoder(nn.Module):
         return y
 
 
-def uniform_init(*shape: int):
-    t = torch.empty(shape)
-    nn.init.kaiming_uniform_(t)
-    return t
-
-
-def sample_vectors(samples, num: int):
-    num_samples, device = samples.shape[0], samples.device
-
-    if num_samples >= num:
-        indices = torch.randperm(num_samples, device=device)[:num]
-    else:
-        indices = torch.randint(0, num_samples, (num,), device=device)
-
-    return samples[indices]
-
-
-def kmeans(samples, num_clusters: int, num_iters: int = 10):
-    dim, dtype = samples.shape[-1], samples.dtype
-
-    means = sample_vectors(samples, num_clusters)
-
-    for _ in range(num_iters):
-        diffs = rearrange(samples, "n d -> n () d") - rearrange(
-            means, "c d -> () c d"
-        )
-        dists = -(diffs ** 2).sum(dim=-1)
-
-        buckets = dists.max(dim=-1).indices
-        bins = torch.bincount(buckets, minlength=num_clusters)
-        zero_mask = bins == 0
-        bins_min_clamped = bins.masked_fill(zero_mask, 1)
-
-        new_means = buckets.new_zeros(num_clusters, dim, dtype=dtype)
-        new_means.scatter_add_(0, repeat(buckets, "n -> n d", d=dim), samples)
-        new_means = new_means / bins_min_clamped[..., None]
-
-        means = torch.where(zero_mask[..., None], means, new_means)
-
-    return means, bins
-
-
 class EuclideanCodebook(nn.Module):
     """Codebook with Euclidean distance.
     Args:
@@ -663,7 +655,7 @@ class EuclideanCodebook(nn.Module):
     ):
         super().__init__()
         self.decay = decay
-        init_fn: tp.Union[tp.Callable[..., torch.Tensor], tp.Any] = uniform_init if not kmeans_init else torch.zeros
+        init_fn: Union[Callable[..., torch.Tensor], Any] = _uniform_init if not kmeans_init else torch.zeros
         embed = init_fn(codebook_size, dim)
 
         self.codebook_size = codebook_size
@@ -682,7 +674,7 @@ class EuclideanCodebook(nn.Module):
         if self.inited:
             return
 
-        embed, cluster_size = kmeans(data, self.codebook_size, self.kmeans_iters)
+        embed, cluster_size = _kmeans(data, self.codebook_size, self.kmeans_iters)
         self.embed.data.copy_(embed)
         self.embed_avg.data.copy_(embed.clone())
         self.cluster_size.data.copy_(cluster_size)
@@ -692,7 +684,7 @@ class EuclideanCodebook(nn.Module):
 
     def replace_(self, samples, mask):
         modified_codebook = torch.where(
-            mask[..., None], sample_vectors(samples, self.codebook_size), self.embed
+            mask[..., None], _sample_vectors(samples, self.codebook_size), self.embed
         )
         self.embed.data.copy_(modified_codebook)
 
@@ -726,7 +718,7 @@ class EuclideanCodebook(nn.Module):
         return embed_ind.view(*shape[:-1])
 
     def dequantize(self, embed_ind):
-        quantize = F.embedding(embed_ind, self.embed)
+        quantize = nn.functional.embedding(embed_ind, self.embed)
         return quantize
 
     def encode(self, x):
@@ -750,7 +742,7 @@ class EuclideanCodebook(nn.Module):
         self.init_embed_(x)
 
         embed_ind = self.quantize(x)
-        embed_onehot = F.one_hot(embed_ind, self.codebook_size).type(dtype)
+        embed_onehot = nn.functional.one_hot(embed_ind, self.codebook_size).type(dtype)
         embed_ind = self.postprocess_emb(embed_ind, shape)
         quantize = self.dequantize(embed_ind)
 
@@ -770,10 +762,6 @@ class EuclideanCodebook(nn.Module):
         #     self.embed.data.copy_(embed_normalized)
 
         return quantize, embed_ind
-
-
-def default(val: tp.Any, d: tp.Any) -> tp.Any:
-    return val if val is not None else d
 
 
 class VectorQuantization(nn.Module):
@@ -796,7 +784,7 @@ class VectorQuantization(nn.Module):
         self,
         dim: int,
         codebook_size: int,
-        codebook_dim: tp.Optional[int] = None,
+        codebook_dim: Optional[int] = None,
         decay: float = 0.99,
         epsilon: float = 1e-5,
         kmeans_init: bool = True,
@@ -805,7 +793,7 @@ class VectorQuantization(nn.Module):
         commitment_weight: float = 1.,
     ):
         super().__init__()
-        _codebook_dim: int = default(codebook_dim, dim)
+        _codebook_dim: int = _default(codebook_dim, dim)
 
         requires_projection = _codebook_dim != dim
         self.project_in = (nn.Linear(dim, _codebook_dim) if requires_projection else nn.Identity())
@@ -849,11 +837,11 @@ class VectorQuantization(nn.Module):
         loss = torch.tensor([0.0], device=device, requires_grad=self.training)
 
         if self.training:
-            warnings.warn('When using RVQ in training model, first check '
+            logger.warning('When using RVQ in training model, first check '
                           'https://github.com/facebookresearch/encodec/issues/25 . '
                           'The bug wasn\'t fixed here for reproducibility.')
             if self.commitment_weight > 0:
-                commit_loss = F.mse_loss(quantize.detach(), x)
+                commit_loss = nn.functional.mse_loss(quantize.detach(), x)
                 loss = loss + commit_loss * self.commitment_weight
 
         quantize = self.project_out(quantize)
@@ -871,7 +859,7 @@ class ResidualVectorQuantization(nn.Module):
             [VectorQuantization(**kwargs) for _ in range(num_quantizers)]
         )
 
-    def forward(self, x, n_q: tp.Optional[int] = None):
+    def forward(self, x, n_q: Optional[int] = None):
         quantized_out = 0.0
         residual = x
 
@@ -891,7 +879,7 @@ class ResidualVectorQuantization(nn.Module):
         out_losses, out_indices = map(torch.stack, (all_losses, all_indices))
         return quantized_out, out_indices, out_losses
 
-    def encode(self, x: torch.Tensor, n_q: tp.Optional[int] = None) -> torch.Tensor:
+    def encode(self, x: torch.Tensor, n_q: Optional[int] = None) -> torch.Tensor:
         residual = x
         all_indices = []
         n_q = n_q or len(self.layers)
@@ -917,7 +905,7 @@ class QuantizedResult:
     quantized: torch.Tensor
     codes: torch.Tensor
     bandwidth: torch.Tensor  # bandwidth in kb/s used, per batch item.
-    penalty: tp.Optional[torch.Tensor] = None
+    penalty: Optional[torch.Tensor] = None
     metrics: dict = field(default_factory=dict)
 
 
@@ -962,7 +950,7 @@ class ResidualVectorQuantizer(nn.Module):
             threshold_ema_dead_code=self.threshold_ema_dead_code,
         )
 
-    def forward(self, x: torch.Tensor, frame_rate: int, bandwidth: tp.Optional[float] = None) -> QuantizedResult:
+    def forward(self, x: torch.Tensor, frame_rate: int, bandwidth: Optional[float] = None) -> QuantizedResult:
         """Residual vector quantization on the given input tensor.
         Args:
             x (torch.Tensor): Input tensor.
@@ -979,7 +967,7 @@ class ResidualVectorQuantizer(nn.Module):
         bw = torch.tensor(n_q * bw_per_q).to(x)
         return QuantizedResult(quantized, codes, bw, penalty=torch.mean(commit_loss))
 
-    def get_num_quantizers_for_bandwidth(self, frame_rate: int, bandwidth: tp.Optional[float] = None) -> int:
+    def get_num_quantizers_for_bandwidth(self, frame_rate: int, bandwidth: Optional[float] = None) -> int:
         """Return n_q based on specified target bandwidth.
         """
         bw_per_q = self.get_bandwidth_per_quantizer(frame_rate)
@@ -996,7 +984,7 @@ class ResidualVectorQuantizer(nn.Module):
         """
         return math.log2(self.bins) * frame_rate
 
-    def encode(self, x: torch.Tensor, frame_rate: int, bandwidth: tp.Optional[float] = None) -> torch.Tensor:
+    def encode(self, x: torch.Tensor, frame_rate: int, bandwidth: Optional[float] = None) -> torch.Tensor:
         """Encode a given input tensor with the specified frame rate at the given bandwidth.
         The RVQ encode method sets the appropriate number of quantizers to use
         and returns indices for each quantizer.
@@ -1608,20 +1596,20 @@ class EnCodecModel(EnCodecPreTrainedModel):
 
 #TODO: need this? maybe put in Config
     @property
-    def segment_length(self) -> tp.Optional[int]:
+    def segment_length(self) -> Optional[int]:
         if self.segment is None:
             return None
         return int(self.segment * self.sample_rate)
 
 #TODO: need this? maybe put in Config
     @property
-    def segment_stride(self) -> tp.Optional[int]:
+    def segment_stride(self) -> Optional[int]:
         segment_length = self.segment_length
         if segment_length is None:
             return None
         return max(1, int((1 - self.overlap) * segment_length))
 
-    def encode(self, x: torch.Tensor) -> tp.List[EncodedFrame]:
+    def encode(self, x: torch.Tensor) -> List[EncodedFrame]:
         """Given a tensor `x`, returns a list of frames containing
         the discrete encoded codes for `x`, along with rescaling factors
         for each segment, when `self.normalize` is True.
@@ -1640,7 +1628,7 @@ class EnCodecModel(EnCodecPreTrainedModel):
             stride = self.segment_stride  # type: ignore
             assert stride is not None
 
-        encoded_frames: tp.List[EncodedFrame] = []
+        encoded_frames: List[EncodedFrame] = []
         for offset in range(0, length, stride):
             frame = x[:, :, offset: offset + segment_length]
             encoded_frames.append(self._encode_frame(frame))
@@ -1666,7 +1654,7 @@ class EnCodecModel(EnCodecPreTrainedModel):
         # codes is [B, K, T], with T frames, K nb of codebooks.
         return codes, scale
 
-    def decode(self, encoded_frames: tp.List[EncodedFrame]) -> torch.Tensor:
+    def decode(self, encoded_frames: List[EncodedFrame]) -> torch.Tensor:
         """Decode the given frames into a waveform.
         Note that the output might be a bit bigger than the input. In that case,
         any extra steps at the end can be trimmed.
