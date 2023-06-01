@@ -165,7 +165,7 @@ def load_wav2vec2_layer(name, value, hf_model=None, hf_dict=None):
                 rename_dict(mapped_key, value, name, weight_type, hf_dict)
             else:
                 set_recursively(mapped_key, value, name, weight_type, hf_model)
-        continue
+            return is_used
     return is_used
 
 
