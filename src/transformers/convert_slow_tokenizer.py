@@ -547,8 +547,8 @@ class AlbertConverter(SpmConverter):
         if self.original_tokenizer.do_lower_case:
             list_normalizers.append(normalizers.Lowercase())
 
-        if proto.normalizer_spec.name != "identity":
-            precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
+        precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
+        if precompiled_charsmap:
             list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
         list_normalizers.append(normalizers.Replace(Regex(" {2,}"), " "))
         return normalizers.Sequence(list_normalizers)
@@ -800,7 +800,8 @@ class XLNetConverter(SpmConverter):
             list_normalizers.append(normalizers.Lowercase())
 
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-        list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+        if precompiled_charsmap:
+            list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
         list_normalizers.append(normalizers.Replace(Regex(" {2,}"), " "))
         return normalizers.Sequence(list_normalizers)
 
@@ -834,7 +835,8 @@ class RemBertConverter(SpmConverter):
             list_normalizers.append(normalizers.Lowercase())
 
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-        list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+        if precompiled_charsmap:
+            list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
         return normalizers.Sequence(list_normalizers)
 
     def post_processor(self):
