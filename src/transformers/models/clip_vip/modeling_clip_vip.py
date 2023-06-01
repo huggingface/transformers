@@ -16,7 +16,7 @@
 
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Type, Union
 
 import torch
 import torch.utils.checkpoint
@@ -241,12 +241,12 @@ class CLIPViPVisionEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         bsz, num_frames, in_channels, height, width = pixel_values.shape
-        if num_frames != self.temporal_embedding.shape[1]:
+        if num_frames == self.temporal_embedding.shape[1]:
+            time_embed = self.temporal_embedding
+        else:
             time_embed = self.temporal_embedding.transpose(1, 2)
             time_embed = F.interpolate(time_embed, size=(num_frames), mode="linear")
             time_embed = time_embed.transpose(1, 2)
-        else:
-            time_embed = self.temporal_embedding
 
         patch_embeds = self.patch_embedding(pixel_values.reshape(-1, in_channels, height, width))
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)  # [bsz*num_frames, height * width, out_channels]
@@ -261,15 +261,10 @@ class CLIPViPVisionEmbeddings(nn.Module):
         added_cls = self.added_cls.expand(bsz, self.config.add_cls_num, -1)
         added_cls = added_cls + self.position_embedding(self.position_ids[:, 0:1])
 
-        # N, L = patch_embeds.shape[1], patch_embeds.shape[2]
-        N = num_frames
-        L = height // self.config.patch_size * width // self.config.patch_size
-
         embeds = torch.cat(
             [class_embeds, added_cls, patch_embeds.reshape(patch_embeds.shape[0], -1, patch_embeds.shape[-1])], dim=1
         )
-        M = 1 + self.config.add_cls_num
-        return (embeds, (M, N, L))  # [B, M+N*L, C]
+        return embeds
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPTextEmbeddings with CLIP->CLIPViP
@@ -305,7 +300,9 @@ class CLIPViPTextEmbeddings(nn.Module):
 
 
 class CLIPViPAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """Base class for both the text/vision attentions"""
+
+    # """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     # Copied from transformers.models.clip.modeling_clip.CLIPAttention.__init__
     def __init__(self, config):
@@ -331,8 +328,10 @@ class CLIPViPAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    # Copied from transformers.models.clip.modeling_clip.CLIPAttention.forward with forward->text_encoding
-    def text_encoding(
+
+class CLIPViPTextAttention(CLIPViPAttention):
+    # Copied from transformers.models.clip.modeling_clip.CLIPAttention.forward
+    def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
@@ -410,21 +409,19 @@ class CLIPViPAttention(nn.Module):
 
         return attn_output, attn_weights_reshaped
 
+
+class CLIPViPVisionAttention(CLIPViPAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        inputs_size: Tuple[int, int, int],
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
+        num_frames: int,
+        num_patches: int,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        """
-        hidden_states: [B, M+N*L, C] inputs_size: (M, N, L)
-        """
-        if inputs_size is None:
-            return self.text_encoding(hidden_states, attention_mask, causal_attention_mask, output_attentions)
+        """Input shape: [batch size, (num_cls + num_frames * num_patches), embed_dim]"""
 
-        M, N, L = inputs_size
+        # num_cls corresponds to the number of "video proxy tokens" from the paper
+        num_cls = self.config.add_cls_num + 1
         bsz, tgt_len, embed_dim = hidden_states.size()
 
         # get query proj
@@ -436,39 +433,48 @@ class CLIPViPAttention(nn.Module):
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
-
         # qkv: [B*num_heads, M+N*L, head_dim]
         # in-frame attention:
-        q = query_states[:, M:].reshape(-1, L, self.head_dim)  # [B*num_heads*N, L, head_dim]
-        k = key_states[:, :M].repeat(1, N, 1).reshape(-1, M, self.head_dim)  # [B*num_heads*N, M, head_dim]
-        k = torch.cat([k, key_states[:, M:].reshape(-1, L, self.head_dim)], dim=1)  # [B*num_heads*N, M+L, head_dim]
-        v = value_states[:, :M].repeat(1, N, 1).reshape(-1, M, self.head_dim)  # [B*num_heads*N, M, head_dim]
-        v = torch.cat([v, value_states[:, M:].reshape(-1, L, self.head_dim)], dim=1)  # [B*num_heads*N, M+L, head_dim]
+        q = query_states[:, num_cls:].reshape(-1, num_patches, self.head_dim)  # [B*num_heads*N, L, head_dim]
+        k = (
+            key_states[:, :num_cls].repeat(1, num_frames, 1).reshape(-1, num_cls, self.head_dim)
+        )  # [B*num_heads*N, M, head_dim]
+        k = torch.cat(
+            [k, key_states[:, num_cls:].reshape(-1, num_patches, self.head_dim)], dim=1
+        )  # [B*num_heads*N, M+L, head_dim]
+        v = (
+            value_states[:, :num_cls].repeat(1, num_frames, 1).reshape(-1, num_cls, self.head_dim)
+        )  # [B*num_heads*N, M, head_dim]
+        v = torch.cat(
+            [v, value_states[:, num_cls:].reshape(-1, num_patches, self.head_dim)], dim=1
+        )  # [B*num_heads*N, M+L, head_dim]
         attn_weights = torch.bmm(q, k.transpose(1, 2))
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
         attn_output = torch.bmm(attn_probs, v)  # [B*num_heads*N, L, head_dim]
-        attn_output = attn_output.view(bsz, self.num_heads, N, L, self.head_dim)
+        attn_output = attn_output.view(bsz, self.num_heads, num_frames, num_patches, self.head_dim)
         attn_output = attn_output.permute(0, 2, 3, 1, 4)
-        attn_output_frames = attn_output.reshape(bsz, N * L, embed_dim)  # [B, N*L, C]
+        attn_output_frames = attn_output.reshape(bsz, num_frames * num_patches, embed_dim)  # [B, N*L, C]
 
         # cls divided attention:
-        q = query_states[:, :M]  # [B*num_heads, M, head_dim]
+        q = query_states[:, :num_cls]  # [B*num_heads, M, head_dim]
         k = key_states  # [B*num_heads, M+N*L, head_dim]
         v = value_states  # [B*num_heads, M+N*L, head_dim]
         attn_weights = torch.bmm(q, k.transpose(1, 2))
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
         attn_output = torch.bmm(attn_probs, v)  # [B*num_heads, M, head_dim]
-        attn_output = attn_output.view(bsz, self.num_heads, M, self.head_dim)
+        attn_output = attn_output.view(bsz, self.num_heads, num_cls, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
-        attn_output_cls = attn_output.reshape(bsz, M, embed_dim)  # [B, M, C]
+        attn_output_cls = attn_output.reshape(bsz, num_cls, embed_dim)  # [B, M, C]
 
         attn_output = torch.cat([attn_output_cls, attn_output_frames], dim=1)
 
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, None if not output_attentions else attn_weights
+        if output_attentions:
+            return attn_output, attn_weights
+        return attn_output, None
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->CLIPViP
@@ -488,10 +494,12 @@ class CLIPViPMLP(nn.Module):
 
 
 class CLIPViPEncoderLayer(nn.Module):
-    def __init__(self, config: CLIPViPConfig):
+    def __init__(
+        self, config: CLIPViPConfig, attn_class: Union[Type[CLIPViPVisionAttention], Type[CLIPViPTextAttention]]
+    ):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = CLIPViPAttention(config)
+        self.self_attn = attn_class(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = CLIPViPMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -499,9 +507,10 @@ class CLIPViPEncoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        inputs_size,
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
+        num_frames: Optional[int] = None,
+        num_patches: Optional[int] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor]:
         """
@@ -513,17 +522,27 @@ class CLIPViPEncoderLayer(nn.Module):
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
+            inputs_size (`Optional[Tuple[int,int,int]]`) specifying (num_patches, num_frames)
+                if this encoder layer is part of a CLIPViPVisionTransformer, and otherwise None.
         """
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            inputs_size=inputs_size,
-            attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
-            output_attentions=output_attentions,
-        )
+        if isinstance(self.self_attn, CLIPViPVisionAttention):
+            hidden_states, attn_weights = self.self_attn(
+                hidden_states=hidden_states,
+                num_frames=num_frames,
+                num_patches=num_patches,
+                output_attentions=output_attentions,
+            )
+        else:  # self_attn is a CLIPViPTextAttention
+            hidden_states, attn_weights = self.self_attn(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                causal_attention_mask=causal_attention_mask,
+                output_attentions=output_attentions,
+            )
+
         hidden_states = residual + hidden_states
 
         residual = hidden_states
@@ -708,18 +727,21 @@ class CLIPViPEncoder(nn.Module):
         config: CLIPViPConfig
     """
 
-    def __init__(self, config: CLIPViPConfig):
+    def __init__(
+        self, config: CLIPViPConfig, attn_class: Union[Type[CLIPViPVisionAttention], Type[CLIPViPTextAttention]]
+    ):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([CLIPViPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([CLIPViPEncoderLayer(config, attn_class) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
         self,
         inputs_embeds,
-        inputs_size=None,
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
+        num_frames: Optional[int] = None,
+        num_patches: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -744,6 +766,10 @@ class CLIPViPEncoder(nn.Module):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
+            num_frames (`bool`, *optional*):
+                the number of frames in the videos being encoded. Only set for video encoding.
+            num_patches (`bool`, *optional*):
+                the number of patches from CLIPViPVisionEmbeddings. Only set for video encoding.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -775,17 +801,19 @@ class CLIPViPEncoder(nn.Module):
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(encoder_layer),
-                    hidden_states,
-                    inputs_size,
-                    attention_mask,
-                    causal_attention_mask,
+                    hiden_states=hidden_states,
+                    attention_mask=attention_mask,
+                    causal_attention_mask=causal_attention_mask,
+                    num_frames=num_frames,
+                    num_patches=num_patches,
                 )
             else:
                 layer_outputs = encoder_layer(
-                    hidden_states,
-                    inputs_size,
-                    attention_mask,
-                    causal_attention_mask,
+                    hidden_states=hidden_states,
+                    attention_mask=attention_mask,
+                    causal_attention_mask=causal_attention_mask,
+                    num_frames=num_frames,
+                    num_patches=num_patches,
                     output_attentions=output_attentions,
                 )
 
@@ -810,7 +838,7 @@ class CLIPViPTextTransformer(nn.Module):
         self.config = config
         embed_dim = config.hidden_size
         self.embeddings = CLIPViPTextEmbeddings(config)
-        self.encoder = CLIPViPEncoder(config)
+        self.encoder = CLIPViPEncoder(config, CLIPViPTextAttention)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(CLIP_VIP_TEXT_INPUTS_DOCSTRING)
@@ -962,7 +990,7 @@ class CLIPViPVisionTransformer(nn.Module):
 
         self.embeddings = CLIPViPVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.encoder = CLIPViPEncoder(config)
+        self.encoder = CLIPViPEncoder(config, CLIPViPVisionAttention)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(CLIP_VIP_VISION_INPUTS_DOCSTRING)
@@ -987,12 +1015,16 @@ class CLIPViPVisionTransformer(nn.Module):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        hidden_states, inputs_size = self.embeddings(pixel_values)
+        hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layrnorm(hidden_states)
+
+        num_frames, _, height, width = pixel_values.size()[1:]
+        num_patches = height // self.config.patch_size * width // self.config.patch_size
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
-            inputs_size=inputs_size,
+            num_frames=num_frames,
+            num_patches=num_patches,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
