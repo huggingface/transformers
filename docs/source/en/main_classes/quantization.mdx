@@ -86,6 +86,7 @@ With this integration we were able to load large models on smaller devices and r
 <Tip warning={true}>
 
 Note that once a model has been loaded in 8-bit it is currently not possible to push the quantized weights on the Hub except if you use the latest `transformers` and `bitsandbytes`. Note also that you cannot train 8-bit weights as this is not supported yet. However you can use 8-bit models to train extra parameters, this will be covered in the next section.
+Note also that `device_map` is optional but setting `device_map = 'auto'` is prefered for inference as it will dispatch efficiently the model on the available ressources.
 
 </Tip>
 
@@ -162,9 +163,10 @@ You can load a quantized model from the Hub by using `from_pretrained` method. M
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("{your_username}/bloom-560m-8bit")
+model = AutoModelForCausalLM.from_pretrained("{your_username}/bloom-560m-8bit", device_map="auto")
 ```
-Note that in this case, you don't need to specify the arguments `load_in_8bit=True` and `device_map="auto"`, but you need to make sure that `bitsandbytes` and `accelerate` are installed.
+Note that in this case, you don't need to specify the arguments `load_in_8bit=True`, but you need to make sure that `bitsandbytes` and `accelerate` are installed.
+Note also that `device_map` is optional but setting `device_map = 'auto'` is prefered for inference as it will dispatch efficiently the model on the available ressources.
 
 ### Advanced usecases
 
@@ -252,6 +254,8 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 With the official support of adapters in the Hugging Face ecosystem, you can fine-tune models that have been loaded in 8-bit. 
 This enables fine-tuning large models such as `flan-t5-large` or `facebook/opt-6.7b` in a single google Colab. Please have a look at [`peft`](https://github.com/huggingface/peft) library for more details.
+
+Note that you don't need to pass `device_map` when loading the model for training. It will automatically load your model on your GPU. You can also set the device map to a specific device if needed (e.g. `cuda:0`, `0`, `torch.device('cuda:0')`). Please note that `device_map=auto` should be used for inference only. 
 
 ### BitsAndBytesConfig
 
