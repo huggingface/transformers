@@ -499,6 +499,7 @@ SPECIAL_MODEL_NAMES = {
     "DonutSwin": "Swin Transformer",
     "Marian": "MarianMT",
     "MaskFormerSwin": "Swin Transformer",
+    "ICT": "Image Completion Transformer",
     "OpenAI GPT-2": "GPT-2",
     "OpenAI GPT": "GPT",
     "Perceiver": "Perceiver IO",
