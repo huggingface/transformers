@@ -82,8 +82,8 @@ XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 
 if is_accelerate_available():
-    from accelerate import Accelerator, dispatch_model, infer_auto_device_map, init_empty_weights
     from accelerate import __version__ as accelerate_version
+    from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
     from accelerate.utils import (
         find_tied_parameters,
         load_offloaded_weights,
@@ -1918,20 +1918,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return super().float(*args)
 
     @classmethod
-    def _get_current_device(cls):
-        r"""
-        Get the current device using the `Accelerate` object - We just return the process index of the `Accelerate`
-        object to handle corner cases when running scripts in distributed setups.
-
-        Returns:
-            current_device (`int`):
-                The current device index.
-        """
-        dummy_accelerator = Accelerator()
-        current_device = dummy_accelerator.process_index
-        return current_device
-
-    @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
         r"""
         Instantiate a pretrained pytorch model from a pre-trained model configuration.
@@ -2281,8 +2267,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if device_map is None:
                 if torch.cuda.is_available():
-                    current_device = cls._get_current_device()
-                    device_map = {"": current_device}
+                    device_map = {"": torch.cuda.current_device()}
                 else:
                     raise RuntimeError("No GPU found. A GPU is needed for quantization.")
                 logger.info(
@@ -2355,19 +2340,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if load_in_8bit:
                 if torch_dtype is None:
                     torch_dtype = torch.float16
-                if torch.cuda.is_available():
-                    current_device = cls._get_current_device()
-                    device_map = {"": current_device}
-                else:
-                    raise RuntimeError("No GPU found. A GPU is needed for quantization.")
-                logger.info(
-                    "The device_map was not initialized."
-                    "Setting device_map to {'':torch.cuda.current_device()}."
-                    "If you want to use the model for inference, please set device_map ='auto' "
-                )
-                if low_cpu_mem_usage is None:
-                    low_cpu_mem_usage = True
-
+                if device_map is None:
+                    device_map = {"": torch.cuda.current_device()}
+                    logger.info(
+                        "The device_map was not initialized."
+                        "Setting device_map to {'':torch.cuda.current_device()}."
+                        "If you want to use the model for inference, please set device_map ='auto' "
+                    )
+                    if low_cpu_mem_usage is None:
+                        low_cpu_mem_usage = True
         elif not is_8bit_serializable and not load_in_8bit and hasattr(config, "quantization_config"):
             logger.warning(
                 "Detected the presence of a `quantization_config` attribute in the model's configuration but you don't have the correct"
