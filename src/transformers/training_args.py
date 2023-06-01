@@ -956,7 +956,7 @@ class TrainingArguments:
             "help": (
                 "Whether or not to use PyTorch Fully Sharded Data Parallel (FSDP) training (in distributed training"
                 " only). The base option should be `full_shard`, `shard_grad_op` or `no_shard` , hybrid_shard,"
-                " _hybrid_shard_zero2 and you can add CPU-offload to `full_shard` or `shard_grad_op` like this: "
+                " hybrid_shard_zero2 and you can add CPU-offload to `full_shard` or `shard_grad_op` like this: "
                 "full_shard offload` or `shard_grad_op offload`. You can add auto-wrap to `full_shard` or "
                 "`shard_grad_op` with the same syntax: full_shard auto_wrap` or `shard_grad_op auto_wrap`."
             ),
