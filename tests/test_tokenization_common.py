@@ -2117,26 +2117,27 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(fast=False)
         new_tokens = []
         new_tokens.append(AddedToken("<my_new_token_1>", lstrip=False, rstrip=False))
-        new_tokens.append(AddedToken("<my_new_token_1>", lstrip=True, rstrip=False))
-        new_tokens.append(AddedToken("<my_new_token_1>", lstrip=False, rstrip=True))
-        new_tokens.append(AddedToken("<my_new_token_1>", lstrip=True, rstrip=True))
+        new_tokens.append(AddedToken("<my_new_token_2>", lstrip=True, rstrip=False))
+        new_tokens.append(AddedToken("<my_new_token_3>", lstrip=False, rstrip=True))
+        new_tokens.append(AddedToken("<my_new_token_4>", lstrip=True, rstrip=True))
 
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 for token in new_tokens:
                     tokenizer.add_tokens([token])
                     tokens = tokenizer.tokenize(f"This sentence is{token}a test")
-                    self.assertIn("<my_new_token_1>", tokens)
+                    self.assertIn(token.content, tokens)
 
                     tokens = tokenizer.tokenize(f"This sentence is {token}a test")
-                    self.assertIn("<my_new_token_1>", tokens)
+                    self.assertIn(token.content, tokens)
 
                     tokens = tokenizer.tokenize(f"This sentence is{token} a test")
-                    self.assertIn("<my_new_token_1>", tokens)
+                    self.assertIn(token.content, tokens)
 
                     tokens = tokenizer.tokenize(f"This sentence is {token} a test")
-                    self.assertIn("<my_new_token_1>", tokens)
-
+                    self.assertIn(token.content, tokens)
+        
+        # for non BPE based tokenizers we need to test that lstrip and rstrip are respected
     @require_tokenizers
     def test_added_token_are_matched_longest_first(self):
         if not self.test_slow_tokenizer:
