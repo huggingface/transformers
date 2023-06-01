@@ -294,7 +294,7 @@ class Wav2Vec2ModelTester:
         )
 
     def create_and_check_model_with_attn_adapter(self, config, input_values, attention_mask):
-        config.num_attn_adapters = 1
+        config.adapter_attn_dim = 16
         model = Wav2Vec2ForCTC(config=config)
 
         assert model._adapters is not None, "Attention adapters have to be defined."
@@ -1139,7 +1139,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         input_features = [np.random.random(16_000 * s) for s in [1, 3, 2, 6]]
 
-        model = Wav2Vec2ForCTC.from_pretrained("hf-internal-testing/tiny-random-wav2vec2", num_attn_adapters=1)
+        model = Wav2Vec2ForCTC.from_pretrained("hf-internal-testing/tiny-random-wav2vec2", adapter_attn_dim=16)
 
         with tempfile.TemporaryDirectory() as tempdir:
             model.save_pretrained(tempdir)
