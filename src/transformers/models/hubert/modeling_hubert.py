@@ -614,7 +614,7 @@ class HubertAttnAdapterLayer(nn.Module):
         self.input_dim = config.adapter_attn_dim
         self.hidden_dim = config.hidden_size
 
-        self.norm = nn.LayerNorm((self.hidden_dim))
+        self.norm = nn.LayerNorm(self.hidden_dim)
         self.linear_1 = nn.Linear(self.hidden_dim, self.input_dim)
         self.act_fn = nn.ReLU()
         self.linear_2 = nn.Linear(self.input_dim, self.hidden_dim)
