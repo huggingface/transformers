@@ -65,6 +65,7 @@ from transformers import AutoModelForCausalLM
 model_name = "bigscience/bloom-2b5"
 model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_4bit=True)
 ```
+Note that `device_map` is optional but setting `device_map = 'auto'` is prefered for inference as it will dispatch efficiently the model on the available ressources.
 
 ### Running FP4 models - multi GPU setup 
 
