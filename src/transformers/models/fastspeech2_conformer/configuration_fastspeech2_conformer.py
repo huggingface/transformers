@@ -20,6 +20,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
+
 class FastSpeech2ConformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FastSpeech2ConformerModel`]. It is used to instantiate an
@@ -32,7 +33,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
 
 
     Args:
-        
+
 
     Example:
 
@@ -52,14 +53,14 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        adim=384,
-        odim=80,
-        idim=62,
-        aheads=4,
-        elayers=6,
-        eunits=1536,
-        dlayers=6,
-        dunits=1536,
+        acoustic_dim=384,  # from adim
+        input_dim=62,  # from idim
+        output_dim=80,  # from odim
+        num_attention_heads=4,
+        encoder_layers=6,
+        encoder_linear_units=1536,
+        decoder_layers=6,
+        decoder_linear_units=1536,
         postnet_layers=5,
         postnet_chans=256,
         postnet_filts=5,
@@ -114,28 +115,31 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         # additional features
         utt_embed_dim=None,  # confirm this, previously was 64
         lang_embs=None,  # confirm this, previously was 8000
+        vocab_size=75,
         bos_token_id=0,
         pad_token_id=1,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         local_vars = locals()
         for var_name, var_value in local_vars.items():
             if "kernel_size" in var_name and var_value % 2 == 0:
                 raise ValueError(f"`{var_name}` must be odd, but got {var_value} instead.")
-        
+
         super().__init__(bos_token_id=bos_token_id, pad_token_id=pad_token_id, eos_token_id=eos_token_id, **kwargs)
-        self.adim = adim
-        self.aheads = aheads
+        self.acoustic_dim = acoustic_dim
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.num_attention_heads = num_attention_heads
         self.conformer_dec_kernel_size = conformer_dec_kernel_size
         self.conformer_enc_kernel_size = conformer_enc_kernel_size
         self.decoder_normalize_before = decoder_normalize_before
-        self.dlayers = dlayers
-        self.dunits = dunits
+        self.decoder_layers = decoder_layers
+        self.decoder_linear_units = decoder_linear_units
         self.duration_predictor_chans = duration_predictor_chans
         self.duration_predictor_kernel_size = duration_predictor_kernel_size
         self.duration_predictor_layers = duration_predictor_layers
-        self.elayers = elayers
+        self.encoder_layers = encoder_layers
         self.encoder_normalize_before = encoder_normalize_before
         self.energy_embed_dropout = energy_embed_dropout
         self.energy_embed_kernel_size = energy_embed_kernel_size
@@ -143,7 +147,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         self.energy_predictor_dropout = energy_predictor_dropout
         self.energy_predictor_kernel_size = energy_predictor_kernel_size
         self.energy_predictor_layers = energy_predictor_layers
-        self.eunits = eunits
+        self.encoder_linear_units = encoder_linear_units
         self.init_type = init_type
         self.lang_embs = lang_embs
         self.pitch_embed_dropout = pitch_embed_dropout
@@ -173,12 +177,10 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         self.use_masking = use_masking
         self.use_weighted_masking = use_weighted_masking
         self.utt_embed_dim = utt_embed_dim
-        self.idim = idim
-        self.odim = odim
         self.encoder_concat_after = encoder_concat_after
         self.decoder_concat_after = decoder_concat_after
         self.duration_predictor_dropout_rate = duration_predictor_dropout_rate
-        
+        self.vocab_size = vocab_size
 
     @property
     def mel_dim(self):
