@@ -422,7 +422,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 and token not in tokens_to_add
             ):
                 tokens_to_add.append(token)
-                self.additional_special_tokens.append(new_tokens[i])
+                if isinstance(new_tokens[i], AddedToken):
+                    # tokens that are added using AddedToken are special tokens.
+                    self._additional_special_tokens.append(new_tokens[i])
                 if self.verbose:
                     logger.info(f"Adding {token} to the vocabulary")
 
@@ -531,6 +533,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     if tok_extended.lstrip and left:
                         tokens[i - 1] = left.rstrip()  # Opposite here
                 else:
+                    # there should be a list of additional tokens that are not special. These have to be in no split
+                    # but they are not special. By default any added token should have right and left strip to True 
+                    # Apparently. We need to keep this behaviour
+
                     # We strip left and right by default
                     if right:
                         tokens[i + 1] = right.lstrip()
