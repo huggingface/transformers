@@ -1867,8 +1867,8 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
     @require_torchaudio
     def test_inference_mms_1b_all(self):
-        model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/mms-1b-all").to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("patrickvonplaten/mms-1b-all")
+        model = Wav2Vec2ForCTC.from_pretrained("facebook/mms-1b-all").to(torch_device)
+        processor = Wav2Vec2Processor.from_pretrained("facebook/mms-1b-all")
 
         LANG_MAP = {"it": "ita", "es": "spa", "fr": "fra", "en": "eng"}
 

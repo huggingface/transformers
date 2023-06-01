@@ -57,18 +57,19 @@ from datasets import load_dataset, Audio
 # English
 stream_data = load_dataset("mozilla-foundation/common_voice_13_0", "en", split="test", streaming=True)
 stream_data = stream_data.cast_column("audio", Audio(sampling_rate=16000))
-en_sample = next(iter(stream_data))
+en_sample = next(iter(stream_data))["audio"]["array"]
 
 # French
 stream_data = load_dataset("mozilla-foundation/common_voice_13_0", "fr", split="test", streaming=True)
 stream_data = stream_data.cast_column("audio", Audio(sampling_rate=16000))
-fr_sample = next(iter(stream_data))
+fr_sample = next(iter(stream_data))["audio"]["array"]
 ```
 
 Next, we load the model and processor
 
 ```py
 from transformers import Wav2Vec2ForCTC, AutoProcessor
+import torch
 
 model_id = "facebook/mms-1b-all"
 
@@ -87,7 +88,7 @@ with torch.no_grad():
 
 ids = torch.argmax(outputs, dim=-1)[0]
 transcription = processor.decode(ids)
-#
+# 'joe keton disapproved of films and buster also had reservations about the media'
 ```
 
 We can now keep the same model in memory and simply switch out the language adapters by
@@ -105,7 +106,7 @@ with torch.no_grad():
 
 ids = torch.argmax(outputs, dim=-1)[0]
 transcription = processor.decode(ids)
-#
+# "ce dernier est volé tout au long de l'histoire romaine"
 ```
 
 In the same way the language can be switched out for all other supported languages. Please have a look at:

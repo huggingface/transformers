@@ -643,7 +643,7 @@ class UniSpeechEncoderLayer(nn.Module):
 class UniSpeechAttnAdapterLayer(nn.Module):
     def __init__(self, config):
         """
-        Implements adapter modules directly with 3D tensor weight as parameters and without using ModuleList orto speed
+        Implements adapter modules directly with 3D tensor weight as parameters and without using ModuleList to speed
         up training throughput.
         """
         super().__init__()
