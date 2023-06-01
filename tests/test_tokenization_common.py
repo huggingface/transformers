@@ -2970,6 +2970,7 @@ class TokenizerTesterMixin:
                 assert tokenizer_r.tokenize("This sentence is <a_new_token_2>a test") == tokenizer_s.tokenize("This sentence is <a_new_token_2>a test")
                 assert tokenizer_r.tokenize("This sentence is <a_new_token_2> a test") == tokenizer_s.tokenize("This sentence is <a_new_token_2> a test")
                 
+                # tests for single word will be added in another PR
                 new_tokens = AddedToken("<a_new_token_3>", single_word = True, lstrip = True, rstrip = True)
                 tokenizer_s.add_tokens([new_tokens])
                 tokenizer_r.add_tokens([new_tokens])
