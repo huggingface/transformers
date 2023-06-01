@@ -339,7 +339,7 @@ def convert_checkpoint(
         config.sampling_rate = 48_000
         config.audio_channels = 2
         config.causal = False
-        config.model_norm = "time_group_norm"
+        config.norm = "time_group_norm"
         config.audio_normalize = True
         config.segment = 1.0
     else:

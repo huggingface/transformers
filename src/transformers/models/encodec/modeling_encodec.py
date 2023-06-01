@@ -50,17 +50,10 @@ ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# ROOT_URL = 'https://dl.fbaipublicfiles.com/encodec/v0/'
-
 EncodedFrame = Tuple[torch.Tensor, Optional[torch.Tensor]]
 
-CONV_NORMALIZATIONS = frozenset(['none', 'weight_norm', 'spectral_norm',
+_CONV_NORMALIZATIONS = frozenset(['none', 'weight_norm', 'spectral_norm',
                                  'time_layer_norm', 'layer_norm', 'time_group_norm'])
-
-
-#TODO: get rid of this
-def _default(val: Any, d: Any) -> Any:
-    return val if val is not None else d
 
 
 def _linear_overlap_add(frames: List[torch.Tensor], stride: int):
@@ -106,7 +99,8 @@ def _linear_overlap_add(frames: List[torch.Tensor], stride: int):
 
 
 def _apply_parametrization_norm(module: nn.Module, norm: str = 'none') -> nn.Module:
-    assert norm in CONV_NORMALIZATIONS
+    if norm not in _CONV_NORMALIZATIONS:
+        raise ValueError(f"Invalid normalization option: {norm}")
     if norm == 'weight_norm':
         return nn.utils.weight_norm(module)
     elif norm == 'spectral_norm':
@@ -121,7 +115,8 @@ def _get_norm_module(module: nn.Module, causal: bool = False, norm: str = 'none'
     """Return the proper normalization module. If causal is True, this will ensure the returned
     module is causal, or return an error if the normalization doesn't support causal evaluation.
     """
-    assert norm in CONV_NORMALIZATIONS
+    if norm not in _CONV_NORMALIZATIONS:
+        raise ValueError(f"Invalid normalization option: {norm}")
     if norm == 'layer_norm':
         assert isinstance(module, nn.modules.conv._ConvNd)
         return ConvLayerNorm(module.out_channels, **norm_kwargs)
@@ -213,7 +208,6 @@ def _kmeans(samples, num_clusters: int, num_iters: int = 10):
         means = torch.where(zero_mask[..., None], means, new_means)
 
     return means, bins
-
 
 
 class ConvLayerNorm(nn.LayerNorm):
@@ -411,217 +405,173 @@ class SEANetResnetBlock(nn.Module):
 
 
 class SEANetEncoder(nn.Module):
-    """SEANet encoder.
-    Args:
-        channels (int): Audio channels.
-        dimension (int): Intermediate representation dimension.
-        n_filters (int): Base width for the model.
-        n_residual_layers (int): nb of residual layers.
-        ratios (Sequence[int]): kernel size and stride ratios. The encoder uses downsampling ratios instead of
-            upsampling ratios, hence it will use the ratios in the reverse order to the ones specified here
-            that must match the decoder order
-        activation (str): Activation function.
-        activation_params (dict): Parameters to provide to the activation function
-        norm (str): Normalization method.
-        norm_params (dict): Parameters to provide to the underlying normalization used along with the convolution.
-        kernel_size (int): Kernel size for the initial convolution.
-        last_kernel_size (int): Kernel size for the initial convolution.
-        residual_kernel_size (int): Kernel size for the residual layers.
-        dilation_base (int): How much to increase the dilation with each layer.
-        causal (bool): Whether to use fully causal convolution.
-        pad_mode (str): Padding mode for the convolutions.
-        true_skip (bool): Whether to use true skip connection or a simple
-            (streamable) convolution as the skip connection in the residual network blocks.
-        compress (int): Reduced dimensionality in residual branches (from Demucs v3).
-        lstm (int): Number of LSTM layers at the end of the encoder.
-    """
+    """SEANet encoder."""
     def __init__(self, config: EnCodecConfig):
         super().__init__()
-
-#TODO: move into config!
-        channels: int = 1
-        dimension: int = 128
-        n_filters: int = 32
-        n_residual_layers: int = 1
-        ratios: List[int] = [8, 5, 4, 2]
-        activation: str = 'ELU'
-        activation_params: dict = {'alpha': 1.0}
-        norm: str = 'weight_norm'
-        norm_params: Dict[str, Any] = {}
-        kernel_size: int = 7
-        last_kernel_size: int = 7
-        residual_kernel_size: int = 3
-        dilation_base: int = 2
-        causal: bool = False
-        pad_mode: str = 'reflect'
-        true_skip: bool = False
-        compress: int = 2
-        lstm: int = 2
-
-        channels = config.audio_channels
-        norm = config.model_norm
-        causal = config.causal
-
-        self.channels = channels
-        self.dimension = dimension
-        self.n_filters = n_filters
-        self.ratios = list(reversed(ratios))
-        del ratios
-        self.n_residual_layers = n_residual_layers
+        self.channels = config.audio_channels
+        self.dimension = config.dimension
+        self.n_filters = config.num_filters
+        self.ratios = list(reversed(config.ratios))
+        self.n_residual_layers = config.num_residual_layers
         self.hop_length = np.prod(self.ratios)
 
-        act = getattr(nn, activation)
+        act = getattr(nn, config.activation)
         mult = 1
-        model: List[nn.Module] = [
-            SConv1d(channels, mult * n_filters, kernel_size, norm=norm, norm_kwargs=norm_params,
-                    causal=causal, pad_mode=pad_mode)
+        model = [
+            SConv1d(
+                config.audio_channels,
+                mult * config.num_filters,
+                config.kernel_size,
+                norm=config.norm,
+                norm_kwargs=config.norm_params,
+                causal=config.causal,
+                pad_mode=config.pad_mode,
+            )
         ]
         # Downsample to raw audio scale
         for i, ratio in enumerate(self.ratios):
             # Add residual layers
-            for j in range(n_residual_layers):
+            for j in range(config.num_residual_layers):
                 model += [
-                    SEANetResnetBlock(mult * n_filters, kernel_sizes=[residual_kernel_size, 1],
-                                      dilations=[dilation_base ** j, 1],
-                                      norm=norm, norm_params=norm_params,
-                                      activation=activation, activation_params=activation_params,
-                                      causal=causal, pad_mode=pad_mode, compress=compress, true_skip=true_skip)]
-
+                    SEANetResnetBlock(
+                        mult * config.num_filters,
+                        kernel_sizes=[config.residual_kernel_size, 1],
+                        dilations=[config.dilation_base ** j, 1],
+                        norm=config.norm,
+                        norm_params=config.norm_params,
+                        activation=config.activation,
+                        activation_params=config.activation_params,
+                        causal=config.causal,
+                        pad_mode=config.pad_mode,
+                        compress=config.compress,
+                        true_skip=config.true_skip,
+                    )
+                ]
             # Add downsampling layers
             model += [
-                act(**activation_params),
-                SConv1d(mult * n_filters, mult * n_filters * 2,
-                        kernel_size=ratio * 2, stride=ratio,
-                        norm=norm, norm_kwargs=norm_params,
-                        causal=causal, pad_mode=pad_mode),
+                act(**config.activation_params),
+                SConv1d(
+                    mult * config.num_filters,
+                    mult * config.num_filters * 2,
+                    kernel_size=ratio * 2,
+                    stride=ratio,
+                    norm=config.norm,
+                    norm_kwargs=config.norm_params,
+                    causal=config.causal,
+                    pad_mode=config.pad_mode,
+                )
             ]
             mult *= 2
 
-        if lstm:
-            model += [SLSTM(mult * n_filters, num_layers=lstm)]
+        if config.lstm:
+            model += [SLSTM(mult * config.num_filters, num_layers=config.lstm)]
 
         model += [
-            act(**activation_params),
-            SConv1d(mult * n_filters, dimension, last_kernel_size, norm=norm, norm_kwargs=norm_params,
-                    causal=causal, pad_mode=pad_mode)
+            act(**config.activation_params),
+            SConv1d(
+                mult * config.num_filters,
+                config.dimension,
+                config.last_kernel_size,
+                norm=config.norm,
+                norm_kwargs=config.norm_params,
+                causal=config.causal,
+                pad_mode=config.pad_mode,
+            )
         ]
 
         self.model = nn.Sequential(*model)
+        #TODO: nn.ModuleList
 
     def forward(self, x):
         return self.model(x)
 
 
 class SEANetDecoder(nn.Module):
-    """SEANet decoder.
-    Args:
-        channels (int): Audio channels.
-        dimension (int): Intermediate representation dimension.
-        n_filters (int): Base width for the model.
-        n_residual_layers (int): nb of residual layers.
-        ratios (Sequence[int]): kernel size and stride ratios
-        activation (str): Activation function.
-        activation_params (dict): Parameters to provide to the activation function
-        final_activation (str): Final activation function after all convolutions.
-        final_activation_params (dict): Parameters to provide to the activation function
-        norm (str): Normalization method.
-        norm_params (dict): Parameters to provide to the underlying normalization used along with the convolution.
-        kernel_size (int): Kernel size for the initial convolution.
-        last_kernel_size (int): Kernel size for the initial convolution.
-        residual_kernel_size (int): Kernel size for the residual layers.
-        dilation_base (int): How much to increase the dilation with each layer.
-        causal (bool): Whether to use fully causal convolution.
-        pad_mode (str): Padding mode for the convolutions.
-        true_skip (bool): Whether to use true skip connection or a simple
-            (streamable) convolution as the skip connection in the residual network blocks.
-        compress (int): Reduced dimensionality in residual branches (from Demucs v3).
-        lstm (int): Number of LSTM layers at the end of the encoder.
-        trim_right_ratio (float): Ratio for trimming at the right of the transposed convolution under the causal setup.
-            If equal to 1.0, it means that all the trimming is done at the right.
-    """
+    """SEANet decoder."""
     def __init__(self, config: EnCodecConfig):
         super().__init__()
-
-#TODO: move into config
-        channels: int = 1
-        dimension: int = 128
-        n_filters: int = 32
-        n_residual_layers: int = 1
-        ratios: List[int] = [8, 5, 4, 2]
-        activation: str = 'ELU'
-        activation_params: dict = {'alpha': 1.0}
-        final_activation: Optional[str] = None
-        final_activation_params: Optional[dict] = None
-        norm: str = 'weight_norm'
-        norm_params: Dict[str, Any] = {}
-        kernel_size: int = 7
-        last_kernel_size: int = 7
-        residual_kernel_size: int = 3
-        dilation_base: int = 2
-        causal: bool = False
-        pad_mode: str = 'reflect'
-        true_skip: bool = False
-        compress: int = 2
-        lstm: int = 2
-        trim_right_ratio: float = 1.0
-
-        channels = config.audio_channels
-        norm = config.model_norm
-        causal = config.causal
-
-        self.dimension = dimension
-        self.channels = channels
-        self.n_filters = n_filters
-        self.ratios = ratios
-        del ratios
-        self.n_residual_layers = n_residual_layers
+        # TODO: do we need these properties?
+        self.dimension = config.dimension
+        self.channels = config.audio_channels
+        self.n_filters = config.num_filters
+        self.ratios = config.ratios
+        self.n_residual_layers = config.num_residual_layers
         self.hop_length = np.prod(self.ratios)
 
-        act = getattr(nn, activation)
+        act = getattr(nn, config.activation)
         mult = int(2 ** len(self.ratios))
-        model: List[nn.Module] = [
-            SConv1d(dimension, mult * n_filters, kernel_size, norm=norm, norm_kwargs=norm_params,
-                    causal=causal, pad_mode=pad_mode)
+        model = [
+            SConv1d(
+                config.dimension,
+                mult * config.num_filters,
+                config.kernel_size,
+                norm=config.norm,
+                norm_kwargs=config.norm_params,
+                causal=config.causal,
+                pad_mode=config.pad_mode
+            )
         ]
 
-        if lstm:
-            model += [SLSTM(mult * n_filters, num_layers=lstm)]
+        if config.lstm:
+            model += [SLSTM(mult * config.num_filters, num_layers=config.lstm)]
 
         # Upsample to raw audio scale
         for i, ratio in enumerate(self.ratios):
             # Add upsampling layers
             model += [
-                act(**activation_params),
-                SConvTranspose1d(mult * n_filters, mult * n_filters // 2,
-                                 kernel_size=ratio * 2, stride=ratio,
-                                 norm=norm, norm_kwargs=norm_params,
-                                 causal=causal, trim_right_ratio=trim_right_ratio),
+                act(**config.activation_params),
+                SConvTranspose1d(
+                    mult * config.num_filters,
+                    mult * config.num_filters // 2,
+                    kernel_size=ratio * 2,
+                    stride=ratio,
+                    norm=config.norm,
+                    norm_kwargs=config.norm_params,
+                    causal=config.causal,
+                    trim_right_ratio=config.trim_right_ratio,
+                )
             ]
             # Add residual layers
-            for j in range(n_residual_layers):
+            for j in range(config.num_residual_layers):
                 model += [
-                    SEANetResnetBlock(mult * n_filters // 2, kernel_sizes=[residual_kernel_size, 1],
-                                      dilations=[dilation_base ** j, 1],
-                                      activation=activation, activation_params=activation_params,
-                                      norm=norm, norm_params=norm_params, causal=causal,
-                                      pad_mode=pad_mode, compress=compress, true_skip=true_skip)]
-
+                    SEANetResnetBlock(
+                        mult * config.num_filters // 2,
+                        kernel_sizes=[config.residual_kernel_size, 1],
+                        dilations=[config.dilation_base ** j, 1],
+                        activation=config.activation,
+                        activation_params=config.activation_params,
+                        norm=config.norm,
+                        norm_params=config.norm_params,
+                        causal=config.causal,
+                        pad_mode=config.pad_mode,
+                        compress=config.compress,
+                        true_skip=config.true_skip,
+                    )
+                ]
             mult //= 2
 
         # Add final layers
         model += [
-            act(**activation_params),
-            SConv1d(n_filters, channels, last_kernel_size, norm=norm, norm_kwargs=norm_params,
-                    causal=causal, pad_mode=pad_mode)
+            act(**config.activation_params),
+            SConv1d(
+                config.num_filters,
+                config.audio_channels,
+                config.last_kernel_size,
+                norm=config.norm,
+                norm_kwargs=config.norm_params,
+                causal=config.causal,
+                pad_mode=config.pad_mode
+            )
         ]
         # Add optional final activation to decoder (eg. tanh)
-        if final_activation is not None:
-            final_act = getattr(nn, final_activation)
+        if config.final_activation is not None:
+            final_act = getattr(nn, config.final_activation)
             final_activation_params = final_activation_params or {}
             model += [
                 final_act(**final_activation_params)
             ]
         self.model = nn.Sequential(*model)
+        # TODO: use ModuleList
 
     def forward(self, z):
         y = self.model(z)
@@ -680,7 +630,7 @@ class EuclideanCodebook(nn.Module):
         self.cluster_size.data.copy_(cluster_size)
         self.inited.data.copy_(torch.Tensor([True]))
         # Make sure all buffers across workers are in sync after initialization
-        #MIH distrib.broadcast_tensors(self.buffers())
+        #TODO distrib.broadcast_tensors(self.buffers())
 
     def replace_(self, samples, mask):
         modified_codebook = torch.where(
@@ -698,7 +648,7 @@ class EuclideanCodebook(nn.Module):
 
         batch_samples = rearrange(batch_samples, "... d -> (...) d")
         self.replace_(batch_samples, mask=expired_codes)
-        #MIH distrib.broadcast_tensors(self.buffers())
+        #TODO distrib.broadcast_tensors(self.buffers())
 
     def preprocess(self, x):
         x = rearrange(x, "... d -> (...) d")
@@ -746,7 +696,7 @@ class EuclideanCodebook(nn.Module):
         embed_ind = self.postprocess_emb(embed_ind, shape)
         quantize = self.dequantize(embed_ind)
 
-        #MIH
+        #TODO
         # if self.training:
         #     # We do the expiry of code at that point as buffers are in sync
         #     # and all the workers will take the same decision.
@@ -793,7 +743,7 @@ class VectorQuantization(nn.Module):
         commitment_weight: float = 1.,
     ):
         super().__init__()
-        _codebook_dim: int = _default(codebook_dim, dim)
+        _codebook_dim: int = codebook_dim if codebook_dim is not None else dim
 
         requires_projection = _codebook_dim != dim
         self.project_in = (nn.Linear(dim, _codebook_dim) if requires_projection else nn.Identity())
@@ -1564,6 +1514,9 @@ class EnCodecModel(EnCodecPreTrainedModel):
         self.encoder = SEANetEncoder(config)
         self.decoder = SEANetDecoder(config)
 
+# self.encoder.hop_length
+# self.encoder.dimension
+
         # TODO: put this in RVQ itself using config.xxx
         # also put encoder.hop_length in config then?!
         n_q = int(1000 * config.target_bandwidths[-1] // (math.ceil(config.sampling_rate / self.encoder.hop_length) * 10))
@@ -1676,8 +1629,8 @@ class EnCodecModel(EnCodecPreTrainedModel):
             out = out * scale.view(-1, 1, 1)
         return out
 
-    # @add_start_docstrings_to_model_forward(ENCODEC_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
+    #TODO @add_start_docstrings_to_model_forward(ENCODEC_INPUTS_DOCSTRING)
+    #TODO @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(self, input_values: torch.Tensor, bandwidth: Optional[float] = None) -> torch.Tensor:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
