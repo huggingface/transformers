@@ -2193,10 +2193,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if isinstance(device_map, torch.device):
             device_map = {"": device_map}
         elif isinstance(device_map, str) and device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
-            device_map = {"": torch.device(device_map)}
+            try: 
+                device_map = {"": torch.device(device_map)}
+            except RuntimeError:
+                raise ValueError("When passing device_map as a string, the value needs to be a device name (e.g. cpu, cuda:0) or 'auto', 'balanced', 'balanced_low_0', 'sequential'") 
         elif isinstance(device_map, int):
             if device_map < 0:
-                device_map = {"": "cpu"}
+                raise ValueError("You can't pass device_map as a negative int. If you want to put the model on the cpu, pass device_map = 'cpu' ")
             else:
                 device_map = {"": device_map}
 
@@ -2259,10 +2262,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 torch_dtype = torch.float16
 
             if device_map is None:
-                device_map = {"": torch.cuda.current_device()}
-                logger.warning(
-                    "The device_map was not initialized. Setting device_map to {"
-                    ":torch.cuda.current_device()}."
+                if torch.cuda.is_available():
+                    device_map = {"": torch.cuda.current_device()}
+                else:
+                    raise RuntimeError("No GPU found.")
+                logger.info(
+                    "The device_map was not initialized."
+                    "Setting device_map to {'':torch.cuda.current_device()}."
                     "If you want to use the model for inference, please set device_map ='auto' "
                 )
                 if low_cpu_mem_usage is None:
@@ -2332,7 +2338,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     torch_dtype = torch.float16
                 if device_map is None:
                     device_map = {"": torch.cuda.current_device()}
-                    logger.warning(
+                    logger.info(
                         "The device_map was not initialized. Setting device_map to {"
                         ":torch.cuda.current_device()}."
                         "If you want to use the model for inference, please set device_map ='auto' "
