@@ -80,7 +80,13 @@ def set_recursively(key, value, full_name, weight_type, hf_pointer):
     if weight_type is not None and weight_type != "param":
         hf_shape = getattr(hf_pointer, weight_type).shape
     elif weight_type is not None and weight_type == "param":
-        hf_shape = getattr(hf_pointer, hf_param_name).shape
+        shape_pointer = hf_pointer
+        for attribute in hf_param_name.split("."):
+            shape_pointer = getattr(shape_pointer, attribute)
+        hf_shape = shape_pointer.shape
+
+        # let's reduce dimension
+        value = value[0]
     else:
         hf_shape = hf_pointer.shape
 
@@ -99,7 +105,8 @@ def set_recursively(key, value, full_name, weight_type, hf_pointer):
     elif weight_type == "bias":
         hf_pointer.bias.data = value
     elif weight_type == "param":
-        hf_pointer = getattr(hf_pointer, hf_param_name)
+        for attribute in hf_param_name.split("."):
+            hf_pointer = getattr(hf_pointer, attribute)
         hf_pointer.data = value
     else:
         hf_pointer.data = value
@@ -121,18 +128,17 @@ def rename_dict(key, value, full_name, weight_type, hf_dict):
     else:
         full_key = key
 
-    hf_dict[full_key] = value
+    hf_dict[full_key] = value if "lm_head" in full_key else value[0]
 
 
 PARAM_MAPPING = {
-    "W_a": "weight_1",
-    "W_b": "weight_2",
-    "b_a": "bias_1",
-    "b_b": "bias_2",
-    "ln_W": "layer_norm_weight",
-    "ln_b": "layer_norm_bias",
+    "W_a": "linear_1.weight",
+    "W_b": "linear_2.weight",
+    "b_a": "linear_1.bias",
+    "b_b": "linear_2.bias",
+    "ln_W": "norm.weight",
+    "ln_b": "norm.bias",
 }
-
 
 def load_wav2vec2_layer(name, value, hf_model=None, hf_dict=None):
     is_used = False
