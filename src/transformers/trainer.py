@@ -456,7 +456,7 @@ class Trainer:
                 self.fsdp = ShardingStrategy.SHARD_GRAD_OP
             elif FSDPOption.HYBRID_SHARD in args.fsdp:
                 self.fsdp = ShardingStrategy.HYBRID_SHARD
-            elif FSDPOption._HYBRID_SHARD_ZERO2 in args.fsdp:
+            elif FSDPOption.HYBRID_SHARD_ZERO2 in args.fsdp:
                 self.fsdp = ShardingStrategy._HYBRID_SHARD_ZERO2
             elif FSDPOption.NO_SHARD in args.fsdp:
                 self.fsdp = ShardingStrategy.NO_SHARD

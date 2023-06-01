@@ -423,7 +423,7 @@ class TrainingArguments:
               `"shard_grad_op"`).
             - `"auto_wrap"`: Automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`.
             - `"hybrid_shard"`: Apply `full_shard` within a node, and replicate parameters across nodes`.
-            - `"_hybrid_shard_zero2"`: Apply `shard_grad_op` within a node, and replicate parameters across nodes.
+            - `"hybrid_shard_zero2"`: Apply `shard_grad_op` within a node, and replicate parameters across nodes.
         fsdp_config (`str` or `dict`, *optional*):
             Config to be used with fsdp (Pytorch Distributed Parallel Training). The value is either a location of
             deepspeed json config file (e.g., `ds_config.json`) or an already loaded json file as `dict`.

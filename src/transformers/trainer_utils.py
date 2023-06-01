@@ -664,7 +664,7 @@ class FSDPOption(ExplicitEnum):
     OFFLOAD = "offload"
     AUTO_WRAP = "auto_wrap"
     HYBRID_SHARD = "hybrid_shard"
-    _HYBRID_SHARD_ZERO2 = "_hybrid_shard_zero2"
+    HYBRID_SHARD_ZERO2 = "_hybrid_shard_zero2"
 
 
 class RemoveColumnsCollator:
