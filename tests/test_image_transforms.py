@@ -39,6 +39,7 @@ if is_vision_available():
         center_to_corners_format,
         convert_to_rgb,
         corners_to_center_format,
+        flip_channel_order,
         get_resize_output_image_size,
         id_to_rgb,
         normalize,
@@ -520,3 +521,41 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertEqual(rgb_image.mode, "RGB")
         self.assertEqual(rgb_image.size, (2, 1))
         self.assertTrue(np.allclose(np.array(rgb_image), np.array([[[0, 0, 0], [255, 255, 255]]], dtype=np.uint8)))
+
+    def test_flip_channel_order(self):
+        # fmt: off
+        img_channels_first = np.array([
+            [[ 0,  1,  2,  3],
+             [ 4,  5,  6,  7]],
+
+            [[ 8,  9, 10, 11],
+             [12, 13, 14, 15]],
+
+            [[16, 17, 18, 19],
+             [20, 21, 22, 23]],
+        ])
+        # fmt: on
+        img_channels_last = np.moveaxis(img_channels_first, 0, -1)
+        # fmt: off
+        flipped_img_channels_first = np.array([
+            [[16, 17, 18, 19],
+             [20, 21, 22, 23]],
+
+            [[ 8,  9, 10, 11],
+             [12, 13, 14, 15]],
+
+            [[ 0,  1,  2,  3],
+             [ 4,  5,  6,  7]],
+        ])
+        # fmt: on
+        flipped_img_channels_last = np.moveaxis(flipped_img_channels_first, 0, -1)
+
+        self.assertTrue(np.allclose(flip_channel_order(img_channels_first), flipped_img_channels_first))
+        self.assertTrue(
+            np.allclose(flip_channel_order(img_channels_first, "channels_last"), flipped_img_channels_last)
+        )
+
+        self.assertTrue(np.allclose(flip_channel_order(img_channels_last), flipped_img_channels_last))
+        self.assertTrue(
+            np.allclose(flip_channel_order(img_channels_last, "channels_first"), flipped_img_channels_first)
+        )
