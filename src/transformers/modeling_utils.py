@@ -2341,7 +2341,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if torch_dtype is None:
                     torch_dtype = torch.float16
                 if device_map is None:
-                    device_map = {"": torch.cuda.current_device()}
+                    if torch.cuda.is_available():
+                        device_map = {"": torch.cuda.current_device()}
+                    else:
+                        raise RuntimeError("No GPU found. A GPU is needed for quantization.")
                     logger.info(
                         "The device_map was not initialized."
                         "Setting device_map to {'':torch.cuda.current_device()}."
@@ -2349,6 +2352,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
                     if low_cpu_mem_usage is None:
                         low_cpu_mem_usage = True
+
         elif not is_8bit_serializable and not load_in_8bit and hasattr(config, "quantization_config"):
             logger.warning(
                 "Detected the presence of a `quantization_config` attribute in the model's configuration but you don't have the correct"
