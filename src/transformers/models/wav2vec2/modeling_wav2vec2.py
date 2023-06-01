@@ -21,7 +21,6 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
@@ -1178,9 +1177,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
     @property
     def _adapters(self):
         if self.config.adapter_attn_dim is None:
-            raise ValueError(
-                f"{self.__class__} has no adapter layers. Make sure to define `config.adapter_attn_dim`."
-            )
+            raise ValueError(f"{self.__class__} has no adapter layers. Make sure to define `config.adapter_attn_dim`.")
 
         adapter_weights = {}
         for name, module in self.named_modules():

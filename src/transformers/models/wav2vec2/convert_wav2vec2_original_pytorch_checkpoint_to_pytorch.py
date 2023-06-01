@@ -140,6 +140,7 @@ PARAM_MAPPING = {
     "ln_b": "norm.bias",
 }
 
+
 def load_wav2vec2_layer(name, value, hf_model=None, hf_dict=None):
     is_used = False
     for key, mapped_key in MAPPING.items():

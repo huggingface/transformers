@@ -19,7 +19,6 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
@@ -612,29 +611,22 @@ class HubertAttnAdapterLayer(nn.Module):
         up training throughput.
         """
         super().__init__()
-        self.adapter_num = config.num_attn_adapters
-        self.input_dim = 16
+        self.input_dim = config.adapter_attn_dim
         self.hidden_dim = config.hidden_size
-        self.weight_1 = nn.Parameter(torch.empty(self.adapter_num, self.input_dim, self.hidden_dim))
-        self.weight_2 = nn.Parameter(torch.empty(self.adapter_num, self.hidden_dim, self.input_dim))
-        self.bias_1 = nn.Parameter(torch.empty(self.adapter_num, self.input_dim))
-        self.bias_2 = nn.Parameter(torch.empty(self.adapter_num, self.hidden_dim))
 
-        self.layer_norm_weight = nn.Parameter(torch.empty(self.adapter_num, self.hidden_dim))
-        self.layer_norm_bias = nn.Parameter(torch.empty(self.adapter_num, self.hidden_dim))
-
+        self.norm = nn.LayerNorm((self.hidden_dim))
+        self.linear_1 = nn.Linear(self.hidden_dim, self.input_dim)
         self.act_fn = nn.ReLU()
+        self.linear_2 = nn.Linear(self.input_dim, self.hidden_dim)
 
-    def forward(self, hidden_states: torch.FloatTensor, adapter_id: int = 0):
-        hidden_states = hidden_states
-        hidden_states = F.layer_norm(
-            hidden_states, (self.hidden_dim,), self.layer_norm_weight[adapter_id], self.layer_norm_bias[adapter_id]
-        )
-        hidden_states = F.linear(hidden_states, self.weight_1[adapter_id], self.bias_1[adapter_id])
+    def forward(self, hidden_states: torch.FloatTensor):
+        hidden_states = self.norm(hidden_states)
+
+        hidden_states = self.linear_1(hidden_states)
         hidden_states = self.act_fn(hidden_states)
-        hidden_states = F.linear(hidden_states, self.weight_2[adapter_id], self.bias_2[adapter_id])
-        outputs = hidden_states
-        return outputs
+        hidden_states = self.linear_2(hidden_states)
+
+        return hidden_states
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayerStableLayerNorm with Wav2Vec2->Hubert
@@ -652,7 +644,7 @@ class HubertEncoderLayerStableLayerNorm(nn.Module):
         self.feed_forward = HubertFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        if getattr(config, "num_attn_adapters", None) is not None:
+        if getattr(config, "adapter_attn_dim", None) is not None:
             self.adapter_layer = HubertAttnAdapterLayer(config)
         else:
             self.adapter_layer = None
@@ -1156,9 +1148,9 @@ class HubertForCTC(HubertPreTrainedModel):
         )
         self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
 
-        if target_lang is not None and getattr(self.config, "num_attn_adapters", None) is None:
-            raise ValueError(f"Cannot pass `target_lang`: {target_lang} if `config.num_attn_adapters` is not defined.")
-        elif target_lang is None and getattr(self.config, "num_attn_adapters", None) is not None:
+        if target_lang is not None and getattr(self.config, "adapter_attn_dim", None) is None:
+            raise ValueError(f"Cannot pass `target_lang`: {target_lang} if `config.adapter_attn_dim` is not defined.")
+        elif target_lang is None and getattr(self.config, "adapter_attn_dim", None) is not None:
             logger.info("By default `target_lang` is set to 'eng'.")
         elif target_lang is not None:
             self.load_adapter(target_lang)
