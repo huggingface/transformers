@@ -852,7 +852,7 @@ def _get_learning_rate(self):
                 raise
     else:
         if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-            last_lr = self.optimizer.param_groups[0]['lr']
+            last_lr = self.optimizer.param_groups[0]["lr"]
         else:
             last_lr = self.lr_scheduler.get_last_lr()[0]
         if torch.is_tensor(last_lr):
