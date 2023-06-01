@@ -401,12 +401,33 @@ class SEANetEncoder(nn.Module):
         compress (int): Reduced dimensionality in residual branches (from Demucs v3).
         lstm (int): Number of LSTM layers at the end of the encoder.
     """
-    def __init__(self, channels: int = 1, dimension: int = 128, n_filters: int = 32, n_residual_layers: int = 1,
-                 ratios: tp.List[int] = [8, 5, 4, 2], activation: str = 'ELU', activation_params: dict = {'alpha': 1.0},
-                 norm: str = 'weight_norm', norm_params: tp.Dict[str, tp.Any] = {}, kernel_size: int = 7,
-                 last_kernel_size: int = 7, residual_kernel_size: int = 3, dilation_base: int = 2, causal: bool = False,
-                 pad_mode: str = 'reflect', true_skip: bool = False, compress: int = 2, lstm: int = 2):
+    def __init__(self, config: EnCodecConfig):
         super().__init__()
+
+#TODO: move into config!
+        channels: int = 1
+        dimension: int = 128
+        n_filters: int = 32
+        n_residual_layers: int = 1
+        ratios: tp.List[int] = [8, 5, 4, 2]
+        activation: str = 'ELU'
+        activation_params: dict = {'alpha': 1.0}
+        norm: str = 'weight_norm'
+        norm_params: tp.Dict[str, tp.Any] = {}
+        kernel_size: int = 7
+        last_kernel_size: int = 7
+        residual_kernel_size: int = 3
+        dilation_base: int = 2
+        causal: bool = False
+        pad_mode: str = 'reflect'
+        true_skip: bool = False
+        compress: int = 2
+        lstm: int = 2
+
+        channels = config.audio_channels
+        norm = config.model_norm
+        causal = config.causal
+
         self.channels = channels
         self.dimension = dimension
         self.n_filters = n_filters
@@ -484,14 +505,36 @@ class SEANetDecoder(nn.Module):
         trim_right_ratio (float): Ratio for trimming at the right of the transposed convolution under the causal setup.
             If equal to 1.0, it means that all the trimming is done at the right.
     """
-    def __init__(self, channels: int = 1, dimension: int = 128, n_filters: int = 32, n_residual_layers: int = 1,
-                 ratios: tp.List[int] = [8, 5, 4, 2], activation: str = 'ELU', activation_params: dict = {'alpha': 1.0},
-                 final_activation: tp.Optional[str] = None, final_activation_params: tp.Optional[dict] = None,
-                 norm: str = 'weight_norm', norm_params: tp.Dict[str, tp.Any] = {}, kernel_size: int = 7,
-                 last_kernel_size: int = 7, residual_kernel_size: int = 3, dilation_base: int = 2, causal: bool = False,
-                 pad_mode: str = 'reflect', true_skip: bool = False, compress: int = 2, lstm: int = 2,
-                 trim_right_ratio: float = 1.0):
+    def __init__(self, config: EnCodecConfig):
         super().__init__()
+
+#TODO: move into config
+        channels: int = 1
+        dimension: int = 128
+        n_filters: int = 32
+        n_residual_layers: int = 1
+        ratios: tp.List[int] = [8, 5, 4, 2]
+        activation: str = 'ELU'
+        activation_params: dict = {'alpha': 1.0}
+        final_activation: tp.Optional[str] = None
+        final_activation_params: tp.Optional[dict] = None
+        norm: str = 'weight_norm'
+        norm_params: tp.Dict[str, tp.Any] = {}
+        kernel_size: int = 7
+        last_kernel_size: int = 7
+        residual_kernel_size: int = 3
+        dilation_base: int = 2
+        causal: bool = False
+        pad_mode: str = 'reflect'
+        true_skip: bool = False
+        compress: int = 2
+        lstm: int = 2
+        trim_right_ratio: float = 1.0
+
+        channels = config.audio_channels
+        norm = config.model_norm
+        causal = config.causal
+
         self.dimension = dimension
         self.channels = channels
         self.n_filters = n_filters
@@ -1514,21 +1557,13 @@ ENCODEC_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare EnCodec Encoder-Decoder Model outputting raw hidden-states without any specific pre- or post-nets.",
+    "The EnCodec neural audio codec model.",
     ENCODEC_BASE_START_DOCSTRING,
 )
 class EnCodecModel(EnCodecPreTrainedModel):
     def __init__(self, config: EnCodecConfig):
         super().__init__(config)
         self.config = config
-
-        # target_bandwidths = [1.5, 3., 6, 12., 24.]  # [3., 6., 12., 24.] for 48khz
-        # sample_rate = 24_000         # or 48_000
-        # channels = 1                 # 2 for 48khz
-        # causal = True                # False for 48khz
-        # model_norm = 'weight_norm'   # time_group_norm for 48khz
-        # normalize = False            # audio_normalize (True for 48kHz model)
-        # segment = None               # 1.0 for 48kHz model
 
 # TODO: no longer copy to self!
         self.target_bandwidths = config.target_bandwidths
@@ -1538,24 +1573,17 @@ class EnCodecModel(EnCodecPreTrainedModel):
         self.segment = config.segment
         self.overlap = config.overlap
 
-        self.encoder = SEANetEncoder(channels=config.audio_channels, norm=config.model_norm, causal=config.causal)
-        self.decoder = SEANetDecoder(channels=config.audio_channels, norm=config.model_norm, causal=config.causal)
+        self.encoder = SEANetEncoder(config)
+        self.decoder = SEANetDecoder(config)
 
         # TODO: put this in RVQ itself using config.xxx
         # also put encoder.hop_length in config then?!
         n_q = int(1000 * config.target_bandwidths[-1] // (math.ceil(config.sampling_rate / self.encoder.hop_length) * 10))
-        self.quantizer = ResidualVectorQuantizer(
+        self.quantizer = ResidualVectorQuantizer( #TODO:config
             dimension=self.encoder.dimension,
             n_q=n_q,
             bins=1024,
         )
-
-        # self.encoder = SEANetEncoder(config)
-        # self.decoder = SEANetDecoder(config)
-        # self.quantizer = ResidualVectorQuantizer(config)
-
-                #  target_bandwidths: tp.List[float],
-                #  segment: tp.Optional[float] = None,
 
         self.frame_rate = math.ceil(self.sample_rate / np.prod(self.encoder.ratios))
         self.bits_per_codebook = int(math.log2(self.quantizer.bins))
@@ -1565,24 +1593,11 @@ class EnCodecModel(EnCodecPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # def get_input_embeddings(self):
-    #     if isinstance(self.encoder, EnCodecEncoderWithTextPrenet):
-    #         return self.encoder.get_input_embeddings()
-    #     if isinstance(self.decoder, EnCodecDecoderWithTextPrenet):
-    #         return self.decoder.get_input_embeddings()
-    #     return None
-
-    # def set_input_embeddings(self, value):
-    #     if isinstance(self.encoder, EnCodecEncoderWithTextPrenet):
-    #         self.encoder.set_input_embeddings(value)
-    #     if isinstance(self.decoder, EnCodecDecoderWithTextPrenet):
-    #         self.decoder.set_input_embeddings(value)
-
     # TODO: probably just use this from config, or pass into forward / encode / decode
     def set_target_bandwidth(self, bandwidth: float):
-        if bandwidth not in self.target_bandwidths:
+        if bandwidth not in self.config.target_bandwidths:
             raise ValueError(f"This model doesn't support the bandwidth {bandwidth}. "
-                             f"Select one of {self.target_bandwidths}.")
+                             f"Select one of {self.config.target_bandwidths}.")
         self.bandwidth = bandwidth
 
     def get_encoder(self):
@@ -1591,20 +1606,14 @@ class EnCodecModel(EnCodecPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    # def freeze_feature_encoder(self):
-    #     """
-    #     Calling this function will disable the gradient computation for the feature encoder so that its parameter will
-    #     not be updated during training.
-    #     """
-    #     if isinstance(self.encoder, EnCodecEncoderWithSpeechPrenet):
-    #         self.encoder.prenet.freeze_feature_encoder()
-
+#TODO: need this? maybe put in Config
     @property
     def segment_length(self) -> tp.Optional[int]:
         if self.segment is None:
             return None
         return int(self.segment * self.sample_rate)
 
+#TODO: need this? maybe put in Config
     @property
     def segment_stride(self) -> tp.Optional[int]:
         segment_length = self.segment_length
@@ -1679,103 +1688,23 @@ class EnCodecModel(EnCodecPreTrainedModel):
             out = out * scale.view(-1, 1, 1)
         return out
 
-    def forward(self, x: torch.Tensor, bandwidth: Optional[float] = None) -> torch.Tensor:
+    # @add_start_docstrings_to_model_forward(ENCODEC_INPUTS_DOCSTRING)
+    # @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(self, input_values: torch.Tensor, bandwidth: Optional[float] = None) -> torch.Tensor:
+        r"""
+        input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
+            Float values of the input audio waveform.
+
+        Returns:
+        """
+        #return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         # if bandwidth is None:
         #     bandwidth = self.target_bandwidths[0]
         # if bandwidth not in self.target_bandwidths:
         #     raise ValueError(f"This model doesn't support the bandwidth {bandwidth}. "
         #                      f"Select one of {self.target_bandwidths}.")
         # self.bandwidth = bandwidth
-
-        frames = self.encode(x)
-        return self.decode(frames)[:, :, :x.shape[-1]]
-
-    # @add_start_docstrings_to_model_forward(ENCODEC_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
-    # def forward(
-    #     self,
-    #     input_values: Optional[torch.Tensor] = None,
-    #     attention_mask: Optional[torch.LongTensor] = None,
-    #     decoder_input_values: Optional[torch.Tensor] = None,
-    #     decoder_attention_mask: Optional[torch.LongTensor] = None,
-    #     head_mask: Optional[torch.FloatTensor] = None,
-    #     decoder_head_mask: Optional[torch.FloatTensor] = None,
-    #     cross_attn_head_mask: Optional[torch.Tensor] = None,
-    #     encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-    #     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-    #     use_cache: Optional[bool] = None,
-    #     speaker_embeddings: Optional[torch.FloatTensor] = None,
-    #     output_attentions: Optional[bool] = None,
-    #     output_hidden_states: Optional[bool] = None,
-    #     return_dict: Optional[bool] = None,
-    # ) -> Union[Tuple[torch.FloatTensor], Seq2SeqModelOutput]:
-    #     r"""
-    #     input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-    #         Depending on which encoder is being used, the `input_values` are either: float values of the input raw
-    #         speech waveform, or indices of input sequence tokens in the vocabulary, or hidden states.
-
-    #     decoder_input_values (`torch.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-    #         Depending on which decoder is being used, the `decoder_input_values` are either: float values of log-mel
-    #         filterbank features extracted from the raw speech waveform, or indices of decoder input sequence tokens in
-    #         the vocabulary, or hidden states.
-
-    #     speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
-    #         Tensor containing the speaker embeddings.
-
-    #     Returns:
-    #     """
-    #     output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-    #     output_hidden_states = (
-    #         output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-    #     )
-    #     use_cache = use_cache if use_cache is not None else self.config.use_cache
-    #     return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-    #     # Encode if needed (training, first prediction pass)
-    #     if encoder_outputs is None:
-    #         encoder_outputs = self.encoder(
-    #             input_values=input_values,
-    #             attention_mask=attention_mask,
-    #             head_mask=head_mask,
-    #             output_attentions=output_attentions,
-    #             output_hidden_states=output_hidden_states,
-    #             return_dict=return_dict,
-    #         )
-    #     # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-    #     elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-    #         encoder_outputs = BaseModelOutput(
-    #             last_hidden_state=encoder_outputs[0],
-    #             hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-    #             attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-    #         )
-
-    #     # downsample encoder attention mask (only for encoders with speech input)
-    #     if attention_mask is not None and isinstance(self.encoder, EnCodecEncoderWithSpeechPrenet):
-    #         encoder_attention_mask = self.encoder.prenet._get_feature_vector_attention_mask(
-    #             encoder_outputs[0].shape[1], attention_mask
-    #         )
-    #     else:
-    #         encoder_attention_mask = attention_mask
-
-    #     if isinstance(self.decoder, EnCodecDecoderWithSpeechPrenet):
-    #         decoder_args = {"speaker_embeddings": speaker_embeddings}
-    #     else:
-    #         decoder_args = {}
-
-    #     decoder_outputs = self.decoder(
-    #         input_values=decoder_input_values,
-    #         attention_mask=decoder_attention_mask,
-    #         encoder_hidden_states=encoder_outputs[0],
-    #         encoder_attention_mask=encoder_attention_mask,
-    #         head_mask=decoder_head_mask,
-    #         cross_attn_head_mask=cross_attn_head_mask,
-    #         past_key_values=past_key_values,
-    #         use_cache=use_cache,
-    #         output_attentions=output_attentions,
-    #         output_hidden_states=output_hidden_states,
-    #         return_dict=return_dict,
-    #         **decoder_args,
-    #     )
 
     #     if not return_dict:
     #         return decoder_outputs + encoder_outputs
@@ -1790,3 +1719,5 @@ class EnCodecModel(EnCodecPreTrainedModel):
     #         encoder_hidden_states=encoder_outputs.hidden_states,
     #         encoder_attentions=encoder_outputs.attentions,
     #     )
+
+        return self.decode(self.encode(input_values))[..., :input_values.shape[-1]]
