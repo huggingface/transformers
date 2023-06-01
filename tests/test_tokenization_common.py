@@ -2136,8 +2136,9 @@ class TokenizerTesterMixin:
 
                     tokens = tokenizer.tokenize(f"This sentence is {token} a test")
                     self.assertIn(token.content, tokens)
-        
+
         # for non BPE based tokenizers we need to test that lstrip and rstrip are respected
+
     @require_tokenizers
     def test_added_token_are_matched_longest_first(self):
         if not self.test_slow_tokenizer:

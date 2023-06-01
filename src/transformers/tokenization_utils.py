@@ -534,7 +534,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                         tokens[i - 1] = left.rstrip()  # Opposite here
                 else:
                     # there should be a list of additional tokens that are not special. These have to be in no split
-                    # but they are not special. By default any added token should have right and left strip to True 
+                    # but they are not special. By default any added token should have right and left strip to True
                     # Apparently. We need to keep this behaviour
 
                     # We strip left and right by default

@@ -42,6 +42,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
     },
 }
 
+
 class LlamaTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding.
