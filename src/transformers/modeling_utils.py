@@ -2191,9 +2191,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # change device_map into a map if we passed an int, a str or a torch.device
         if isinstance(device_map, torch.device):
-            device_map = {"": device_map.index}
+            device_map = {"": device_map}
         elif isinstance(device_map, str) and device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
-            device_map = {"": torch.device(device_map).index}
+            device_map = {"": torch.device(device_map)}
         elif isinstance(device_map, int):
             if device_map < 0:
                 device_map = {"": "cpu"}
