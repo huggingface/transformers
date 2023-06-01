@@ -200,8 +200,8 @@
     title: (번역중) Summary of the tokenizers
   - local: in_translation
     title: (번역중) Attention mechanisms
-  - local: in_translation
-    title: (번역중) Padding and truncation
+  - local: pad_truncation
+    title: 패딩과 잘라내기
   - local: in_translation
     title: (번역중) BERTology
   - local: in_translation
