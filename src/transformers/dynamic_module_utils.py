@@ -513,3 +513,18 @@ def custom_object_save(obj, folder, config=None):
         result.append(dest_file)
 
     return result
+
+
+def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has_remote_code):
+    if trust_remote_code is None:
+        if has_local_code:
+            trust_remote_code = False
+        elif has_remote_code:
+            # Maybe add an input here with timeout (need to find a good way to do it that works crossplatform)
+            pass
+    if has_remote_code and not has_local_code and not trust_remote_code:
+        raise ValueError(
+            f"Loading {model_name} requires you to execute the configuration file in that"
+            " repo on your local machine. Make sure you have read the code there to avoid malicious use, then"
+            " set the option `trust_remote_code=True` to remove this error."
+        )
