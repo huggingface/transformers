@@ -11,6 +11,10 @@ from torch import nn
 
 from ...modeling_utils import PreTrainedModel
 from .configuration_fastspeech2_conformer import FastSpeech2ConformerConfig
+from ...utils import logging # add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+
+
+logger = logging.get_logger(__name__)
 
 def initialize(model, init):
     """
@@ -91,7 +95,7 @@ def make_pad_mask(lengths, xs=None, length_dim=-1, device=None):
 
     if not isinstance(lengths, list):
         lengths = lengths.tolist()
-    bs = int(len(lengths))
+    batch_size = int(len(lengths))
     if xs is None:
         maxlen = int(max(lengths))
     else:
@@ -101,12 +105,13 @@ def make_pad_mask(lengths, xs=None, length_dim=-1, device=None):
         seq_range = torch.arange(0, maxlen, dtype=torch.int64, device=device)
     else:
         seq_range = torch.arange(0, maxlen, dtype=torch.int64)
-    seq_range_expand = seq_range.unsqueeze(0).expand(bs, maxlen)
+    seq_range_expand = seq_range.unsqueeze(0).expand(batch_size, maxlen)
     seq_length_expand = seq_range_expand.new(lengths).unsqueeze(-1)
     mask = seq_range_expand >= seq_length_expand
 
     if xs is not None:
-        assert xs.size(0) == bs, (xs.size(0), bs)
+        if xs.size(0) != batch_size:
+            raise ValueError(f"Size mismatch in `make_pad_mask`: {xs.size(0)} != {batch_size}")
 
         if length_dim < 0:
             length_dim = xs.dim() + length_dim
@@ -136,7 +141,7 @@ def make_non_pad_mask(lengths, xs=None, length_dim=-1, device=None):
     return ~make_pad_mask(lengths, xs, length_dim, device=device)
 
 
-class DurationPredictor(torch.nn.Module):
+class FastSpeech2ConformerDurationPredictor(nn.Module):
     """
     Duration predictor module.
 
@@ -172,7 +177,7 @@ class DurationPredictor(torch.nn.Module):
         # self.experts = nn.ModuleDict()
         # for idx in range(self.num_experts):
         #     self.experts[f"expert_{idx}"] = expert_class(config, ffn_dim)
-        super(DurationPredictor, self).__init__()
+        super(FastSpeech2ConformerDurationPredictor, self).__init__()
         self.offset = offset
         self.conv_layers = torch.nn.ModuleList()
         for idx in range(n_layers):
@@ -186,7 +191,7 @@ class DurationPredictor(torch.nn.Module):
                         padding=(kernel_size - 1) // 2,
                     ),
                     torch.nn.ReLU(),
-                    LayerNorm(n_chans, dim=1),
+                    FastSpeech2ConformerLayerNorm(n_chans, dim=1),
                     torch.nn.Dropout(dropout_rate),
             ])
             self.conv_layers.append(layer)
@@ -242,7 +247,7 @@ class DurationPredictor(torch.nn.Module):
         return self._forward(xs, x_masks, True)
 
 
-class LengthRegulator(torch.nn.Module):
+class FastSpeech2ConformerLengthRegulator(nn.Module):
     """
     Length regulator module for feed-forward Transformer.
 
@@ -264,7 +269,7 @@ class LengthRegulator(torch.nn.Module):
         Args:
             pad_value (float, optional): Value used for padding.
         """
-        super(LengthRegulator, self).__init__()
+        super(FastSpeech2ConformerLengthRegulator, self).__init__()
         self.pad_value = pad_value
 
     def forward(self, xs, target_durations, alpha=1.0):
@@ -280,8 +285,9 @@ class LengthRegulator(torch.nn.Module):
             Tensor: replicated input tensor based on durations (batch_size, T*, embedding_dim).
         """
 
-        if alpha != 1.0:
-            assert alpha > 0
+        if alpha <= 0:
+            raise ValueError("Alpha must be greater than 0.")
+        elif alpha != 1.0:
             target_durations = torch.round(target_durations.float() * alpha).long()
 
         if target_durations.sum() == 0:
@@ -296,7 +302,7 @@ class LengthRegulator(torch.nn.Module):
         return torch.repeat_interleave(x, d, dim=0)
 
 
-class PostNet(torch.nn.Module):
+class FastSpeech2ConformerPostnet(nn.Module):
     """
     Postnet module for Spectrogram prediction network.
 
@@ -323,7 +329,7 @@ class PostNet(torch.nn.Module):
             use_batch_norm (bool, optional): Whether to use batch normalization..
             dropout_rate (float, optional): Dropout rate..
         """
-        super(PostNet, self).__init__()
+        super(FastSpeech2ConformerPostnet, self).__init__()
         self.postnet = torch.nn.ModuleList()
         for n_layer in range(n_layers):
             is_last_layer = n_layer == n_layers - 1
@@ -358,8 +364,8 @@ class PostNet(torch.nn.Module):
         return xs
 
 
-class LayerNorm(torch.nn.LayerNorm):
-    """Layer normalization module.
+class FastSpeech2ConformerLayerNorm(torch.nn.LayerNorm):
+    """Wrapper for torch.nn.LayerNorm that enables normalization along a specified dimension.
 
     Args:
         nout (int): Output dim size.
@@ -368,8 +374,8 @@ class LayerNorm(torch.nn.LayerNorm):
     """
 
     def __init__(self, nout, dim=-1):
-        """Construct an LayerNorm object."""
-        super(LayerNorm, self).__init__(nout, eps=1e-12)
+        """Construct an FastSpeech2ConformerLayerNorm object."""
+        super(FastSpeech2ConformerLayerNorm, self).__init__(nout, eps=1e-12)
         self.dim = dim
 
     def forward(self, x):
@@ -383,15 +389,15 @@ class LayerNorm(torch.nn.LayerNorm):
 
         """
         if self.dim == -1:
-            return super(LayerNorm, self).forward(x)
+            return super(FastSpeech2ConformerLayerNorm, self).forward(x)
         return (
-            super(LayerNorm, self)
+            super(FastSpeech2ConformerLayerNorm, self)
             .forward(x.transpose(self.dim, -1))
             .transpose(self.dim, -1)
         )
 
 
-class VariancePredictor(torch.nn.Module):
+class FastSpeech2ConformerVariancePredictor(nn.Module):
     """
     Variance predictor module.
 
@@ -436,7 +442,7 @@ class VariancePredictor(torch.nn.Module):
                         bias=bias,
                     ),
                     torch.nn.ReLU(),
-                    LayerNorm(n_chans, dim=1),
+                    FastSpeech2ConformerLayerNorm(n_chans, dim=1),
                     torch.nn.Dropout(dropout_rate)]
                 )
             self.conv_layers.append(layer)
@@ -467,7 +473,7 @@ class VariancePredictor(torch.nn.Module):
 
         return xs
     
-class VarianceEmbedding(torch.nn.Module):
+class FastSpeech2ConformerVarianceEmbedding(nn.Module):
     def __init__(
         self,
         in_channels=1,
@@ -493,7 +499,7 @@ class VarianceEmbedding(torch.nn.Module):
         return xs
 
 
-class DurationPredictorLoss(torch.nn.Module):
+class FastSpeech2ConformerVarianceDurationPredictorLoss(torch.nn.Module):
     """
     Loss function module for duration predictor.
 
@@ -508,7 +514,7 @@ class DurationPredictorLoss(torch.nn.Module):
             reduction (str): Reduction type in loss calculation.
 
         """
-        super(DurationPredictorLoss, self).__init__()
+        super(FastSpeech2ConformerVarianceDurationPredictorLoss, self).__init__()
         self.criterion = torch.nn.MSELoss(reduction=reduction)
         self.offset = offset
 
@@ -544,7 +550,9 @@ class FastSpeech2ConformerLoss(torch.nn.Module):
         """
         super().__init__()
 
-        assert (use_masking != use_weighted_masking) or not use_masking
+        if use_masking and use_weighted_masking:
+            raise ValueError("Either use_masking or use_weighted_masking can be True, but not both.")
+
         self.use_masking = use_masking
         self.use_weighted_masking = use_weighted_masking
 
@@ -552,7 +560,7 @@ class FastSpeech2ConformerLoss(torch.nn.Module):
         reduction = "none" if self.use_weighted_masking else "mean"
         self.l1_criterion = torch.nn.L1Loss(reduction=reduction)
         self.mse_criterion = torch.nn.MSELoss(reduction=reduction)
-        self.duration_criterion = DurationPredictorLoss(reduction=reduction)
+        self.duration_criterion = FastSpeech2ConformerVarianceDurationPredictorLoss(reduction=reduction)
 
     def forward(
         self,
@@ -647,6 +655,8 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "fastspeech2_conformer"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
+    
+    main_input_name = "input_ids"
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -659,7 +669,7 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+        elif isinstance(module, (nn.FastSpeech2ConformerLayerNorm, nn.GroupNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
@@ -707,20 +717,16 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         self.multilingual_model = config.lang_embs is not None
         self.multispeaker_model = config.utt_embed_dim is not None
 
-
-
-        # define encoder
         encoder_input_layer = torch.nn.Embedding(num_embeddings=self.input_dim, embedding_dim=self.acoustic_dim, padding_idx=0)
-
         self.encoder = FastSpeech2ConformerEncoder(
             attention_dim=self.acoustic_dim,
             attention_heads=config.num_attention_heads,
             linear_units=config.encoder_linear_units,
             num_blocks=config.encoder_layers,
             input_layer=encoder_input_layer,
-            dropout_rate=config.transformer_enc_dropout_rate,
-            positional_dropout_rate=config.transformer_enc_positional_dropout_rate,
-            attention_dropout_rate=config.transformer_enc_attn_dropout_rate,
+            dropout_rate=config.encoder_dropout_rate,
+            positional_dropout_rate=config.encoder_positional_dropout_rate,
+            attention_dropout_rate=config.encoder_attention_dropout_rate,
             normalize_before=config.encoder_normalize_before,
             concat_after=config.encoder_concat_after,
             positionwise_conv_kernel_size=config.positionwise_conv_kernel_size,
@@ -732,7 +738,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             lang_embs=config.lang_embs,
         )
 
-        self.duration_predictor = DurationPredictor(
+        self.duration_predictor = FastSpeech2ConformerDurationPredictor(
             input_dim=self.acoustic_dim,
             n_layers=config.duration_predictor_layers,
             n_chans=config.duration_predictor_chans,
@@ -740,7 +746,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             dropout_rate=config.duration_predictor_dropout_rate,
         )
 
-        self.pitch_predictor = VariancePredictor(
+        self.pitch_predictor = FastSpeech2ConformerVariancePredictor(
             input_dim=self.acoustic_dim,
             n_layers=config.pitch_predictor_layers,
             n_chans=config.pitch_predictor_chans,
@@ -748,13 +754,13 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             dropout_rate=config.pitch_predictor_dropout,
         )
         # continuous pitch + FastPitch style avg
-        self.pitch_embed = VarianceEmbedding(
+        self.pitch_embed = FastSpeech2ConformerVarianceEmbedding(
                 out_channels=self.acoustic_dim,
                 kernel_size=config.pitch_embed_kernel_size,
                 padding=(config.pitch_embed_kernel_size - 1) // 2,
                 dropout_rate=config.pitch_embed_dropout)
 
-        self.energy_predictor = VariancePredictor(
+        self.energy_predictor = FastSpeech2ConformerVariancePredictor(
             input_dim=self.acoustic_dim,
             n_layers=config.energy_predictor_layers,
             n_chans=config.energy_predictor_chans,
@@ -762,24 +768,25 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             dropout_rate=config.energy_predictor_dropout,
         )
         # continuous energy + FastPitch style avg
-        self.energy_embed = VarianceEmbedding(
+        self.energy_embed = FastSpeech2ConformerVarianceEmbedding(
                 out_channels=self.acoustic_dim,
                 kernel_size=config.energy_embed_kernel_size,
                 padding=(config.energy_embed_kernel_size - 1) // 2,
                 dropout_rate=config.energy_embed_dropout
                 )
 
-        self.length_regulator = LengthRegulator()
+        self.length_regulator = FastSpeech2ConformerLengthRegulator()
 
+        # The decoder is an encoder
         self.decoder = FastSpeech2ConformerEncoder(
             attention_dim=self.acoustic_dim,
             attention_heads=config.num_attention_heads,
             linear_units=config.decoder_linear_units,
             num_blocks=config.decoder_layers,
             input_layer=None,
-            dropout_rate=config.transformer_dec_dropout_rate,
-            positional_dropout_rate=config.transformer_dec_positional_dropout_rate,
-            attention_dropout_rate=config.transformer_dec_attn_dropout_rate,
+            dropout_rate=config.decoder_dropout_rate,
+            positional_dropout_rate=config.decoder_positional_dropout_rate,
+            attention_dropout_rate=config.decoder_attention_dropout_rate,
             normalize_before=config.decoder_normalize_before,
             concat_after=config.decoder_concat_after,
             positionwise_conv_kernel_size=config.positionwise_conv_kernel_size,
@@ -792,7 +799,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
 
         self.feat_out = torch.nn.Linear(self.acoustic_dim, self.output_dim * config.reduction_factor)
 
-        self.postnet = PostNet(
+        self.postnet = FastSpeech2ConformerPostnet(
             output_dim=self.output_dim,
             n_layers=config.postnet_layers,
             n_chans=config.postnet_chans,
@@ -1012,7 +1019,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         # add eos at the last of sequence
         x = torch.nn.functional.pad(x, [0, 1], "constant", self.eos)
 
-        # setup batch axis
+        # set up batch axis
         input_lengths = torch.tensor([x.shape[0]], dtype=torch.long, device=x.device)
         xs, ys = x.unsqueeze(0), None
         
@@ -1023,7 +1030,6 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         if utterance_embedding is not None:
             utterance_embedding.unsqueeze(0)
         
-        # (1, L, output_dim)
         outputs_before_postnet, outputs_after_postnet, duration_outputs, pitch_predictions, energy_predictions = self._forward(
             xs,
             input_lengths,
@@ -1036,7 +1042,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
 
         self.train()
         if return_duration_pitch_energy:
-            return outputs_after_postnet[0], duration_outputs[0], pitch_predictions[0], energy_predictions[0]
+            return outputs_after_postnet[0], duration_outputs[0], pitch_predictions[0], energy_predictions[0] # add outputs_before_postnet
         return outputs_after_postnet[0]
 
     def _source_mask(self, input_lengths):
@@ -1069,7 +1075,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         return output_dict
 
 
-class MultiHeadedAttention(nn.Module):
+class FastSpeech2ConformerMultiHeadedAttention(nn.Module):
     """
     Multi-Head Attention layer.
 
@@ -1081,10 +1087,10 @@ class MultiHeadedAttention(nn.Module):
 
     def __init__(self, n_head, n_feat, dropout_rate):
         """
-        Construct an MultiHeadedAttention object.
+        Construct an FastSpeech2ConformerMultiHeadedAttention object.
         """
-        super(MultiHeadedAttention, self).__init__()
-        assert n_feat % n_head == 0
+        super(FastSpeech2ConformerMultiHeadedAttention, self).__init__()
+
         # We assume d_v always equals d_k
         self.d_k = n_feat // n_head
         self.h = n_head
@@ -1092,7 +1098,6 @@ class MultiHeadedAttention(nn.Module):
         self.linear_k = nn.Linear(n_feat, n_feat)
         self.linear_v = nn.Linear(n_feat, n_feat)
         self.linear_out = nn.Linear(n_feat, n_feat)
-        self.attn = None
         self.dropout = nn.Dropout(p=dropout_rate)
 
     def forward_qkv(self, query, key, value):
@@ -1113,11 +1118,8 @@ class MultiHeadedAttention(nn.Module):
         q = self.linear_q(query).view(n_batch, -1, self.h, self.d_k)
         k = self.linear_k(key).view(n_batch, -1, self.h, self.d_k)
         v = self.linear_v(value).view(n_batch, -1, self.h, self.d_k)
-        # (batch_size, head, time1, d_k)
         q = q.transpose(1, 2)
-        # (batch_size, head, time2, d_k)  
         k = k.transpose(1, 2)
-        # (batch_size, head, time2, d_k)
         v = v.transpose(1, 2)
 
         return q, k, v
@@ -1142,18 +1144,17 @@ class MultiHeadedAttention(nn.Module):
             min_value = float(numpy.finfo(torch.tensor(0, dtype=scores.dtype).numpy().dtype).min)
             scores = scores.masked_fill(mask, min_value)
             # (batch_size, head, time1, time2)
-            self.attn = torch.softmax(scores, dim=-1).masked_fill(mask, 0.0)
+            attn = torch.softmax(scores, dim=-1).masked_fill(mask, 0.0)
         else:
             # (batch_size, head, time1, time2)
-            self.attn = torch.softmax(scores, dim=-1)
+            attn = torch.softmax(scores, dim=-1)
 
-        p_attn = self.dropout(self.attn)
+        p_attn = self.dropout(attn)
         # (batch_size, head, time1, d_k)
         x = torch.matmul(p_attn, value)
         # (batch_size, time1, d_model)
         x = x.transpose(1, 2).contiguous().view(n_batch, -1, self.h * self.d_k)
 
-        # (batch_size, time1, d_model)
         return self.linear_out(x)  
 
     def forward(self, query, key, value, mask):
@@ -1175,7 +1176,7 @@ class MultiHeadedAttention(nn.Module):
         return self.forward_attention(v, scores, mask)
 
 
-class RelPositionMultiHeadedAttention(MultiHeadedAttention):
+class FastSpeech2ConformerRelPositionMultiHeadedAttention(FastSpeech2ConformerMultiHeadedAttention):
     """
     Multi-Head Attention layer with relative position encoding.
     Details can be found in https://github.com/espnet/espnet/pull/2816.
@@ -1188,7 +1189,7 @@ class RelPositionMultiHeadedAttention(MultiHeadedAttention):
     """
 
     def __init__(self, n_head, n_feat, dropout_rate, zero_triu=False):
-        """Construct an RelPositionMultiHeadedAttention object."""
+        """Construct an FastSpeech2ConformerRelPositionMultiHeadedAttention object."""
         super().__init__(n_head, n_feat, dropout_rate)
         self.zero_triu = zero_triu
         # linear transformation for positional encoding
@@ -1265,13 +1266,6 @@ class RelPositionMultiHeadedAttention(MultiHeadedAttention):
         scores = (matrix_ac + matrix_bd) / math.sqrt(self.d_k)
 
         return self.forward_attention(v, scores, mask)
-
-class Swish(torch.nn.Module):
-    """Construct an Swish object."""
-
-    def forward(self, x):
-        """Return Swich activation function."""
-        return x * torch.sigmoid(x)
     
 class FastSpeech2ConformerConvolutionModule(nn.Module):
     """
@@ -1286,7 +1280,6 @@ class FastSpeech2ConformerConvolutionModule(nn.Module):
     def __init__(self, channels, kernel_size, bias=True):
         super(FastSpeech2ConformerConvolutionModule, self).__init__()
         # kernel_size should be an odd number for 'SAME' padding
-        assert (kernel_size - 1) % 2 == 0
 
         self.pointwise_conv1 = nn.Conv1d(
             channels,
@@ -1314,7 +1307,6 @@ class FastSpeech2ConformerConvolutionModule(nn.Module):
             padding=0,
             bias=bias,
         )
-        self.activation = Swish()
 
     def forward(self, x):
         """
@@ -1337,27 +1329,32 @@ class FastSpeech2ConformerConvolutionModule(nn.Module):
 
         # 1D Depthwise Conv
         x = self.depthwise_conv(x)
-        x = self.activation(self.norm(x))
+        x = self.norm(x)
+        
+        # This is currently a manual swish activation instead of using nn.functional.silu()
+        # since it caused a slightly (~1e-6) divergence from the original implementation
+        # in ESPnet, please advise which is preferred
+        x = x * torch.sigmoid(x) 
 
         x = self.pointwise_conv2(x)
 
         return x.transpose(1, 2)
 
 
-class EncoderLayer(nn.Module):
+class FastSpeech2ConformerEncoderLayer(nn.Module):
     """
     Encoder layer module.
 
     Args:
         size (int): Input dimension.
         self_attn (torch.nn.Module): Self-attention module instance.
-            `MultiHeadedAttention` or `RelPositionMultiHeadedAttention` instance
+            `FastSpeech2ConformerMultiHeadedAttention` or `FastSpeech2ConformerRelPositionMultiHeadedAttention` instance
             can be used as the argument.
         feed_forward (torch.nn.Module): Feed-forward module instance.
-            `PositionwiseFeedForward`, `MultiLayeredConv1d`, or `Conv1dLinear` instance
+            `PositionwiseFeedForward`, `FastSpeech2ConformerMultiLayeredConv1d`, or `Conv1dLinear` instance
             can be used as the argument.
         feed_forward_macaron (torch.nn.Module): Additional feed-forward module instance.
-            `PositionwiseFeedForward`, `MultiLayeredConv1d`, or `Conv1dLinear` instance
+            `PositionwiseFeedForward`, `FastSpeech2ConformerMultiLayeredConv1d`, or `Conv1dLinear` instance
             can be used as the argument.
         conv_module (torch.nn.Module): Convolution module instance.
             `ConvlutionModule` instance can be used as the argument.
@@ -1382,7 +1379,7 @@ class EncoderLayer(nn.Module):
         encoder_layer = 1,
         type_ = "Encoder"
     ):
-        super(EncoderLayer, self).__init__()
+        super(FastSpeech2ConformerEncoderLayer, self).__init__()
         self.encoder_layer = encoder_layer
         self.type_ = type_
         
@@ -1392,22 +1389,22 @@ class EncoderLayer(nn.Module):
         self.conv_module = conv_module
         
         # for the FNN module
-        self.norm_ff = LayerNorm(size)  
+        self.norm_ff = FastSpeech2ConformerLayerNorm(size)  
         
         # for the MHA module
-        self.norm_mha = LayerNorm(size)
+        self.norm_mha = FastSpeech2ConformerLayerNorm(size)
         
         if feed_forward_macaron is not None:
-            self.norm_ff_macaron = LayerNorm(size)
+            self.norm_ff_macaron = FastSpeech2ConformerLayerNorm(size)
             self.ff_scale = 0.5
         else:
             self.ff_scale = 1.0
         if self.conv_module is not None:
             # for the CNN module
-            self.norm_conv = LayerNorm(size)  
+            self.norm_conv = FastSpeech2ConformerLayerNorm(size)  
             
             # for the final output of the block
-            self.norm_final = LayerNorm(size)
+            self.norm_final = FastSpeech2ConformerLayerNorm(size)
         self.dropout = nn.Dropout(dropout_rate)
         self.size = size
         self.dropout_rate = dropout_rate
@@ -1459,7 +1456,9 @@ class EncoderLayer(nn.Module):
         if cache is None:
             x_q = x
         else:
-            assert cache.shape == (x.shape[0], x.shape[1] - 1, self.size)
+            if cache.shape != (x.shape[0], x.shape[1] - 1, self.size):
+                raise ValueError(f"Shape mismatch: cache shape {cache.shape} does not match expected shape {(x.shape[0], x.shape[1] - 1, self.size)}")
+
             x_q = x[:, -1:, :]
             residual = residual[:, -1:, :]
             mask = None if mask is None else mask[:, -1:, :]
@@ -1510,7 +1509,7 @@ class EncoderLayer(nn.Module):
         return x, mask
 
 
-class LayerNorm(torch.nn.LayerNorm):
+class FastSpeech2ConformerLayerNorm(torch.nn.LayerNorm):
     """
     Layer normalization module.
 
@@ -1521,9 +1520,9 @@ class LayerNorm(torch.nn.LayerNorm):
 
     def __init__(self, nout, dim=-1, eps=1e-12):
         """
-        Construct an LayerNorm object.
+        Construct an FastSpeech2ConformerLayerNorm object.
         """
-        super(LayerNorm, self).__init__(nout, eps=eps)
+        super(FastSpeech2ConformerLayerNorm, self).__init__(nout, eps=eps)
         self.dim = dim
 
     def forward(self, x):
@@ -1537,11 +1536,11 @@ class LayerNorm(torch.nn.LayerNorm):
             torch.Tensor: Normalized tensor.
         """
         if self.dim == -1:
-            return super(LayerNorm, self).forward(x)
-        return super(LayerNorm, self).forward(x.transpose(1, -1)).transpose(1, -1)
+            return super(FastSpeech2ConformerLayerNorm, self).forward(x)
+        return super(FastSpeech2ConformerLayerNorm, self).forward(x.transpose(1, -1)).transpose(1, -1)
 
 
-class MultiLayeredConv1d(torch.nn.Module):
+class FastSpeech2ConformerMultiLayeredConv1d(nn.Module):
     """
     Multi-layered conv1d for Transformer block.
 
@@ -1556,7 +1555,7 @@ class MultiLayeredConv1d(torch.nn.Module):
 
     def __init__(self, in_chans, hidden_chans, kernel_size, dropout_rate, type_="Encoder", encoder_layer=0):
         """
-        Initialize MultiLayeredConv1d module.
+        Initialize FastSpeech2ConformerMultiLayeredConv1d module.
 
         Args:
             in_chans (int): Number of input channels.
@@ -1564,7 +1563,7 @@ class MultiLayeredConv1d(torch.nn.Module):
             kernel_size (int): Kernel size of conv1d.
             dropout_rate (float): Dropout rate.
         """
-        super(MultiLayeredConv1d, self).__init__()
+        super(FastSpeech2ConformerMultiLayeredConv1d, self).__init__()
         self.w_1 = torch.nn.Conv1d(
             in_chans,
             hidden_chans,
@@ -1597,7 +1596,7 @@ class MultiLayeredConv1d(torch.nn.Module):
         return self.w_2(x.transpose(-1, 1)).transpose(-1, 1)
 
 
-class RelPositionalEncoding(torch.nn.Module):
+class FastSpeech2ConformerRelPositionalEncoding(nn.Module):
     """
     Relative positional encoding module (new implementation).
     Details can be found in https://github.com/espnet/espnet/pull/2816.
@@ -1612,7 +1611,7 @@ class RelPositionalEncoding(torch.nn.Module):
         """
         Construct an PositionalEncoding object.
         """
-        super(RelPositionalEncoding, self).__init__()
+        super(FastSpeech2ConformerRelPositionalEncoding, self).__init__()
         self.d_model = d_model
         self.xscale = math.sqrt(self.d_model)
         self.dropout = torch.nn.Dropout(p=dropout_rate)
@@ -1663,14 +1662,12 @@ class RelPositionalEncoding(torch.nn.Module):
         """
         self.extend_pe(x)
         x = x * self.xscale
-        pos_emb = self.pe[
-            :,
-            self.pe.size(1) // 2 - x.size(1) + 1 : self.pe.size(1) // 2 + x.size(1),
-        ]
+        center_idx = self.pe.size(1) // 2
+        pos_emb = self.pe[:, center_idx - x.size(1) + 1 : center_idx + x.size(1)]
         return self.dropout(x), self.dropout(pos_emb)
 
 
-class FastSpeech2ConformerEncoder(torch.nn.Module):
+class FastSpeech2ConformerEncoder(nn.Module):
     """
     FastSpeech2ConformerEncoder encoder module.
 
@@ -1683,7 +1680,7 @@ class FastSpeech2ConformerEncoder(torch.nn.Module):
         dropout_rate (float): Dropout rate.
         positional_dropout_rate (float): Dropout rate after adding positional encoding.
         attention_dropout_rate (float): Dropout rate in attention.
-        input_layer (Union[str, torch.nn.Module]): Input layer type.
+        input_layer (Union[str, nn.Module]): Input layer type.
         normalize_before (bool): Whether to use layer_norm before the first block.
         concat_after (bool): Whether to concat attention layer's input and output.
             if True, additional linear will be applied.
@@ -1724,7 +1721,7 @@ class FastSpeech2ConformerEncoder(torch.nn.Module):
         self.type_ = type
         
         self.embed = input_layer
-        self.pos_enc = RelPositionalEncoding(attention_dim, positional_dropout_rate, type_=self.type_)
+        self.pos_enc = FastSpeech2ConformerRelPositionalEncoding(attention_dim, positional_dropout_rate, type_=self.type_)
 
         self.utt_embed = utt_embed
         if utt_embed is not None:
@@ -1733,11 +1730,11 @@ class FastSpeech2ConformerEncoder(torch.nn.Module):
             self.language_embedding = torch.nn.Embedding(num_embeddings=lang_embs, embedding_dim=attention_dim)
 
         # self-attention module definition
-        encoder_selfattn_layer = RelPositionMultiHeadedAttention
+        encoder_selfattn_layer = FastSpeech2ConformerRelPositionMultiHeadedAttention
         encoder_selfattn_layer_args = (attention_heads, attention_dim, attention_dropout_rate, zero_triu)
 
         # feed-forward module definition
-        positionwise_layer = MultiLayeredConv1d
+        positionwise_layer = FastSpeech2ConformerMultiLayeredConv1d
         positionwise_layer_args = (
             attention_dim,
             linear_units,
@@ -1750,9 +1747,9 @@ class FastSpeech2ConformerEncoder(torch.nn.Module):
         convolution_layer = FastSpeech2ConformerConvolutionModule
         convolution_layer_args = (attention_dim, cnn_module_kernel)
 
-        self.encoders = nn.ModuleList(
+        self.conformer_layers = nn.ModuleList(
             [
-                EncoderLayer(
+                FastSpeech2ConformerEncoderLayer(
                     attention_dim,
                     encoder_selfattn_layer(*encoder_selfattn_layer_args),
                     positionwise_layer(*positionwise_layer_args),
@@ -1793,8 +1790,8 @@ class FastSpeech2ConformerEncoder(torch.nn.Module):
             test = tuple(tensor.clone().detach() for tensor in xs)
             torch.save(test, 'hf-pre_encoders.pt')
 
-        for encoder_layer in self.encoders:
-            xs, masks = encoder_layer(xs, masks)
+        for conformer_layer in self.conformer_layers:
+            xs, masks = conformer_layer(xs, masks)
         
         if self.type_ == "Encoder":
             test = tuple(tensor.clone().detach() for tensor in xs)

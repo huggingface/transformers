@@ -66,7 +66,6 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         postnet_filts=5,
         positionwise_layer_type="conv1d",
         positionwise_conv_kernel_size=1,
-        use_scaled_pos_enc=True,
         use_batch_norm=True,
         encoder_normalize_before=True,
         decoder_normalize_before=True,
@@ -99,17 +98,15 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         pitch_embed_dropout=0.0,
         stop_gradient_from_pitch_predictor=True,
         # training related
-        transformer_enc_dropout_rate=0.2,
-        transformer_enc_positional_dropout_rate=0.2,
-        transformer_enc_attn_dropout_rate=0.2,
-        transformer_dec_dropout_rate=0.2,
-        transformer_dec_positional_dropout_rate=0.2,
-        transformer_dec_attn_dropout_rate=0.2,
+        encoder_dropout_rate=0.2,
+        encoder_positional_dropout_rate=0.2,
+        encoder_attention_dropout_rate=0.2,
+        decoder_dropout_rate=0.2,
+        decoder_positional_dropout_rate=0.2,
+        decoder_attention_dropout_rate=0.2,
         duration_predictor_dropout_rate=0.2,
         postnet_dropout_rate=0.5,
         init_type="xavier_uniform",
-        init_enc_alpha=1.0,
-        init_dec_alpha=1.0,
         use_masking=True,
         use_weighted_masking=False,
         # additional features
@@ -125,6 +122,10 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         for var_name, var_value in local_vars.items():
             if "kernel_size" in var_name and var_value % 2 == 0:
                 raise ValueError(f"`{var_name}` must be odd, but got {var_value} instead.")
+        if acoustic_dim % num_attention_heads != 0:
+            raise ValueError("The acoustic_dim must be evenly divisible by the number of attention heads.")
+        if use_masking and use_weighted_masking:
+            raise ValueError("Either use_masking or use_weighted_masking can be True, but not both.")
 
         super().__init__(bos_token_id=bos_token_id, pad_token_id=pad_token_id, eos_token_id=eos_token_id, **kwargs)
         self.acoustic_dim = acoustic_dim
@@ -165,12 +166,12 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         self.reduction_factor = reduction_factor
         self.stop_gradient_from_energy_predictor = stop_gradient_from_energy_predictor
         self.stop_gradient_from_pitch_predictor = stop_gradient_from_pitch_predictor
-        self.transformer_dec_attn_dropout_rate = transformer_dec_attn_dropout_rate
-        self.transformer_dec_dropout_rate = transformer_dec_dropout_rate
-        self.transformer_dec_positional_dropout_rate = transformer_dec_positional_dropout_rate
-        self.transformer_enc_attn_dropout_rate = transformer_enc_attn_dropout_rate
-        self.transformer_enc_dropout_rate = transformer_enc_dropout_rate
-        self.transformer_enc_positional_dropout_rate = transformer_enc_positional_dropout_rate
+        self.decoder_attention_dropout_rate = decoder_attention_dropout_rate
+        self.decoder_dropout_rate = decoder_dropout_rate
+        self.decoder_positional_dropout_rate = decoder_positional_dropout_rate
+        self.encoder_attention_dropout_rate = encoder_attention_dropout_rate
+        self.encoder_dropout_rate = encoder_dropout_rate
+        self.encoder_positional_dropout_rate = encoder_positional_dropout_rate
         self.use_batch_norm = use_batch_norm
         self.use_cnn_in_conformer = use_cnn_in_conformer
         self.use_macaron_style_in_conformer = use_macaron_style_in_conformer
