@@ -286,6 +286,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
         r"language_model.lm_head.weight",
     ]
     _no_split_modules = ["Blip2Attention", "T5Block", "OPTDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
     _keep_in_fp32_modules = ["wo"]
 
     def _init_weights(self, module):

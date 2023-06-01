@@ -17,7 +17,6 @@ Integration with Deepspeed
 
 import importlib.util
 import weakref
-from copy import deepcopy
 from functools import partialmethod
 
 from .dependency_versions_check import dep_version_check
@@ -256,10 +255,12 @@ def deepspeed_config():
         return None
 
 
-def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps):
+def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps, model_parameters):
     """
     A convenience wrapper that deals with optimizer and lr scheduler configuration.
     """
+    from accelerate.utils import DummyOptim, DummyScheduler
+
     config = hf_deepspeed_config.config
 
     # Optimizer + Scheduler
@@ -267,13 +268,13 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
     # 1. DS scheduler + DS optimizer: Yes
     # 2. HF scheduler + HF optimizer: Yes
     # 3. DS scheduler + HF optimizer: Yes
-    # 4. HF scheduler + DS optimizer: Yes
+    # 4. HF scheduler + DS optimizer: No
     #
     # Unless Offload is enabled in which case it's:
     # 1. DS scheduler + DS optimizer: Yes
     # 2. HF scheduler + HF optimizer: Mostly*
     # 3. DS scheduler + HF optimizer: Mostly*
-    # 4. HF scheduler + DS optimizer: Yes
+    # 4. HF scheduler + DS optimizer: No
     #
     # Mostly*: All non-native DeepSpeed optimizers that have both CPU and GPU implementation should work (except LAMB)
 
@@ -284,6 +285,7 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
                 "--adafactor was passed, but also found `optimizer` configured in the DeepSpeed config. "
                 "Only one optimizer can be configured."
             )
+        optimizer = DummyOptim(params=model_parameters)
     else:
         if hf_deepspeed_config.is_offload():
             logger.info(
@@ -297,21 +299,21 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
         # To use other optimizers requires voiding warranty with: `zero_allow_untested_optimizer`
         config["zero_allow_untested_optimizer"] = True
 
-    def _lr_scheduler_callable(optimizer):
-        return trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
-
     lr_scheduler = None
-    if "scheduler" not in config:
-        if optimizer is None:
-            # Optimizer is not available, so use callable to defer lr_scheduler creation to DS init
-            lr_scheduler = _lr_scheduler_callable
-        else:
-            lr_scheduler = trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
+    if "scheduler" in config:
+        lr_scheduler = DummyScheduler(optimizer)
+    else:
+        if isinstance(optimizer, DummyOptim):
+            raise ValueError(
+                "Found `optimizer` configured in the DeepSpeed config, but no `scheduler`. "
+                "Please configure a scheduler in the DeepSpeed config."
+            )
+        lr_scheduler = trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
 
     return optimizer, lr_scheduler
 
 
-def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inference=False):
+def deepspeed_init(trainer, num_training_steps, inference=False):
     """
     Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
 
@@ -323,28 +325,22 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
         resume_from_checkpoint: path to a checkpoint if to resume from after normal DeepSpeedEngine load
         inference: launch in inference mode (no optimizer and no lr scheduler)
 
-    Returns: model, optimizer, lr_scheduler
+    Returns: optimizer, lr_scheduler
 
     We may use `deepspeed_init` more than once during the life of Trainer, when we do - it's a temp hack based on:
     https://github.com/microsoft/DeepSpeed/issues/1394#issuecomment-937405374 until Deepspeed fixes a bug where it
     can't resume from a checkpoint after it did some stepping https://github.com/microsoft/DeepSpeed/issues/1612
 
     """
-    import deepspeed
     from deepspeed.utils import logger as ds_logger
 
     model = trainer.model
     args = trainer.args
 
-    if hasattr(trainer, "hf_deepspeed_config_orig"):
-        hf_deepspeed_config = deepcopy(trainer.hf_deepspeed_config_orig)
-    else:
-        hf_deepspeed_config = args.hf_deepspeed_config
-        trainer.hf_deepspeed_config_orig = deepcopy(args.hf_deepspeed_config)
+    hf_deepspeed_config = trainer.accelerator.state.deepspeed_plugin.hf_ds_config
 
     # resume config update - some bits like `model` and `num_training_steps` only become available during train
     hf_deepspeed_config.trainer_config_finalize(args, model, num_training_steps)
-    config = hf_deepspeed_config.config
 
     # set the Deepspeed log level consistent with the Trainer
     ds_logger.setLevel(args.get_process_log_level())
@@ -361,40 +357,33 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
         model_parameters = None
     else:
         trainer.optimizer = None  # important for when deepspeed_init is used as re-init
-        optimizer, lr_scheduler = deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps)
         model_parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
+        optimizer, lr_scheduler = deepspeed_optim_sched(
+            trainer, hf_deepspeed_config, args, num_training_steps, model_parameters
+        )
 
     # keep for quick debug:
     # from pprint import pprint; pprint(config)
 
-    kwargs = {
-        "model": model,
-        "model_parameters": model_parameters,
-        "config_params": config,
-        "optimizer": optimizer,
-        "lr_scheduler": lr_scheduler,
-    }
+    return optimizer, lr_scheduler
 
-    deepspeed_engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
 
-    if resume_from_checkpoint is not None:
-        # it's possible that the user is trying to resume from model_path, which doesn't necessarily
-        # contain a deepspeed checkpoint. e.g. examples just check if the dir exists and assume it's
-        # a resume from a checkpoint and not just a local pretrained weight. So we check here if the
-        # path contains what looks like a deepspeed checkpoint
-        import glob
+def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path):
+    # it's possible that the user is trying to resume from model_path, which doesn't necessarily
+    # contain a deepspeed checkpoint. e.g. examples just check if the dir exists and assume it's
+    # a resume from a checkpoint and not just a local pretrained weight. So we check here if the
+    # path contains what looks like a deepspeed checkpoint
+    import glob
 
-        deepspeed_checkpoint_dirs = sorted(glob.glob(f"{resume_from_checkpoint}/global_step*"))
+    deepspeed_checkpoint_dirs = sorted(glob.glob(f"{checkpoint_path}/global_step*"))
 
-        if len(deepspeed_checkpoint_dirs) > 0:
-            logger.info(f"Attempting to resume from {resume_from_checkpoint}")
-            # this magically updates self.optimizer and self.lr_scheduler
-            load_path, _ = deepspeed_engine.load_checkpoint(
-                resume_from_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
-            )
-            if load_path is None:
-                raise ValueError(f"[deepspeed] failed to resume from checkpoint {resume_from_checkpoint}")
-        else:
-            raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
-
-    return deepspeed_engine, optimizer, lr_scheduler
+    if len(deepspeed_checkpoint_dirs) > 0:
+        logger.info(f"Attempting to resume from {checkpoint_path}")
+        # this magically updates self.optimizer and self.lr_scheduler
+        load_path, _ = deepspeed_engine.load_checkpoint(
+            checkpoint_path, load_optimizer_states=True, load_lr_scheduler_states=True
+        )
+        if load_path is None:
+            raise ValueError(f"[deepspeed] failed to resume from checkpoint {checkpoint_path}")
+    else:
+        raise ValueError(f"Can't find a valid checkpoint at {checkpoint_path}")

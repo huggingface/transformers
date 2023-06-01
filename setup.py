@@ -132,7 +132,6 @@ _deps = [
     "librosa",
     "nltk",
     "natten>=0.14.6",
-    "numba<0.57.0",  # Can be removed once unpinned.
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
@@ -160,7 +159,7 @@ _deps = [
     "ruff>=0.0.241,<=0.0.259",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
-    "safetensors>=0.2.1",
+    "safetensors>=0.3.1",
     "sagemaker>=2.31.0",
     "scikit-learn",
     "sentencepiece>=0.1.91,!=0.1.92",
@@ -286,8 +285,7 @@ extras["sigopt"] = deps_list("sigopt")
 extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-# numba can be removed here once unpinned
-extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm", "numba")
+extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
