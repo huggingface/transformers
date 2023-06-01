@@ -28,9 +28,9 @@ Maximizing the throughput (samples/second) leads to lower training cost. This is
 as much as possible and thus filling GPU memory to its limit. If the desired batch size exceeds the limits of the GPU memory, 
 the memory optimization techniques listed in this guide such as gradient accumulation can help.
 
-However, if the preferred batch size fits into memory, there’s no reason to apply memory-optimizing techniques that can 
+However, if the preferred batch size fits into memory, there's no reason to apply memory-optimizing techniques that can 
 slow down the training. Just because one can use a large batch size, does not mean they should. As part of hyperparameter 
-tuning, you should determine which batch size yields the best results and then optimize the throughput accordingly.
+tuning, you should determine which batch size yields the best results and then optimize accordingly.
 
 The methods and tools covered in this guide can be classified based on the effect they have on the training process:
 
@@ -41,20 +41,19 @@ The methods and tools covered in this guide can be classified based on the effec
 | [Gradient checkpointing](#gradient-checkpointing)     | No                      | Yes                          |
 | [Mixed precision training](#mixed-precision-training) | Yes                     | (No)                         |
 | [Optimizer choice](#optimizer-choice)                 | Yes                     | Yes                          |
-| DataLoader                                            | Yes                     | No                           |
+| [Data preloading](#data-preloading)                   | Yes                     | No                           |
 | DeepSpeed Zero                                        | No                      | Yes                          |
 | torch.compile                                         | Yes                      | No                           |
 
-A bracket means there may be negligible effects on memory utilization. 
+Note: a bracket means there may be negligible effects on memory utilization. 
 
-You can combine the above methods to get a cumulative effect.
-
-[b](#optimizer-choice)
+You can combine the above methods to get a cumulative effect. []()
 
 ## Batch size choice
 
-To achieve optimal performance, it is recommended to use batch sizes and input/output neuron counts that are divisible 
-by a specific number. Typically, this number starts at 8, but it can be higher depending on the hardware being used and the model's dtype.
+To achieve optimal performance, start by identifying the appropriate batch size. It is recommended to use batch sizes and 
+input/output neuron counts that are of size 2^N. Often it's a multiple of 8, but it can be 
+higher depending on the hardware being used and the model's dtype.
 
 For reference, check out NVIDIA's recommendation for [input/output neuron counts](
 https://docs.nvidia.com/deeplearning/performance/dl-performance-fully-connected/index.html#input-features) and 
@@ -62,16 +61,17 @@ https://docs.nvidia.com/deeplearning/performance/dl-performance-fully-connected/
 fully connected layers (which are involved in GEMMs (General Matrix Multiplications)).
 
 [Tensor Core Requirements](https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc) 
-define the multiplier based on the dtype and the hardware. For example, for fp16 a multiple of 8 is recommended, unless 
+define the multiplier based on the dtype and the hardware. For instance, for fp16 data type a multiple of 8 is recommended, unless 
 it's an A100 GPU, in which case use multiples of 64.
 
-For parameters that are small, there is also [Dimension Quantization Effects](https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#dim-quantization) to consider, this is where tiling happens and the right multiplier can have a significant speedup.
+For parameters that are small, consider also [Dimension Quantization Effects](https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#dim-quantization). 
+This is where tiling happens and the right multiplier can have a significant speedup.
 
 ## Gradient Accumulation
 
 Model weights are not the only thing that is stored in memory during the training process. Other components consuming GPU 
 memory are optimizer states, gradients, forward activations saved for gradient computation, temporary buffers, and 
-functionality-specific memory. By reducing the memory footprint of some of these components, we can optimize overall GPU 
+functionality-specific memory. By reducing the memory footprint of some of these components, you can optimize overall GPU 
 memory usage.
 
 The **gradient accumulation** method aims to calculate gradients in smaller increments instead of computing them for the 
@@ -80,7 +80,7 @@ and backward passes through the model and accumulating the gradients during the 
 gradients have been accumulated, the model's optimization step is executed. By employing gradient accumulation, it 
 becomes possible to increase the **effective batch size** beyond the limitations imposed by the GPU's memory capacity. 
 However, it is important to note that the additional forward and backward passes introduced by gradient accumulation can 
-slightly slow down the training process.
+slow down the training process.
 
 You can enable gradient accumulation by adding `gradient_accumulation_steps` argument to  [`TrainingArguments`]: 
 
@@ -90,20 +90,18 @@ training_args = TrainingArguments(per_device_train_batch_size=1, gradient_accumu
 
 In the above example, your effective batch size becomes 4. 
 
-Alternatively, you can use 🤗 Accelerate to gain full control over the training loop. Find the 🤗 Accelerate example [further down in this guide](#using--accelerate).
+Alternatively, use 🤗 Accelerate to gain full control over the training loop. Find the 🤗 Accelerate example 
+[further down in this guide](#using--accelerate).
 
 Note:  While it is advised to max out GPU usage as much as possible, a high number of gradient accumulation steps can 
 result in a more pronounced training slowdown. Consider the following example. Let's say, the `per_device_train_batch_size=4` 
-without gradient accumulation is the GPU's limit. If you would like to train with batches of size 64, do not set the 
+without gradient accumulation hits the GPU's limit. If you would like to train with batches of size 64, do not set the 
 `per_device_train_batch_size` to 1 and `gradient_accumulation_steps` to 64. Instead, keep the `per_device_train_batch_size=4` 
 and set the `gradient_accumulation_steps=16`. This results in the same effective batch size while making better use of 
 the available GPU resources.
 
-
 For additional information, please refer to batch size and gradient accumulation benchmarks for [RTX-3090](https://github.com/huggingface/transformers/issues/14608#issuecomment-1004392537)
 and [A100](https://github.com/huggingface/transformers/issues/15026#issuecomment-1005033957).
-
-Next we have a look at another trick to save a little bit more GPU memory called gradient checkpointing.
 
 ## Gradient Checkpointing
 
@@ -114,7 +112,7 @@ Saving all activations from the forward pass in order to compute the gradients d
 significant memory overhead. The alternative approach of discarding the activations and recalculating them when needed 
 during the backward pass, would introduce a considerable computational overhead and slow down the training process.
 
-**Gradient checkpointing** offers a compromise between these two approaches and and saves strategically selected activations 
+**Gradient checkpointing** offers a compromise between these two approaches and saves strategically selected activations 
 throughout the computational graph so only a fraction of the activations need to be re-computed for the gradients. For 
 an in-depth explanation of gradient checkpointing, refer to [this great article](https://medium.com/tensorflow/fitting-larger-networks-into-memory-583e3c758ff9).
 
@@ -162,7 +160,7 @@ If you prefer to use 🤗 Accelerate, find the 🤗 Accelerate example [further 
 ### BF16
 
 If you have access to an Ampere or newer hardware you can use bf16 for mixed precision training and evaluation. While 
-bf16 has a worse precision than fp16, it has a much much bigger dynamic range. In fp16 the biggest number you can have 
+bf16 has a worse precision than fp16, it has a much bigger dynamic range. In fp16 the biggest number you can have 
 is `65535` and any number above that will result in an overflow. A bf16 number can be as large as `3.39e+38` (!) which 
 is about the same as fp32 - because both have 8-bits used for the numerical range.
 
@@ -209,7 +207,7 @@ For additional information on tf32 vs other precisions, please refer to the foll
 The most common optimizer used to train transformer models is Adam or AdamW (Adam with weight decay). Adam achieves 
 good convergence by storing the rolling average of the previous gradients which, however, adds an additional memory 
 footprint of the order of the number of model parameters. One remedy to this is to use an alternative optimizer. 
-For example if you have [NVIDIA/apex](https://github.com/NVIDIA/apex) installed `adamw_apex_fused` will give you the 
+For example if you have [NVIDIA/apex](https://github.com/NVIDIA/apex) installed, `adamw_apex_fused` will give you the 
 fastest training experience among all supported AdamW optimizers.
 
 [`Trainer`] integrates a variety of optimisers that can be used out of box: `adamw_hf`, `adamw_torch`, `adamw_torch_fused`, 
@@ -235,7 +233,7 @@ You can switch to Adafactor by setting `optim="adafactor"` in [`TrainingArgument
 training_args = TrainingArguments(per_device_train_batch_size=4, optim="adafactor", **default_args)
 ```
 
-Combined with other approaches (gradient accumulation, gradient accumulation, gradient checkpointing, mixed precision training) 
+Combined with other approaches (gradient accumulation, gradient checkpointing, and mixed precision training) 
 you can notice up to 3x improvement while maintaining the throughput! However, as mentioned before, the convergence of 
 Adafactor can be worse than Adam. 
 
@@ -246,11 +244,12 @@ means that it stores the state with lower precision and dequantizes it only for 
 idea behind mixed precision training.
 
 To use the 8-bit optimizer, you need to install it separately and then pass it as a custom optimizer to the [`Trainer`]. 
+
 First, follow the installation guide in the GitHub [repo](https://github.com/TimDettmers/bitsandbytes) to install the `bitsandbytes` library 
 that implements the 8-bit Adam optimizer.
 
 Next you need to initialize the optimizer. This involves two steps: 
-* First, group the model’s parameters into two groups  - one where weight decay should be applied, and the other one where it should not. Usually, biases and layer norm parameters are not weight decayed. 
+* First, group the model's parameters into two groups - one where weight decay should be applied, and the other one where it should not. Usually, biases and layer norm parameters are not weight decayed. 
 * Then do some argument housekeeping to use the same parameters as the previously used AdamW optimizer.
 
 ```py
@@ -297,13 +296,14 @@ Finally, pass the custom optimizer as an argument to the `Trainer`:
 trainer = Trainer(model=model, args=training_args, train_dataset=ds, optimizers=(adam_bnb_optim, None))
 ```
 
-Combined with other approaches (gradient accumulation, gradient accumulation, gradient checkpointing, mixed precision training), 
+Combined with other approaches (gradient accumulation, gradient checkpointing, and mixed precision training), 
 you can expect to get about a 3x memory improvement and even slightly higher throughput as using Adafactor. 
 
 ### `_multi_tensor`
 
 pytorch-nightly introduced `torch.optim._multi_tensor` which should significantly speed up the optimizers for situations 
-with lots of small feature tensors. It should eventually become the default, but if you want to experiment with it sooner and don't mind using the bleed-edge, see: https://github.com/huggingface/transformers/issues/9965
+with lots of small feature tensors. It should eventually become the default, but if you want to experiment with it sooner, 
+see: https://github.com/huggingface/transformers/issues/9965
 
 ## Using 🤗 Accelerate
 
@@ -354,30 +354,38 @@ During the [`prepare`](https://huggingface.co/docs/accelerate/package_reference/
 call the dataloader will also be distributed across workers should we use multiple GPUs. We use the same [8-bit optimizer](#8-bit-adam) from the earlier example.
 
 Finally, we can add the main training loop. Note that the `backward` call is handled by 🤗 Accelerate. We can also see
-how gradient accumulation works: we normalize the loss so we get the average at the end of accumulation and once we have 
+how gradient accumulation works: we normalize the loss, so we get the average at the end of accumulation and once we have 
 enough steps we run the optimization. 
 
 Implementing these optimization techniques with 🤗 Accelerate only takes a handful of lines of code and comes with the 
 benefit of more flexibility in the training loop. For a full documentation of all features have a look at the 
 [Accelerate documentation](https://huggingface.co/docs/accelerate/index).
 
-## DataLoader
+## Data preloading
 
-One of the important requirements to reach great training speed is the ability to feed the GPU at the maximum speed it can handle. By default everything happens in the main process and it might not be able to read the data from disk fast enough, and thus create a bottleneck, leading to GPU under-utilization.
+One of the important requirements to reach great training speed is the ability to feed the GPU at the maximum speed it 
+can handle. By default, everything happens in the main process, and it might not be able to read the data from disk fast 
+enough, and thus create a bottleneck, leading to GPU under-utilization.
 
 - `DataLoader(pin_memory=True, ...)` which ensures that the data gets preloaded into the pinned memory on CPU and typically leads to much faster transfers from CPU to GPU memory.
-- `DataLoader(num_workers=4, ...)` - spawn several workers to pre-load data faster - during training watch the GPU utilization stats and if it's far from 100% experiment with raising the number of workers. Of course, the problem could be elsewhere so a very big number of workers won't necessarily lead to a better performance.
+- `DataLoader(num_workers=4, ...)` - spawn several workers to preload data faster - during training watch the GPU utilization stats and if it's far from 100% experiment with raising the number of workers. Of course, the problem could be elsewhere so a very big number of workers won't necessarily lead to a better performance.
+
+When using [`Trainer`], corresponding [`TrainingArguments`] are: `dataloader_pin_memory` (`True` by default), and `dataloader_num_workers` (defaults to `0`).
 
 ## DeepSpeed ZeRO
 
-The in-depth details on how to use Deepspeed can be found [here](main_classes/deepspeed).
+DeepSpeed is an open-source deep learning optimization library that both 🤗 Transformers and 🤗 Accelerate integrate with.
+It provides a wide range of features and optimizations designed to improve the efficiency and scalability of large-scale 
+deep learning training.
 
-First, a quick decision tree:
+If your model fits onto a single GPU and you have enough space to fit a small batch size, you don't need to use DeepSpeed
+as it'll only slow things down. However, if the model doesn't fit onto a single GPU or you can't fit a small batch, you can 
+leverage DeepSpeed ZeRO + CPU Offload, or NVMe Offload for much larger models.
 
-1. Model fits onto a single GPU and you have enough space to fit a small batch size - you don't need to use Deepspeed as it'll only slow things down in this use case.
-2. Model doesn't fit onto a single GPU or you can't fit a small batch - use DeepSpeed ZeRO + CPU Offload and for much larger models NVMe Offload.
+For an in-depth guide on DeepSpeed integration, check [here](main_classes/deepspeed).
 
-Now if the decision tree suggested you use DeepSpeed first you need to [install it](main_classes/deepspeed#installation), then follow one of the following guides to create a configuration file and launch DeepSpeed.
+Now if the decision tree suggested you use DeepSpeed first you need to [install it](main_classes/deepspeed#installation), then follow one 
+of the following guides to create a configuration file and launch DeepSpeed.
 
 Activation:
 
@@ -393,14 +401,37 @@ Activation:
 https://github.com/huggingface/transformers/blob/master/src/transformers/trainer.py) - simply search for `deepspeed` in the code.
 
 
-## Choice of GPU
-Sometimes, even when applying all the above tweaks the throughput on a given GPU might still not be good enough. One easy solution is to change the type of GPU. For example switching from let's say a K80 (which you typically get on Google Colab) to a fancier GPU such as the V100 or A100. Although they are more expensive they are usually more cost effective than cheaper GPUs due to their larger memory and faster architecture.
+## Using torch.compile
 
-Now, let's take a step back and discuss what we should optimize for when scaling the training of large models.
+PyTorch 2.0 introduces a new compile function, you can learn more about it [in their documentation](https://pytorch.org/get-started/pytorch-2.0/). It uses Python’s frame evaluation API to automatically create a graph from existing PyTorch programs. After capturing the graph, different backends can be deployed to lower the graph to an optimized engine. You can choose one option below for performance boost.
+
+`torch.compile` has a growing list of backends, which can be found in [backends.py](https://github.com/pytorch/pytorch/blob/master/torch/_dynamo/optimizations/backends.py)
+or `torchdynamo.list_backends()` each of which with its optional dependencies.
+
+Some of the most commonly used backends are
+
+**Debugging backends**:
+* `dynamo.optimize("eager")` - Uses PyTorch to run the extracted GraphModule. This is quite useful in debugging TorchDynamo issues.
+* `dynamo.optimize("aot_eager")` - Uses AotAutograd with no compiler, i.e, just using PyTorch eager for the AotAutograd's extracted forward and backward graphs. This is useful for debugging, and unlikely to give speedups.
+
+**Training & inference backends**:
+* `dynamo.optimize("inductor")` - Uses TorchInductor backend with AotAutograd and cudagraphs by leveraging codegened Triton kernels  [Read more](https://dev-discuss.pytorch.org/t/torchinductor-a-pytorch-native-compiler-with-define-by-run-ir-and-symbolic-shapes/747)
+* `dynamo.optimize("nvfuser")` -  nvFuser with TorchScript. [Read more](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593)
+* `dynamo.optimize("aot_nvfuser")` -  nvFuser with AotAutograd. [Read more](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593)
+* `dynamo.optimize("aot_cudagraphs")` - cudagraphs with AotAutograd. [Read more](https://github.com/pytorch/torchdynamo/pull/757)
+
+**Inference-only backend**s:
+* `dynamo.optimize("ofi")` -  Uses Torchscript optimize_for_inference.  [Read more](https://pytorch.org/docs/stable/generated/torch.jit.optimize_for_inference.html)
+* `dynamo.optimize("fx2trt")` -  Uses Nvidia TensorRT for inference optimizations.  [Read more](https://github.com/pytorch/TensorRT/blob/master/docsrc/tutorials/getting_started_with_fx_path.rst)
+* `dynamo.optimize("onnxrt")` -  Uses ONNXRT for inference on CPU/GPU.  [Read more](https://onnxruntime.ai/)
+* `dynamo.optimize("ipex")` -  Uses IPEX for inference on CPU.  [Read more](https://github.com/intel/intel-extension-for-pytorch)
+
+
 
 ## Efficient Software Prebuilds
 
-PyTorch's [pip and conda builds](https://pytorch.org/get-started/locally/#start-locally) come prebuit with the cuda toolkit which is enough to run PyTorch, but it is insufficient if you need to build cuda extensions.
+PyTorch's [pip and conda builds](https://pytorch.org/get-started/locally/#start-locally) come prebuilt with the cuda toolkit 
+which is enough to run PyTorch, but it is insufficient if you need to build cuda extensions.
 
 At times it may take an additional effort to pre-build some components, e.g., if you're using libraries like `apex` that don't come pre-compiled. In other situations figuring out how to install the right cuda toolkit system-wide can be complicated. To address these users' needs PyTorch and NVIDIA release a new version of NGC docker container which already comes with everything prebuilt and you just need to install your programs on it and it will run out of the box.
 
@@ -439,12 +470,23 @@ Most related papers and implementations are built around Tensorflow/TPUs:
 
 And for Pytorch DeepSpeed has built one as well: [DeepSpeed-MoE: Advancing Mixture-of-Experts Inference and Training to Power Next-Generation AI Scale](https://arxiv.org/abs/2201.05596), [Mixture of Experts](https://www.deepspeed.ai/tutorials/mixture-of-experts/) - blog posts:  [1](https://www.microsoft.com/en-us/research/blog/deepspeed-powers-8x-larger-moe-model-training-with-high-performance/), [2](https://www.microsoft.com/en-us/research/publication/scalable-and-efficient-moe-training-for-multitask-multilingual-models/) and specific deployment with large transformer-based natural language generation models: [blog post](https://www.deepspeed.ai/news/2021/12/09/deepspeed-moe-nlg.html), [Megatron-Deepspeed branch](Thttps://github.com/microsoft/Megatron-DeepSpeed/tree/moe-training).
 
+## GPU choice
+
+Sometimes, even when applying all the above tweaks the throughput on a given GPU might still not be good enough. One 
+easy solution is to change the type of GPU. For example switching from let's say a K80 (which you typically get on Google Colab) to a fancier GPU such as the V100 or A100. Although they are more expensive they are usually more 
+cost effective than cheaper GPUs due to their larger memory and faster architecture.
+
 
 ## Scaling beyond a single GPU
 
-For some applications, such as pretraining large language models, applying all the approaches above might still not be fast enough. In this case you want to scale your experiment to several GPUs.
+For some applications, such as pretraining large language models, applying all the approaches above might still not be fast enough. 
+In this case you want to scale your experiment to several GPUs.
 
-Another use case for training on many GPUs is if the model does not fit on a single GPU with all the mentioned tricks. There are still more methods we can apply although life starts to get a bit more complicated. This usually involves some form of pipeline or tensor parallelism where the model itself is distributed across several GPUs. One can also make use of DeepSpeed which implements some of these parallelism strategies along with some more optimization to reduce the memory footprint such as partitioning the optimizer states. You can read more about this in the ["Multi-GPU training" section](perf_train_gpu_many).
+Another use case for training on many GPUs is if the model does not fit on a single GPU with all the mentioned tricks. 
+There are still more methods we can apply although life starts to get a bit more complicated. This usually involves some 
+form of pipeline or tensor parallelism where the model itself is distributed across several GPUs. One can also make use 
+of DeepSpeed which implements some of these parallelism strategies along with some more optimization to reduce the 
+memory footprint such as partitioning the optimizer states. You can read more about this in the ["Multi-GPU training" section](perf_train_gpu_many).
 
 ## Using PyTorch native attention
 
@@ -457,28 +499,3 @@ model = model.to_bettertransformer()
 ```
 
 Training can then be done as usual.
-
-## Using torch.compile
-
-PyTorch 2.0 introduces a new compile function, you can learn more about it [in their documentation](https://pytorch.org/get-started/pytorch-2.0/). It uses Python’s frame evaluation API to automatically create a graph from existing PyTorch programs. After capturing the graph, different backends can be deployed to lower the graph to an optimized engine. You can choose one option below for performance boost.
-
-`torch.compile` has a growing list of backends, which can be found in [backends.py](https://github.com/pytorch/pytorch/blob/master/torch/_dynamo/optimizations/backends.py)
-or `torchdynamo.list_backends()` each of which with its optional dependencies.
-
-Some of the most commonly used backends are
-
-**Debugging backends**:
-* `dynamo.optimize("eager")` - Uses PyTorch to run the extracted GraphModule. This is quite useful in debugging TorchDynamo issues.
-* `dynamo.optimize("aot_eager")` - Uses AotAutograd with no compiler, i.e, just using PyTorch eager for the AotAutograd's extracted forward and backward graphs. This is useful for debugging, and unlikely to give speedups.
-
-**Training & inference backends**:
-* `dynamo.optimize("inductor")` - Uses TorchInductor backend with AotAutograd and cudagraphs by leveraging codegened Triton kernels  [Read more](https://dev-discuss.pytorch.org/t/torchinductor-a-pytorch-native-compiler-with-define-by-run-ir-and-symbolic-shapes/747)
-* `dynamo.optimize("nvfuser")` -  nvFuser with TorchScript. [Read more](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593)
-* `dynamo.optimize("aot_nvfuser")` -  nvFuser with AotAutograd. [Read more](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593)
-* `dynamo.optimize("aot_cudagraphs")` - cudagraphs with AotAutograd. [Read more](https://github.com/pytorch/torchdynamo/pull/757)
-
-**Inference-only backend**s:
-* `dynamo.optimize("ofi")` -  Uses Torchscript optimize_for_inference.  [Read more](https://pytorch.org/docs/stable/generated/torch.jit.optimize_for_inference.html)
-* `dynamo.optimize("fx2trt")` -  Uses Nvidia TensorRT for inference optimizations.  [Read more](https://github.com/pytorch/TensorRT/blob/master/docsrc/tutorials/getting_started_with_fx_path.rst)
-* `dynamo.optimize("onnxrt")` -  Uses ONNXRT for inference on CPU/GPU.  [Read more](https://onnxruntime.ai/)
-* `dynamo.optimize("ipex")` -  Uses IPEX for inference on CPU.  [Read more](https://github.com/intel/intel-extension-for-pytorch)
