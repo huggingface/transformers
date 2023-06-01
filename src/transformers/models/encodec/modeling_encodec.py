@@ -1522,25 +1522,28 @@ class EnCodecModel(EnCodecPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        target_bandwidths = [1.5, 3., 6, 12., 24.]  # [3., 6., 12., 24.] for 48khz
-        sample_rate = 24_000         # or 48_000
-        channels = 1                 # 2 for 48khz
-        causal = True                # False for 48khz
-        model_norm = 'weight_norm'   # time_group_norm for 48khz
-        normalize = False            # audio_normalize (True for 48kHz model)
-        segment = None               # 1.0 for 48kHz model
+        # target_bandwidths = [1.5, 3., 6, 12., 24.]  # [3., 6., 12., 24.] for 48khz
+        # sample_rate = 24_000         # or 48_000
+        # channels = 1                 # 2 for 48khz
+        # causal = True                # False for 48khz
+        # model_norm = 'weight_norm'   # time_group_norm for 48khz
+        # normalize = False            # audio_normalize (True for 48kHz model)
+        # segment = None               # 1.0 for 48kHz model
 
-        # TODO: put into EnCodecConfig
-        self.target_bandwidths = target_bandwidths
-        self.sample_rate = sample_rate
-        self.channels = channels
-        self.normalize = normalize
-        self.segment = segment
-        self.overlap = 0.01
+# TODO: no longer copy to self!
+        self.target_bandwidths = config.target_bandwidths
+        self.sample_rate = config.sampling_rate
+        self.channels = config.audio_channels
+        self.normalize = config.audio_normalize
+        self.segment = config.segment
+        self.overlap = config.overlap
 
-        self.encoder = SEANetEncoder(channels=channels, norm=model_norm, causal=causal)
-        self.decoder = SEANetDecoder(channels=channels, norm=model_norm, causal=causal)
-        n_q = int(1000 * target_bandwidths[-1] // (math.ceil(sample_rate / self.encoder.hop_length) * 10))
+        self.encoder = SEANetEncoder(channels=config.audio_channels, norm=config.model_norm, causal=config.causal)
+        self.decoder = SEANetDecoder(channels=config.audio_channels, norm=config.model_norm, causal=config.causal)
+
+        # TODO: put this in RVQ itself using config.xxx
+        # also put encoder.hop_length in config then?!
+        n_q = int(1000 * config.target_bandwidths[-1] // (math.ceil(config.sampling_rate / self.encoder.hop_length) * 10))
         self.quantizer = ResidualVectorQuantizer(
             dimension=self.encoder.dimension,
             n_q=n_q,
