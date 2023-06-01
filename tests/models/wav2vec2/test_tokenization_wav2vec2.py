@@ -782,24 +782,24 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         def check_tokenizer(tokenizer, check_ita_first=False):
             if check_ita_first:
-                assert tokenizer.decode([6, 9, 9]) == "ad"
-                assert tokenizer.encoder == ita_vocab
+                self.assertEqual(tokenizer.decode([6, 9, 9]), "ad")
+                self.assertEqual(tokenizer.encoder, ita_vocab)
                 tokenizer.set_target_lang("eng")
 
-            assert tokenizer.encoder == eng_vocab
-            assert tokenizer.decode([7, 8, 7]) == "aba"
+            self.assertEqual(tokenizer.encoder, eng_vocab)
+            self.assertEqual(tokenizer.decode([7, 8, 7]), "aba")
 
             tokenizer.set_target_lang("spa")
-            assert tokenizer.decode([23, 88, 23]) == "aca"
-            assert tokenizer.encoder == spa_vocab
+            self.assertEqual(tokenizer.decode([23, 88, 23]), "aca")
+            self.assertEqual(tokenizer.encoder, spa_vocab)
 
             tokenizer.set_target_lang("eng")
-            assert tokenizer.encoder == eng_vocab
-            assert tokenizer.decode([7, 7, 8]) == "ab"
+            self.assertEqual(tokenizer.encoder, eng_vocab)
+            self.assertEqual(tokenizer.decode([7, 7, 8]), "ab")
 
             tokenizer.set_target_lang("ita")
-            assert tokenizer.decode([6, 9, 9]) == "ad"
-            assert tokenizer.encoder == ita_vocab
+            self.assertEqual(tokenizer.decode([6, 9, 9]), "ad")
+            self.assertEqual(tokenizer.encoder, ita_vocab)
 
         with tempfile.TemporaryDirectory() as tempdir:
             tempfile_path = os.path.join(tempdir, "vocab.json")
@@ -815,5 +815,5 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.save_pretrained(tempdir)
             tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(tempdir)
 
-            assert tokenizer.target_lang == "ita"
+            self.assertEqual(tokenizer.target_lang, "ita")
             check_tokenizer(tokenizer, check_ita_first=True)

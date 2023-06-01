@@ -297,7 +297,7 @@ class Wav2Vec2ModelTester:
         config.adapter_attn_dim = 16
         model = Wav2Vec2ForCTC(config=config)
 
-        assert model._adapters is not None, "Attention adapters have to be defined."
+        self.parent.assertIsNotNone(model._adapters)
 
         model.to(torch_device)
         model.eval()
@@ -1157,10 +1157,11 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
             with self.assertRaises(OSError):
                 model.load_adapter("eng", use_safetensors=False)
-
+            with self.assertRaises(Exception):
+                model.load_adapter("ita", use_safetensors=True)
             logits_2 = get_logits(model, input_features)
 
-            torch.allclose(logits, logits_2, atol=1e-3)
+            self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
 
         with tempfile.TemporaryDirectory() as tempdir:
             model.save_pretrained(tempdir)
@@ -1181,7 +1182,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
             logits_2 = get_logits(model, input_features)
 
-            torch.allclose(logits, logits_2, atol=1e-3)
+            self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
 
         model = Wav2Vec2ForCTC.from_pretrained("hf-internal-testing/tiny-random-wav2vec2-adapter")
         logits = get_logits(model, input_features)
@@ -1192,7 +1193,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         logits_2 = get_logits(model, input_features)
 
-        torch.allclose(logits, logits_2, atol=1e-3)
+        self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
 
     @slow
     def test_model_from_pretrained(self):
