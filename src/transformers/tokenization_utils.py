@@ -431,12 +431,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self.added_tokens_encoder.update(added_tok_encoder)
         self.added_tokens_decoder.update(added_tok_decoder)
 
-        # Make sure we don't split on any special tokens (even they were already in the vocab before e.g. for Albert)
+        # Make sure we don't split on any special tokens (even if they were already in the vocab before e.g. for Albert)
         if special_tokens:
-            if len(token_contents) == 1:
-                _insert_one_token_to_ordered_list(self.unique_no_split_tokens, token_contents[0])
+            if len(tokens_to_add) == 1:
+                _insert_one_token_to_ordered_list(self.unique_no_split_tokens, tokens_to_add[0])
             else:
-                self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(token_contents)))
+                self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(tokens_to_add)))
         else:
             # Or on the newly added tokens
             if len(tokens_to_add) == 1:
