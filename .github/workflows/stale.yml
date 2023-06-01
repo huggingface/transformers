@@ -10,7 +10,7 @@ jobs:
     if: github.repository == 'huggingface/transformers'
     runs-on: ubuntu-latest
     env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.HUGGINGFACE_PUSH }}
     steps:
     - uses: actions/checkout@v3
 
