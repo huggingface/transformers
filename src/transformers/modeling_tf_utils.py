@@ -1511,12 +1511,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         function themselves.
         """
         if loss in ("auto_with_warning", "passthrough"):  # "passthrough" for workflow backward compatibility
-            logger.warning(
+            logger.info(
                 "No loss specified in compile() - the model's internal loss computation will be used as the "
                 "loss. Don't panic - this is a common way to train TensorFlow models in Transformers! "
                 "To disable this behaviour please pass a loss argument, or explicitly pass "
                 "`loss=None` if you do not want your model to compute a loss. You can also specify `loss='auto'` to "
-                "get the internal loss without printing this warning."
+                "get the internal loss without printing this info string."
             )
             loss = "auto"
         if loss == "auto":
