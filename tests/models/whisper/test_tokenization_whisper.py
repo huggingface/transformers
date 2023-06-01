@@ -213,6 +213,38 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             rust_tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens
         )
 
+    def test_skip_special_tokens_with_timestamps(self):
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        # fmt: off
+        encoded_input = [
+            50258, 50363, 50364, 634, 575, 12525, 22618, 1968, 6144,
+            35617, 20084, 1756, 311, 589, 307, 534, 10281, 934,
+            439, 293, 50676, 50676, 393, 4411, 294, 309, 457,
+            707, 295, 33301, 286, 392, 6628, 13, 50836, 50257,
+        ]
+        # fmt: on
+
+        expected_with_special_tokens = "<|startoftranscript|><|notimestamps|><|0.00|> He has grave doubts whether Sir Frederick Layton's work is really Greek after all and<|6.24|><|6.24|> can discover in it but little of rocky Ithaca.<|9.44|><|endoftext|>"
+        expected_without_special_tokens = "<|0.00|> He has grave doubts whether Sir Frederick Layton's work is really Greek after all and<|6.24|><|6.24|> can discover in it but little of rocky Ithaca.<|9.44|>"
+        self.assertEqual(
+            tokenizer.decode(encoded_input, decode_with_timestamps=True, skip_special_tokens=False),
+            expected_with_special_tokens,
+        )
+        self.assertEqual(
+            tokenizer.decode(encoded_input, decode_with_timestamps=True, skip_special_tokens=True),
+            expected_without_special_tokens,
+        )
+        self.assertEqual(
+            rust_tokenizer.decode(encoded_input, decode_with_timestamps=True, skip_special_tokens=False),
+            expected_with_special_tokens,
+        )
+        self.assertEqual(
+            rust_tokenizer.decode(encoded_input, decode_with_timestamps=True, skip_special_tokens=True),
+            expected_without_special_tokens,
+        )
+
 
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     checkpoint_name = "openai/whisper-small.en"
