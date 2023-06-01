@@ -2060,7 +2060,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 parameter/buffer name, once a given module name is inside, every submodule of it will be sent to the
                 same device. If we only pass the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank
                 like `1`) on which the model will be allocated, the device map will map the entire model to this
-                device. Passing device_map = 0 is the same as doing device_map = {"":"cuda:0"}
+                device. Passing `device_map = 0` means put the whole model on GPU 0.
 
                 To have Accelerate compute the most optimized `device_map` automatically, set `device_map="auto"`. For
                 more information about each option see [designing a device
@@ -2196,7 +2196,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             try: 
                 device_map = {"": torch.device(device_map)}
             except RuntimeError:
-                raise ValueError("When passing device_map as a string, the value needs to be a device name (e.g. cpu, cuda:0) or 'auto', 'balanced', 'balanced_low_0', 'sequential'") 
+                raise ValueError(f"When passing device_map as a string, the value needs to be a device name (e.g. cpu, cuda:0) or 'auto', 'balanced', 'balanced_low_0', 'sequential' but found {device_map}") 
         elif isinstance(device_map, int):
             if device_map < 0:
                 raise ValueError("You can't pass device_map as a negative int. If you want to put the model on the cpu, pass device_map = 'cpu' ")
@@ -2265,7 +2265,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if torch.cuda.is_available():
                     device_map = {"": torch.cuda.current_device()}
                 else:
-                    raise RuntimeError("No GPU found.")
+                    raise RuntimeError("No GPU found. A GPU is needed for quantization.")
                 logger.info(
                     "The device_map was not initialized."
                     "Setting device_map to {'':torch.cuda.current_device()}."
