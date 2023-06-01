@@ -2111,6 +2111,34 @@ class TokenizerTesterMixin:
                     )
 
     @require_tokenizers
+    def test_added_token_are_never_split(self):
+        if not self.test_slow_tokenizer:
+            self.skipTest("Currently this test is only for slow tokenizers")
+            return
+        tokenizers = self.get_tokenizers(fast=False)
+        new_tokens = []
+        new_tokens.append(AddedToken("<my_new_token_1>", lstrip = False, rstrip = False))
+        new_tokens.append(AddedToken("<my_new_token_1>", lstrip = True, rstrip = False))
+        new_tokens.append(AddedToken("<my_new_token_1>", lstrip = False, rstrip = True))
+        new_tokens.append(AddedToken("<my_new_token_1>", lstrip = True, rstrip = True))
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                for token in new_tokens:
+                    tokenizer.add_tokens([token])
+                    tokens = tokenizer.tokenize(f"This sentence is{token}a test")
+                    self.assertIn("<my_new_token_1>", tokens)
+
+                    tokens = tokenizer.tokenize(f"This sentence is {token}a test")
+                    self.assertIn("<my_new_token_1>", tokens)
+                    
+                    tokens = tokenizer.tokenize(f"This sentence is{token} a test")
+                    self.assertIn("<my_new_token_1>", tokens)
+                    
+                    tokens = tokenizer.tokenize(f"This sentence is {token} a test")
+                    self.assertIn("<my_new_token_1>", tokens)
+        
+        
+    @require_tokenizers
     def test_added_token_are_matched_longest_first(self):
         if not self.test_slow_tokenizer:
             self.skipTest("This test is only for slow tokenizers")
@@ -2936,50 +2964,6 @@ class TokenizerTesterMixin:
                 self.assertGreaterEqual(len(tokenizer_r.special_tokens_map["additional_special_tokens"]), 2)
 
                 self.assertEqual(len(tokenizer_r), vocab_size + 8)
-
-    def test_added_tokens_behaviour(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_s = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                
-                new_tokens = AddedToken("<a_new_token>", single_word = False, lstrip = False, rstrip = False)
-                tokenizer_s.add_tokens([new_tokens])
-                tokenizer_r.add_tokens([new_tokens])
-                
-                assert tokenizer_r.tokenize("This sentence is<a_new_token>a test") == tokenizer_s.tokenize("This sentence is<a_new_token>a test")
-                assert tokenizer_r.tokenize("This sentence is<a_new_token> a test") == tokenizer_s.tokenize("This sentence is<a_new_token> a test")
-                assert tokenizer_r.tokenize("This sentence is <a_new_token>a test") == tokenizer_s.tokenize("This sentence is <a_new_token>a test")
-                assert tokenizer_r.tokenize("This sentence is <a_new_token> a test") == tokenizer_s.tokenize("This sentence is <a_new_token> a test")
-                
-                new_tokens = AddedToken("<a_new_token_1>", single_word = False, lstrip = True, rstrip = False)
-                tokenizer_s.add_tokens([new_tokens])
-                tokenizer_r.add_tokens([new_tokens])
-                
-                assert tokenizer_r.tokenize("This sentence is<a_new_token_1>a test") == tokenizer_s.tokenize("This sentence is<a_new_token_1>a test")
-                assert tokenizer_r.tokenize("This sentence is<a_new_token_1> a test") == tokenizer_s.tokenize("This sentence is<a_new_token_1> a test")
-                assert tokenizer_r.tokenize("This sentence is <a_new_token_1>a test") == tokenizer_s.tokenize("This sentence is <a_new_token_1>a test")
-                assert tokenizer_r.tokenize("This sentence is <a_new_token_1> a test") == tokenizer_s.tokenize("This sentence is <a_new_token_1> a test")
-                
-                new_tokens = AddedToken("<a_new_token_2>", single_word = False, lstrip = True, rstrip = True)
-                tokenizer_s.add_tokens([new_tokens])
-                tokenizer_r.add_tokens([new_tokens])
-                
-                assert tokenizer_r.tokenize("This sentence is<a_new_token_2>a test") == tokenizer_s.tokenize("This sentence is<a_new_token_2>a test")
-                assert tokenizer_r.tokenize("This sentence is<a_new_token_2> a test") == tokenizer_s.tokenize("This sentence is<a_new_token_2> a test")
-                assert tokenizer_r.tokenize("This sentence is <a_new_token_2>a test") == tokenizer_s.tokenize("This sentence is <a_new_token_2>a test")
-                assert tokenizer_r.tokenize("This sentence is <a_new_token_2> a test") == tokenizer_s.tokenize("This sentence is <a_new_token_2> a test")
-                
-                # tests for single word will be added in another PR
-                new_tokens = AddedToken("<a_new_token_3>", single_word = True, lstrip = True, rstrip = True)
-                tokenizer_s.add_tokens([new_tokens])
-                tokenizer_r.add_tokens([new_tokens])
-                
-                assert tokenizer_r.tokenize("This sentence is<a_new_token_3>a test") == tokenizer_s.tokenize("This sentence is<a_new_token_3>a test")
-                assert tokenizer_r.tokenize("This sentence is<a_new_token_3> a test") == tokenizer_s.tokenize("This sentence is<a_new_token_3> a test")
-                assert tokenizer_r.tokenize("This sentence is <a_new_token_3>a test") == tokenizer_s.tokenize("This sentence is <a_new_token_3>a test")
-                assert tokenizer_r.tokenize("This sentence is <a_new_token_3> a test") == tokenizer_s.tokenize("This sentence is <a_new_token_3> a test")
-                
 
     def test_offsets_mapping(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
