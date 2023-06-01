@@ -32,10 +32,10 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Mas
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
 from .configuration_ict import IctConfig
 
@@ -84,6 +84,7 @@ class IctEmbeddings(nn.Module):
             seq_length = embeddings.shape[1]
             mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
             # replace the masked visual tokens by mask_tokens
+            # changed from [1, 1024] to [1, 1024, 1] to torch.float32
             mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
             embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
@@ -349,7 +350,7 @@ class IctTransformerModel(IctPretrainedModel):
         )
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
-        pooled_output = self.head(sequence_output)  # logits
+        pooled_output = self.head(sequence_output)
 
         if not return_dict:
             head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
@@ -372,14 +373,10 @@ class IctResnetBlock(nn.Module):
         super().__init__()
         self.conv_block = nn.Sequential(
             nn.ReflectionPad2d(2),
-            nn.utils.spectral_norm(
-                nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, padding=0, dilation=2, bias=False)
-            ),
+            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, padding=0, dilation=2),
             nn.ReLU(True),
             nn.ReflectionPad2d(1),
-            nn.utils.spectral_norm(
-                nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, padding=0, dilation=1, bias=False)
-            ),
+            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, padding=0, dilation=1),
         )
 
     def forward(self, x):
@@ -714,11 +711,11 @@ ICT_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, height * width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`IctImageProcessor.__call__`]
             for details.
-        clusters (`np.ndarray`, of shape `(n_clusters, 3)`):
-            Clusters used to quantize the image of shape `(n_clusters, 3)` before being fed to Guided Upsampler.
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, height * width)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Generate random
             masks if not provided.
+        clusters (`np.ndarray`, of shape `(n_clusters, 3)`):
+            Clusters used to quantize the image of shape `(n_clusters, 3)` before being fed to Guided Upsampler.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -749,7 +746,32 @@ class IctModel(IctPretrainedModel):
         return self.transformer.embeddings.token_embedding
 
     @add_start_docstrings_to_model_forward(ICT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=MaskedImageModelingOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="vision",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
+    def top_k_logits(self, logits, k):
+        output, _ = torch.topk(logits, k)
+        logits_clone = logits.clone()
+        logits_clone[logits_clone < output[:, [-1]]] = -float("Inf")
+        return logits_clone
+
+    def sample_mask(self, pixel_values, logits, bool_masked_pos, temperature=1.0, top_k=50):
+        _, length, _ = logits.shape
+        output = pixel_values.clone()
+
+        for i in range(length):
+            if bool_masked_pos[0, i] != 0:
+                logits_i = logits[:, i, :] / temperature
+                logits_i = self.top_k_logits(logits_i, top_k)
+                probs = nn.functional.softmax(logits_i, dim=-1)
+                pred = torch.multinomial(probs, num_samples=1)
+                output[:, i] = pred[:, 0]
+        return output
+
     def forward(
         self,
         pixel_values: Optional[torch.Tensor],
@@ -777,17 +799,21 @@ class IctModel(IctPretrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> pixel_values = image_processor(image, return_tensors="pt").pixel_values
+        >>> clusters = image_processor.clusters
 
         >>> # create random boolean mask of shape (batch_size, num_patches)
-        >>> bool_masked_pos = torch.randint(low=0, high=2, size=(pixel_values.shape[0], pixel_values.shape[1])).bool()
+        >>> bool_masked_pos = torch.randint(low=0, high=2, size=(pixel_values.shape[0] * pixel_values.shape[1])).bool()
 
-        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
+        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos, clusters=clusters)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         clusters = clusters if clusters is not None else self.config.clusters
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
+
+        if clusters is None:
+            raise ValueError("You have to specify clusters")
 
         outputs = self.transformer(
             pixel_values,
@@ -796,15 +822,18 @@ class IctModel(IctPretrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        sequence_output = outputs[0]
-        batch_size, sequence_length, num_channels = sequence_output.shape
+        logits = outputs[1]
+        batch_size, sequence_length, _ = logits.shape
         height = width = math.floor(sequence_length**0.5)
-        sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
 
         # modified from https://github.com/raywzy/ICT/blob/59dd12d374d47cdf0dce90923017ca3657e6aa0b/Transformer/inference.py#L107-L126
-        clusters = np.rint(127.5 * (clusters + 1.0))
+        # clusters = np.rint(127.5 * (clusters + 1.0))
         clusters = torch.from_numpy(clusters)
-        recovered_pixel_values = [clusters[pixel_values[i]].view(height, width, 3) for i in range(batch_size)]
+        original_images = [clusters[pixel_values[i]].view(height, width, 3) for i in range(batch_size)]
+        recovered_pixel_values = self.sample_mask(
+            pixel_values, logits, bool_masked_pos, temperature=self.config.temperature, top_k=self.config.top_k
+        )
+        recovered_images = [clusters[recovered_pixel_values[i]].view(height, width, 3) for i in range(batch_size)]
 
         reshaped_bool_masked_pos = [
             bool_masked_pos.reshape(height, width) if bool_masked_pos is not None
@@ -813,9 +842,7 @@ class IctModel(IctPretrainedModel):
             for _ in range(batch_size)
         ]
 
-        reconstructed_pixel_values = self.guided_upsampler(
-            pixel_values, recovered_pixel_values, reshaped_bool_masked_pos
-        )
+        reconstructed_pixel_values = self.guided_upsampler(original_images, recovered_images, reshaped_bool_masked_pos)
 
         loss = None
         if bool_masked_pos is not None:

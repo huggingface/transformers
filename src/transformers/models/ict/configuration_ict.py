@@ -32,8 +32,8 @@ class IctConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`IctModel`]. It is used to instantiate an ICT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the ICT model trained with the ImageNet
-    dataset [sheonhan/ict-imagenet-256](https://huggingface.co/sheonhan/ict-imagenet-256).
+    defaults will yield a similar configuration to that of the ICT model trained with the ImageNet dataset
+    [sheonhan/ict-imagenet-256](https://huggingface.co/sheonhan/ict-imagenet-256).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -70,8 +70,14 @@ class IctConfig(PretrainedConfig):
             The size (resolution) of each image.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        qkv_bias (`bool`, *optional*, defaults to `False`):
+        qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
+        temperature (`float`, *optional*, defaults to 1.0):
+            The value used to module the next token probabilities that will be used by default in the `generate` method
+            of the model. Must be strictly positive.
+        top_k (`int`, *optional*, defaults to 50):
+            Number of highest probability vocabulary tokens to keep for top-k-filtering that will be used by default in
+            the `generate` method of the model.
         output_height (`int`, *optional*, defaults to 256):
             The height of the final image.
         output_width (`int`, *optional*, defaults to 256):
@@ -112,7 +118,9 @@ class IctConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         image_size=1024,
         num_channels=3,
-        qkv_bias=False,
+        qkv_bias=True,
+        temperature=1.0,
+        top_k=50,
         output_height=256,
         output_width=256,
         clusters=None,
@@ -135,6 +143,8 @@ class IctConfig(PretrainedConfig):
         self.image_size = image_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
+        self.temperature = temperature
+        self.top_k = top_k
         self.output_height = output_height
         self.output_width = output_width
         self.clusters = np.array(clusters) if clusters is not None else None

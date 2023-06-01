@@ -34,20 +34,65 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-# rename parameter names
-def rename_key(name):
-    if "stem.conv" in name:
-        name = name.replace("stem.conv", "bit.embedder.convolution")
-    if "blocks" in name:
-        name = name.replace("blocks", "layers")
-    if "head.fc" in name:
-        name = name.replace("head.fc", "classifier.1")
-    if name.startswith("norm"):
-        name = "bit." + name
-    if "bit" not in name and "classifier" not in name:
-        name = "bit.encoder." + name
+# here we list all keys to be renamed (original name on the left, our name on the right)
+def create_rename_keys(config):
+    rename_keys = []
+    rename_keys.append(("pos_emb", "transformer.embeddings.position_embedding"))
+    rename_keys.append(("tok_emb.weight", "transformer.embeddings.token_embedding.weight"))
+    # NOTE: masks token does not exist in the original weights
 
-    return name
+    for i in range(config.num_hidden_layers):
+        rename_keys.append((f"blocks.{i}.ln1.weight", f"transformer.encoder.layers.{i}.ln_1.weight"))
+        rename_keys.append((f"blocks.{i}.ln1.bias", f"transformer.encoder.layers.{i}.ln_1.bias"))
+        rename_keys.append((f"blocks.{i}.ln2.weight", f"transformer.encoder.layers.{i}.ln_2.weight"))
+        rename_keys.append((f"blocks.{i}.ln2.bias", f"transformer.encoder.layers.{i}.ln_2.bias"))
+        rename_keys.append((f"blocks.{i}.attn.key.weight", f"transformer.encoder.layers.{i}.attention.key.weight"))
+        rename_keys.append((f"blocks.{i}.attn.key.bias", f"transformer.encoder.layers.{i}.attention.key.bias"))
+        rename_keys.append((f"blocks.{i}.attn.query.weight", f"transformer.encoder.layers.{i}.attention.query.weight"))
+        rename_keys.append((f"blocks.{i}.attn.query.bias", f"transformer.encoder.layers.{i}.attention.query.bias"))
+        rename_keys.append((f"blocks.{i}.attn.value.weight", f"transformer.encoder.layers.{i}.attention.value.weight"))
+        rename_keys.append((f"blocks.{i}.attn.value.bias", f"transformer.encoder.layers.{i}.attention.value.bias"))
+        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"transformer.encoder.layers.{i}.attention.output.weight"))
+        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"transformer.encoder.layers.{i}.attention.output.bias"))
+        rename_keys.append((f"blocks.{i}.mlp.0.weight", f"transformer.encoder.layers.{i}.mlp.0.weight"))
+        rename_keys.append((f"blocks.{i}.mlp.0.bias", f"transformer.encoder.layers.{i}.mlp.0.bias"))
+        rename_keys.append((f"blocks.{i}.mlp.2.weight", f"transformer.encoder.layers.{i}.mlp.2.weight"))
+        rename_keys.append((f"blocks.{i}.mlp.2.bias", f"transformer.encoder.layers.{i}.mlp.2.bias"))
+
+    # Generator
+    rename_keys.append(("module.encoder.1.weight", "guided_upsampler.generator.encoder.1.weight"))
+    rename_keys.append(("module.encoder.1.bias", "guided_upsampler.generator.encoder.1.bias"))
+    rename_keys.append(("module.encoder.3.weight", "guided_upsampler.generator.encoder.3.weight"))
+    rename_keys.append(("module.encoder.3.bias", "guided_upsampler.generator.encoder.3.bias"))
+    rename_keys.append(("module.encoder.5.weight", "guided_upsampler.generator.encoder.5.weight"))
+    rename_keys.append(("module.encoder.5.bias", "guided_upsampler.generator.encoder.5.bias"))
+
+    for i in range(config.num_residual_blocks):
+        rename_keys.append(
+            (f"module.middle.{i}.conv_block.1.weight", f"guided_upsampler.generator.middle.{i}.conv_block.1.weight")
+        )
+        rename_keys.append(
+            (f"module.middle.{i}.conv_block.1.bias", f"guided_upsampler.generator.middle.{i}.conv_block.1.bias")
+        )
+        rename_keys.append(
+            (f"module.middle.{i}.conv_block.4.weight", f"guided_upsampler.generator.middle.{i}.conv_block.4.weight")
+        )
+        rename_keys.append(
+            (f"module.middle.{i}.conv_block.4.bias", f"guided_upsampler.generator.middle.{i}.conv_block.4.bias")
+        )
+
+    rename_keys.append(("module.decoder.0.weight", "guided_upsampler.generator.decoder.0.weight"))
+    rename_keys.append(("module.decoder.0.bias", "guided_upsampler.generator.decoder.0.bias"))
+    rename_keys.append(("module.decoder.2.weight", "guided_upsampler.generator.decoder.2.weight"))
+    rename_keys.append(("module.decoder.2.bias", "guided_upsampler.generator.decoder.2.bias"))
+    rename_keys.append(("module.decoder.5.weight", "guided_upsampler.generator.decoder.5.weight"))
+    rename_keys.append(("module.decoder.5.bias", "guided_upsampler.generator.decoder.5.bias"))
+
+    rename_keys.append(("ln_f.weight", "transformer.layernorm.weight"))
+    rename_keys.append(("ln_f.bias", "transformer.layernorm.bias"))
+    rename_keys.append(("head.weight", "transformer.head.weight"))
+
+    return rename_keys
 
 
 # We will verify our results on an image of cute cats
@@ -65,14 +110,25 @@ def convert_ict_checkpoint(
     pytorch_dump_path: Path,
     push_to_hub: bool,
 ):
-    torch.load(checkpoint_path, map_location="cpu")["model"]
     config = IctConfig.from_json_file(ict_config_file)
     model = IctModel(config)
     model_name = checkpoint_path.split("/")[-1].split(".")[0]
 
-    # print(orig_state_dict)
-    # model.load_state_dict(orig_state_dict)
-    # model.eval()
+    model_state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+
+    generator_local_path = hf_hub_download(repo_id="sheonhan/ict-imagenet-256", filename="generator.pt")
+    generator_state_dict = torch.load(generator_local_path, map_location="cpu")
+
+    model_state_dict.update(generator_state_dict)
+    model_state_dict = {key: value for key, value in model_state_dict.items() if "attn.mask" not in key}
+
+    rename_keys = create_rename_keys(config)
+    for src, dest in rename_keys:
+        val = model_state_dict.pop(src)
+        model_state_dict[dest] = val
+
+    model.load_state_dict(model_state_dict, strict=False)
+    model.eval()
 
     # prepare image
     image = prepare_img()
@@ -92,15 +148,12 @@ def convert_ict_checkpoint(
     original_pixel_values = image_transforms(image).unsqueeze(0)
 
     assert torch.allclose(original_pixel_values, pixel_values)
-    inputs = {}
-    inputs["pixel_values"] = pixel_values
 
-    # local_path = hf_hub_download(repo_id="hf-internal-testing/bool-masked-pos", filename="bool_masked_pos.pt")
-    local_path = hf_hub_download(repo_id="sheonhan/ict-imagenet-256", filename="my_bool_masked_pos.pt")
-    bool_masked_pos = torch.load(local_path)
-    inputs["bool_masked_pos"] = bool_masked_pos
+    bool_masked_pos_local_path = hf_hub_download(repo_id="sheonhan/ict-imagenet-256", filename="my_bool_masked_pos.pt")
+    bool_masked_pos = torch.load(bool_masked_pos_local_path)
+    bool_masked_pos = bool_masked_pos.unsqueeze(0)
 
-    outputs = model(**inputs)
+    outputs = model(pixel_values=pixel_values, bool_masked_pos=bool_masked_pos, clusters=clusters)
     logits = outputs.logits
 
     expected_shape = (3, 256, 256)
