@@ -1433,9 +1433,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         self,
         input_features: BatchFeature,
         composer="composer1",
-        max_length: int = 256,
         generation_config=None,
-        return_dict_in_generate=True,
         **kwargs,
     ):
         """
@@ -1458,8 +1456,6 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
                 `"composer"`. Please make sure that the composet value is present in `composer_to_feature_token` in
                 `generation_config`. For an example please see
                 https://huggingface.co/susnato/pop2piano_dev/blob/main/generation_config.json .
-            max_length (`int`, *optional*, defaults to 256):
-                Number of tokens to be generated.
             generation_config (`~generation.GenerationConfig`, *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
                 passed to generate matching the attributes of `generation_config` will override them. If
@@ -1467,8 +1463,6 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
                 priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
                 configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
                 default values, whose documentation should be checked to parameterize generation.
-            return_dict_in_generate (`bool`, *optional*, defaults to `True`):
-                Whether to return dict or not.
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1562,20 +1556,20 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
                     : torch.max(torch.where(attention_mask == 1)[1]) + 1,
                     : torch.max(torch.where(attention_mask == 1)[2]) + 1,
                 ]
-
             inputs_embeds = self.get_mel_conditioner_outputs(
                 input_features=_input_features, composer=composer, generation_config=generation_config
             )
 
+            kwargs["return_dict_in_generate"] = True
             generation_output = super().generate(
                 inputs=None,
                 generation_config=generation_config,
                 inputs_embeds=inputs_embeds,
-                max_length=max_length,
-                return_dict_in_generate=True,
                 **kwargs,
             )
             generation_outputs.append(generation_output)
+
+        return_dict_in_generate = generation_config.return_dict_in_generate if hasattr(generation_config, "return_dict_in_generate") else True
 
         if is_greedy_gen_mode:
             if return_dict_in_generate:
