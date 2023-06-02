@@ -422,7 +422,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 and token not in tokens_to_add
             ):
                 tokens_to_add.append(token)
-                if isinstance(new_tokens[i], AddedToken):
+                if isinstance(new_tokens[i], AddedToken) or special_tokens:
                     # tokens that are added using AddedToken are special tokens.
                     self._additional_special_tokens.append(new_tokens[i])
                 if self.verbose:
@@ -435,10 +435,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         # Make sure we don't split on any special tokens (even if they were already in the vocab before e.g. for Albert)
         if special_tokens:
-            if len(tokens_to_add) == 1:
-                _insert_one_token_to_ordered_list(self.unique_no_split_tokens, tokens_to_add[0])
+            if len(token_contents) == 1:
+                _insert_one_token_to_ordered_list(self.unique_no_split_tokens, token_contents[0])
             else:
-                self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(tokens_to_add)))
+                self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(token_contents)))
         else:
             # Or on the newly added tokens
             if len(tokens_to_add) == 1:
