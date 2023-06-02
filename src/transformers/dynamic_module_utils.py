@@ -18,6 +18,7 @@ import importlib
 import os
 import re
 import shutil
+import signal
 import sys
 from pathlib import Path
 from typing import Dict, Optional, Union
@@ -515,16 +516,38 @@ def custom_object_save(obj, folder, config=None):
     return result
 
 
+def _raise_timeout_error(signum, frame):
+    raise ValueError(
+        "Loading this model requires you to execute the configuration file in that repo on your local machine. We "
+        "if it was okay but did not get an answer. Make sure you have read the code there to avoid malicious use, "
+        "then set the option `trust_remote_code=True` to remove this error."
+    )
+
+
 def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has_remote_code):
+    timeout = 30
     if trust_remote_code is None:
         if has_local_code:
             trust_remote_code = False
         elif has_remote_code:
-            # Maybe add an input here with timeout (need to find a good way to do it that works crossplatform)
-            pass
+            signal.signal(signal.SIGALRM, _raise_timeout_error)
+            signal.alarm(timeout)
+            while trust_remote_code is None:
+                answer = input(
+                    f"Loading {model_name} requires to execute some code in that repo, you can inspect the content of "
+                    f"the repository at https://hf.co/{model_name}. Do you accept? [y/n] "
+                )
+                if answer.lower() in ["yes", "y", "1"]:
+                    trust_remote_code = True
+                elif answer.lower() in ["no", "n", "0"]:
+                    trust_remote_code = False
+            signal.alarm(0)
+
     if has_remote_code and not has_local_code and not trust_remote_code:
         raise ValueError(
             f"Loading {model_name} requires you to execute the configuration file in that"
             " repo on your local machine. Make sure you have read the code there to avoid malicious use, then"
             " set the option `trust_remote_code=True` to remove this error."
         )
+
+    return trust_remote_code
