@@ -181,7 +181,8 @@ class AudioClassificationPipeline(Pipeline):
                     from torchaudio import functional as F
                 else:
                     raise ImportError(
-                        "torchaudio is required to resample audio samples in AutomaticSpeechRecognitionPipeline."
+                        "torchaudio is required to resample audio samples in AutomaticSpeechRecognitionPipeline. "
+                        "The torchaudio package can be installed through: `pip install torchaudio`."
                     )
 
                 inputs = F.resample(
