@@ -98,7 +98,7 @@ class GCViTConfig(PretrainedConfig):
         image_size=224, 
         num_channels=3, 
         embed_dim=64, 
-        depths=[3,4,6,5],#[3, 4, 19, 5], 
+        depths=[3, 4, 19, 5], #[3,4,6,5], 
         num_heads=[2,4,8,16],#[2, 4, 8, 16], 
         window_size=[7, 7, 14, 7],
         mlp_ratio=3.0, 
@@ -109,7 +109,7 @@ class GCViTConfig(PretrainedConfig):
         hidden_act="gelu",
         initializer_range=0.02,
         layer_scale=None,
-        layer_norm_eps=None,#1e-5,
+        layer_norm_eps=1e-5,
         **kwargs,
     ):
         super().__init__(**kwargs)
