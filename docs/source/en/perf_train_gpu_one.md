@@ -443,20 +443,22 @@ benefit of more flexibility in the training loop. For a full documentation of al
 PyTorch's [pip and conda builds](https://pytorch.org/get-started/locally/#start-locally) come prebuilt with the cuda toolkit 
 which is enough to run PyTorch, but it is insufficient if you need to build cuda extensions.
 
-At times it may take an additional effort to pre-build some components, e.g., if you're using libraries like `apex` that 
+At times, additional efforts may be required to pre-build some components. For instance, if you're using libraries like `apex` that 
 don't come pre-compiled. In other situations figuring out how to install the right cuda toolkit system-wide can be complicated. 
-To address these users' needs PyTorch and NVIDIA release a new version of NGC docker container which already comes with 
-everything prebuilt and you just need to install your programs on it and it will run out of the box.
+To address these scenarios PyTorch and NVIDIA released a new version of NGC docker container which already comes with 
+everything prebuilt. You just need to install your programs on it, and it will run out of the box.
 
 This approach is also useful if you want to tweak the pytorch source and/or make a new customized build.
-
-To find the docker image version you want start [here](https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/), choose one of the latest monthly releases. Go into the release's notes for the desired release, check that the environment's components are matching your needs (including NVIDIA Driver requirements!) and then at the very top of that document go to the corresponding NGC page. If for some reason you get lost, here is [the index of all PyTorch NGC images](https://ngc.nvidia.com/catalog/containers/nvidia:pytorch).
+To find the docker image version you want start [with PyTorch release notes](https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/), 
+choose one of the latest monthly releases. Go into the release's notes for the desired release, check that the environment's 
+components are matching your needs (including NVIDIA Driver requirements!) and then at the very top of that document go 
+to the corresponding NGC page. If for some reason you get lost, here is [the index of all PyTorch NGC images](https://ngc.nvidia.com/catalog/containers/nvidia:pytorch).
 
 Next follow the instructions to download and deploy the docker image.
 
 ## Mixture of Experts
 
-Quite a few of the recent papers reported a 4-5x training speedup and a faster inference by integrating
+Some recent papers reported a 4-5x training speedup and a faster inference by integrating
 Mixture of Experts (MoE) into the Transformer models.
 
 Since it has been discovered that more parameters lead to better performance, this technique allows to increase the 
@@ -488,7 +490,8 @@ And for Pytorch DeepSpeed has built one as well: [DeepSpeed-MoE: Advancing Mixtu
 
 ## Using PyTorch native attention
 
-PyTorch 2.0 released the native [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA), that allows to use fused GPU kernels as [memory-efficient attention](https://arxiv.org/abs/2112.05682) and [flash attention](https://arxiv.org/abs/2205.14135).
+PyTorch 2.0 released the native [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA), 
+that allows to use fused GPU kernels as [memory-efficient attention](https://arxiv.org/abs/2112.05682) and [flash attention](https://arxiv.org/abs/2205.14135).
 
 After installing the [`optimum`](https://github.com/huggingface/optimum) package, the relevant internal modules can be 
 replaced to use PyTorch's native attention with:
