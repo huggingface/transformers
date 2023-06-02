@@ -98,6 +98,7 @@ class TFBeitModelOutputWithPooling(TFBaseModelOutputWithPooling):
     attentions: Optional[Tuple[tf.Tensor]] = None
 
 
+# Copied from transformers.models.convnext.modeling_tf_convnext.TFConvNextDropPath with ConvNext->Beit
 class TFBeitDropPath(tf.keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
     References:
@@ -542,7 +543,7 @@ class TFBeitRelativePositionBias(tf.keras.layers.Layer):
             initializer="zeros",
             trainable=True,
             name="relative_position_bias_table",
-        )  # [2*Wh-1 * 2*Ww-1, nH]
+        )  # [2*Window_height-1 * 2*Window_width-1, nH]
         # cls to token & token 2 cls & cls to cls
 
         super().build(input_shape)
@@ -550,17 +551,17 @@ class TFBeitRelativePositionBias(tf.keras.layers.Layer):
     def get_position_index(self):
         # get pair-wise relative position index for each token inside the window
         xx, yy = tf.meshgrid(range(self.window_size[0]), range(self.window_size[1]))
-        coords = tf.stack([yy, xx], axis=0)  # [2, Wh, Ww]
-        coords_flatten = tf.reshape(coords, [2, -1])  # [2, Wh*Ww]
+        coords = tf.stack([yy, xx], axis=0)  # [2, Window_height, Window_width]
+        coords_flatten = tf.reshape(coords, [2, -1])  # [2, Window_height*Window_width]
 
-        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # [2, Wh*Ww, Wh*Ww]
-        relative_coords = tf.transpose(relative_coords, perm=[1, 2, 0])  # [Wh*Ww, Wh*Ww, 2]
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # [2, Window_height*Window_width, Window_height*Window_width]
+        relative_coords = tf.transpose(relative_coords, perm=[1, 2, 0])  # [Window_height*Window_width, Window_height*Window_width, 2]
 
         xx = (relative_coords[:, :, 0] + self.window_size[0] - 1) * (2 * self.window_size[1] - 1)
         yy = relative_coords[:, :, 1] + self.window_size[1] - 1
         relative_coords = tf.stack([xx, yy], axis=-1)
 
-        relative_position_index = tf.reduce_sum(relative_coords, axis=-1)  # [Wh*Ww, Wh*Ww]
+        relative_position_index = tf.reduce_sum(relative_coords, axis=-1)  # [Window_height*Window_width, Window_height*Window_width]
 
         top = tf.ones((1, relative_position_index.shape[1]), dtype=relative_position_index.dtype) * (
             self.num_relative_distance - 3
@@ -572,7 +573,7 @@ class TFBeitRelativePositionBias(tf.keras.layers.Layer):
 
         left_corner = tf.concat([corner, left], axis=0)
         relative_position_index = tf.concat([top, relative_position_index], axis=0)
-        relative_position_index = tf.concat([left_corner, relative_position_index], axis=1)  # [Wh*Ww + 1, Wh*Ww + 1]
+        relative_position_index = tf.concat([left_corner, relative_position_index], axis=1)  # [Window_height*Window_width + 1, Window_height*Window_width + 1]
         return relative_position_index
 
     def call(self, inputs=None) -> tf.Tensor:
