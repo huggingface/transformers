@@ -524,14 +524,16 @@ def _raise_timeout_error(signum, frame):
     )
 
 
+TIME_OUT_REMOTE_CODE = 30
+
+
 def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has_remote_code):
-    timeout = 30
     if trust_remote_code is None:
         if has_local_code:
             trust_remote_code = False
-        elif has_remote_code:
+        elif has_remote_code and TIME_OUT_REMOTE_CODE > 0:
             signal.signal(signal.SIGALRM, _raise_timeout_error)
-            signal.alarm(timeout)
+            signal.alarm(TIME_OUT_REMOTE_CODE)
             while trust_remote_code is None:
                 answer = input(
                     f"Loading {model_name} requires to execute some code in that repo, you can inspect the content of "
@@ -542,6 +544,9 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
                 elif answer.lower() in ["no", "n", "0"]:
                     trust_remote_code = False
             signal.alarm(0)
+        elif has_remote_code:
+            # For the CI which puts the timeout at 0
+            _raise_timeout_error(None, None)
 
     if has_remote_code and not has_local_code and not trust_remote_code:
         raise ValueError(
