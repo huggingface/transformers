@@ -89,7 +89,7 @@ class TFSwiftFormerPatchEmbedding(tf.keras.layers.Layer):
                 ),  # FIXME: is this the equivalent momentum?
                 tf.keras.layers.Activation("relu"),
             ],
-            name="path_embeddings",
+            name="patch_embeddings",
         )
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
