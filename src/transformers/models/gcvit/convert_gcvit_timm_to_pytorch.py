@@ -32,7 +32,7 @@ def get_gcvit_config(gcvit_name):
     name_split = gcvit_name.split("_")
     model_size = name_split[1]
     img_size = int(name_split[3][-3:])
-    
+
     print(model_size)
     if model_size == "xxtiny":
         depths = (2, 2, 6, 2)
@@ -171,7 +171,6 @@ def convert_gcvit_checkpoint(gcvit_name, pytorch_dump_folder_path):
     print(config)
     model = GCViTForImageClassification(config)
     model.eval()
-
 
     new_state_dict = convert_state_dict(timm_model.state_dict(), model)
     model.load_state_dict(new_state_dict)
