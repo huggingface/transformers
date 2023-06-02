@@ -279,8 +279,8 @@ class GCViTDropPath(nn.Module):
 
 class GCViTFeatExtract(nn.Module):
     """
-    Feature extraction block based on: "Hatamizadeh et al.,
-    Global Context Vision Transformers <https://arxiv.org/abs/2206.09959>"
+    Feature extraction block based on: "Hatamizadeh et al., Global Context Vision Transformers
+    <https://arxiv.org/abs/2206.09959>"
     """
 
     def __init__(self, dim, keep_dim=False):
@@ -896,8 +896,8 @@ class GCViTStage(nn.Module):
 
 class GCViTGlobalQueryGen(nn.Module):
     """
-    Global query generator based on: "Hatamizadeh et al.,
-    Global Context Vision Transformers <https://arxiv.org/abs/2206.09959>"
+    Global query generator based on: "Hatamizadeh et al., Global Context Vision Transformers
+    <https://arxiv.org/abs/2206.09959>"
     """
 
     def __init__(self, dim, input_resolution, image_resolution, window_size, num_heads):
