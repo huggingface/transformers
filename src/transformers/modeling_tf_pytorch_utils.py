@@ -257,11 +257,14 @@ def load_pytorch_state_dict_in_tf2_model(
     else:
         from tensorflow.python.keras import backend as K
 
+    if tf_inputs is None:
+        tf_inputs = tf_model.dummy_inputs
+
     if _prefix is None:
         _prefix = ""
-
-    with tf.name_scope(_prefix):
-        tf_model(tf_inputs)  # Make sure model is built
+    if tf_inputs is not None:
+        with tf.name_scope(_prefix):
+            tf_model(tf_inputs, training=False)  # Make sure model is built
     # Adapt state dict - TODO remove this and update the AWS weights files instead
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
@@ -337,9 +340,6 @@ def load_pytorch_state_dict_in_tf2_model(
         all_pytorch_weights.discard(name)
 
     K.batch_set_value(weight_value_tuples)
-
-    if tf_inputs is not None:
-        tf_model(tf_inputs, training=False)  # Make sure restore ops are run
 
     logger.info(f"Loaded {tf_loaded_numel:,} parameters in the TF 2.0 model.")
 
@@ -435,7 +435,11 @@ def load_tf2_checkpoint_in_pytorch_model(
     tf_model_class = getattr(transformers, tf_model_class_name)
     tf_model = tf_model_class(pt_model.config)
 
-    tf_model(tf_inputs)  # Make sure model is built
+    if tf_inputs is None:
+        tf_inputs = tf_model.dummy_inputs
+
+    if tf_inputs is not None:
+        tf_model(tf_inputs, training=False)  # Make sure model is built
 
     load_tf_weights(tf_model, tf_checkpoint_path)
 
