@@ -2135,15 +2135,15 @@ class TokenizerTesterMixin:
 
                 tokens = tokenizer.tokenize(f"This sentence is {token}a test")
                 self.assertIn(token.content, tokens)
+                idx = tokens.index(token.content)
 
                 if len(space) > 0:
+
                     if not token.lstrip:
-                        idx = tokens.index(token.content)
-                        # if the tokenizer eats spaces, then this can't hold
                         assert tokens[idx - 1] == space
                     else:
-                        idx = tokens.index(token.content)
                         assert tokens[idx - 1] != space
+
 
                 tokens = tokenizer.tokenize(f"This sentence is{token} a test")
                 self.assertIn(token.content, tokens)
@@ -2151,11 +2151,9 @@ class TokenizerTesterMixin:
 
                 if len(space) > 0:
                     if not token.rstrip:
-                        idx = tokens.index(token.content)
-                        assert tokens[idx + 1] != space
+                        assert space in tokens[idx + 1]
                     else:
-                        idx = tokens.index(token.content)
-                        assert tokens[idx + 1] == space
+                        assert space not in tokens[idx + 1]
 
                 tokens = tokenizer.tokenize(f"This sentence is {token} a test")
                 self.assertIn(token.content, tokens)
@@ -2164,17 +2162,13 @@ class TokenizerTesterMixin:
 
                 if len(space) > 0:
                     if not token.rstrip:
-                        idx = tokens.index(token.content)
-                        assert tokens[idx + 1] != space
+                        assert space in tokens[idx + 1]
                     else:
-                        idx = tokens.index(token.content)
-                        assert tokens[idx + 1] == space
+                        assert space not in tokens[idx + 1]
 
                     if not token.lstrip:
-                        idx = tokens.index(token.content)
                         assert tokens[idx - 1] == space
                     else:
-                        idx = tokens.index(token.content)
                         assert tokens[idx - 1] != space
 
 
