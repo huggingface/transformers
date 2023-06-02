@@ -496,8 +496,8 @@ class TFSwiftFormerPreTrainedModel(TFPreTrainedModel):
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
-            # FIXME: In the mobileViT these values come from the config except the batch size, what should I put here?
-            shape=(6, 256, 256, 3),
+            # FIXME: In the vit these values come from the config except the batch size, what should I put here?
+            shape=(5, self.config.num_channels, 256, 256),
             dtype=tf.float32,
         )
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
@@ -754,4 +754,12 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
+        )
+
+    def serving_output(self, output: TFImageClassifierOutputWithNoAttention) -> TFImageClassifierOutputWithNoAttention:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+
+        return TFImageClassifierOutputWithNoAttention(
+            logits=output.logits,
+            hidden_states=hs,
         )
