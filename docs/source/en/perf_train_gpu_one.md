@@ -500,4 +500,4 @@ replaced to use PyTorch's native attention with:
 model = model.to_bettertransformer()
 ```
 
-Training can then be done as usual.
+Once converted, train the model as usual.
