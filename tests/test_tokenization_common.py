@@ -2125,9 +2125,10 @@ class TokenizerTesterMixin:
         for token in new_tokens:
             with self.subTest(f"testing with {token.content[1:-1]}"):
                 space = tokenizer.tokenize(" ")[0]
-                if len(space) > 0:
+                if len(space) > 1:
                     # BPE adds a spiece underline
                     space = space[-1]
+            
                 tokenizer.add_tokens([token])
                 tokens = tokenizer.tokenize(f"This sentence is{token}a test")
                 self.assertIn(token.content, tokens)
@@ -2163,7 +2164,7 @@ class TokenizerTesterMixin:
                     self.assertIn(space, tokens[idx + 1])
                 else:
                     idx = tokens.index(token.content)
-                    self.assertNotIn(space, tokens[idx - 1])
+                    self.assertNotIn(space, tokens[idx + 1])
 
                 if not token.rstrip:
                     idx = tokens.index(token.content)
