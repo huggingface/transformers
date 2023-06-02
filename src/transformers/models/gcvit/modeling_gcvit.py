@@ -327,7 +327,7 @@ class GCViTEmbeddings(nn.Module):
 
         embeddings, output_dimensions = self.patch_embeddings(pixel_values)
         embeddings = self.dropout(embeddings)
-
+        
         return embeddings, output_dimensions
 
 
@@ -394,14 +394,15 @@ class GCViTReducePatchSize(nn.Module):
         
 
     def forward(self, x):
-        x = x.contiguous()
         x = x.permute(0, 2, 3, 1) #(B, H, W, C)
+        x = x.contiguous()
         x = self.norm1(x)
         x = x.permute(0, 3, 1, 2) #(B, C, H, W)
         x = x + self.conv(x)
         x = self.reduction(x)
-        x = x.permute(0, 2, 3, 1)
+        x = x.permute(0, 2, 3, 1) #(B, H, W, C)
         x = self.norm2(x)
+        x = x.permute(0, 3, 1, 2) #(B, C, H, W)
         return x
 
 
@@ -432,14 +433,12 @@ class GCViTPatchEmbeddings(nn.Module):
 
         embeddings = self.projection(pixel_values)
         embeddings = self.conv_down(embeddings)
-        embeddings = embeddings.permute(0,3,1,2)
-        embeddings = embeddings.squeeze()
-        _, height, width = embeddings.shape
+        _, _, height, width = embeddings.shape
         output_dimensions = (height, width)
         return embeddings, output_dimensions
 
 
-# Almost copied from transformers.models.swin.modeling_swin.Swinv2SelfAttention
+
 class GCViTSelfAttention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
@@ -488,7 +487,7 @@ class GCViTSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
-        batch_size, dim, num_channels = hidden_states.shape
+        batch_size, dim, num_channels = hidden_states.shape  
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -585,6 +584,7 @@ class GCViTGlobalSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        q_global: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
@@ -696,10 +696,12 @@ class GCViTWindowAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        q_global: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
+
         self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -814,27 +816,33 @@ class GCViTLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         input_dimensions: Tuple[int, int],
-        q_global: torch.Tensor
+        q_global: torch.Tensor,
+        head_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = False,
+        always_partition: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]: 
-        
+
+        # hidden_states = hidden_states.unsqueeze(0) # Add Batch
         height, width = input_dimensions
-        batch_size, _, channels = hidden_states.size()
+        batch_size, channels, _, _ = hidden_states.size()
+        hidden_states = hidden_states.permute(0, 2, 3, 1) # B H W C
         shortcut = hidden_states
 
+
         hidden_states = self.layernorm_before(hidden_states)
-        h_w = torch.div(height, self.window_size, rounding_mode='floor')
-        w_w = torch.div(width, self.window_size, rounding_mode='floor')
-        x_windows = window_partition(hidden_states, self.window_size, h_w, w_w)
-        x_windows = x_windows.view(-1, height * width, channels)
-        attn_windows = self.attn(x_windows, q_global)
-        hidden_states = window_reverse(attn_windows, self.window_size, height, width, h_w, w_w)
+        x_windows = window_partition(hidden_states, self.window_size)
+        x_windows = x_windows.view(-1, self.window_size * self.window_size, channels)
+        attn_windows = self.attention(x_windows, q_global)
+
+        hidden_states = window_reverse(attn_windows[0], self.window_size, height, width)
         hidden_states = shortcut + self.drop_path(self.gamma1 * hidden_states)
 
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
         layer_output = self.output(layer_output)
         layer_output = hidden_states + self.drop_path(self.gamma2 * layer_output)
-        
+        layer_output = layer_output.permute(0, 3, 1, 2) # B C H W
+
         return layer_output
 
 
@@ -861,10 +869,8 @@ class GCViTStage(nn.Module):
         )
 
         # Reduce patch size layer
-        self.downsample= None if not downsample else GCViTReducePatchSize(dim=dim, norm_layer=nn.LayerNorm)
-
+        self.downsample= None if not downsample else GCViTReducePatchSize(dim = dim, norm_layer=nn.LayerNorm)
         self.q_global_gen = GCViTGlobalQueryGen(dim, input_resolution, image_resolution, window_size, num_heads)
-
     
     def forward(
         self,
@@ -875,20 +881,22 @@ class GCViTStage(nn.Module):
         always_partition: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         height, width = input_dimensions
+
         for i, layer_module in enumerate(self.blocks):
             layer_head_mask = head_mask[i] if head_mask is not None else None
-            # aquí entra a cada uno de los forward de cada GCViTLayer
+            q_global = self.q_global_gen(hidden_states)
+            
             layer_outputs = layer_module(
-                hidden_states, input_dimensions, layer_head_mask, output_attentions, always_partition
+                hidden_states, input_dimensions, q_global, layer_head_mask, output_attentions, always_partition
             )
-
-            hidden_states = layer_outputs[0]
+            
+            hidden_states = layer_outputs
 
         hidden_states_before_downsampling = hidden_states
         if self.downsample is not None:
             height_downsampled, width_downsampled = (height + 1) // 2, (width + 1) // 2
             output_dimensions = (height, width, height_downsampled, width_downsampled)
-            hidden_states = self.downsample(hidden_states_before_downsampling, input_dimensions)
+            hidden_states = self.downsample(hidden_states_before_downsampling)
         else:
             output_dimensions = (height, width, height, width)
 
@@ -896,6 +904,8 @@ class GCViTStage(nn.Module):
 
         if output_attentions:
             stage_outputs += layer_outputs[1:]
+
+
         return stage_outputs
 
 
@@ -959,8 +969,7 @@ class GCViTGlobalQueryGen(nn.Module):
         self.dim_head = torch.div(dim, self.num_heads, rounding_mode='floor')
 
     def forward(self, x):
-        x = x.permute(0, 3, 1, 2) # B C H W
-        x = self.to_q_global(x).permute(0, 2, 3, 1)
+        x = self.to_q_global(x)
         B = x.shape[0]
         x = x.reshape(B, 1, self.N, self.num_heads, self.dim_head).permute(0, 1, 3, 2, 4)
         return x
@@ -978,7 +987,7 @@ class GCViTEncoder(nn.Module):
                 
                 GCViTStage(
                     config=config,
-                    dim=int(config.embed_dim * 2**(max(i_layer - 1, 0))),
+                    dim=int(config.embed_dim * 2**(max(i_layer, 0))),
                     num_heads=config.num_heads[i_layer],
                     window_size=config.window_size[i_layer],
                     depth=config.depths[i_layer],
@@ -1022,7 +1031,6 @@ class GCViTEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         return module(*inputs, output_attentions)
@@ -1207,7 +1215,6 @@ class GCViTModel(GCViTPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, len(self.config.depths))
 
         embedding_output, input_dimensions = self.embeddings(pixel_values)
-
         encoder_outputs = self.encoder(
             embedding_output,
             input_dimensions,
@@ -1216,12 +1223,13 @@ class GCViTModel(GCViTPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
         sequence_output = encoder_outputs[0]
+        sequence_output = sequence_output.permute(0, 2, 3, 1) # B H W C
         sequence_output = self.layernorm(sequence_output)
 
         pooled_output = None
         if self.pooler is not None:
+            sequence_output = sequence_output.squeeze()
             pooled_output = self.pooler(sequence_output.transpose(1, 2))
             pooled_output = torch.flatten(pooled_output, 1)
 
