@@ -17,9 +17,13 @@ from typing import Tuple, Union
 
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_torch_available, requires_backends
+from ...utils import is_timm_available, is_torch_available, requires_backends
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_timm_backbone import TimmBackboneConfig
+
+
+if is_timm_available():
+    import timm
 
 
 if is_torch_available():
@@ -38,8 +42,6 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
 
     def __init__(self, config, **kwargs):
         requires_backends(self, "timm")
-        import timm
-
         super().__init__(config)
         self.config = config
 
@@ -100,7 +102,7 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
 
     def _init_weights(self, module):
         """
-        Empty init weights function to ensure compatibitliy of the class in the library.
+        Empty init weights function to ensure compatibility of the class in the library.
         """
         pass
 
