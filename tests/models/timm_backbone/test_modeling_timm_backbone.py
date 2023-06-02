@@ -177,6 +177,10 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, unittest.Test
     def test_channels(self):
         pass
 
+    @unittest.skip("TimmBackbone doesn't support output_attentions.")
+    def test_torchscript_output_attentions(self):
+        pass
+
     @unittest.skip("Safetensors is not supported by timm.")
     def test_can_use_safetensors(self):
         pass
