@@ -635,8 +635,7 @@ class Trainer:
                         f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
                         "but SageMaker Model Parallelism < 1.10 does not support FP16 in trainer."
                     )
-
-        if (args.fp16 or args.bf16) and self.sharded_ddp is not None:
+        if args.fp16 or args.bf16:
             if args.half_precision_backend == "auto":
                 if args.device == torch.device("cpu"):
                     if args.fp16:
@@ -653,30 +652,29 @@ class Trainer:
         self.do_grad_scaling = False
         if (args.fp16 or args.bf16) and not (self.is_deepspeed_enabled or is_sagemaker_mp_enabled()):
             # deepspeed and SageMaker Model Parallel manage their own half precision
-            if self.sharded_ddp is not None:
-                if args.half_precision_backend == "cuda_amp":
-                    self.use_cuda_amp = True
-                    self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
-                    #  bf16 does not need grad scaling
-                    self.do_grad_scaling = self.amp_dtype == torch.float16
-                    if self.do_grad_scaling:
-                        if self.sharded_ddp is not None:
-                            self.scaler = ShardedGradScaler()
-                        elif self.fsdp is not None:
-                            from torch.distributed.fsdp.sharded_grad_scaler import (
-                                ShardedGradScaler as FSDPShardedGradScaler,
-                            )
+            if args.half_precision_backend == "cuda_amp":
+                self.use_cuda_amp = True
+                self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
+                #  bf16 does not need grad scaling
+                self.do_grad_scaling = self.amp_dtype == torch.float16
+                if self.do_grad_scaling:
+                    if self.sharded_ddp is not None:
+                        self.scaler = ShardedGradScaler()
+                    elif self.fsdp is not None:
+                        from torch.distributed.fsdp.sharded_grad_scaler import (
+                            ShardedGradScaler as FSDPShardedGradScaler,
+                        )
 
-                            self.scaler = FSDPShardedGradScaler()
-                        elif is_torch_tpu_available():
-                            from torch_xla.amp import GradScaler
+                        self.scaler = FSDPShardedGradScaler()
+                    elif is_torch_tpu_available():
+                        from torch_xla.amp import GradScaler
 
-                            self.scaler = GradScaler()
-                        else:
-                            self.scaler = torch.cuda.amp.GradScaler()
-                elif args.half_precision_backend == "cpu_amp":
-                    self.use_cpu_amp = True
-                    self.amp_dtype = torch.bfloat16
+                        self.scaler = GradScaler()
+                    else:
+                        self.scaler = torch.cuda.amp.GradScaler()
+            elif args.half_precision_backend == "cpu_amp":
+                self.use_cpu_amp = True
+                self.amp_dtype = torch.bfloat16
             elif args.half_precision_backend == "apex":
                 if not is_apex_available():
                     raise ImportError(
