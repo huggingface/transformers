@@ -537,11 +537,11 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
             while trust_remote_code is None:
                 answer = input(
                     f"Loading {model_name} requires to execute some code in that repo, you can inspect the content of "
-                    f"the repository at https://hf.co/{model_name}. Do you accept? [y/n] "
+                    f"the repository at https://hf.co/{model_name}. Do you accept? [y/N] "
                 )
                 if answer.lower() in ["yes", "y", "1"]:
                     trust_remote_code = True
-                elif answer.lower() in ["no", "n", "0"]:
+                elif answer.lower() in ["no", "n", "0", ""]:
                     trust_remote_code = False
             signal.alarm(0)
         elif has_remote_code:
