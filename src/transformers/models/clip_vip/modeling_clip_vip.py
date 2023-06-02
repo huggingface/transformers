@@ -433,40 +433,44 @@ class CLIPViPVisionAttention(CLIPViPAttention):
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
-        # qkv: [B*num_heads, M+N*L, head_dim]
+        # qkv: [bsz*num_heads, num_cls+num_frames*num_patches, head_dim]
         # in-frame attention:
-        q = query_states[:, num_cls:].reshape(-1, num_patches, self.head_dim)  # [B*num_heads*N, L, head_dim]
+        q = query_states[:, num_cls:].reshape(
+            -1, num_patches, self.head_dim
+        )  # [bsz*num_heads*num_frames, num_patches, head_dim]
         k = (
             key_states[:, :num_cls].repeat(1, num_frames, 1).reshape(-1, num_cls, self.head_dim)
-        )  # [B*num_heads*N, M, head_dim]
+        )  # [bsz*num_heads*num_frames, num_cls, head_dim]
         k = torch.cat(
             [k, key_states[:, num_cls:].reshape(-1, num_patches, self.head_dim)], dim=1
-        )  # [B*num_heads*N, M+L, head_dim]
+        )  # [bsz*num_heads*num_frames, num_cls + num_patches, head_dim]
         v = (
             value_states[:, :num_cls].repeat(1, num_frames, 1).reshape(-1, num_cls, self.head_dim)
-        )  # [B*num_heads*N, M, head_dim]
+        )  # [bsz*num_heads*num_frames, num_cls, head_dim]
         v = torch.cat(
             [v, value_states[:, num_cls:].reshape(-1, num_patches, self.head_dim)], dim=1
-        )  # [B*num_heads*N, M+L, head_dim]
+        )  # [bsz*num_heads*num_frames, num_cls+num_patches, head_dim]
         attn_weights = torch.bmm(q, k.transpose(1, 2))
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        attn_output = torch.bmm(attn_probs, v)  # [B*num_heads*N, L, head_dim]
+        attn_output = torch.bmm(attn_probs, v)  # [bsz*num_heads*num_frames, num_patches, head_dim]
         attn_output = attn_output.view(bsz, self.num_heads, num_frames, num_patches, self.head_dim)
         attn_output = attn_output.permute(0, 2, 3, 1, 4)
-        attn_output_frames = attn_output.reshape(bsz, num_frames * num_patches, embed_dim)  # [B, N*L, C]
+        attn_output_frames = attn_output.reshape(
+            bsz, num_frames * num_patches, embed_dim
+        )  # [bsz, num_frames*num_patches, channels]
 
         # cls divided attention:
-        q = query_states[:, :num_cls]  # [B*num_heads, M, head_dim]
-        k = key_states  # [B*num_heads, M+N*L, head_dim]
-        v = value_states  # [B*num_heads, M+N*L, head_dim]
+        q = query_states[:, :num_cls]  # [bsz*num_heads, num_cls, head_dim]
+        k = key_states  # [bsz*num_heads, num_cls+num_frames*num_patches, head_dim]
+        v = value_states  # [bsz*num_heads, num_cls+num_frames*num_patches, head_dim]
         attn_weights = torch.bmm(q, k.transpose(1, 2))
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        attn_output = torch.bmm(attn_probs, v)  # [B*num_heads, M, head_dim]
+        attn_output = torch.bmm(attn_probs, v)  # [bsz*num_heads, num_cls, head_dim]
         attn_output = attn_output.view(bsz, self.num_heads, num_cls, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
-        attn_output_cls = attn_output.reshape(bsz, num_cls, embed_dim)  # [B, M, C]
+        attn_output_cls = attn_output.reshape(bsz, num_cls, embed_dim)  # [bsz, num_cls, channels]
 
         attn_output = torch.cat([attn_output_cls, attn_output_frames], dim=1)
 
@@ -667,7 +671,7 @@ CLIP_VIP_TEXT_INPUTS_DOCSTRING = r"""
 
 CLIP_VIP_VISION_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
