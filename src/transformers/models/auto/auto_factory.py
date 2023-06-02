@@ -533,6 +533,9 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
         if kwargs.get("out_features", None) is not None:
             raise ValueError("Cannot specify out_features for timm backbones")
 
+        if kwargs.get("output_loading_info", False):
+            raise ValueError("Cannot specify `output_loading_info=True` when loading from timm")
+
         num_channels = kwargs.pop("num_channels", config.num_channels)
         features_only = kwargs.pop("features_only", config.features_only)
         use_pretrained_backbone = kwargs.pop("use_pretrained_backbone", config.use_pretrained_backbone)

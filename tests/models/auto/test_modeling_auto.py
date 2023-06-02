@@ -231,9 +231,11 @@ class AutoModelTest(unittest.TestCase):
     def test_auto_backbone_timm_model_from_pretrained(self):
         # Configs can't be loaded for timm models
         model = AutoBackbone.from_pretrained("resnet18", use_timm_backbone=True)
-        model, loading_info = AutoBackbone.from_pretrained(
-            "resnet18", use_timm_backbone=True, output_loading_info=True
-        )
+
+        with pytest.raises(ValueError):
+            # We can't pass output_loading_info=True as we're loading from timm
+            AutoBackbone.from_pretrained("resnet18", use_timm_backbone=True, output_loading_info=True)
+
         self.assertIsNotNone(model)
         self.assertIsInstance(model, TimmBackbone)
 
