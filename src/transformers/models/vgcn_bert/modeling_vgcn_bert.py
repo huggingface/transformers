@@ -1023,9 +1023,12 @@ class VGCNBertForMaskedLM(VGCNBertPreTrainedModel):
         prediction_logits = self.vocab_layer_norm(prediction_logits)  # (bs, seq_length, dim)
         prediction_logits = self.vocab_projector(prediction_logits)  # (bs, seq_length, vocab_size)
 
+        # remove graph embedding outputs
+        prediction_logits = prediction_logits[:, : input_ids.size(1), :]
+
         mlm_loss = None
         if labels is not None:
-            mlm_loss = self.mlm_loss_fct(prediction_logits.view(-1, prediction_logits.size(-1)), labels.view(-1))
+            mlm_loss = self.mlm_loss_fct(prediction_logits.reshape(-1, prediction_logits.size(-1)), labels.view(-1))
 
         if not return_dict:
             output = (prediction_logits,) + dlbrt_output[1:]
@@ -1252,6 +1255,9 @@ class VGCNBertForQuestionAnswering(VGCNBertPreTrainedModel):
 
         hidden_states = self.dropout(hidden_states)  # (bs, max_query_len, dim)
         logits = self.qa_outputs(hidden_states)  # (bs, max_query_len, 2)
+        # remove graph embedding outputs
+        logits = logits[:, : input_ids.size(1), :]
+
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1).contiguous()  # (bs, max_query_len)
         end_logits = end_logits.squeeze(-1).contiguous()  # (bs, max_query_len)
@@ -1369,10 +1375,13 @@ class VGCNBertForTokenClassification(VGCNBertPreTrainedModel):
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
 
+        # remove graph embedding outputs
+        logits = logits[:, : input_ids.size(1), :]
+
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            loss = loss_fct(logits.reshape(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[1:]

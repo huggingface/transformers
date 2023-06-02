@@ -227,9 +227,7 @@ class VGCNBertModelTester(object):
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.seq_length + self.vgcn_graph_embds_dim, self.vocab_size)
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_vgcn_bert_for_question_answering(
         self,
@@ -250,12 +248,8 @@ class VGCNBertModelTester(object):
         result = model(
             input_ids, attention_mask=input_mask, start_positions=sequence_labels, end_positions=sequence_labels
         )
-        self.parent.assertEqual(
-            result.start_logits.shape, (self.batch_size, self.seq_length + self.vgcn_graph_embds_dim)
-        )
-        self.parent.assertEqual(
-            result.end_logits.shape, (self.batch_size, self.seq_length + self.vgcn_graph_embds_dim)
-        )
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_vgcn_bert_for_sequence_classification(
         self,
@@ -296,9 +290,7 @@ class VGCNBertModelTester(object):
         model.eval()
 
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.seq_length + self.vgcn_graph_embds_dim, self.num_labels)
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_vgcn_bert_for_multiple_choice(
         self,
@@ -399,6 +391,7 @@ class VGCNBertModelTest(ModelTesterMixin, unittest.TestCase):
             *config_and_inputs, *wgraphs_and_tokenizer_id_maps
         )
 
+    # TODO: upload vgcn-bert model weights file to hub
     @slow
     def test_model_from_pretrained(self):
         for model_name in VGCNBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -429,6 +422,7 @@ class VGCNBertModelTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp:
                 torch.jit.save(traced_model, os.path.join(tmp, "traced_model.pt"))
                 loaded = torch.jit.load(os.path.join(tmp, "traced_model.pt"), map_location=torch_device)
+                # TODO: correct this failure
                 loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
 
 
