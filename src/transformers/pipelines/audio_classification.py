@@ -17,7 +17,7 @@ from typing import Union
 import numpy as np
 import requests
 
-from ..utils import add_end_docstrings, is_torch_available, logging
+from ..utils import add_end_docstrings, is_torch_available, is_torchaudio_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
@@ -176,7 +176,13 @@ class AudioClassificationPipeline(Pipeline):
             inputs = _inputs
             if in_sampling_rate != self.feature_extractor.sampling_rate:
                 import torch
-                from torchaudio import functional as F
+
+                if is_torchaudio_available():
+                    from torchaudio import functional as F
+                else:
+                    raise ImportError(
+                        "torchaudio is required to resample audio samples in AutomaticSpeechRecognitionPipeline."
+                    )
 
                 inputs = F.resample(
                     torch.from_numpy(inputs), in_sampling_rate, self.feature_extractor.sampling_rate
