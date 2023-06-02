@@ -345,12 +345,23 @@ and launch DeepSpeed:
 
 ## Using torch.compile
 
-PyTorch 2.0 introduces a new compile function, you can learn more about it [in their documentation](https://pytorch.org/get-started/pytorch-2.0/). It uses Python’s frame evaluation API to automatically create a graph from existing PyTorch programs. After capturing the graph, different backends can be deployed to lower the graph to an optimized engine. You can choose one option below for performance boost.
+PyTorch 2.0 introduced a new compile function that doesn't require any modification to existing PyTorch code but can 
+optimize your code by adding a single line of code: `model = torch.compile(model)`.
+
+If using [`Trainer`], you only need `to` pass the `torch_compile` option in the [`TrainingArguments`], e.g.: 
+
+```python
+training_args = TrainingArguments(torch_compile=True, **default_args)
+```
+
+`torch.compile` uses Python's frame evaluation API to automatically create a graph from existing PyTorch programs. After 
+capturing the graph, different backends can be deployed to lower the graph to an optimized engine. 
+You can find more details and benchmarks in [PyTorch documentation](https://pytorch.org/get-started/pytorch-2.0/).
 
 `torch.compile` has a growing list of backends, which can be found in [backends.py](https://github.com/pytorch/pytorch/blob/master/torch/_dynamo/optimizations/backends.py)
 or `torchdynamo.list_backends()` each of which with its optional dependencies.
 
-Some of the most commonly used backends are
+Choose which backend to use by specifying it via `torch_compile_backend` in the [`TrainingArguments`].  Some of the most commonly used backends are:
 
 **Debugging backends**:
 * `dynamo.optimize("eager")` - Uses PyTorch to run the extracted GraphModule. This is quite useful in debugging TorchDynamo issues.
@@ -367,6 +378,8 @@ Some of the most commonly used backends are
 * `dynamo.optimize("fx2trt")` -  Uses Nvidia TensorRT for inference optimizations.  [Read more](https://github.com/pytorch/TensorRT/blob/master/docsrc/tutorials/getting_started_with_fx_path.rst)
 * `dynamo.optimize("onnxrt")` -  Uses ONNXRT for inference on CPU/GPU.  [Read more](https://onnxruntime.ai/)
 * `dynamo.optimize("ipex")` -  Uses IPEX for inference on CPU.  [Read more](https://github.com/intel/intel-extension-for-pytorch)
+
+For an example of using `torch.compile` with 🤗 Transformers, check out this [blog post on fine-tuning a BERT model for Text Classification using the newest PyTorch 2.0 features](https://www.philschmid.de/getting-started-pytorch-2-0-transformers)
 
 ## Using 🤗 Accelerate
 
