@@ -2320,7 +2320,10 @@ class Trainer:
 
             # Run delayed LR scheduler now that metrics are populated
             if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                self.lr_scheduler.step(metrics[self.args.metric_for_best_model])
+                metric_to_check = self.args.metric_for_best_model
+                if not metric_to_check.startswith("eval_"):
+                    metric_to_check = f"eval_{metric_to_check}"
+                self.lr_scheduler.step(metrics[metric_to_check])
 
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
