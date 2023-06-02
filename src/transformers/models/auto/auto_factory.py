@@ -528,10 +528,10 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
 
         use_timm = kwargs.pop("use_timm_backbone", True)
         if not use_timm:
-            raise ValueError("use_timm_backbone must be True for timm backbones")
+            raise ValueError("`use_timm_backbone` must be `True` for timm backbones")
 
         if kwargs.get("out_features", None) is not None:
-            raise ValueError("Cannot specify out_features for timm backbones")
+            raise ValueError("Cannot specify `out_features` for timm backbones")
 
         if kwargs.get("output_loading_info", False):
             raise ValueError("Cannot specify `output_loading_info=True` when loading from timm")
