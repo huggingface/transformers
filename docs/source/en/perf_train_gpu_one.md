@@ -130,7 +130,9 @@ an in-depth explanation of gradient checkpointing, refer to [this great article]
 To enable gradient checkpointing in the [`Trainer`], pass corresponding a flag to the [`TrainingArguments`]:
 
 ```py
-training_args = TrainingArguments(per_device_train_batch_size=1, gradient_accumulation_steps=4, gradient_checkpointing=True, **default_args)
+training_args = TrainingArguments(
+    per_device_train_batch_size=1, gradient_accumulation_steps=4, gradient_checkpointing=True, **default_args
+)
 ```
 
 Alternatively, use 🤗 Accelerate - find the 🤗 Accelerate example [further in this guide](#using--accelerate). 
