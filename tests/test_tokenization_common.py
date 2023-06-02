@@ -2114,28 +2114,30 @@ class TokenizerTesterMixin:
         if not self.test_slow_tokenizer:
             self.skipTest("Currently this test is only for slow tokenizers")
             return
-        tokenizers = self.get_tokenizers(fast=False)
+        tokenizer = self.tokenizer_class.from_pretrained(self.tokenizer_class.PRETRAINED_VOCAB_FILES_MAP[ self.from_pretrained_vocab_key
+                ].keys()
+        )
         new_tokens = []
-        new_tokens.append(AddedToken("<my_new_token_1>", lstrip=False, rstrip=False))
-        new_tokens.append(AddedToken("<my_new_token_2>", lstrip=True, rstrip=False))
-        new_tokens.append(AddedToken("<my_new_token_3>", lstrip=False, rstrip=True))
-        new_tokens.append(AddedToken("<my_new_token_4>", lstrip=True, rstrip=True))
+        new_tokens.append(AddedToken("<lstrip=False, rstrip=False>", lstrip=False, rstrip=False))
+        new_tokens.append(AddedToken("<lstrip=True, rstrip=False>", lstrip=True, rstrip=False))
+        new_tokens.append(AddedToken("<lstrip=False, rstrip=True>", lstrip=False, rstrip=True))
+        new_tokens.append(AddedToken("<lstrip=True, rstrip=True>", lstrip=True, rstrip=True))
 
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                for token in new_tokens:
-                    tokenizer.add_tokens([token])
-                    tokens = tokenizer.tokenize(f"This sentence is{token}a test")
-                    self.assertIn(token.content, tokens)
+        
+        for token in new_tokens:
+            with self.subTest(f"{token.content.replace('<','>','')}"):
+                tokenizer.add_tokens([token])
+                tokens = tokenizer.tokenize(f"This sentence is{token}a test")
+                self.assertIn(token.content, tokens)
 
-                    tokens = tokenizer.tokenize(f"This sentence is {token}a test")
-                    self.assertIn(token.content, tokens)
+                tokens = tokenizer.tokenize(f"This sentence is {token}a test")
+                self.assertIn(token.content, tokens)
 
-                    tokens = tokenizer.tokenize(f"This sentence is{token} a test")
-                    self.assertIn(token.content, tokens)
+                tokens = tokenizer.tokenize(f"This sentence is{token} a test")
+                self.assertIn(token.content, tokens)
 
-                    tokens = tokenizer.tokenize(f"This sentence is {token} a test")
-                    self.assertIn(token.content, tokens)
+                tokens = tokenizer.tokenize(f"This sentence is {token} a test")
+                self.assertIn(token.content, tokens)
 
         # for non BPE based tokenizers we need to test that lstrip and rstrip are respected
 
