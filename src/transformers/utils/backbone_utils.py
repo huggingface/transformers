@@ -137,13 +137,7 @@ class BackboneMixin:
         verify_out_features_out_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
-        # Here we remap the out_indices to the indices of the stages in self.stage_names and self.num_channels
-        # to match the transformers model.
-        out_features, out_indices = _align_output_features_output_indices(
-            out_features=out_features, out_indices=None, stage_names=self.stage_names
-        )
-        self.out_features = out_features
-        self.out_indices = out_indices
+        self._out_features, self._out_indices = out_features, out_indices
 
     def _init_transformers_backbone(self, config) -> None:
         stage_names = getattr(config, "stage_names")
