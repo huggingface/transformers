@@ -132,8 +132,8 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         )
 
         input_features = feature_extractor(speech_input, sampling_rate=16_000, return_tensors="np")
-        self.assertTrue(input_features.input_features.ndim == 4)
-        self.assertEqual(input_features.input_features.shape[-1], 512)
+        self.assertTrue(input_features.inputs_embeds.ndim == 3)
+        self.assertEqual(input_features.inputs_embeds.shape[-1], 512)
 
         self.assertTrue(input_features.beatsteps.ndim == 2)
         self.assertTrue(input_features.extrapolated_beatstep.ndim == 2)
@@ -145,14 +145,12 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
             x["sampling_rate"] for x in speech_samples
         ][0]
         feaure_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
-        input_features = feaure_extractor(
-            input_speech, sampling_rate=sampling_rate, return_tensors="pt"
-        ).input_features
+        inputs_embeds = feaure_extractor(input_speech, sampling_rate=sampling_rate, return_tensors="pt").inputs_embeds
 
         EXPECTED_INPUT_FEATURES = torch.tensor(
             [[-7.1493, -6.8701, -4.3214], [-5.9473, -5.7548, -3.8438], [-6.1324, -5.9018, -4.3778]]
         )
-        self.assertTrue(torch.allclose(input_features[0, 0, :3, :3], EXPECTED_INPUT_FEATURES, atol=1e-4))
+        self.assertTrue(torch.allclose(inputs_embeds[0, :3, :3], EXPECTED_INPUT_FEATURES, atol=1e-4))
 
     def test_attention_mask(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
@@ -174,17 +172,19 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
             [speech_input1, speech_input2], sampling_rate=[44_100, 16_000], return_tensors="np"
         )
 
+        self.assertTrue(hasattr(input_features, "attention_mask"))
+
         # check shapes
-        self.assertEqual(input_features["attention_mask_input_features"].shape[0], 2)
+        self.assertTrue(input_features["attention_mask"].ndim == 2)
         self.assertEqual(input_features["attention_mask_beatsteps"].shape[0], 2)
         self.assertEqual(input_features["attention_mask_extrapolated_beatstep"].shape[0], 2)
 
         # check if they are any values except 0 and 1
-        self.assertTrue(np.max(input_features["attention_mask_input_features"]) == 1)
+        self.assertTrue(np.max(input_features["attention_mask"]) == 1)
         self.assertTrue(np.max(input_features["attention_mask_beatsteps"]) == 1)
         self.assertTrue(np.max(input_features["attention_mask_extrapolated_beatstep"]) == 1)
 
-        self.assertTrue(np.min(input_features["attention_mask_input_features"]) == 0)
+        self.assertTrue(np.min(input_features["attention_mask"]) == 0)
         self.assertTrue(np.min(input_features["attention_mask_beatsteps"]) == 0)
         self.assertTrue(np.min(input_features["attention_mask_extrapolated_beatstep"]) == 0)
 
@@ -214,8 +214,8 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
             [speech_input1, speech_input2, speech_input3], sampling_rate=[44_100, 16_000, 48_000]
         )
 
+        self.assertEqual(len(input_features["inputs_embeds"].shape), 3)
         # check shape
-        self.assertEqual(input_features["input_features"].shape[0], 3)
         self.assertEqual(input_features["beatsteps"].shape[0], 3)
         self.assertEqual(input_features["extrapolated_beatstep"].shape[0], 3)
 
@@ -246,10 +246,10 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         )
 
         # check np array or not
-        self.assertEqual(type(input_features["input_features"]), np.ndarray)
+        self.assertEqual(type(input_features["inputs_embeds"]), np.ndarray)
 
         # check shape
-        self.assertEqual(input_features["input_features"].shape[0], 3)
+        self.assertEqual(len(input_features["inputs_embeds"].shape), 3)
 
     def test_batch_feature_pt(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
@@ -278,10 +278,10 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         )
 
         # check pt tensor or not
-        self.assertEqual(type(input_features["input_features"]), torch.Tensor)
+        self.assertEqual(type(input_features["inputs_embeds"]), torch.Tensor)
 
         # check shape
-        self.assertEqual(input_features["input_features"].shape[0], 3)
+        self.assertEqual(len(input_features["inputs_embeds"].shape), 3)
 
     @require_tf
     def test_batch_feature_tf(self):
@@ -313,10 +313,10 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         )
 
         # check tf tensor or not
-        self.assertTrue(tf.is_tensor(input_features["input_features"]))
+        self.assertTrue(tf.is_tensor(input_features["inputs_embeds"]))
 
         # check shape
-        self.assertEqual(input_features["input_features"].shape[0], 3)
+        self.assertEqual(len(input_features["inputs_embeds"].shape), 3)
 
     @unittest.skip(
         "Pop2PianoFeatureExtractor does not supports padding externally(while processing audioes in batches padding is automatically applied to max_length)"

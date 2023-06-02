@@ -27,14 +27,13 @@ from transformers.testing_utils import (
     slow,
 )
 
+from ...generation.test_utils import GreedySearchEncoderDecoderOutput
+
 
 if is_torch_available():
     import torch
 
-    from transformers.models.pop2piano.modeling_pop2piano import (
-        Pop2PianoForConditionalGeneration,
-        Pop2PianoGreedySearchEncoderDecoderOutput,
-    )
+    from transformers.models.pop2piano.modeling_pop2piano import Pop2PianoForConditionalGeneration
 
 requirements = is_torch_available() and is_pretty_midi_available()
 if requirements:
@@ -48,29 +47,46 @@ if requirements:
 class Pop2PianoTokenizerTest(unittest.TestCase):
     def test_call(self):
         tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
-        model_output = Pop2PianoGreedySearchEncoderDecoderOutput(sequences=[torch.ones([120, 96])])
+        model_output = GreedySearchEncoderDecoderOutput(sequences=torch.ones([120, 96]))
         input_features = BatchFeature(
             {"beatsteps": torch.ones([1, 955]), "extrapolated_beatstep": torch.ones([1, 1000])}
         )
 
-        output = tokenizer(relative_tokens=model_output.sequences, input_features=input_features)
+        output = tokenizer(token_ids=model_output.sequences, input_features=input_features)
         self.assertTrue(isinstance(output, pretty_midi.pretty_midi.PrettyMIDI))
 
     def test_call_batched(self):
         tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
-        model_output = Pop2PianoGreedySearchEncoderDecoderOutput(
-            sequences=[torch.ones([120, 96]), torch.zeros([100, 50])]
+        model_output = GreedySearchEncoderDecoderOutput(
+            sequences=torch.concatenate(
+                [
+                    torch.randint(size=[120, 96], low=0, high=70, dtype=torch.long),
+                    torch.zeros(size=[1, 96], dtype=torch.long),
+                    torch.randint(size=[50, 96], low=0, high=40, dtype=torch.long),
+                    torch.zeros(size=[1, 96], dtype=torch.long),
+                ],
+                axis=0,
+            )
         )
         input_features = BatchFeature(
             {
                 "beatsteps": torch.ones([2, 955]),
                 "extrapolated_beatstep": torch.ones([2, 1000]),
+                "attention_mask": torch.concatenate(
+                    [
+                        torch.ones([120, 96], dtype=torch.long),
+                        torch.zeros([1, 96], dtype=torch.long),
+                        torch.ones([50, 96], dtype=torch.long),
+                        torch.zeros([1, 96], dtype=torch.long),
+                    ],
+                    axis=0,
+                ),
                 "attention_mask_beatsteps": torch.ones([2, 955]),
                 "attention_mask_extrapolated_beatstep": torch.ones([2, 1000]),
             }
         )
 
-        output = tokenizer(relative_tokens=model_output.sequences, input_features=input_features)
+        output = tokenizer(token_ids=model_output.sequences, input_features=input_features)
         # check length
         self.assertTrue(len(output) == 2)
         # check object type
@@ -87,9 +103,9 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
 
         output_fe = feature_extractor(ds["audio"][0]["array"], sampling_rate=ds["audio"][0]["sampling_rate"])
-        output_model = model.generate(output_fe, composer="composer1")
+        output_model = model.generate(inputs_embeds=output_fe["inputs_embeds"], composer="composer1")
         output_tokenizer = tokenizer(
-            relative_tokens=output_model.sequences,
+            token_ids=output_model,
             input_features=output_fe,
         )
 

@@ -318,7 +318,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     def __call__(
         self,
-        relative_tokens: Union[List, List[np.ndarray], List[torch.Tensor]],
+        token_ids: Union[List, List[np.ndarray], List[torch.Tensor]],
         input_features: BatchFeature,
     ):
         r"""
@@ -326,8 +326,8 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         midi_tokens and returns it.
 
         Args:
-            relative_tokens (List of [`~utils.TensorType`]):
-                Output of `Pop2PianoConditionalGeneration` model.
+            token_ids (List of [`~utils.TensorType`]):
+                Output tokens of `Pop2PianoConditionalGeneration` model.
             input_features (`BatchFeature`):
                 `input_features` returned by `Pop2PianoFeatureExtractor.__call__`.
         Returns:
@@ -335,49 +335,74 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
                 returns list of pretty_midi objects.
         """
 
-        # check for length mismatch
-        if (
-            len(relative_tokens) != input_features["beatsteps"].shape[0]
-            or input_features["beatsteps"].shape[0] != input_features["extrapolated_beatstep"].shape[0]
-        ):
+        # check if they have attention_masks(attention_mask, attention_mask_beatsteps, attention_mask_extrapolated_beatstep) or not
+        attention_masks_present = bool(
+            hasattr(input_features, "attention_mask")
+            and hasattr(input_features, "attention_mask_beatsteps")
+            and hasattr(input_features, "attention_mask_extrapolated_beatstep")
+        )
+
+        # if we are processing batched inputs then we must need attention_masks
+        if not attention_masks_present and input_features["beatsteps"].shape[0] > 1:
             raise ValueError(
-                "Length mistamtch between relative_tokens, beatsteps and extrapolated_beatstep! "
-                f"Found relative_tokens length - {len(relative_tokens)}, beatsteps shape - {input_features['beatsteps'].shape[0]}, extrapolated_beatsteps shape - {input_features['extrapolated_beatstep'].shape[0]}"
-                "all lengths must be same."
+                "attention_mask, attention_mask_beatsteps and attention_mask_extrapolated_beatstep must be present for batched inputs! But one of them were not present."
             )
 
-        # check for attention_mask
-        if (
-            len(relative_tokens) > 1
-            and (not hasattr(input_features, "attention_mask_beatsteps"))
-            and (not hasattr(input_features, "attention_mask_extrapolated_beatstep"))
-        ):
-            raise ValueError("attention_mask must be present for batched inputs!")
+        # check for length mismatch between inputs_embeds, beatsteps and extrapolated_beatstep
+        if attention_masks_present:
+            # since we know about the number of examples in token_ids from attention_mask
+            if (
+                sum(input_features["attention_mask"][:, 0] == 0) != input_features["beatsteps"].shape[0]
+                or input_features["beatsteps"].shape[0] != input_features["extrapolated_beatstep"].shape[0]
+            ):
+                raise ValueError(
+                    "Length mistamtch between token_ids, beatsteps and extrapolated_beatstep! "
+                    f"Found token_ids length - {token_ids.shape[0]}, beatsteps shape - {input_features['beatsteps'].shape[0]}, extrapolated_beatsteps shape - {input_features['extrapolated_beatstep'].shape[0]}"
+                )
+            if input_features["attention_mask"].shape[0] != token_ids.shape[0]:
+                raise ValueError(
+                    f"Found attention_mask of length - {input_features['attention_mask'].shape[0]} but token_ids of length - {token_ids.shape[0]}"
+                )
+        else:
+            # if there is no attention mask present then it's surely a single example
+            if input_features["beatsteps"].shape[0] != 1 or input_features["extrapolated_beatstep"].shape[0] != 1:
+                raise ValueError(
+                    "Length mistamtch of beatsteps and extrapolated_beatstep! Since attention_mask is not present the number of examples must be 1, "
+                    f"But found beatsteps length - {input_features['beatsteps'].shape[0]}, extrapolated_beatsteps length - {input_features['extrapolated_beatstep'].shape[0]}."
+                )
+
+        if attention_masks_present:
+            # check for zeros(since token_ids are seperated by zero arrays)
+            batch_idx = [e for e, i in enumerate(input_features["attention_mask"][:, 0]) if i == 0]
+        else:
+            batch_idx = [token_ids.shape[0]]
 
         pm_object_list = []
-        for index in range(len(relative_tokens)):
-            relative_token = relative_tokens[index]
+        start_idx = 0
+        for index, end_idx in enumerate(batch_idx):
+            each_tokens_ids = token_ids[start_idx:end_idx]
+            # check where the whole example ended by searching for eos_token_id and getting the upper bound
+            each_tokens_ids = each_tokens_ids[
+                :, : torch.max(torch.where(each_tokens_ids == int(self.eos_token))[1]) + 1
+            ]
             beatsteps = input_features["beatsteps"][index]
             extrapolated_beatstep = input_features["extrapolated_beatstep"][index]
 
             # if attention mask is present then mask out real array/tensor
-            if hasattr(input_features, "attention_mask_beatsteps") and hasattr(
-                input_features, "attention_mask_extrapolated_beatstep"
-            ):
+            if attention_masks_present:
                 attention_mask_beatsteps = input_features["attention_mask_beatsteps"][index]
                 attention_mask_extrapolated_beatstep = input_features["attention_mask_extrapolated_beatstep"][index]
-
                 beatsteps = beatsteps[: torch.max(torch.where(attention_mask_beatsteps == 1)[0]) + 1]
                 extrapolated_beatstep = extrapolated_beatstep[
                     : torch.max(torch.where(attention_mask_extrapolated_beatstep == 1)[0]) + 1
                 ]
 
-            relative_token = to_numpy(relative_token)
+            each_tokens_ids = to_numpy(each_tokens_ids)
             beatsteps = to_numpy(beatsteps)
             extrapolated_beatstep = to_numpy(extrapolated_beatstep)
 
             pm, notes = self.relative_batch_tokens_to_midi(
-                tokens=relative_token,
+                tokens=each_tokens_ids,
                 beatstep=extrapolated_beatstep,
                 bars_per_batch=self.num_bars,
                 cutoff_time_idx=(self.num_bars + 1) * 4,
@@ -387,6 +412,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
                 n.end += beatsteps[0]
 
             pm_object_list.append(pm)
+            start_idx += end_idx + 1  # 1 represents the zero array
 
         # if single audio then just return the object but otherwise return in list
         if len(pm_object_list) == 1:

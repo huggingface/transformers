@@ -23,7 +23,7 @@ from transformers.feature_extraction_utils import BatchFeature
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available
 
-from ...generation.test_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin, GreedySearchEncoderDecoderOutput
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
@@ -32,10 +32,7 @@ if is_torch_available():
     import torch
 
     from transformers import Pop2PianoForConditionalGeneration
-    from transformers.models.pop2piano.modeling_pop2piano import (
-        POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST,
-        Pop2PianoGreedySearchEncoderDecoderOutput,
-    )
+    from transformers.models.pop2piano.modeling_pop2piano import POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
@@ -625,33 +622,33 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
     def test_pass_with_input_features(self):
         input_features = BatchFeature(
             {
-                "input_features": torch.randint(size=(1, 75, 100, 512), low=0, high=100).type(torch.float32),
+                "inputs_embeds": torch.rand((75, 100, 512)).type(torch.float32),
                 "beatsteps": torch.randint(size=(1, 955), low=0, high=100).type(torch.float32),
                 "extrapolated_beatstep": torch.randint(size=(1, 900), low=0, high=100).type(torch.float32),
             }
-        ).to(torch_device)
-        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev").to(torch_device)
-        model_opts = model.generate(input_features=input_features, return_dict_in_generate=True)
+        )
+        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+        model_opts = model.generate(inputs_embeds=input_features["inputs_embeds"], return_dict_in_generate=True)
 
-        self.assertEqual(type(model_opts), Pop2PianoGreedySearchEncoderDecoderOutput)
-        self.assertEqual(len(model_opts.sequences), 1)
+        self.assertEqual(type(model_opts), GreedySearchEncoderDecoderOutput)
+        self.assertEqual(model_opts.sequences.ndim, 2)
 
     def test_pass_with_batched_input_features(self):
         input_features = BatchFeature(
             {
-                "input_features": torch.randint(size=(5, 100, 100, 512), low=0, high=100).type(torch.float32),
+                "inputs_embeds": torch.rand((220, 70, 512)).type(torch.float32),
                 "beatsteps": torch.randint(size=(5, 955), low=0, high=100).type(torch.float32),
                 "extrapolated_beatstep": torch.randint(size=(5, 900), low=0, high=100).type(torch.float32),
                 "attention_mask_input_features": torch.ones((5, 100, 100, 512)).type(torch.int32),
                 "attention_mask_beatsteps": torch.ones((5, 955)).type(torch.int32),
                 "attention_mask_extrapolated_beatstep": torch.ones((5, 900)).type(torch.int32),
             }
-        ).to(torch_device)
-        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev").to(torch_device)
-        model_opts = model.generate(input_features=input_features, return_dict_in_generate=True)
+        )
+        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+        model_opts = model.generate(inputs_embeds=input_features["inputs_embeds"], return_dict_in_generate=True)
 
-        self.assertEqual(type(model_opts), Pop2PianoGreedySearchEncoderDecoderOutput)
-        self.assertEqual(len(model_opts.sequences), 5)
+        self.assertEqual(type(model_opts), GreedySearchEncoderDecoderOutput)
+        self.assertEqual(model_opts.sequences.ndim, 2)
 
 
 @require_torch
@@ -682,8 +679,8 @@ class Pop2PianoModelIntegrationTests(unittest.TestCase):
     def test_full_model_integration(self):
         model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
         model.eval()
-        input_features = BatchFeature({"input_features": torch.ones([1, 75, 66, 512])})
-        outputs = model.generate(input_features=input_features).sequences[0]
+        input_features = BatchFeature({"inputs_embeds": torch.ones([75, 66, 512])})
+        outputs = model.generate(inputs_embeds=input_features["inputs_embeds"], return_dict_in_generate=True).sequences
 
         # check for shapes
         self.assertEqual(outputs.size(0), 75)

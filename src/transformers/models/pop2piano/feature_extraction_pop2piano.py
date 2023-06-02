@@ -67,7 +67,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         num_bars (`int`, *optional*, defaults to 2):
             Determines interval between each sequence.
     """
-    model_input_names = ["input_features"]
+    model_input_names = ["inputs_embeds"]
 
     def __init__(
         self,
@@ -215,32 +215,52 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
     def pad(self, inputs: BatchFeature):
         """
-        Takes input_features of shape (batch, dim1, dim2, dim3), beatsteps of shape (batch, dim1) and
+        Takes inputs_embeds of shape (batch, dim1, dim2, dim3), beatsteps of shape (batch, dim1) and
         extrapolated_beatstep of shape (batch, dim1) and returns the padded version of themselves along with the
         attention_mask. Please note that dim1, dim2, dim3 are variable sizes so the padding is applied on those axis.
         """
 
-        input_features_shapes = [input_feature.shape for input_feature in inputs["input_features"]]
+        inputs_embeds_shapes = [inputs_embed.shape for inputs_embed in inputs["inputs_embeds"]]
         beatsteps_shapes = [beatsteps.shape for beatsteps in inputs["beatsteps"]]
         ext_beatstep_shapes = [
             extrapolated_beatstep.shape for extrapolated_beatstep in inputs["extrapolated_beatstep"]
         ]
 
-        for i, input_feature in enumerate(inputs["input_features"]):
+        for i, inputs_embed in enumerate(inputs["inputs_embeds"]):
             padding = (
-                (0, max([*zip(*input_features_shapes)][0]) - input_features_shapes[i][0]),
-                (0, max([*zip(*input_features_shapes)][1]) - input_features_shapes[i][1]),
+                (0, 0),
+                (0, max([*zip(*inputs_embeds_shapes)][1]) - inputs_embeds_shapes[i][1]),
                 (0, 0),
             )
-            inputs["input_features"][i] = np.pad(
-                input_feature, padding, "constant", constant_values=self.padding_value
+            inputs["inputs_embeds"][i] = np.concatenate(
+                [
+                    np.pad(inputs_embed, padding, "constant", constant_values=self.padding_value),
+                    np.zeros(
+                        [1, max([*zip(*inputs_embeds_shapes)][1]), 512]
+                    ),  # if it is batched then we seperate each examples using zero array
+                ],
+                axis=0,
             )
 
-            # compute attention_mask for input_features and add it to dict
-            attention_mask_input_feature = np.ones(input_features_shapes[i])
-            inputs["attention_mask_input_features"][i] = np.pad(
-                attention_mask_input_feature, padding, "constant", constant_values=self.padding_value
+            # compute attention_mask for inputs_embeds and add it to dict
+            attention_mask_inputs_embed = np.ones(inputs_embeds_shapes[i][:2], dtype=np.int64)
+            inputs["attention_mask"][i] = np.concatenate(
+                [
+                    np.pad(
+                        attention_mask_inputs_embed,
+                        (padding[0], padding[1]),
+                        "constant",
+                        constant_values=self.padding_value,
+                    ),
+                    np.zeros(
+                        [1, max([*zip(*inputs_embeds_shapes)][1])], dtype=np.int64
+                    ),  # if it is batched then we seperate each examples using zero array
+                ],
+                axis=0,
             )
+
+        inputs["inputs_embeds"] = np.concatenate(inputs["inputs_embeds"], axis=0).astype(np.float32)
+        inputs["attention_mask"] = np.concatenate(inputs["attention_mask"], axis=0)
 
         for i, beatsteps in enumerate(inputs["beatsteps"]):
             padding = (0, max([*zip(*beatsteps_shapes)][0]) - beatsteps_shapes[i][0])
@@ -288,8 +308,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             steps_per_beat (`int`, *optional*, defaults to 2):
                 An excellent description of what this argument actually means.
             return_attention_mask (`bool` *optional*, defaults to False):
-                Denotes if attention_mask for input_features, beatsteps and extrapolated_beatstep will be given as
-                output or not.
+                Denotes if attention_mask for inputs_embeds, beatsteps and extrapolated_beatstep will be given as
+                output or not. Automatically set to True for batched inputs.
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to 'pt'):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
@@ -313,7 +333,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             audio = [audio]
             sampling_rate = [sampling_rate]
 
-        batch_input_feature, batch_beatsteps, batch_ext_beatstep = [], [], []
+        batch_size = 0
+        batch_inputs_embed, batch_beatsteps, batch_ext_beatstep = [], [], []
         for single_raw_audio, single_sampling_rate in zip(audio, sampling_rate):
             # If it's [np.ndarray]
             if isinstance(single_raw_audio, list) and isinstance(single_raw_audio[0], np.ndarray):
@@ -337,39 +358,43 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             start_sample = int(beatsteps[0] * single_sampling_rate)
             end_sample = int(beatsteps[-1] * single_sampling_rate)
 
-            input_feature, extrapolated_beatstep = self.single_preprocess(
+            inputs_embed, extrapolated_beatstep = self.single_preprocess(
                 beatstep=beatsteps - beatsteps[0],
                 audio=torch.from_numpy(single_raw_audio)[start_sample:end_sample],
             )
 
-            input_feature = np.transpose(self.log_mel_spectogram(input_feature), (0, -1, -2))
+            inputs_embed = np.transpose(self.log_mel_spectogram(inputs_embed), (0, -1, -2))
 
-            batch_input_feature.append(input_feature)
+            batch_inputs_embed.append(inputs_embed)
             batch_beatsteps.append(beatsteps)
             batch_ext_beatstep.append(extrapolated_beatstep)
+            batch_size += 1
 
         if return_attention_mask:
             output = BatchFeature(
                 {
-                    "input_features": batch_input_feature,
+                    "inputs_embeds": batch_inputs_embed,
                     "beatsteps": batch_beatsteps,
                     "extrapolated_beatstep": batch_ext_beatstep,
-                    "attention_mask_input_features": [None] * len(batch_input_feature),
-                    "attention_mask_beatsteps": [None] * len(batch_input_feature),
-                    "attention_mask_extrapolated_beatstep": [None] * len(batch_input_feature),
+                    "attention_mask": [None] * batch_size,
+                    "attention_mask_beatsteps": [None] * batch_size,
+                    "attention_mask_extrapolated_beatstep": [None] * batch_size,
                 }
             )
         else:
             output = BatchFeature(
                 {
-                    "input_features": batch_input_feature,
+                    "inputs_embeds": batch_inputs_embed,
                     "beatsteps": batch_beatsteps,
                     "extrapolated_beatstep": batch_ext_beatstep,
                 }
             )
 
-        if is_batched or return_attention_mask:
+        if return_attention_mask:
             output = self.pad(output)
+
+        if not is_batched and not return_attention_mask:
+            output["inputs_embeds"] = output["inputs_embeds"][0]
 
         if return_tensors is not None:
             output = output.convert_to_tensors(return_tensors)
