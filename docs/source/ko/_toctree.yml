@@ -56,8 +56,8 @@
         title: (번역중) Semantic segmentation
       - local: tasks/video_classification
         title: 영상 분류
-      - local: in_translation
-        title: (번역중) Object detection
+      - local: tasks/object_detection
+        title: 객체 탐지
       - local: tasks/zero_shot_object_detection
         title: 제로샷(zero-shot) 객체 탐지
       - local: tasks/zero_shot_image_classification
