@@ -532,12 +532,12 @@ All models are a standard [`tf.keras.Model`](https://www.tensorflow.org/api_docs
    ... )  # doctest: +SKIP
    ```
 
-5. When you're ready, you can call `compile` and `fit` to start training:
+5. When you're ready, you can call `compile` and `fit` to start training. Note that Transformers models all have a default task-relevant loss function, so you don't need to specify one unless you want to:
 
    ```py
    >>> from tensorflow.keras.optimizers import Adam
 
-   >>> model.compile(optimizer=Adam(3e-5))
+   >>> model.compile(optimizer=Adam(3e-5))  # No loss argument!
    >>> model.fit(tf_dataset)  # doctest: +SKIP
    ```
 
