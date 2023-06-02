@@ -415,15 +415,22 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if not isinstance(token, str):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
             if not special_tokens and hasattr(self, "do_lower_case") and self.do_lower_case:
-                token = token.lower()
+                token = token.lower() # this is partly wrong. Added tokens that are not special but have escape cars are not
+                # lowered. Why means that the Trie will be wrong.
             if (
                 token != self.unk_token
                 and self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token)
                 and token not in tokens_to_add
             ):
                 tokens_to_add.append(token)
-                if isinstance(new_tokens[i], AddedToken) or special_tokens:
-                    # tokens that are added using AddedToken are special tokens.
+                if isinstance(new_tokens[i], AddedToken) and not special_tokens :
+                    if hasattr(self, "do_lower_case") and self.do_lower_case:
+                        token = AddedToken(new_tokens[i].content.lower(), single_word = new_tokens[i].single_word, lstrip = new_tokens[i].lstrip, rstrip = new_tokens[i].rstrip, normalized = new_tokens[i].normalized)
+                    else:
+                        token = new_tokens[i]
+                    self._additional_special_tokens.append(token)
+                if special_tokens:
+                    # they are not lower when tokenizing
                     self._additional_special_tokens.append(new_tokens[i])
                 if self.verbose:
                     logger.info(f"Adding {token} to the vocabulary")

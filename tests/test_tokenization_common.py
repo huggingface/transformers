@@ -2125,9 +2125,11 @@ class TokenizerTesterMixin:
         for token in new_tokens:
             with self.subTest(f"testing with {token.content[1:-1]}"):
                 space = tokenizer.tokenize(" .")
-                if len(space) > 0:
-                    # BPE adds a spiece underline, but eats aways spaces so don't test it.
+                if len(space) > 1:
+                    # BPE adds a spiece underline, but eats aways spaces so don't test it. (cleanup_tokenization_spaces to test)
                     space = space[0][0]
+                else: 
+                    space = []
 
                 tokenizer.add_tokens([token])
                 tokens = tokenizer.tokenize(f"This sentence is{token}a test")
@@ -2168,8 +2170,6 @@ class TokenizerTesterMixin:
                         assert tokens[idx - 1] == space
                     else:
                         assert tokens[idx - 1] != space
-
-        # for non BPE based tokenizers we need to test that lstrip and rstrip are respected
 
     @require_tokenizers
     def test_added_token_are_matched_longest_first(self):
