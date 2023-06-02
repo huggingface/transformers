@@ -592,7 +592,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         if text_model.name != "text_model":
             raise ValueError("text model must be created with the name `text_model`.")
 
-        model.build_with_dummies()  # Ensure model is fully built
+        model.build()  # Ensure model is fully built
 
         return model
 

@@ -1154,15 +1154,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         else:
             self(self.dummy_inputs, training=False)
             self.built = True
-            self.built_with_dummies = True
-
-    def build_with_dummies(self, dummies=None):
-        if self.built_with_dummies and dummies is None:
-            return
-        if dummies is None:
-            dummies = self.dummy_inputs
-        self(dummies, training=False)
-        self.built_with_dummies = True
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -1182,7 +1173,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             )
         # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
         self._set_save_spec(self.serving.input_signature[0])
-        self.built_with_dummies = False
 
     def get_config(self):
         return self.config.to_dict()
