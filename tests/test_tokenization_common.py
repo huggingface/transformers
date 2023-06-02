@@ -2138,12 +2138,10 @@ class TokenizerTesterMixin:
                 idx = tokens.index(token.content)
 
                 if len(space) > 0:
-
                     if not token.lstrip:
                         assert tokens[idx - 1] == space
                     else:
                         assert tokens[idx - 1] != space
-
 
                 tokens = tokenizer.tokenize(f"This sentence is{token} a test")
                 self.assertIn(token.content, tokens)
@@ -2170,7 +2168,6 @@ class TokenizerTesterMixin:
                         assert tokens[idx - 1] == space
                     else:
                         assert tokens[idx - 1] != space
-
 
         # for non BPE based tokenizers we need to test that lstrip and rstrip are respected
 
