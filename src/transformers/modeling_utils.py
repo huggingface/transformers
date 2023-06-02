@@ -2177,7 +2177,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
         use_safetensors = kwargs.pop("use_safetensors", None if is_safetensors_available() else False)
-
+        #Used to allow for directly inputting state dict with pretrained_model_or_path == None
+        specified_state_dict = None
         if is_bitsandbytes_available():
             is_8bit_serializable = version.parse(importlib_metadata.version("bitsandbytes")) > version.parse("0.37.2")
         else:
@@ -2592,7 +2593,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 subfolder=subfolder,
                 _commit_hash=commit_hash,
             )
-
+        
         # load pt weights early so that we know which dtype to init the model under
         if from_pt:
             if not is_sharded and state_dict is None:
@@ -2652,6 +2653,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 loaded_state_dict_keys = list(state_dict.keys())
             if low_cpu_mem_usage or use_keep_in_fp32_modules:
+                if(pretrained_model_name_or_path == None):
+                    specified_state_dict = state_dict
                 state_dict = None
 
         config.name_or_path = pretrained_model_name_or_path
@@ -2823,7 +2826,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         """
                     )
                 del device_map_without_lm_head
-
+        
         if from_tf:
             if resolved_archive_file.endswith(".index"):
                 # Load from a TensorFlow 1.X checkpoint - provided by original authors
@@ -2883,6 +2886,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dtype=torch_dtype,
                 is_quantized=(load_in_8bit or load_in_4bit),
                 keep_in_fp32_modules=keep_in_fp32_modules,
+                specified_state_dict=specified_state_dict
             )
 
         model.is_loaded_in_4bit = load_in_4bit
@@ -2955,6 +2959,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         dtype=None,
         is_quantized=False,
         keep_in_fp32_modules=None,
+        specified_state_dict=None
     ):
         is_safetensors = False
         if is_quantized:
@@ -3156,7 +3161,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 for p, f in weight_map.items()
                 if param_device_map[p] == "disk"
             }
-
+        
         if state_dict is not None:
             # Whole checkpoint
             mismatched_keys = _find_mismatched_keys(
@@ -3199,7 +3204,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
                     continue
-                state_dict = load_state_dict(shard_file)
+                if(specified_state_dict != None):
+                    state_dict = specified_state_dict
+                else:
+                    state_dict = load_state_dict(shard_file)
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
