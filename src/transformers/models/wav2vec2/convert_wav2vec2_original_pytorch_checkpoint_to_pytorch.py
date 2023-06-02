@@ -49,6 +49,7 @@ MAPPING = {
     "fc2": "encoder.layers.*.feed_forward.output_dense",
     "final_layer_norm": "encoder.layers.*.final_layer_norm",
     "encoder.layer_norm": "encoder.layer_norm",
+    "adapter_layer": "encoder.layers.*.adapter_layer",
     "w2v_model.layer_norm": "feature_projection.layer_norm",
     "quantizer.weight_proj": "quantizer.weight_proj",
     "quantizer.vars": "quantizer.codevectors",
@@ -66,12 +67,26 @@ TOP_LEVEL_KEYS = [
 ]
 
 
-def set_recursively(hf_pointer, key, value, full_name, weight_type):
+def set_recursively(key, value, full_name, weight_type, hf_pointer):
     for attribute in key.split("."):
         hf_pointer = getattr(hf_pointer, attribute)
 
-    if weight_type is not None:
+    hf_param_name = None
+    for param_key in PARAM_MAPPING.keys():
+        if full_name.endswith(param_key):
+            hf_param_name = PARAM_MAPPING[full_name.split(".")[-1]]
+            weight_type = "param"
+
+    if weight_type is not None and weight_type != "param":
         hf_shape = getattr(hf_pointer, weight_type).shape
+    elif weight_type is not None and weight_type == "param":
+        shape_pointer = hf_pointer
+        for attribute in hf_param_name.split("."):
+            shape_pointer = getattr(shape_pointer, attribute)
+        hf_shape = shape_pointer.shape
+
+        # let's reduce dimension
+        value = value[0]
     else:
         hf_shape = hf_pointer.shape
 
@@ -89,10 +104,69 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
         hf_pointer.weight_v.data = value
     elif weight_type == "bias":
         hf_pointer.bias.data = value
+    elif weight_type == "param":
+        for attribute in hf_param_name.split("."):
+            hf_pointer = getattr(hf_pointer, attribute)
+        hf_pointer.data = value
     else:
         hf_pointer.data = value
 
     logger.info(f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}.")
+
+
+def rename_dict(key, value, full_name, weight_type, hf_dict):
+    hf_param_name = None
+    for param_key in PARAM_MAPPING.keys():
+        if full_name.endswith(param_key):
+            hf_param_name = PARAM_MAPPING[full_name.split(".")[-1]]
+            weight_type = "param"
+
+    if weight_type is not None and weight_type != "param":
+        full_key = ".".join([key, weight_type])
+    elif weight_type is not None and weight_type == "param":
+        full_key = ".".join([key, hf_param_name])
+    else:
+        full_key = key
+
+    hf_dict[full_key] = value if "lm_head" in full_key else value[0]
+
+
+PARAM_MAPPING = {
+    "W_a": "linear_1.weight",
+    "W_b": "linear_2.weight",
+    "b_a": "linear_1.bias",
+    "b_b": "linear_2.bias",
+    "ln_W": "norm.weight",
+    "ln_b": "norm.bias",
+}
+
+
+def load_wav2vec2_layer(name, value, hf_model=None, hf_dict=None):
+    is_used = False
+    for key, mapped_key in MAPPING.items():
+        mapped_key = "wav2vec2." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
+        if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
+            is_used = True
+            if "*" in mapped_key:
+                layer_index = name.split(key)[0].split(".")[-2]
+                mapped_key = mapped_key.replace("*", layer_index)
+            if "weight_g" in name:
+                weight_type = "weight_g"
+            elif "weight_v" in name:
+                weight_type = "weight_v"
+            elif "bias" in name:
+                weight_type = "bias"
+            elif "weight" in name:
+                # TODO: don't match quantizer.weight_proj
+                weight_type = "weight"
+            else:
+                weight_type = None
+            if hf_dict is not None:
+                rename_dict(mapped_key, value, name, weight_type, hf_dict)
+            else:
+                set_recursively(mapped_key, value, name, weight_type, hf_model)
+            return is_used
+    return is_used
 
 
 def recursively_load_weights(fairseq_model, hf_model, is_headless):
@@ -113,26 +187,7 @@ def recursively_load_weights(fairseq_model, hf_model, is_headless):
             )
             is_used = True
         else:
-            for key, mapped_key in MAPPING.items():
-                mapped_key = "wav2vec2." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
-                if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
-                    is_used = True
-                    if "*" in mapped_key:
-                        layer_index = name.split(key)[0].split(".")[-2]
-                        mapped_key = mapped_key.replace("*", layer_index)
-                    if "weight_g" in name:
-                        weight_type = "weight_g"
-                    elif "weight_v" in name:
-                        weight_type = "weight_v"
-                    elif "bias" in name:
-                        weight_type = "bias"
-                    elif "weight" in name:
-                        # TODO: don't match quantizer.weight_proj
-                        weight_type = "weight"
-                    else:
-                        weight_type = None
-                    set_recursively(hf_model, mapped_key, value, name, weight_type)
-                continue
+            is_used = load_wav2vec2_layer(name, value, hf_model)
         if not is_used:
             unused_weights.append(name)
 

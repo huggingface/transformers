@@ -36,6 +36,17 @@ COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "s": None}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
 
+class EmptyJob:
+    job_name = "empty"
+
+    def to_dict(self):
+        return {
+            "working_directory": "~/transformers",
+            "docker": copy.deepcopy(DEFAULT_DOCKER_IMAGE),
+            "steps":["checkout"],
+        }
+
+
 @dataclass
 class CircleCIJob:
     name: str
@@ -342,7 +353,6 @@ examples_torch_job = CircleCIJob(
         "pip install .[sklearn,torch,sentencepiece,testing,torch-speech]",
         "pip install -r examples/pytorch/_tests_requirements.txt",
     ],
-    tests_to_run="./examples/pytorch/",
 )
 
 
@@ -355,7 +365,6 @@ examples_tensorflow_job = CircleCIJob(
         "pip install .[sklearn,tensorflow,sentencepiece,testing]",
         "pip install -r examples/tensorflow/_tests_requirements.txt",
     ],
-    tests_to_run="./examples/tensorflow/",
 )
 
 
@@ -367,7 +376,6 @@ examples_flax_job = CircleCIJob(
         "pip install .[flax,testing,sentencepiece]",
         "pip install -r examples/flax/_tests_requirements.txt",
     ],
-    tests_to_run="./examples/flax/",
 )
 
 
@@ -483,7 +491,6 @@ REGULAR_TESTS = [
     hub_job,
     onnx_job,
     exotic_models_job,
-    doc_test_job
 ]
 EXAMPLES_TESTS = [
     examples_torch_job,
@@ -495,6 +502,8 @@ PIPELINE_TESTS = [
     pipelines_tf_job,
 ]
 REPO_UTIL_TESTS = [repo_utils_job]
+DOC_TESTS = [doc_test_job]
+
 
 def create_circleci_config(folder=None):
     if folder is None:
@@ -550,23 +559,43 @@ def create_circleci_config(folder=None):
 
     example_file = os.path.join(folder, "examples_test_list.txt")
     if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
-        jobs.extend(EXAMPLES_TESTS)
+        with open(example_file, "r", encoding="utf-8") as f:
+            example_tests = f.read().split(" ")
+        for job in EXAMPLES_TESTS:
+            framework = job.name.replace("examples_", "").replace("torch", "pytorch")
+            if example_tests == "all":
+                job.tests_to_run = [f"examples/{framework}"]
+            else:
+                job.tests_to_run = [f for f in example_tests if f.startswith(f"examples/{framework}")]
+            
+            if len(job.tests_to_run) > 0:
+                jobs.append(job)
+
+    doctest_file = os.path.join(folder, "doctest_list.txt")
+    if os.path.exists(doctest_file):
+        with open(doctest_file) as f:
+            doctest_list = f.read()
+    else:
+        doctest_list = []
+    if len(doctest_list) > 0:
+        jobs.extend(DOC_TESTS)
 
     repo_util_file = os.path.join(folder, "test_repo_utils.txt")
     if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
         jobs.extend(REPO_UTIL_TESTS)
 
-    if len(jobs) > 0:
-        config = {"version": "2.1"}
-        config["parameters"] = {
-            # Only used to accept the parameters from the trigger
-            "nightly": {"type": "boolean", "default": False},
-            "tests_to_run": {"type": "string", "default": test_list},
-        }
-        config["jobs"] = {j.job_name: j.to_dict() for j in jobs}
-        config["workflows"] = {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
-        with open(os.path.join(folder, "generated_config.yml"), "w") as f:
-            f.write(yaml.dump(config, indent=2, width=1000000, sort_keys=False))
+    if len(jobs) == 0:
+        jobs = [EmptyJob()]
+    config = {"version": "2.1"}
+    config["parameters"] = {
+        # Only used to accept the parameters from the trigger
+        "nightly": {"type": "boolean", "default": False},
+        "tests_to_run": {"type": "string", "default": test_list},
+    }
+    config["jobs"] = {j.job_name: j.to_dict() for j in jobs}
+    config["workflows"] = {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
+    with open(os.path.join(folder, "generated_config.yml"), "w") as f:
+        f.write(yaml.dump(config, indent=2, width=1000000, sort_keys=False))
 
 
 if __name__ == "__main__":

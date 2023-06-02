@@ -155,6 +155,10 @@ _import_structure = {
         "AutoProcessor",
         "AutoTokenizer",
     ],
+    "models.autoformer": [
+        "AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "AutoformerConfig",
+    ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
     "models.bartpho": [],
@@ -383,6 +387,7 @@ _import_structure = {
     "models.mobilenet_v1": ["MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV1Config"],
     "models.mobilenet_v2": ["MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV2Config"],
     "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
+    "models.mobilevitv2": ["MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTV2Config"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
@@ -614,6 +619,7 @@ _import_structure = {
     "tools": [
         "Agent",
         "HfAgent",
+        "LocalAgent",
         "OpenAiAgent",
         "PipelineTool",
         "RemoteTool",
@@ -1079,6 +1085,14 @@ else:
             "AutoModelForZeroShotImageClassification",
             "AutoModelForZeroShotObjectDetection",
             "AutoModelWithLMHead",
+        ]
+    )
+    _import_structure["models.autoformer"].extend(
+        [
+            "AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "AutoformerForPrediction",
+            "AutoformerModel",
+            "AutoformerPreTrainedModel",
         ]
     )
     _import_structure["models.bart"].extend(
@@ -2058,6 +2072,15 @@ else:
             "MobileViTForSemanticSegmentation",
             "MobileViTModel",
             "MobileViTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mobilevitv2"].extend(
+        [
+            "MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MobileViTV2ForImageClassification",
+            "MobileViTV2ForSemanticSegmentation",
+            "MobileViTV2Model",
+            "MobileViTV2PreTrainedModel",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -3129,6 +3152,15 @@ else:
             "TFDPRReader",
         ]
     )
+    _import_structure["models.efficientformer"].extend(
+        [
+            "TF_EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFEfficientFormerForImageClassification",
+            "TFEfficientFormerForImageClassificationWithTeacher",
+            "TFEfficientFormerModel",
+            "TFEfficientFormerPreTrainedModel",
+        ]
+    )
     _import_structure["models.electra"].extend(
         [
             "TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3403,6 +3435,13 @@ else:
             "TFRoFormerLayer",
             "TFRoFormerModel",
             "TFRoFormerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.sam"].extend(
+        [
+            "TF_SAM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFSamModel",
+            "TFSamPreTrainedModel",
         ]
     )
     _import_structure["models.segformer"].extend(
@@ -3938,6 +3977,10 @@ if TYPE_CHECKING:
         AutoProcessor,
         AutoTokenizer,
     )
+    from .models.autoformer import (
+        AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        AutoformerConfig,
+    )
     from .models.bart import BartConfig, BartTokenizer
     from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
     from .models.bert import (
@@ -4150,6 +4193,7 @@ if TYPE_CHECKING:
     from .models.mobilenet_v1 import MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV1Config
     from .models.mobilenet_v2 import MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV2Config
     from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
+    from .models.mobilevitv2 import MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTV2Config
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
     from .models.mvp import MvpConfig, MvpTokenizer
@@ -4361,7 +4405,17 @@ if TYPE_CHECKING:
     )
 
     # Tools
-    from .tools import Agent, HfAgent, OpenAiAgent, PipelineTool, RemoteTool, Tool, launch_gradio_demo, load_tool
+    from .tools import (
+        Agent,
+        HfAgent,
+        LocalAgent,
+        OpenAiAgent,
+        PipelineTool,
+        RemoteTool,
+        Tool,
+        launch_gradio_demo,
+        load_tool,
+    )
 
     # Trainer
     from .trainer_callback import (
@@ -4765,6 +4819,12 @@ if TYPE_CHECKING:
             AutoModelForZeroShotImageClassification,
             AutoModelForZeroShotObjectDetection,
             AutoModelWithLMHead,
+        )
+        from .models.autoformer import (
+            AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            AutoformerForPrediction,
+            AutoformerModel,
+            AutoformerPreTrainedModel,
         )
         from .models.bart import (
             BART_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5551,6 +5611,13 @@ if TYPE_CHECKING:
             MobileViTForSemanticSegmentation,
             MobileViTModel,
             MobileViTPreTrainedModel,
+        )
+        from .models.mobilevitv2 import (
+            MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MobileViTV2ForImageClassification,
+            MobileViTV2ForSemanticSegmentation,
+            MobileViTV2Model,
+            MobileViTV2PreTrainedModel,
         )
         from .models.mpnet import (
             MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6431,6 +6498,13 @@ if TYPE_CHECKING:
             TFDPRQuestionEncoder,
             TFDPRReader,
         )
+        from .models.efficientformer import (
+            TF_EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFEfficientFormerForImageClassification,
+            TFEfficientFormerForImageClassificationWithTeacher,
+            TFEfficientFormerModel,
+            TFEfficientFormerPreTrainedModel,
+        )
         from .models.electra import (
             TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFElectraForMaskedLM,
@@ -6645,6 +6719,11 @@ if TYPE_CHECKING:
             TFRoFormerLayer,
             TFRoFormerModel,
             TFRoFormerPreTrainedModel,
+        )
+        from .models.sam import (
+            TF_SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSamModel,
+            TFSamPreTrainedModel,
         )
         from .models.segformer import (
             TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

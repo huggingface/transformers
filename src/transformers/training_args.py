@@ -64,7 +64,7 @@ if is_torch_available():
     import torch.distributed as dist
 
 if is_accelerate_available():
-    from accelerate import PartialState
+    from accelerate.state import AcceleratorState, PartialState
     from accelerate.utils import DistributedType
 
 if is_torch_tpu_available(check_device=False):
@@ -139,10 +139,17 @@ class OptimizerNames(ExplicitEnum):
     ADAMW_TORCH_XLA = "adamw_torch_xla"
     ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
-    ADAMW_BNB = "adamw_bnb_8bit"
     ADAMW_ANYPRECISION = "adamw_anyprecision"
     SGD = "sgd"
     ADAGRAD = "adagrad"
+    ADAMW_BNB = "adamw_bnb_8bit"
+    ADAMW_8BIT = "adamw_8bit"  # just an alias for adamw_bnb_8bit
+    LION_8BIT = "lion_8bit"
+    LION = "lion_32bit"
+    PAGED_ADAMW = "paged_adamw_32bit"
+    PAGED_ADAMW_8BIT = "paged_adamw_8bit"
+    PAGED_LION = "paged_lion_32bit"
+    PAGED_LION_8BIT = "paged_lion_8bit"
 
 
 @dataclass
@@ -435,7 +442,7 @@ class TrainingArguments:
                     - `"backward_pre"` : Prefetches the next set of parameters before the current set of parameter's
                       gradient
                         computation.
-                    - `"backward_pos"` : This prefetches the next set of parameters after the current set of
+                    - `"backward_post"` : This prefetches the next set of parameters after the current set of
                       parameter’s
                         gradient computation.
                 - fsdp_forward_prefetch (`bool`, *optional*, defaults to `False`)
@@ -1364,6 +1371,15 @@ class TrainingArguments:
             self.torch_compile = True
         if self.torch_compile and self.torch_compile_backend is None:
             self.torch_compile_backend = "inductor"
+
+        # accelerate integration for torch compile
+        if self.torch_compile:
+            # set env vars for accelerate
+            prefix = "ACCELERATE_DYNAMO_"
+            os.environ[prefix + "BACKEND"] = self.torch_compile_backend
+            if self.torch_compile_mode is not None:
+                os.environ[prefix + "MODE"] = self.torch_compile_mode
+
         if self.framework == "pt" and is_torch_available() and self.torch_compile:
             if is_torch_tf32_available():
                 if self.tf32 is None and not self.fp16 or self.bf16:
@@ -1497,6 +1513,32 @@ class TrainingArguments:
             if self.fsdp_config["xla_fsdp_grad_ckpt"]:
                 warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla` is set to true.")
 
+        # accelerate integration for FSDP
+        if len(self.fsdp) > 0 and not self.fsdp_config["xla"]:
+            os.environ["ACCELERATE_USE_FSDP"] = "true"
+            from accelerate.utils.constants import (
+                FSDP_AUTO_WRAP_POLICY,
+                FSDP_SHARDING_STRATEGY,
+            )
+
+            for fsdp_option in self.fsdp:
+                if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
+                    # set environment variable for FSDP sharding strategy
+                    os.environ["FSDP_SHARDING_STRATEGY"] = str(FSDP_SHARDING_STRATEGY.index(fsdp_option.upper()) + 1)
+                elif fsdp_option == FSDPOption.OFFLOAD:
+                    os.environ["FSDP_OFFLOAD_PARAMS"] = "true"
+                elif fsdp_option == FSDPOption.AUTO_WRAP:
+                    if self.fsdp_config["fsdp_min_num_params"] > 0:
+                        os.environ["FSDP_MIN_NUM_PARAMS"] = str(self.fsdp_config["fsdp_min_num_params"])
+                        os.environ["FSDP_AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[1]
+                    elif self.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None) is not None:
+                        os.environ["FSDP_TRANSFORMER_CLS_TO_WRAP"] = ",".join(
+                            self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]
+                        )
+                        os.environ["FSDP_AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[0]
+            prefetch_policy = self.fsdp_config.get("fsdp_backward_prefetch", "NO_PREFETCH")
+            os.environ["FSDP_BACKWARD_PREFETCH"] = prefetch_policy.upper()
+
         if self.tpu_metrics_debug:
             warnings.warn(
                 "using `--tpu_metrics_debug` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
@@ -1508,6 +1550,7 @@ class TrainingArguments:
         if isinstance(self.debug, str):
             self.debug = [DebugOption(s) for s in self.debug.split()]
 
+        self.deepspeed_plugin = None
         if self.deepspeed:
             # - must be run very last in arg parsing, since it will use a lot of these settings.
             # - must be run before the model is created.
@@ -1519,6 +1562,12 @@ class TrainingArguments:
             # note: leave self.deepspeed unmodified in case a user relies on it not to be modified)
             self.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.deepspeed)
             self.hf_deepspeed_config.trainer_config_process(self)
+
+            # Accelerate DeepSpeed Plugin
+            from accelerate.utils import DeepSpeedPlugin
+
+            os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"
+            self.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.hf_deepspeed_config)
 
         if self.push_to_hub_token is not None:
             warnings.warn(
@@ -1554,6 +1603,15 @@ class TrainingArguments:
                 f"{self.hub_model_id}).",
                 FutureWarning,
             )
+
+        # if training args is specified, it will override the one specified in the accelerate config
+        if self.half_precision_backend != "apex" and len(self.sharded_ddp) == 0:
+            mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
+            if self.fp16:
+                mixed_precision_dtype = "fp16"
+            elif self.bf16:
+                mixed_precision_dtype = "bf16"
+            os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
 
     def __str__(self):
         self_as_dict = asdict(self)
@@ -1609,10 +1667,13 @@ class TrainingArguments:
     def _setup_devices(self) -> "torch.device":
         requires_backends(self, ["torch"])
         logger.info("PyTorch: setting up devices")
-        if not is_sagemaker_mp_enabled() and not is_accelerate_available(check_partial_state=True):
-            raise ImportError(
-                "Using the `Trainer` with `PyTorch` requires `accelerate`: Run `pip install --upgrade accelerate`"
-            )
+        if not is_sagemaker_mp_enabled():
+            if not is_accelerate_available(check_partial_state=True):
+                raise ImportError(
+                    "Using the `Trainer` with `PyTorch` requires `accelerate>=0.19.0`: Please run `pip install transformers[torch]` or `pip install accelerate -U`"
+                )
+            AcceleratorState._reset_state(reset_partial_state=True)
+        self.distributed_state = None
         if self.no_cuda:
             self.distributed_state = PartialState(cpu=True, backend=self.ddp_backend)
             self._n_gpu = 0
@@ -1621,6 +1682,9 @@ class TrainingArguments:
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
             torch.cuda.set_device(device)
+        elif is_sagemaker_dp_enabled():
+            self.distributed_state = PartialState(_use_sagemaker_dp=True)
+            self._n_gpu = 1
         elif self.deepspeed:
             # Need to do similar for Accelerator init
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"
@@ -1636,7 +1700,7 @@ class TrainingArguments:
         if (
             torch.distributed.is_available()
             and torch.distributed.is_initialized()
-            and self.distributed_state.distributed_type == DistributedType.NO
+            and self.parallel_mode != ParallelMode.DISTRIBUTED
         ):
             logger.warning(
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
@@ -1645,8 +1709,9 @@ class TrainingArguments:
         if is_torch_tpu_available():
             device = self.distributed_state.device
             self._n_gpu = 0
-        elif is_sagemaker_dp_enabled():
-            self._n_gpu = 1
+        elif is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled():
+            # Already set _n_gpu
+            pass
         elif self.distributed_state.distributed_type == DistributedType.NO:
             if self.use_mps_device:
                 if not torch.backends.mps.is_available():
@@ -1672,7 +1737,9 @@ class TrainingArguments:
                         )
                     device = torch.device("mps")
                     self._n_gpu = 1
-
+            elif self.no_cuda:
+                device = torch.device("cpu")
+                self._n_gpu = 0
             else:
                 # if n_gpu is > 1 we'll use nn.DataParallel.
                 # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
@@ -1707,7 +1774,8 @@ class TrainingArguments:
         """
         requires_backends(self, ["torch"])
         # Make sure `self._n_gpu` is properly setup.
-        _ = self._setup_devices
+        if not hasattr(self, "_n_gpu"):
+            _ = self._setup_devices
         return self._n_gpu
 
     @property
@@ -1728,7 +1796,9 @@ class TrainingArguments:
             return ParallelMode.SAGEMAKER_MODEL_PARALLEL
         elif is_sagemaker_dp_enabled():
             return ParallelMode.SAGEMAKER_DATA_PARALLEL
-        elif hasattr(self, "distributed_state") and self.distributed_state.distributed_type != DistributedType.NO:
+        elif (
+            self.distributed_state is not None and self.distributed_state.distributed_type != DistributedType.NO
+        ) or (self.distributed_state is None and self.local_rank != -1):
             return ParallelMode.DISTRIBUTED
         elif self.n_gpu > 1:
             return ParallelMode.NOT_DISTRIBUTED

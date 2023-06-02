@@ -578,7 +578,7 @@ def download_url(url, proxies=None):
         " that this is not compatible with the caching system (your file will be downloaded at each execution) or"
         " multiple processes (each process will download the file in a different temporary file)."
     )
-    tmp_file = tempfile.mktemp()
+    tmp_file = tempfile.mkstemp()[1]
     with open(tmp_file, "wb") as f:
         http_get(url, f, proxies=proxies)
     return tmp_file
@@ -701,9 +701,31 @@ class PushToHubMixin:
             for f in os.listdir(working_dir)
             if f not in files_timestamps or os.path.getmtime(os.path.join(working_dir, f)) > files_timestamps[f]
         ]
+
+        # filter for actual files + folders at the root level
+        modified_files = [
+            f
+            for f in modified_files
+            if os.path.isfile(os.path.join(working_dir, f)) or os.path.isdir(os.path.join(working_dir, f))
+        ]
+
         operations = []
+        # upload standalone files
         for file in modified_files:
             operations.append(CommitOperationAdd(path_or_fileobj=os.path.join(working_dir, file), path_in_repo=file))
+            if os.path.isdir(os.path.join(working_dir, file)):
+                # go over individual files of folder
+                for f in os.listdir(os.path.join(working_dir, file)):
+                    operations.append(
+                        CommitOperationAdd(
+                            path_or_fileobj=os.path.join(working_dir, file, f), path_in_repo=os.path.join(file, f)
+                        )
+                    )
+            else:
+                operations.append(
+                    CommitOperationAdd(path_or_fileobj=os.path.join(working_dir, file), path_in_repo=file)
+                )
+
         logger.info(f"Uploading the following files to {repo_id}: {','.join(modified_files)}")
         return create_commit(
             repo_id=repo_id, operations=operations, commit_message=commit_message, token=token, create_pr=create_pr

@@ -1687,6 +1687,15 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> print(generated_text)
         A stop sign is on a street corner.
+
+        >>> # conditional generation
+        >>> text = "A picture of"
+        >>> inputs = processor(text=text, images=image, return_tensors="pt", add_special_tokens=False)
+
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=50)
+        >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        >>> print(generated_text)
+        A picture of a stop sign with a red stop sign on it.
         ```
 
         Training:
@@ -1724,6 +1733,12 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+            )
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
         hidden_states = encoder_outputs[0]

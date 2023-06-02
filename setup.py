@@ -38,14 +38,9 @@ To create the package for pypi.
 7. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
 
-   Clean up your build and dist folders (to avoid re-uploading oldies):
-   rm -rf dist
-   rm -rf build
+   Run `make build-release`. This will build the release and do some sanity checks for you. If this ends with an error
+   message, you need to fix things before going further.
 
-   For the wheel, run: "python setup.py bdist_wheel" in the top level directory.
-   (this will build a wheel for the python version you use to build it).
-
-   For the sources, run: "python setup.py sdist"
    You should now have a /dist directory with both .whl and .tar.gz source versions.
 
 8. Check that everything looks correct by uploading the package to the pypi test server:
@@ -61,6 +56,7 @@ To create the package for pypi.
    Check you can run the following commands:
    python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))"
    python -c "from transformers import *"
+   python utils/check_build.py --check_lib
 
    If making a patch release, double check the bug you are patching is indeed resolved.
 
@@ -136,7 +132,6 @@ _deps = [
     "librosa",
     "nltk",
     "natten>=0.14.6",
-    "numba<0.57.0",  # Can be removed once unpinned.
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
@@ -158,13 +153,13 @@ _deps = [
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
-    "rhoknp>=1.1.0",
+    "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff>=0.0.241,<=0.0.259",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
-    "safetensors>=0.2.1",
+    "safetensors>=0.3.1",
     "sagemaker>=2.31.0",
     "scikit-learn",
     "sentencepiece>=0.1.91,!=0.1.92",
@@ -290,8 +285,7 @@ extras["sigopt"] = deps_list("sigopt")
 extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-# numba can be removed here once unpinned
-extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm", "numba")
+extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
@@ -325,7 +319,6 @@ extras["testing"] = (
         "protobuf",  # Can be removed once we can unpin protobuf
         "sacremoses",
         "rjieba",
-        "safetensors",
         "beautifulsoup4",
     )
     + extras["retrieval"]
@@ -429,6 +422,7 @@ install_requires = [
     deps["regex"],  # for OpenAI GPT
     deps["requests"],  # for downloading models over HTTPS
     deps["tokenizers"],
+    deps["safetensors"],
     deps["tqdm"],  # progress bars in model download and training scripts
 ]
 
@@ -446,7 +440,7 @@ setup(
     package_dir={"": "src"},
     packages=find_packages("src"),
     include_package_data=True,
-    package_data={"transformers": ["*.cu", "*.cpp", "*.cuh", "*.h", "*.pyx"]},
+    package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx"]},
     zip_safe=False,
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},

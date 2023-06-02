@@ -649,8 +649,8 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
 
         else:
             if banned_mask_list:
-                banned_mask = torch.LongTensor(banned_mask_list)
-                indices = torch.ones(len(banned_mask))
+                indices = torch.ones(len(banned_mask_list))
+                banned_mask = torch.LongTensor(banned_mask_list, device=indices.device)
                 # A sparse tensor is generated from a list of coordinates: [[0, 1], [0, 2], [2, 0]]. A conversion to dense tensor generates:
                 # [ 0  1  1 ]
                 # [ 0  0  0 ]
@@ -678,7 +678,7 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     generation. See [Autoregressive Entity Retrieval](https://arxiv.org/abs/2010.00904) for more information.
 
     Args:
-        prefix_allowed_tokens_fn: (`Callable[[int, torch.Tensor], List[int]]`):
+        prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`):
             This function constraints the beam search to allowed tokens only at each step. This function takes 2
             arguments `inputs_ids` and the batch ID `batch_id`. It has to return a list with the allowed tokens for the
             next generation step conditioned on the previously generated tokens `inputs_ids` and the batch ID

@@ -33,6 +33,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("align", "AlignConfig"),
         ("altclip", "AltCLIPConfig"),
         ("audio-spectrogram-transformer", "ASTConfig"),
+        ("autoformer", "AutoformerConfig"),
         ("bart", "BartConfig"),
         ("beit", "BeitConfig"),
         ("bert", "BertConfig"),
@@ -132,6 +133,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v1", "MobileNetV1Config"),
         ("mobilenet_v2", "MobileNetV2Config"),
         ("mobilevit", "MobileViTConfig"),
+        ("mobilevitv2", "MobileViTV2Config"),
         ("mpnet", "MPNetConfig"),
         ("mt5", "MT5Config"),
         ("mvp", "MvpConfig"),
@@ -225,6 +227,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("align", "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("altclip", "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("audio-spectrogram-transformer", "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("autoformer", "AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bart", "BART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bert", "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -317,6 +320,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v1", "MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilenet_v2", "MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilevit", "MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("mobilevitv2", "MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mpnet", "MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mvp", "MVP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("nat", "NAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -399,6 +403,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),
         ("audio-spectrogram-transformer", "Audio Spectrogram Transformer"),
+        ("autoformer", "Autoformer"),
         ("bart", "BART"),
         ("barthez", "BARThez"),
         ("bartpho", "BARTpho"),
@@ -512,10 +517,12 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("megatron_gpt2", "Megatron-GPT2"),
         ("mgp-str", "MGP-STR"),
         ("mluke", "mLUKE"),
+        ("mms", "MMS"),
         ("mobilebert", "MobileBERT"),
         ("mobilenet_v1", "MobileNetV1"),
         ("mobilenet_v2", "MobileNetV2"),
         ("mobilevit", "MobileViT"),
+        ("mobilevitv2", "MobileViTV2"),
         ("mpnet", "MPNet"),
         ("mt5", "MT5"),
         ("mvp", "MVP"),
@@ -942,6 +949,7 @@ class AutoConfig:
                 )
             class_ref = config_dict["auto_map"]["AutoConfig"]
             config_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
+            _ = kwargs.pop("code_revision", None)
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]

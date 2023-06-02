@@ -199,7 +199,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return super()._encode_plus(*args, **kwargs)
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._decode_with_timestamps
-    def _decode_with_timestamps(self, token_ids, time_precision=0.02) -> str:
+    def _decode_with_timestamps(self, token_ids, skip_special_tokens=False, time_precision=0.02) -> str:
         """
         Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
         given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
@@ -213,7 +213,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 outputs.append([])
             else:
                 outputs[-1].append(token)
-        outputs = [s if isinstance(s, str) else self.decode(s) for s in outputs]
+        outputs = [
+            s if isinstance(s, str) else self.decode(s, skip_special_tokens=skip_special_tokens) for s in outputs
+        ]
         return "".join(outputs)
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._compute_offsets
@@ -303,7 +305,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
         if decode_with_timestamps:
-            text = self._decode_with_timestamps(token_ids, time_precision=time_precision)
+            text = self._decode_with_timestamps(
+                token_ids, time_precision=time_precision, skip_special_tokens=skip_special_tokens
+            )
         # retrieve offsets
         if output_offsets:
             offsets = None
@@ -312,6 +316,11 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return text
 
     def _decode(self, *args, normalize: bool = False, **kwargs) -> str:
+        if kwargs["skip_special_tokens"]:
+            prompt_token_id = self.convert_tokens_to_ids("<|startofprev|>")
+            decoder_start_token_id = self.convert_tokens_to_ids("<|startoftranscript|>")
+            kwargs["token_ids"] = self._strip_prompt(kwargs["token_ids"], prompt_token_id, decoder_start_token_id)
+
         text = super()._decode(*args, **kwargs)
 
         if normalize:
@@ -485,3 +494,30 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             return_language=return_language,
             time_precision=time_precision,
         )
+
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.get_prompt_ids
+    def get_prompt_ids(self, text: str, return_tensors="np"):
+        """Converts prompt text to IDs that can be passed to [`~WhisperForConditionalGeneration.generate`]."""
+        batch_encoding = self("<|startofprev|>", " " + text.strip(), add_special_tokens=False)
+
+        # Check for special tokens
+        prompt_text_ids = batch_encoding["input_ids"][1:]
+        special_token_id = next((x for x in prompt_text_ids if x >= self.all_special_ids[0]), None)
+        if special_token_id is not None:
+            token = self.convert_ids_to_tokens(special_token_id)
+            raise ValueError(f"Encountered text in the prompt corresponding to disallowed special token: {token}.")
+
+        batch_encoding.convert_to_tensors(tensor_type=return_tensors)
+        return batch_encoding["input_ids"]
+
+    @staticmethod
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._strip_prompt
+    def _strip_prompt(token_ids: List[int], prompt_token_id: int, decoder_start_token_id: int):
+        has_prompt = isinstance(token_ids, list) and token_ids and token_ids[0] == prompt_token_id
+        if has_prompt:
+            if decoder_start_token_id in token_ids:
+                return token_ids[token_ids.index(decoder_start_token_id) :]
+            else:
+                return []
+
+        return token_ids

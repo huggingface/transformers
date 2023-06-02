@@ -15,6 +15,8 @@
 """ Testing suite for the PyTorch VisionTextDualEncoder model. """
 
 
+from __future__ import annotations
+
 import collections
 import tempfile
 import unittest
