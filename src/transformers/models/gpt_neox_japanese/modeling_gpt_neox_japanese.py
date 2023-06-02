@@ -50,6 +50,7 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
     base_model_prefix = "gpt_neox_japanese"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTNeoXJapaneseLayer"]
+    _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
         """Initialize the weights"""

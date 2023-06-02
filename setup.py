@@ -38,14 +38,9 @@ To create the package for pypi.
 7. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
 
-   Clean up your build and dist folders (to avoid re-uploading oldies):
-   rm -rf dist
-   rm -rf build
+   Run `make build-release`. This will build the release and do some sanity checks for you. If this ends with an error
+   message, you need to fix things before going further.
 
-   For the wheel, run: "python setup.py bdist_wheel" in the top level directory.
-   (this will build a wheel for the python version you use to build it).
-
-   For the sources, run: "python setup.py sdist"
    You should now have a /dist directory with both .whl and .tar.gz source versions.
 
 8. Check that everything looks correct by uploading the package to the pypi test server:
@@ -61,6 +56,7 @@ To create the package for pypi.
    Check you can run the following commands:
    python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))"
    python -c "from transformers import *"
+   python utils/check_build.py --check_lib
 
    If making a patch release, double check the bug you are patching is indeed resolved.
 
@@ -102,7 +98,7 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow",
-    "accelerate>=0.17.0",
+    "accelerate>=0.19.0",
     "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
     "beautifulsoup4",
     "black~=23.1",
@@ -112,6 +108,7 @@ _deps = [
     "datasets!=2.5.0",
     "decord==0.6.0",
     "deepspeed>=0.8.3",
+    "diffusers",
     "dill<0.3.5",
     "evaluate>=0.2.0",
     "fairscale>0.3",
@@ -123,7 +120,7 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.11.0,<1.0",
+    "huggingface-hub>=0.14.1,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -135,34 +132,34 @@ _deps = [
     "librosa",
     "nltk",
     "natten>=0.14.6",
-    "numba<0.57.0",  # Can be removed once unpinned.
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
+    "opencv-python",
     "optuna",
     "optax>=0.0.8,<=0.1.4",
     "packaging>=20.0",
     "parameterized",
     "phonemizer",
-    "protobuf<=3.20.2",
+    "protobuf<=3.20.3",
     "psutil",
     "pyyaml>=5.1",
     "pydantic",
-    "pytest",
+    "pytest>=7.2.0",
     "pytest-timeout",
     "pytest-xdist",
     "python>=3.7.0",
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
-    "rhoknp>=1.1.0",
+    "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff>=0.0.241,<=0.0.259",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
-    "safetensors>=0.2.1",
+    "safetensors>=0.3.1",
     "sagemaker>=2.31.0",
     "scikit-learn",
     "sentencepiece>=0.1.91,!=0.1.92",
@@ -288,8 +285,7 @@ extras["sigopt"] = deps_list("sigopt")
 extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-# numba can be removed here once unpinned
-extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm", "numba")
+extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
@@ -323,7 +319,6 @@ extras["testing"] = (
         "protobuf",  # Can be removed once we can unpin protobuf
         "sacremoses",
         "rjieba",
-        "safetensors",
         "beautifulsoup4",
     )
     + extras["retrieval"]
@@ -412,6 +407,10 @@ extras["torchhub"] = deps_list(
     "tqdm",
 )
 
+extras["agents"] = deps_list(
+    "diffusers", "accelerate", "datasets", "torch", "sentencepiece", "opencv-python", "Pillow"
+)
+
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
     deps["importlib_metadata"] + ";python_version<'3.8'",  # importlib_metadata for Python versions that don't have it
@@ -423,12 +422,13 @@ install_requires = [
     deps["regex"],  # for OpenAI GPT
     deps["requests"],  # for downloading models over HTTPS
     deps["tokenizers"],
+    deps["safetensors"],
     deps["tqdm"],  # progress bars in model download and training scripts
 ]
 
 setup(
     name="transformers",
-    version="4.29.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.30.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
@@ -440,7 +440,7 @@ setup(
     package_dir={"": "src"},
     packages=find_packages("src"),
     include_package_data=True,
-    package_data={"transformers": ["*.cu", "*.cpp", "*.cuh", "*.h", "*.pyx"]},
+    package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx"]},
     zip_safe=False,
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},

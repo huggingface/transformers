@@ -41,6 +41,7 @@ from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
+    id_tensor_storage,
     prune_conv1d_layer,
     prune_layer,
     prune_linear_layer,
@@ -207,21 +208,28 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
         # if no floating dtype was found return whatever the first dtype is
         return last_dtype
 
-    else:
-        # For nn.DataParallel compatibility in PyTorch > 1.5
-        def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
-            tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-            return tuples
+    # For nn.DataParallel compatibility in PyTorch > 1.5
+    def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
+        tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+        return tuples
 
-        gen = parameter._named_members(get_members_fn=find_tensor_attributes)
-        last_tuple = None
-        for tuple in gen:
-            last_tuple = tuple
-            if tuple[1].is_floating_point():
-                return tuple[1].dtype
+    gen = parameter._named_members(get_members_fn=find_tensor_attributes)
+    last_tuple = None
+    for tuple in gen:
+        last_tuple = tuple
+        if tuple[1].is_floating_point():
+            return tuple[1].dtype
 
+    if last_tuple is not None:
         # fallback to the last dtype
         return last_tuple[1].dtype
+
+    # fallback to buffer dtype
+    for t in parameter.buffers():
+        last_dtype = t.dtype
+        if t.is_floating_point():
+            return t.dtype
+    return last_dtype
 
 
 def get_state_dict_float_dtype(state_dict):
@@ -297,26 +305,31 @@ def shard_checkpoint(
     """
     max_shard_size = convert_file_size_to_int(max_shard_size)
 
-    sharded_state_dicts = []
-    current_block = {}
-    current_block_size = 0
+    sharded_state_dicts = [{}]
+    last_block_size = 0
     total_size = 0
+    storage_id_to_block = {}
 
     for key, weight in state_dict.items():
+        storage_id = id_tensor_storage(weight)
+
+        # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
+        if storage_id in storage_id_to_block:
+            block_id = storage_id_to_block[storage_id]
+            sharded_state_dicts[block_id][key] = weight
+            continue
+
         weight_size = weight.numel() * dtype_byte_size(weight.dtype)
 
         # If this weight is going to tip up over the maximal size, we split.
-        if current_block_size + weight_size > max_shard_size:
-            sharded_state_dicts.append(current_block)
-            current_block = {}
-            current_block_size = 0
+        if last_block_size + weight_size > max_shard_size:
+            sharded_state_dicts.append({})
+            last_block_size = 0
 
-        current_block[key] = weight
-        current_block_size += weight_size
+        sharded_state_dicts[-1][key] = weight
+        last_block_size += weight_size
         total_size += weight_size
-
-    # Add the last block
-    sharded_state_dicts.append(current_block)
+        storage_id_to_block[storage_id] = len(sharded_state_dicts) - 1
 
     # If we only have one shard, we return it
     if len(sharded_state_dicts) == 1:
@@ -599,7 +612,7 @@ def _load_state_dict_into_meta_model(
     state_dict_folder=None,
     state_dict_index=None,
     dtype=None,
-    load_in_8bit=False,
+    is_quantized=False,
     is_safetensors=False,
     keep_in_fp32_modules=None,
 ):
@@ -620,8 +633,8 @@ def _load_state_dict_into_meta_model(
     # - Is there a situation where some keys aren't in `loaded_state_dict_keys` and in which case
     #   they won't get loaded.
 
-    if load_in_8bit:
-        from .utils.bitsandbytes import set_module_8bit_tensor_to_device
+    if is_quantized:
+        from .utils.bitsandbytes import set_module_quantized_tensor_to_device
 
     error_msgs = []
 
@@ -692,12 +705,13 @@ def _load_state_dict_into_meta_model(
                 # TODO: group all errors and raise at the end.
                 raise ValueError(f"{param_name} doesn't have any device set.")
             param_device = device_map[module_name]
+
         if param_device == "disk":
             if not is_safetensors:
                 offload_index = offload_weight(param, param_name, offload_folder, offload_index)
         elif param_device == "cpu" and state_dict_index is not None:
             state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
-        elif not load_in_8bit:
+        elif not is_quantized:
             # For backward compatibility with older versions of `accelerate`
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
@@ -707,7 +721,7 @@ def _load_state_dict_into_meta_model(
                 fp16_statistics = None
 
             if "SCB" not in param_name:
-                set_module_8bit_tensor_to_device(
+                set_module_quantized_tensor_to_device(
                     model, param_name, param_device, value=param, fp16_statistics=fp16_statistics
                 )
 
@@ -905,7 +919,7 @@ class ModuleUtilsMixin:
                 The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard).
             num_hidden_layers (`int`):
                 The number of hidden layers in the model.
-            is_attention_chunked: (`bool`, *optional*, defaults to `False`):
+            is_attention_chunked (`bool`, *optional*, defaults to `False`):
                 Whether or not the attentions scores are computed by chunks or not.
 
         Returns:
@@ -1038,6 +1052,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     main_input_name = "input_ids"
     _auto_class = None
     _no_split_modules = None
+    _skip_keys_device_placement = None
     _keep_in_fp32_modules = None
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
@@ -1693,6 +1708,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 UserWarning,
             )
 
+        if getattr(self, "is_loaded_in_4bit", False):
+            raise NotImplementedError(
+                "You are calling `save_pretrained` on a 4-bit converted model. This is currently not supported"
+            )
+
         if "save_config" in kwargs:
             warnings.warn(
                 "`save_config` is deprecated and will be removed in v5 of Transformers. Use `is_main_process` instead."
@@ -1869,9 +1889,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def to(self, *args, **kwargs):
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_loaded_in_8bit", False):
+        if getattr(self, "is_quantized", False):
             raise ValueError(
-                "`.to` is not supported for `8-bit` models. Please use the model as it is, since the"
+                "`.to` is not supported for `4-bit` or `8-bit` models. Please use the model as it is, since the"
                 " model has already been set to the correct devices and casted to the correct `dtype`."
             )
         else:
@@ -1879,9 +1899,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def half(self, *args):
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_loaded_in_8bit", False):
+        if getattr(self, "is_quantized", False):
             raise ValueError(
-                "`.half()` is not supported for `8-bit` models. Please use the model as it is, since the"
+                "`.half()` is not supported for `4-bit` or `8-bit` models. Please use the model as it is, since the"
                 " model has already been casted to the correct `dtype`."
             )
         else:
@@ -1889,9 +1909,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def float(self, *args):
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_loaded_in_8bit", False):
+        if getattr(self, "is_quantized", False):
             raise ValueError(
-                "`.float()` is not supported for `8-bit` models. Please use the model as it is, since the"
+                "`.float()` is not supported for `4-bit` or `8-bit` models. Please use the model as it is, since the"
                 " model has already been casted to the correct `dtype`."
             )
         else:
@@ -2035,10 +2055,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 </Tip>
 
-            device_map (`str` or `Dict[str, Union[int, str, torch.device]]`, *optional*):
+            device_map (`str` or `Dict[str, Union[int, str, torch.device]]` or `int` or `torch.device`, *optional*):
                 A map that specifies where each submodule should go. It doesn't need to be refined to each
                 parameter/buffer name, once a given module name is inside, every submodule of it will be sent to the
-                same device.
+                same device. If we only pass the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank
+                like `1`) on which the model will be allocated, the device map will map the entire model to this
+                device. Passing `device_map = 0` means put the whole model on GPU 0.
 
                 To have Accelerate compute the most optimized `device_map` automatically, set `device_map="auto"`. For
                 more information about each option see [designing a device
@@ -2149,6 +2171,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_folder = kwargs.pop("offload_folder", None)
         offload_state_dict = kwargs.pop("offload_state_dict", False)
         load_in_8bit = kwargs.pop("load_in_8bit", False)
+        load_in_4bit = kwargs.pop("load_in_4bit", False)
         quantization_config = kwargs.pop("quantization_config", None)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
@@ -2165,6 +2188,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
                 " ignored."
             )
+
+        # change device_map into a map if we passed an int, a str or a torch.device
+        if isinstance(device_map, torch.device):
+            device_map = {"": device_map}
+        elif isinstance(device_map, str) and device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
+            try:
+                device_map = {"": torch.device(device_map)}
+            except RuntimeError:
+                raise ValueError(
+                    "When passing device_map as a string, the value needs to be a device name (e.g. cpu, cuda:0) or "
+                    f"'auto', 'balanced', 'balanced_low_0', 'sequential' but found {device_map}."
+                )
+        elif isinstance(device_map, int):
+            if device_map < 0:
+                raise ValueError(
+                    "You can't pass device_map as a negative int. If you want to put the model on the cpu, pass device_map = 'cpu' "
+                )
+            else:
+                device_map = {"": device_map}
+
         if device_map is not None:
             if low_cpu_mem_usage is None:
                 low_cpu_mem_usage = True
@@ -2187,10 +2230,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if quantization_config is None:
             quantization_config, kwargs = BitsAndBytesConfig.from_dict(
-                config_dict={"load_in_8bit": load_in_8bit}, return_unused_kwargs=True, **kwargs
+                config_dict={"load_in_8bit": load_in_8bit, "load_in_4bit": load_in_4bit},
+                return_unused_kwargs=True,
+                **kwargs,
             )
         elif quantization_config is not None:
             load_in_8bit = quantization_config.load_in_8bit
+            load_in_4bit = quantization_config.load_in_4bit
 
             quantization_config_kwargs = {
                 k: v for k, v in kwargs.items() if k in inspect.signature(BitsAndBytesConfig).parameters
@@ -2202,36 +2248,40 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "`quantization_config` argument at the same time."
                 )
 
-            # in the case a user loads an 8bit model from the Hub and assigns a new quantization_config
-            if device_map is None:
-                device_map = "auto"
-                if low_cpu_mem_usage is None:
-                    low_cpu_mem_usage = True
-
-        if load_in_8bit:
+        if load_in_8bit or load_in_4bit:
             if not (is_accelerate_available() and is_bitsandbytes_available()):
                 raise ImportError(
                     "Using `load_in_8bit=True` requires Accelerate: `pip install accelerate` and the latest version of"
                     " bitsandbytes `pip install -i https://test.pypi.org/simple/ bitsandbytes` or"
                     " pip install bitsandbytes` "
                 )
-            if torch_dtype != torch.float16:
+
+            if torch_dtype is None:
                 # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
-                logger.warning(
+                logger.info(
                     f"Overriding torch_dtype={torch_dtype} with `torch_dtype=torch.float16` due to "
-                    "requirements of `bitsandbytes` to enable model loading in mixed int8. "
-                    "Either pass torch_dtype=torch.float16 or don't pass this argument at all to remove this warning."
+                    "requirements of `bitsandbytes` to enable model loading in 8-bit or 4-bit. "
+                    "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
+                    " torch_dtype=torch.float16 to remove this warning."
                 )
                 torch_dtype = torch.float16
 
             if device_map is None:
-                raise ValueError(
-                    "A device map needs to be passed to run convert models into mixed-int8 format. Please run"
-                    "`.from_pretrained` with `device_map='auto'`"
+                if torch.cuda.is_available():
+                    device_map = {"": torch.cuda.current_device()}
+                else:
+                    raise RuntimeError("No GPU found. A GPU is needed for quantization.")
+                logger.info(
+                    "The device_map was not initialized."
+                    "Setting device_map to {'':torch.cuda.current_device()}."
+                    "If you want to use the model for inference, please set device_map ='auto' "
                 )
+                if low_cpu_mem_usage is None:
+                    low_cpu_mem_usage = True
+
             if from_tf or from_flax:
                 raise ValueError(
-                    "Converting into mixed 8-bit weights from tf/flax weights is currently not supported, please make"
+                    "Converting into 4-bit or 8-bit weights from tf/flax weights is currently not supported, please make"
                     " sure the weights are in PyTorch format."
                 )
 
@@ -2289,13 +2339,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             load_in_8bit = quantization_config.load_in_8bit
 
             if load_in_8bit:
-                torch_dtype = torch.float16
-
+                if torch_dtype is None:
+                    torch_dtype = torch.float16
                 if device_map is None:
-                    device_map = "auto"
+                    if torch.cuda.is_available():
+                        device_map = {"": torch.cuda.current_device()}
+                    else:
+                        raise RuntimeError("No GPU found. A GPU is needed for quantization.")
+                    logger.info(
+                        "The device_map was not initialized."
+                        "Setting device_map to {'':torch.cuda.current_device()}."
+                        "If you want to use the model for inference, please set device_map ='auto' "
+                    )
+                    if low_cpu_mem_usage is None:
+                        low_cpu_mem_usage = True
 
-                if low_cpu_mem_usage is None:
-                    low_cpu_mem_usage = True
         elif not is_8bit_serializable and not load_in_8bit and hasattr(config, "quantization_config"):
             logger.warning(
                 "Detected the presence of a `quantization_config` attribute in the model's configuration but you don't have the correct"
@@ -2575,7 +2633,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # Check if `_keep_in_fp32_modules` is not None
             use_keep_in_fp32_modules = (
-                (cls._keep_in_fp32_modules is not None) and is_accelerate_available() and torch_dtype == torch.float16
+                (cls._keep_in_fp32_modules is not None)
+                and is_accelerate_available()
+                and (torch_dtype == torch.float16 or load_in_4bit or load_in_8bit)
             )
             if (
                 (cls._keep_in_fp32_modules is not None)
@@ -2604,7 +2664,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
-        elif load_in_8bit or low_cpu_mem_usage:
+        elif load_in_8bit or load_in_4bit or low_cpu_mem_usage:
             init_contexts.append(init_empty_weights())
 
         with ContextManagers(init_contexts):
@@ -2617,20 +2677,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             keep_in_fp32_modules = []
 
-        if load_in_8bit:
-            from .utils.bitsandbytes import get_keys_to_not_convert, replace_8bit_linear
+        if load_in_8bit or load_in_4bit:
+            from .utils.bitsandbytes import get_keys_to_not_convert, replace_with_bnb_linear
 
-            load_in_8bit_skip_modules = quantization_config.llm_int8_skip_modules
-            load_in_8bit_threshold = quantization_config.llm_int8_threshold
+            llm_int8_skip_modules = quantization_config.llm_int8_skip_modules
             load_in_8bit_fp32_cpu_offload = quantization_config.llm_int8_enable_fp32_cpu_offload
 
             logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
 
             # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
-            if load_in_8bit_skip_modules is None:
+            if llm_int8_skip_modules is None:
                 modules_to_not_convert = get_keys_to_not_convert(model)
             else:
-                modules_to_not_convert = load_in_8bit_skip_modules
+                modules_to_not_convert = llm_int8_skip_modules
 
             if not isinstance(modules_to_not_convert, list):
                 modules_to_not_convert = [modules_to_not_convert]
@@ -2650,21 +2709,35 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 modules_to_not_convert.extend(keys_on_cpu)
 
-            model = replace_8bit_linear(
-                model, threshold=load_in_8bit_threshold, modules_to_not_convert=modules_to_not_convert
-            )
+            supports_4bit = version.parse(importlib_metadata.version("bitsandbytes")) >= version.parse("0.39.0")
 
+            if load_in_4bit and not supports_4bit:
+                raise ValueError(
+                    "You have a version of `bitsandbytes` that is not compatible with 4bit inference and training"
+                    " make sure you have the latest version of `bitsandbytes` installed"
+                )
+
+            model = replace_with_bnb_linear(
+                model, modules_to_not_convert=modules_to_not_convert, quantization_config=quantization_config
+            )
             # training in 8-bit is only available in 0.37.0+
-            model._is_int8_training_enabled = version.parse(
+            model._is_quantized_training_enabled = version.parse(
                 importlib_metadata.version("bitsandbytes")
             ) >= version.parse("0.37.0")
 
             model.config.quantization_config = quantization_config
             model.is_8bit_serializable = is_8bit_serializable
 
+        if load_in_8bit and torch_dtype is None:
+            logger.warning(
+                "You are loading your model in 8bit but you did not specify a `torch_dtype` attribute."
+                "All non-linear modules will be loaded in full precision."
+                " If you want to load the other modules in other precision, please specify a `torch_dtype` attribute."
+            )
+
         if isinstance(device_map, str):
             special_dtypes = {}
-            if load_in_8bit:
+            if load_in_8bit or load_in_4bit:
                 special_dtypes.update(
                     {
                         name: torch_dtype
@@ -2681,8 +2754,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 }
             )
 
+            target_dtype = torch_dtype
+
+            if load_in_4bit:
+                if version.parse(importlib_metadata.version("accelerate")) > version.parse("0.19.0"):
+                    from accelerate.utils import CustomDtype
+
+                    target_dtype = CustomDtype.INT4
+                else:
+                    raise ValueError(
+                        "You are using `device_map='auto'` on a 4bit loaded version of the model. To automatically compute"
+                        " the appropriate device map, you should upgrade your `accelerate` library,"
+                        "`pip install --upgrade accelerate` or install it from source to support fp4 auto device map"
+                        "calculation. You may encounter unexpected behavior, or pass your own device map"
+                    )
+            elif load_in_8bit:
+                target_dtype = torch.int8
+
             if model._no_split_modules is None:
-                raise ValueError(f"{model.__class__.__name__} does not support `device_map='{device_map}'` yet.")
+                raise ValueError(
+                    f"{model.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model"
+                    "class needs to implement the `_no_split_modules` attribute."
+                )
             no_split_modules = model._no_split_modules
             if device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
                 raise ValueError(
@@ -2703,7 +2796,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if device_map != "sequential" and get_balanced_memory is not None:
                 max_memory = get_balanced_memory(
                     model,
-                    dtype=torch_dtype if not load_in_8bit else torch.int8,
+                    dtype=target_dtype,
                     low_zero=(device_map == "balanced_low_0"),
                     max_memory=max_memory,
                     **kwargs,
@@ -2711,9 +2804,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             kwargs["max_memory"] = max_memory
             # Make sure tied weights are tied before creating the device map.
             model.tie_weights()
-            device_map = infer_auto_device_map(model, dtype=torch_dtype if not load_in_8bit else torch.int8, **kwargs)
+            device_map = infer_auto_device_map(model, dtype=target_dtype, **kwargs)
 
-            if load_in_8bit:
+            if load_in_8bit or load_in_4bit:
                 # The LM head / tied weights or any last module can stay on disk / CPU
                 device_map_without_lm_head = {
                     key: device_map[key] for key in device_map.keys() if key not in modules_to_not_convert
@@ -2788,11 +2881,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 offload_folder=offload_folder,
                 offload_state_dict=offload_state_dict,
                 dtype=torch_dtype,
-                load_in_8bit=load_in_8bit,
+                is_quantized=(load_in_8bit or load_in_4bit),
                 keep_in_fp32_modules=keep_in_fp32_modules,
             )
 
+        model.is_loaded_in_4bit = load_in_4bit
         model.is_loaded_in_8bit = load_in_8bit
+        model.is_quantized = load_in_8bit or load_in_4bit
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -2825,7 +2920,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:
-            dispatch_model(model, device_map=device_map, offload_dir=offload_folder, offload_index=offload_index)
+            kwargs = {"device_map": device_map, "offload_dir": offload_folder, "offload_index": offload_index}
+            if "skip_keys" in inspect.signature(dispatch_model).parameters:
+                kwargs["skip_keys"] = model._skip_keys_device_placement
+            dispatch_model(model, **kwargs)
 
         if output_loading_info:
             if loading_info is None:
@@ -2855,12 +2953,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_folder=None,
         offload_state_dict=None,
         dtype=None,
-        load_in_8bit=False,
+        is_quantized=False,
         keep_in_fp32_modules=None,
     ):
         is_safetensors = False
-        if load_in_8bit:
-            from .utils.bitsandbytes import set_module_8bit_tensor_to_device
+        if is_quantized:
+            from .utils.bitsandbytes import set_module_quantized_tensor_to_device
 
         if device_map is not None and "disk" in device_map.values():
             archive_file = (
@@ -2966,10 +3064,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     target_dtype = torch.float32
 
                 if param.device == torch.device("meta"):
-                    if not load_in_8bit:
+                    if not (is_quantized):
                         set_module_tensor_to_device(model, key, "cpu", torch.empty(*param.size(), dtype=target_dtype))
                     else:
-                        set_module_8bit_tensor_to_device(
+                        set_module_quantized_tensor_to_device(
                             model, key, "cpu", torch.empty(*param.size(), dtype=target_dtype)
                         )
 
@@ -3127,7 +3225,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         state_dict_folder=state_dict_folder,
                         state_dict_index=state_dict_index,
                         dtype=dtype,
-                        load_in_8bit=load_in_8bit,
+                        is_quantized=is_quantized,
                         is_safetensors=is_safetensors,
                         keep_in_fp32_modules=keep_in_fp32_modules,
                     )
@@ -3167,7 +3265,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
 
-        if load_in_8bit:
+        if is_quantized:
             unexpected_keys = [elem for elem in unexpected_keys if "SCB" not in elem]
             missing_keys = [elem for elem in missing_keys if "SCB" not in elem]
 
