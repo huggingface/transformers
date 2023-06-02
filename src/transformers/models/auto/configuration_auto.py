@@ -515,6 +515,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("megatron_gpt2", "Megatron-GPT2"),
         ("mgp-str", "MGP-STR"),
         ("mluke", "mLUKE"),
+        ("mms", "MMS"),
         ("mobilebert", "MobileBERT"),
         ("mobilenet_v1", "MobileNetV1"),
         ("mobilenet_v2", "MobileNetV2"),
