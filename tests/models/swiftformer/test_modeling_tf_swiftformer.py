@@ -73,6 +73,7 @@ class TFSwiftFormerModelTester:
         self.embed_dims = embed_dims
 
     def prepare_config_and_inputs(self):
+        # FIXME: should be same shape as pytorch version??
         pixel_values = floats_tensor([self.batch_size, self.image_size, self.image_size, self.num_channels])
 
         labels = None
@@ -272,7 +273,7 @@ def prepare_img():
 
 @require_tf
 @require_vision
-class SwiftFormerModelIntegrationTest(unittest.TestCase):
+class TFSwiftFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
@@ -285,7 +286,7 @@ class SwiftFormerModelIntegrationTest(unittest.TestCase):
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt")
+        inputs = feature_extractor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(**inputs)
