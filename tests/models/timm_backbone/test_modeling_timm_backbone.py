@@ -115,8 +115,8 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, unittest.Test
         self.config_tester.check_config_arguments_init()
 
     def test_timm_transformer_backbone_equivalence(self):
-        timm_checkpoint = "resnet50"
-        transformers_checkpoint = "microsoft/resnet-50"
+        timm_checkpoint = "resnet18"
+        transformers_checkpoint = "microsoft/resnet-18"
 
         timm_model = AutoBackbone.from_pretrained(timm_checkpoint, use_timm_backbone=True)
         transformers_model = AutoBackbone.from_pretrained(transformers_checkpoint)
