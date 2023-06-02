@@ -5,7 +5,7 @@ Functionality for storing and setting the version info for SparseML
 from datetime import date
 
 
-nm_version_base = "1.5.0"
+nm_version_base = "1.6.0"
 transformers_version_base = "42301"  # 4.23.1
 is_release = False  # change to True to set the generated version as a release version
 
