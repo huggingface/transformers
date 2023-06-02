@@ -130,6 +130,7 @@ from . import (
     mobilenet_v1,
     mobilenet_v2,
     mobilevit,
+    mobilevitv2,
     mpnet,
     mt5,
     mvp,
