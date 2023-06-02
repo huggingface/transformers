@@ -2114,7 +2114,7 @@ class TokenizerTesterMixin:
         if not self.test_slow_tokenizer:
             self.skipTest("Currently this test is only for slow tokenizers")
             return
-        model_ids = self.tokenizer_class.pretrained_vocab_files_map[ self.from_pretrained_vocab_key].keys()
+        model_ids = self.tokenizer_class.pretrained_vocab_files_map[self.from_pretrained_vocab_key].keys()
         tokenizer = self.tokenizer_class.from_pretrained(list(model_ids)[0])
         new_tokens = []
         new_tokens.append(AddedToken("<lstrip=False, rstrip=False>", lstrip=False, rstrip=False))
@@ -2122,11 +2122,10 @@ class TokenizerTesterMixin:
         new_tokens.append(AddedToken("<lstrip=False, rstrip=True>", lstrip=False, rstrip=True))
         new_tokens.append(AddedToken("<lstrip=True, rstrip=True>", lstrip=True, rstrip=True))
 
-        
         for token in new_tokens:
             with self.subTest(f"testing with {token.content[1:-1]}"):
                 space = tokenizer.tokenize(" ")[0]
-                if len(space)>0:
+                if len(space) > 0:
                     # BPE adds a spiece underline
                     space = space[-1]
                 tokenizer.add_tokens([token])
@@ -2135,44 +2134,43 @@ class TokenizerTesterMixin:
 
                 tokens = tokenizer.tokenize(f"This sentence is {token}a test")
                 self.assertIn(token.content, tokens)
-                
+
                 if not token.rstrip:
                     idx = tokens.index(token.content)
-                    self.assertIn(space, tokens[idx-1])
+                    self.assertIn(space, tokens[idx - 1])
                 else:
                     idx = tokens.index(token.content)
-                    self.assertNotIn(space, tokens[idx-1])
+                    self.assertNotIn(space, tokens[idx - 1])
 
                 tokens = tokenizer.tokenize(f"This sentence is{token} a test")
                 self.assertIn(token.content, tokens)
                 idx = tokens.index(token.content)
-                
+
                 if not token.lstrip:
                     idx = tokens.index(token.content)
-                    self.assertIn(space, tokens[idx+1])
+                    self.assertIn(space, tokens[idx + 1])
                 else:
                     idx = tokens.index(token.content)
-                    self.assertNotIn(space, tokens[idx-1])
-                    
+                    self.assertNotIn(space, tokens[idx - 1])
 
                 tokens = tokenizer.tokenize(f"This sentence is {token} a test")
                 self.assertIn(token.content, tokens)
-                
+
                 idx = tokens.index(token.content)
-                
+
                 if not token.lstrip:
                     idx = tokens.index(token.content)
-                    self.assertIn(space, tokens[idx+1])
+                    self.assertIn(space, tokens[idx + 1])
                 else:
                     idx = tokens.index(token.content)
-                    self.assertNotIn(space, tokens[idx-1])
-                
+                    self.assertNotIn(space, tokens[idx - 1])
+
                 if not token.rstrip:
                     idx = tokens.index(token.content)
-                    self.assertIn(space, tokens[idx-1])
+                    self.assertIn(space, tokens[idx - 1])
                 else:
                     idx = tokens.index(token.content)
-                    self.assertNotIn(space, tokens[idx-1])
+                    self.assertNotIn(space, tokens[idx - 1])
 
         # for non BPE based tokenizers we need to test that lstrip and rstrip are respected
 
