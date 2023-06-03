@@ -74,7 +74,8 @@ class TFSwiftFormerModelTester:
 
     def prepare_config_and_inputs(self):
         # FIXME: should be same shape as pytorch version??
-        pixel_values = floats_tensor([self.batch_size, self.image_size, self.image_size, self.num_channels])
+        # pixel_values = floats_tensor([self.batch_size, self.image_size, self.image_size, self.num_channels])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         labels = None
         if self.use_labels:
@@ -104,6 +105,7 @@ class TFSwiftFormerModelTester:
     def create_and_check_model(self, config, pixel_values, labels):
         model = TFSwiftFormerModel(config=config)
         result = model(pixel_values)
+        # FIXME: channels_first or last?
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, 7, 7, self.embed_dims[-1]))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
@@ -160,7 +162,7 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="SwiftFormer does not use inputs_embeds")
+    @unittest.skip(reason="TFSwiftFormer does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -198,7 +200,7 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
             model = TFSwiftFormerModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
-    @unittest.skip(reason="SwiftFormer does not output attentions")
+    @unittest.skip(reason="TFSwiftFormer does not output attentions")
     def test_attention_outputs(self):
         pass
 
@@ -220,7 +222,9 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
                     hidden_states[i].shape,
                     tf.TensorShape(
                         [
+                            # FIXME: channels_last?
                             self.model_tester.batch_size,
+                            # self.model_tester.embed_dims[i // 2],
                             (self.model_tester.image_size // 4) // 2 ** (i // 2),
                             (self.model_tester.image_size // 4) // 2 ** (i // 2),
                             self.model_tester.embed_dims[i // 2],
