@@ -351,8 +351,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self.added_tokens_encoder: Dict[str, int] = {}
         self.added_tokens_decoder: Dict[int, str] = {}
         self.unique_no_split_tokens: List[str] = []
-        self.tokens_trie = Trie()
-
+        self._create_trie(self.all_special_tokens)
+        if self.tokens_trie is None:
+            self.tokens_trie = Trie()
         self._decode_use_source_tokenizer = False
 
     @property
@@ -414,24 +415,28 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         for i, token in enumerate(token_contents):
             if not isinstance(token, str):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
-            if not special_tokens and hasattr(self, "do_lower_case") and self.do_lower_case:
-                token = token.lower() # this is partly wrong. Added tokens that are not special but have escape cars are not
-                # lowered. Why means that the Trie will be wrong.
+            # if not special_tokens and hasattr(self, "do_lower_case") and self.do_lower_case:
+            #     token = token.lower() # is this useless? The `create_trie` function already does that.
+            # We lower only the content, but the added token
             if (
                 token != self.unk_token
                 and self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token)
                 and token not in tokens_to_add
             ):
                 tokens_to_add.append(token)
-                if isinstance(new_tokens[i], AddedToken) and not special_tokens :
+                if isinstance(new_tokens[i], AddedToken) and not special_tokens:
                     if hasattr(self, "do_lower_case") and self.do_lower_case:
-                        token = AddedToken(new_tokens[i].content.lower(), single_word = new_tokens[i].single_word, lstrip = new_tokens[i].lstrip, rstrip = new_tokens[i].rstrip, normalized = new_tokens[i].normalized)
+                        # this should maybe never arise? adding a token that has a mix of lower and upper, while model does lower. Or jsut addihng a non special token like `TOKEN`.
+                        token = AddedToken(
+                            new_tokens[i].content.lower(),
+                            single_word=new_tokens[i].single_word,
+                            lstrip=new_tokens[i].lstrip,
+                            rstrip=new_tokens[i].rstrip,
+                            normalized=new_tokens[i].normalized,
+                        )
                     else:
                         token = new_tokens[i]
                     self._additional_special_tokens.append(token)
-                if special_tokens:
-                    # they are not lower when tokenizing
-                    self._additional_special_tokens.append(new_tokens[i])
                 if self.verbose:
                     logger.info(f"Adding {token} to the vocabulary")
 
@@ -459,6 +464,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     def _create_trie(self, unique_no_split_tokens):
         trie = Trie()
         for token in unique_no_split_tokens:
+            # if single_word=True, then we have to add ` token ` instead of `token`
             if hasattr(self, "do_lower_case") and self.do_lower_case and token not in self.all_special_tokens:
                 trie.add(token.lower())
             else:
@@ -523,15 +529,24 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
             text = re.sub(pattern, lambda m: m.groups()[0] or m.groups()[1].lower(), text)
 
-        no_split_token = set(self.unique_no_split_tokens)
+        no_split_token = set(self.all_special_tokens)
         tokens = self.tokens_trie.split(text)
         # ["This is something", "<special_token_1>", "  else"]
         for i, token in enumerate(tokens):
-            if token in no_split_token:
+            if token in self.all_special_tokens:
                 tok_extended = all_special_tokens_extended.get(token, None)
                 left = tokens[i - 1] if i > 0 else None
                 right = tokens[i + 1] if i < len(tokens) - 1 else None
+
                 if isinstance(tok_extended, AddedToken):
+                    if tok_extended.single_word:
+                        if right and not right[0] == " " and right not in self.all_special_tokens:
+                            tokens[i] = ""
+                            tokens[i + 1] += token
+                        elif left and not left[0] == " " and right not in self.all_special_tokens:
+                            tokens[i] = ""
+                            tokens[i - 1] += token
+
                     if tok_extended.rstrip and right:
                         # A bit counter-intuitive but we strip the left of the string
                         # since tok_extended.rstrip means the special token is eating all white spaces on its right
@@ -549,6 +564,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                         tokens[i + 1] = right.lstrip()
                     if left:
                         tokens[i - 1] = left.rstrip()
+
         # ["This is something", "<special_token_1>", "else"]
         tokenized_text = []
         for token in tokens:

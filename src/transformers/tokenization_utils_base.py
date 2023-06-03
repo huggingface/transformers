@@ -838,6 +838,11 @@ class SpecialTokensMixin:
                 else:
                     raise TypeError(f"special token {key} has to be either str or AddedToken but got: {type(value)}")
 
+        # TODO Trie should be created here, we initialized all the values but the Trie does not change
+        # the unique no split tokens should be updated here? Or is it _additional_special_tokens for fast
+        # if self.is_fast:
+        #     self.add_tokens(self.all_special_tokens, True) # we need to use fast functionalities to add special tokens
+
     def sanitize_special_tokens(self) -> int:
         """
         Make sure that all the special tokens attributes of the tokenizer (`tokenizer.mask_token`,
@@ -933,13 +938,14 @@ class SpecialTokensMixin:
                     # update the property
                     additional_special_tokens.extend(to_add)
                     self.additional_special_tokens = additional_special_tokens
-
+                # this is slow, trie is re-created here
                 added_tokens += self.add_tokens(value, special_tokens=True)
             else:
                 assert isinstance(
                     value, (str, AddedToken)
                 ), f"Token {value} for key {key} should be a str or an AddedToken instance"
                 setattr(self, key, value)
+                # and here.... and everytime
                 added_tokens += self.add_tokens([value], special_tokens=True)
 
         return added_tokens
@@ -2010,7 +2016,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     value = [AddedToken(**token) if isinstance(token, dict) else token for token in value]
                 setattr(tokenizer, key, value)
 
-        # Add supplementary tokens.
+        # Add supplementary tokens. The Trie is created here for slow.
         special_tokens = tokenizer.all_special_tokens
         if added_tokens_file is not None:
             with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
@@ -2019,13 +2025,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # Sort added tokens by index
             added_tok_encoder_sorted = sorted(added_tok_encoder.items(), key=lambda x: x[1])
 
-            # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
-            # individual tokens would repeatedly rebuild a trie, which can be slow.
-            is_last_special = None
-            tokens = []
+            added_special_tokens = []
+            non_special_tokens = []
 
             for token, index in added_tok_encoder_sorted:
-                current_index = len(tokenizer) + len(tokens)
+                current_index = len(tokenizer) + len(added_special_tokens) + len(non_special_tokens)
                 if has_tokenizer_file and index != current_index and tokenizer.convert_tokens_to_ids(token) != index:
                     # Tokenizer fast: added token needs to either be in the vocabulary with the proper index or the
                     # index is the current length of the tokenizer (not in vocabulary)
@@ -2042,23 +2046,28 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     )
 
                 is_special = bool(token in special_tokens)
-                if is_last_special is None or is_last_special == is_special:
-                    tokens.append(token)
+                if is_special:
+                    added_special_tokens.append(token)
                 else:
-                    tokenizer.add_tokens(tokens, special_tokens=is_last_special)
-                    tokens = [token]
-                is_last_special = is_special
+                    non_special_tokens.append(token)
 
-            if tokens:
-                tokenizer.add_tokens(tokens, special_tokens=is_last_special)
+            if added_special_tokens:
+                tokenizer.add_tokens(added_special_tokens, special_tokens=True)
 
+            if non_special_tokens:
+                tokenizer.add_tokens(non_special_tokens, special_tokens=False)
+        
+        # this overwrites the ones added non? 
+        tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
+        # the tokenizer.all_special_tokens should automatically be in `self.unique_no_split` and the trie should be created
+        # this would allow us to avoid having to `sanitize` which breaks.
         # Check all our special tokens are registered as "no split" token (we don't cut them) and are in the vocab
-        added_tokens = tokenizer.sanitize_special_tokens()
-        if added_tokens:
-            logger.warning_advice(
-                "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
-                " fine-tuned or trained."
-            )
+        # added_tokens = tokenizer.sanitize_special_tokens()
+        # if added_tokens:
+        #     logger.warning_advice(
+        #         "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
+        #         " fine-tuned or trained."
+        #     )
 
         return tokenizer
 

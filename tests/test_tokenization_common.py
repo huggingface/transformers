@@ -2115,7 +2115,9 @@ class TokenizerTesterMixin:
             self.skipTest("Currently this test is only for slow tokenizers")
             return
         model_ids = self.tokenizer_class.pretrained_vocab_files_map[self.from_pretrained_vocab_key].keys()
-        tokenizer = self.tokenizer_class.from_pretrained(list(model_ids)[0])
+        tokenizer = self.tokenizer_class.from_pretrained(
+            list(model_ids)[0], do_lowercase=False
+        )  # complicates everything FIXME
         new_tokens = []
         new_tokens.append(AddedToken("<lstrip=False, rstrip=False>", lstrip=False, rstrip=False))
         new_tokens.append(AddedToken("<lstrip=True, rstrip=False>", lstrip=True, rstrip=False))
@@ -2128,7 +2130,7 @@ class TokenizerTesterMixin:
                 if len(space) > 1:
                     # BPE adds a spiece underline, but eats aways spaces so don't test it. (cleanup_tokenization_spaces to test)
                     space = space[0][0]
-                else: 
+                else:
                     space = []
 
                 tokenizer.add_tokens([token])

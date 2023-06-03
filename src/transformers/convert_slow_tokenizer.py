@@ -1117,7 +1117,7 @@ class LlamaConverter(SpmConverter):
                 decoders.Replace("▁", " "),
                 decoders.ByteFallback(),
                 decoders.Fuse(),
-                decoders.Strip(content=" ", left=1),
+                decoders.Strip(content=" ", left=1), # should this have priority over the `rstrip` and `lstrip`
             ]
         )
 
