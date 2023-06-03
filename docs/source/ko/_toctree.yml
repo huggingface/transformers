@@ -21,7 +21,7 @@
     title: 🤗 Accelerate로 분산 학습 구성하기
   - local: model_sharing
     title: 만든 모델 공유하기
-  - local: ../en/transformers_agents
+  - local: transformers_agents
     title: (번역중) Agents
   title: (번역중) 튜토리얼
 - sections:
@@ -32,7 +32,7 @@
         title: 토큰 분류
       - local: tasks/question_answering
         title: 질의 응답(Question Answering)
-      - local: ../en/tasks/language_modeling
+      - local: tasks/language_modeling
         title: (번역중) Causal language modeling
       - local: tasks/masked_language_modeling
         title: 마스킹된 언어 모델링(Masked language modeling)
@@ -45,7 +45,7 @@
     title: 자연어처리
     isExpanded: false
   - sections:
-      - local: ../en/tasks/audio_classification
+      - local: tasks/audio_classification
         title: (번역중) Audio classification
       - local: tasks/asr
         title: 자동 음성 인식
@@ -54,7 +54,7 @@
   - sections:
       - local: tasks/image_classification
         title: 이미지 분류
-      - local: ../en/tasks/semantic_segmentation
+      - local: tasks/semantic_segmentation
         title: (번역중) Semantic segmentation
       - local: tasks/video_classification
         title: 영상 분류
@@ -71,9 +71,9 @@
   - sections:
       - local: tasks/image_captioning
         title: 이미지 캡셔닝
-      - local: ../en/tasks/document_question_answering
+      - local: tasks/document_question_answering
         title: (번역중) Document Question Answering
-      - local: ../en/tasks/text-to-speech
+      - local: tasks/text-to-speech
         title: (번역중) Text to speech
     title: (번역중) 멀티모달
     isExpanded: false
@@ -83,7 +83,7 @@
       title: 🤗 Tokenizers 라이브러리에서 토크나이저 사용하기
     - local: multilingual
       title: 다국어 모델 추론하기
-    - local: ../en/generation_strategies
+    - local: generation_strategies
       title: (번역중) Customize text generation strategy
     - local: create_a_model
       title: 모델별 API 사용하기
@@ -93,604 +93,604 @@
       title: Amazon SageMaker에서 학습 실행하기
     - local: serialization
       title: ONNX로 내보내기
-    - local: ../en/tflite
+    - local: tflite
       title: (번역중) Export to TFLite
     - local: torchscript
       title: TorchScript로 내보내기
-    - local: ../en/benchmarks
+    - local: benchmarks
       title: (번역중) Benchmarks
-    - local: ../en/notebooks
+    - local: notebooks
       title: (번역중) Notebooks with examples
-    - local: ../en/community
+    - local: community
       title: (번역중) Community resources
-    - local: ../en/custom_tools
+    - local: custom_tools
       title: (번역중) Custom Tools and Prompts
     - local: troubleshooting
       title: 문제 해결
   title: (번역중) 개발자 가이드
 - sections:
-    - local: ../en/performance
+    - local: performance
       title: (번역중) Overview
-    - local: ../en/perf_train_gpu_one
+    - local: perf_train_gpu_one
       title: (번역중) Training on one GPU
-    - local: ../en/perf_train_gpu_many
+    - local: perf_train_gpu_many
       title: (번역중) Training on many GPUs
-    - local: ../en/perf_train_cpu
+    - local: perf_train_cpu
       title: (번역중) Training on CPU
-    - local: ../en/perf_train_cpu_many
+    - local: perf_train_cpu_many
       title: (번역중) Training on many CPUs
-    - local: ../en/perf_train_tpu
+    - local: perf_train_tpu
       title: (번역중) Training on TPUs
-    - local: ../en/perf_train_tpu_tf
+    - local: perf_train_tpu_tf
       title: (번역중) Training on TPU with TensorFlow
-    - local: ../en/perf_train_special
+    - local: perf_train_special
       title: (번역중) Training on Specialized Hardware
-    - local: ../en/perf_infer_cpu
+    - local: perf_infer_cpu
       title: (번역중) Inference on CPU
-    - local: ../en/perf_infer_gpu_one
+    - local: perf_infer_gpu_one
       title: (번역중) Inference on one GPU
-    - local: ../en/perf_infer_gpu_many
+    - local: perf_infer_gpu_many
       title: (번역중) Inference on many GPUs
-    - local: ../en/perf_infer_special
+    - local: perf_infer_special
       title: (번역중) Inference on Specialized Hardware
-    - local: ../en/perf_hardware
+    - local: perf_hardware
       title: (번역중) Custom hardware for training
-    - local: ../en/big_models
+    - local: big_models
       title: (번역중) Instantiating a big model
-    - local: ../en/debugging
+    - local: debugging
       title: (번역중) Debugging
-    - local: ../en/hpo_train
+    - local: hpo_train
       title: (번역중) Hyperparameter Search using Trainer API
-    - local: ../en/tf_xla
+    - local: tf_xla
       title: (번역중) XLA Integration for TensorFlow Models
   title: (번역중) 성능 및 확장성
 - sections:
-    - local: ../en/contributing
+    - local: contributing
       title: (번역중) How to contribute to transformers?
-    - local: ../en/add_new_model
+    - local: add_new_model
       title: (번역중) How to add a model to 🤗 Transformers?
-    - local: ../en/add_tensorflow_model
+    - local: add_tensorflow_model
       title: (번역중) How to convert a 🤗 Transformers model to TensorFlow?
-    - local: ../en/add_new_pipeline
+    - local: add_new_pipeline
       title: (번역중) How to add a pipeline to 🤗 Transformers?
-    - local: ../en/testing
+    - local: testing
       title: (번역중) Testing
-    - local: ../en/pr_checks
+    - local: pr_checks
       title: (번역중) Checks on a Pull Request
   title: (번역중) 기여하기
 
 - sections:
-  - local: ../en/philosophy
+  - local: philosophy
     title: (번역중) Philosophy
-  - local: ../en/glossary
+  - local: glossary
     title: (번역중) Glossary
-  - local: ../en/task_summary
+  - local: task_summary
     title: (번역중) What 🤗 Transformers can do
-  - local: ../en/tasks_explained
+  - local: tasks_explained
     title: (번역중) How 🤗 Transformers solve tasks
-  - local: ../en/model_summary
+  - local: model_summary
     title: (번역중) The Transformer model family
-  - local: ../en/tokenizer_summary
+  - local: tokenizer_summary
     title: (번역중) Summary of the tokenizers
-  - local: ../en/attention
+  - local: attention
     title: (번역중) Attention mechanisms
   - local: pad_truncation
     title: 패딩과 잘라내기
-  - local: ../en/bertology
+  - local: bertology
     title: (번역중) BERTology
-  - local: ../en/perplexity
+  - local: perplexity
     title: (번역중) Perplexity of fixed-length models
-  - local: ../en/pipeline_webserver
+  - local: pipeline_webserver
     title: (번역중) Pipelines for webserver inference
   title: (번역중) 개념 가이드
 - sections:
   - sections:
-    - local: ../en/main_classes/agent
+    - local: main_classes/agent
       title: (번역중) Agents and Tools
-    - local: ../en/model_doc/auto
+    - local: model_doc/auto
       title: (번역중) Auto Classes
-    - local: ../en/main_classes/callback
+    - local: main_classes/callback
       title: (번역중) Callbacks
-    - local: ../en/main_classes/configuration
+    - local: main_classes/configuration
       title: (번역중) Configuration
-    - local: ../en/main_classes/data_collator
+    - local: main_classes/data_collator
       title: (번역중) Data Collator
-    - local: ../en/main_classes/keras_callbacks
+    - local: main_classes/keras_callbacks
       title: (번역중) Keras callbacks
-    - local: ../en/main_classes/logging
+    - local: main_classes/logging
       title: (번역중) Logging
-    - local: ../en/main_classes/model
+    - local: main_classes/model
       title: (번역중) Models
-    - local: ../en/main_classes/text_generation
+    - local: main_classes/text_generation
       title: (번역중) Text Generation
-    - local: ../en/main_classes/onnx
+    - local: main_classes/onnx
       title: (번역중) ONNX
-    - local: ../en/main_classes/optimizer_schedules
+    - local: main_classes/optimizer_schedules
       title: (번역중) Optimization
-    - local: ../en/main_classes/output
+    - local: main_classes/output
       title: (번역중) Model outputs
-    - local: ../en/main_classes/pipelines
+    - local: main_classes/pipelines
       title: (번역중) Pipelines
-    - local: ../en/main_classes/processors
+    - local: main_classes/processors
       title: (번역중) Processors
-    - local: ../en/main_classes/quantization
+    - local: main_classes/quantization
       title: (번역중) Quantization
-    - local: ../en/main_classes/tokenizer
+    - local: main_classes/tokenizer
       title: (번역중) Tokenizer
-    - local: ../en/main_classes/trainer
+    - local: main_classes/trainer
       title: (번역중) Trainer
-    - local: ../en/main_classes/deepspeed
+    - local: main_classes/deepspeed
       title: (번역중) DeepSpeed Integration
-    - local: ../en/main_classes/feature_extractor
+    - local: main_classes/feature_extractor
       title: (번역중) Feature Extractor
-    - local: ../en/main_classes/image_processor
+    - local: main_classes/image_processor
       title: (번역중) Image Processor
     title: (번역중) 메인 클래스
   - sections:
     - isExpanded: false
       sections:
-      - local: ../en/model_doc/albert
+      - local: model_doc/albert
         title: (번역중) ALBERT
-      - local: ../en/model_doc/bart
+      - local: model_doc/bart
         title: (번역중) BART
-      - local: ../en/model_doc/barthez
+      - local: model_doc/barthez
         title: (번역중) BARThez
-      - local: ../en/model_doc/bartpho
+      - local: model_doc/bartpho
         title: (번역중) BARTpho
-      - local: ../en/model_doc/bert
+      - local: model_doc/bert
         title: (번역중) BERT
-      - local: ../en/model_doc/bert-generation
+      - local: model_doc/bert-generation
         title: (번역중) BertGeneration
-      - local: ../en/model_doc/bert-japanese
+      - local: model_doc/bert-japanese
         title: (번역중) BertJapanese
-      - local: ../en/model_doc/bertweet
+      - local: model_doc/bertweet
         title: (번역중) Bertweet
-      - local: ../en/model_doc/big_bird
+      - local: model_doc/big_bird
         title: (번역중) BigBird
-      - local: ../en/model_doc/bigbird_pegasus
+      - local: model_doc/bigbird_pegasus
         title: (번역중) BigBirdPegasus
-      - local: ../en/model_doc/biogpt
+      - local: model_doc/biogpt
         title: (번역중) BioGpt
-      - local: ../en/model_doc/blenderbot
+      - local: model_doc/blenderbot
         title: (번역중) Blenderbot
-      - local: ../en/model_doc/blenderbot-small
+      - local: model_doc/blenderbot-small
         title: (번역중) Blenderbot Small
-      - local: ../en/model_doc/bloom
+      - local: model_doc/bloom
         title: (번역중) BLOOM
-      - local: ../en/model_doc/bort
+      - local: model_doc/bort
         title: (번역중) BORT
-      - local: ../en/model_doc/byt5
+      - local: model_doc/byt5
         title: (번역중) ByT5
-      - local: ../en/model_doc/camembert
+      - local: model_doc/camembert
         title: (번역중) CamemBERT
-      - local: ../en/model_doc/canine
+      - local: model_doc/canine
         title: (번역중) CANINE
-      - local: ../en/model_doc/codegen
+      - local: model_doc/codegen
         title: (번역중) CodeGen
-      - local: ../en/model_doc/convbert
+      - local: model_doc/convbert
         title: (번역중) ConvBERT
-      - local: ../en/model_doc/cpm
+      - local: model_doc/cpm
         title: (번역중) CPM
-      - local: ../en/model_doc/cpmant
+      - local: model_doc/cpmant
         title: (번역중) CPMANT
-      - local: ../en/model_doc/ctrl
+      - local: model_doc/ctrl
         title: (번역중) CTRL
-      - local: ../en/model_doc/deberta
+      - local: model_doc/deberta
         title: (번역중) DeBERTa
-      - local: ../en/model_doc/deberta-v2
+      - local: model_doc/deberta-v2
         title: (번역중) DeBERTa-v2
-      - local: ../en/model_doc/dialogpt
+      - local: model_doc/dialogpt
         title: (번역중) DialoGPT
-      - local: ../en/model_doc/distilbert
+      - local: model_doc/distilbert
         title: (번역중) DistilBERT
-      - local: ../en/model_doc/dpr
+      - local: model_doc/dpr
         title: (번역중) DPR
-      - local: ../en/model_doc/electra
+      - local: model_doc/electra
         title: (번역중) ELECTRA
-      - local: ../en/model_doc/encoder-decoder
+      - local: model_doc/encoder-decoder
         title: (번역중) Encoder Decoder Models
-      - local: ../en/model_doc/ernie
+      - local: model_doc/ernie
         title: (번역중) ERNIE
-      - local: ../en/model_doc/ernie_m
+      - local: model_doc/ernie_m
         title: (번역중) ErnieM
-      - local: ../en/model_doc/esm
+      - local: model_doc/esm
         title: (번역중) ESM
-      - local: ../en/model_doc/flan-t5
+      - local: model_doc/flan-t5
         title: (번역중) FLAN-T5
-      - local: ../en/model_doc/flan-ul2
+      - local: model_doc/flan-ul2
         title: (번역중) FLAN-UL2
-      - local: ../en/model_doc/flaubert
+      - local: model_doc/flaubert
         title: (번역중) FlauBERT
-      - local: ../en/model_doc/fnet
+      - local: model_doc/fnet
         title: (번역중) FNet
-      - local: ../en/model_doc/fsmt
+      - local: model_doc/fsmt
         title: (번역중) FSMT
-      - local: ../en/model_doc/funnel
+      - local: model_doc/funnel
         title: (번역중) Funnel Transformer
-      - local: ../en/model_doc/openai-gpt
+      - local: model_doc/openai-gpt
         title: (번역중) GPT
-      - local: ../en/model_doc/gpt_neo
+      - local: model_doc/gpt_neo
         title: (번역중) GPT Neo
-      - local: ../en/model_doc/gpt_neox
+      - local: model_doc/gpt_neox
         title: (번역중) GPT NeoX
-      - local: ../en/model_doc/gpt_neox_japanese
+      - local: model_doc/gpt_neox_japanese
         title: (번역중) GPT NeoX Japanese
-      - local: ../en/model_doc/gptj
+      - local: model_doc/gptj
         title: (번역중) GPT-J
-      - local: ../en/model_doc/gpt2
+      - local: model_doc/gpt2
         title: (번역중) GPT2
-      - local: ../en/model_doc/gpt_bigcode
+      - local: model_doc/gpt_bigcode
         title: (번역중) GPTBigCode
-      - local: ../en/model_doc/gptsan-japanese
+      - local: model_doc/gptsan-japanese
         title: (번역중) GPTSAN Japanese
-      - local: ../en/model_doc/gpt-sw3
+      - local: model_doc/gpt-sw3
         title: (번역중) GPTSw3
-      - local: ../en/model_doc/herbert
+      - local: model_doc/herbert
         title: (번역중) HerBERT
-      - local: ../en/model_doc/ibert
+      - local: model_doc/ibert
         title: (번역중) I-BERT
-      - local: ../en/model_doc/jukebox
+      - local: model_doc/jukebox
         title: (번역중) Jukebox
-      - local: ../en/model_doc/led
+      - local: model_doc/led
         title: (번역중) LED
-      - local: ../en/model_doc/llama
+      - local: model_doc/llama
         title: (번역중) LLaMA
-      - local: ../en/model_doc/longformer
+      - local: model_doc/longformer
         title: (번역중) Longformer
-      - local: ../en/model_doc/longt5
+      - local: model_doc/longt5
         title: (번역중) LongT5
-      - local: ../en/model_doc/luke
+      - local: model_doc/luke
         title: (번역중) LUKE
-      - local: ../en/model_doc/m2m_100
+      - local: model_doc/m2m_100
         title: (번역중) M2M100
-      - local: ../en/model_doc/marian
+      - local: model_doc/marian
         title: (번역중) MarianMT
-      - local: ../en/model_doc/markuplm
+      - local: model_doc/markuplm
         title: (번역중) MarkupLM
-      - local: ../en/model_doc/mbart
+      - local: model_doc/mbart
         title: (번역중) MBart and MBart-50
-      - local: ../en/model_doc/mega
+      - local: model_doc/mega
         title: (번역중) MEGA
-      - local: ../en/model_doc/megatron-bert
+      - local: model_doc/megatron-bert
         title: (번역중) MegatronBERT
-      - local: ../en/model_doc/megatron_gpt2
+      - local: model_doc/megatron_gpt2
         title: (번역중) MegatronGPT2
-      - local: ../en/model_doc/mluke
+      - local: model_doc/mluke
         title: (번역중) mLUKE
-      - local: ../en/model_doc/mobilebert
+      - local: model_doc/mobilebert
         title: (번역중) MobileBERT
-      - local: ../en/model_doc/mpnet
+      - local: model_doc/mpnet
         title: (번역중) MPNet
-      - local: ../en/model_doc/mt5
+      - local: model_doc/mt5
         title: (번역중) MT5
-      - local: ../en/model_doc/mvp
+      - local: model_doc/mvp
         title: (번역중) MVP
-      - local: ../en/model_doc/nezha
+      - local: model_doc/nezha
         title: (번역중) NEZHA
-      - local: ../en/model_doc/nllb
+      - local: model_doc/nllb
         title: (번역중) NLLB
-      - local: ../en/model_doc/nllb-moe
+      - local: model_doc/nllb-moe
         title: (번역중) NLLB-MoE
-      - local: ../en/model_doc/nystromformer
+      - local: model_doc/nystromformer
         title: (번역중) Nyströmformer
-      - local: ../en/model_doc/open-llama
+      - local: model_doc/open-llama
         title: (번역중) Open-Llama
-      - local: ../en/model_doc/opt
+      - local: model_doc/opt
         title: (번역중) OPT
-      - local: ../en/model_doc/pegasus
+      - local: model_doc/pegasus
         title: (번역중) Pegasus
-      - local: ../en/model_doc/pegasus_x
+      - local: model_doc/pegasus_x
         title: (번역중) PEGASUS-X
-      - local: ../en/model_doc/phobert
+      - local: model_doc/phobert
         title: (번역중) PhoBERT
-      - local: ../en/model_doc/plbart
+      - local: model_doc/plbart
         title: (번역중) PLBart
-      - local: ../en/model_doc/prophetnet
+      - local: model_doc/prophetnet
         title: (번역중) ProphetNet
-      - local: ../en/model_doc/qdqbert
+      - local: model_doc/qdqbert
         title: (번역중) QDQBert
-      - local: ../en/model_doc/rag
+      - local: model_doc/rag
         title: (번역중) RAG
-      - local: ../en/model_doc/realm
+      - local: model_doc/realm
         title: (번역중) REALM
-      - local: ../en/model_doc/reformer
+      - local: model_doc/reformer
         title: (번역중) Reformer
-      - local: ../en/model_doc/rembert
+      - local: model_doc/rembert
         title: (번역중) RemBERT
-      - local: ../en/model_doc/retribert
+      - local: model_doc/retribert
         title: (번역중) RetriBERT
-      - local: ../en/model_doc/roberta
+      - local: model_doc/roberta
         title: (번역중) RoBERTa
-      - local: ../en/model_doc/roberta-prelayernorm
+      - local: model_doc/roberta-prelayernorm
         title: (번역중) RoBERTa-PreLayerNorm
-      - local: ../en/model_doc/roc_bert
+      - local: model_doc/roc_bert
         title: (번역중) RoCBert
-      - local: ../en/model_doc/roformer
+      - local: model_doc/roformer
         title: (번역중) RoFormer
-      - local: ../en/model_doc/rwkv
+      - local: model_doc/rwkv
         title: (번역중) RWKV
-      - local: ../en/model_doc/splinter
+      - local: model_doc/splinter
         title: (번역중) Splinter
-      - local: ../en/model_doc/squeezebert
+      - local: model_doc/squeezebert
         title: (번역중) SqueezeBERT
-      - local: ../en/model_doc/switch_transformers
+      - local: model_doc/switch_transformers
         title: (번역중) SwitchTransformers
-      - local: ../en/model_doc/t5
+      - local: model_doc/t5
         title: (번역중) T5
-      - local: ../en/model_doc/t5v1.1
+      - local: model_doc/t5v1.1
         title: (번역중) T5v1.1
-      - local: ../en/model_doc/tapex
+      - local: model_doc/tapex
         title: (번역중) TAPEX
-      - local: ../en/model_doc/transfo-xl
+      - local: model_doc/transfo-xl
         title: (번역중) Transformer XL
-      - local: ../en/model_doc/ul2
+      - local: model_doc/ul2
         title: (번역중) UL2
-      - local: ../en/model_doc/xmod
+      - local: model_doc/xmod
         title: (번역중) X-MOD
-      - local: ../en/model_doc/xglm
+      - local: model_doc/xglm
         title: (번역중) XGLM
-      - local: ../en/model_doc/xlm
+      - local: model_doc/xlm
         title: (번역중) XLM
-      - local: ../en/model_doc/xlm-prophetnet
+      - local: model_doc/xlm-prophetnet
         title: (번역중) XLM-ProphetNet
-      - local: ../en/model_doc/xlm-roberta
+      - local: model_doc/xlm-roberta
         title: (번역중) XLM-RoBERTa
-      - local: ../en/model_doc/xlm-roberta-xl
+      - local: model_doc/xlm-roberta-xl
         title: (번역중) XLM-RoBERTa-XL
-      - local: ../en/model_doc/xlm-v
+      - local: model_doc/xlm-v
         title: (번역중) XLM-V
-      - local: ../en/model_doc/xlnet
+      - local: model_doc/xlnet
         title: (번역중) XLNet
-      - local: ../en/model_doc/yoso
+      - local: model_doc/yoso
         title: (번역중) YOSO
       title: (번역중) 텍스트 모델
     - isExpanded: false
       sections:
-      - local: ../en/model_doc/beit
+      - local: model_doc/beit
         title: (번역중) BEiT
-      - local: ../en/model_doc/bit
+      - local: model_doc/bit
         title: (번역중) BiT
-      - local: ../en/model_doc/conditional_detr
+      - local: model_doc/conditional_detr
         title: (번역중) Conditional DETR
-      - local: ../en/model_doc/convnext
+      - local: model_doc/convnext
         title: (번역중) ConvNeXT
-      - local: ../en/model_doc/convnextv2
+      - local: model_doc/convnextv2
         title: (번역중) ConvNeXTV2
-      - local: ../en/model_doc/cvt
+      - local: model_doc/cvt
         title: (번역중) CvT
-      - local: ../en/model_doc/deformable_detr
+      - local: model_doc/deformable_detr
         title: (번역중) Deformable DETR
-      - local: ../en/model_doc/deit
+      - local: model_doc/deit
         title: (번역중) DeiT
-      - local: ../en/model_doc/deta
+      - local: model_doc/deta
         title: (번역중) DETA
-      - local: ../en/model_doc/detr
+      - local: model_doc/detr
         title: (번역중) DETR
-      - local: ../en/model_doc/dinat
+      - local: model_doc/dinat
         title: (번역중) DiNAT
-      - local: ../en/model_doc/dit
+      - local: model_doc/dit
         title: (번역중) DiT
-      - local: ../en/model_doc/dpt
+      - local: model_doc/dpt
         title: (번역중) DPT
-      - local: ../en/model_doc/efficientformer
+      - local: model_doc/efficientformer
         title: (번역중) EfficientFormer
-      - local: ../en/model_doc/efficientnet
+      - local: model_doc/efficientnet
         title: (번역중) EfficientNet
-      - local: ../en/model_doc/focalnet
+      - local: model_doc/focalnet
         title: (번역중) FocalNet
-      - local: ../en/model_doc/glpn
+      - local: model_doc/glpn
         title: (번역중) GLPN
-      - local: ../en/model_doc/imagegpt
+      - local: model_doc/imagegpt
         title: (번역중) ImageGPT
-      - local: ../en/model_doc/levit
+      - local: model_doc/levit
         title: (번역중) LeViT
-      - local: ../en/model_doc/mask2former
+      - local: model_doc/mask2former
         title: (번역중) Mask2Former
-      - local: ../en/model_doc/maskformer
+      - local: model_doc/maskformer
         title: (번역중) MaskFormer
-      - local: ../en/model_doc/mobilenet_v1
+      - local: model_doc/mobilenet_v1
         title: (번역중) MobileNetV1
-      - local: ../en/model_doc/mobilenet_v2
+      - local: model_doc/mobilenet_v2
         title: (번역중) MobileNetV2
-      - local: ../en/model_doc/mobilevit
+      - local: model_doc/mobilevit
         title: (번역중) MobileViT
-      - local: ../en/model_doc/mobilevitv2
+      - local: model_doc/mobilevitv2
         title: (번역중) MobileViTV2
-      - local: ../en/model_doc/nat
+      - local: model_doc/nat
         title: (번역중) NAT
-      - local: ../en/model_doc/poolformer
+      - local: model_doc/poolformer
         title: (번역중) PoolFormer
-      - local: ../en/model_doc/regnet
+      - local: model_doc/regnet
         title: (번역중) RegNet
-      - local: ../en/model_doc/resnet
+      - local: model_doc/resnet
         title: (번역중) ResNet
-      - local: ../en/model_doc/segformer
+      - local: model_doc/segformer
         title: (번역중) SegFormer
-      - local: ../en/model_doc/swiftformer
+      - local: model_doc/swiftformer
         title: (번역중) SwiftFormer
-      - local: ../en/model_doc/swin
+      - local: model_doc/swin
         title: (번역중) Swin Transformer
-      - local: ../en/model_doc/swinv2
+      - local: model_doc/swinv2
         title: (번역중) Swin Transformer V2
-      - local: ../en/model_doc/swin2sr
+      - local: model_doc/swin2sr
         title: (번역중) Swin2SR
-      - local: ../en/model_doc/table-transformer
+      - local: model_doc/table-transformer
         title: (번역중) Table Transformer
-      - local: ../en/model_doc/timesformer
+      - local: model_doc/timesformer
         title: (번역중) TimeSformer
-      - local: ../en/model_doc/upernet
+      - local: model_doc/upernet
         title: (번역중) UperNet
-      - local: ../en/model_doc/van
+      - local: model_doc/van
         title: (번역중) VAN
-      - local: ../en/model_doc/videomae
+      - local: model_doc/videomae
         title: (번역중) VideoMAE
-      - local: ../en/model_doc/vit
+      - local: model_doc/vit
         title: (번역중) Vision Transformer (ViT)
-      - local: ../en/model_doc/vit_hybrid
+      - local: model_doc/vit_hybrid
         title: (번역중) ViT Hybrid
-      - local: ../en/model_doc/vit_mae
+      - local: model_doc/vit_mae
         title: (번역중) ViTMAE
-      - local: ../en/model_doc/vit_msn
+      - local: model_doc/vit_msn
         title: (번역중) ViTMSN
-      - local: ../en/model_doc/yolos
+      - local: model_doc/yolos
         title: (번역중) YOLOS
       title: (번역중) 비전 모델
     - isExpanded: false
       sections:
-      - local: ../en/model_doc/audio-spectrogram-transformer
+      - local: model_doc/audio-spectrogram-transformer
         title: (번역중) Audio Spectrogram Transformer
-      - local: ../en/model_doc/clap
+      - local: model_doc/clap
         title: (번역중) CLAP
-      - local: ../en/model_doc/hubert
+      - local: model_doc/hubert
         title: (번역중) Hubert
-      - local: ../en/model_doc/mctct
+      - local: model_doc/mctct
         title: (번역중) MCTCT
-      - local: ../en/model_doc/mms
+      - local: model_doc/mms
         title: (번역중) MMS
-      - local: ../en/model_doc/sew
+      - local: model_doc/sew
         title: (번역중) SEW
-      - local: ../en/model_doc/sew-d
+      - local: model_doc/sew-d
         title: (번역중) SEW-D
-      - local: ../en/model_doc/speech_to_text
+      - local: model_doc/speech_to_text
         title: (번역중) Speech2Text
-      - local: ../en/model_doc/speech_to_text_2
+      - local: model_doc/speech_to_text_2
         title: (번역중) Speech2Text2
-      - local: ../en/model_doc/speecht5
+      - local: model_doc/speecht5
         title: (번역중) SpeechT5
-      - local: ../en/model_doc/unispeech
+      - local: model_doc/unispeech
         title: (번역중) UniSpeech
-      - local: ../en/model_doc/unispeech-sat
+      - local: model_doc/unispeech-sat
         title: (번역중) UniSpeech-SAT
-      - local: ../en/model_doc/wav2vec2
+      - local: model_doc/wav2vec2
         title: (번역중) Wav2Vec2
-      - local: ../en/model_doc/wav2vec2-conformer
+      - local: model_doc/wav2vec2-conformer
         title: (번역중) Wav2Vec2-Conformer
-      - local: ../en/model_doc/wav2vec2_phoneme
+      - local: model_doc/wav2vec2_phoneme
         title: (번역중) Wav2Vec2Phoneme
-      - local: ../en/model_doc/wavlm
+      - local: model_doc/wavlm
         title: (번역중) WavLM
-      - local: ../en/model_doc/whisper
+      - local: model_doc/whisper
         title: (번역중) Whisper
-      - local: ../en/model_doc/xls_r
+      - local: model_doc/xls_r
         title: (번역중) XLS-R
-      - local: ../en/model_doc/xlsr_wav2vec2
+      - local: model_doc/xlsr_wav2vec2
         title: (번역중) XLSR-Wav2Vec2
       title: (번역중) 오디오 모델
     - isExpanded: false
       sections:
-      - local: ../en/model_doc/align
+      - local: model_doc/align
         title: (번역중) ALIGN
-      - local: ../en/model_doc/altclip
+      - local: model_doc/altclip
         title: (번역중) AltCLIP
-      - local: ../en/model_doc/blip
+      - local: model_doc/blip
         title: (번역중) BLIP
-      - local: ../en/model_doc/blip-2
+      - local: model_doc/blip-2
         title: (번역중) BLIP-2
-      - local: ../en/model_doc/bridgetower
+      - local: model_doc/bridgetower
         title: (번역중) BridgeTower
-      - local: ../en/model_doc/chinese_clip
+      - local: model_doc/chinese_clip
         title: (번역중) Chinese-CLIP
-      - local: ../en/model_doc/clip
+      - local: model_doc/clip
         title: (번역중) CLIP
-      - local: ../en/model_doc/clipseg
+      - local: model_doc/clipseg
         title: (번역중) CLIPSeg
-      - local: ../en/model_doc/data2vec
+      - local: model_doc/data2vec
         title: (번역중) Data2Vec
-      - local: ../en/model_doc/deplot
+      - local: model_doc/deplot
         title: (번역중) DePlot
-      - local: ../en/model_doc/donut
+      - local: model_doc/donut
         title: (번역중) Donut
-      - local: ../en/model_doc/flava
+      - local: model_doc/flava
         title: (번역중) FLAVA
-      - local: ../en/model_doc/git
+      - local: model_doc/git
         title: (번역중) GIT
-      - local: ../en/model_doc/groupvit
+      - local: model_doc/groupvit
         title: (번역중) GroupViT
-      - local: ../en/model_doc/layoutlm
+      - local: model_doc/layoutlm
         title: (번역중) LayoutLM
-      - local: ../en/model_doc/layoutlmv2
+      - local: model_doc/layoutlmv2
         title: (번역중) LayoutLMV2
-      - local: ../en/model_doc/layoutlmv3
+      - local: model_doc/layoutlmv3
         title: (번역중) LayoutLMV3
-      - local: ../en/model_doc/layoutxlm
+      - local: model_doc/layoutxlm
         title: (번역중) LayoutXLM
-      - local: ../en/model_doc/lilt
+      - local: model_doc/lilt
         title: (번역중) LiLT
-      - local: ../en/model_doc/lxmert
+      - local: model_doc/lxmert
         title: (번역중) LXMERT
-      - local: ../en/model_doc/matcha
+      - local: model_doc/matcha
         title: (번역중) MatCha
-      - local: ../en/model_doc/mgp-str
+      - local: model_doc/mgp-str
         title: (번역중) MGP-STR
-      - local: ../en/model_doc/oneformer
+      - local: model_doc/oneformer
         title: (번역중) OneFormer
-      - local: ../en/model_doc/owlvit
+      - local: model_doc/owlvit
         title: (번역중) OWL-ViT
-      - local: ../en/model_doc/perceiver
+      - local: model_doc/perceiver
         title: (번역중) Perceiver
-      - local: ../en/model_doc/pix2struct
+      - local: model_doc/pix2struct
         title: (번역중) Pix2Struct
-      - local: ../en/model_doc/sam
+      - local: model_doc/sam
         title: (번역중) Segment Anything
-      - local: ../en/model_doc/speech-encoder-decoder
+      - local: model_doc/speech-encoder-decoder
         title: (번역중) Speech Encoder Decoder Models
-      - local: ../en/model_doc/tapas
+      - local: model_doc/tapas
         title: (번역중) TAPAS
-      - local: ../en/model_doc/trocr
+      - local: model_doc/trocr
         title: (번역중) TrOCR
-      - local: ../en/model_doc/tvlt
+      - local: model_doc/tvlt
         title: (번역중) TVLT
-      - local: ../en/model_doc/vilt
+      - local: model_doc/vilt
         title: (번역중) ViLT
-      - local: ../en/model_doc/vision-encoder-decoder
+      - local: model_doc/vision-encoder-decoder
         title: (번역중) Vision Encoder Decoder Models
-      - local: ../en/model_doc/vision-text-dual-encoder
+      - local: model_doc/vision-text-dual-encoder
         title: (번역중) Vision Text Dual Encoder
-      - local: ../en/model_doc/visual_bert
+      - local: model_doc/visual_bert
         title: (번역중) VisualBERT
-      - local: ../en/model_doc/xclip
+      - local: model_doc/xclip
         title: (번역중) X-CLIP
       title: (번역중) 멀티모달 모델
     - isExpanded: false
       sections:
-      - local: ../en/model_doc/decision_transformer
+      - local: model_doc/decision_transformer
         title: (번역중) Decision Transformer
-      - local: ../en/model_doc/trajectory_transformer
+      - local: model_doc/trajectory_transformer
         title: (번역중) Trajectory Transformer
       title: (번역중) 강화학습 모델
     - isExpanded: false
       sections:
-      - local: ../en/model_doc/autoformer
+      - local: model_doc/autoformer
         title: (번역중) Autoformer
-      - local: ../en/model_doc/informer
+      - local: model_doc/informer
         title: (번역중) Informer
-      - local: ../en/model_doc/time_series_transformer
+      - local: model_doc/time_series_transformer
         title: (번역중) Time Series Transformer
       title: (번역중) 시계열 모델
     - isExpanded: false
       sections:
-      - local: ../en/model_doc/graphormer
+      - local: model_doc/graphormer
         title: (번역중) Graphormer
       title: (번역중) 그래프 모델
     title: (번역중) 모델
   - sections:
-    - local: ../en/internal/modeling_utils
+    - local: internal/modeling_utils
       title: (번역중) Custom Layers and Utilities
-    - local: ../en/internal/pipelines_utils
+    - local: internal/pipelines_utils
       title: (번역중) Utilities for pipelines
-    - local: ../en/internal/tokenization_utils
+    - local: internal/tokenization_utils
       title: (번역중) Utilities for Tokenizers
-    - local: ../en/internal/trainer_utils
+    - local: internal/trainer_utils
       title: (번역중) Utilities for Trainer
-    - local: ../en/internal/generation_utils
+    - local: internal/generation_utils
       title: (번역중) Utilities for Generation
-    - local: ../en/internal/image_processing_utils
+    - local: internal/image_processing_utils
       title: (번역중) Utilities for Image Processors
-    - local: ../en/internal/audio_utils
+    - local: internal/audio_utils
       title: (번역중) Utilities for Audio processing
-    - local: ../en/internal/file_utils
+    - local: internal/file_utils
       title: (번역중) General Utilities
-    - local: ../en/internal/time_series_utils
+    - local: internal/time_series_utils
       title: (번역중) Utilities for Time Series
     title: (번역중) 내부 유틸리티
   title: (번역중) API
