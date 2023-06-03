@@ -93,6 +93,7 @@ class TFSwiftFormerPatchEmbedding(tf.keras.layers.Layer):
         )
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
+        x = tf.transpose(x, perm=(0, 2, 3, 1))
         return self.patch_embedding(x, training=training)
 
 
