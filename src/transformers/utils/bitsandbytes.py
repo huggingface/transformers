@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import warnings
 from copy import deepcopy
 from typing import TYPE_CHECKING, List, Optional, Tuple, TypeVar, Union
