@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 if is_bitsandbytes_available():
     import bitsandbytes as bnb
     import torch  # noqa: F811
-    import torch.nn as nn
+    import torch.nn as nn  # noqa: F811
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
