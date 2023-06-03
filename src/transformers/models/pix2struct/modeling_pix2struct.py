@@ -210,7 +210,7 @@ class Pix2StructVisionAttention(nn.Module):
                 attention_mask = torch.ones((batch_size, seq_length), device=scores.device, dtype=scores.dtype)
 
             if attention_mask.dim() == 2:
-                position_bias = position_bias + attention_mask[:, None, :, None].to(position_bias.device)
+                position_bias = position_bias + attention_mask[:, None, None, :].to(position_bias.device)
             else:
                 # (batch_size, n_heads, seq_length, key_length)
                 position_bias = position_bias + attention_mask.to(position_bias.device)
