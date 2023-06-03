@@ -10,7 +10,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# 인과 언어 모델링
+# 인과 언어 모델링[[causal-language-modeling]]
 
 [[open-in-colab]]
 
@@ -54,7 +54,7 @@ pip install transformers datasets evaluate
 >>> notebook_login()
 ```
 
-## ELI5 데이터셋 불러오기
+## ELI5 데이터셋 불러오기[[load-eli5-dataset]]
 
 먼저, 🤗 Datasets 라이브러리에서 r/askscience의 작은 하위 집합인 ELI5 데이터셋을 불러옵니다.
 이를 통해 전체 데이터셋에서 학습하는 데 더 많은 시간을 투자하기 전에, 실험해봄으로써 모든 것이 작동하는지 확인할 수 있습니다.
@@ -91,7 +91,7 @@ pip install transformers datasets evaluate
 
 많아 보일 수 있지만, 실제로는 `text` 필드만 중요합니다. 언어 모델링 작업의 장점은 레이블이 필요하지 않다는 것입니다. 다음 단어 *자체가* 레이블입니다. (이렇게 레이블을 제공하지 않아도 되는 학습을 비지도 학습이라고 일컫습니다)
 
-## 전처리
+## 전처리[[preprocess]]
 
 <Youtube id="ma1TrR7gE7I"/>
 
@@ -202,7 +202,7 @@ pip install transformers datasets evaluate
 </frameworkcontent>
 
 
-## 훈련
+## 훈련[[train]]
 
 <frameworkcontent>
 <pt>
@@ -337,7 +337,7 @@ TensorFlow에서 모델을 미세 조정하려면, 먼저 옵티마이저 함수
 
 </Tip>
 
-## 추론
+## 추론[[inference]]
 
 좋아요, 이제 모델을 미세 조정했으므로 추론에 사용할 수 있습니다!
 
