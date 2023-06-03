@@ -79,8 +79,8 @@
       title: 🤗 Tokenizers 라이브러리에서 토크나이저 사용하기
     - local: multilingual
       title: 다국어 모델 추론하기
-    - local: in_translation
-      title: (번역중) Customize text generation strategy
+    - local: generation_strategies
+      title: (번역중) 사용자 정의 텍스트 생성 전략
     - local: create_a_model
       title: 모델별 API 사용하기
     - local: custom_models
@@ -156,10 +156,10 @@
     title: (번역중) Philosophy
   - local: in_translation
     title: (번역중) Glossary
-  - local: in_translation
-    title: (번역중) What 🤗 Transformers can do
-  - local: in_translation
-    title: (번역중) How 🤗 Transformers solve tasks
+  - local: task_summary
+    title: 🤗 Transformers로 할 수 있는 작업
+  - local: tasks_explained
+    title: 🤗 Transformers로 작업을 해결하는 방법
   - local: in_translation
     title: (번역중) The Transformer model family
   - local: in_translation
