@@ -1,5 +1,6 @@
 import warnings
 from copy import deepcopy
+from typing import TYPE_CHECKING, List, Optional, Tuple, TypeVar, Union
 
 from packaging import version
 
@@ -7,9 +8,17 @@ from ..utils import logging
 from .import_utils import importlib_metadata, is_accelerate_available, is_bitsandbytes_available
 
 
+if TYPE_CHECKING:
+    import torch
+    from torch import nn
+
+    from ..utils.quantization_config import BitsAndBytesConfig
+
+    T = TypeVar("T", bound=nn.Module)
+
 if is_bitsandbytes_available():
     import bitsandbytes as bnb
-    import torch
+    import torch  # noqa: F811
     import torch.nn as nn
 
 if is_accelerate_available():
@@ -19,7 +28,13 @@ if is_accelerate_available():
 logger = logging.get_logger(__name__)
 
 
-def set_module_quantized_tensor_to_device(module, tensor_name, device, value=None, fp16_statistics=None):
+def set_module_quantized_tensor_to_device(
+    module: nn.Module,
+    tensor_name: str,
+    device: Union[str, torch.device],
+    value: Optional[torch.Tensor] = None,
+    fp16_statistics: Optional[torch.HalfTensor] = None,
+) -> None:
     """
     A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
     `param.to(device)` creates a new tensor not linked to the parameter, which is why we need this function). The
@@ -31,7 +46,7 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
             The module in which the tensor we want to move lives.
         tensor_name (`str`):
             The full name of the parameter/buffer.
-        device (`int`, `str` or `torch.device`):
+        device (`str` or `torch.device`):
             The device on which to set the tensor.
         value (`torch.Tensor`, *optional*):
             The value of the tensor (useful when going from the meta device to any other device).
@@ -51,7 +66,7 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
     if tensor_name not in module._parameters and tensor_name not in module._buffers:
         raise ValueError(f"{module} does not have a parameter or a buffer named {tensor_name}.")
     is_buffer = tensor_name in module._buffers
-    old_value = getattr(module, tensor_name)
+    old_value: torch.Tensor = getattr(module, tensor_name)
 
     if old_value.device == torch.device("meta") and device not in ["meta", torch.device("meta")] and value is None:
         raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
@@ -67,6 +82,8 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
 
     if is_8bit or is_4bit:
         param = module._parameters[tensor_name]
+        if param is None:
+            raise ValueError(f"Parameter {tensor_name} of {type(module).__name__} object is None.")
         if param.device.type != "cuda":
             if value is None:
                 new_value = old_value.to(device)
@@ -109,17 +126,19 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
             module._parameters[tensor_name] = new_value
 
 
-def _replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name=None, quantization_config=None):
+def _replace_with_bnb_linear(
+    model: T,
+    quantization_config: BitsAndBytesConfig,
+    modules_to_not_convert: List[str],
+    current_key_name: List[str],
+) -> Tuple[T, bool]:
     """
     Private method that wraps the recursion for module replacement.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
     has_been_replaced = False
     for name, module in model.named_children():
-        if current_key_name is None:
-            current_key_name = []
-
         if isinstance(module, nn.Linear) and name not in modules_to_not_convert:
             # Check if the current key is not in the `modules_to_not_convert`
             if not any(key in ".".join(current_key_name) for key in modules_to_not_convert):
@@ -150,19 +169,24 @@ def _replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_nam
                             )
                             has_been_replaced = True
                     # Force requires grad to False to avoid unexpected errors
-                    model._modules[name].requires_grad_(False)
+                    module.requires_grad_(False)
         # Remove the last key for recursion
         if len(list(module.children())) > 0:
             _, has_been_replaced = _replace_with_bnb_linear(
                 module,
+                quantization_config,
                 modules_to_not_convert,
                 current_key_name,
-                quantization_config,
             )
     return model, has_been_replaced
 
 
-def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name=None, quantization_config=None):
+def replace_with_bnb_linear(
+    model: T,
+    quantization_config: BitsAndBytesConfig,
+    modules_to_not_convert: Optional[List[str]] = None,
+    current_key_name: Optional[List[str]] = None,
+) -> T:
     """
     A helper function to replace all `torch.nn.Linear` modules by `bnb.nn.Linear8bit` modules from the `bitsandbytes`
     library. This will enable running your models using mixed int8 precision as described by the paper `LLM.int8():
@@ -180,17 +204,21 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
     Parameters:
         model (`torch.nn.Module`):
             Input model or `torch.nn.Module` as the function is run recursively.
+        quantization_config (`BitsAndBytesConfig`):
+            Configuration parameters for the `bitsandbytes` library and loading the model using advanced features such
+            as offloading in fp32 on CPU or on disk.
         modules_to_not_convert (`List[`str`]`, *optional*, defaults to `["lm_head"]`):
             Names of the modules to not convert in `Linear8bitLt`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
-        current_key_name (`List[`str`]`, *optional*):
+        current_key_name (`List[`str`]`, *optional*, defaults to `[]`):
             An array to track the current key of the recursion. This is used to check whether the current key (part of
             it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
             `disk`).
     """
     modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
+    current_key_name = [] if current_key_name is None else current_key_name
     model, has_been_replaced = _replace_with_bnb_linear(
-        model, modules_to_not_convert, current_key_name, quantization_config
+        model, quantization_config, modules_to_not_convert, current_key_name
     )
 
     if not has_been_replaced:

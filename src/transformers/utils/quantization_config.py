@@ -18,9 +18,10 @@ import copy
 import json
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Union
+from typing import Any, Dict, Tuple, Union, overload
 
 from packaging import version
+from typing_extensions import Literal, Self
 
 from ..utils import is_torch_available, logging
 from ..utils.import_utils import importlib_metadata
@@ -168,8 +169,24 @@ class BitsAndBytesConfig:
         else:
             return None
 
+    @overload
     @classmethod
-    def from_dict(cls, config_dict, return_unused_kwargs, **kwargs):
+    def from_dict(
+        cls, config_dict: Dict[str, Any], return_unused_kwargs: Literal[False], **kwargs: Any
+    ) -> Self:  # type: ignore[valid-type]
+        ...
+
+    @overload
+    @classmethod
+    def from_dict(
+        cls, config_dict: Dict[str, Any], return_unused_kwargs: Literal[True], **kwargs: Any
+    ) -> Tuple[Self, Dict[str, Any]]:  # type: ignore[valid-type]
+        ...
+
+    @classmethod
+    def from_dict(
+        cls, config_dict: Dict[str, Any], return_unused_kwargs: bool, **kwargs: Any
+    ) -> Union[Self, Tuple[Self, Dict[str, Any]]]:  # type: ignore[valid-type]
         """
         Instantiates a [`BitsAndBytesConfig`] from a Python dictionary of parameters.
 

@@ -25,12 +25,13 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
 import torch
 from packaging import version
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
+from typing_extensions import TypedDict
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -735,6 +736,40 @@ def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
         weights_name = ".".join(splits)
 
     return weights_name
+
+
+class FromPretrainedKwargs(TypedDict, total=False):
+    config: Union[PretrainedConfig, str, os.PathLike]
+    state_dict: Any
+    cache_dir: Any
+    from_tf: Any
+    from_flax: Any
+    ignore_mismatched_sizes: Any
+    force_download: Any
+    resume_download: Any
+    proxies: Any
+    output_loading_info: Any
+    local_files_only: Any
+    use_auth_token: Any
+    revision: Any
+    trust_remote_code: Any
+    mirror: Any
+    _from_pipeline: Any
+    _from_auto: Any
+    _fast_init: Any
+    torch_dtype: Any
+    low_cpu_mem_usage: Any
+    device_map: Any
+    max_memory: Any
+    offload_folder: Any
+    offload_state_dict: Any
+    load_in_8bit: Any
+    load_in_4bit: Any
+    quantization_config: BitsAndBytesConfig
+    subfolder: Any
+    _commit_hash: Any
+    variant: Any
+    use_safetensors: Any
 
 
 class ModuleUtilsMixin:
@@ -2146,6 +2181,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Currently, it can't handle deepspeed ZeRO stage 3 and ignores loading errors
 
         """
+        kwargs = cast(FromPretrainedKwargs, kwargs)  # type: ignore[assignment]
+
         config = kwargs.pop("config", None)
         state_dict = kwargs.pop("state_dict", None)
         cache_dir = kwargs.pop("cache_dir", None)
@@ -2234,7 +2271,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 return_unused_kwargs=True,
                 **kwargs,
             )
-        elif quantization_config is not None:
+        else:
             load_in_8bit = quantization_config.load_in_8bit
             load_in_4bit = quantization_config.load_in_4bit
 
@@ -2316,7 +2353,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             model_kwargs = kwargs
 
-        if is_8bit_serializable and quantization_config is not None and load_in_8bit:
+        if is_8bit_serializable and load_in_8bit:
             if hasattr(config, "quantization_config"):
                 logger.warning(
                     "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a"
@@ -2331,7 +2368,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             elif isinstance(quantization_config, BitsAndBytesConfig):
                 pass
             else:
-                raise ValueError(
+                raise TypeError(
                     f"Invalid type for `quantization_config`: {type(quantization_config)}. Should be a `dict` or a"
                     " `BitsAndBytesConfig` instance."
                 )
@@ -2717,9 +2754,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     " make sure you have the latest version of `bitsandbytes` installed"
                 )
 
-            model = replace_with_bnb_linear(
-                model, modules_to_not_convert=modules_to_not_convert, quantization_config=quantization_config
-            )
+            model = replace_with_bnb_linear(model, quantization_config, modules_to_not_convert=modules_to_not_convert)
             # training in 8-bit is only available in 0.37.0+
             model._is_quantized_training_enabled = version.parse(
                 importlib_metadata.version("bitsandbytes")
