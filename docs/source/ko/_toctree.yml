@@ -30,8 +30,8 @@
         title: 토큰 분류
       - local: tasks/question_answering
         title: 질의 응답(Question Answering)
-      - local: tasks/causal_language_modeling
-        title: 인과 언어 모델링(Causal language modelling)
+      - local: tasks/language_modeling
+        title: 인과 언어 모델링(Causal language modeling)
       - local: tasks/masked_language_modeling
         title: 마스킹된 언어 모델링(Masked language modeling)
       - local: tasks/translation
