@@ -10,42 +10,29 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Text generation strategies
+# 텍스트 생성 전략
 
-Text generation is essential to many NLP tasks, such as open-ended text generation, summarization, translation, and
-more. It also plays a role in a variety of mixed-modality applications that have text as an output like speech-to-text
-and vision-to-text. Some of the models that can generate text include
-GPT2, XLNet, OpenAI GPT, CTRL, TransformerXL, XLM, Bart, T5, GIT, Whisper.
+텍스트 생성은 오픈엔드 텍스트 생성, 요약, 번역 등 여러 NLP 작업에 필수적입니다. 또한 음성에서 텍스트로, 이미지에서 텍스트로 변환하는 등의 다양한 혼합 모달리티 응용 프로그램에서도 역할을 합니다. 텍스트를 생성할 수 있는 일부 모델에는 GPT2, XLNet, OpenAI GPT, CTRL, TransformerXL, XLM, Bart, T5, GIT, Whisper가 포함됩니다.
 
-Check out a few examples that use [`~transformers.generation_utils.GenerationMixin.generate`] method to produce
-text outputs for different tasks:
-* [Text summarization](./tasks/summarization#inference)
-* [Image captioning](./model_doc/git#transformers.GitForCausalLM.forward.example)
-* [Audio transcription](./model_doc/whisper#transformers.WhisperForConditionalGeneration.forward.example)
+[`~transformers.generation_utils.GenerationMixin.generate`] 메서드를 사용하여 다른 작업에 대한 텍스트 출력을 생성하는 몇 가지 예제를 확인해보세요:
+* [텍스트 요약](./tasks/summarization#inference)
+* [이미지 캡션](./model_doc/git#transformers.GitForCausalLM.forward.example)
+* [오디오 전사](./model_doc/whisper#transformers.WhisperForConditionalGeneration.forward.example)
 
-Note that the inputs to the generate method depend on the model's modality. They are returned by the model's preprocessor
-class, such as AutoTokenizer or AutoProcessor. If a model's preprocessor creates more than one kind of input, pass all
-the inputs to generate(). You can learn more about the individual model's preprocessor in the corresponding model's documentation.
+`generate` 메서드의 입력은 모델의 모달리티에 따라 달라집니다. AutoTokenizer나 AutoProcessor와 같은 모델의 전처리기 클래스에서 반환됩니다. 모델의 전처리기가 여러 종류의 입력을 생성하는 경우, 모든 입력을 generate()에 전달하세요. 각 모델의 전처리기에 대한 자세한 내용은 해당 모델의 문서에서 알아볼 수 있습니다.
 
-The process of selecting output tokens to generate text is known as decoding, and you can customize the decoding strategy
-that the `generate()` method will use. Modifying a decoding strategy does not change the values of any trainable parameters.
-However, it can have a noticeable impact on the quality of the generated output. It can help reduce repetition in the text
-and make it more coherent.
+텍스트를 생성하기 위해 출력 토큰을 선택하는 과정을 디코딩이라고 합니다. `generate()` 메서드가 사용할 디코딩 전략을 사용자 정의할 수 있습니다. 디코딩 전략을 수정해도 훈련 가능한 매개변수의 값은 변경되지 않지만, 생성된 출력의 품질에 눈에 띄는 영향을 줄 수 있습니다. 이를 통해 텍스트의 반복을 줄이고 더 일관된 텍스트를 생성하는 데 도움이 됩니다.
 
-This guide describes:
-* default generation configuration
-* common decoding strategies and their main parameters
-* saving and sharing custom generation configurations with your fine-tuned model on 🤗 Hub
+이 안내서에서는 다음과 같은 내용을 설명합니다:
+* 기본 텍스트 생성 구성
+* 일반적인 디코딩 전략 및 주요 매개변수
+* 🤗 Hub의 세부 튜닝된 모델과 사용자 지정 생성 구성 저장 및 공유
 
-## Default text generation configuration
+## 기본 텍스트 생성 구성
 
-A decoding strategy for a model is defined in its generation configuration. When using pre-trained models for inference
-within a [`pipeline`], the models call the `PreTrainedModel.generate()` method that applies a default generation
-configuration under the hood. The default configuration is also used when no custom configuration has been saved with
-the model.
+모델의 디코딩 전략은 생성 구성에 정의됩니다. [`파이프라인`] 내에서 사전 훈련된 모델을 추론에 사용할 때, 모델은 내부적으로 `PreTrainedModel.generate()` 메서드를 호출하며 기본 생성 구성을 적용합니다. 기본 구성은 모델과 관련된 사용자 정의 구성이 저장되지 않은 경우에도 사용됩니다.
 
-When you load a model explicitly, you can inspect the generation configuration that comes with it through
- `model.generation_config`:
+모델을 명시적으로 로드하는 경우 `model.generation_config`을 통해 해당 모델과 함께 제공되는 생성 구성을 검사할 수 있습니다:
 
 ```python
 >>> from transformers import AutoModelForCausalLM
@@ -60,45 +47,32 @@ GenerationConfig {
 }
 ```
 
-Printing out the `model.generation_config` reveals only the values that are different from the default generation
-configuration, and does not list any of the default values.
+`model.generation_config`를 출력하면 기본 생성 구성과 다른 값만 나열되며, 기본 값은 나열되지 않습니다.
 
-The default generation configuration limits the size of the output combined with the input prompt to a maximum of 20
-tokens to avoid running into resource limitations. The default decoding strategy is greedy search, which is the simplest decoding strategy that picks a token with the highest probability as the next token. For many tasks
-and small output sizes this works well. However, when used to generate longer outputs, greedy search can start
-producing highly repetitive results.
+기본 생성 구성은 출력의 크기를 제한하여 입력 프롬프트와 함께 최대 20개의 토큰을 사용하는 것이 기본 설정으로 되어 있습니다. 기본 디코딩 전략은 탐욕적인 탐색(greedy search)으로, 다음 토큰으로 가장 높은 확률을 갖는 토큰을 선택하는 가장 간단한 디코딩 전략입니다. 많은 작업과 작은 출력 크기에는 잘 작동합니다. 그러나 긴 출력을 생성하는 데 사용할 경우, 탐욕적인 탐색은 반복적인 결과를 생성하기 시작할 수 있습니다.
 
-## Customize text generation
+## 텍스트 생성 사용자 정의
 
-You can override any `generation_config` by passing the parameters and their values directly to the [`generate`] method:
+[`generate`] 메서드에 매개변수와 해당 값들을 직접 전달하여 `generation_config`를 재정의할 수 있습니다:
 
 ```python
 >>> my_model.generate(**inputs, num_beams=4, do_sample=True)
 ```
 
-Even if the default decoding strategy mostly works for your task, you can still tweak a few things. Some of the
-commonly adjusted parameters include:
+기본 디코딩 전략이 작업에 대해 대부분 작동하더라도 몇 가지 사항을 조정할 수 있습니다. 일반적으로 조정되는 매개변수 중 일부는 다음과 같습니다:
 
-- `max_new_tokens`: the maximum number of tokens to generate. In other words, the size of the output sequence, not
-including the tokens in the prompt.
-- `num_beams`: by specifying a number of beams higher than 1, you are effectively switching from greedy search to
-beam search. This strategy evaluates several hypotheses at each time step and eventually chooses the hypothesis that
-has the overall highest probability for the entire sequence. This has the advantage of identifying high-probability
-sequences that start with a lower probability initial tokens and would've been ignored by the greedy search.
-- `do_sample`: if set to `True`, this parameter enables decoding strategies such as multinomial sampling, beam-search
-multinomial sampling, Top-K sampling and Top-p sampling. All these strategies select the next token from the probability
-distribution over the entire vocabulary with various strategy-specific adjustments.
-- `num_return_sequences`: the number of sequence candidates to return for each input. This options is only available for
-the decoding strategies that support multiple sequence candidates, e.g. variations of beam search and sampling. Decoding
-strategies like greedy search and contrastive search return a single output sequence.
+- `max_new_tokens`: 생성할 토큰의 최대 개수입니다. 다시 말해, 프롬프트의 토큰을 포함하지 않는 출력 시퀀스의 크기입니다.
+- `num_beams`: 1보다 큰 빔의 수를 지정함으로써 탐욕적인 탐색에서 빔 탐색으로 전환할 수 있습니다. 이 전략은 각 시간 단계에서 여러 가설을 평가하고 최종적으로 전체 시퀀스에 대한 전반적인 확률이 가장 높은 가설을 선택합니다. 이는 초기 토큰의 확률이 낮은 상황에서 시작하는 높은 확률의 시퀀스를 식별하는 장점이 있으며, 탐욕적인 탐색에서 무시되었을 것입니다.
+- `do_sample`: `True`로 설정하면 이 매개변수는 다항 분포 샘플링, 빔 탐색 다항 분포 샘플링, Top-K 샘플링 및 Top-p 샘플링과 같은 디코딩 전략을 활성화합니다. 이러한 전략은 전체 어휘에 대한 확률 분포에서 다음 토큰을 선택합니다.
+- `num_return_sequences`: 각 입력에 대해 반환할 시퀀스 후보의 수입니다. 이 옵션은 빔 탐색과 샘플링과 같은 다중 시퀀스 후보를 지원하는 디코딩 전략에만 사용할 수 있습니다. 탐욕적인 탐색과 대조적인 탐색과 같은 디코딩 전략은 단일 출력 시퀀스를 반환합니다.
 
-## Save a custom decoding strategy with your model
+## 사용자 정의 디코딩 전략을 모델과 함께 저장
 
-If you would like to share your fine-tuned model with a specific generation configuration, you can:
-* Create a [`GenerationConfig`] class instance
-* Specify the decoding strategy parameters
-* Save your generation configuration with [`GenerationConfig.save_pretrained`], making sure to leave its `config_file_name` argument empty
-* Set `push_to_hub` to `True` to upload your config to the model's repo
+특정 생성 구성을 갖는 튜닝된 모델을 공유하려면 다음을 수행할 수 있습니다:
+* [`GenerationConfig`] 클래스 인스턴스 생성
+* 디코딩 전략 매개변수 지정
+* [`GenerationConfig.save_pretrained`]을 사용하여 생성 구성 저장 (config_file_name 매개변수를 비워두는 것을 잊지 마세요)
+* `push_to_hub`를 `True`로 설정하여 구성을 모델 리포에 업로드
 
 ```python
 >>> from transformers import AutoModelForCausalLM, GenerationConfig
@@ -110,10 +84,7 @@ If you would like to share your fine-tuned model with a specific generation conf
 >>> generation_config.save_pretrained("my_account/my_model", push_to_hub=True)
 ```
 
-You can also store several generation configurations in a single directory, making use of the `config_file_name`
-argument in [`GenerationConfig.save_pretrained`]. You can later instantiate them with [`GenerationConfig.from_pretrained`]. This is useful if you want to
-store several generation configurations for a single model (e.g. one for creative text generation with sampling, and
-one for summarization with beam search). You must have the right Hub permissions to add configuration files to a model.
+[`GenerationConfig.save_pretrained`]에서 `config_file_name` 매개변수를 사용하여 여러 생성 구성을 단일 디렉토리에 저장할 수도 있습니다. [`GenerationConfig.from_pretrained`]를 사용하여 나중에 이를 인스턴스화할 수 있습니다. 이 방법은 단일 모델에 대해 여러 생성 구성을 저장하려는 경우 유용합니다 (예: 샘플링과 함께 창의적인 텍스트 생성을 위한 구성과 빔 탐색을 위한 구성). 모델에 구성 파일을 추가하려면 올바른 Hub 권한이 있어야 합니다.
 
 ```python
 >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, GenerationConfig
@@ -139,21 +110,17 @@ one for summarization with beam search). You must have the right Hub permissions
 ['Les fichiers de configuration sont faciles à utiliser !']
 ```
 
-## Streaming
+## 스트리밍
 
-The `generate()` supports streaming, through its `streamer` input. The `streamer` input is compatible any instance
-from a class that has the following methods: `put()` and `end()`. Internally, `put()` is used to push new tokens and
-`end()` is used to flag the end of text generation.
+`generate()`는 `streamer` 입력을 통해 스트리밍을 지원합니다. `streamer` 입력은 `put()` 및 `end()`라는 메서드를 가진 클래스의 인스턴스와 호환됩니다. 내부적으로 `put()`은 새로운 토큰을 밀어넣는 데 사용되고, `end()`는 텍스트 생성의 종료를 나타내는 데 사용됩니다.
 
 <Tip warning={true}>
 
-The API for the streamer classes is still under development and may change in the future.
+스트리밍 클래스에 대한 API는 아직 개발 중이며 앞으로 변경될 수 있습니다.
 
 </Tip>
 
-In practice, you can craft your own streaming class for all sorts of purposes! We also have basic streaming classes
-ready for you to use. For example, you can use the [`TextStreamer`] class to stream the output of `generate()` into
-your screen, one word at a time:
+실제로 다양한 목적을 위해 직접 스트리밍 클래스를 작성할 수 있습니다! 또한 사용할 수 있는 기본 스트리밍 클래스도 제공됩니다. 예를 들어 [`TextStreamer`] 클래스를 사용하여 `generate()`의 출력을 한 번에 한 단어씩 화면에 스트리밍할 수 있습니다:
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
@@ -168,16 +135,15 @@ your screen, one word at a time:
 An increasing sequence: one, two, three, four, five, six, seven, eight, nine, ten, eleven,
 ```
 
-## Decoding strategies
+## 디코딩 전략
 
-Certain combinations of the `generate()` parameters, and ultimately `generation_config`, can be used to enable specific
-decoding strategies. If you are new to this concept, we recommend reading [this blog post that illustrates how common decoding strategies work](https://huggingface.co/blog/how-to-generate).
+[`generate`] 메서드의 매개변수와 마지막으로 `generation_config`의 특정 조합을 사용하여 특정 디코딩 전략을 활성화할 수 있습니다. 이 개념에 대해 처음 접하신다면, [공통 디코딩 전략의 작동 방식을 설명하는 블로그 글](https://huggingface.co/blog/how-to-generate)을 읽어보시기를 권장합니다.
 
-Here, we'll show some of the parameters that control the decoding strategies and illustrate how you can use them.
+여기에서는 디코딩 전략을 제어하는 일부 매개변수를 보여주고, 해당 매개변수를 어떻게 사용하는지 설명하겠습니다.
 
-### Greedy Search
+### 탐욕적 탐색
 
-[`generate`] uses greedy search decoding by default so you don't have to pass any parameters to enable it. This means the parameters `num_beams` is set to 1 and `do_sample=False`.
+[`generate`]는 기본적으로 탐욕적 탐색 디코딩을 사용하므로, 이를 활성화하기 위해 별도의 매개변수를 전달할 필요가 없습니다. 이는 `num_beams` 매개변수가 1로 설정되고 `do_sample=False`임을 의미합니다.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -194,12 +160,9 @@ Here, we'll show some of the parameters that control the decoding strategies and
 ['I look forward to seeing you all again!\n\n\n\n\n\n\n\n\n\n\n']
 ```
 
-### Contrastive search
+### 대조적 탐색
 
-The contrastive search decoding strategy was proposed in the 2022 paper [A Contrastive Framework for Neural Text Generation](https://arxiv.org/abs/2202.06417).
-It demonstrates superior results for generating non-repetitive yet coherent long outputs. To learn how contrastive search
-works, check out [this blog post](https://huggingface.co/blog/introducing-csearch).
-The two main parameters that enable and control the behavior of contrastive search are `penalty_alpha` and `top_k`:
+대조적 탐색 디코딩 전략은 2022년 논문 [A Contrastive Framework for Neural Text Generation](https://arxiv.org/abs/2202.06417)에서 제안되었습니다. 이는 반복되지 않으면서도 일관된 긴 출력을 생성하는 데 우수한 결과를 보입니다. 대조적 탐색의 작동 방식을 알아보려면 [이 블로그 글](https://huggingface.co/blog/introducing-csearch)을 확인하세요. 대조적 탐색을 활성화하고 제어하는 두 가지 주요 매개변수는 `penalty_alpha`와 `top_k`입니다:
 
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -219,14 +182,11 @@ We pride ourselves on being the best in the business and our customer service is
  We look forward to hearing from you!']
 ```
 
-### Multinomial sampling
+### 다항 분포 샘플링
 
-As opposed to greedy search that always chooses a token with the highest probability as the
-next token, multinomial sampling (also called ancestral sampling) randomly selects the next token based on the probability distribution over the entire
-vocabulary given by the model. Every token with a non-zero probability has a chance of being selected, thus reducing the
-risk of repetition.
+최대 확률을 갖는 토큰을 항상 선택하는 탐욕적 탐색과는 달리, 다항 분포 샘플링(조상 샘플링이라고도 함)은 모델이 제공하는 전체 어휘에 대한 확률 분포를 기반으로 다음 토큰을 무작위로 선택합니다. 확률이 0이 아닌 모든 토큰은 선택될 수 있는 기회를 가지므로 반복 위험을 줄입니다.
 
-To enable multinomial sampling set `do_sample=True` and `num_beams=1`.
+다항 분포 샘플링을 활성화하려면 `do_sample=True` 및 `num_beams=1`로 설정하세요.
 
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -247,13 +207,11 @@ their upcoming events which are currently scheduled in Australia.\n\nWe love tha
 name for themselves and become famous for what they']
 ```
 
-### Beam-search decoding
+### 빔 탐색 디코딩
 
-Unlike greedy search, beam-search decoding keeps several hypotheses at each time step and eventually chooses
-the hypothesis that has the overall highest probability for the entire sequence. This has the advantage of identifying high-probability
-sequences that start with lower probability initial tokens and would've been ignored by the greedy search.
+탐욕적 탐색과는 달리, 빔 탐색 디코딩은 각 시간 단계에서 여러 개의 가설을 유지하고, 최종적으로 전체 시퀀스에 대한 전반적인 확률이 가장 높은 가설을 선택합니다. 이는 초기 토큰의 확률이 낮은 상황에서 시작하는 높은 확률의 시퀀스를 식별하는 장점이 있으며, 탐욕적 탐색에서는 무시될 수 있습니다.
 
-To enable this decoding strategy, specify the `num_beams` (aka number of hypotheses to keep track of) that is greater than 1.
+이 디코딩 전략을 활성화하려면 `num_beams` (즉, 추적할 가설 수)를 1보다 큰 값으로 지정하세요.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -272,10 +230,9 @@ To enable this decoding strategy, specify the `num_beams` (aka number of hypothe
 time."\n\nHe added: "I am very proud of the work I have been able to do in the last few years.\n\n"I have']
 ```
 
-### Beam-search multinomial sampling
+### 빔 탐색 다항 분포 샘플링
 
-As the name implies, this decoding strategy combines beam search with multinomial sampling. You need to specify
-the `num_beams` greater than 1, and set `do_sample=True` to use this decoding strategy.
+이 디코딩 전략은 빔 탐색과 다항 분포 샘플링을 결합한 전략입니다. `num_beams`을 1보다 큰 값으로 지정하고, `do_sample=True`로 설정하여 이 디코딩 전략을 사용하세요.
 
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
@@ -293,12 +250,9 @@ the `num_beams` greater than 1, and set `do_sample=True` to use this decoding st
 'Das Haus ist wunderbar.'
 ```
 
-### Diverse beam search decoding
+### 다양한 빔 탐색 디코딩
 
-The diverse beam search decoding strategy is an extension of the beam search strategy that allows for generating a more diverse
-set of beam sequences to choose from. To learn how it works, refer to [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models](https://arxiv.org/pdf/1610.02424.pdf).
-This approach has two main parameters: `num_beams` and `num_beam_groups`.
-The groups are selected to ensure they are distinct enough compared to the others, and regular beam search is used within each group.
+다양한 빔 탐색 디코딩 전략은 빔 탐색 전략의 확장으로, 더 다양한 빔 시퀀스 세트를 생성하여 선택할 수 있습니다. 작동 방식에 대한 자세한 내용은 [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models](https://arxiv.org/pdf/1610.02424.pdf)를 참조하세요. 이 접근 방식에는 `num_beams`와 `num_beam_groups`라는 두 가지 주요 매개변수가 있습니다. 그룹은 다른 그룹과 충분히 구별되도록 선택되며, 각 그룹 내에서는 일반적인 빔 탐색이 사용됩니다.
 
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
@@ -329,19 +283,13 @@ The groups are selected to ensure they are distinct enough compared to the other
 'The Design Principles are a set of universal design principles that can be applied to any location, climate and culture, and they allow us to design the most efficient and sustainable human habitation and food production systems.'
 ```
 
-This guide illustrates the main parameters that enable various decoding strategies. More advanced parameters exist for the
-[`generate`] method, which gives you even further control over the [`generate`] method's behavior.
-For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation.mdx).
+이 안내서에서는 다양한 디코딩 전략을 활성화하는 주요 매개변수를 보여주었습니다. [`generate`] 메서드의 사용 가능한 모든 매개변수의 완전한 목록은 [API 문서](./main_classes/text_generation.mdx)를 참조하세요.
 
-### Assisted Decoding
+### 보조 디코딩
 
-Assisted decoding is a modification of the decoding strategies above that uses an assistant model with the same
-tokenizer (ideally a much smaller model) to greedily generate a few candidate tokens. The main model then validates
-the candidate tokens in a single forward pass, which speeds up the decoding process. Currently, only greedy search
-and sampling are supported with assisted decoding, and doesn't support batched inputs. To learn more about assisted
-decoding, check [this blog post](https://huggingface.co/blog/assisted-generation).
+보조 디코딩은 위의 디코딩 전략을 수정한 것으로, 동일한 토크나이저를 사용하는 (이상적으로 훨씬 작은) 보조 모델을 사용하여 몇 개의 후보 토큰을 탐욕적으로 생성합니다. 그런 다음 주요 모델은 후보 토큰을 하나의 전방 통과로 검증하여 디코딩 프로세스를 가속화합니다. 현재 보조 디코딩은 탐욕적 탐색과 샘플링만 지원하며, 배치 입력은 지원하지 않습니다. 자세한 내용은 [이 블로그 글](https://huggingface.co/blog/assisted-generation)을 참조하세요.
 
-To enable assisted decoding, set the `assistant_model` argument with a model.
+보조 디코딩을 활성화하려면 `assistant_model` 인자에 모델을 지정하세요.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -360,8 +308,7 @@ To enable assisted decoding, set the `assistant_model` argument with a model.
 ['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
 ```
 
-When using assisted decoding with sampling methods, you can use the `temperarure` argument to control the randomness
-just like in multinomial sampling. However, in assisted decoding, reducing the temperature will help improving latency.
+샘플링 방법으로 보조 디코딩을 사용할 때는 다항 분포 샘플링에서와 마찬가지로 `temperature` 인자를 사용하여 임의성을 제어할 수 있습니다. 그러나 보조 디코딩에서는 온도를 낮추면 대기 시간이 향상되는 데 도움이 됩니다.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
