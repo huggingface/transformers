@@ -23,7 +23,7 @@ import tempfile
 import traceback
 import warnings
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, overload
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -48,6 +48,7 @@ from huggingface_hub.utils import (
     hf_raise_for_status,
 )
 from requests.exceptions import HTTPError
+from typing_extensions import Literal
 
 from . import __version__, logging
 from .generic import working_or_temp_dir
@@ -233,7 +234,7 @@ def extract_commit_hash(resolved_file: Optional[str], commit_hash: Optional[str]
 def try_to_load_from_cache(
     repo_id: str,
     filename: str,
-    cache_dir: Union[str, Path, None] = None,
+    cache_dir: Optional[Union[str, os.PathLike]] = None,
     revision: Optional[str] = None,
     repo_type: Optional[str] = None,
 ) -> Optional[str]:
@@ -243,12 +244,12 @@ def try_to_load_from_cache(
     This function will not raise any exception if the file in not cached.
 
     Args:
-        cache_dir (`str` or `os.PathLike`):
-            The folder where the cached files lie.
         repo_id (`str`):
             The ID of the repo on huggingface.co.
         filename (`str`):
             The filename to look for inside `repo_id`.
+        cache_dir (`str` or `os.PathLike`):
+            The folder where the cached files lie.
         revision (`str`, *optional*):
             The specific model version to use. Will default to `"main"` if it's not provided and no `commit_hash` is
             provided either.
@@ -297,6 +298,94 @@ def try_to_load_from_cache(
     return cached_file if os.path.isfile(cached_file) else None
 
 
+@overload
+def cached_file(
+    path_or_repo_id: Union[str, os.PathLike],
+    filename: str,
+    cache_dir: Optional[Union[str, os.PathLike]] = ...,
+    force_download: bool = ...,
+    resume_download: bool = ...,
+    proxies: Optional[Dict[str, str]] = ...,
+    use_auth_token: Optional[Union[bool, str]] = ...,
+    revision: Optional[str] = ...,
+    local_files_only: bool = ...,
+    subfolder: str = ...,
+    repo_type: Optional[str] = ...,
+    user_agent: Optional[Union[str, Dict[str, str]]] = ...,
+    *,
+    _raise_exceptions_for_missing_entries: Literal[True] = ...,
+    _raise_exceptions_for_connection_errors: Literal[True] = ...,
+    _commit_hash: Optional[str] = ...,
+) -> str:
+    ...
+
+
+@overload
+def cached_file(
+    path_or_repo_id: Union[str, os.PathLike],
+    filename: str,
+    cache_dir: Optional[Union[str, os.PathLike]] = ...,
+    force_download: bool = ...,
+    resume_download: bool = ...,
+    proxies: Optional[Dict[str, str]] = ...,
+    use_auth_token: Optional[Union[bool, str]] = ...,
+    revision: Optional[str] = ...,
+    local_files_only: bool = ...,
+    subfolder: str = ...,
+    repo_type: Optional[str] = ...,
+    user_agent: Optional[Union[str, Dict[str, str]]] = ...,
+    *,
+    _raise_exceptions_for_missing_entries: Literal[True] = ...,
+    _raise_exceptions_for_connection_errors: bool,
+    _commit_hash: Optional[str] = ...,
+) -> Optional[str]:
+    ...
+
+
+@overload
+def cached_file(
+    path_or_repo_id: Union[str, os.PathLike],
+    filename: str,
+    cache_dir: Optional[Union[str, os.PathLike]] = ...,
+    force_download: bool = ...,
+    resume_download: bool = ...,
+    proxies: Optional[Dict[str, str]] = ...,
+    use_auth_token: Optional[Union[bool, str]] = ...,
+    revision: Optional[str] = ...,
+    local_files_only: bool = ...,
+    subfolder: str = ...,
+    repo_type: Optional[str] = ...,
+    user_agent: Optional[Union[str, Dict[str, str]]] = ...,
+    *,
+    _raise_exceptions_for_missing_entries: bool,
+    _raise_exceptions_for_connection_errors: Literal[True] = ...,
+    _commit_hash: Optional[str] = ...,
+) -> Optional[str]:
+    ...
+
+
+@overload
+def cached_file(
+    path_or_repo_id: Union[str, os.PathLike],
+    filename: str,
+    cache_dir: Optional[Union[str, os.PathLike]] = ...,
+    force_download: bool = ...,
+    resume_download: bool = ...,
+    proxies: Optional[Dict[str, str]] = ...,
+    use_auth_token: Optional[Union[bool, str]] = ...,
+    revision: Optional[str] = ...,
+    local_files_only: bool = ...,
+    subfolder: str = ...,
+    repo_type: Optional[str] = ...,
+    user_agent: Optional[Union[str, Dict[str, str]]] = ...,
+    *,
+    _raise_exceptions_for_missing_entries: bool,
+    _raise_exceptions_for_connection_errors: bool,
+    _commit_hash: Optional[str] = ...,
+) -> Optional[str]:
+    ...
+
+
 def cached_file(
     path_or_repo_id: Union[str, os.PathLike],
     filename: str,
@@ -310,10 +399,11 @@ def cached_file(
     subfolder: str = "",
     repo_type: Optional[str] = None,
     user_agent: Optional[Union[str, Dict[str, str]]] = None,
+    *,
     _raise_exceptions_for_missing_entries: bool = True,
     _raise_exceptions_for_connection_errors: bool = True,
     _commit_hash: Optional[str] = None,
-):
+) -> Optional[str]:
     """
     Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
 
@@ -558,7 +648,7 @@ def get_file_from_repo(
     )
 
 
-def download_url(url, proxies=None):
+def download_url(url: str, proxies: Optional[Dict[str, str]] = None) -> str:
     """
     Downloads a given url in a temporary file. This function is not safe to use in multiple processes. Its only use is
     for deprecated behavior allowing to download config/models with a single url instead of using the Hub.

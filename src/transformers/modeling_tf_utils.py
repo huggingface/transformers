@@ -2737,17 +2737,24 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         "user_agent": user_agent,
                         "revision": revision,
                         "subfolder": subfolder,
-                        "_raise_exceptions_for_missing_entries": False,
                         "_commit_hash": commit_hash,
                     }
-                    resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
+                    resolved_archive_file = cached_file(
+                        pretrained_model_name_or_path,
+                        filename,
+                        **cached_file_kwargs,
+                        _raise_exceptions_for_missing_entries=False,
+                    )
 
                     # Since we set _raise_exceptions_for_missing_entries=False, we don't get an exception but a None
                     # result when internet is up, the repo and revision exist, but the file does not.
                     if resolved_archive_file is None and filename == SAFE_WEIGHTS_NAME:
                         # Maybe the checkpoint is sharded, we try to grab the index name in this case.
                         resolved_archive_file = cached_file(
-                            pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME, **cached_file_kwargs
+                            pretrained_model_name_or_path,
+                            SAFE_WEIGHTS_INDEX_NAME,
+                            **cached_file_kwargs,
+                            _raise_exceptions_for_missing_entries=False,
                         )
                         if resolved_archive_file is not None:
                             is_sharded = True
@@ -2758,19 +2765,28 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                             # This repo has no safetensors file of any kind, we switch to TensorFlow.
                             filename = TF2_WEIGHTS_NAME
                             resolved_archive_file = cached_file(
-                                pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **cached_file_kwargs
+                                pretrained_model_name_or_path,
+                                TF2_WEIGHTS_NAME,
+                                **cached_file_kwargs,
+                                _raise_exceptions_for_missing_entries=False,
                             )
                     if resolved_archive_file is None and filename == TF2_WEIGHTS_NAME:
                         # Maybe the checkpoint is sharded, we try to grab the index name in this case.
                         resolved_archive_file = cached_file(
-                            pretrained_model_name_or_path, TF2_WEIGHTS_INDEX_NAME, **cached_file_kwargs
+                            pretrained_model_name_or_path,
+                            TF2_WEIGHTS_INDEX_NAME,
+                            **cached_file_kwargs,
+                            _raise_exceptions_for_missing_entries=False,
                         )
                         if resolved_archive_file is not None:
                             is_sharded = True
                     if resolved_archive_file is None and filename == WEIGHTS_NAME:
                         # Maybe the checkpoint is sharded, we try to grab the index name in this case.
                         resolved_archive_file = cached_file(
-                            pretrained_model_name_or_path, WEIGHTS_INDEX_NAME, **cached_file_kwargs
+                            pretrained_model_name_or_path,
+                            WEIGHTS_INDEX_NAME,
+                            **cached_file_kwargs,
+                            _raise_exceptions_for_missing_entries=False,
                         )
                         if resolved_archive_file is not None:
                             is_sharded = True

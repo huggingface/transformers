@@ -718,24 +718,34 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                         "user_agent": user_agent,
                         "revision": revision,
                         "subfolder": subfolder,
-                        "_raise_exceptions_for_missing_entries": False,
                         "_commit_hash": commit_hash,
                     }
-                    resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
+                    resolved_archive_file = cached_file(
+                        pretrained_model_name_or_path,
+                        filename,
+                        **cached_file_kwargs,
+                        _raise_exceptions_for_missing_entries=False,
+                    )
 
                     # Since we set _raise_exceptions_for_missing_entries=False, we don't get an expection but a None
                     # result when internet is up, the repo and revision exist, but the file does not.
                     if resolved_archive_file is None and filename == FLAX_WEIGHTS_NAME:
                         # Maybe the checkpoint is sharded, we try to grab the index name in this case.
                         resolved_archive_file = cached_file(
-                            pretrained_model_name_or_path, FLAX_WEIGHTS_INDEX_NAME, **cached_file_kwargs
+                            pretrained_model_name_or_path,
+                            FLAX_WEIGHTS_INDEX_NAME,
+                            **cached_file_kwargs,
+                            _raise_exceptions_for_missing_entries=False,
                         )
                         if resolved_archive_file is not None:
                             is_sharded = True
                     # Maybe the checkpoint is pytorch sharded, we try to grab the pytorch index name in this case.
                     elif resolved_archive_file is None and from_pt:
                         resolved_archive_file = cached_file(
-                            pretrained_model_name_or_path, WEIGHTS_INDEX_NAME, **cached_file_kwargs
+                            pretrained_model_name_or_path,
+                            WEIGHTS_INDEX_NAME,
+                            **cached_file_kwargs,
+                            _raise_exceptions_for_missing_entries=False,
                         )
                         if resolved_archive_file is not None:
                             is_sharded = True

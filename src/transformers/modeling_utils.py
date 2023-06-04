@@ -2484,10 +2484,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         "user_agent": user_agent,
                         "revision": revision,
                         "subfolder": subfolder,
-                        "_raise_exceptions_for_missing_entries": False,
                         "_commit_hash": commit_hash,
                     }
-                    resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
+                    resolved_archive_file = cached_file(
+                        pretrained_model_name_or_path,
+                        filename,
+                        **cached_file_kwargs,
+                        _raise_exceptions_for_missing_entries=False,
+                    )
 
                     # Since we set _raise_exceptions_for_missing_entries=False, we don't get an exception but a None
                     # result when internet is up, the repo and revision exist, but the file does not.
@@ -2497,18 +2501,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             pretrained_model_name_or_path,
                             _add_variant(SAFE_WEIGHTS_INDEX_NAME, variant),
                             **cached_file_kwargs,
+                            _raise_exceptions_for_missing_entries=False,
                         )
                         if resolved_archive_file is not None:
                             is_sharded = True
                         elif use_safetensors:
                             raise EnvironmentError(
-                                f" {_add_variant(SAFE_WEIGHTS_NAME, variant)} or {_add_variant(SAFE_WEIGHTS_INDEX_NAME, variant)} and thus cannot be loaded with `safetensors`. Please make sure that the model has been saved with `safe_serialization=True` or do not set `use_safetensors=True`."
+                                f"{_add_variant(SAFE_WEIGHTS_NAME, variant)} or "
+                                f"{_add_variant(SAFE_WEIGHTS_INDEX_NAME, variant)} and thus cannot be loaded with "
+                                "`safetensors`. Please make sure that the model has been saved with "
+                                "`safe_serialization=True` or do not set `use_safetensors=True`."
                             )
                         else:
                             # This repo has no safetensors file of any kind, we switch to PyTorch.
                             filename = _add_variant(WEIGHTS_NAME, variant)
                             resolved_archive_file = cached_file(
-                                pretrained_model_name_or_path, filename, **cached_file_kwargs
+                                pretrained_model_name_or_path,
+                                filename,
+                                **cached_file_kwargs,
+                                _raise_exceptions_for_missing_entries=False,
                             )
                     if resolved_archive_file is None and filename == _add_variant(WEIGHTS_NAME, variant):
                         # Maybe the checkpoint is sharded, we try to grab the index name in this case.
@@ -2516,6 +2527,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             pretrained_model_name_or_path,
                             _add_variant(WEIGHTS_INDEX_NAME, variant),
                             **cached_file_kwargs,
+                            _raise_exceptions_for_missing_entries=False,
                         )
                         if resolved_archive_file is not None:
                             is_sharded = True
