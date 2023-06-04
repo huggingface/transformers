@@ -436,6 +436,57 @@ class OwlViTImageProcessor(BaseImageProcessor):
 
         return results
 
+    def post_process_object_detection_evaluation(
+        self, outputs, pred_per_im: int = 300, target_sizes: Union[TensorType, List[Tuple]] = None
+    ):
+        """
+        Converts the raw output of [`OwlViTForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format.
+
+        Args:
+            outputs ([`OwlViTObjectDetectionOutput`]):
+                Raw outputs of the model.
+            pred_per_im (`int`, *optional*):
+                Number of detections per image. Should be 100 for COCO, 300 for LVIS
+            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+                `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            in the batch as predicted by the model.
+        """
+        logits, boxes = outputs.logits, outputs.pred_boxes
+
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+        scores = torch.sigmoid(logits)
+
+        # Convert to [x0, y0, x1, y1] format
+        boxes = center_to_corners_format(boxes)
+
+        # Convert from relative [0, 1] to absolute [0, height] coordinates
+        if target_sizes is not None:
+            if isinstance(target_sizes, List):
+                img_h = torch.Tensor([i[0] for i in target_sizes])
+                img_w = torch.Tensor([i[1] for i in target_sizes])
+            else:
+                img_h, img_w = target_sizes.unbind(1)
+
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
+            boxes = boxes * scale_fct[:, None, :]
+
+        scores, topk_indexes = torch.topk(scores.view(logits.shape[0], -1), pred_per_im, dim=1)
+        topk_boxes = topk_indexes // logits.shape[2]
+        labels = topk_indexes % logits.shape[2]
+        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
+        return [{'scores': s, 'labels': l, 'boxes': b} for s, l, b in zip(scores, labels, boxes)]
+
+
+
     # TODO: (Amy) Make compatible with other frameworks
     def post_process_image_guided_detection(self, outputs, threshold=0.6, nms_threshold=0.3, target_sizes=None):
         """
