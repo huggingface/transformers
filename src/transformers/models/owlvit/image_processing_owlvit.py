@@ -464,7 +464,6 @@ class OwlViTImageProcessor(BaseImageProcessor):
                 )
 
         scores = torch.sigmoid(logits)
-
         # Convert to [x0, y0, x1, y1] format
         boxes = center_to_corners_format(boxes)
 

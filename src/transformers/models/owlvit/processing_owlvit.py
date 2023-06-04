@@ -190,7 +190,7 @@ class OwlViTProcessor(ProcessorMixin):
         This method forwards all its arguments to [`OwlViTImageProcessor.post_process_object_detection`]. Please refer
         to the docstring of this method for more information.
         """
-        return self.image_processor.post_process_object_detection(*args, **kwargs)
+        return self.image_processor.post_process_object_detection_evaluation(*args, **kwargs)
 
     def post_process_image_guided_detection(self, *args, **kwargs):
         """
@@ -228,3 +228,4 @@ class OwlViTProcessor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor
+
