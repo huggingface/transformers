@@ -38,7 +38,6 @@ from ...image_utils import (
     make_list_of_images,
     valid_images,
 )
-
 from ...utils import TensorType, is_torch_available, logging
 
 
