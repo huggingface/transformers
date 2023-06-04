@@ -1137,7 +1137,7 @@ class GenerationMixin:
                 unused_model_args.append(key)
 
         if unused_model_args:
-            raise ValueError(
+            warnings.warn(
                 f"The following `model_kwargs` are not used by the model: {unused_model_args} (note: typos in the"
                 " generate arguments will also show up in this list)"
             )
