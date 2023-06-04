@@ -397,7 +397,7 @@ class PretrainedConfig(PushToHubMixin):
         """
         `str`: Name or path to the pretrained checkpoint.
         """
-        return self._name_or_path
+        return getattr(self, "_name_or_path", "")
 
     @name_or_path.setter
     def name_or_path(self, value):
