@@ -1094,12 +1094,7 @@ class Pix2StructTextBlock(nn.Module):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (hidden_states,)
-
-        if use_cache:
-            outputs = outputs + (present_key_value_state,) + attention_outputs
-        else:
-            outputs = outputs + attention_outputs
+        outputs = (hidden_states, present_key_value_state) + attention_outputs
 
         return outputs
 
@@ -1530,9 +1525,6 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 
             # layer_outputs is a tuple with:
             # hidden-states, key-value-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
-            if use_cache is False:
-                layer_outputs = layer_outputs[:1] + (None,) + layer_outputs[1:]
-
             hidden_states, present_key_value_state = layer_outputs[:2]
 
             # We share the position biases between the layers - the first layer store them
@@ -1546,8 +1538,8 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
                 present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[2],)
-                all_cross_attentions = all_cross_attentions + (layer_outputs[3],)
+                all_attentions = all_attentions + (layer_outputs[3],)
+                all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
