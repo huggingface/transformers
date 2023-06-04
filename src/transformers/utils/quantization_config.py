@@ -183,6 +183,13 @@ class BitsAndBytesConfig:
     ) -> Tuple[Self, Dict[str, Any]]:  # type: ignore[valid-type]
         ...
 
+    @overload
+    @classmethod
+    def from_dict(
+        cls, config_dict: Dict[str, Any], return_unused_kwargs: bool, **kwargs: Any
+    ) -> Union[Self, Tuple[Self, Dict[str, Any]]]:  # type: ignore[valid-type]
+        ...
+
     @classmethod
     def from_dict(
         cls, config_dict: Dict[str, Any], return_unused_kwargs: bool, **kwargs: Any
