@@ -21,9 +21,10 @@ import json
 import os
 import re
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
 from packaging import version
+from typing_extensions import Literal, Self
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
@@ -368,7 +369,7 @@ class PretrainedConfig(PushToHubMixin):
             )
 
         # Name or path to the pretrained checkpoint
-        self._name_or_path = str(kwargs.pop("name_or_path", ""))
+        self.name_or_path = kwargs.pop("name_or_path", "")
         # Config hash
         self._commit_hash = kwargs.pop("_commit_hash", None)
 
@@ -393,7 +394,10 @@ class PretrainedConfig(PushToHubMixin):
 
     @property
     def name_or_path(self) -> str:
-        return getattr(self, "_name_or_path", None)
+        """
+        `str`: Name or path to the pretrained checkpoint.
+        """
+        return self._name_or_path
 
     @name_or_path.setter
     def name_or_path(self, value):
@@ -466,8 +470,43 @@ class PretrainedConfig(PushToHubMixin):
                 token=kwargs.get("use_auth_token"),
             )
 
+    @overload
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Union[str, os.PathLike],
+        return_unused_kwargs: Literal[False] = ...,
+        **kwargs: Any,
+    ) -> Self:  # type: ignore[valid-type]
+        ...
+
+    @overload
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Union[str, os.PathLike],
+        return_unused_kwargs: Literal[True],
+        **kwargs: Any,
+    ) -> Tuple[Self, Dict[str, Any]]:  # type: ignore[valid-type]
+        ...
+
+    @overload
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Union[str, os.PathLike],
+        return_unused_kwargs: bool,
+        **kwargs: Any,
+    ) -> Union[Self, Tuple[Self, Dict[str, Any]]]:  # type: ignore[valid-type]
+        ...
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Union[str, os.PathLike],
+        return_unused_kwargs: bool = False,
+        **kwargs: Any,
+    ) -> Union[Self, Tuple[Self, Dict[str, Any]]]:  # type: ignore[valid-type]
         r"""
         Instantiate a [`PretrainedConfig`] (or a derived class) from a pretrained model configuration.
 
@@ -481,6 +520,12 @@ class PretrainedConfig(PushToHubMixin):
                 - a path to a *directory* containing a configuration file saved using the
                   [`~PretrainedConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
                 - a path or url to a saved configuration JSON *file*, e.g., `./my_model_directory/configuration.json`.
+            return_unused_kwargs (`bool`, *optional*, defaults to `False`):
+                If `False`, then this function returns just the final configuration object.
+
+                If `True`, then this functions returns a `Tuple(config, unused_kwargs)` where *unused_kwargs* is a
+                dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e., the
+                part of `kwargs` which has not been used to update `config` and is otherwise ignored.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
@@ -507,12 +552,6 @@ class PretrainedConfig(PushToHubMixin):
 
                 </Tip>
 
-            return_unused_kwargs (`bool`, *optional*, defaults to `False`):
-                If `False`, then this function returns just the final configuration object.
-
-                If `True`, then this functions returns a `Tuple(config, unused_kwargs)` where *unused_kwargs* is a
-                dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e., the
-                part of `kwargs` which has not been used to update `config` and is otherwise ignored.
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
@@ -551,7 +590,7 @@ class PretrainedConfig(PushToHubMixin):
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
             )
 
-        return cls.from_dict(config_dict, **kwargs)
+        return cls.from_dict(config_dict, return_unused_kwargs=return_unused_kwargs, **kwargs)
 
     @classmethod
     def get_config_dict(
@@ -674,8 +713,31 @@ class PretrainedConfig(PushToHubMixin):
             )
         return config_dict, kwargs
 
+    @overload
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any], **kwargs) -> "PretrainedConfig":
+    def from_dict(
+        cls, config_dict: Dict[str, Any], return_unused_kwargs: Literal[False] = ..., **kwargs: Any
+    ) -> Self:  # type: ignore[valid-type]
+        ...
+
+    @overload
+    @classmethod
+    def from_dict(
+        cls, config_dict: Dict[str, Any], return_unused_kwargs: Literal[True], **kwargs: Any
+    ) -> Tuple[Self, Dict[str, Any]]:  # type: ignore[valid-type]
+        ...
+
+    @overload
+    @classmethod
+    def from_dict(
+        cls, config_dict: Dict[str, Any], return_unused_kwargs: bool, **kwargs: Any
+    ) -> Union[Self, Tuple[Self, Dict[str, Any]]]:  # type: ignore[valid-type]
+        ...
+
+    @classmethod
+    def from_dict(
+        cls, config_dict: Dict[str, Any], return_unused_kwargs: bool = False, **kwargs: Any
+    ) -> Union[Self, Tuple[Self, Dict[str, Any]]]:  # type: ignore[valid-type]
         """
         Instantiates a [`PretrainedConfig`] from a Python dictionary of parameters.
 
@@ -683,15 +745,20 @@ class PretrainedConfig(PushToHubMixin):
             config_dict (`Dict[str, Any]`):
                 Dictionary that will be used to instantiate the configuration object. Such a dictionary can be
                 retrieved from a pretrained checkpoint by leveraging the [`~PretrainedConfig.get_config_dict`] method.
+            return_unused_kwargs (`bool`, *optional*, defaults to `False`):
+                If `False`, then this function returns just the final configuration object.
+
+                If `True`, then this functions returns a `Tuple(config, unused_kwargs)` where *unused_kwargs* is a
+                dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e., the
+                part of `kwargs` which has not been used to update `config` and is otherwise ignored.
             kwargs (`Dict[str, Any]`):
                 Additional parameters from which to initialize the configuration object.
 
         Returns:
             [`PretrainedConfig`]: The configuration object instantiated from those parameters.
         """
-        return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
         # Those arguments may be passed along for our internal telemetry.
-        # We remove them so they don't appear in `return_unused_kwargs`.
+        # We remove them so they don't appear if `return_unused_kwargs` is `True`.
         kwargs.pop("_from_auto", None)
         kwargs.pop("_from_pipeline", None)
         # The commit hash might have been updated in the `config_dict`, we don't want the kwargs to erase that update.
@@ -729,7 +796,7 @@ class PretrainedConfig(PushToHubMixin):
             return config
 
     @classmethod
-    def from_json_file(cls, json_file: Union[str, os.PathLike]) -> "PretrainedConfig":
+    def from_json_file(cls, json_file: Union[str, os.PathLike]) -> Self:  # type: ignore[valid-type]
         """
         Instantiates a [`PretrainedConfig`] from the path to a JSON file of parameters.
 

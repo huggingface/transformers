@@ -27,7 +27,7 @@ import re
 import warnings
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type, Union
 
 import h5py
 import numpy as np
@@ -1083,27 +1083,27 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     Class attributes (overridden by derived classes):
 
-        - **config_class** ([`PretrainedConfig`]) -- A subclass of [`PretrainedConfig`] to use as configuration class
-          for this model architecture.
+        - **config_class** ([`Type[PretrainedConfig]`]) -- A subclass of [`PretrainedConfig`] to use as configuration
+          class for this model architecture.
         - **base_model_prefix** (`str`) -- A string indicating the attribute associated to the base model in derived
           classes of the same architecture adding modules on top of the base model.
         - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for NLP
           models, `pixel_values` for vision models and `input_values` for speech models).
     """
-    config_class = None
-    base_model_prefix = ""
-    main_input_name = "input_ids"
-    _auto_class = None
-    _using_dummy_loss = None
-    _label_to_output_map = None
+    config_class: Type[PretrainedConfig]
+    base_model_prefix: str = ""
+    main_input_name: str = "input_ids"
+    _auto_class: Optional[str] = None
+    _using_dummy_loss: bool = False
+    _label_to_output_map: Optional[Dict[str, str]] = None
 
     # a list of re pattern of tensor names to ignore from the model when loading the model weights
     # (and avoid unnecessary warnings).
-    _keys_to_ignore_on_load_missing = None
+    _keys_to_ignore_on_load_missing: Optional[List[str]] = None
     # a list of re pattern of tensor names to ignore from the weights when loading the model weights
     # (and avoid unnecessary warnings).
-    _keys_to_ignore_on_load_unexpected = None
-    _requires_load_weight_prefix = False
+    _keys_to_ignore_on_load_unexpected: Optional[List[str]] = None
+    _requires_load_weight_prefix: bool = False
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:

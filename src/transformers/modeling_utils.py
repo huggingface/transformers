@@ -25,7 +25,7 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 from packaging import version
@@ -1032,8 +1032,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     Class attributes (overridden by derived classes):
 
-        - **config_class** ([`PretrainedConfig`]) -- A subclass of [`PretrainedConfig`] to use as configuration class
-          for this model architecture.
+        - **config_class** ([`Type[PretrainedConfig]`]) -- A subclass of [`PretrainedConfig`] to use as configuration
+          class for this model architecture.
         - **load_tf_weights** (`Callable`) -- A python *method* for loading a TensorFlow checkpoint in a PyTorch model,
           taking as arguments:
 
@@ -1047,27 +1047,27 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for NLP
           models, `pixel_values` for vision models and `input_values` for speech models).
     """
-    config_class = None
-    base_model_prefix = ""
-    main_input_name = "input_ids"
-    _auto_class = None
-    _no_split_modules = None
-    _skip_keys_device_placement = None
-    _keep_in_fp32_modules = None
+    config_class: Type[PretrainedConfig]
+    base_model_prefix: str = ""
+    main_input_name: str = "input_ids"
+    _auto_class: Optional[str] = None
+    _no_split_modules: Optional[List[str]] = None
+    _skip_keys_device_placement: Optional[str] = None
+    _keep_in_fp32_modules: Optional[List[str]] = None
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
     # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
-    _keys_to_ignore_on_load_missing = None
+    _keys_to_ignore_on_load_missing: Optional[List[str]] = None
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of
     # unexpected keys we find (keys inside the checkpoint but not the model) and avoid unnecessary
     # warnings.
-    _keys_to_ignore_on_load_unexpected = None
+    _keys_to_ignore_on_load_unexpected: Optional[List[str]] = None
     # a list of `state_dict` keys to ignore when saving the model (useful for keys that aren't
     # trained, but which are either deterministic or tied variables)
-    _keys_to_ignore_on_save = None
+    _keys_to_ignore_on_save: Optional[List[str]] = None
 
-    is_parallelizable = False
-    supports_gradient_checkpointing = False
+    is_parallelizable: bool = False
+    supports_gradient_checkpointing: bool = False
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
