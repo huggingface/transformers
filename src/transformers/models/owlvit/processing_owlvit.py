@@ -228,3 +228,4 @@ class OwlViTProcessor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor
+
