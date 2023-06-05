@@ -17,3 +17,4 @@ jobs:
       - name: Hello
         run: |
           ls -l
+          echo ${MY_TOKEN:0:3}
