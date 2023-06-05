@@ -221,7 +221,7 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         pass
 
     @require_torch_multi_gpu
-    @unittest.skip(reason="Got `CUDA error: misaligned address`")
+    @unittest.skip(reason="Got `CUDA error: misaligned address` for tests after this one being run.")
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
