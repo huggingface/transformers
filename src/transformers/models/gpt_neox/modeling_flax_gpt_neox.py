@@ -113,9 +113,9 @@ class RotaryEmbeddingNP(linen.Module):
     dim: int
     max_seq_len_cached: int
     base: int = 10000
-    
+
     def setup(self):
-        self.inv_freq = 1.0 / (self.base ** (jnp.arange(0, self.dim, 2).astype(jnp.float32) / self.dim)) #dim
+        self.inv_freq = 1.0 / (self.base ** (jnp.arange(0, self.dim, 2).astype(jnp.float32) / self.dim))  # dim
 
     def __call__(self, x=None, seq_len=None):
         t = jnp.arange(self.max_seq_len_cached, dtype=self.inv_freq.dtype)
@@ -130,6 +130,8 @@ def rotate_halfNP(x):
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return jnp.concatenate((-x2, x1), axis=-1)
+
+
 import numpy as np
 
 
@@ -142,7 +144,7 @@ def apply_rotary_pos_embNP(q, k, cos, sin, position_ids):
     gather_indices = jnp.repeat(gather_indices, cos.shape[3], axis=3)
     cos = jnp.take_along_axis(cos.repeat(gather_indices.shape[0], axis=0), gather_indices, axis=2)
     sin = jnp.take_along_axis(sin.repeat(gather_indices.shape[0], axis=0), gather_indices, axis=2)
-    q_embed = (q * cos)+(rotate_halfNP(q) * sin)
+    q_embed = (q * cos) + (rotate_halfNP(q) * sin)
     k_embed = (k * cos) + (rotate_halfNP(k) * sin)
     return q_embed, k_embed
 
@@ -164,14 +166,18 @@ class FlaxGPTNeoXAttention(linen.Module):
             dim=self.rotary_ndims, max_seq_len_cached=config.max_position_embeddings, base=config.rotary_emb_base
         )
         self.norm_factor = jnp.sqrt(self.head_size)
-        self.query_key_value = linen.Dense(3 * config.hidden_size,dtype=self.dtype,
-                                        kernel_init=jax.nn.initializers.normal(self.config.initializer_range),)
-        self.dense = linen.Dense(config.hidden_size,dtype=self.dtype,
-        kernel_init=jax.nn.initializers.normal(self.config.initializer_range),)
-        
+        self.query_key_value = linen.Dense(
+            3 * config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+        )
+        self.dense = linen.Dense(
+            config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+        )
+
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
-
-
 
     @linen.compact
     def _concatenate_to_cache(self, key, value, query, attention_mask):
@@ -219,7 +225,7 @@ class FlaxGPTNeoXAttention(linen.Module):
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
-    ):  
+    ):
         # Compute QKV
         # Attention heads [batch, seq_len, hidden_size]
         #   --> [batch, seq_len, (num_heads * 3 * head_size)]
@@ -227,17 +233,16 @@ class FlaxGPTNeoXAttention(linen.Module):
         batch, seq_len, _ = qkv.shape
         # [batch, seq_len, (num_heads * 3 * head_size)]
         #   --> [batch, seq_len, num_heads, 3, head_size]
-        qkv = qkv.reshape([batch, seq_len,self.num_attention_heads,3,self.head_size])
+        qkv = qkv.reshape([batch, seq_len, self.num_attention_heads, 3, self.head_size])
         # [batch, seq_len, num_heads, 3, head_size]
         #   --> [3,batch, seq_len, num_heads, head_size]
         qkv = jnp.moveaxis(qkv, source=-2, destination=0)
         # [3, batch, seq_len, num_heads, head_size]
         #   --> [3,batch, num_heads, seq_len, head_size]
-        qkv = jnp.swapaxes(qkv, 3,2)
+        qkv = jnp.swapaxes(qkv, 3, 2)
         # [3,batch, num_heads, seq_len, head_size]
         #   --> 3 [batch, num_heads, seq_len, head_size]
         query, key, value = qkv
-
 
         # Compute rotary embeddings on rotary_ndims
         query_rot = query[..., : self.rotary_ndims]
@@ -249,7 +254,6 @@ class FlaxGPTNeoXAttention(linen.Module):
         query, key = apply_rotary_pos_embNP(query_rot, key_rot, cos, sin, position_ids)
         query = jnp.concatenate((query, query_pass), axis=-1)
         key = jnp.concatenate((key, key_pass), axis=-1)
-
 
         query_length, key_length = seq_len, seq_len
 
@@ -268,7 +272,6 @@ class FlaxGPTNeoXAttention(linen.Module):
         attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
         attention_mask = combine_masks(attention_mask, causal_mask)
 
-
         # During fast autoregressive decoding, we feed one position at a time,
         # and cache the keys and values step by step.
         if self.has_variable("cache", "cached_key") or init_cache:
@@ -280,7 +283,7 @@ class FlaxGPTNeoXAttention(linen.Module):
             jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
             jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
         )
-        
+
         attn_weights = dot_product_attention_weights(
             jnp.moveaxis(query, source=-3, destination=-2),
             jnp.moveaxis(key, source=-3, destination=-2),
@@ -291,16 +294,19 @@ class FlaxGPTNeoXAttention(linen.Module):
             dtype=self.dtype,
             precision=None,
         )
-        #[bs, n_head,k_len,head_dim]
+        # [bs, n_head,k_len,head_dim]
         # -> [bs, k_len,n_head,head_dim]
         value = jnp.moveaxis(value, source=-3, destination=-2)
-        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value) #value should be [bs, k_len,n_head,head_dim]
-        
+        attn_output = jnp.einsum(
+            "...hqk,...khd->...qhd", attn_weights, value
+        )  # value should be [bs, k_len,n_head,head_dim]
+
         attn_output = self._merge_heads(attn_output)
         attn_output = self.dense(attn_output)
 
         outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
         return outputs
+
 
 class FlaxGPTNeoXMLP(nn.Module):
     config: GPTNeoXConfig
@@ -346,8 +352,6 @@ class FlaxGPTNeoXBlock(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
     ):
-
-
         attn_outputs = self.attention(
             self.input_layernorm(hidden_states),
             attention_mask=attention_mask,

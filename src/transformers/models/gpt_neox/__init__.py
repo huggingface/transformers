@@ -89,7 +89,6 @@ if TYPE_CHECKING:
         from .modeling_flax_gpt_neox import FlaxGPTNeoXForCausalLM, FlaxGPTNeoXModel, FlaxGPTNeoXPreTrainedModel
 
 
-
 else:
     import sys
 
