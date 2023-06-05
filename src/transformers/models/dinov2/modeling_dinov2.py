@@ -359,6 +359,28 @@ class Dinov2MLP(nn.Module):
         return hidden_state
 
 
+class Dinov2SwiGLUFFN(nn.Module):
+    def __init__(
+        self,
+        in_features: int,
+        hidden_features: Optional[int] = None,
+        out_features: Optional[int] = None,
+        bias: bool = True,
+    ) -> None:
+        super().__init__()
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
+        self.w12 = nn.Linear(in_features, 2 * hidden_features, bias=bias)
+        self.w3 = nn.Linear(hidden_features, out_features, bias=bias)
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        x12 = self.w12(hidden_state)
+        x1, x2 = x12.chunk(2, dim=-1)
+        hidden = nn.functional.silu(x1) * x2
+        return self.w3(hidden)
+
+
 class Dinov2Layer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
@@ -372,7 +394,11 @@ class Dinov2Layer(nn.Module):
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         mlp_hidden_size = int(config.hidden_size * config.mlp_ratio)
-        self.mlp = Dinov2MLP(config, config.hidden_size, mlp_hidden_size)
+
+        if config.use_swiglu_ffn:
+            self.mlp = Dinov2SwiGLUFFN(config.hidden_size, mlp_hidden_size)
+        else:
+            self.mlp = Dinov2MLP(config, config.hidden_size, mlp_hidden_size)
         self.layer_scale2 = Dinov2LayerScale(config.hidden_size, init_values=config.layerscale_value)
         self.drop_path2 = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
@@ -604,9 +630,9 @@ class Dinov2Model(Dinov2PreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
-        expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
-        if pixel_values.dtype != expected_dtype:
-            pixel_values = pixel_values.to(expected_dtype)
+        # expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
+        # if pixel_values.dtype != expected_dtype:
+        #     pixel_values = pixel_values.to(expected_dtype)
 
         embedding_output = self.embeddings(pixel_values)
 

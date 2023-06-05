@@ -39,13 +39,18 @@ def get_dinov2_config(model_name):
 
     # size of the architecture
     if "vits" in model_name:
-        raise NotImplementedError("To do")
+        config.hidden_size = 384
+        config.num_attention_heads = 6
     elif "vitb" in model_name:
         pass
     elif "vitl" in model_name:
-        raise NotImplementedError("To do")
+        config.hidden_size = 1024
+        config.num_hidden_layers = 24
+        config.num_attention_heads = 16
     elif "vitg" in model_name:
-        raise NotImplementedError("To do")
+        config.use_swiglu_ffn = True
+        config.hidden_size = 1536
+        config.num_hidden_layers = 40
     else:
         raise ValueError("Model not supported")
 
@@ -69,10 +74,16 @@ def create_rename_keys(config):
         rename_keys.append((f"blocks.{i}.norm2.weight", f"encoder.layer.{i}.norm2.weight"))
         rename_keys.append((f"blocks.{i}.norm2.bias", f"encoder.layer.{i}.norm2.bias"))
         # MLP
-        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"encoder.layer.{i}.mlp.fc1.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"encoder.layer.{i}.mlp.fc1.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"encoder.layer.{i}.mlp.fc2.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"encoder.layer.{i}.mlp.fc2.bias"))
+        if config.use_swiglu_ffn:
+            rename_keys.append((f"blocks.{i}.mlp.w12.weight", f"encoder.layer.{i}.mlp.w12.weight"))
+            rename_keys.append((f"blocks.{i}.mlp.w12.bias", f"encoder.layer.{i}.mlp.w12.bias"))
+            rename_keys.append((f"blocks.{i}.mlp.w3.weight", f"encoder.layer.{i}.mlp.w3.weight"))
+            rename_keys.append((f"blocks.{i}.mlp.w3.bias", f"encoder.layer.{i}.mlp.w3.bias"))
+        else:
+            rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"encoder.layer.{i}.mlp.fc1.weight"))
+            rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"encoder.layer.{i}.mlp.fc1.bias"))
+            rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"encoder.layer.{i}.mlp.fc2.weight"))
+            rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"encoder.layer.{i}.mlp.fc2.bias"))
         # layerscale
         rename_keys.append((f"blocks.{i}.ls1.gamma", f"encoder.layer.{i}.layer_scale1.lambda1"))
         rename_keys.append((f"blocks.{i}.ls2.gamma", f"encoder.layer.{i}.layer_scale2.lambda1"))
@@ -145,11 +156,6 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
     assert len(missing_keys) == 0
     assert unexpected_keys == ["mask_token"]
 
-    # Check outputs on an image, prepared by ViTImageProcessor
-    # processor = ViTImageProcessor()
-    # encoding = processor(images=prepare_img(), return_tensors="pt")
-    # pixel_values = encoding["pixel_values"]
-
     # load image
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
@@ -171,14 +177,14 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
 
     with torch.no_grad():
         outputs = model(pixel_values)
+        original_outputs = original_model(pixel_values)
 
-    last_hidden_state = outputs.last_hidden_state
+    print("HF outputs:", outputs.last_hidden_state[:, 0])
+    print("Original outputs:", original_outputs)
 
     # assert values
-    expected_slice = torch.tensor(
-        [[-2.1849, -0.3433, 1.0913], [-3.2696, -0.7386, -0.8044], [-3.0603, 1.2498, -0.7685]]
-    )
-    assert torch.allclose(last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+    assert outputs.last_hidden_state[:, 0].shape == original_outputs.shape
+    assert torch.allclose(outputs.last_hidden_state[:, 0], original_outputs, atol=1e-3)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
@@ -186,7 +192,7 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
         # print(f"Saving image processor to {pytorch_dump_folder_path}")
-        # processor.save_pretrained(pytorch_dump_folder_path)
+        #processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         model_name_to_hf_name = {

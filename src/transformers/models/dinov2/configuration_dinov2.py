@@ -70,10 +70,12 @@ class Dinov2Config(PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        layerscale_value (`float`, `optional`, defaults to 1.0):
+        layerscale_value (`float`, *optional*, defaults to 1.0):
            Initial value to use for layer scale.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             Stochastic depth rate per sample (when applied in the main path of residual layers).
+        use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
+            Whether to use the SwiGLU feedforward neural network.
 
     Example:
 
@@ -108,6 +110,7 @@ class Dinov2Config(PretrainedConfig):
         qkv_bias=True,
         layerscale_value=1.0,
         drop_path_rate=0.0,
+        use_swiglu_ffn=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -127,6 +130,7 @@ class Dinov2Config(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.layerscale_value = layerscale_value
         self.drop_path_rate = drop_path_rate
+        self.use_swiglu_ffn = use_swiglu_ffn
 
 
 class Dinov2OnnxConfig(OnnxConfig):
