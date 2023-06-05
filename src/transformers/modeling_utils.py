@@ -90,7 +90,7 @@ if is_accelerate_available():
         offload_weight,
         save_offload_index,
         set_module_tensor_to_device,
-        check_tied_parameters_on_same_device
+        check_tied_parameters_on_same_device,
     )
 
     if version.parse(accelerate_version) > version.parse("0.11.0"):
@@ -2829,7 +2829,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model.tie_weights()
             tied_params = find_tied_parameters(model)
             # check if we don't have tied param in different devices
-            check_tied_parameters_on_same_device(tied_params,device_map)
+            check_tied_parameters_on_same_device(tied_params, device_map)
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
