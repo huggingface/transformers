@@ -49,16 +49,16 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MobileViTV2Config"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "shehan97/mobilevitv2-1.0-imagenet1k-256"
+_CHECKPOINT_FOR_DOC = "apple/mobilevitv2-1.0-imagenet1k-256"
 _EXPECTED_OUTPUT_SHAPE = [1, 512, 8, 8]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "shehan97/mobilevitv2-1.0-imagenet1k-256"
+_IMAGE_CLASS_CHECKPOINT = "apple/mobilevitv2-1.0-imagenet1k-256"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "shehan97/mobilevitv2-1.0-imagenet1k-256"
+    "apple/mobilevitv2-1.0-imagenet1k-256"
     # See all MobileViTV2 models at https://huggingface.co/models?filter=mobilevitv2
 ]
 
