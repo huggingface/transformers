@@ -631,11 +631,15 @@ class AutoTokenizer:
                         "`use_fast` is set to `True` but the tokenizer class does not have a fast version. "
                         " Falling back to the slow version."
                     )
-            if tokenizer_class is None:
+
+            if tokenizer_class is None and tokenizer_class_name is not None:
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_name)
 
             if tokenizer_class is None:
-                raise ValueError(f"Tokenizer class {tokenizer_class_name} is not currently imported.")
+                raise ValueError(
+                    f"Tokenizer class {tokenizer_class_name} is not currently imported. "
+                    "Your tokenizer may require sentencepiece. Try again after installing "
+                    "sentencepiece.")
 
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
