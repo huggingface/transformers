@@ -19,10 +19,10 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-from PIL import Image
 import torch
 from datasets import load_dataset
 from torchvision.transforms import Compose, Lambda, Normalize, RandomHorizontalFlip, RandomResizedCrop, ToTensor
+from torchvision.transforms.functional import InterpolationMode
 
 import transformers
 from transformers import (
@@ -309,7 +309,7 @@ def main():
     transforms = Compose(
         [
             Lambda(lambda img: img.convert("RGB") if img.mode != "RGB" else img),
-            RandomResizedCrop(size, scale=(0.2, 1.0), interpolation=Image.BICUBIC),
+            RandomResizedCrop(size, scale=(0.2, 1.0), interpolation=InterpolationMode.BICUBIC),
             RandomHorizontalFlip(),
             ToTensor(),
             Normalize(mean=image_processor.image_mean, std=image_processor.image_std),
