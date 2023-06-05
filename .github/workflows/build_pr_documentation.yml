@@ -3,6 +3,7 @@ name: Build PR Documentation
 on:
   pull_request:
 
+jobs:
   check_runners:
     name: Check Runners
     runs-on: [single-gpu,doc-tests-gpu]
