@@ -85,12 +85,12 @@ if is_accelerate_available():
     from accelerate import __version__ as accelerate_version
     from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
     from accelerate.utils import (
+        check_tied_parameters_on_same_device,
         find_tied_parameters,
         load_offloaded_weights,
         offload_weight,
         save_offload_index,
         set_module_tensor_to_device,
-        check_tied_parameters_on_same_device,
     )
 
     if version.parse(accelerate_version) > version.parse("0.11.0"):
