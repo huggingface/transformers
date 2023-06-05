@@ -15,6 +15,7 @@ jobs:
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Hello
+        shell: bash
         run: |
           ls -l
           echo ${MY_TOKEN:0:3}
