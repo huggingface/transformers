@@ -26,7 +26,8 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
-from transformers import Dinov2Config, Dinov2Model
+from transformers import BitImageProcessor, Dinov2Config, Dinov2Model
+from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
 from transformers.utils import logging
 
 
@@ -158,29 +159,36 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
 
     # load image
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
     # preprocess image
     transformations = transforms.Compose(
         [
-            transforms.Resize(256),
+            transforms.Resize(256, interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             transforms.Normalize(
-                mean=[0.485, 0.456, 0.406],  # these are RGB mean+std values
-                std=[0.229, 0.224, 0.225],  # across a large photo dataset.
+                mean=IMAGENET_DEFAULT_MEAN,  # these are RGB mean+std values
+                std=IMAGENET_DEFAULT_STD,  # across a large photo dataset.
             ),
         ]
     )
 
-    pixel_values = transformations(image).unsqueeze(0)  # insert batch dimension
+    original_pixel_values = transformations(image).unsqueeze(0)  # insert batch dimension
+
+    processor = BitImageProcessor(
+        size={"shortest_edge": 256},
+        resample=PILImageResampling.BICUBIC,
+        image_mean=IMAGENET_DEFAULT_MEAN,
+        image_std=IMAGENET_DEFAULT_STD,
+    )
+    pixel_values = processor(image, return_tensors="pt").pixel_values
+
+    assert torch.allclose(original_pixel_values, pixel_values)
 
     with torch.no_grad():
         outputs = model(pixel_values)
         original_outputs = original_model(pixel_values)
-
-    print("HF outputs:", outputs.last_hidden_state[:, 0])
-    print("Original outputs:", original_outputs)
 
     # assert values
     assert outputs.last_hidden_state[:, 0].shape == original_outputs.shape
@@ -191,8 +199,8 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        # print(f"Saving image processor to {pytorch_dump_folder_path}")
-        #processor.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving image processor to {pytorch_dump_folder_path}")
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         model_name_to_hf_name = {
@@ -204,7 +212,7 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
 
         name = model_name_to_hf_name[model_name]
         model.push_to_hub(f"nielsr/{name}")
-        # processor.push_to_hub(f"nielsr/{name}")
+        processor.push_to_hub(f"nielsr/{name}")
 
 
 if __name__ == "__main__":
