@@ -718,6 +718,9 @@ class FlaxT5BlockCollection(nn.Module):
                 if self.causal:
                     all_cross_attentions = all_cross_attentions + (layer_outputs[4],)
 
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
