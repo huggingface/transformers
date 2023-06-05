@@ -90,6 +90,7 @@ if is_accelerate_available():
         offload_weight,
         save_offload_index,
         set_module_tensor_to_device,
+        check_tied_parameters_on_same_device
     )
 
     if version.parse(accelerate_version) > version.parse("0.11.0"):
@@ -2824,6 +2825,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
                 del device_map_without_lm_head
 
+        if device_map is not None:
+            model.tie_weights()
+            tied_params = find_tied_parameters(model)
+            # check if we don't have tied param in different devices
+            check_tied_parameters_on_same_device(tied_params,device_map)
+
         if from_tf:
             if resolved_archive_file.endswith(".index"):
                 # Load from a TensorFlow 1.X checkpoint - provided by original authors
@@ -3015,6 +3022,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
 
         if find_tied_parameters is not None:
+            model.tie_weights()
             tied_params = find_tied_parameters(model)
         else:
             tied_params = []
