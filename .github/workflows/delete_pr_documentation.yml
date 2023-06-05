@@ -1,0 +1,15 @@
+name: Delete dev documentation (artifact)
+
+on:
+  workflow_run:
+    workflows: ["Delete dev documentation"]
+    types:
+      - completed
+
+jobs:
+  build:
+    uses: huggingface/doc-builder/.github/workflows/delete_pr_documentation.yml@main
+    with:
+      package_name: transformers
+    secrets:
+      hf_token: ${{ secrets.HF_DOC_BUILD_PUSH }}
