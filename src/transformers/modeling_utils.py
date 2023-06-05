@@ -25,12 +25,13 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, overload
 
 import torch
 from packaging import version
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
+from typing_extensions import Literal, Self, TypedDict
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -1020,6 +1021,13 @@ class ModuleUtilsMixin:
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
+class LoadingInfo(TypedDict):
+    missing_keys: List[str]
+    unexpected_keys: List[str]
+    mismatched_keys: List[Tuple[str, Tuple[int, ...], Tuple[int, ...]]]
+    error_msgs: List[str]
+
+
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin):
     r"""
     Base class for all models.
@@ -1917,8 +1925,47 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             return super().float(*args)
 
+    @overload
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
+        *model_args: Any,
+        output_loading_info: Literal[False] = ...,
+        **kwargs: Any,
+    ) -> Self:
+        ...
+
+    @overload
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
+        *model_args: Any,
+        output_loading_info: Literal[True],
+        **kwargs: Any,
+    ) -> Tuple[Self, LoadingInfo]:
+        ...
+
+    @overload
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
+        *model_args: Any,
+        output_loading_info: bool,
+        **kwargs: Any,
+    ) -> Union[Self, Tuple[Self, LoadingInfo]]:
+        ...
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
+        *model_args: Any,
+        output_loading_info: bool = False,
+        **kwargs: Any,
+    ) -> Union[Self, Tuple[Self, LoadingInfo]]:
         r"""
         Instantiate a pretrained pytorch model from a pre-trained model configuration.
 
@@ -1952,6 +1999,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                       arguments `config` and `state_dict`).
             model_args (sequence of positional arguments, *optional*):
                 All remaining positional arguments will be passed to the underlying model's `__init__` method.
+            output_loading_info(`bool`, *optional*, defaults to `False`):
+                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             config (`Union[PretrainedConfig, str, os.PathLike]`, *optional*):
                 Can be either:
 
@@ -1995,8 +2044,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
-            output_loading_info(`bool`, *optional*, defaults to `False`):
-                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(`bool`, *optional*, defaults to `False`):
                 Whether or not to only look at local files (i.e., do not try to download the model).
             use_auth_token (`str` or `bool`, *optional*):
@@ -2155,7 +2202,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
-        output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
