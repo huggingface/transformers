@@ -378,7 +378,6 @@ class UdopPreTrainedModel(PreTrainedModel):
 
     config_class = UdopConfig
     base_model_prefix = "transformer"
-    is_parallelizable = True
     supports_gradient_checkpointing = True
     _no_split_modules = ["UdopBlock"]
     _keep_in_fp32_modules = ["wo"]
