@@ -3,6 +3,9 @@ name: Build PR Documentation
 on:
   pull_request:
 
+env:
+  MY_TOKEN: ${{ secrets.DUMMY_TEST_TOKEN }}
+
 jobs:
   check_runners:
     name: Check Runners
