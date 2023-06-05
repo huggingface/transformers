@@ -449,7 +449,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 attention_mask=attention_mask,
                 **generate_kwargs,
             )
-            if return_timestamps == "word":
+            if return_timestamps == "word" and self.type == "seq2seq_whisper":
                 out = {"tokens": tokens["sequences"], "token_timestamps": tokens["token_timestamps"]}
             else:
                 out = {"tokens": tokens}

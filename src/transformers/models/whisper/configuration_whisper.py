@@ -174,6 +174,9 @@ class WhisperConfig(PretrainedConfig):
         alignment_heads (`List[List[int]]`, *optional*):
             List of [layer index, head index] pairs selecting the cross-attention heads that are highly correlated to
             word-level timing, i.e. the alignment between audio and text tokens.
+        median_filter_width (`int`, *optional*, defaults to 7):
+            Width of the median filter used to smoothen to cross-attention outputs when computing token timestamps.
+            Should be an odd number.
 
     Example:
 
@@ -232,6 +235,7 @@ class WhisperConfig(PretrainedConfig):
         mask_feature_length=10,
         mask_feature_min_masks=0,
         alignment_heads=[[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]],
+        median_filter_width=7,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -270,6 +274,7 @@ class WhisperConfig(PretrainedConfig):
         self.mask_feature_min_masks = mask_feature_min_masks
 
         self.alignment_heads = alignment_heads
+        self.median_filter_width = median_filter_width
 
         super().__init__(
             pad_token_id=pad_token_id,

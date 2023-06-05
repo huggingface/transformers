@@ -247,18 +247,18 @@ def _median_filter(inputs: torch.Tensor, filter_width: int) -> torch.Tensor:
     return result
 
 
-def _dynamic_time_warping(x: np.ndarray):
+def _dynamic_time_warping(matrix: np.ndarray):
     """
     Measures similarity between two temporal sequences: the input audio and the output tokens. Used to generate
     token-level timestamps.
     """
-    N, M = x.shape
-    cost = np.ones((N + 1, M + 1), dtype=np.float32) * np.inf
-    trace = -np.ones((N + 1, M + 1), dtype=np.float32)
+    output_length, input_length = matrix.shape
+    cost = np.ones((output_length + 1, input_length + 1), dtype=np.float32) * np.inf
+    trace = -np.ones((output_length + 1, input_length + 1), dtype=np.float32)
 
     cost[0, 0] = 0
-    for j in range(1, M + 1):
-        for i in range(1, N + 1):
+    for j in range(1, input_length + 1):
+        for i in range(1, output_length + 1):
             c0 = cost[i - 1, j - 1]
             c1 = cost[i - 1, j]
             c2 = cost[i, j - 1]
@@ -270,7 +270,7 @@ def _dynamic_time_warping(x: np.ndarray):
             else:
                 c, t = c2, 2
 
-            cost[i, j] = x[i - 1, j - 1] + c
+            cost[i, j] = matrix[i - 1, j - 1] + c
             trace[i, j] = t
 
     # backtrace
@@ -1745,12 +1745,12 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             kwargs["output_attentions"] = True
             kwargs["return_dict_in_generate"] = True
 
-        if return_token_timestamps:
             if getattr(generation_config, "task", None) == "translate":
                 logger.warning("Token-level timestamps may not be reliable for task 'translate'.")
             if not hasattr(self.config, "alignment_heads"):
                 logger.warning(
-                    "Model configuration has no `alignment_heads`, token-level timestamps not available. See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the model config."
+                    "Model configuration has no `alignment_heads`, token-level timestamps not available. "
+                    "See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the model config."
                 )
 
         outputs = super().generate(
@@ -1818,7 +1818,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         # Normalize and smoothen the weights.
         std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
         weights = (weights - mean) / std
-        weights = _median_filter(weights, 7)
+        weights = _median_filter(weights, self.config.median_filter_width)
 
         # Average the different cross-attention heads.
         matrix = weights.mean(dim=1)

@@ -254,6 +254,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         fast_tokenizer_prompt_ids = rust_tokenizer.get_prompt_ids(prompt)
 
         self.assertListEqual(tokenizer_prompt_ids.tolist(), fast_tokenizer_prompt_ids.tolist())
+
     def test_combine_tokens_into_words(self):
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()

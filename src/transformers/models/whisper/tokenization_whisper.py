@@ -843,7 +843,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                     # one, and we cannot use timestamped tokens to create chunks
                     if last_language and language != last_language and not return_timestamps:
                         previous_tokens.append(current_tokens)
-                        resolved_tokens = _find_longest_common_sequence(previous_tokens, None)
+                        resolved_tokens = _find_longest_common_sequence(previous_tokens)
                         resolved_text = tokenizer.decode(resolved_tokens)
                         chunk["text"] = resolved_text
                         chunks.append(chunk)
@@ -969,6 +969,8 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
     # It would be much harder to do O(n) because of fault tolerance.
     # We actually have a really good property which is that the total sequence
     # MUST be those subsequences in order.
+    # If token_timestamp_sequences is provided, will split those sequences in
+    # exactly the same way.
 
     left_sequence = sequences[0]
     left_length = len(left_sequence)
@@ -1069,15 +1071,13 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
 
 
 def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language):
-    words, word_tokens, token_indices = _combine_tokens_into_words(tokenizer, tokens, language)
-
+    words, _, token_indices = _combine_tokens_into_words(tokenizer, tokens, language)
     timings = [
         {
             "text": word,
-            "tokens": tokens,
             "timestamp": (token_timestamps[indices[0]][0], token_timestamps[indices[-1]][1]),
         }
-        for word, tokens, indices in zip(words, word_tokens, token_indices)
+        for word, indices in zip(words, token_indices)
     ]
     return timings
 
@@ -1164,6 +1164,7 @@ def _split_tokens_on_spaces(tokenizer, tokens: List[int]):
 
 
 def _merge_punctuations(words, tokens, indices, prepended, appended):
+    """Merges punctuation tokens with neighboring words."""
     # merge prepended punctuations
     i = len(words) - 2
     j = len(words) - 1
