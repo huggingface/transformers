@@ -37,6 +37,7 @@ from ..utils import (
     is_vision_available,
     logging,
 )
+from .agent_types import AGENT_TYPE_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -550,14 +551,37 @@ class PipelineTool(Tool):
         return self.post_processor(outputs)
 
     def __call__(self, *args, **kwargs):
+        signature_args = list(inspect.signature(self.encode).parameters.keys())
+        all_args = {signature_args[idx]: arg for idx, arg in enumerate(args)}
+
+        if len(kwargs.keys() & all_args.keys()):
+            raise TypeError(f"got multiple values for argument {kwargs.keys() & all_args.keys()}")
+
+        kwargs.update(all_args)
+
+        for i, _input in enumerate(self.inputs):
+            if not isinstance(kwargs[signature_args[i]], AGENT_TYPE_MAPPING[_input]):
+                all_args[signature_args[i]] = AGENT_TYPE_MAPPING[_input]
+
         if not self.is_initialized:
             self.setup()
 
-        encoded_inputs = self.encode(*args, **kwargs)
+        encoded_inputs = self.encode(**kwargs)
         encoded_inputs = send_to_device(encoded_inputs, self.device)
         outputs = self.forward(encoded_inputs)
         outputs = send_to_device(outputs, "cpu")
-        return self.decode(outputs)
+        decoded_outputs = self.decode(outputs)
+
+        if not isinstance(decoded_outputs, (list, tuple, dict)):
+            decoded_outputs = AGENT_TYPE_MAPPING[self.outputs[0]](decoded_outputs)
+        elif isinstance(decoded_outputs, dict):
+            decoded_outputs = {
+                k: AGENT_TYPE_MAPPING[self.outputs[i]](v) for i, (k, v) in enumerate(decoded_outputs.items())
+            }
+        elif isinstance(decoded_outputs, (list, tuple)):
+            decoded_outputs = [AGENT_TYPE_MAPPING[self.outputs[i]](v) for i, (k, v) in enumerate(decoded_outputs)]
+
+        return decoded_outputs
 
 
 def launch_gradio_demo(tool_class: Tool):

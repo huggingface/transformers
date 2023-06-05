@@ -18,6 +18,7 @@ from typing import List
 
 from transformers import is_torch_available, is_vision_available
 from transformers.testing_utils import get_tests_dir, is_tool_test
+from transformers.tools.agent_types import AGENT_TYPE_MAPPING
 
 
 if is_torch_available():
@@ -98,3 +99,16 @@ class ToolTesterMixin:
         self.assertTrue(hasattr(self.tool, "description"))
         self.assertTrue(hasattr(self.tool, "default_checkpoint"))
         self.assertTrue(self.tool.description.startswith("This is a tool that"))
+
+    def test_agent_types(self):
+        inputs = create_inputs(self.tool.inputs)
+        outputs = self.tool(*inputs)
+
+        if not isinstance(outputs, list):
+            outputs = [outputs]
+
+        self.assertEqual(len(outputs), len(self.tool.outputs))
+
+        for output, output_type in zip(outputs, self.tool.outputs):
+            agent_type = AGENT_TYPE_MAPPING[output_type]
+            self.assertTrue(isinstance(output, agent_type))
