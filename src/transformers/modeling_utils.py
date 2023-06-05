@@ -2828,7 +2828,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
                 del device_map_without_lm_head
 
-        if device_map is not None:
+        elif device_map is not None:
             model.tie_weights()
             tied_params = find_tied_parameters(model)
             # check if we don't have tied param in different devices
