@@ -866,7 +866,7 @@ class TrainingArguments:
             )
         },
     )
-    debug: str = field(
+    debug: Union[str, List[DebugOption]] = field(
         default="",
         metadata={
             "help": (
