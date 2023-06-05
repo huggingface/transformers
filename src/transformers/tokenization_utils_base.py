@@ -242,10 +242,7 @@ class BatchEncoding(UserDict):
         elif self._encodings is not None:
             return self._encodings[item]
         elif isinstance(item, slice):
-            _start = item.start
-            _stop = item.stop
-            _step = item.step
-            return {key: self.data[key][_start:_stop:_step] for key in self.data.keys()}
+            return {key: self.data[key][slice] for key in self.data.keys()}
         else:
             raise KeyError(
                 "Indexing with integers (to access backend Encoding for a given batch index) "
