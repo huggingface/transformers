@@ -84,6 +84,7 @@ class GPTJAttention(nn.Module):
         super().__init__()
 
         max_positions = config.max_position_embeddings
+        self.max_positions = max_positions
         self.register_buffer(
             "bias",
             torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
@@ -219,6 +220,8 @@ class GPTJAttention(nn.Module):
         else:
             embed_positions = self._get_embed_positions(position_ids)
 
+        if int(torch.max(position_ids)) >= self.max_positions:
+            raise ValueError('Input position_ids are out of range of this model')
         repeated_position_ids = position_ids.unsqueeze(-1).repeat(1, 1, embed_positions.shape[-1])
         sincos = torch.gather(embed_positions, 1, repeated_position_ids)
         sin, cos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
