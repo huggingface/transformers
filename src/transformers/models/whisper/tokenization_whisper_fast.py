@@ -199,7 +199,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return super()._encode_plus(*args, **kwargs)
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._decode_with_timestamps
-    def _decode_with_timestamps(self, token_ids, time_precision=0.02) -> str:
+    def _decode_with_timestamps(self, token_ids, skip_special_tokens=False, time_precision=0.02) -> str:
         """
         Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
         given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
@@ -213,7 +213,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 outputs.append([])
             else:
                 outputs[-1].append(token)
-        outputs = [s if isinstance(s, str) else self.decode(s) for s in outputs]
+        outputs = [
+            s if isinstance(s, str) else self.decode(s, skip_special_tokens=skip_special_tokens) for s in outputs
+        ]
         return "".join(outputs)
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._compute_offsets
@@ -303,7 +305,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
         if decode_with_timestamps:
-            text = self._decode_with_timestamps(token_ids, time_precision=time_precision)
+            text = self._decode_with_timestamps(
+                token_ids, time_precision=time_precision, skip_special_tokens=skip_special_tokens
+            )
         # retrieve offsets
         if output_offsets:
             offsets = None
@@ -494,7 +498,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.get_prompt_ids
     def get_prompt_ids(self, text: str, return_tensors="np"):
         """Converts prompt text to IDs that can be passed to [`~WhisperForConditionalGeneration.generate`]."""
-        batch_encoding = self("<|startofprev|>", text.strip(), add_prefix_space=True, add_special_tokens=False)
+        batch_encoding = self("<|startofprev|>", " " + text.strip(), add_special_tokens=False)
 
         # Check for special tokens
         prompt_text_ids = batch_encoding["input_ids"][1:]
