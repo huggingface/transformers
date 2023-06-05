@@ -722,7 +722,7 @@ class Dinov2ForImageClassification(Dinov2PreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0] # batch_size, sequence_length, hidden_size
+        sequence_output = outputs[0]  # batch_size, sequence_length, hidden_size
 
         cls_token = sequence_output[:, 0]
         patch_tokens = sequence_output[:, 1:]
