@@ -722,9 +722,14 @@ class Dinov2ForImageClassification(Dinov2PreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs[0] # batch_size, sequence_length, hidden_size
 
-        logits = self.classifier(sequence_output[:, 0, :])
+        cls_token = sequence_output[:, 0]
+        patch_tokens = sequence_output[:, 1:]
+
+        linear_input = torch.cat([cls_token, patch_tokens.mean(dim=1)], dim=1)
+
+        logits = self.classifier(linear_input)
 
         loss = None
         if labels is not None:
