@@ -494,6 +494,8 @@
         title: MobileNetV2
       - local: model_doc/mobilevit
         title: MobileViT
+      - local: model_doc/mobilevitv2
+        title: MobileViTV2
       - local: model_doc/nat
         title: NAT
       - local: model_doc/poolformer
@@ -543,6 +545,8 @@
         title: Hubert
       - local: model_doc/mctct
         title: MCTCT
+      - local: model_doc/mms
+        title: MMS
       - local: model_doc/sew
         title: SEW
       - local: model_doc/sew-d

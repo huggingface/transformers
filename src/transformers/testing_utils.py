@@ -112,6 +112,10 @@ from .utils import (
 )
 
 
+if is_accelerate_available():
+    from accelerate.state import AcceleratorState, PartialState
+
+
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
 DUMMY_UNKNOWN_IDENTIFIER = "julien-c/dummy-unknown"
 DUMMY_DIFF_TOKENIZER_IDENTIFIER = "julien-c/dummy-diff-tokenizer"
@@ -1331,6 +1335,9 @@ class TestCasePlus(unittest.TestCase):
         for path in self.teardown_tmp_dirs:
             shutil.rmtree(path, ignore_errors=True)
         self.teardown_tmp_dirs = []
+        if is_accelerate_available():
+            AcceleratorState._reset_state()
+            PartialState._reset_state()
 
 
 def mockenv(**kwargs):

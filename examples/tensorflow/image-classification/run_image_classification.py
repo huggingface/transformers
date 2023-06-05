@@ -497,6 +497,8 @@ def main():
                 collate_fn=collate_fn,
             ).with_options(dataset_options)
 
+        # Transformers models compute the right loss for their task by default when labels are passed, and will
+        # use this for training unless you specify your own loss function in compile().
         model.compile(optimizer=optimizer, jit_compile=training_args.xla, metrics=["accuracy"])
 
         push_to_hub_model_id = training_args.push_to_hub_model_id
