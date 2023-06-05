@@ -19,7 +19,7 @@ import inspect
 import unittest
 
 from transformers import MobileViTV2Config
-from transformers.testing_utils import require_torch_multi_gpu, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
