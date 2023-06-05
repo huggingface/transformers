@@ -85,7 +85,6 @@ if is_accelerate_available():
     from accelerate import __version__ as accelerate_version
     from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
     from accelerate.utils import (
-        check_tied_parameters_on_same_device,
         find_tied_parameters,
         load_offloaded_weights,
         offload_weight,
@@ -97,6 +96,10 @@ if is_accelerate_available():
         from accelerate.utils import get_balanced_memory
     else:
         get_balanced_memory = None
+    if version.parse(accelerate_version) > version.parse("0.19.0"):
+        from accelerate.utils import check_tied_parameters_on_same_device
+    else:
+        check_tied_parameters_on_same_device = None
 else:
     find_tied_parameters = None
 
@@ -2829,7 +2832,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model.tie_weights()
             tied_params = find_tied_parameters(model)
             # check if we don't have tied param in different devices
-            check_tied_parameters_on_same_device(tied_params, device_map)
+            if check_tied_parameters_on_same_device is not None:
+                check_tied_parameters_on_same_device(tied_params, device_map)
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
