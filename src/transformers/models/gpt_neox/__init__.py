@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...file_utils import _LazyModule, is_tokenizers_available, is_flax_available, is_torch_available
 from ...utils import OptionalDependencyNotAvailable
 
 
@@ -40,6 +40,17 @@ else:
         "GPTNeoXLayer",
         "GPTNeoXModel",
         "GPTNeoXPreTrainedModel",
+    ]
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_flax_gpt_neox"] = [
+        "FlaxGPTNeoXForCausalLM",
+        "FlaxGPTNeoXModel",
+        "FlaxGPTNeoXPreTrainedModel",
     ]
 
 
@@ -68,6 +79,15 @@ if TYPE_CHECKING:
             GPTNeoXModel,
             GPTNeoXPreTrainedModel,
         )
+
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_flax_gpt_neox import FlaxGPTNeoXForCausalLM, FlaxGPTNeoXModel, FlaxGPTNeoXPreTrainedModel
+
 
 
 else:
