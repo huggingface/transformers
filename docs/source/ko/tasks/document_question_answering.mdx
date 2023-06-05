@@ -96,23 +96,22 @@ DatasetDict({
 })
 ```
 
-As you can see, the dataset is split into train and test sets already. Take a look at a random example to familiarize
-yourself with the features.
+보시다시피, 데이터 세트는 이미 훈련 세트와 테스트 세트로 나누어져 있습니다. 무작위로 예제를 살펴보면서 특성을 확인해보세요.
 
 ```py
 >>> dataset["train"].features
 ```
 
-Here's what the individual fields represent:
-* `id`: the example's id
-* `image`: a PIL.Image.Image object containing the document image
-* `query`: the question string - natural language asked question, in several languages
-* `answers`: a list of correct answers provided by human annotators
-* `words` and `bounding_boxes`: the results of OCR, which we will not use here
-* `answer`: an answer matched by a different model which we will not use here
+각 필드가 나타내는 내용은 다음과 같습니다:
+* `id`: 예제의 id
+* `image`: 문서 이미지를 포함하는 PIL.Image.Image 객체
+* `query`: 질문 문자열 - 여러 언어의 자연어로 된 질문
+* `answers`: 사람이 주석을 단 정답 리스트
+* `words` and `bounding_boxes`: OCR의 결과값들이며 이 가이드에서는 사용하지 않을 예정
+* `answer`: 다른 모델과 일치하는 답변이며 이 가이드에서는 사용하지 않을 예정
 
-Let's leave only English questions, and drop the `answer` feature which appears to contain predictions by another model.
-We'll also take the first of the answers from the set provided by the annotators. Alternatively, you can randomly sample it.
+영어로 된 질문만 남기고 다른 모델에 대한 예측을 포함하는 `answer` 특성을 삭제하겠습니다.
+그리고 주석 작성자가 제공한 데이터 세트에서 첫 번째 답변을 가져옵니다. 또는 무작위로 샘플을 추출할 수도 있습니다.
 
 ```py
 >>> updated_dataset = dataset.map(lambda example: {"question": example["query"]["en"]}, remove_columns=["query"])
@@ -121,10 +120,9 @@ We'll also take the first of the answers from the set provided by the annotators
 ... )
 ```
 
-Note that the LayoutLMv2 checkpoint that we use in this guide has been trained with `max_position_embeddings = 512` (you can
-find this information in the [checkpoint's `config.json` file](https://huggingface.co/microsoft/layoutlmv2-base-uncased/blob/main/config.json#L18)).
-We can truncate the examples but to avoid the situation where the answer might be at the end of a large document and end up truncated,
-here we'll remove the few examples where the embedding is likely to end up longer than 512.
+이 가이드에서 사용하는 LayoutLMv2 체크포인트는 `max_position_embeddings = 512`로 훈련되었습니다.(이 정보는 [checkpoint's `config.json` file](https://huggingface.co/microsoft/layoutlmv2-base-uncased/blob/main/config.json#L18)에서 확인할 수 있습니다.)
+바로 예제를 잘라낼 수도 있지만, 긴 문서의 끝에 답변이 있어 잘리는 상황을 피하기 위해 여기서는 임베딩이 512보다 길어질 가능성이 있는 몇 가지 예제를 제거하겠습니다.
+
 If most of the documents in your dataset are long, you can implement a sliding window strategy - check out [this notebook](https://github.com/huggingface/notebooks/blob/main/examples/question_answering.ipynb) for details.
 
 ```py
