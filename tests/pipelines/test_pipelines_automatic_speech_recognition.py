@@ -328,14 +328,14 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                         'timestamp': (0.0, 3.36),
                         'text': ' Conquered returned to its place amidst the tents.',
                         'words': [
-                            {'text': ' Conquered', 'tokens': [2656, 358, 4073], 'timestamp': (29.78, 29.9)},
-                            {'text': ' returned', 'tokens': [8752], 'timestamp': (29.9, 29.9)},
-                            {'text': ' to', 'tokens': [281], 'timestamp': (29.9, 29.9)},
-                            {'text': ' its', 'tokens': [1080], 'timestamp': (29.9, 29.9)},
-                            {'text': ' place', 'tokens': [1081], 'timestamp': (29.9, 29.9)},
-                            {'text': ' amidst', 'tokens': [30153, 372], 'timestamp': (29.9, 29.9)},
-                            {'text': ' the', 'tokens': [264], 'timestamp': (29.9, 29.9)},
-                            {'text': ' tents.', 'tokens': [39283, 13], 'timestamp': (29.9, 29.9)}
+                            {'text': ' Conquered', 'timestamp': (29.78, 29.9)},
+                            {'text': ' returned', 'timestamp': (29.9, 29.9)},
+                            {'text': ' to', 'timestamp': (29.9, 29.9)},
+                            {'text': ' its', 'timestamp': (29.9, 29.9)},
+                            {'text': ' place', 'timestamp': (29.9, 29.9)},
+                            {'text': ' amidst', 'timestamp': (29.9, 29.9)},
+                            {'text': ' the', 'timestamp': (29.9, 29.9)},
+                            {'text': ' tents.', 'timestamp': (29.9, 29.9)}
                         ]
                     }
                 ]
