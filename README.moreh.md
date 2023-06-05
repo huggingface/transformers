@@ -23,5 +23,5 @@ conda activate transformers-dev
 ```bash
 conda env create -f hacenv.yml
 conda activate transformers-dev
-update-moreh --force --tensorflow
+update-moreh --force
 ```

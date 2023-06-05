@@ -1,13 +1,12 @@
-name: transformers-dev
+name: transformers
 dependencies:
     - python=3.8
     - pip
     - pip:
-        - torch==1.7.1+cu110.moreh23.4.1
-        - moreh-driver==23.4.1
-        - tensorflow==2.9.0
-        - -e ".[dev]"
+        - torch==1.10.0+cu111.moreh23.6.0
+        - moreh-driver==23.6.0
+        - -e ".[dev-torch]"
 
 # conda env create -f hacenv.yml
-# conda activate transformers-dev
-# update-moreh --force --target 23.4.1 --tensorflow
+# conda activate transformers
+# update-moreh --force --target 23.6.0 --torch 1.10.0
