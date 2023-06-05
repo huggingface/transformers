@@ -90,8 +90,8 @@
         title: (번역중) Semantic segmentation
       - local: tasks/video_classification
         title: 영상 분류
-      - local: in_translation
-        title: (번역중) Object detection
+      - local: tasks/object_detection
+        title: 객체 탐지
       - local: tasks/zero_shot_object_detection
         title: 제로샷(zero-shot) 객체 탐지
       - local: tasks/zero_shot_image_classification
@@ -191,9 +191,9 @@
   - local: in_translation
     title: (번역중) Glossary
   - local: in_translation
-    title: (번역중) What 🤗 Transformers can do
-  - local: in_translation
-    title: (번역중) How 🤗 Transformers solve tasks
+    title: (번역중) 🤗 What 🤗 Transformers can do
+  - local: tasks_explained
+    title: 🤗 Transformers로 작업을 해결하는 방법
   - local: in_translation
     title: (번역중) The Transformer model family
   - local: in_translation

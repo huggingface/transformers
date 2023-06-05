@@ -148,6 +148,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             The token used for defining the end of a word.
         do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to accept lowercase input and lowercase the output when decoding.
+        target_lang (`str`, *optional*):
+            A target language the tokenizer should set by default. `target_lang` has to be defined for multi-lingual,
+            nested vocabulary such as [facebook/mms-1b-all](https://huggingface.co/facebook/mms-1b-all).
 
         **kwargs
             Additional keyword arguments passed along to [`PreTrainedTokenizer`]
@@ -168,6 +171,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         word_delimiter_token="|",
         replace_word_delimiter_char=" ",
         do_lower_case=False,
+        target_lang=None,
         **kwargs,
     ):
         super().__init__(
@@ -178,6 +182,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             do_lower_case=do_lower_case,
             word_delimiter_token=word_delimiter_token,
             replace_word_delimiter_char=replace_word_delimiter_char,
+            target_lang=target_lang,
             **kwargs,
         )
 
@@ -185,9 +190,18 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         self.do_lower_case = do_lower_case
         self.replace_word_delimiter_char = replace_word_delimiter_char
+        self.target_lang = target_lang
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
-            self.encoder = json.load(vocab_handle)
+            self.vocab = json.load(vocab_handle)
+
+        # if target lang is defined vocab must be a nested dict
+        # with each target lang being one vocabulary
+        if target_lang is not None:
+            self.encoder = self.vocab[target_lang]
+        else:
+            self.encoder = self.vocab
+
         self.decoder = {v: k for k, v in self.encoder.items()}
 
         # make sure that tokens made of several
@@ -197,6 +211,27 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 self.unique_no_split_tokens.append(token)
 
         self._create_trie(self.unique_no_split_tokens)
+
+    def set_target_lang(self, target_lang: str):
+        """
+        Set the target language of a nested multi-lingual dictionary
+        """
+        if self.vocab == self.encoder:
+            raise ValueError(f"{self.vocab} is not a multi-lingual, nested tokenizer. Cannot set target language.")
+
+        if target_lang not in self.vocab:
+            raise ValueError(f"{target_lang} does not exist. Choose one of {', '.join(self.vocab.keys())}.")
+
+        self.target_lang = target_lang
+        self.init_kwargs["target_lang"] = target_lang
+        self.encoder = self.vocab[target_lang]
+        self.decoder = {v: k for k, v in self.encoder.items()}
+
+        # make sure that tokens made of several
+        # characters are not split at tokenization
+        for token in self.encoder.keys():
+            if len(token) > 1:
+                self.unique_no_split_tokens.append(token)
 
     @property
     def word_delimiter_token(self) -> str:
@@ -231,7 +266,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         return len(self.decoder)
 
     def get_vocab(self) -> Dict:
-        return dict(self.encoder, **self.added_tokens_encoder)
+        return dict(self.vocab, **self.added_tokens_encoder)
 
     def _tokenize(self, text, **kwargs):
         """
@@ -606,7 +641,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+            f.write(json.dumps(self.vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         return (vocab_file,)
 
