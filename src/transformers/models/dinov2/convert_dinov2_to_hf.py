@@ -52,6 +52,7 @@ def get_dinov2_config(model_name):
         config.use_swiglu_ffn = True
         config.hidden_size = 1536
         config.num_hidden_layers = 40
+        config.num_attention_heads = 24
     else:
         raise ValueError("Model not supported")
 
