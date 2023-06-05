@@ -211,9 +211,11 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
                 self.fill_only("zero_optimization.stage3_prefetch_bucket_size", 0.9 * hidden_size * hidden_size)
                 self.fill_only("zero_optimization.stage3_param_persistence_threshold", 10 * hidden_size)
 
-        # scheduler
-        self.fill_match("scheduler.params.total_num_steps", num_training_steps, "num_training_steps (calculated)")
-        self.fill_match("scheduler.params.warmup_num_steps", args.get_warmup_steps(num_training_steps), "warmup_steps")
+        if args.hivemind is not True:
+            # if hivemind is true it will not have max_steps set, so we can't do this check
+            # scheduler
+            self.fill_match("scheduler.params.total_num_steps", num_training_steps, "num_training_steps (calculated)")
+            self.fill_match("scheduler.params.warmup_num_steps", args.get_warmup_steps(num_training_steps), "warmup_steps")
 
         if len(self.mismatches) > 0:
             mismatches = "\n".join(self.mismatches)
@@ -313,7 +315,7 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
     return optimizer, lr_scheduler
 
 
-def deepspeed_init(trainer, num_training_steps, inference=False):
+def deepspeed_init(trainer, num_training_steps=None, inference=False):
     """
     Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
 
@@ -340,6 +342,7 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
     hf_deepspeed_config = trainer.accelerator.state.deepspeed_plugin.hf_ds_config
 
     # resume config update - some bits like `model` and `num_training_steps` only become available during train
+    # NOTE: When using hivemind num_training_steps is None
     hf_deepspeed_config.trainer_config_finalize(args, model, num_training_steps)
 
     # set the Deepspeed log level consistent with the Trainer
@@ -358,6 +361,7 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
     else:
         trainer.optimizer = None  # important for when deepspeed_init is used as re-init
         model_parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
+        # NOTE: when using hivemind num_training_steps is None
         optimizer, lr_scheduler = deepspeed_optim_sched(
             trainer, hf_deepspeed_config, args, num_training_steps, model_parameters
         )

@@ -102,6 +102,7 @@ from .import_utils import (
     direct_transformers_import,
     get_torch_version,
     is_accelerate_available,
+    is_hivemind_available,
     is_apex_available,
     is_bitsandbytes_available,
     is_bs4_available,

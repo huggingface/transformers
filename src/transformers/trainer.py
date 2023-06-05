@@ -593,7 +593,7 @@ class Trainer:
         if args.max_steps > 0:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
 
-        if train_dataset is not None and not has_length(train_dataset) and args.max_steps <= 0:
+        if train_dataset is not None and not has_length(train_dataset) and args.max_steps <= 0 and args.hivemind is False:
             raise ValueError(
                 "The train_dataset does not implement __len__, max_steps has to be specified. "
                 "The number of steps needs to be known in advance for the learning rate scheduler."
@@ -1073,7 +1073,7 @@ class Trainer:
             pin_memory=self.args.dataloader_pin_memory,
         )
 
-    def create_optimizer_and_scheduler(self, num_training_steps: int):
+    def create_optimizer_and_scheduler(self, num_training_steps: Optional[int] = None):
         """
         Setup the optimizer and the learning rate scheduler.
 
@@ -1268,7 +1268,7 @@ class Trainer:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
 
-    def create_scheduler(self, num_training_steps: int, optimizer: torch.optim.Optimizer = None):
+    def create_scheduler(self, num_training_steps: Optional[int], optimizer: torch.optim.Optimizer = None):
         """
         Setup the scheduler. The optimizer of the trainer must have been set up either before this method is called or
         passed as an argument.
@@ -1664,10 +1664,138 @@ class Trainer:
             trial=trial,
             ignore_keys_for_eval=ignore_keys_for_eval,
         )
+    
+    def _inner_step(self, step, inputs, tr_loss, epoch, trial, ignore_keys_for_eval):
+        print("step: ", step)
+        print("steps_trained_in_current_epoch: ", self.steps_trained_in_current_epoch)
+
+        args = self.args
+        model = self.model
+        resume_from_checkpoint = self.resume_from_checkpoint
+        steps_trained_in_current_epoch = self.steps_trained_in_current_epoch
+        total_batched_samples = self.total_batched_samples
+        steps_in_epoch = self.steps_in_epoch
+        steps_skipped = self.steps_skipped
+        steps_trained_progress_bar = self.steps_trained_progress_bar
+        rng_to_sync = self.rng_to_sync
+        total_batched_samples += 1
+
+        if rng_to_sync:
+            self._load_rng_state(resume_from_checkpoint)
+            rng_to_sync = False
+
+        # Skip past any already trained steps if resuming training
+        if steps_trained_in_current_epoch > 0:
+            steps_trained_in_current_epoch -= 1
+            if steps_trained_progress_bar is not None:
+                steps_trained_progress_bar.update(1)
+                print("+1")
+                print("steps_trained_progress_bar: ", steps_trained_progress_bar)
+            if steps_trained_in_current_epoch == 0:
+                self._load_rng_state(resume_from_checkpoint)
+            return True
+        elif steps_trained_progress_bar is not None:
+            steps_trained_progress_bar.close()
+            steps_trained_progress_bar = None
+
+        if step % args.gradient_accumulation_steps == 0:
+            self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
+
+        with self.accelerator.accumulate(model):
+            tr_loss_step = self.training_step(model, inputs)
+
+        if (
+            args.logging_nan_inf_filter
+            and not is_torch_tpu_available()
+            and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
+        ):
+            # if loss is nan or inf simply add the average of previous logged losses
+            tr_loss += tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
+        else:
+            tr_loss += tr_loss_step
+
+        self.current_flos += float(self.floating_point_ops(inputs))
+
+        # should this be under the accumulate context manager?
+        # the `or` condition of `steps_in_epoch <= args.gradient_accumulation_steps` is not covered
+        # in accelerate
+        if total_batched_samples % args.gradient_accumulation_steps == 0 or (
+            # last step in epoch but step is always smaller than gradient_accumulation_steps
+            steps_in_epoch <= args.gradient_accumulation_steps
+            and (step + 1) == steps_in_epoch
+        ):
+            # Gradient clipping
+            if args.max_grad_norm is not None and args.max_grad_norm > 0:
+                # deepspeed does its own clipping
+
+                if self.do_grad_scaling:
+                    # Reduce gradients first for XLA
+                    if is_torch_tpu_available():
+                        gradients = xm._fetch_gradients(self.optimizer)
+                        xm.all_reduce("sum", gradients, scale=1.0 / xm.xrt_world_size())
+                    # AMP: gradients need unscaling
+                    self.scaler.unscale_(self.optimizer)
+
+                if is_sagemaker_mp_enabled() and args.fp16:
+                    self.optimizer.clip_master_grads(args.max_grad_norm)
+                elif hasattr(self.optimizer, "clip_grad_norm"):
+                    # Some optimizers (like the sharded optimizer) have a specific way to do gradient clipping
+                    self.optimizer.clip_grad_norm(args.max_grad_norm)
+                elif hasattr(model, "clip_grad_norm_"):
+                    # Some models (like FullyShardedDDP) have a specific way to do gradient clipping
+                    model.clip_grad_norm_(args.max_grad_norm)
+                elif self.use_apex:
+                    # Revert to normal clipping otherwise, handling Apex or full precision
+                    nn.utils.clip_grad_norm_(
+                        amp.master_params(self.optimizer),
+                        args.max_grad_norm,
+                    )
+                else:
+                    self.accelerator.clip_grad_norm_(
+                        model.parameters(),
+                        args.max_grad_norm,
+                    )
+
+            # Optimizer step
+            optimizer_was_run = True
+            if is_torch_tpu_available():
+                if self.do_grad_scaling:
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    xm.optimizer_step(self.optimizer)
+            elif self.do_grad_scaling:
+                scale_before = self.scaler.get_scale()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                scale_after = self.scaler.get_scale()
+                optimizer_was_run = scale_before <= scale_after
+            else:
+                self.optimizer.step()
+
+            if optimizer_was_run:
+                # Delay optimizer scheduling until metrics are generated
+                if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    self.lr_scheduler.step()
+
+            model.zero_grad()
+            self.state.global_step += 1
+            self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
+            print("on_step_end")
+            self.control = self.callback_handler.on_step_end(args, self.state, self.control)
+
+            self._maybe_log_save_evaluate(tr_loss, model, trial, epoch, ignore_keys_for_eval)
+        else:
+            print("on_substep_end")
+            self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
+
+        if self.control.should_epoch_stop or self.control.should_training_stop:
+            return False
 
     def _inner_training_loop(
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
     ):
+        self.resume_from_checkpoint = resume_from_checkpoint
         self._train_batch_size = batch_size
         logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
         # Data loader and number of training steps
@@ -1680,7 +1808,13 @@ class Trainer:
         total_train_batch_size = args.train_batch_size * args.gradient_accumulation_steps * args.world_size
 
         len_dataloader = None
-        if has_length(train_dataloader):
+        if args.hivemind is True:
+            # The hivemind swarm does not need to know the number of training steps as it's infinite  
+            if args.max_steps != -1:
+                raise ValueError("You cannot pass max_steps when using hivemind.")
+            else:
+                args.max_steps = None # to trigger any checks that use max_steps
+        elif has_length(train_dataloader):
             len_dataloader = len(train_dataloader)
             num_update_steps_per_epoch = len_dataloader // args.gradient_accumulation_steps
             num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
@@ -1710,13 +1844,19 @@ class Trainer:
                 f" {args.max_steps}"
             )
 
-        # Compute absolute values for logging, eval, and save if given as ratio
-        if args.logging_steps and args.logging_steps < 1:
-            args.logging_steps = math.ceil(max_steps * args.logging_steps)
-        if args.eval_steps and args.eval_steps < 1:
-            args.eval_steps = math.ceil(max_steps * args.eval_steps)
-        if args.save_steps and args.save_steps < 1:
-            args.save_steps = math.ceil(max_steps * args.save_steps)
+        # for hivemind, log, eval, and save steps must be an integer, not ratio, as theres no "max_steps" to compute ratio from
+        if args.hivemind is True and (args.logging_steps < 1 or args.eval_steps < 1 or args.save_steps < 1):
+            raise ValueError(
+                "For hivemind, logging_steps, eval_steps, and save_steps must be an integer, not ratio. Theres no max_steps to compute ratio from on an infinite training loop."
+            )
+        else:
+            # Compute absolute values for logging, eval, and save if given as ratio
+            if args.logging_steps and args.logging_steps < 1:
+                args.logging_steps = math.ceil(max_steps * args.logging_steps)
+            if args.eval_steps and args.eval_steps < 1:
+                args.eval_steps = math.ceil(max_steps * args.eval_steps)
+            if args.save_steps and args.save_steps < 1:
+                args.save_steps = math.ceil(max_steps * args.save_steps)
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
@@ -1921,115 +2061,18 @@ class Trainer:
                 rng_to_sync = True
 
             step = -1
+            self.total_batched_samples = total_batched_samples
+            self.steps_trained_in_current_epoch = steps_trained_in_current_epoch
+            self.steps_in_epoch = steps_in_epoch
+            self.steps_skipped = steps_skipped
+            self.steps_trained_progress_bar = steps_trained_progress_bar
+            self.rng_to_sync = rng_to_sync
+
             for step, inputs in enumerate(epoch_iterator):
-                total_batched_samples += 1
-                if rng_to_sync:
-                    self._load_rng_state(resume_from_checkpoint)
-                    rng_to_sync = False
-
-                # Skip past any already trained steps if resuming training
-                if steps_trained_in_current_epoch > 0:
-                    steps_trained_in_current_epoch -= 1
-                    if steps_trained_progress_bar is not None:
-                        steps_trained_progress_bar.update(1)
-                    if steps_trained_in_current_epoch == 0:
-                        self._load_rng_state(resume_from_checkpoint)
-                    continue
-                elif steps_trained_progress_bar is not None:
-                    steps_trained_progress_bar.close()
-                    steps_trained_progress_bar = None
-
-                if step % args.gradient_accumulation_steps == 0:
-                    self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
-
-                with self.accelerator.accumulate(model):
-                    tr_loss_step = self.training_step(model, inputs)
-
-                if (
-                    args.logging_nan_inf_filter
-                    and not is_torch_tpu_available()
-                    and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
-                ):
-                    # if loss is nan or inf simply add the average of previous logged losses
-                    tr_loss += tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
-                else:
-                    tr_loss += tr_loss_step
-
-                self.current_flos += float(self.floating_point_ops(inputs))
-
-                # should this be under the accumulate context manager?
-                # the `or` condition of `steps_in_epoch <= args.gradient_accumulation_steps` is not covered
-                # in accelerate
-                if total_batched_samples % args.gradient_accumulation_steps == 0 or (
-                    # last step in epoch but step is always smaller than gradient_accumulation_steps
-                    steps_in_epoch <= args.gradient_accumulation_steps
-                    and (step + 1) == steps_in_epoch
-                ):
-                    # Gradient clipping
-                    if args.max_grad_norm is not None and args.max_grad_norm > 0:
-                        # deepspeed does its own clipping
-
-                        if self.do_grad_scaling:
-                            # Reduce gradients first for XLA
-                            if is_torch_tpu_available():
-                                gradients = xm._fetch_gradients(self.optimizer)
-                                xm.all_reduce("sum", gradients, scale=1.0 / xm.xrt_world_size())
-                            # AMP: gradients need unscaling
-                            self.scaler.unscale_(self.optimizer)
-
-                        if is_sagemaker_mp_enabled() and args.fp16:
-                            self.optimizer.clip_master_grads(args.max_grad_norm)
-                        elif hasattr(self.optimizer, "clip_grad_norm"):
-                            # Some optimizers (like the sharded optimizer) have a specific way to do gradient clipping
-                            self.optimizer.clip_grad_norm(args.max_grad_norm)
-                        elif hasattr(model, "clip_grad_norm_"):
-                            # Some models (like FullyShardedDDP) have a specific way to do gradient clipping
-                            model.clip_grad_norm_(args.max_grad_norm)
-                        elif self.use_apex:
-                            # Revert to normal clipping otherwise, handling Apex or full precision
-                            nn.utils.clip_grad_norm_(
-                                amp.master_params(self.optimizer),
-                                args.max_grad_norm,
-                            )
-                        else:
-                            self.accelerator.clip_grad_norm_(
-                                model.parameters(),
-                                args.max_grad_norm,
-                            )
-
-                    # Optimizer step
-                    optimizer_was_run = True
-                    if is_torch_tpu_available():
-                        if self.do_grad_scaling:
-                            self.scaler.step(self.optimizer)
-                            self.scaler.update()
-                        else:
-                            xm.optimizer_step(self.optimizer)
-                    elif self.do_grad_scaling:
-                        scale_before = self.scaler.get_scale()
-                        self.scaler.step(self.optimizer)
-                        self.scaler.update()
-                        scale_after = self.scaler.get_scale()
-                        optimizer_was_run = scale_before <= scale_after
-                    else:
-                        self.optimizer.step()
-
-                    if optimizer_was_run:
-                        # Delay optimizer scheduling until metrics are generated
-                        if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                            self.lr_scheduler.step()
-
-                    model.zero_grad()
-                    self.state.global_step += 1
-                    self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
-                    self.control = self.callback_handler.on_step_end(args, self.state, self.control)
-
-                    self._maybe_log_save_evaluate(tr_loss, model, trial, epoch, ignore_keys_for_eval)
-                else:
-                    self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
-
-                if self.control.should_epoch_stop or self.control.should_training_stop:
+                result = self._inner_step(step, inputs, tr_loss, epoch, trial, ignore_keys_for_eval)
+                if result is False:
                     break
+
             if step < 0:
                 logger.warning(
                     "There seems to be not a single sample in your epoch_iterator, stopping training at step"

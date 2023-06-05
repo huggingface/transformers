@@ -49,6 +49,7 @@ from .utils import (
     is_torch_neuroncore_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
+    is_hivemind_available,
     logging,
     requires_backends,
 )
@@ -996,6 +997,14 @@ class TrainingArguments:
             )
         },
     )
+    hivemind_config: Optional[dict] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Hivemind configuration (TBW)"
+            )
+        },
+    )
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
@@ -1420,6 +1429,36 @@ class TrainingArguments:
         elif not isinstance(self.report_to, list):
             self.report_to = [self.report_to]
 
+        if self.hivemind_config is not None:
+            """
+            hivemind_config must have the following format:
+            {
+                "dht": hivemind.DHT # preinitialized
+                "opt": {
+                    "run_id": str, # mandatory
+                    "target_group_size": int, # mandatory
+                    **kwargs # optional, other hivemind.Optimizer kwargs
+                }
+            }
+            """
+
+            if type(self.hivemind_config) is not dict:
+                raise ValueError("hivemind_config must be a dictionary")
+
+            if not is_hivemind_available():
+                raise ValueError("Requires hivemind to be installed: `pip install hivemind`.")
+            
+            if self.hivemind_config.get("dht", None) is None:
+                raise ValueError("hivemind_config must have a preinitialized dht")
+            if self.hivemind_config["opt"].get("run_id", None) is None:
+                raise ValueError("hivemind_config must have a run_id")
+            if self.hivemind_config["opt"].get("target_group_size", None) is None:
+                raise ValueError("hivemind_config must have a target_group_size")
+            
+            self.hivemind = True
+        else:
+            self.hivemind = False
+
         if self.warmup_ratio < 0 or self.warmup_ratio > 1:
             raise ValueError("warmup_ratio must lie in range [0,1]")
         elif self.warmup_ratio > 0 and self.warmup_steps > 0:
@@ -1427,6 +1466,8 @@ class TrainingArguments:
                 "Both warmup_ratio and warmup_steps given, warmup_steps will override any effect of warmup_ratio"
                 " during training"
             )
+        if self.warmup_ratio is not None and self.hivemind is True:
+            raise ValueError("warmup_ratio is not supported with hivemind, as there is no max_steps. Use warmup_steps instead.")
 
         if isinstance(self.sharded_ddp, bool):
             self.sharded_ddp = "simple" if self.sharded_ddp else ""
@@ -1538,7 +1579,7 @@ class TrainingArguments:
                         os.environ["FSDP_AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[0]
             prefetch_policy = self.fsdp_config.get("fsdp_backward_prefetch", "NO_PREFETCH")
             os.environ["FSDP_BACKWARD_PREFETCH"] = prefetch_policy.upper()
-
+            
         if self.tpu_metrics_debug:
             warnings.warn(
                 "using `--tpu_metrics_debug` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
@@ -1973,13 +2014,19 @@ class TrainingArguments:
         else:
             yield
 
-    def get_warmup_steps(self, num_training_steps: int):
+    def get_warmup_steps(self, num_training_steps: Optional[int]):
         """
         Get number of steps used for a linear warmup.
         """
-        warmup_steps = (
-            self.warmup_steps if self.warmup_steps > 0 else math.ceil(num_training_steps * self.warmup_ratio)
-        )
+        # check if warmup_steps exists rather than a one-liner
+        if self.warmup_steps > 0:
+            warmup_steps = self.warmup_steps
+        elif (self.warmup_ratio > 0) is False:
+            warmup_steps = 0 # to avoid touching num_training_steps as it may be None
+        else:
+            warmup_steps = (
+                math.ceil(num_training_steps * self.warmup_ratio)
+            )
         return warmup_steps
 
     def to_dict(self):

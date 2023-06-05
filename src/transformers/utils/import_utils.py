@@ -130,6 +130,7 @@ _tokenizers_available = _is_package_available("tokenizers")
 _torchaudio_available = _is_package_available("torchaudio")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
+_hivemind_available = _is_package_available("hivemind")
 
 
 _torch_version = "N/A"
@@ -513,6 +514,9 @@ def is_accelerate_available(check_partial_state=False):
     if check_partial_state:
         return _accelerate_available and version.parse(_accelerate_version) >= version.parse("0.19.0")
     return _accelerate_available
+
+def is_hivemind_available():
+    return _hivemind_available
 
 
 def is_optimum_available():
