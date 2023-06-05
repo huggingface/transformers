@@ -838,7 +838,7 @@ class IterableDatasetShard(IterableDataset):
 
 
 def _get_learning_rate(self):
-    if self.deepspeed:
+    if self.is_deepspeed_enabled:
         # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
         # not run for the first few dozen steps while loss scale is too large, and thus during
         # that time `get_last_lr` will fail if called during that warm up stage, so work around it:
@@ -851,7 +851,10 @@ def _get_learning_rate(self):
             else:
                 raise
     else:
-        last_lr = self.lr_scheduler.get_last_lr()[0]
+        if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            last_lr = self.optimizer.param_groups[0]["lr"]
+        else:
+            last_lr = self.lr_scheduler.get_last_lr()[0]
         if torch.is_tensor(last_lr):
             last_lr = last_lr.item()
     return last_lr

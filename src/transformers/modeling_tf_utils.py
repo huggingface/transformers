@@ -1498,7 +1498,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     def compile(
         self,
         optimizer="rmsprop",
-        loss="passthrough",
+        loss="auto_with_warning",
         metrics=None,
         loss_weights=None,
         weighted_metrics=None,
@@ -1510,13 +1510,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         This is a thin wrapper that sets the model's loss output head as the loss if the user does not specify a loss
         function themselves.
         """
-        if loss == "passthrough":
-            logger.warning(
+        if loss in ("auto_with_warning", "passthrough"):  # "passthrough" for workflow backward compatibility
+            logger.info(
                 "No loss specified in compile() - the model's internal loss computation will be used as the "
                 "loss. Don't panic - this is a common way to train TensorFlow models in Transformers! "
                 "To disable this behaviour please pass a loss argument, or explicitly pass "
-                "`loss=None` if you do not want your model to compute a loss."
+                "`loss=None` if you do not want your model to compute a loss. You can also specify `loss='auto'` to "
+                "get the internal loss without printing this info string."
             )
+            loss = "auto"
+        if loss == "auto":
             loss = dummy_loss
             self._using_dummy_loss = True
         else:

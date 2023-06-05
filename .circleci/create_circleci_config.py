@@ -36,6 +36,17 @@ COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "s": None}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
 
+class EmptyJob:
+    job_name = "empty"
+
+    def to_dict(self):
+        return {
+            "working_directory": "~/transformers",
+            "docker": copy.deepcopy(DEFAULT_DOCKER_IMAGE),
+            "steps":["checkout"],
+        }
+
+
 @dataclass
 class CircleCIJob:
     name: str
@@ -573,17 +584,18 @@ def create_circleci_config(folder=None):
     if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
         jobs.extend(REPO_UTIL_TESTS)
 
-    if len(jobs) > 0:
-        config = {"version": "2.1"}
-        config["parameters"] = {
-            # Only used to accept the parameters from the trigger
-            "nightly": {"type": "boolean", "default": False},
-            "tests_to_run": {"type": "string", "default": test_list},
-        }
-        config["jobs"] = {j.job_name: j.to_dict() for j in jobs}
-        config["workflows"] = {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
-        with open(os.path.join(folder, "generated_config.yml"), "w") as f:
-            f.write(yaml.dump(config, indent=2, width=1000000, sort_keys=False))
+    if len(jobs) == 0:
+        jobs = [EmptyJob()]
+    config = {"version": "2.1"}
+    config["parameters"] = {
+        # Only used to accept the parameters from the trigger
+        "nightly": {"type": "boolean", "default": False},
+        "tests_to_run": {"type": "string", "default": test_list},
+    }
+    config["jobs"] = {j.job_name: j.to_dict() for j in jobs}
+    config["workflows"] = {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
+    with open(os.path.join(folder, "generated_config.yml"), "w") as f:
+        f.write(yaml.dump(config, indent=2, width=1000000, sort_keys=False))
 
 
 if __name__ == "__main__":

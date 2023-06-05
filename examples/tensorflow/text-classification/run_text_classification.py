@@ -487,6 +487,8 @@ def main():
             metrics = []
         else:
             metrics = ["accuracy"]
+        # Transformers models compute the right loss for their task by default when labels are passed, and will
+        # use this for training unless you specify your own loss function in compile().
         model.compile(optimizer=optimizer, metrics=metrics)
         # endregion
 
