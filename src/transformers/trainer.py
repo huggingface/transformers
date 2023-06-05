@@ -645,6 +645,8 @@ class Trainer:
                         args.half_precision_backend = "cpu_amp"
                     else:
                         raise ValueError("Tried to use cpu amp but native cpu amp is not available")
+                elif args.device == torch.device('xla'):
+                    args.half_precision_backend = "cpu_amp"
                 else:
                     args.half_precision_backend = "cuda_amp"
 
