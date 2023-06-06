@@ -5095,8 +5095,8 @@ if TYPE_CHECKING:
     from .models.fastspeech2_conformer import (
         FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FastSpeech2ConformerConfig,
-        FastSpeech2ConformerTokenizer,
         FastSpeech2ConformerHifiGanConfig,
+        FastSpeech2ConformerTokenizer,
     )
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
@@ -6667,9 +6667,9 @@ if TYPE_CHECKING:
         )
         from .models.fastspeech2_conformer import (
             FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FastSpeech2ConformerHifiGan,
             FastSpeech2ConformerModel,
             FastSpeech2ConformerPreTrainedModel,
-            FastSpeech2ConformerHifiGan
         )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

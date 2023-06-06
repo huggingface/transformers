@@ -62,9 +62,8 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         decoder_layers=6,
         decoder_linear_units=1536,
         postnet_layers=5,
-        postnet_chans=256,
-        postnet_filts=5,
-        positionwise_layer_type="conv1d",
+        postnet_channels=256,
+        postnet_filters=5,
         positionwise_conv_kernel_size=1,
         use_batch_norm=True,
         encoder_normalize_before=True,
@@ -75,15 +74,15 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         # encoder / decoder
         use_macaron_style_in_conformer=True,
         use_cnn_in_conformer=True,
-        conformer_enc_kernel_size=7,
-        conformer_dec_kernel_size=31,
+        encoder_kernel_size=7,
+        decoder_kernel_size=31,
         # duration predictor
         duration_predictor_layers=2,
-        duration_predictor_chans=256,
+        duration_predictor_channels=256,
         duration_predictor_kernel_size=3,
         # energy predictor
         energy_predictor_layers=2,
-        energy_predictor_chans=256,
+        energy_predictor_channels=256,
         energy_predictor_kernel_size=3,
         energy_predictor_dropout=0.5,
         energy_embed_kernel_size=1,
@@ -91,7 +90,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         stop_gradient_from_energy_predictor=False,
         # pitch predictor
         pitch_predictor_layers=5,
-        pitch_predictor_chans=256,
+        pitch_predictor_channels=256,
         pitch_predictor_kernel_size=5,
         pitch_predictor_dropout=0.5,
         pitch_embed_kernel_size=1,
@@ -106,7 +105,6 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         decoder_attention_dropout_rate=0.2,
         duration_predictor_dropout_rate=0.2,
         postnet_dropout_rate=0.5,
-        init_type="xavier_uniform",
         use_masking=True,
         use_weighted_masking=False,
         # additional features
@@ -132,36 +130,34 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.num_attention_heads = num_attention_heads
-        self.conformer_dec_kernel_size = conformer_dec_kernel_size
-        self.conformer_enc_kernel_size = conformer_enc_kernel_size
+        self.decoder_kernel_size = decoder_kernel_size
+        self.encoder_kernel_size = encoder_kernel_size
         self.decoder_normalize_before = decoder_normalize_before
         self.decoder_layers = decoder_layers
         self.decoder_linear_units = decoder_linear_units
-        self.duration_predictor_chans = duration_predictor_chans
+        self.duration_predictor_channels = duration_predictor_channels
         self.duration_predictor_kernel_size = duration_predictor_kernel_size
         self.duration_predictor_layers = duration_predictor_layers
         self.encoder_layers = encoder_layers
         self.encoder_normalize_before = encoder_normalize_before
         self.energy_embed_dropout = energy_embed_dropout
         self.energy_embed_kernel_size = energy_embed_kernel_size
-        self.energy_predictor_chans = energy_predictor_chans
+        self.energy_predictor_channels = energy_predictor_channels
         self.energy_predictor_dropout = energy_predictor_dropout
         self.energy_predictor_kernel_size = energy_predictor_kernel_size
         self.energy_predictor_layers = energy_predictor_layers
         self.encoder_linear_units = encoder_linear_units
-        self.init_type = init_type
         self.lang_embs = lang_embs
         self.pitch_embed_dropout = pitch_embed_dropout
         self.pitch_embed_kernel_size = pitch_embed_kernel_size
-        self.pitch_predictor_chans = pitch_predictor_chans
+        self.pitch_predictor_channels = pitch_predictor_channels
         self.pitch_predictor_dropout = pitch_predictor_dropout
         self.pitch_predictor_kernel_size = pitch_predictor_kernel_size
         self.pitch_predictor_layers = pitch_predictor_layers
         self.positionwise_conv_kernel_size = positionwise_conv_kernel_size
-        self.positionwise_layer_type = positionwise_layer_type
-        self.postnet_chans = postnet_chans
+        self.postnet_channels = postnet_channels
         self.postnet_dropout_rate = postnet_dropout_rate
-        self.postnet_filts = postnet_filts
+        self.postnet_filters = postnet_filters
         self.postnet_layers = postnet_layers
         self.reduction_factor = reduction_factor
         self.stop_gradient_from_energy_predictor = stop_gradient_from_energy_predictor

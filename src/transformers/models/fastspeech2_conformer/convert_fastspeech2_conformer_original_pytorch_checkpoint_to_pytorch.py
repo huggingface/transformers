@@ -15,374 +15,143 @@
 """Convert FastSpeech2Conformer checkpoint."""
 
 import argparse
+from pathlib import Path
 
 import torch
+import yaml
 
 from transformers import (
     FastSpeech2ConformerConfig,
-    FastSpeech2ConformerFeatureExtractor,
-    FastSpeech2ConformerForSpeechToSpeech,
-    FastSpeech2ConformerForSpeechToText,
-    FastSpeech2ConformerForTextToSpeech,
-    FastSpeech2ConformerProcessor,
-    FastSpeech2ConformerTokenizer,
+    FastSpeech2ConformerModel,
     logging,
 )
-from transformers.tokenization_utils import AddedToken
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.FastSpeech2Conformer")
 
-MAPPING_SPEECH_ENCODER_PRENET = {
-    "speech_encoder_prenet.layer_norm": "FastSpeech2Conformer.encoder.prenet.feature_projection.layer_norm",
-    "speech_encoder_prenet.post_extract_proj": "FastSpeech2Conformer.encoder.prenet.feature_projection.projection",
-    "speech_encoder_prenet.pos_conv.0": "FastSpeech2Conformer.encoder.prenet.pos_conv_embed.conv",
-    "speech_encoder_prenet.mask_emb": "FastSpeech2Conformer.encoder.prenet.masked_spec_embed",
+CONFIG_MAPPING = {
+    "adim": "acoustic_dim",
+    "aheads": "num_attention_heads",
+    "conformer_dec_kernel_size": "decoder_kernel_size",
+    "conformer_enc_kernel_size": "encoder_kernel_size",
+    "decoder_normalize_before": "decoder_normalize_before",
+    "dlayers": "decoder_layers",
+    "dunits": "decoder_linear_units",
+    "duration_predictor_chans": "duration_predictor_channels",
+    "duration_predictor_kernel_size": "duration_predictor_kernel_size",
+    "duration_predictor_layers": "duration_predictor_layers",
+    "elayers": "encoder_layers",
+    "encoder_normalize_before": "encoder_normalize_before",
+    "energy_embed_dropout": "energy_embed_dropout",
+    "energy_embed_kernel_size": "energy_embed_kernel_size",
+    "energy_predictor_chans": "energy_predictor_channels",
+    "energy_predictor_dropout": "energy_predictor_dropout",
+    "energy_predictor_kernel_size": "energy_predictor_kernel_size",
+    "energy_predictor_layers": "energy_predictor_layers",
+    "eunits": "encoder_linear_units",
+    "pitch_embed_dropout": "pitch_embed_dropout",
+    "pitch_embed_kernel_size": "pitch_embed_kernel_size",
+    "pitch_predictor_chans": "pitch_predictor_channels",
+    "pitch_predictor_dropout": "pitch_predictor_dropout",
+    "pitch_predictor_kernel_size": "pitch_predictor_kernel_size",
+    "pitch_predictor_layers": "pitch_predictor_layers",
+    "positionwise_conv_kernel_size": "positionwise_conv_kernel_size",
+    "postnet_chans": "postnet_channels",
+    "postnet_filts": "postnet_filters",
+    "postnet_layers": "postnet_layers",
+    "reduction_factor": "reduction_factor",
+    "stop_gradient_from_energy_predictor": "stop_gradient_from_energy_predictor",
+    "stop_gradient_from_pitch_predictor": "stop_gradient_from_pitch_predictor",
+    "transformer_dec_attn_dropout_rate": "decoder_attention_dropout_rate",
+    "transformer_dec_dropout_rate": "decoder_dropout_rate",
+    "transformer_dec_positional_dropout_rate": "decoder_positional_dropout_rate",
+    "transformer_enc_attn_dropout_rate": "encoder_attention_dropout_rate",
+    "transformer_enc_dropout_rate": "encoder_dropout_rate",
+    "transformer_enc_positional_dropout_rate": "encoder_positional_dropout_rate",
+    "use_cnn_in_conformer": "use_cnn_in_conformer",
+    "use_macaron_style_in_conformer": "use_macaron_style_in_conformer",
+    "use_masking": "use_masking",
+    "use_weighted_masking": "use_weighted_masking",
+    "idim": "input_dim",
+    "odim": "output_dim",
 }
-MAPPING_TEXT_ENCODER_PRENET = {
-    "text_encoder_prenet.encoder_prenet.0": "FastSpeech2Conformer.encoder.prenet.embed_tokens",
-    "text_encoder_prenet.encoder_prenet.1.alpha": "FastSpeech2Conformer.encoder.prenet.encode_positions.alpha",
-}
-MAPPING_SPEECH_DECODER_PRENET = {
-    "speech_decoder_prenet.decoder_prenet.0.0.prenet.0.0": "FastSpeech2Conformer.decoder.prenet.layers.0",
-    "speech_decoder_prenet.decoder_prenet.0.0.prenet.1.0": "FastSpeech2Conformer.decoder.prenet.layers.1",
-    "speech_decoder_prenet.decoder_prenet.0.1": "FastSpeech2Conformer.decoder.prenet.final_layer",
-    "speech_decoder_prenet.decoder_prenet.1.alpha": "FastSpeech2Conformer.decoder.prenet.encode_positions.alpha",
-    "speech_decoder_prenet.spkembs_layer.0": "FastSpeech2Conformer.decoder.prenet.speaker_embeds_layer",
-}
-MAPPING_SPEECH_DECODER_POSTNET = {
-    "speech_decoder_postnet.feat_out": "speech_decoder_postnet.feat_out",
-    "speech_decoder_postnet.prob_out": "speech_decoder_postnet.prob_out",
-    "speech_decoder_postnet.postnet.postnet.0.0": "speech_decoder_postnet.layers.0.conv",
-    "speech_decoder_postnet.postnet.postnet.0.1": "speech_decoder_postnet.layers.0.batch_norm",
-    "speech_decoder_postnet.postnet.postnet.1.0": "speech_decoder_postnet.layers.1.conv",
-    "speech_decoder_postnet.postnet.postnet.1.1": "speech_decoder_postnet.layers.1.batch_norm",
-    "speech_decoder_postnet.postnet.postnet.2.0": "speech_decoder_postnet.layers.2.conv",
-    "speech_decoder_postnet.postnet.postnet.2.1": "speech_decoder_postnet.layers.2.batch_norm",
-    "speech_decoder_postnet.postnet.postnet.3.0": "speech_decoder_postnet.layers.3.conv",
-    "speech_decoder_postnet.postnet.postnet.3.1": "speech_decoder_postnet.layers.3.batch_norm",
-    "speech_decoder_postnet.postnet.postnet.4.0": "speech_decoder_postnet.layers.4.conv",
-    "speech_decoder_postnet.postnet.postnet.4.1": "speech_decoder_postnet.layers.4.batch_norm",
-}
-MAPPING_TEXT_DECODER_PRENET = {
-    "text_decoder_prenet.embed_tokens": "FastSpeech2Conformer.decoder.prenet.embed_tokens",
-}
-MAPPING_TEXT_DECODER_POSTNET = {
-    "text_decoder_postnet.output_projection": "text_decoder_postnet.lm_head",
-}
-MAPPING_ENCODER = {
-    "encoder.layers.*.self_attn.k_proj": "FastSpeech2Conformer.encoder.wrapped_encoder.layers.*.attention.k_proj",
-    "encoder.layers.*.self_attn.v_proj": "FastSpeech2Conformer.encoder.wrapped_encoder.layers.*.attention.v_proj",
-    "encoder.layers.*.self_attn.q_proj": "FastSpeech2Conformer.encoder.wrapped_encoder.layers.*.attention.q_proj",
-    "encoder.layers.*.self_attn.out_proj": "FastSpeech2Conformer.encoder.wrapped_encoder.layers.*.attention.out_proj",
-    "encoder.layers.*.self_attn_layer_norm": "FastSpeech2Conformer.encoder.wrapped_encoder.layers.*.layer_norm",
-    "encoder.layers.*.fc1": "FastSpeech2Conformer.encoder.wrapped_encoder.layers.*.feed_forward.intermediate_dense",
-    "encoder.layers.*.fc2": "FastSpeech2Conformer.encoder.wrapped_encoder.layers.*.feed_forward.output_dense",
-    "encoder.layers.*.final_layer_norm": "FastSpeech2Conformer.encoder.wrapped_encoder.layers.*.final_layer_norm",
-    "encoder.layer_norm": "FastSpeech2Conformer.encoder.wrapped_encoder.layer_norm",
-    "encoder.pos_emb.pe_k": "FastSpeech2Conformer.encoder.wrapped_encoder.embed_positions.pe_k",
-}
-MAPPING_DECODER = {
-    "decoder.layers.*.self_attn.k_proj": "FastSpeech2Conformer.decoder.wrapped_decoder.layers.*.self_attn.k_proj",
-    "decoder.layers.*.self_attn.v_proj": "FastSpeech2Conformer.decoder.wrapped_decoder.layers.*.self_attn.v_proj",
-    "decoder.layers.*.self_attn.q_proj": "FastSpeech2Conformer.decoder.wrapped_decoder.layers.*.self_attn.q_proj",
-    "decoder.layers.*.self_attn.out_proj": "FastSpeech2Conformer.decoder.wrapped_decoder.layers.*.self_attn.out_proj",
-    "decoder.layers.*.self_attn_layer_norm": "FastSpeech2Conformer.decoder.wrapped_decoder.layers.*.self_attn_layer_norm",
-    "decoder.layers.*.encoder_attn.k_proj": "FastSpeech2Conformer.decoder.wrapped_decoder.layers.*.encoder_attn.k_proj",
-    "decoder.layers.*.encoder_attn.v_proj": "FastSpeech2Conformer.decoder.wrapped_decoder.layers.*.encoder_attn.v_proj",
-    "decoder.layers.*.encoder_attn.q_proj": "FastSpeech2Conformer.decoder.wrapped_decoder.layers.*.encoder_attn.q_proj",
-    "decoder.layers.*.encoder_attn.out_proj": "FastSpeech2Conformer.decoder.wrapped_decoder.layers.*.encoder_attn.out_proj",
-    "decoder.layers.*.encoder_attn_layer_norm": "FastSpeech2Conformer.decoder.wrapped_decoder.layers.*.encoder_attn_layer_norm",
-    "decoder.layers.*.fc1": "FastSpeech2Conformer.decoder.wrapped_decoder.layers.*.feed_forward.intermediate_dense",
-    "decoder.layers.*.fc2": "FastSpeech2Conformer.decoder.wrapped_decoder.layers.*.feed_forward.output_dense",
-    "decoder.layers.*.final_layer_norm": "FastSpeech2Conformer.decoder.wrapped_decoder.layers.*.final_layer_norm",
-}
-MAPPING_S2T = {
-    **MAPPING_SPEECH_ENCODER_PRENET,
-    **MAPPING_ENCODER,
-    **MAPPING_DECODER,
-    **MAPPING_TEXT_DECODER_PRENET,
-    **MAPPING_TEXT_DECODER_POSTNET,
-}
-MAPPING_T2S = {
-    **MAPPING_TEXT_ENCODER_PRENET,
-    **MAPPING_ENCODER,
-    **MAPPING_DECODER,
-    **MAPPING_SPEECH_DECODER_PRENET,
-    **MAPPING_SPEECH_DECODER_POSTNET,
-}
-MAPPING_S2S = {
-    **MAPPING_SPEECH_ENCODER_PRENET,
-    **MAPPING_ENCODER,
-    **MAPPING_DECODER,
-    **MAPPING_SPEECH_DECODER_PRENET,
-    **MAPPING_SPEECH_DECODER_POSTNET,
-}
-TOP_LEVEL_KEYS = []
-IGNORE_KEYS = [
-    "encoder.version",
-    "encoder.layers.*.norm_k.weight",
-    "encoder.layers.*.norm_k.bias",
-    "decoder.version",
-    "decoder.layers.*.norm_k.weight",
-    "decoder.layers.*.norm_k.bias",
-    "decoder.pos_emb.pe_k",
-    "speech_encoder_prenet.embed_positions._float_tensor",
-    "text_decoder_prenet.embed_positions._float_tensor",
-]
-IGNORE_KEYS_S2T = IGNORE_KEYS + [
-    "encoder.proj",
-    "text_encoder_prenet.*",
-    "speech_decoder_prenet.*",
-    "speech_decoder_postnet.*",
-]
-IGNORE_KEYS_T2S = IGNORE_KEYS + [
-    "encoder.proj",
-    "speech_encoder_prenet.*",
-    "text_decoder_prenet.*",
-    "text_decoder_postnet.*",
-]
-IGNORE_KEYS_S2S = IGNORE_KEYS + [
-    "encoder.proj",
-    "text_encoder_prenet.*",
-    "text_decoder_prenet.*",
-    "text_decoder_postnet.*",
-]
 
 
-def set_recursively(hf_pointer, key, value, full_name, weight_type):
-    for attribute in key.split("."):
-        hf_pointer = getattr(hf_pointer, attribute)
+def remap_yaml_config(yaml_config_path):
+    with Path(yaml_config_path).open("r", encoding="utf-8") as f:
+        args = yaml.safe_load(f)
+        args = argparse.Namespace(**args)
 
-    if weight_type is not None:
-        hf_shape = getattr(hf_pointer, weight_type).shape
-    else:
-        hf_shape = hf_pointer.shape
+    remapped_dict = {}
+    model_params = args.tts_conf["text2mel_params"]
 
-    if hf_shape != value.shape:
-        raise ValueError(
-            f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be"
-            f" {value.shape} for {full_name}"
-        )
+    # espnet_config_key -> hf_config_key, any keys not included are ignored
+    for espnet_config_key, hf_config_key in CONFIG_MAPPING.items():
+        if espnet_config_key in model_params:
+            remapped_dict[hf_config_key] = model_params[espnet_config_key]
 
-    if weight_type == "weight":
-        hf_pointer.weight.data = value
-    elif weight_type == "weight_g":
-        hf_pointer.weight_g.data = value
-    elif weight_type == "weight_v":
-        hf_pointer.weight_v.data = value
-    elif weight_type == "bias":
-        hf_pointer.bias.data = value
-    elif weight_type == "running_mean":
-        hf_pointer.running_mean.data = value
-    elif weight_type == "running_var":
-        hf_pointer.running_var.data = value
-    elif weight_type == "num_batches_tracked":
-        hf_pointer.num_batches_tracked.data = value
-    else:
-        hf_pointer.data = value
-
-    logger.info(f"{key + ('.' + weight_type if weight_type is not None else '')} was initialized from {full_name}.")
+    return remapped_dict
 
 
-def should_ignore(name, ignore_keys):
-    for key in ignore_keys:
-        if key.endswith(".*"):
-            if name.startswith(key[:-1]):
-                return True
-        elif ".*." in key:
-            prefix, suffix = key.split(".*.")
-            if prefix in name and suffix in name:
-                return True
-        elif key in name:
-            return True
-    return False
-
-
-def recursively_load_weights(fairseq_dict, hf_model, task):
-    unused_weights = []
-
-    if task == "s2t":
-        feature_encoder = hf_model.FastSpeech2Conformer.encoder.prenet.feature_encoder
-        MAPPING = MAPPING_S2T
-        IGNORE_KEYS = IGNORE_KEYS_S2T
-    elif task == "t2s":
-        feature_encoder = None
-        MAPPING = MAPPING_T2S
-        IGNORE_KEYS = IGNORE_KEYS_T2S
-    elif task == "s2s":
-        feature_encoder = hf_model.FastSpeech2Conformer.encoder.prenet.feature_encoder
-        MAPPING = MAPPING_S2S
-        IGNORE_KEYS = IGNORE_KEYS_S2S
-    else:
-        raise ValueError(f"Unsupported task: {task}")
-
-    for name, value in fairseq_dict.items():
-        if should_ignore(name, IGNORE_KEYS):
-            logger.info(f"{name} was ignored")
-            continue
-
-        is_used = False
-        if "conv_layers" in name:
-            load_conv_layer(
-                name,
-                value,
-                feature_encoder,
-                unused_weights,
-                hf_model.config.feat_extract_norm == "group",
-            )
-            is_used = True
-        else:
-            for key, mapped_key in MAPPING.items():
-                # mapped_key = "FastSpeech2Conformer." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
-
-                if "*" in key:
-                    prefix, suffix = key.split(".*.")
-                    if prefix in name and suffix in name:
-                        key = suffix
-
-                # if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
-                if key in name:
-                    is_used = True
-                    if "*" in mapped_key:
-                        layer_index = name.split(key)[0].split(".")[-2]
-                        mapped_key = mapped_key.replace("*", layer_index)
-                    if "weight_g" in name:
-                        weight_type = "weight_g"
-                    elif "weight_v" in name:
-                        weight_type = "weight_v"
-                    elif "bias" in name:
-                        weight_type = "bias"
-                    elif "weight" in name:
-                        weight_type = "weight"
-                    elif "running_mean" in name:
-                        weight_type = "running_mean"
-                    elif "running_var" in name:
-                        weight_type = "running_var"
-                    elif "num_batches_tracked" in name:
-                        weight_type = "num_batches_tracked"
-                    else:
-                        weight_type = None
-                    set_recursively(hf_model, mapped_key, value, name, weight_type)
+def convert_espnet_state_dict_to_hf(state_dict):
+    new_state_dict = {}
+    for key in state_dict:
+        if "tts.generator.text2mel." in key:
+            # Keys to ignore
+            if "postnet" in key and ("running" in key or "num_batches_tracked" in key):
                 continue
-        if not is_used:
-            unused_weights.append(name)
 
-    logger.warning(f"Unused weights: {unused_weights}")
+            # Keys to remap
+            new_key = key.replace("tts.generator.text2mel.", "")
+            if "encoder.embed.0.weight" in key:
+                new_key = new_key.replace("0.", "")
+            if "w_1" in key:
+                new_key = new_key.replace("w_1", "conv1")
+            if "w_2" in key:
+                new_key = new_key.replace("w_2", "conv2")
+            if "predictor.conv" in key:
+                new_key = new_key.replace(".conv", ".conv_layers")
+            if "pitch_embed" in key or "energy_embed" in key:
+                new_key = new_key.replace("0", "conv")
+            if "encoders" in key:
+                new_key = new_key.replace("encoders", "conformer_layers")
 
+            new_state_dict[new_key] = state_dict[key]
 
-def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
-    name = full_name.split("conv_layers.")[-1]
-    items = name.split(".")
-    layer_id = int(items[0])
-    type_id = int(items[1])
-
-    if type_id == 0:
-        if "bias" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].conv.bias.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but"
-                    f" {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].conv.bias.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
-        elif "weight" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].conv.weight.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but"
-                    f" {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].conv.weight.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
-    elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
-        if "bias" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but"
-                    f" {feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
-        elif "weight" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but"
-                    f" {feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
-    else:
-        unused_weights.append(full_name)
+    return new_state_dict
 
 
 @torch.no_grad()
-def convert_FastSpeech2Conformer_checkpoint(
-    task,
+def convert_FastSpeech2ConformerModel_checkpoint(
     checkpoint_path,
     pytorch_dump_folder_path,
-    config_path=None,
-    vocab_path=None,
+    yaml_config_path=None,
     repo_id=None,
 ):
-    """
-    Copy/paste/tweak model's weights to transformers design.
-    """
-    if config_path is not None:
-        config = FastSpeech2ConformerConfig.from_pretrained(config_path)
+    if yaml_config_path is not None:
+        config_kwargs = remap_yaml_config(yaml_config_path)
+        config = FastSpeech2ConformerConfig(**config_kwargs)
     else:
         config = FastSpeech2ConformerConfig()
 
-    if task == "s2t":
-        config.max_length = config.max_text_positions
-        model = FastSpeech2ConformerForSpeechToText(config)
-    elif task == "t2s":
-        config.max_speech_positions = 1876
-        config.max_text_positions = 600
-        config.max_length = config.max_speech_positions
-        model = FastSpeech2ConformerForTextToSpeech(config)
-    elif task == "s2s":
-        config.max_speech_positions = 1876
-        config.max_length = config.max_speech_positions
-        model = FastSpeech2ConformerForSpeechToSpeech(config)
-    else:
-        raise ValueError(f"Unknown task name: {task}")
+    model = FastSpeech2ConformerModel(config)
 
-    if vocab_path:
-        tokenizer = FastSpeech2ConformerTokenizer(vocab_path, model_max_length=config.max_text_positions)
-
-        # Mask token behaves like a normal word, i.e. include the space before it
-        mask_token = AddedToken("<mask>", lstrip=True, rstrip=False)
-        tokenizer.mask_token = mask_token
-        tokenizer.add_special_tokens({"mask_token": mask_token})
-        tokenizer.add_tokens(["<ctc_blank>"])
-
-    feature_extractor = FastSpeech2ConformerFeatureExtractor()
-    processor = FastSpeech2ConformerProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
-    processor.save_pretrained(pytorch_dump_folder_path)
-
-    fairseq_checkpoint = torch.load(checkpoint_path)
-    recursively_load_weights(fairseq_checkpoint["model"], model, task)
+    espnet_checkpoint = torch.load(checkpoint_path)
+    hf_compatible_state_dict = convert_espnet_state_dict_to_hf(espnet_checkpoint)
+    model.load_state_dict(hf_compatible_state_dict)
 
     model.save_pretrained(pytorch_dump_folder_path)
 
     if repo_id:
         print("Pushing to the hub...")
-        processor.push_to_hub(repo_id)
         model.push_to_hub(repo_id)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--task",
-        default="s2t",
-        type=str,
-        help="Type of the FastSpeech2Conformer model you'd like to convert. Should be one of 's2t', 't2s', 's2s'.",
-    )
-    parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to fairseq checkpoint")
-    parser.add_argument("--vocab_path", default=None, type=str, help="Path to SentencePiece model")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
+    parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
+    parser.add_argument("--yaml_config_path", default=None, type=str, help="Path to config.yaml of model to convert")
     parser.add_argument(
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
     )
@@ -391,11 +160,9 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_FastSpeech2Conformer_checkpoint(
-        args.task,
+    convert_FastSpeech2ConformerModel_checkpoint(
         args.checkpoint_path,
         args.pytorch_dump_folder_path,
-        args.config_path,
-        args.vocab_path,
+        args.yaml_config_path,
         args.push_to_hub,
     )
