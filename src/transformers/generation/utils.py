@@ -1808,6 +1808,7 @@ class GenerationMixin:
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
         subset_hidden: Optional[bool] = True,
+        compress_hidden: Optional[bool] = False,
         **model_kwargs,
     ) -> Union[ContrastiveSearchOutput, torch.LongTensor]:
         r"""
@@ -1932,6 +1933,14 @@ class GenerationMixin:
         this_peer_finished = False  # used by synced_gpus only
         batch_size = input_ids.shape[0]
 
+        # compression mat mult init
+        if model.config.n_embd:
+            hidden_size = model.config.n_embd
+        elif model.config.hidden_size:
+            hidden_size = model.config.hidden_size
+        compression_factor = 8
+        compressor = torch.nn.Linear(hidden_size, hidden_size//compression_factor, bias=False)
+
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -1964,7 +1973,13 @@ class GenerationMixin:
                     last_hidden_states = outputs.hidden_states[-1]
 
                 if subset_hidden:
+                    print ('Using subset of last hidden layer')
                     last_hidden_states = last_hidden_states[:, :, :100]
+
+                elif compress_hidden:
+                    print ('Using compressed last hidden layer')
+                    last_hidden_states = compressor(last_hidden_states)
+
                 # next logit for contrastive search to select top-k candidate tokens
                 logit_for_next_step = outputs.logits[:, -1, :]
 
@@ -2047,6 +2062,10 @@ class GenerationMixin:
             else:
                 next_hidden = outputs.hidden_states[-1]
                 full_hidden_states = outputs.hidden_states
+
+            if subset_hidden:
+                next_hidden = next_hidden[:, :, :100]
+
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
 
             # compute the degeneration penalty and re-rank the candidates based on the degeneration penalty and the
