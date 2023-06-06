@@ -426,6 +426,7 @@ _import_structure = {
     "models.fastspeech2_conformer": [
         "FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "FastSpeech2ConformerConfig",
+        "FastSpeech2ConformerHifiGanConfig",
         "FastSpeech2ConformerTokenizer",
     ],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
@@ -2133,6 +2134,7 @@ else:
             "FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "FastSpeech2ConformerModel",
             "FastSpeech2ConformerPreTrainedModel",
+            "FastSpeech2ConformerHifiGan",
         ]
     )
     _import_structure["models.flaubert"].extend(
@@ -5094,6 +5096,7 @@ if TYPE_CHECKING:
         FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FastSpeech2ConformerConfig,
         FastSpeech2ConformerTokenizer,
+        FastSpeech2ConformerHifiGanConfig,
     )
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
@@ -6666,6 +6669,7 @@ if TYPE_CHECKING:
             FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             FastSpeech2ConformerModel,
             FastSpeech2ConformerPreTrainedModel,
+            FastSpeech2ConformerHifiGan
         )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

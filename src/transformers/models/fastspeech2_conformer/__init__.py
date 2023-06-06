@@ -24,6 +24,7 @@ _import_structure = {
     "configuration_fastspeech2_conformer": [
         "FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "FastSpeech2ConformerConfig",
+        "FastSpeech2ConformerHifiGanConfig"
     ],
     "tokenization_fastspeech2_conformer": ["FastSpeech2ConformerTokenizer"],
 }
@@ -33,6 +34,7 @@ if is_torch_available():
         "FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FastSpeech2ConformerModel",
         "FastSpeech2ConformerPreTrainedModel",
+        "FastSpeech2ConformerHifiGan"
     ]
 
 
@@ -40,6 +42,7 @@ if TYPE_CHECKING:
     from .configuration_fastspeech2_conformer import (
         FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FastSpeech2ConformerConfig,
+        FastSpeech2ConformerHifiGanConfig
     )
     from .tokenization_fastspeech2_conformer import FastSpeech2ConformerConformerTokenizer
 
@@ -48,6 +51,7 @@ if TYPE_CHECKING:
             FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             FastSpeech2ConformerModel,
             FastSpeech2ConformerPreTrainedModel,
+            FastSpeech2ConformerHifiGan
         )
 
 
