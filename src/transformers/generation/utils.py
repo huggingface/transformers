@@ -1807,6 +1807,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
+        subset_hidden: Optional[bool] = True,
         **model_kwargs,
     ) -> Union[ContrastiveSearchOutput, torch.LongTensor]:
         r"""
@@ -1961,6 +1962,9 @@ class GenerationMixin:
                     last_hidden_states = outputs.decoder_hidden_states[-1]
                 else:
                     last_hidden_states = outputs.hidden_states[-1]
+
+                if subset_hidden:
+                    last_hidden_states = last_hidden_states[:, :, :100]
                 # next logit for contrastive search to select top-k candidate tokens
                 logit_for_next_step = outputs.logits[:, -1, :]
 
