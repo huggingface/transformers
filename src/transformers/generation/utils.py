@@ -2321,7 +2321,6 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
 
         this_peer_finished = False  # used by synced_gpus only
-        print({k: v.device if hasattr(v, "device") else v for k, v in model_kwargs.items()})
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -2335,7 +2334,7 @@ class GenerationMixin:
 
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-            print({k: v.device if hasattr(v, "device") else v for k, v in model_inputs.items()})
+
             # forward pass to get next token
             outputs = self(
                 **model_inputs,
