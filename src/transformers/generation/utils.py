@@ -1934,12 +1934,10 @@ class GenerationMixin:
         batch_size = input_ids.shape[0]
 
         # compression mat mult init
-        if model.config.n_embd:
-            hidden_size = model.config.n_embd
-        elif model.config.hidden_size:
-            hidden_size = model.config.hidden_size
+        outputs = self(**model_inputs, output_hidden_states=True)
+        hidden_dim = outputs.hidden_states[-1].shape[-1]
         compression_factor = 8
-        compressor = torch.nn.Linear(hidden_size, hidden_size//compression_factor, bias=False)
+        compressor = torch.nn.Linear(hidden_dim, hidden_dim//compression_factor, bias=False)
 
         while True:
             if synced_gpus:
@@ -2065,6 +2063,9 @@ class GenerationMixin:
 
             if subset_hidden:
                 next_hidden = next_hidden[:, :, :100]
+
+            elif compress_hidden:
+                next_hidden = compressor(next_hidden)
 
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
 
