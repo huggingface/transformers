@@ -533,6 +533,9 @@ def init_test_examples_dependencies():
             test_example_deps[str(test_file.relative_to(PATH_TO_REPO))] = [
                 str(e.relative_to(PATH_TO_REPO)) for e in examples if e.name in content
             ]
+            test_example_deps[str(test_file.relative_to(PATH_TO_REPO))].append(
+                str(test_file.relative_to(PATH_TO_REPO))
+            )
     return test_example_deps, all_examples
 
 
