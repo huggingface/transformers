@@ -586,6 +586,12 @@ _import_structure = {
     "models.vit_hybrid": ["VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTHybridConfig"],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
+    "models.vits": [
+        "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "VITSConfig",
+        "VITSProcessor",
+        "VITSTokenizer",
+    ],
     "models.vivit": [
         "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VivitConfig",
@@ -889,6 +895,8 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["models.audio_spectrogram_transformer"].append("ASTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
+    _import_structure["models.speecht5"].append("SpeechT5FeatureExtractor")
+    _import_structure["models.tvlt"].append("TvltFeatureExtractor")
 
 # Tensorflow-text-specific objects
 try:
@@ -2912,14 +2920,6 @@ else:
             "ViTMSNPreTrainedModel",
         ]
     )
-    _import_structure["models.vivit"].extend(
-        [
-            "VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "VivitForVideoClassification",
-            "VivitModel",
-            "VivitPreTrainedModel",
-        ]
-    )
     _import_structure["models.wav2vec2"].extend(
         [
             "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4611,7 +4611,6 @@ if TYPE_CHECKING:
     from .models.vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
-    from .models.vivit import VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, VivitConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2Config,
@@ -4890,6 +4889,8 @@ if TYPE_CHECKING:
     else:
         from .models.audio_spectrogram_transformer import ASTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
+        from .models.speecht5 import SpeechT5FeatureExtractor
+        from .models.tvlt import TvltFeatureExtractor
 
     try:
         if not is_tensorflow_text_available():
@@ -6540,12 +6541,6 @@ if TYPE_CHECKING:
             ViTMSNForImageClassification,
             ViTMSNModel,
             ViTMSNPreTrainedModel,
-        )
-        from .models.vivit import (
-            VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VivitForVideoClassification,
-            VivitModel,
-            VivitPreTrainedModel,
         )
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,

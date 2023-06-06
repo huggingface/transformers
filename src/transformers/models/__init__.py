@@ -209,6 +209,7 @@ from . import (
     vit_hybrid,
     vit_mae,
     vit_msn,
+    vits,
     vivit,
     wav2vec2,
     wav2vec2_conformer,
