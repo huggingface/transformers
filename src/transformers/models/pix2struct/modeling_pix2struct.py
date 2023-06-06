@@ -362,7 +362,10 @@ class Pix2StructVisionEncoder(nn.Module):
             hidden_states = layer_outputs[0]
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+                if len(layer_outputs) >= 3:
+                    all_self_attentions = all_self_attentions + (layer_outputs[2],)
+                else:
+                    all_self_attentions = all_self_attentions + (None,)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -1538,8 +1541,12 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
                 present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[3],)
-                all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
+                if len(layer_outputs) >= 6:
+                    all_attentions = all_attentions + (layer_outputs[3],)
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
+                else:
+                    all_attentions = all_attentions + (None,)
+                    all_cross_attentions = all_cross_attentions + (None,)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
