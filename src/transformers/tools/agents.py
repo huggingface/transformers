@@ -472,7 +472,7 @@ class AzureOpenAiAgent(Agent):
         api_key (`str`, *optional*):
             The API key to use. If unset, will look for the environment variable `"AZURE_OPENAI_API_KEY"`.
         resource_name (`str`, *optional*):
-            The name of your Azure OpenAI Resource.  If unset, will look for the environment variable
+            The name of your Azure OpenAI Resource. If unset, will look for the environment variable
             `"AZURE_OPENAI_RESOURCE_NAME"`.
         api_version (`str`, *optional*, default to `"2022-12-01"`):
             The API version to use for this agent.
@@ -536,7 +536,7 @@ class AzureOpenAiAgent(Agent):
         else:
             openai.api_base = f"https://{resource_name}.openai.azure.com"
         openai.api_version = api_version
-        
+
         if is_chat_model is None:
             is_chat_model = "gpt" in deployment_id.lower()
         self.is_chat_model = is_chat_model
@@ -546,7 +546,7 @@ class AzureOpenAiAgent(Agent):
             run_prompt_template=run_prompt_template,
             additional_tools=additional_tools,
         )
-    
+
     def generate_many(self, prompts, stop):
         if self.is_chat_model:
             return [self._chat_generate(prompt, stop) for prompt in prompts]
