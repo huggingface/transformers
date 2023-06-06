@@ -1666,9 +1666,6 @@ class Trainer:
         )
     
     def _inner_step(self, step, inputs, tr_loss, epoch, trial, ignore_keys_for_eval):
-        print("step: ", step)
-        print("steps_trained_in_current_epoch: ", self.steps_trained_in_current_epoch)
-
         args = self.args
         model = self.model
         resume_from_checkpoint = self.resume_from_checkpoint
@@ -1678,7 +1675,7 @@ class Trainer:
         steps_skipped = self.steps_skipped
         steps_trained_progress_bar = self.steps_trained_progress_bar
         rng_to_sync = self.rng_to_sync
-        total_batched_samples += 1
+        self.total_batched_samples = self.total_batched_samples + 1
 
         if rng_to_sync:
             self._load_rng_state(resume_from_checkpoint)
@@ -1689,11 +1686,9 @@ class Trainer:
             steps_trained_in_current_epoch -= 1
             if steps_trained_progress_bar is not None:
                 steps_trained_progress_bar.update(1)
-                print("+1")
-                print("steps_trained_progress_bar: ", steps_trained_progress_bar)
             if steps_trained_in_current_epoch == 0:
                 self._load_rng_state(resume_from_checkpoint)
-            return True
+            return False
         elif steps_trained_progress_bar is not None:
             steps_trained_progress_bar.close()
             steps_trained_progress_bar = None
@@ -1781,12 +1776,10 @@ class Trainer:
             model.zero_grad()
             self.state.global_step += 1
             self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
-            print("on_step_end")
             self.control = self.callback_handler.on_step_end(args, self.state, self.control)
 
             self._maybe_log_save_evaluate(tr_loss, model, trial, epoch, ignore_keys_for_eval)
         else:
-            print("on_substep_end")
             self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
 
         if self.control.should_epoch_stop or self.control.should_training_stop:
