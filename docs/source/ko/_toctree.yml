@@ -168,8 +168,8 @@
     title: (번역중) Attention mechanisms
   - local: pad_truncation
     title: 패딩과 잘라내기
-  - local: in_translation
-    title: (번역중) BERTology
+  - local: bertology
+    title: BERTology
   - local: in_translation
     title: (번역중) Perplexity of fixed-length models
   - local: in_translation
