@@ -639,13 +639,27 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
                 "inputs_embeds": torch.rand((220, 70, 512)).type(torch.float32),
                 "beatsteps": torch.randint(size=(5, 955), low=0, high=100).type(torch.float32),
                 "extrapolated_beatstep": torch.randint(size=(5, 900), low=0, high=100).type(torch.float32),
-                "attention_mask_input_features": torch.ones((5, 100, 100, 512)).type(torch.int32),
+                "attention_mask": torch.concatenate(
+                    [
+                        torch.ones([120, 70], dtype=torch.int32),
+                        torch.zeros([1, 70], dtype=torch.int32),
+                        torch.ones([50, 70], dtype=torch.int32),
+                        torch.zeros([1, 70], dtype=torch.int32),
+                        torch.ones([47, 70], dtype=torch.int32),
+                        torch.zeros([1, 70], dtype=torch.int32),
+                    ],
+                    axis=0,
+                ),
                 "attention_mask_beatsteps": torch.ones((5, 955)).type(torch.int32),
                 "attention_mask_extrapolated_beatstep": torch.ones((5, 900)).type(torch.int32),
             }
         )
         model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
-        model_opts = model.generate(inputs_embeds=input_features["inputs_embeds"], return_dict_in_generate=True)
+        model_opts = model.generate(
+            inputs_embeds=input_features["inputs_embeds"],
+            attention_mask=input_features["attention_mask"],
+            return_dict_in_generate=True,
+        )
 
         self.assertEqual(type(model_opts), GreedySearchEncoderDecoderOutput)
         self.assertEqual(model_opts.sequences.ndim, 2)

@@ -1102,19 +1102,13 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
             embedding_offset=embedding_offset,
         )
         if attention_mask is not None:
-            # check for zero pads (ion between two examples)
-            zero_pads = [e for e, i in enumerate(attention_mask) if i.max() == 0]
-            inputs_embeds[zero_pads] = 0.0
+            inputs_embeds[~attention_mask[:, 0].bool()] = 0.0
 
             # since self.mel_conditioner adds a new array at the front of inputs_embeds we need to do the same for attention_mask to keep the shapes same
-            front_ones = torch.ones([attention_mask.shape[0], 1])
-            attention_mask = torch.concatenate([front_ones, attention_mask], axis=1)
-            attention_mask[zero_pads] = 0
+            attention_mask = torch.concatenate([attention_mask[:, 0].view(-1, 1), attention_mask], axis=1)
+            return inputs_embeds, attention_mask
 
-        else:
-            attention_mask = torch.ones([inputs_embeds.shape[0], inputs_embeds.shape[1]], dtype=torch.long)
-
-        return inputs_embeds, attention_mask
+        return inputs_embeds, None
 
     @add_start_docstrings_to_model_forward(Pop2Piano_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
