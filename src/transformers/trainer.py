@@ -3164,7 +3164,11 @@ class Trainer:
         model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
         if len(self.accelerator._models) == 0 and model is self.model:
-            model = self.accelerator.prepare(model)
+            model = (
+                self.accelerator.prepare(model)
+                if self.is_deepspeed_enabled
+                else self.accelerator.prepare_model(model, mixed_precision_only=True)
+            )
 
             if self.is_fsdp_enabled:
                 self.model = model
@@ -3771,7 +3775,11 @@ class Trainer:
         model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
         if len(self.accelerator._models) == 0 and model is self.model:
-            model = self.accelerator.prepare(model)
+            model = (
+                self.accelerator.prepare(model)
+                if self.is_deepspeed_enabled
+                else self.accelerator.prepare_model(model, mixed_precision_only=True)
+            )
 
             if self.is_fsdp_enabled:
                 self.model = model
