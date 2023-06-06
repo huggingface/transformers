@@ -1934,6 +1934,7 @@ class GenerationMixin:
         batch_size = input_ids.shape[0]
 
         # compression mat mult init
+        model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
         outputs = self(**model_inputs, output_hidden_states=True)
         hidden_dim = outputs.hidden_states[-1].shape[-1]
         compression_factor = 8
