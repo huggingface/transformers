@@ -50,6 +50,12 @@ jobs:
                       touch test_preparation/examples_test_list.txt
                   fi
             - run: |
+                  if [ -f filtered_test_list_cross_tests.txt ]; then
+                      mv filtered_test_list_cross_tests.txt test_preparation/filtered_test_list_cross_tests.txt
+                  else
+                      touch test_preparation/filtered_test_list_cross_tests.txt
+                  fi
+            - run: |
                 if [ -f doctest_list.txt ]; then
                     cp doctest_list.txt test_preparation/doctest_list.txt
                 else
