@@ -245,8 +245,8 @@ class BatchEncoding(UserDict):
             return {key: self.data[key][slice] for key in self.data.keys()}
         else:
             raise KeyError(
-                "Indexing with integers (to access backend Encoding for a given batch index) "
-                "is not available when using Python based tokenizers"
+                "Invalid key. Only three types of key are available: "
+                "(1) string, (2) integers for backend Encoding, and (3) slices for data subsetting."
             )
 
     def __getattr__(self, item: str):
