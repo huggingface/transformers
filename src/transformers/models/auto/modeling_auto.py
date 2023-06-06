@@ -18,7 +18,7 @@ import warnings
 from collections import OrderedDict
 
 from ...utils import logging
-from .auto_factory import _BaseAutoModelClass, _LazyAutoMapping, auto_class_update
+from .auto_factory import _BaseAutoBackboneClass, _BaseAutoModelClass, _LazyAutoMapping, auto_class_update
 from .configuration_auto import CONFIG_MAPPING_NAMES
 
 
@@ -179,6 +179,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("tapas", "TapasModel"),
         ("time_series_transformer", "TimeSeriesTransformerModel"),
         ("timesformer", "TimesformerModel"),
+        ("timm_backbone", "TimmBackbone"),
         ("trajectory_transformer", "TrajectoryTransformerModel"),
         ("transfo-xl", "TransfoXLModel"),
         ("tvlt", "TvltModel"),
@@ -999,6 +1000,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("nat", "NatBackbone"),
         ("resnet", "ResNetBackbone"),
         ("swin", "SwinBackbone"),
+        ("timm_backbone", "TimmBackbone"),
     ]
 )
 
@@ -1330,7 +1332,7 @@ class AutoModelForAudioXVector(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_AUDIO_XVECTOR_MAPPING
 
 
-class AutoBackbone(_BaseAutoModelClass):
+class AutoBackbone(_BaseAutoBackboneClass):
     _model_mapping = MODEL_FOR_BACKBONE_MAPPING
 
 
