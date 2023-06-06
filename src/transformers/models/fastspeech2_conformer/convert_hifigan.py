@@ -15,9 +15,10 @@
 """Convert FastSpeech2Conformer HiFi-GAN checkpoint."""
 
 import argparse
+from pathlib import Path
 
-import numpy as np
 import torch
+import yaml
 
 from transformers import FastSpeech2ConformerHifiGan, FastSpeech2ConformerHifiGanConfig, logging
 
@@ -25,8 +26,13 @@ from transformers import FastSpeech2ConformerHifiGan, FastSpeech2ConformerHifiGa
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.FastSpeech2Conformer")
 
+match_config = FastSpeech2ConformerHifiGan.from_pretrained("connor-henderson/fastspeech2_conformer_hifigan").config
+
 
 def load_weights(checkpoint, hf_model, config):
+    vocoder_key_prefix = "tts.generator.vocoder."
+    checkpoint = {k.replace(vocoder_key_prefix, ""): v for k, v in checkpoint.items() if vocoder_key_prefix in k}
+
     hf_model.apply_weight_norm()
 
     hf_model.conv_pre.weight_g.data = checkpoint["input_conv.weight_g"]
@@ -55,29 +61,53 @@ def load_weights(checkpoint, hf_model, config):
     hf_model.remove_weight_norm()
 
 
+def remap_yaml_config(yaml_config_path):
+    with Path(yaml_config_path).open("r", encoding="utf-8") as f:
+        args = yaml.safe_load(f)
+        args = argparse.Namespace(**args)
+
+    vocoder_type = args.tts_conf["vocoder_type"]
+    if vocoder_type != "hifigan_generator":
+        raise TypeError(f"Vocoder config must be for `hifigan_generator`, but got {vocoder_type}")
+
+    remapped_dict = {}
+    vocoder_params = args.tts_conf["vocoder_params"]
+
+    # espnet_config_key -> hf_config_key
+    key_mappings = {
+        "channels": "upsample_initial_channel",
+        "in_channels": "model_in_dim",
+        "resblock_dilations": "resblock_dilation_sizes",
+        "resblock_kernel_sizes": "resblock_kernel_sizes",
+        "upsample_kernel_sizes": "upsample_kernel_sizes",
+        "upsample_scales": "upsample_rates",
+    }
+    for espnet_config_key, hf_config_key in key_mappings.items():
+        remapped_dict[hf_config_key] = vocoder_params[espnet_config_key]
+    remapped_dict["sampling_rate"] = args.tts_conf["sampling_rate"]
+    remapped_dict["normalize_before"] = False
+    remapped_dict["leaky_relu_slope"] = vocoder_params["nonlinear_activation_params"]["negative_slope"]
+
+    return remapped_dict
+
+
 @torch.no_grad()
 def convert_hifigan_checkpoint(
     checkpoint_path,
-    stats_path,
     pytorch_dump_folder_path,
-    config_path=None,
+    yaml_config_path=None,
     repo_id=None,
 ):
-    if config_path is not None:
-        config = FastSpeech2ConformerHifiGanConfig.from_pretrained(config_path)
+    if yaml_config_path is not None:
+        config_kwargs = remap_yaml_config(yaml_config_path)
+        config = FastSpeech2ConformerHifiGanConfig(**config_kwargs)
     else:
         config = FastSpeech2ConformerHifiGanConfig()
 
     model = FastSpeech2ConformerHifiGan(config)
 
     orig_checkpoint = torch.load(checkpoint_path)
-    load_weights(orig_checkpoint["model"]["generator"], model, config)
-
-    stats = np.load(stats_path)
-    mean = stats[0].reshape(-1)
-    scale = stats[1].reshape(-1)
-    model.mean = torch.from_numpy(mean).float()
-    model.scale = torch.from_numpy(scale).float()
+    load_weights(orig_checkpoint, model, config)
 
     model.save_pretrained(pytorch_dump_folder_path)
 
@@ -89,8 +119,7 @@ def convert_hifigan_checkpoint(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
-    parser.add_argument("--stats_path", required=True, default=None, type=str, help="Path to stats.npy file")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
+    parser.add_argument("--yaml_config_path", default=None, type=str, help="Path to config.yaml of model to convert")
     parser.add_argument(
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
     )
@@ -101,8 +130,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     convert_hifigan_checkpoint(
         args.checkpoint_path,
-        args.stats_path,
         args.pytorch_dump_folder_path,
-        args.config_path,
+        args.yaml_config_path,
         args.push_to_hub,
     )
