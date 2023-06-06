@@ -1,58 +1,119 @@
-import os
-import tempfile
 import unittest
+import torch
+import numpy as np
+import scipy.sparse as sp
+
+import transformers as tfr
 
 from transformers.models.vgcn_bert.modeling_graph import WordGraph
 
 
-class WordGraphTest(unittest.TestCase):
-    def test_word_graph(self):
-        # Create a WordGraph
-        word_graph = WordGraph()
-        self.assertTrue(isinstance(word_graph, WordGraph))
+class PmiWordGraphTest(unittest.TestCase):
+    def setUp(self):
+        self.texts = [
+            "moore is like a progressive bull in a china shop , a provocateur crashing into ideas and special-interest groups as he slaps together his own brand of liberalism . ",
+            "idiotic and ugly . ",
+            "even if the naipaul original remains the real masterpiece , the movie possesses its own languorous charm . ",
+        ]
+        self.tokenizer = tfr.DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
+        self.window_size = 20
+        self.algorithm = "npmi"
+        self.edge_threshold = 0.0
+        self.remove_stopwords = False
+        self.min_freq_to_keep = 0
 
-        # Create a temporary directory
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            # Save it to disk
-            word_graph.save_pretrained(tmpdirname)
-            # Load it from disk
-            word_graph = WordGraph.from_pretrained(tmpdirname)
-            self.assertTrue(isinstance(word_graph, WordGraph))
+    def test_init(self):
+        graph = WordGraph(
+            self.texts,
+            self.tokenizer,
+            self.window_size,
+            self.algorithm,
+            self.edge_threshold,
+            self.remove_stopwords,
+            self.min_freq_to_keep,
+        )
+        self.assertIsInstance(graph.adjacency_matrix, sp.csr_matrix)
+        self.assertEqual(len(graph.wgraph_id_to_tokenizer_id_map), graph.adjacency_matrix.shape[0])
 
-    def test_word_graph_from_pretrained(self):
-        # Download model and configuration from S3 and cache.
-        model = WordGraph.from_pretrained("bert-base-uncased")
-        self.assertIsNotNone(model)
+    def test_zero_padding(self):
+        graph = WordGraph(
+            self.texts,
+            self.tokenizer,
+            self.window_size,
+            self.algorithm,
+            self.edge_threshold,
+            self.remove_stopwords,
+            self.min_freq_to_keep,
+        )
+        self.assertTrue(graph.wgraph_id_to_tokenizer_id_map[0] == 0)
+        self.assertTrue(graph.adjacency_matrix.todense()[0, :].sum() == 0)
+        self.assertTrue(graph.adjacency_matrix.todense()[:, 0].sum() == 0)
 
-    # os.environ["TRANSFORMERS_OFFLINE"] = "1"
-    # model_path = "/tmp/local-huggingface-models/hf-maintainers_distilbert-base-uncased"
+    def test_adj_matrix(self):
+        graph = WordGraph(
+            self.texts,
+            self.tokenizer,
+            self.window_size,
+            self.algorithm,
+            self.edge_threshold,
+            self.remove_stopwords,
+            self.min_freq_to_keep,
+        )
+        self.assertTrue(all(graph.adjacency_matrix[1:, 1:].diagonal() == np.ones(graph.adjacency_matrix.shape[0] - 1)))
+        self.assertTrue(all(graph.adjacency_matrix.data >= 0))
 
-    # # DistilBertTokenizerFast
-    # tokenizer = tfr.AutoTokenizer.from_pretrained(model_path)
+    def test_to_torch_sparse(self):
+        graph = WordGraph(
+            self.texts,
+            self.tokenizer,
+            self.window_size,
+            self.algorithm,
+            self.edge_threshold,
+            self.remove_stopwords,
+            self.min_freq_to_keep,
+        )
+        torch_sparse = graph.to_torch_sparse()
+        self.assertTrue(torch_sparse.layout == torch.sparse_coo)
+        self.assertTrue(torch_sparse.is_coalesced())
 
-    # words_relations = [
-    #     ("I", "you", 0.3),
-    #     ("here", "there", 0.7),
-    #     ("city", "montreal", 0.8),
-    #     ("comeabc", "gobefbef", 0.2),
-    # ]
-    # wgraph = WordGraph(words_relations, tokenizer)
-    # # vocab_adj, vocab, vocab_indices = wgraph.adjacency_matrix, wgraph.vocab, wgraph.vocab_indices
-    # print(len(wgraph.vocab))
-    # # print(wgraph.tokenizer_id_to_wgraph_id_array)
-    # print_matrix(wgraph.adjacency_matrix.todense())
 
-    # # texts = [" I am here", "He is here", "here i am, gobefbef"]
-    # texts = [" I am here!", "He is here", "You are also here, gobefbef!", "What is interpribility"]
-    # wgraph = WordGraph(texts, tokenizer, window_size=4)
-    # # vocab_adj, vocab, vocab_indices = wgraph.adjacency_matrix, wgraph.vocab, wgraph.vocab_indices
+class PredefinedWordGraphTest(unittest.TestCase):
+    def setUp(self):
+        self.entity_relations = [
+            ("I", "you", 0.3),
+            ("here", "there", 0.7),
+            ("city", "montreal", 0.8),
+            ("weather", "rain", 0.6),
+        ]
+        self.tokenizer = tfr.DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
+        self.remove_stopwords = False
 
-    # print(len(wgraph.vocab))
-    # # print(wgraph.tokenizer_id_to_wgraph_id_array)
-    # print_matrix(wgraph.adjacency_matrix.todense())
-    # print()
-    # norm_adj = _normalize_adj(wgraph.adjacency_matrix)
-    # print_matrix(norm_adj.todense())
+    def test_init(self):
+        graph = WordGraph(
+            self.entity_relations,
+            self.tokenizer,
+            self.remove_stopwords,
+        )
+        self.assertIsInstance(graph.adjacency_matrix, sp.csr_matrix)
+        self.assertEqual(len(graph.wgraph_id_to_tokenizer_id_map), graph.adjacency_matrix.shape[0])
 
-    # # print(vocab_indices[vocab[3]])
-    # print("---end---")
+    def test_zero_padding(self):
+        graph = WordGraph(
+            self.entity_relations,
+            self.tokenizer,
+            self.remove_stopwords,
+        )
+        self.assertTrue(graph.wgraph_id_to_tokenizer_id_map[0] == 0)
+        self.assertTrue(graph.adjacency_matrix.todense()[0, :].sum() == 0)
+        self.assertTrue(graph.adjacency_matrix.todense()[:, 0].sum() == 0)
+
+    def test_adj_matrix(self):
+        graph = WordGraph(
+            self.entity_relations,
+            self.tokenizer,
+            self.remove_stopwords,
+        )
+        self.assertTrue(all(graph.adjacency_matrix[1:, 1:].diagonal() == np.ones(graph.adjacency_matrix.shape[0] - 1)))
+        self.assertTrue(graph.adjacency_matrix[1, 2] == np.float32(0.3))
+        print(graph.adjacency_matrix[2, 1])
+        self.assertTrue(graph.adjacency_matrix[2, 1] == np.float32(0.3))
