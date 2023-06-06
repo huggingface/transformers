@@ -57,7 +57,6 @@ class BarkSelfAttention(nn.Module):
         super().__init__()
         
         
-        assert config.hidden_size % config.num_heads == 0, f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"f" {self.num_heads})."
 
         # regularization
         self.dropout = config.dropout
@@ -68,6 +67,8 @@ class BarkSelfAttention(nn.Module):
         self.num_heads = config.num_heads
         self.head_dim = self.embed_dim // self.num_heads
           
+        assert config.hidden_size % config.num_heads == 0, f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"f" {self.num_heads})."
+
         # key, query, value projections for all heads, but in a batch
         self.att_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.bias)
         # output projection
@@ -283,6 +284,7 @@ class BarkModulePreTrainedModel(PreTrainedModel):
     # supports_gradient_checkpointing = True
     _no_split_modules = ["BarkBlock"] # TODO: what to do with this?
     
+    # TODO: ask about module.padding_idx
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear,)):
@@ -340,7 +342,7 @@ class BarkModule(BarkModulePreTrainedModel):
             wpe = nn.Embedding(config.block_size, config.hidden_size),
             drop = nn.Dropout(config.dropout),
             h = nn.ModuleList([BarkBlock(config, idx, is_causal=True) for idx in range(config.num_layers)]),
-            ln_f = nn.LayerNorm(config.hidden_size, elementwise_affine=True, eps=1e-5),
+            ln_f = LayerNorm(config.hidden_size, bias=config.bias),
         ))
         self.lm_head = nn.Linear(config.hidden_size, config.output_vocab_size, bias=False)
         
@@ -503,7 +505,7 @@ class BarkModule(BarkModulePreTrainedModel):
             else:
                 outputs = block(
                     hidden_states,
-                    layer_past=past_layer_kv,
+                    past_kv=past_layer_kv,
                     attention_mask=attention_mask,
                     head_mask=head_mask[i],
                     use_cache=use_cache,
@@ -557,7 +559,7 @@ class BarkSemanticModel(BarkModule):
         # Same architecture than an autoregressive gpt-like model except for an hacky context merging at the very beginning of the generation
         super().__init__(config)
 
-    def _get_and_check_input_embeddings(self, input_ids, input_embeds, past_key_values, merge_context):    
+    def _get_and_check_input_embeddings(self, input_ids, input_embeds, past_key_values):    
         # Hack From Bark original repository to sum text and history prompt embeddings
         # It sums the text embeddings and the history prompt embeddings once at the very beginning of the generation
         # (merge_context) 
@@ -626,10 +628,10 @@ class BarkFineAcousticsModel(BarkModule):
         self.lm_heads = nn.ModuleList(
             [
                 nn.Linear(config.hidden_size, config.output_vocab_size, bias=False)
-                for _ in range(config.n_codes_given, self.n_codes_total)
+                for _ in range(config.n_codes_given, config.n_codes_total)
             ]
         )
-        for i in range(self.n_codes_total - config.n_codes_given):
+        for i in range(config.n_codes_total - config.n_codes_given):
             self.transformer.wtes[i + 1].weight = self.lm_heads[i].weight
             # TODO: check what it does
             
@@ -666,7 +668,7 @@ class BarkFineAcousticsModel(BarkModule):
                 wte(input_ids[:, :, i]).unsqueeze(-1) for i, wte in enumerate(self.transformer.wtes)
             ]  # token embeddings of shape (b, t, n_embd)
             input_embeds = torch.cat(input_embeds, dim=-1)
-            x = input_embeds[:, :, :, : pred_idx + 1].sum(dim=-1)            
+            input_embeds = input_embeds[:, :, :, : pred_idx + 1].sum(dim=-1)            
                         
         elif input_embeds is not None:
             input_embeds = self.transformer.wte(input_ids) # token embeddings of shape (b, t, n_embd)
@@ -698,7 +700,6 @@ class BarkFineAcousticsModel(BarkModule):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
     
     
@@ -707,7 +708,7 @@ class BarkFineAcousticsModel(BarkModule):
         
         input_shape = input_embeds.size()[:-1]
         batch_size = input_embeds.shape[0]
-        seq_length = input_shape[-1]
+        seq_length = input_shape[1]
         
         device = input_ids.device if input_ids is not None else input_embeds.device
         
@@ -746,17 +747,17 @@ class BarkFineAcousticsModel(BarkModule):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
             
-                outputs = block(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    head_mask=head_mask[i],
-                    output_attentions=output_attentions,
-                )
+            outputs = block(
+                hidden_states,
+                attention_mask=attention_mask,
+                head_mask=head_mask[i],
+                output_attentions=output_attentions,
+            )
                 
             hidden_states = outputs[0]
                 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                all_self_attentions = all_self_attentions + (outputs[1],)
 
         hidden_states = self.transformer.ln_f(hidden_states)
         hidden_states = hidden_states.view(output_shape)

@@ -25,8 +25,9 @@ class BarkConfig(PretrainedConfig):
         bias=True, # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster 
         n_codes_total=8, # for BarkFineAcousticsModel       
         n_codes_given=1, # for BarkFineAcousticsModel       
-        
-        use_return_dict=False, # TODO
+                
+                
+        initializer_range=0.02,
         use_cache=True, # TODO
         #bos_token_id=50256, # TODO
         #eos_token_id=50256, # TODO
@@ -42,18 +43,8 @@ class BarkConfig(PretrainedConfig):
         self.bias = bias
         self.n_codes_total = n_codes_total
         self.n_codes_given = n_codes_given
-        self.use_return_dict = use_return_dict
         self.use_cache = use_cache
-
-        if len(self.attention_layers) != self.num_layers:
-            raise ValueError(
-                "Configuration for convolutional module is incorrect. "
-                "It is required that `len(config.attention_layers)` == `config.num_layers` "
-                f"but is `len(config.attention_layers) = {len(self.attention_layers)}`, "
-                f"`config.num_layers = {self.num_layers}`. "
-                "`config.attention_layers` is prepared using `config.attention_types`. "
-                "Please verify the value of `config.attention_types` argument."
-            )
+        self.initializer_range = initializer_range
 
         super().__init__(**kwargs)
 
