@@ -524,7 +524,7 @@ def _raise_timeout_error(signum, frame):
     )
 
 
-TIME_OUT_REMOTE_CODE = 30
+TIME_OUT_REMOTE_CODE = 15
 
 
 def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has_remote_code):
