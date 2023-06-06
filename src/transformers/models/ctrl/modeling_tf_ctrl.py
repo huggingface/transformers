@@ -15,6 +15,9 @@
 # limitations under the License.
 """ TF 2.0 CTRL model."""
 
+
+from __future__ import annotations
+
 import warnings
 from typing import Optional, Tuple, Union
 
@@ -256,13 +259,13 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -532,13 +535,13 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -560,15 +563,6 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
             training=training,
         )
         return outputs
-
-    def serving_output(self, output):
-        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutputWithPast(
-            last_hidden_state=output.last_hidden_state, past_key_values=pkv, hidden_states=hs, attentions=attns
-        )
 
 
 class TFCTRLLMHead(tf.keras.layers.Layer):
@@ -645,18 +639,18 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFCausalLMOutputWithPast]:
         r"""
@@ -702,13 +696,6 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
             attentions=transformer_outputs.attentions,
         )
 
-    def serving_output(self, output):
-        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFCausalLMOutputWithPast(logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns)
-
 
 @add_start_docstrings(
     """
@@ -749,18 +736,18 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFSequenceClassifierOutput]:
         r"""
@@ -836,10 +823,3 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
-
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
-    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)

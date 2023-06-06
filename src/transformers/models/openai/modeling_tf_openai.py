@@ -15,6 +15,8 @@
 # limitations under the License.
 """ TF 2.0 OpenAI GPT model."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -237,12 +239,12 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -355,19 +357,6 @@ class TFOpenAIGPTPreTrainedModel(TFPreTrainedModel):
     config_class = OpenAIGPTConfig
     base_model_prefix = "transformer"
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
 
 @dataclass
 class TFOpenAIGPTDoubleHeadsModelOutput(ModelOutput):
@@ -394,8 +383,8 @@ class TFOpenAIGPTDoubleHeadsModelOutput(ModelOutput):
 
     logits: tf.Tensor = None
     mc_logits: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 OPENAI_GPT_START_DOCSTRING = r"""
@@ -514,12 +503,12 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -538,13 +527,6 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
             training=training,
         )
         return outputs
-
-    # Copied from transformers.models.distilbert.modeling_tf_distilbert.TFDistilBertModel.serving_output
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -576,16 +558,16 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFCausalLMOutput]:
         r"""
@@ -628,12 +610,6 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
             attentions=transformer_outputs.attentions,
         )
 
-    def serving_output(self, output: TFCausalLMOutput) -> TFCausalLMOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFCausalLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
-
     def prepare_inputs_for_generation(self, inputs, **kwargs):
         return {"input_ids": inputs}
 
@@ -661,13 +637,13 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
     @replace_return_docstrings(output_type=TFOpenAIGPTDoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        mc_token_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        mc_token_ids: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -750,27 +726,13 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-                "mc_token_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFOpenAIGPTDoubleHeadsModelOutput(
-            logits=output.logits, mc_logits=output.mc_logits, hidden_states=hs, attentions=attns
-        )
+    @property
+    def input_signature(self):
+        return {
+            "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+            "mc_token_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+        }
 
 
 @add_start_docstrings(
@@ -809,16 +771,16 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFSequenceClassifierOutput]:
         r"""
@@ -892,10 +854,3 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
-
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
-    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)

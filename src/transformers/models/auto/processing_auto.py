@@ -57,6 +57,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
         ("markuplm", "MarkupLMProcessor"),
+        ("mctct", "MCTCTProcessor"),
         ("mgp-str", "MgpstrProcessor"),
         ("oneformer", "OneFormerProcessor"),
         ("owlvit", "OwlViTProcessor"),
@@ -259,6 +260,7 @@ class AutoProcessor:
                 processor_class = get_class_from_dynamic_module(
                     processor_auto_map, pretrained_model_name_or_path, **kwargs
                 )
+                _ = kwargs.pop("code_revision", None)
             else:
                 processor_class = processor_class_from_name(processor_class)
 

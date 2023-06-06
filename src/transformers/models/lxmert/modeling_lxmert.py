@@ -111,7 +111,7 @@ class LxmertForQuestionAnsweringOutput(ModelOutput):
         loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
             Total loss as the sum of the masked language modeling loss and the next sequence prediction
             (classification) loss.k.
-        question_answering_score: (`torch.FloatTensor` of shape `(batch_size, n_qa_answers)`, *optional*):
+        question_answering_score (`torch.FloatTensor` of shape `(batch_size, n_qa_answers)`, *optional*):
             Prediction scores of question answering objective (classification).
         language_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for input features + one for the output of each cross-modality layer) of
@@ -153,10 +153,10 @@ class LxmertForPreTrainingOutput(ModelOutput):
             (classification) loss.
         prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        cross_relationship_score: (`torch.FloatTensor` of shape `(batch_size, 2)`):
+        cross_relationship_score (`torch.FloatTensor` of shape `(batch_size, 2)`):
             Prediction scores of the textual matching objective (classification) head (scores of True/False
             continuation before SoftMax).
-        question_answering_score: (`torch.FloatTensor` of shape `(batch_size, n_qa_answers)`):
+        question_answering_score (`torch.FloatTensor` of shape `(batch_size, n_qa_answers)`):
             Prediction scores of question answering objective (classification).
         language_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for input features + one for the output of each cross-modality layer) of
@@ -828,12 +828,12 @@ LXMERT_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        visual_feats: (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
+        visual_feats (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
             This input represents visual features. They ROI pooled object features from bounding boxes using a
             faster-RCNN model)
 
             These are currently not provided by the transformers library.
-        visual_pos: (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_pos_dim)`):
+        visual_pos (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_pos_dim)`):
             This input represents spacial features corresponding to their relative (via index) visual features. The
             pre-trained LXMERT model expects these spacial features to be normalized bounding boxes on a scale of 0 to
             1.
@@ -1171,7 +1171,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        obj_labels: (`Dict[Str: Tuple[Torch.FloatTensor, Torch.FloatTensor]]`, *optional*):
+        obj_labels (`Dict[Str: Tuple[Torch.FloatTensor, Torch.FloatTensor]]`, *optional*):
             each key is named after each one of the visual losses and each element of the tuple is of the shape
             `(batch_size, num_features)` and `(batch_size, num_features, visual_feature_dim)` for each the label id and
             the label score respectively
@@ -1398,7 +1398,7 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[LxmertForQuestionAnsweringOutput, Tuple[torch.FloatTensor]]:
         r"""
-        labels: (`Torch.Tensor` of shape `(batch_size)`, *optional*):
+        labels (`Torch.Tensor` of shape `(batch_size)`, *optional*):
             A one-hot representation of the correct answer
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

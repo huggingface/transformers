@@ -45,7 +45,7 @@ class RobertaPreLayerNormConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
+        vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the RoBERTa-PreLayerNorm model. Defines the number of different tokens that can be
             represented by the `inputs_ids` passed when calling [`RobertaPreLayerNormModel`] or
             [`TFRobertaPreLayerNormModel`].
@@ -106,7 +106,7 @@ class RobertaPreLayerNormConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=30522,
+        vocab_size=50265,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,

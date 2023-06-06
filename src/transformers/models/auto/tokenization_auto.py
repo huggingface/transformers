@@ -678,6 +678,7 @@ class AutoTokenizer:
                 else:
                     class_ref = tokenizer_auto_map[0]
                 tokenizer_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
+                _ = kwargs.pop("code_revision", None)
 
             elif use_fast and not config_tokenizer_class.endswith("Fast"):
                 tokenizer_class_candidate = f"{config_tokenizer_class}Fast"

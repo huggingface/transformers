@@ -15,10 +15,12 @@
 """ TF 2.0 GroupViT model."""
 
 
+from __future__ import annotations
+
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -26,7 +28,6 @@ import tensorflow as tf
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling
 from ...modeling_tf_utils import (
-    DUMMY_INPUTS,
     TFModelInputType,
     TFPreTrainedModel,
     get_initializer,
@@ -247,7 +248,7 @@ class TFGroupViTModelOutput(ModelOutput):
             The output of the [`TFGroupViTVisionModel`].
     """
 
-    loss: Optional[tf.Tensor] = None
+    loss: tf.Tensor | None = None
     logits_per_image: tf.Tensor = None
     logits_per_text: tf.Tensor = None
     segmentation_logits: tf.Tensor = None
@@ -647,7 +648,7 @@ class TFGroupViTStage(tf.keras.layers.Layer):
         else:
             return x, None
 
-    def concat_x(self, x: tf.Tensor, group_token: Optional[tf.Tensor] = None) -> tf.Tensor:
+    def concat_x(self, x: tf.Tensor, group_token: tf.Tensor | None = None) -> tf.Tensor:
         if group_token is None:
             return x
         return tf.concat([x, group_token], axis=1)
@@ -655,7 +656,7 @@ class TFGroupViTStage(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        prev_group_token: Optional[tf.Tensor] = None,
+        prev_group_token: tf.Tensor | None = None,
         output_attentions: bool = False,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
@@ -1138,9 +1139,9 @@ class TFGroupViTTextMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1183,7 +1184,7 @@ class TFGroupViTVisionMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
+        pixel_values: TFModelInputType | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1262,9 +1263,9 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def get_text_features(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1298,7 +1299,7 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def get_image_features(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
+        pixel_values: TFModelInputType | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1325,10 +1326,10 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        pixel_values: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        pixel_values: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1606,38 +1607,14 @@ class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
 
         self.groupvit = TFGroupViTTextMainLayer(config, name="groupvit")
 
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        return {
-            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32),
-        }
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
-        output = self.call(inputs)
-        return self.serving_output(output)
-
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GROUPVIT_TEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=GroupViTTextConfig)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1673,17 +1650,6 @@ class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
 
         return outputs
 
-    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutputWithPooling(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            hidden_states=hs,
-            attentions=attns,
-        )
-
 
 class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
     config_class = GroupViTVisionConfig
@@ -1694,44 +1660,12 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
 
         self.groupvit = TFGroupViTVisionMainLayer(config, name="groupvit")
 
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(len(DUMMY_INPUTS), 3, self.config.image_size, self.config.image_size), dtype=tf.float32
-        )
-        return {"pixel_values": VISION_DUMMY_INPUTS}
-
-    @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
-        ]
-    )
-    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GROUPVIT_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=GroupViTVisionConfig)
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
+        pixel_values: TFModelInputType | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1770,15 +1704,6 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
 
         return outputs
 
-    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
-        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
-        return TFBaseModelOutputWithPooling(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            hidden_states=output.hidden_states,
-            attentions=output.attentions,
-        )
-
 
 @add_start_docstrings(GROUPVIT_START_DOCSTRING)
 class TFGroupViTModel(TFGroupViTPreTrainedModel):
@@ -1789,51 +1714,13 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
 
         self.groupvit = TFGroupViTMainLayer(config, name="groupvit")
 
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(len(DUMMY_INPUTS), 3, self.config.vision_config.image_size, self.config.vision_config.image_size),
-            dtype=tf.float32,
-        )
-        return {
-            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32),
-            "pixel_values": VISION_DUMMY_INPUTS,
-        }
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float64, name="pixel_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFGroupViTModelOutput:
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GROUPVIT_TEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def get_text_features(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1872,7 +1759,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
     @add_start_docstrings_to_model_forward(GROUPVIT_VISION_INPUTS_DOCSTRING)
     def get_image_features(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
+        pixel_values: TFModelInputType | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1916,10 +1803,10 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
     @replace_return_docstrings(output_type=TFGroupViTModelOutput, config_class=GroupViTConfig)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        pixel_values: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        pixel_values: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

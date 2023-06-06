@@ -136,7 +136,7 @@ class PretrainedConfig(PushToHubMixin):
         diversity_penalty (`float`, *optional*, defaults to 0.0):
             Value to control diversity for group beam search. that will be used by default in the `generate` method of
             the model. 0 means no diversity penalty. The higher the penalty, the more diverse are the outputs.
-        temperature (`float`, *optional*, defaults to 1):
+        temperature (`float`, *optional*, defaults to 1.0):
             The value used to module the next token probabilities that will be used by default in the `generate` method
             of the model. Must be strictly positive.
         top_k (`int`, *optional*, defaults to 50):

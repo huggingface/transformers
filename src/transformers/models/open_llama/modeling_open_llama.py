@@ -40,7 +40,7 @@ try:
 except ImportError:
     xops = None
     logger.warn(
-        "Xformers is not installed correctly. If you want to use memorry_efficient_attention to accelerate training use the following command to install Xformers\npip install xformers."
+        "Xformers is not installed correctly. If you want to use memory_efficient_attention to accelerate training use the following command to install Xformers\npip install xformers."
     )
 
 
@@ -91,14 +91,11 @@ class OpenLlamaRMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
         variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
 
-        # convert into half-precision if necessary
-        if self.weight.dtype in [torch.float16, torch.bfloat16]:
-            hidden_states = hidden_states.to(self.weight.dtype)
-
-        return self.weight * hidden_states
+        return (self.weight * hidden_states).to(input_dtype)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->OpenLlama
@@ -226,7 +223,7 @@ class OpenLlamaAttention(nn.Module):
 
         past_key_value = (key_states, value_states) if use_cache else None
 
-        if self.config.use_memorry_efficient_attention and xops is not None and self.training:
+        if self.config.use_memory_efficient_attention and xops is not None and self.training:
             attn_weights = None
             query_states = query_states.transpose(1, 2)
             key_states = key_states.transpose(1, 2)
@@ -249,7 +246,9 @@ class OpenLlamaAttention(nn.Module):
                         f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                     )
                 attn_weights = attn_weights + attention_mask
-                attn_weights = torch.max(attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min))
+                attn_weights = torch.max(
+                    attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
+                )
 
             # upcast attention to fp32
             attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
@@ -564,7 +563,7 @@ class OpenLlamaModel(OpenLlamaPreTrainedModel):
             if self.embed_layer_norm:
                 inputs_embeds = self.embed_layer_norm(inputs_embeds)
         # embed positions
-        if self.config.use_memorry_efficient_attention and self.training:
+        if self.config.use_memory_efficient_attention and self.training:
             attention_mask = None
         elif attention_mask is None:
             attention_mask = torch.ones(
