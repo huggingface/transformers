@@ -593,11 +593,10 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
         else:
 
             def linear(w, b, x):
-                return tf.cond(
-                    b is not None,
-                    lambda: tf.matmul(x, w, transpose_b=True) + tf.transpose(b),
-                    lambda: tf.matmul(x, w, transpose_b=True),
-                )
+                out = tf.matmul(x, w, transpose_b=True)
+                if b is not None:
+                    out += tf.transpose(b)
+                return out
 
             ws = tf.split(
                 tf.transpose(self.in_proj.weight[0]), num_or_size_splits=self.num_attention_heads * 3, axis=0

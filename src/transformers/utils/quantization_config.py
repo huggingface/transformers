@@ -74,9 +74,9 @@ class BitsAndBytesConfig:
         bnb_4bit_compute_dtype (`torch.dtype` or str, *optional*, defaults to `torch.float32`):
             This sets the computational type which might be different than the input time. For example, inputs might be
             fp32, but computation can be set to bf16 for speedups.
-        bnb_4bit_quant_type (`str`, {fp4, fn4}, defaults to `fp4`):
+        bnb_4bit_quant_type (`str`, {fp4, nf4}, defaults to `fp4`):
             This sets the quantization data type in the bnb.nn.Linear4Bit layers. Options are FP4 and NF4 data types
-            which are specified by `fp4` or `fn4`.
+            which are specified by `fp4` or `nf4`.
         bnb_4bit_use_double_quant (`bool`, *optional*, defaults to `False`):
             This flag is used for nested quantization where the quantization constants from the first quantization are
             quantized again.
