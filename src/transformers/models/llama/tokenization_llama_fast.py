@@ -75,7 +75,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     slow_tokenizer_class = LlamaTokenizer
     padding_side = "left"
-    model_input_names: List[str] = ["input_ids", "attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,
