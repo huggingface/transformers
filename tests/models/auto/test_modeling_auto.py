@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pytest
 
+import transformers
 from transformers import BertConfig, GPT2Model, is_safetensors_available, is_torch_available
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.testing_utils import (
@@ -92,6 +93,9 @@ if is_torch_available():
 
 @require_torch
 class AutoModelTest(unittest.TestCase):
+    def setUp(self):
+        transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -312,6 +316,13 @@ class AutoModelTest(unittest.TestCase):
                 del MODEL_MAPPING._extra_content[CustomConfig]
 
     def test_from_pretrained_dynamic_model_distant(self):
+        # If remote code is not set, we will time out when asking whether to load the model.
+        with self.assertRaises(ValueError):
+            model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model")
+        # If remote code is disabled, we can't load this config.
+        with self.assertRaises(ValueError):
+            model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=False)
+
         model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
         self.assertEqual(model.__class__.__name__, "NewModel")
 
@@ -415,6 +426,34 @@ class AutoModelTest(unittest.TestCase):
             ):
                 if CustomConfig in mapping._extra_content:
                     del mapping._extra_content[CustomConfig]
+
+    def test_from_pretrained_dynamic_model_conflict(self):
+        class NewModelConfigLocal(BertConfig):
+            model_type = "new-model"
+
+        class NewModel(BertModel):
+            config_class = NewModelConfigLocal
+
+        try:
+            AutoConfig.register("new-model", NewModelConfigLocal)
+            AutoModel.register(NewModelConfigLocal, NewModel)
+            # If remote code is not set, the default is to use local
+            model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model")
+            self.assertEqual(model.config.__class__.__name__, "NewModelConfigLocal")
+
+            # If remote code is disabled, we load the local one.
+            model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=False)
+            self.assertEqual(model.config.__class__.__name__, "NewModelConfigLocal")
+
+            # If remote is enabled, we load from the Hub
+            model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
+            self.assertEqual(model.config.__class__.__name__, "NewModelConfig")
+
+        finally:
+            if "new-model" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["new-model"]
+            if NewModelConfigLocal in MODEL_MAPPING._extra_content:
+                del MODEL_MAPPING._extra_content[NewModelConfigLocal]
 
     def test_repo_not_found(self):
         with self.assertRaisesRegex(
