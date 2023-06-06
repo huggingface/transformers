@@ -1141,6 +1141,12 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
             attentions=output.attentions,
         )
 
+    @property
+    def dummy_inputs(self):
+        dummies = super().dummy_inputs
+        # Funnel struggles with very short inputs, so we double the seq_len of the default dummies for it
+        return {key: tf.concat([tensor, tensor], axis=1) for key, tensor in dummies.items()}
+
 
 @add_start_docstrings(
     "The bare Funnel Transformer Model transformer outputting raw hidden-states without any specific head on top.",
