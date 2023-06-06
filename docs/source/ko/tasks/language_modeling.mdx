@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 [[open-in-colab]]
 
-언어 모델링은 causal과 masked 두 가지 유형으로 나뉩니다. 이 가이드에서는 인과 언어 모델링을 설명합니다.
+언어 모델링은 인과적 언어 모델링과 마스크드 언어 모델링, 두 가지 유형으로 나뉩니다. 이 가이드에서는 인과적 언어 모델링을 설명합니다.
 인과 언어 모델은 텍스트 생성에 자주 사용됩니다. 또 창의적인 방향으로 응용할 수 있습니다.
 직접 사용하며 재미있는 탐구를 해보거나, Copilot 또는 CodeParrot와 같은 지능형 코딩 어시스턴트의 기반이 되기도 합니다.
 
@@ -25,7 +25,7 @@ specific language governing permissions and limitations under the License.
 
 이 가이드에서는 다음 작업을 수행하는 방법을 안내합니다:
 
-1. [DistilGPT2](https://huggingface.co/distilgpt2) 모델을 [ELI5](https://huggingface.co/datasets/eli5) 데이터셋의 [r/askscience](https://www.reddit.com/r/askscience/) 하위 집합으로 미세 조정
+1. [DistilGPT2](https://huggingface.co/distilgpt2) 모델을 [ELI5](https://huggingface.co/datasets/eli5) 데이터 세트의 [r/askscience](https://www.reddit.com/r/askscience/) 하위 집합으로 미세 조정
 2. 미세 조정된 모델을 추론에 사용
 
 <Tip>
@@ -54,10 +54,10 @@ pip install transformers datasets evaluate
 >>> notebook_login()
 ```
 
-## ELI5 데이터셋 불러오기[[load-eli5-dataset]]
+## ELI5 데이터 세트 불러오기[[load-eli5-dataset]]
 
-먼저, 🤗 Datasets 라이브러리에서 r/askscience의 작은 하위 집합인 ELI5 데이터셋을 불러옵니다.
-이를 통해 전체 데이터셋에서 학습하는 데 더 많은 시간을 투자하기 전에, 실험해봄으로써 모든 것이 작동하는지 확인할 수 있습니다.
+먼저, 🤗 Datasets 라이브러리에서 r/askscience의 작은 하위 집합인 ELI5 데이터 세트를 불러옵니다.
+이를 통해 전체 데이터 세트에서 학습하는 데 더 많은 시간을 투자하기 전에, 실험해봄으로써 모든 것이 작동하는지 확인할 수 있습니다.
 
 ```py
 >>> from datasets import load_dataset
@@ -65,7 +65,7 @@ pip install transformers datasets evaluate
 >>> eli5 = load_dataset("eli5", split="train_asks[:5000]")
 ```
 
-데이터셋의 `train_asks` 분할을 [`~datasets.Dataset.train_test_split`] 메서드를 사용하여 학습 및 테스트 세트로 분할합니다:
+데이터 세트의 `train_asks` 분할을 [`~datasets.Dataset.train_test_split`] 메소드를 사용하여 학습 및 테스트 세트로 분할합니다:
 
 ```py
 >>> eli5 = eli5.train_test_split(test_size=0.2)
@@ -103,7 +103,7 @@ pip install transformers datasets evaluate
 >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
 ```
 
-위의 예제에서 알 수 있듯이, `text` 필드는 `answers` 아래에 중첩되어 있습니다. 따라서 [`flatten`](https://huggingface.co/docs/datasets/process.html#flatten) 메서드를 사용하여 중첩 구조에서 `text` 하위 필드를 추출해야 합니다.
+위의 예제에서 알 수 있듯이, `text` 필드는 `answers` 아래에 중첩되어 있습니다. 따라서 [`flatten`](https://huggingface.co/docs/datasets/process.html#flatten) 메소드를 사용하여 중첩 구조에서 `text` 하위 필드를 추출해야 합니다.
 
 ```py
 >>> eli5 = eli5.flatten()
@@ -131,7 +131,7 @@ pip install transformers datasets evaluate
 ...     return tokenizer([" ".join(x) for x in examples["answers.text"]])
 ```
 
-이 전처리 함수를 전체 데이터셋에 적용하려면 🤗 Datasets [`~datasets.Dataset.map`] 메서드를 사용하세요. `batched=True`로 설정하여 데이터셋의 여러 요소를 한 번에 처리하고, `num_proc`를 증가시켜 프로세스 수를 늘릴 수 있습니다. 필요 없는 열은 제거하세요:
+이 전처리 함수를 전체 데이터 세트에 적용하려면 🤗 Datasets [`~datasets.Dataset.map`] 메소드를 사용하세요. `batched=True`로 설정하여 데이터셋의 여러 요소를 한 번에 처리하고, `num_proc`를 증가시켜 프로세스 수를 늘릴 수 있습니다. 필요 없는 열은 제거하세요:
 
 ```py
 >>> tokenized_eli5 = eli5.map(
@@ -142,7 +142,7 @@ pip install transformers datasets evaluate
 ... )
 ```
 
-이제 데이터셋은 시퀀스가 토큰화됐지만, 일부 시퀀스는 모델의 최대 입력 길이보다 길 수 있습니다.
+이제 데이터 세트는 시퀀스가 토큰화됐지만, 일부 시퀀스는 모델의 최대 입력 길이보다 길 수 있습니다.
 
 이제 두 번째 전처리 함수를 사용하여
 - 모든 시퀀스를 연결하고,
@@ -169,7 +169,7 @@ pip install transformers datasets evaluate
 ...     return result
 ```
 
-전체 데이터셋에 `group_texts` 함수를 적용하세요:
+전체 데이터 세트에 `group_texts` 함수를 적용하세요:
 
 ```py
 >>> lm_dataset = tokenized_eli5.map(group_texts, batched=True, num_proc=4)
@@ -223,7 +223,7 @@ pip install transformers datasets evaluate
 여기까지 진행하면 세 단계만 남았습니다:
 
 1. [`TrainingArguments`]에서 훈련 하이퍼파라미터를 정의하세요. `output_dir`은 유일한 필수 매개변수로, 모델을 저장할 위치를 지정합니다. (먼저 Hugging Face에 로그인 필수) `push_to_hub=True`로 설정하여 이 모델을 허브에 업로드할 수 있습니다.
-2. 훈련 인수를 [`Trainer`]에 모델, 데이터셋 및 데이터 콜레이터와 함께 전달하세요.
+2. 훈련 인수를 [`Trainer`]에 모델, 데이터 세트 및 데이터 콜레이터와 함께 전달하세요.
 3. [`~Trainer.train`]을 호출하여 모델을 미세 조정하세요.
 
 ```py
@@ -246,7 +246,7 @@ pip install transformers datasets evaluate
 >>> trainer.train()
 ```
 
-훈련이 완료되면 [`~transformers.Trainer.evaluate`] 메서드를 사용하여 모델을 평가하고 퍼플렉서티를 얻을 수 있습니다:
+훈련이 완료되면 [`~transformers.Trainer.evaluate`] 메소드를 사용하여 모델을 평가하고 퍼플렉서티를 얻을 수 있습니다:
 
 ```py
 >>> import math
@@ -256,7 +256,7 @@ pip install transformers datasets evaluate
 Perplexity: 49.61
 ```
 
-그런 다음 [`~transformers.Trainer.push_to_hub`] 메서드를 사용하여 모델을 허브에 공유하세요. 이렇게 하면 누구나 모델을 사용할 수 있습니다:
+그런 다음 [`~transformers.Trainer.push_to_hub`] 메소드를 사용하여 모델을 허브에 공유하세요. 이렇게 하면 누구나 모델을 사용할 수 있습니다:
 
 ```py
 >>> trainer.push_to_hub()
@@ -284,7 +284,7 @@ TensorFlow에서 모델을 미세 조정하려면, 먼저 옵티마이저 함수
 >>> model = TFAutoModelForCausalLM.from_pretrained("distilgpt2")
 ```
 
-[`~transformers.TFPreTrainedModel.prepare_tf_dataset`]을 사용하여 데이터셋을 `tf.data.Dataset` 형식으로 변환하세요:
+[`~transformers.TFPreTrainedModel.prepare_tf_dataset`]을 사용하여 데이터 세트를 `tf.data.Dataset` 형식으로 변환하세요:
 
 ```py
 >>> tf_train_set = model.prepare_tf_dataset(
@@ -321,7 +321,7 @@ TensorFlow에서 모델을 미세 조정하려면, 먼저 옵티마이저 함수
 ... )
 ```
 
-마지막으로, 모델을 훈련하기 위해 [`fit`](https://keras.io/api/models/model_training_apis/#fit-method)을 호출하세요. 훈련 데이터셋, 검증 데이터셋, epoch 수 및 콜백을 전달하세요:
+마지막으로, 모델을 훈련하기 위해 [`fit`](https://keras.io/api/models/model_training_apis/#fit-method)을 호출하세요. 훈련 데이터 세트, 검증 데이터 세트, 에폭 수 및 콜백을 전달하세요:
 
 ```py
 >>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3, callbacks=[callback])
@@ -368,7 +368,7 @@ TensorFlow에서 모델을 미세 조정하려면, 먼저 옵티마이저 함수
 >>> inputs = tokenizer(prompt, return_tensors="pt").input_ids
 ```
 
-[`~transformers.generation_utils.GenerationMixin.generate`] 메서드를 사용하여 텍스트를 생성하세요. 생성을 제어하는 다양한 텍스트 생성 전략과 매개변수에 대한 자세한 내용은 [텍스트 생성 전략](../generation_strategies) 페이지를 확인하세요.
+[`~transformers.generation_utils.GenerationMixin.generate`] 메소드를 사용하여 텍스트를 생성하세요. 생성을 제어하는 다양한 텍스트 생성 전략과 매개변수에 대한 자세한 내용은 [텍스트 생성 전략](../generation_strategies) 페이지를 확인하세요.
 
 ```py
 >>> from transformers import AutoModelForCausalLM
@@ -394,7 +394,7 @@ TensorFlow에서 모델을 미세 조정하려면, 먼저 옵티마이저 함수
 >>> inputs = tokenizer(prompt, return_tensors="tf").input_ids
 ```
 
-[`~transformers.generation_tf_utils.TFGenerationMixin.generate`] 메서드를 사용하여 요약을 생성하세요. 생성을 제어하는 다양한 텍스트 생성 전략과 매개변수에 대한 자세한 내용은 [텍스트 생성 전략](../generation_strategies) 페이지를 확인하세요.
+[`~transformers.generation_tf_utils.TFGenerationMixin.generate`] 메소드를 사용하여 요약을 생성하세요. 생성을 제어하는 다양한 텍스트 생성 전략과 매개변수에 대한 자세한 내용은 [텍스트 생성 전략](../generation_strategies) 페이지를 확인하세요.
 
 ```py
 >>> from transformers import TFAutoModelForCausalLM
