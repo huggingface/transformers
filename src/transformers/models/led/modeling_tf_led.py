@@ -200,7 +200,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
                 self.key_global.build((self.config.hidden_size,))
             with tf.name_scope("value_global"):
                 self.value_global.build((self.config.hidden_size,))
-        self.built = True
+        super().build(input_shape)
 
     def call(
         self,
