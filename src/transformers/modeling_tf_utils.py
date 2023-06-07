@@ -1124,8 +1124,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         dummies = {}
         sig = self._prune_signature(self.input_signature)
         for key, spec in sig.items():
-            # 2 is the most correct arbitrary size. I will not be taking questions
-            dummies[key] = tf.ones(shape=[dim if dim is not None else 2 for dim in spec.shape], dtype=spec.dtype)
+            # 1 is the most correct arbitrary size. I will not be taking questions
+            dummies[key] = tf.ones(shape=[dim if dim is not None else 1 for dim in spec.shape], dtype=spec.dtype)
             if key == "token_type_ids":
                 # Some models have token_type_ids but with a vocab_size of 1
                 dummies[key] = tf.zeros_like(dummies[key])
@@ -1133,7 +1133,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             if "encoder_hidden_states" not in dummies:
                 if self.main_input_name == "input_ids":
                     dummies["encoder_hidden_states"] = tf.ones(
-                        shape=(2, 2, self.config.hidden_size), dtype=tf.float32, name="encoder_hidden_states"
+                        shape=(1, 1, self.config.hidden_size), dtype=tf.float32, name="encoder_hidden_states"
                     )
                 else:
                     raise NotImplementedError(
