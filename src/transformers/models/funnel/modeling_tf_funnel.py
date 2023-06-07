@@ -978,7 +978,7 @@ class TFFunnelPreTrainedModel(TFPreTrainedModel):
     @property
     def dummy_inputs(self):
         # Funnel misbehaves with very small inputs, so we override and make them a bit bigger
-        return {"input_ids": tf.ones((3, 3), dtype=tf.int32)}
+        return {"input_ids": tf.ones((1, 3), dtype=tf.int32)}
 
 
 @dataclass
