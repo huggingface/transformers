@@ -521,18 +521,6 @@ class TFGPT2PreTrainedModel(TFPreTrainedModel):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"h.\d+.attn.bias", r"h.\d+.crossattention.bias"]
 
-    @property
-    def dummy_inputs(self):
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        dummies = super().dummy_inputs
-        # GPT-2 gets annoyed at dummies with seq_len 1 for some tests, so make it 2
-        return {key: tf.concat([dummies, dummies], axis=1) for key, dummies in dummies.items()}
-
 
 @dataclass
 class TFGPT2DoubleHeadsModelOutput(ModelOutput):
