@@ -272,6 +272,7 @@ tf_job = CircleCIJob(
         "pip install tensorflow_probability",
     ],
     parallelism=1,
+    pytest_num_workers=7,
     pytest_options={"rA": None},
 )
 
