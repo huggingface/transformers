@@ -20,8 +20,6 @@ import unittest
 import warnings
 from math import ceil, floor
 
-from packaging import version
-
 from transformers import LevitConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
