@@ -15,15 +15,13 @@
 Utilities for working with package versions
 """
 
+import importlib.metadata as importlib_metadata
 import operator
 import re
 import sys
 from typing import Optional
 
 from packaging import version
-
-
-import importlib.metadata as importlib_metadata
 
 
 ops = {
