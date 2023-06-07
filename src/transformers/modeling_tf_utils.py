@@ -74,7 +74,7 @@ from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 if parse(tf.__version__).minor >= 13:
     from keras import backend as K
     from keras.__internal__ import KerasTensor
-    from keras.engine.base_layer_utils import call_context
+    from keras.src.engine.base_layer_utils import call_context
 elif parse(tf.__version__).minor >= 11:
     from keras import backend as K
     from keras.engine.base_layer_utils import call_context
