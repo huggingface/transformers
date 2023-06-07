@@ -2049,8 +2049,6 @@ class GenerationMixin:
                         items.append(item.repeat_interleave(top_k, dim=0))
                 new_key_values.append(items)
             model_kwargs["past_key_values"] = new_key_values
-            print (top_k_ids)
-            print (top_k_ids[:, 0].unsqueeze(0))
 
             # if the used memory exceeds a threshold, do not batch
             if low_memory:
@@ -2065,7 +2063,8 @@ class GenerationMixin:
                         all_outputs[key].append(outputs[key])
 
                 for key in all_outputs:
-                    all_outputs[key] = torch.stack(all_outputs[key], dim=0)
+                    if torch.is_tensor(all_outputs[key]):
+                        outputs[key] = torch.stack(all_outputs[key], dim=0)
                 print (outputs)
                     
             else:
