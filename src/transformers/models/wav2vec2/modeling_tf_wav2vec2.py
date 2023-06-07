@@ -1194,8 +1194,8 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
     @property
     def dummy_inputs(self):
         return {
-            "input_values": tf.random.uniform(shape=(1, 16000), dtype=tf.float32),
-            "attention_mask": tf.ones(shape=(1, 16000), dtype=tf.float32),
+            "input_values": tf.random.uniform(shape=(1, 500), dtype=tf.float32),
+            "attention_mask": tf.ones(shape=(1, 500), dtype=tf.float32),
         }
 
     def __init__(self, config, *inputs, **kwargs):
