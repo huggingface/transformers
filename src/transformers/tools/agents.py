@@ -455,7 +455,7 @@ class OpenAiAgent(Agent):
 
 class AzureOpenAiAgent(Agent):
     """
-    Agent that uses Azore OpenAI to generate code. See the [official
+    Agent that uses Azure OpenAI to generate code. See the [official
     documentation](https://learn.microsoft.com/en-us/azure/cognitive-services/openai/) to learn how to deploy an openAI
     model on Azure
 
