@@ -26,8 +26,8 @@ class FastSpeech2ConformerModelOutput(ModelOutput):
     Output type of [`FastSpeech2ConformerModel`].
     """
 
-    decoder_outputs: torch.FloatTensor = None
-    postnet_outputs: torch.FloatTensor = None
+    outputs_before_postnet: torch.FloatTensor = None
+    outputs_after_postnet: torch.FloatTensor = None
     duration_outputs: torch.FloatTensor = None
     pitch_outputs: torch.FloatTensor = None
     energy_outputs: torch.FloatTensor = None
@@ -271,68 +271,79 @@ class FastSpeech2ConformerLengthRegulator(nn.Module):
         return torch.repeat_interleave(encoded_embedding, target_duration, dim=0)
 
 
-class FastSpeech2ConformerPostnet(nn.Module):
-    """
-    Postnet module for Spectrogram prediction network.
-
-    This is a module of Postnet in Spectrogram prediction network,
-    which described in `Natural TTS Synthesis by
-    Conditioning WaveNet on Mel Spectrogram Predictions`_.
-    The Postnet refines the predicted
-    Mel-filterbank of the decoder,
-    which helps to compensate the detail sturcture of spectrogram.
-
-    .. _`Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions`:
-       https://arxiv.org/abs/1712.05884
-    """
-
-    def __init__(self, output_dim, n_layers=5, n_chans=512, n_filts=5, dropout_rate=0.5, use_batch_norm=True):
-        """
-        Initialize postnet module.
-
-        Args:
-            output_dim (int): Dimension of the outputs.
-            n_layers (int, optional): The number of layers.
-            n_filts (int, optional): The number of filter size.
-            n_units (int, optional): The number of filter channels.
-            use_batch_norm (bool, optional): Whether to use batch normalization..
-            dropout_rate (float, optional): Dropout rate.
-        """
+# Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5BatchNormConvLayer
+class FastSpeech2ConformerBatchNormConvLayer(nn.Module):
+    def __init__(self, config, layer_id=0):
         super().__init__()
-        self.postnet = torch.nn.ModuleList()
-        for layer_idx in range(n_layers):
-            is_final_layer = layer_idx == n_layers - 1
-            input_channels = output_dim if layer_idx == 0 else n_chans
-            output_channels = output_dim if is_final_layer else n_chans
 
-            layer = nn.ModuleList()
-            layer.append(
-                nn.Conv1d(input_channels, output_channels, n_filts, stride=1, padding=(n_filts - 1) // 2, bias=False)
-            )
-            if use_batch_norm:
-                num_groups = 20 if is_final_layer else 32
-                num_channels = output_dim if is_final_layer else n_chans
-                layer.append(nn.GroupNorm(num_groups=num_groups, num_channels=num_channels))
-            if not is_final_layer:
-                layer.append(nn.Tanh())
-            layer.append(nn.Dropout(dropout_rate))
+        if layer_id == 0:
+            in_conv_dim = config.num_mel_bins
+        else:
+            in_conv_dim = config.speech_decoder_postnet_units
 
-            self.postnet.append(layer)
+        if layer_id == config.speech_decoder_postnet_layers - 1:
+            out_conv_dim = config.num_mel_bins
+        else:
+            out_conv_dim = config.speech_decoder_postnet_units
 
-    def forward(self, spectrogram_predictions):
-        """
-        Calculate forward propagation.
+        self.conv = nn.Conv1d(
+            in_conv_dim,
+            out_conv_dim,
+            kernel_size=config.speech_decoder_postnet_kernel,
+            stride=1,
+            padding=(config.speech_decoder_postnet_kernel - 1) // 2,
+            bias=False,
+        )
+        self.batch_norm = nn.BatchNorm1d(out_conv_dim)
 
-        Args:
-            spectrogram (Tensor): Batch of the sequences of padded input tensors (batch_size, input_dim, max_text_length).
+        if layer_id < config.speech_decoder_postnet_layers - 1:
+            self.activation = nn.Tanh()
+        else:
+            self.activation = None
 
-        Returns:
-            Tensor: Batch of padded output tensor. (batch_size, output_dim, max_text_length).
-        """
-        for layer in self.postnet:
-            for module in layer:
-                spectrogram_predictions = module(spectrogram_predictions)
-        return spectrogram_predictions
+        self.dropout = nn.Dropout(config.speech_decoder_postnet_dropout)
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.batch_norm(hidden_states)
+        if self.activation is not None:
+            hidden_states = self.activation(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states
+
+
+# Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5SpeechDecoderPostnet with SpeechT5->FastSpeech2Conformer
+class FastSpeech2ConformerSpeechDecoderPostnet(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+        self.feat_out = nn.Linear(config.hidden_size, config.num_mel_bins * config.reduction_factor)
+
+        should_postnet_compute_logits = getattr(config, "should_postnet_compute_logits", True)
+        if should_postnet_compute_logits:
+            self.prob_out = nn.Linear(config.hidden_size, config.reduction_factor)
+        else:
+            self.prob_out = None
+
+        self.layers = nn.ModuleList(
+            [FastSpeech2ConformerBatchNormConvLayer(config, i) for i in range(config.speech_decoder_postnet_layers)]
+        )
+
+    def forward(self, hidden_states: torch.Tensor):
+        outputs_before_postnet = self.feat_out(hidden_states).view(hidden_states.size(0), -1, self.config.num_mel_bins)
+        outputs_after_postnet = self.postnet(outputs_before_postnet)
+        if self.prob_out is not None:
+            logits = self.prob_out(hidden_states).view(hidden_states.size(0), -1)
+        else:
+            logits = None
+        return outputs_before_postnet, outputs_after_postnet, logits
+
+    def postnet(self, hidden_states: torch.Tensor):
+        layer_output = hidden_states.transpose(1, 2)
+        for layer in self.layers:
+            layer_output = layer(layer_output)
+        return hidden_states + layer_output.transpose(1, 2)
 
 
 class FastSpeech2ConformerLayerNorm(torch.nn.LayerNorm):
@@ -534,8 +545,8 @@ class FastSpeech2ConformerLoss(torch.nn.Module):
 
     def forward(
         self,
-        postnet_outputs,
-        decoder_outputs,
+        outputs_after_postnet,
+        outputs_before_postnet,
         duration_outputs,
         pitch_outputs,
         energy_outputs,
@@ -548,12 +559,12 @@ class FastSpeech2ConformerLoss(torch.nn.Module):
     ):
         """
         Args:
-            postnet_outputs (Tensor): Batch of outputs after postnet (batch_size, max_spectrogram_length, output_dim).
-            decoder_outputs (Tensor): Batch of outputs before postnet (batch_size, max_spectrogram_length, output_dim).
+            outputs_after_postnet (Tensor): Batch of outputs after postnet (batch_size, max_spectrogram_length, num_mel_bins).
+            outputs_before_postnet (Tensor): Batch of outputs before postnet (batch_size, max_spectrogram_length, num_mel_bins).
             duration_outputs (LongTensor): Batch of outputs of duration predictor (batch_size, max_text_length).
             pitch_outputs (Tensor): Batch of outputs of pitch predictor (batch_size, max_text_length, 1).
             energy_outputs (Tensor): Batch of outputs of energy predictor (batch_size, max_text_length, 1).
-            target_spectrograms (Tensor): Batch of target features (batch_size, max_spectrogram_length, output_dim).
+            target_spectrograms (Tensor): Batch of target features (batch_size, max_spectrogram_length, num_mel_bins).
             target_durations (LongTensor): Batch of durations (batch_size, max_text_length).
             target_pitch (Tensor): Batch of target token-averaged pitch (batch_size, max_text_length, 1).
             target_energy (Tensor): Batch of target token-averaged energy (batch_size, max_text_length, 1).
@@ -570,9 +581,9 @@ class FastSpeech2ConformerLoss(torch.nn.Module):
         # apply mask to remove padded part
         if self.use_masking:
             out_masks = make_non_pad_mask(target_lengths).unsqueeze(-1).to(target_spectrograms.device)
-            decoder_outputs = decoder_outputs.masked_select(out_masks)
-            if postnet_outputs is not None:
-                postnet_outputs = postnet_outputs.masked_select(out_masks)
+            outputs_before_postnet = outputs_before_postnet.masked_select(out_masks)
+            if outputs_after_postnet is not None:
+                outputs_after_postnet = outputs_after_postnet.masked_select(out_masks)
             target_spectrograms = target_spectrograms.masked_select(out_masks)
             duration_masks = make_non_pad_mask(input_lengths).to(target_spectrograms.device)
             duration_outputs = duration_outputs.masked_select(duration_masks)
@@ -584,9 +595,9 @@ class FastSpeech2ConformerLoss(torch.nn.Module):
             target_energy = target_energy.masked_select(pitch_masks)
 
         # calculate loss
-        l1_loss = self.l1_criterion(decoder_outputs, target_spectrograms)
-        if postnet_outputs is not None:
-            l1_loss = l1_loss + self.l1_criterion(postnet_outputs, target_spectrograms)
+        l1_loss = self.l1_criterion(outputs_before_postnet, target_spectrograms)
+        if outputs_after_postnet is not None:
+            l1_loss = l1_loss + self.l1_criterion(outputs_after_postnet, target_spectrograms)
         duration_loss = self.duration_criterion(duration_outputs, target_durations)
         pitch_loss = self.mse_criterion(pitch_outputs, target_pitch)
         energy_loss = self.mse_criterion(energy_outputs, target_energy)
@@ -657,11 +668,11 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
 
 def save_test_outputs(outputs):
     print("...creating new test outputs")
-    decoder_outputs, postnet_outputs, duration_outputs, pitch_outputs, energy_outputs = outputs
-    test = decoder_outputs.detach().clone()
+    outputs_before_postnet, outputs_after_postnet, duration_outputs, pitch_outputs, energy_outputs = outputs
+    test = outputs_before_postnet.detach().clone()
     torch.save(test, "hf-decoder_outputs.pt")
 
-    test = postnet_outputs.detach().clone()
+    test = outputs_after_postnet.detach().clone()
     torch.save(test, "hf-postnet_outputs.pt")
 
     test = duration_outputs.detach().clone()
@@ -698,8 +709,8 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
 
         # store hyperparameters
         self.input_dim = config.input_dim
-        self.output_dim = config.output_dim
-        self.acoustic_dim = config.acoustic_dim
+        self.num_mel_bins = config.num_mel_bins
+        self.hidden_size = config.hidden_size
         self.eos_token_id = self.input_dim - 1
         self.reduction_factor = config.reduction_factor
         self.stop_gradient_from_pitch_predictor = config.stop_gradient_from_pitch_predictor
@@ -708,10 +719,10 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         self.multispeaker_model = config.utt_embed_dim is not None
 
         encoder_input_layer = torch.nn.Embedding(
-            num_embeddings=self.input_dim, embedding_dim=self.acoustic_dim, padding_idx=0
+            num_embeddings=self.input_dim, embedding_dim=self.hidden_size, padding_idx=0
         )
         self.encoder = FastSpeech2ConformerEncoder(
-            attention_dim=self.acoustic_dim,
+            attention_dim=self.hidden_size,
             attention_heads=config.num_attention_heads,
             linear_units=config.encoder_linear_units,
             num_blocks=config.encoder_layers,
@@ -730,7 +741,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         )
 
         self.duration_predictor = FastSpeech2ConformerDurationPredictor(
-            input_dim=self.acoustic_dim,
+            input_dim=self.hidden_size,
             n_layers=config.duration_predictor_layers,
             n_chans=config.duration_predictor_channels,
             kernel_size=config.duration_predictor_kernel_size,
@@ -738,7 +749,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         )
 
         self.pitch_predictor = FastSpeech2ConformerVariancePredictor(
-            input_dim=self.acoustic_dim,
+            input_dim=self.hidden_size,
             n_layers=config.pitch_predictor_layers,
             n_chans=config.pitch_predictor_channels,
             kernel_size=config.pitch_predictor_kernel_size,
@@ -746,14 +757,14 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         )
         # continuous pitch + FastPitch style avg
         self.pitch_embed = FastSpeech2ConformerVarianceEmbedding(
-            out_channels=self.acoustic_dim,
+            out_channels=self.hidden_size,
             kernel_size=config.pitch_embed_kernel_size,
             padding=(config.pitch_embed_kernel_size - 1) // 2,
             dropout_rate=config.pitch_embed_dropout,
         )
 
         self.energy_predictor = FastSpeech2ConformerVariancePredictor(
-            input_dim=self.acoustic_dim,
+            input_dim=self.hidden_size,
             n_layers=config.energy_predictor_layers,
             n_chans=config.energy_predictor_channels,
             kernel_size=config.energy_predictor_kernel_size,
@@ -761,7 +772,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         )
         # continuous energy + FastPitch style avg
         self.energy_embed = FastSpeech2ConformerVarianceEmbedding(
-            out_channels=self.acoustic_dim,
+            out_channels=self.hidden_size,
             kernel_size=config.energy_embed_kernel_size,
             padding=(config.energy_embed_kernel_size - 1) // 2,
             dropout_rate=config.energy_embed_dropout,
@@ -771,7 +782,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
 
         # The decoder is an encoder
         self.decoder = FastSpeech2ConformerEncoder(
-            attention_dim=self.acoustic_dim,
+            attention_dim=self.hidden_size,
             attention_heads=config.num_attention_heads,
             linear_units=config.decoder_linear_units,
             num_blocks=config.decoder_layers,
@@ -788,16 +799,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             utt_embed=config.utt_embed_dim,
         )
 
-        self.feat_out = torch.nn.Linear(self.acoustic_dim, self.output_dim * config.reduction_factor)
-
-        self.postnet = FastSpeech2ConformerPostnet(
-            output_dim=self.output_dim,
-            n_layers=config.postnet_layers,
-            n_chans=config.postnet_channels,
-            n_filts=config.postnet_filters,
-            use_batch_norm=config.use_batch_norm,
-            dropout_rate=config.postnet_dropout_rate,
-        )
+        self.speech_decoder_postnet = FastSpeech2ConformerSpeechDecoderPostnet(config)
 
         self.criterion = FastSpeech2ConformerLoss(
             use_masking=config.use_masking, use_weighted_masking=config.use_weighted_masking
@@ -826,7 +828,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             return_mels: Whether to return the predicted spectrogram
             input_ids (LongTensor): Input sequence of text vectors, either batched and padded (batch_size, max_text_length) or not (text_length,).
             input_lengths (LongTensor): Batch of lengths of each input (batch_size,).
-            target_spectrograms (Tensor): Batch of padded target features (batch_size, max_spectrogram_length, output_dim).
+            target_spectrograms (Tensor): Batch of padded target features (batch_size, max_spectrogram_length, num_mel_bins).
             speech_lengths (LongTensor): Batch of the lengths of each target (batch_size,).
             target_durations (LongTensor): Batch of padded durations (batch_size, max_text_length + 1).
             target_pitch (Tensor): Batch of padded token-averaged pitch (batch_size, max_text_length + 1, 1).
@@ -870,7 +872,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             lang_ids=lang_id,
             alpha=alpha,
         )
-        decoder_outputs, postnet_outputs, duration_outputs, pitch_outputs, energy_outputs = outputs
+        outputs_before_postnet, outputs_after_postnet, duration_outputs, pitch_outputs, energy_outputs = outputs
 
         # Remove when pushing up, debugging only
         save_test_outputs(outputs)
@@ -885,8 +887,8 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         if not is_inference:
             # calculate loss
             l1_loss, duration_loss, pitch_loss, energy_loss = self.criterion(
-                postnet_outputs=postnet_outputs,
-                decoder_outputs=decoder_outputs,
+                outputs_after_postnet=outputs_after_postnet,
+                outputs_before_postnet=outputs_before_postnet,
                 duration_outputs=duration_outputs,
                 pitch_outputs=pitch_outputs,
                 energy_outputs=energy_outputs,
@@ -905,8 +907,8 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             return ((loss,) + outputs) if loss is not None else outputs
 
         return FastSpeech2ConformerModelOutput(
-            decoder_outputs=decoder_outputs,
-            postnet_outputs=postnet_outputs,
+            outputs_before_postnet=outputs_before_postnet,
+            outputs_after_postnet=outputs_after_postnet,
             duration_outputs=duration_outputs,
             pitch_outputs=pitch_outputs,
             energy_outputs=energy_outputs,
@@ -935,7 +937,6 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         # forward encoder
         text_masks = self._source_mask(input_lengths)
 
-        # (batch_size, max_text_length, acoustic_dim)
         encoded_texts, _ = self.encoder(
             input_ids, text_masks, utterance_embedding=utterance_embedding, lang_ids=lang_ids
         )
@@ -953,24 +954,18 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         else:
             energy_predictions = self.energy_predictor(encoded_texts, duration_masks.unsqueeze(-1))
 
+        duration_predictions = self.duration_predictor(encoded_texts, duration_masks, is_inference=is_inference)
         if is_inference:
-            # (batch_size, max_text_length)
-            duration_predictions = self.duration_predictor(encoded_texts, duration_masks, is_inference=True)
-
             # use prediction in inference
             embedded_pitch_curve = self.pitch_embed(pitch_predictions)
             embedded_energy_curve = self.energy_embed(energy_predictions)
             encoded_texts = encoded_texts + embedded_energy_curve + embedded_pitch_curve
-            # (batch_size, max_spectrogram_length, acoustic_dim)
             encoded_texts = self.length_regulator(encoded_texts, duration_predictions, alpha)
         else:
-            duration_predictions = self.duration_predictor(encoded_texts, duration_masks, is_inference=False)
-
             # use groundtruth in training
             embedded_pitch_curve = self.pitch_embed(target_pitch)
             embedded_energy_curve = self.energy_embed(target_energy)
             encoded_texts = encoded_texts + embedded_energy_curve + embedded_pitch_curve
-            # (batch_size, max_spectrogram_length, acoustic_dim)
             encoded_texts = self.length_regulator(encoded_texts, target_durations)
 
         # forward decoder
@@ -984,16 +979,18 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             h_masks = self._source_mask(target_lengths_in)
         else:
             h_masks = None
-        # (batch_size, max_spectrogram_length, acoustic_dim)
-        decoder_hidden_states, _ = self.decoder(encoded_texts, h_masks, utterance_embedding)
 
-        # (batch_size, max_spectrogram_length, output_dim)
-        decoder_outputs = self.feat_out(decoder_hidden_states).view(decoder_hidden_states.size(0), -1, self.output_dim)
+        decoder_outputs, _ = self.decoder(encoded_texts, h_masks, utterance_embedding)
 
-        # postnet -> (batch_size, max_spectrogram_length//r * r, output_dim)
-        postnet_outputs = decoder_outputs + self.postnet(decoder_outputs.transpose(1, 2)).transpose(1, 2)
+        outputs_before_postnet, outputs_after_postnet, _ = self.speech_decoder_postnet(decoder_outputs)
 
-        return decoder_outputs, postnet_outputs, duration_predictions, pitch_predictions, energy_predictions
+        return (
+            outputs_before_postnet,
+            outputs_after_postnet,
+            duration_predictions,
+            pitch_predictions,
+            energy_predictions,
+        )
 
     def _source_mask(self, input_lengths):
         """
@@ -1008,6 +1005,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         """
         x_masks = make_non_pad_mask(input_lengths, device=input_lengths.device)
         return x_masks.unsqueeze(-2)
+
 
 class FastSpeech2ConformerMultiHeadedAttention(nn.Module):
     """

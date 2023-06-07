@@ -31,7 +31,7 @@ logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.FastSpeech2Conformer")
 
 CONFIG_MAPPING = {
-    "adim": "acoustic_dim",
+    "adim": "hidden_size",
     "aheads": "num_attention_heads",
     "conformer_dec_kernel_size": "decoder_kernel_size",
     "conformer_enc_kernel_size": "encoder_kernel_size",
@@ -57,9 +57,9 @@ CONFIG_MAPPING = {
     "pitch_predictor_kernel_size": "pitch_predictor_kernel_size",
     "pitch_predictor_layers": "pitch_predictor_layers",
     "positionwise_conv_kernel_size": "positionwise_conv_kernel_size",
-    "postnet_chans": "postnet_channels",
-    "postnet_filts": "postnet_filters",
-    "postnet_layers": "postnet_layers",
+    "postnet_chans": "speech_decoder_postnet_units",
+    "postnet_filts": "speech_decoder_postnet_kernel",
+    "postnet_layers": "speech_decoder_postnet_layers",
     "reduction_factor": "reduction_factor",
     "stop_gradient_from_energy_predictor": "stop_gradient_from_energy_predictor",
     "stop_gradient_from_pitch_predictor": "stop_gradient_from_pitch_predictor",
@@ -74,7 +74,7 @@ CONFIG_MAPPING = {
     "use_masking": "use_masking",
     "use_weighted_masking": "use_weighted_masking",
     "idim": "input_dim",
-    "odim": "output_dim",
+    "odim": "num_mel_bins",
 }
 
 
@@ -98,12 +98,22 @@ def convert_espnet_state_dict_to_hf(state_dict):
     new_state_dict = {}
     for key in state_dict:
         if "tts.generator.text2mel." in key:
-            # Keys to ignore
-            if "postnet" in key and ("running" in key or "num_batches_tracked" in key):
-                continue
-
-            # Keys to remap
             new_key = key.replace("tts.generator.text2mel.", "")
+            if "postnet" in key:
+                # Replace the base path
+                new_key = new_key.replace("postnet.postnet", "speech_decoder_postnet.layers")
+                # Replace subpaths
+                new_key = new_key.replace(".0.weight", ".conv.weight")
+                new_key = new_key.replace(".1.weight", ".batch_norm.weight")
+                new_key = new_key.replace(".1.bias", ".batch_norm.bias")
+                new_key = new_key.replace(".1.running_mean", ".batch_norm.running_mean")
+                new_key = new_key.replace(".1.running_var", ".batch_norm.running_var")
+                new_key = new_key.replace(".1.num_batches_tracked", ".batch_norm.num_batches_tracked")
+            if "feat_out" in key:
+                if "weight" in key:
+                    new_key = "speech_decoder_postnet.feat_out.weight"
+                if "bias" in key:
+                    new_key = "speech_decoder_postnet.feat_out.bias"
             if "encoder.embed.0.weight" in key:
                 new_key = new_key.replace("0.", "")
             if "w_1" in key:

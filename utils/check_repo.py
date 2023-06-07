@@ -159,6 +159,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Blip2QFormerModel",
     "Blip2VisionModel",
     "ErnieMForInformationExtraction",
+    "FastSpeech2ConformerHifiGan",
     "GitVisionModel",
     "GraphormerModel",
     "GraphormerForGraphClassification",

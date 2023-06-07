@@ -53,17 +53,17 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        acoustic_dim=384,  # from adim
-        input_dim=62,  # from idim
-        output_dim=80,  # from odim
+        hidden_size=384,
+        input_dim=62,
+        num_mel_bins=80,
         num_attention_heads=4,
         encoder_layers=6,
         encoder_linear_units=1536,
         decoder_layers=6,
         decoder_linear_units=1536,
-        postnet_layers=5,
-        postnet_channels=256,
-        postnet_filters=5,
+        speech_decoder_postnet_layers=5,
+        speech_decoder_postnet_units=256,
+        speech_decoder_postnet_kernel=5,
         positionwise_conv_kernel_size=1,
         use_batch_norm=True,
         encoder_normalize_before=True,
@@ -104,7 +104,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         decoder_positional_dropout_rate=0.2,
         decoder_attention_dropout_rate=0.2,
         duration_predictor_dropout_rate=0.2,
-        postnet_dropout_rate=0.5,
+        speech_decoder_postnet_dropout=0.5,
         use_masking=True,
         use_weighted_masking=False,
         # additional features
@@ -120,15 +120,15 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         for var_name, var_value in local_vars.items():
             if "kernel_size" in var_name and var_value % 2 == 0:
                 raise ValueError(f"`{var_name}` must be odd, but got {var_value} instead.")
-        if acoustic_dim % num_attention_heads != 0:
-            raise ValueError("The acoustic_dim must be evenly divisible by the number of attention heads.")
+        if hidden_size % num_attention_heads != 0:
+            raise ValueError("The hidden_size must be evenly divisible by num_attention_heads.")
         if use_masking and use_weighted_masking:
             raise ValueError("Either use_masking or use_weighted_masking can be True, but not both.")
 
         super().__init__(bos_token_id=bos_token_id, pad_token_id=pad_token_id, eos_token_id=eos_token_id, **kwargs)
-        self.acoustic_dim = acoustic_dim
+        self.hidden_size = hidden_size
         self.input_dim = input_dim
-        self.output_dim = output_dim
+        self.num_mel_bins = num_mel_bins
         self.num_attention_heads = num_attention_heads
         self.decoder_kernel_size = decoder_kernel_size
         self.encoder_kernel_size = encoder_kernel_size
@@ -155,10 +155,11 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         self.pitch_predictor_kernel_size = pitch_predictor_kernel_size
         self.pitch_predictor_layers = pitch_predictor_layers
         self.positionwise_conv_kernel_size = positionwise_conv_kernel_size
-        self.postnet_channels = postnet_channels
-        self.postnet_dropout_rate = postnet_dropout_rate
-        self.postnet_filters = postnet_filters
-        self.postnet_layers = postnet_layers
+        self.speech_decoder_postnet_units = speech_decoder_postnet_units
+        self.speech_decoder_postnet_dropout = speech_decoder_postnet_dropout
+        self.speech_decoder_postnet_kernel = speech_decoder_postnet_kernel
+        self.speech_decoder_postnet_layers = speech_decoder_postnet_layers
+        self.should_postnet_compute_logits = False
         self.reduction_factor = reduction_factor
         self.stop_gradient_from_energy_predictor = stop_gradient_from_energy_predictor
         self.stop_gradient_from_pitch_predictor = stop_gradient_from_pitch_predictor

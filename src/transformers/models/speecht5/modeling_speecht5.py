@@ -750,7 +750,12 @@ class SpeechT5SpeechDecoderPostnet(nn.Module):
         self.config = config
 
         self.feat_out = nn.Linear(config.hidden_size, config.num_mel_bins * config.reduction_factor)
-        self.prob_out = nn.Linear(config.hidden_size, config.reduction_factor)
+
+        should_postnet_compute_logits = getattr(config, "should_postnet_compute_logits", True)
+        if should_postnet_compute_logits:
+            self.prob_out = nn.Linear(config.hidden_size, config.reduction_factor)
+        else:
+            self.prob_out = None
 
         self.layers = nn.ModuleList(
             [SpeechT5BatchNormConvLayer(config, i) for i in range(config.speech_decoder_postnet_layers)]
@@ -759,7 +764,10 @@ class SpeechT5SpeechDecoderPostnet(nn.Module):
     def forward(self, hidden_states: torch.Tensor):
         outputs_before_postnet = self.feat_out(hidden_states).view(hidden_states.size(0), -1, self.config.num_mel_bins)
         outputs_after_postnet = self.postnet(outputs_before_postnet)
-        logits = self.prob_out(hidden_states).view(hidden_states.size(0), -1)
+        if self.prob_out is not None:
+            logits = self.prob_out(hidden_states).view(hidden_states.size(0), -1)
+        else:
+            logits = None
         return outputs_before_postnet, outputs_after_postnet, logits
 
     def postnet(self, hidden_states: torch.Tensor):
