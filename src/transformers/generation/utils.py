@@ -2037,7 +2037,7 @@ class GenerationMixin:
                     )
 
             # if the used memory exceeds a threshold, do not batch
-            if torch.cuda.get_mem_info()[0] < torch.cuda_get_mem_info()[1]//2:
+            if torch.cuda.get_mem_info()[0] < torch.cuda.get_mem_info()[1]//2:
                 all_outputs = {key:[] for key in outputs} # defined in first loop iteration
                 for i in range(len(top_k_ids)):
                     # compute the candidate tokens by the language model and collect their hidden_states
