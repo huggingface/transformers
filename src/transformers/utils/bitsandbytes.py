@@ -245,7 +245,7 @@ def get_keys_to_not_convert(model):
     tied_params = find_tied_parameters(tied_model)
     # For compatibility with Accelerate < 0.18
     if isinstance(tied_params, dict):
-        tied_keys = sum(list(tied_params.values()),[]) + list(tied_params.keys())
+        tied_keys = sum(list(tied_params.values()), []) + list(tied_params.keys())
     else:
         tied_keys = sum(tied_params, [])
     has_tied_params = len(tied_keys) > 0
