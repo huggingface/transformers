@@ -18,7 +18,6 @@ import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
-import torch
 from typing_extensions import TypedDict
 
 from ...tokenization_utils import PaddingStrategy, PreTrainedTokenizer, TensorType
@@ -534,7 +533,7 @@ class CpmBeeTokenizer(PreTrainedTokenizer):
                     else:
                         rev_ext_table[token_id] = ext_table[fake_id]
 
-            segment_rel_pack.append(torch.from_numpy(np.array(outputs.pop("segment_rel"))))
+            segment_rel_pack.append(np.array(outputs.pop("segment_rel")))
             other_info.append(
                 {
                     "predict_segments": predict_segments,
@@ -564,13 +563,13 @@ class CpmBeeTokenizer(PreTrainedTokenizer):
 
         max_num_rels = 0
         for rel in segment_rel_pack:
-            max_num_rels = max(max_num_rels, rel.size(0))
-        padded_rels = torch.zeros(len(segment_rel_pack), max_num_rels, dtype=torch.int32, device=device)
+            max_num_rels = max(max_num_rels, rel.shape[0])
+        padded_rels = np.zeros((len(segment_rel_pack), max_num_rels), dtype=np.int32)
         for i, rel in enumerate(segment_rel_pack):
-            padded_rels[i, : rel.size(0)] = rel
+            padded_rels[i, : rel.shape[0]] = rel
         batch_outputs["segment_rel"] = padded_rels
-        batch_outputs["batch_ext_table_ids"] = torch.tensor(batch_ext_table_ids, dtype=torch.int32)
-        batch_outputs["batch_ext_table_sub"] = torch.tensor(batch_ext_table_sub, dtype=torch.int32)
+        batch_outputs["batch_ext_table_ids"] = np.array(batch_ext_table_ids, dtype=np.int32)
+        batch_outputs["batch_ext_table_sub"] = np.array(batch_ext_table_sub, dtype=np.int32)
         batch_outputs = BatchEncoding(batch_outputs, tensor_type=return_tensors)
         if return_tensors == "pt":
             batch_outputs = batch_outputs.to(device=device)
