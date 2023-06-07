@@ -346,10 +346,6 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss.backward()
 
     def test_problem_types(self):
-        parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
-        if parsed_torch_version_base.base_version.startswith("1.9"):
-            self.skipTest(reason="This test fails with PyTorch 1.9.x: some CUDA issue")
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         problem_types = [
