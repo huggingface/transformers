@@ -12,6 +12,8 @@ if is_vision_available():
     import PIL.Image
     from PIL import Image
     from PIL.Image import Image as ImageType
+else:
+    ImageType = object
 
 if is_torch_available():
     import torch
@@ -62,7 +64,7 @@ class AgentText(AgentType, str):
         return self.value
 
 
-class AgentImage(AgentType, "PIL.Image.Image"):
+class AgentImage(AgentType, ImageType):
     """
     Image type returned by the agent. Behaves as a PIL.Image.
     """
