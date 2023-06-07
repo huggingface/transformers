@@ -318,13 +318,14 @@ class GPT2Attention(nn.Module):
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
         # past_index is updated in _update_model_kwargs_for_generation
-        # print("past_index", past_index)
+        #print("past_index", past_index)
         if past_index >= 0:
             # print("layer_past here", type(layer_past))
-            # print("first", layer_past[0].shape)
+            #print("layer_past[0]", layer_past[0].shape)
+            #print("key", key.shape)
 
-            layer_past[0][:, :, past_index + 1] = key
-            layer_past[1][:, :, past_index + 1] = value
+            layer_past[0][:, :, past_index + 1:past_index + 2] = key  # slice to keep dimension info
+            layer_past[1][:, :, past_index + 1:past_index + 2] = value
 
             key = layer_past[0][:, :, :past_index + 2]
             value = layer_past[1][:, :, :past_index + 2]
@@ -812,11 +813,12 @@ class GPT2Model(GPT2PreTrainedModel):
         if position_ids is not None:
             position_ids = position_ids.view(-1, input_shape[-1])
 
-        if past_key_values is None:
+        if past_index < 0:
             past_length = 0
-            past_key_values = tuple([None] * len(self.h))
+            # past_key_values = tuple([None] * len(self.h))
         else:
-            past_length = past_key_values[0][0].size(-2)
+            past_length = past_index + 1
+        
         if position_ids is None:
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
@@ -1030,11 +1032,9 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         token_type_ids = kwargs.get("token_type_ids", None)
 
         past_index = kwargs.get("past_index", None)
-        if past_index is None:
-            kwargs["past_index"] = torch.tensor(-1, dtype=torch.int32)
 
         # only last token for inputs_ids if past is defined in kwargs
-        if past_index is not None:
+        if past_index >= 0:
             input_ids = input_ids[:, -1].unsqueeze(-1)
             if token_type_ids is not None:
                 token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
@@ -1046,13 +1046,13 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_index is not None:
+            if past_index >= 0:
                 position_ids = position_ids[:, -1].unsqueeze(-1)
         else:
             position_ids = None
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_index is None:
+        if inputs_embeds is not None and past_index == -1:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
@@ -1246,6 +1246,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         position_ids = kwargs.get("position_ids", None)
 
         if attention_mask is not None and position_ids is None:
+            print("GENERATING POSITION IDS")
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)

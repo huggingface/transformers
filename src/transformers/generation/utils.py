@@ -781,11 +781,10 @@ class GenerationMixin:
                     dim=-1,
                 )
 
-        if "past_index" in model_kwargs:
-            if model_kwargs["past_index"] is None:
-                raise ValueError("should not happen")
+        if model_kwargs["past_index"] is None:
+            raise ValueError("should not happen")
 
-            model_kwargs["past_index"] = model_kwargs["past_index"] + outputs.logits.shape[1]
+        model_kwargs["past_index"] = model_kwargs["past_index"] + outputs.logits.shape[1]
 
         return model_kwargs
 
@@ -2327,6 +2326,8 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
 
         this_peer_finished = False  # used by synced_gpus only
+
+        model_kwargs["past_index"] = torch.tensor(-1, dtype=torch.int32)
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -2341,6 +2342,7 @@ class GenerationMixin:
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
+            """
             print("-----")
             for key, inp in model_inputs.items():
                 if isinstance(inp, torch.Tensor):
@@ -2354,6 +2356,7 @@ class GenerationMixin:
                             print("    ", key, inp_.shape)
                 else:
                     print(key, type(inp))
+            """
             # print(model_inputs["attention_mask"])
 
             # forward pass to get next token
