@@ -1178,8 +1178,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         if isinstance(module, (Wav2Vec2Encoder, Wav2Vec2EncoderStableLayerNorm, Wav2Vec2FeatureEncoder)):
             module.gradient_checkpointing = value
 
-    @property
-    def _adapters(self):
+    def _get_adapters(self):
         if self.config.adapter_attn_dim is None:
             raise ValueError(f"{self.__class__} has no adapter layers. Make sure to define `config.adapter_attn_dim`.")
 
@@ -1339,7 +1338,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                     f" directory containing a file named {filepath}."
                 )
 
-        adapter_weights = self._adapters
+        adapter_weights = self._get_adapters()
         unexpected_keys = set(state_dict.keys()) - set(adapter_weights.keys())
         missing_keys = set(adapter_weights.keys()) - set(state_dict.keys())
 
