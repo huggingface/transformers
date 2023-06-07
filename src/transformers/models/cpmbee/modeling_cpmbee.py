@@ -1466,6 +1466,7 @@ class CpmBeeForCausalLM(CpmBeePreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         beam_scorer: CpmBeeBeamSearchScorer,
+        repetition_penalty: Optional[float] = 1.0,
         logits_processor: Optional[LogitsProcessorList] = None,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
@@ -1600,7 +1601,7 @@ class CpmBeeForCausalLM(CpmBeePreTrainedModel):
                 batch_size,
                 num_beams,
                 model_inputs["input_ids"],
-                1.1,
+                repetition_penalty,
                 pred_start_index,
                 model_inputs["input_ids"].size(-1) - 1,
                 None,
@@ -1685,6 +1686,7 @@ class CpmBeeForCausalLM(CpmBeePreTrainedModel):
         self,
         inputs: Optional[torch.Tensor] = None,
         generation_config: Optional[GenerationConfig] = None,
+        repetition_penalty: Optional[float] = 1.0,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
@@ -1866,6 +1868,7 @@ class CpmBeeForCausalLM(CpmBeePreTrainedModel):
         return self.beam_search(
             input_ids,
             beam_scorer,
+            repetition_penalty=repetition_penalty,
             logits_processor=logits_processor,
             pad_token_id=generation_config.pad_token_id,
             eos_token_id=generation_config.eos_token_id,
@@ -1881,6 +1884,7 @@ class CpmBeeForCausalLM(CpmBeePreTrainedModel):
         data_list: Union[Dict, List[Dict]],
         tokenizer: CpmBeeTokenizer,
         generation_config=None,
+        **kwargs,
     ):
         """
         Override the generate for CPMBee. It will accept dict or list(dict) as input and returns dict or list(dict)
@@ -1903,8 +1907,9 @@ class CpmBeeForCausalLM(CpmBeePreTrainedModel):
         if isinstance(data_list, dict):
             data_list = [data_list]
         input_encoded = tokenizer(data_list, return_tensors="pt", padding=True, device=self.device)
+        input_encoded.update({"generation_config": generation_config}.update(kwargs))
 
-        decode_res = self._generate(generation_config=generation_config, **input_encoded)
+        decode_res = self._generate(**input_encoded)
 
         for sent_id, result in enumerate(decode_res):
             ans_result_map: Dict[int, List[int]] = {}
