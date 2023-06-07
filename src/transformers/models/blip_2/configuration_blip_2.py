@@ -380,5 +380,7 @@ class Blip2Config(PretrainedConfig):
         output["vision_config"] = self.vision_config.to_dict()
         output["qformer_config"] = self.qformer_config.to_dict()
         output["text_config"] = self.text_config.to_dict()
+        if 'quantization_config' in output.keys():
+            output["quantization_config"] = self.quantization_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
