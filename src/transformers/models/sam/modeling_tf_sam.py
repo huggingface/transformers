@@ -1147,21 +1147,6 @@ class TFSamPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
 
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        # We override the default dummy inputs here because SAM has some really explosive memory usage in the
-        # attention layers, so we want to pass the smallest possible batches
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(
-                1,
-                self.config.vision_config.num_channels,
-                self.config.vision_config.image_size,
-                self.config.vision_config.image_size,
-            ),
-            dtype=tf.float32,
-        )
-        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
-
 
 SAM_START_DOCSTRING = r"""
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
