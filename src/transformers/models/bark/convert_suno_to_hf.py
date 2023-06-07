@@ -19,7 +19,7 @@ from huggingface_hub import hf_hub_download
 from bark.generation import _load_model as _bark_load_model
 
 # TODO : how to import directly?
-from transformers.models.bark.configuration_bark import BarkConfig
+from transformers.models.bark.configuration_bark import BarkModuleConfig
 from transformers.models.bark.modeling_bark import BarkFineAcousticsModel, BarkSemanticModel, BarkModule
 
 
@@ -85,7 +85,7 @@ def _download(from_hf_path, file_name):
 
 
 def _load_model(ckpt_path, device, use_small=False, model_type="text"):
-    ConfigClass = BarkConfig
+    ConfigClass = BarkModuleConfig
     if model_type == "text":
         ModelClass = BarkSemanticModel
     elif model_type == "coarse":

@@ -10,12 +10,11 @@ import math
 
 from ...modeling_utils import PreTrainedModel
 from ...modeling_outputs import (
-    BaseModelOutputWithPast,
     CausalLMOutputWithPast,
     MaskedLMOutput
 )
 
-from .configuration_bark import BarkConfig
+from .configuration_bark import BarkModuleConfig, BarkConfig
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 
 
@@ -52,6 +51,7 @@ class BarkSelfAttention(nn.Module):
     # past_kv <- layer_past
     # block_size <- max_position_embeddings
     # n_layer -> num_layers
+    # c_fc -> in_proj 
     
     def __init__(self, config, is_causal=False):
         super().__init__()
@@ -195,8 +195,6 @@ class LayerNorm(nn.Module):
         return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-5)
     
 
-# TODO: move
-# c_fc -> in_proj
 class MLP(nn.Module):
 
     def __init__(self, config):
@@ -225,14 +223,17 @@ class BarkBlock(nn.Module):
             # this handmade layerNorm is used to stick with Bark choice of leaving optional bias in AutoRegressive models
             # (corresponding to the "Text" and the "Coarse" modules)
             self.ln_1 = LayerNorm(config.hidden_size, bias=config.bias)
-            self.ln_2 = LayerNorm(config.hidden_size, bias=config.bias)
         else:
             self.ln_1 = nn.LayerNorm(config.hidden_size)
-            self.ln_2 = nn.LayerNorm(config.hidden_size)
         
         
         self.attn = BarkSelfAttention(config, is_causal=is_causal)
 
+        if is_causal:
+            self.ln_2 = LayerNorm(config.hidden_size, bias=config.bias)
+        else:
+            self.ln_2 = nn.LayerNorm(config.hidden_size)
+            
         self.mlp = MLP(config)
         self.layer_idx = layer_idx
 
@@ -268,10 +269,24 @@ class BarkBlock(nn.Module):
         return outputs  # hidden_states, ((present), attentions)
     
     
-# Done: Block and FineBlock might be fused
-# TODO: deal with PreTrained models. Note that there should be two main classes models
-# CausalGPT, NonCausalGPT -> BarkSemanticModel , BarkCoarseAcousticsModel, BarkFineAcousticsModel
-# CausalModel?
+
+# WIP
+class BarkPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = BarkConfig
+    base_model_prefix = "bark"
+    supports_gradient_checkpointing = False
+
+    def _init_weights(self, module):
+        if isinstance(module, BarkModule):
+            module.apply(module._init_weights)
+
+    def __init__(self, *inputs, **kwargs):
+        super().__init__(*inputs, **kwargs)
 
 class BarkModulePreTrainedModel(PreTrainedModel):
     """
@@ -279,7 +294,7 @@ class BarkModulePreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = BarkConfig # TODO: do this
+    config_class = BarkModuleConfig
     base_model_prefix = "transformer" # TODO: verify this is the right base_model
     # supports_gradient_checkpointing = True
     _no_split_modules = ["BarkBlock"] # TODO: what to do with this?
@@ -321,16 +336,12 @@ class BarkModule(BarkModulePreTrainedModel):
     
     def __init__(self, config):
         super().__init__(config)
-        # TODO: verify if the assert here are needed
-        assert config.input_vocab_size is not None
-        assert config.output_vocab_size is not None
-        assert config.block_size is not None
         self.config = config
 
         self._initialize_modules(config)
 
+        self.gradient_checkpointing = False
         
-        self.gradient_checkpointing = False # TODO: verify if that is good here
         # Initialize weights and apply final processing
         self.post_init()
       
@@ -548,12 +559,6 @@ class BarkModule(BarkModulePreTrainedModel):
             )
 
 
-
-
-
-
-######################################################################################
-
 class BarkSemanticModel(BarkModule):
     def __init__(self, config):
         # Same architecture than an autoregressive gpt-like model except for an hacky context merging at the very beginning of the generation
@@ -563,7 +568,6 @@ class BarkSemanticModel(BarkModule):
         # Hack From Bark original repository to sum text and history prompt embeddings
         # It sums the text embeddings and the history prompt embeddings once at the very beginning of the generation
         # (merge_context) 
-        # TODO: verify if that can be clearer
         
         if input_ids is not None and input_embeds is not None:
             raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
@@ -590,7 +594,6 @@ class BarkSemanticModel(BarkModule):
     
         return input_embeds
 
-#BarkSemanticModel , BarkCoarseAcousticsModel
     
 
 class BarkFineAcousticsModel(BarkModule):
@@ -713,7 +716,6 @@ class BarkFineAcousticsModel(BarkModule):
         device = input_ids.device if input_ids is not None else input_embeds.device
         
         
-        # TODO: verify if it needs to be asserted (maybe use GPTNeo's way)
         if position_ids is None:
             position_ids = torch.arange(0, seq_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0) # shape (1, seq_length)
