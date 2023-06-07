@@ -2048,6 +2048,8 @@ class GenerationMixin:
 
             # compute the candidate tokens by the language model and collects their hidden_states
             next_model_inputs = self.prepare_inputs_for_generation(top_k_ids.view(-1, 1), **model_kwargs)
+            print (next_model_inputs.shape)
+            del outputs
             outputs = self(
                 **next_model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions
             )
