@@ -14,7 +14,7 @@
 # limitations under the License.
 """ CpmBee model configuration"""
 
-from typing import Union
+from typing import List, Optional, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -59,21 +59,23 @@ class CpmBeeConfig(PretrainedConfig):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder.
         position_bias_num_buckets (`int`, *optional*, defaults to 512):
             The number of position_bias buckets.
+        position_bias_num_segment_buckets (`int`, *optional*, defaults to 32):
+            The number of segment buckets.
         position_bias_max_distance (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
-        prompt_types (`int`, *optional*, defaults to 32):
-            The type of prompt.
-        prompt_length (`int`, *optional*, defaults to 32):
-            The length of prompt.
-        position_bias_num_segment_buckets (`int`, *optional*, defaults to 32):
-            The type of segment.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether to use cache.
         init_std (`float`, *optional*, defaults to 1.0):
             Initialize parameters with std = init_std.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether to use cache.
+        distance_scale (`float` or `int`, *optional*, defaults to 16):
+            Scale the rotary embedding.
+        mask_modules (`list` or `tuple`, *optional*, defaults to None):
+            Decides which feedforward block or attention block is pruned.
+        half (`bool`, *optional*, defaults to `False`):
+            Decides the model parameters are half-precision or not.
 
     Example:
 
@@ -107,7 +109,7 @@ class CpmBeeConfig(PretrainedConfig):
         init_std: float = 1.0,
         use_cache: bool = True,
         distance_scale: Union[int, float] = 16,
-        mask_modules=None,
+        mask_modules: Optional[Union[List, Tuple]] = None,
         half: bool = False,
         **kwargs,
     ):
