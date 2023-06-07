@@ -242,6 +242,7 @@ class TFFunnelAttentionStructure:
                 # rel_pos = tf.broadcast_to(rel_pos, (rel_pos.shape[0], self.d_model))
                 rel_pos = tf.cast(rel_pos, dtype=zero_offset.dtype)
                 rel_pos = rel_pos + zero_offset
+                tf.debugging.assert_less(rel_pos, tf.shape(pos_embed)[0])
                 position_embeds_no_pooling = tf.gather(pos_embed, rel_pos, axis=0)
 
                 position_embeds_list.append([position_embeds_no_pooling, position_embeds_pooling])
@@ -974,6 +975,11 @@ class TFFunnelPreTrainedModel(TFPreTrainedModel):
     config_class = FunnelConfig
     base_model_prefix = "funnel"
 
+    @property
+    def dummy_inputs(self):
+        # Funnel misbehaves with very small inputs, so we override and make them a bit bigger
+        return {"input_ids": tf.ones((3, 3), dtype=tf.int32)}
+
 
 @dataclass
 class TFFunnelForPreTrainingOutput(ModelOutput):
@@ -1423,6 +1429,10 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
 
         self.funnel = TFFunnelBaseLayer(config, name="funnel")
         self.classifier = TFFunnelClassificationHead(config, 1, name="classifier")
+
+    @property
+    def dummy_inputs(self):
+        return {"input_ids": tf.ones((3, 3, 4), dtype=tf.int32)}
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))

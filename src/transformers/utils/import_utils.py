@@ -98,7 +98,6 @@ _natten_available = _is_package_available("natten")
 _onnx_available = _is_package_available("onnx")
 _openai_available = _is_package_available("openai")
 _optimum_available = _is_package_available("optimum")
-_optimumneuron_available = _optimum_available and _is_package_available("optimum.neuron")
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
@@ -520,7 +519,7 @@ def is_optimum_available():
 
 
 def is_optimum_neuron_available():
-    return _optimumneuron_available
+    return _optimum_available and _is_package_available("optimum.neuron")
 
 
 def is_safetensors_available():
