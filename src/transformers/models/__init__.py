@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from . import (
-    cpmbee,
     albert,
     align,
     altclip,
@@ -53,6 +52,7 @@ from . import (
     convnextv2,
     cpm,
     cpmant,
+    cpmbee,
     ctrl,
     cvt,
     data2vec,

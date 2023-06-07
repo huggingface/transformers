@@ -53,7 +53,7 @@ class CPMBeeTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         vocab_tokens = list(set(vocab_tokens))
         with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-    
+
     # override test_add_tokens_tokenizer because <...> is special token in CpmBeeTokenizer.
     def test_add_tokens_tokenizer(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -172,7 +172,7 @@ class CPMBeeTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(
                     len(toks_before_adding) > len(toks_after_adding),  # toks_before_adding should be longer
                 )
-    
+
     def test_pre_tokenization(self):
         tokenizer = CpmBeeTokenizer.from_pretrained("openbmb/cpm-bee-10b")
         texts = {"input": "你好，", "<ans>": ""}

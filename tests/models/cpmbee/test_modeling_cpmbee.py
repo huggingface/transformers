@@ -173,12 +173,11 @@ class CpmBeeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 @require_torch
 class CpmBeeForCausalLMlIntegrationTest(unittest.TestCase):
-
     @tooslow
     def test_simple_generation(self):
         texts = {"input": "今天天气不错，", "<ans>": ""}
         model = CpmBeeForCausalLM.from_pretrained("openbmb/cpm-bee-10b")
         tokenizer = CpmBeeTokenizer.from_pretrained("openbmb/cpm-bee-10b")
         output_texts = model.generate(texts, tokenizer)
-        expected_output = {'input': '今天天气不错，', '<ans>': '适合睡觉。'}
+        expected_output = {"input": "今天天气不错，", "<ans>": "适合睡觉。"}
         self.assertEqual(expected_output["<ans>"], output_texts["<ans>"])
