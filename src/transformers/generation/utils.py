@@ -1807,7 +1807,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
-        subset_hidden: Optional[bool] = True,
+        subset_hidden: Optional[bool] = False,
         compress_hidden: Optional[bool] = False,
         low_memory: Optional[bool] = True,
         **model_kwargs,
@@ -1974,7 +1974,7 @@ class GenerationMixin:
 
                 if subset_hidden:
                     print ('Using subset of last hidden layer')
-                    last_hidden_states = last_hidden_states[:, :, :100]
+                    last_hidden_states = last_hidden_states[:, :, :500]
 
                 elif compress_hidden:
                     print ('Using compressed last hidden layer')
@@ -2065,7 +2065,6 @@ class GenerationMixin:
                 for key in all_outputs:
                     if torch.is_tensor(all_outputs[key]):
                         outputs[key] = torch.stack(all_outputs[key], dim=0)
-                print (outputs)
                     
             else:
                 # compute the candidate tokens by the language model and collect their hidden_states
@@ -2087,7 +2086,7 @@ class GenerationMixin:
                 full_hidden_states = outputs.hidden_states
 
             if subset_hidden:
-                next_hidden = next_hidden[:, :, :100]
+                next_hidden = next_hidden[:, :, :500]
 
             elif compress_hidden:
                 next_hidden = compressor(next_hidden)
