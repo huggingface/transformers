@@ -1809,6 +1809,7 @@ class GenerationMixin:
         streamer: Optional["BaseStreamer"] = None,
         subset_hidden: Optional[bool] = True,
         compress_hidden: Optional[bool] = False,
+        low_memory: Optional[bool] = True,
         **model_kwargs,
     ) -> Union[ContrastiveSearchOutput, torch.LongTensor]:
         r"""
@@ -2037,7 +2038,7 @@ class GenerationMixin:
                     )
 
             # if the used memory exceeds a threshold, do not batch
-            if torch.cuda.get_mem_info()[0] < torch.cuda.get_mem_info()[1]//2:
+            if low_memory:
                 all_outputs = {key:[] for key in outputs} # defined in first loop iteration
                 for i in range(len(top_k_ids)):
                     # compute the candidate tokens by the language model and collect their hidden_states
