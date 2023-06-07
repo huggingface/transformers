@@ -620,6 +620,7 @@ _import_structure = {
     ],
     "tools": [
         "Agent",
+        "AzureOpenAiAgent",
         "HfAgent",
         "LocalAgent",
         "OpenAiAgent",
@@ -4424,6 +4425,7 @@ if TYPE_CHECKING:
     # Tools
     from .tools import (
         Agent,
+        AzureOpenAiAgent,
         HfAgent,
         LocalAgent,
         OpenAiAgent,
