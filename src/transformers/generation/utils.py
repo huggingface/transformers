@@ -2036,27 +2036,42 @@ class GenerationMixin:
                         else (outputs.hidden_states,)
                     )
 
-            # Replicates the new past_key_values to match the `top_k` candidates
-            new_key_values = []
-            for layer in model_kwargs["past_key_values"]:
-                items = []
-                # item is either the key or the value matrix
-                for item in layer:
-                    items.append(item.repeat_interleave(top_k, dim=0))
-                new_key_values.append(items)
-            model_kwargs["past_key_values"] = new_key_values
+            # if the used memory exceeds a threshold, do not batch
+            if torch.cuda.get_mem_info()[0] < torch.cuda_get_mem_info()[1]//2:
+                outputs = dict()
+                for i in range(len(top_k_ids))
+                    # compute the candidate tokens by the language model and collect their hidden_states
+                    next_model_inputs = self.prepare_inputs_for_generation(top_k_ids[i], **model_kwargs)
+                    new_outputs = self(
+                        **next_model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions
+                    )
+                    if not outputs:
+                        outputs = new_outputs
+                    else:
+                        for key in outputs:
+                            outputs[key] = torch.stack(outputs[key], new_outputs[key], dim=0)
+            print (outputs)
+                    
+            else:
+                # Replicates the new past_key_values to match the `top_k` candidates
+                new_key_values = []
+                for layer in model_kwargs["past_key_values"]:
+                    items = []
+                    # item is either the key or the value matrix
+                    for item in layer:
+                        items.append(item.repeat_interleave(top_k, dim=0))
+                    new_key_values.append(items)
+                model_kwargs["past_key_values"] = new_key_values
 
-            # compute the candidate tokens by the language model and collects their hidden_states
-            next_model_inputs = self.prepare_inputs_for_generation(top_k_ids.view(-1, 1), **model_kwargs)
-            print (next_model_inputs)
-            print (next_model_inputs.input_ids.shape)
-            del outputs
-            
-            outputs = self(
-                **next_model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions
-            )
+                # compute the candidate tokens by the language model and collect their hidden_states
+                # assembles top_k_ids into batch of size k (leading to OOM for large models)
+                next_model_inputs = self.prepare_inputs_for_generation(top_k_ids.view(-1, 1), **model_kwargs)
+
+                outputs = self(
+                    **next_model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions
+                )
+
             next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
-
             logits = outputs.logits[:, -1, :]
             # name is different for encoder-decoder and decoder-only models
             if self.config.is_encoder_decoder:
