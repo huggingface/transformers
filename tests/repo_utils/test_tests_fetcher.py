@@ -526,10 +526,17 @@ src/transformers/configuration_utils.py
             create_tmp_repo(tmp_folder)
 
             expected_example_deps = {
-                "examples/flax/test_flax_examples.py": ["examples/flax/text-classification/run_glue.py"],
-                "examples/pytorch/test_pytorch_examples.py": ["examples/pytorch/text-classification/run_glue.py"],
+                "examples/flax/test_flax_examples.py": [
+                    "examples/flax/text-classification/run_glue.py",
+                    "examples/flax/test_flax_examples.py",
+                ],
+                "examples/pytorch/test_pytorch_examples.py": [
+                    "examples/pytorch/text-classification/run_glue.py",
+                    "examples/pytorch/test_pytorch_examples.py",
+                ],
                 "examples/tensorflow/test_tensorflow_examples.py": [
-                    "examples/tensorflow/text-classification/run_glue.py"
+                    "examples/tensorflow/text-classification/run_glue.py",
+                    "examples/tensorflow/test_tensorflow_examples.py",
                 ],
             }
 
