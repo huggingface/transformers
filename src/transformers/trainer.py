@@ -3167,7 +3167,7 @@ class Trainer:
             model = (
                 self.accelerator.prepare(model)
                 if self.is_deepspeed_enabled
-                else self.accelerator.prepare_model(model, mixed_precision_only=True)
+                else self.accelerator.prepare_model(model, evaluation_mode=True)
             )
 
             if self.is_fsdp_enabled:
@@ -3778,7 +3778,7 @@ class Trainer:
             model = (
                 self.accelerator.prepare(model)
                 if self.is_deepspeed_enabled
-                else self.accelerator.prepare_model(model, mixed_precision_only=True)
+                else self.accelerator.prepare_model(model, evaluation_mode=True)
             )
 
             if self.is_fsdp_enabled:
