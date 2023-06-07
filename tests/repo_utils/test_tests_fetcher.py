@@ -759,6 +759,41 @@ src/transformers/configuration_utils.py
 
             assert tests_to_run == "tests/models/bert/test_modeling_bert.py"
 
+    def test_infer_tests_to_run_with_examples_modifs(self):
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            tmp_folder = Path(tmp_folder)
+            models = ["bert", "gpt2"]
+            repo = create_tmp_repo(tmp_folder, models=models)
+
+            # Modification in one example trigger the corresponding test
+            commit_changes(
+                "examples/pytorch/text-classification/run_glue.py",
+                "from transformers import BertModeln\n\ncode1",
+                repo,
+            )
+
+            with patch_transformer_repo_path(tmp_folder):
+                infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
+                with open(tmp_folder / "examples_test_list.txt", "r") as f:
+                    example_tests_to_run = f.read()
+
+            assert example_tests_to_run == "examples/pytorch/test_pytorch_examples.py"
+
+            # Modification in one test example file trigger that test
+            repo = create_tmp_repo(tmp_folder, models=models)
+            commit_changes(
+                "examples/pytorch/test_pytorch_examples.py",
+                """test_args = "run_glue.py"\nmore_code""",
+                repo,
+            )
+
+            with patch_transformer_repo_path(tmp_folder):
+                infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
+                with open(tmp_folder / "examples_test_list.txt", "r") as f:
+                    example_tests_to_run = f.read()
+
+            assert example_tests_to_run == "examples/pytorch/test_pytorch_examples.py"
+
     def test_parse_commit_message(self):
         assert parse_commit_message("Normal commit") == {"skip": False, "no_filter": False, "test_all": False}
 

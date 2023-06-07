@@ -643,6 +643,8 @@ def main():
 
         # region Training
         eval_metrics = None
+        # Transformers models compute the right loss for their task by default when labels are passed, and will
+        # use this for training unless you specify your own loss function in compile().
         model.compile(optimizer=optimizer, jit_compile=training_args.xla)
 
         if training_args.do_train:

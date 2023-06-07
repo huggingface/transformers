@@ -757,12 +757,12 @@ class Pix2StructIntegrationTest(unittest.TestCase):
 
         self.assertEqual(
             processor.decode(predictions[0], skip_special_tokens=True),
-            "A picture of a stop sign with a red stop sign on it.",
+            "A picture of a stop sign with a red stop sign",
         )
 
         self.assertEqual(
             processor.decode(predictions[1], skip_special_tokens=True),
-            "An photography of the Temple Bar and the Temple Bar.",
+            "An photography of the Temple Bar and other places in the city.",
         )
 
     def test_vqa_model(self):

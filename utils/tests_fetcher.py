@@ -533,6 +533,9 @@ def init_test_examples_dependencies():
             test_example_deps[str(test_file.relative_to(PATH_TO_REPO))] = [
                 str(e.relative_to(PATH_TO_REPO)) for e in examples if e.name in content
             ]
+            test_example_deps[str(test_file.relative_to(PATH_TO_REPO))].append(
+                str(test_file.relative_to(PATH_TO_REPO))
+            )
     return test_example_deps, all_examples
 
 
@@ -852,10 +855,10 @@ if __name__ == "__main__":
 
         if commit_flags["test_all"]:
             with open(args.output_file, "w", encoding="utf-8") as f:
-                if args.filters is None:
-                    f.write("./tests/")
-                else:
-                    f.write(" ".join(args.filters))
+                f.write("tests")
+            example_file = Path(args.output_file).parent / "examples_test_list.txt"
+            with open(example_file, "w", encoding="utf-8") as f:
+                f.write("all")
 
             test_files_to_run = get_all_tests()
             create_json_map(test_files_to_run, args.json_output_file)

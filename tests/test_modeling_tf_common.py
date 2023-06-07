@@ -348,7 +348,7 @@ class TFModelTesterMixin:
 
             with tf.Graph().as_default() as g:
                 model = model_class(config)
-                model(model.dummy_inputs)
+                model.build()
 
                 for op in g.get_operations():
                     model_op_names.add(op.node_def.op)
@@ -375,7 +375,7 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            model(model.dummy_inputs)
+            model.build()
 
             onnx_model_proto, _ = tf2onnx.convert.from_keras(model, opset=self.onnx_min_opset)
 
@@ -1180,7 +1180,7 @@ class TFModelTesterMixin:
         def _get_word_embedding_weight(model, embedding_layer):
             if isinstance(embedding_layer, tf.keras.layers.Embedding):
                 # builds the embeddings layer
-                model(model.dummy_inputs)
+                model.build()
                 return embedding_layer.embeddings
             else:
                 return model._get_word_embedding_weight(embedding_layer)
@@ -1243,7 +1243,7 @@ class TFModelTesterMixin:
             old_total_size = config.vocab_size
             new_total_size = old_total_size + new_tokens_size
             model = model_class(config=copy.deepcopy(config))  # `resize_token_embeddings` mutates `config`
-            model(model.dummy_inputs)  # builds the embeddings layer
+            model.build()
             model.resize_token_embeddings(new_total_size)
 
             # fetch the output for an input exclusively made of new members of the vocabulary
@@ -2313,8 +2313,8 @@ class UtilsFunctionsTest(unittest.TestCase):
                 # Finally, check the model can be reloaded
                 new_model = TFBertModel.from_pretrained(tmp_dir)
 
-                model(model.dummy_inputs)
-                new_model(model.dummy_inputs)
+                model.build()
+                new_model.build()
 
                 for p1, p2 in zip(model.weights, new_model.weights):
                     self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
@@ -2440,7 +2440,7 @@ class TFModelPushToHubTester(unittest.TestCase):
         )
         model = TFBertModel(config)
         # Make sure model is properly initialized
-        _ = model(model.dummy_inputs)
+        model.build()
 
         logging.set_verbosity_info()
         logger = logging.get_logger("transformers.utils.hub")
@@ -2509,7 +2509,7 @@ class TFModelPushToHubTester(unittest.TestCase):
         )
         model = TFBertModel(config)
         # Make sure model is properly initialized
-        _ = model(model.dummy_inputs)
+        model.build()
 
         model.push_to_hub("valid_org/test-model-tf-org", use_auth_token=self._token)
 

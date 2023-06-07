@@ -340,6 +340,7 @@ class GPTJPreTrainedModel(PreTrainedModel):
     is_parallelizable = True
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTJBlock"]
+    _skip_keys_device_placement = "past_key_values"
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
