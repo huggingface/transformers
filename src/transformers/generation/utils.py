@@ -2036,8 +2036,20 @@ class GenerationMixin:
                         if self.config.is_encoder_decoder
                         else (outputs.hidden_states,)
                     )
-                    
-            print (top_k_ids)
+
+            # Replicates the new past_key_values to match the `top_k` candidates
+            new_key_values = []
+            for layer in model_kwargs["past_key_values"]:
+                items = []
+                # item is either the key or the value matrix
+                for item in layer:
+                    if low_memory:
+                        items.append(item.repeat_interleave(1, dim=0))
+                    else:
+                        items.append(item.repeat_interleave(top_k, dim=0))
+                new_key_values.append(items)
+            model_kwargs["past_key_values"] = new_key_values
+            print (top_k_ids.view(-1, 1))
 
             # if the used memory exceeds a threshold, do not batch
             if low_memory:
@@ -2056,16 +2068,6 @@ class GenerationMixin:
                 print (outputs)
                     
             else:
-                # Replicates the new past_key_values to match the `top_k` candidates
-                new_key_values = []
-                for layer in model_kwargs["past_key_values"]:
-                    items = []
-                    # item is either the key or the value matrix
-                    for item in layer:
-                        items.append(item.repeat_interleave(top_k, dim=0))
-                    new_key_values.append(items)
-                model_kwargs["past_key_values"] = new_key_values
-
                 # compute the candidate tokens by the language model and collect their hidden_states
                 # assembles top_k_ids into batch of size k (leading to OOM for large models)
                 next_model_inputs = self.prepare_inputs_for_generation(top_k_ids.view(-1, 1), **model_kwargs)
