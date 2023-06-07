@@ -248,6 +248,7 @@ _import_structure = {
     "models.convnextv2": ["CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextV2Config"],
     "models.cpm": [],
     "models.cpmant": ["CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CpmAntConfig", "CpmAntTokenizer"],
+    "models.cpmbee": ["CPMBEE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CpmBeeConfig", "CpmBeeTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.cvt": ["CVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CvtConfig"],
     "models.data2vec": [
@@ -978,6 +979,7 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1373,6 +1375,14 @@ else:
             "CpmAntForCausalLM",
             "CpmAntModel",
             "CpmAntPreTrainedModel",
+        ]
+    )
+    _import_structure["models.cpmbee"].extend(
+        [
+            "CPMBEE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CpmBeeForCausalLM",
+            "CpmBeeModel",
+            "CpmBeePreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -4065,6 +4075,7 @@ if TYPE_CHECKING:
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.convnextv2 import CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextV2Config
     from .models.cpmant import CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP, CpmAntConfig, CpmAntTokenizer
+    from .models.cpmbee import CPMBEE_PRETRAINED_CONFIG_ARCHIVE_MAP, CpmBeeConfig, CpmBeeTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvtConfig
     from .models.data2vec import (
@@ -4721,8 +4732,6 @@ if TYPE_CHECKING:
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
-
-        # PyTorch model imports
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -5055,6 +5064,14 @@ if TYPE_CHECKING:
             CpmAntForCausalLM,
             CpmAntModel,
             CpmAntPreTrainedModel,
+        )
+
+        # PyTorch model imports
+        from .models.cpmbee import (
+            CPMBEE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CpmBeeForCausalLM,
+            CpmBeeModel,
+            CpmBeePreTrainedModel,
         )
         from .models.ctrl import (
             CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,

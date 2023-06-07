@@ -1906,6 +1906,30 @@ class CpmAntPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+CPMBEE_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class CpmBeeForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CpmBeeModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CpmBeePreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
