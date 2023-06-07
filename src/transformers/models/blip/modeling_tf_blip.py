@@ -258,6 +258,7 @@ class TFBlipVisionEmbeddings(tf.keras.layers.Layer):
             trainable=True,
             name="position_embedding",
         )
+        super().build(input_shape)
 
     def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
         # Input is channels-first, we transpose. PyTorch transposes after the conv because PyTorch
@@ -282,7 +283,7 @@ class TFBlipTextEmbeddings(tf.keras.layers.Layer):
 
         self.config = config
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape: tf.TensorShape = None):
         with tf.name_scope("token_embedding"):
             self.weight = self.add_weight(
                 shape=(self.config.vocab_size, self.embed_dim),
@@ -757,13 +758,14 @@ class TFBlipMainLayer(tf.keras.layers.Layer):
 
         self.config = config
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         self.logit_scale = self.add_weight(
             name="logit_scale",
             shape=[],
             initializer=tf.keras.initializers.Constant(self.config.logit_scale_init_value),
             trainable=True,
         )
+        super().build(input_shape)
 
     @unpack_inputs
     def call(

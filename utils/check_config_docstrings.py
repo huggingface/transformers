@@ -39,6 +39,7 @@ CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
     "EncoderDecoderConfig",
     "RagConfig",
     "SpeechEncoderDecoderConfig",
+    "TimmBackboneConfig",
     "VisionEncoderDecoderConfig",
     "VisionTextDualEncoderConfig",
     "LlamaConfig",

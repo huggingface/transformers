@@ -341,9 +341,6 @@ def load_pytorch_state_dict_in_tf2_model(
 
     K.batch_set_value(weight_value_tuples)
 
-    if tf_inputs is not None:
-        tf_model(tf_inputs, training=False)  # Make sure restore ops are run
-
     logger.info(f"Loaded {tf_loaded_numel:,} parameters in the TF 2.0 model.")
 
     unexpected_keys = list(all_pytorch_weights)

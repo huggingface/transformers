@@ -128,7 +128,7 @@ class CircleCIJob:
         if self.command_timeout:
             test_command = f"timeout {self.command_timeout} "
         test_command += f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
-        
+
         if self.parallelism == 1:
             if self.tests_to_run is None:
                 test_command += " << pipeline.parameters.tests_to_run >>"
@@ -272,6 +272,7 @@ tf_job = CircleCIJob(
         "pip install tensorflow_probability",
     ],
     parallelism=1,
+    pytest_num_workers=6,
     pytest_options={"rA": None},
 )
 
@@ -456,6 +457,7 @@ doc_test_job = CircleCIJob(
         "pip install -e .[dev]",
         "pip install git+https://github.com/huggingface/accelerate",
         "pip install --upgrade pytest pytest-sugar",
+        "pip install natten",
         "find -name __pycache__ -delete",
         "find . -name \*.pyc -delete",
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.
