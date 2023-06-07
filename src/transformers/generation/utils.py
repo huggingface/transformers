@@ -2038,19 +2038,19 @@ class GenerationMixin:
 
             # if the used memory exceeds a threshold, do not batch
             if torch.cuda.get_mem_info()[0] < torch.cuda_get_mem_info()[1]//2:
-                outputs = dict()
-                for i in range(len(top_k_ids))
+                all_outputs = {key:[] for key in outputs} # defined in first loop iteration
+                for i in range(len(top_k_ids)):
                     # compute the candidate tokens by the language model and collect their hidden_states
                     next_model_inputs = self.prepare_inputs_for_generation(top_k_ids[i], **model_kwargs)
-                    new_outputs = self(
+                    outputs = self(
                         **next_model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions
                     )
-                    if not outputs:
-                        outputs = new_outputs
-                    else:
-                        for key in outputs:
-                            outputs[key] = torch.stack(outputs[key], new_outputs[key], dim=0)
-            print (outputs)
+                    for key in all_outputs:
+                        all_outputs[key].append(outputs[key])
+
+                for key in all_outputs:
+                    all_outputs[key] = torch.stack(all_outputs[key], dim=0)
+                print (outputs)
                     
             else:
                 # Replicates the new past_key_values to match the `top_k` candidates
