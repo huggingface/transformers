@@ -481,9 +481,9 @@ class TFWhisperPreTrainedModel(TFPreTrainedModel):
         """
         return {
             self.main_input_name: tf.random.uniform(
-                [2, self.config.num_mel_bins, self.config.max_source_positions * 2 - 1], dtype=tf.float32
+                [1, self.config.num_mel_bins, self.config.max_source_positions * 2 - 1], dtype=tf.float32
             ),
-            "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int32),
+            "decoder_input_ids": tf.constant([[1, 3]], dtype=tf.int32),
         }
 
     @property
