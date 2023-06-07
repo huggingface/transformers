@@ -353,7 +353,9 @@ def extract_imports(module_fname, cache=None):
         content = f.read()
 
     # Filter out all docstrings to not get imports in code examples.
-    splits = content.split('"""')
+    # fmt: off
+    splits = content.split('\"\"\"')
+    # fmt: on
     content = "".join(splits[::2])
 
     module_parts = str(module_fname).split(os.path.sep)
