@@ -2,16 +2,22 @@ import inspect
 import tempfile
 
 import numpy as np
-import PIL.Image
-import soundfile as sf
-import torch
-from PIL import Image
-from PIL.Image import Image as ImageType
 
-from transformers.utils import logging
+from ..utils import is_soundfile_availble, is_torch_available, is_vision_available, logging
 
 
 logger = logging.get_logger(__name__)
+
+if is_vision_available():
+    import PIL.Image
+    from PIL import Image
+    from PIL.Image import Image as ImageType
+
+if is_torch_available():
+    import torch
+
+if is_soundfile_availble():
+    import soundfile as sf
 
 
 class AgentType:
@@ -56,13 +62,16 @@ class AgentText(AgentType, str):
         return self.value
 
 
-class AgentImage(AgentType, PIL.Image.Image):
+class AgentImage(AgentType, "PIL.Image.Image"):
     """
     Image type returned by the agent. Behaves as a PIL.Image.
     """
 
     def __init__(self, value):
         super().__init__(value)
+
+        if not is_vision_available():
+            raise ImportError("PIL must be installed in order to handle images.")
 
         self._path = None
         self._raw = None
@@ -129,6 +138,9 @@ class AgentAudio(AgentType):
     def __init__(self, value, samplerate=16_000):
         super().__init__(value)
 
+        if not is_soundfile_availble():
+            raise ImportError("soundfile must be installed in order to handle audio.")
+
         self._path = None
         self._tensor = None
 
@@ -165,7 +177,10 @@ class AgentAudio(AgentType):
 
 
 AGENT_TYPE_MAPPING = {"text": AgentText, "image": AgentImage, "audio": AgentAudio}
-INSTANCE_TYPE_MAPPING = {str: AgentText, PIL.Image: AgentImage}
+INSTANCE_TYPE_MAPPING = {str: AgentText}
+
+if is_vision_available():
+    INSTANCE_TYPE_MAPPING[PIL.Image] = AgentImage
 
 
 def handle_agent_inputs(*args, **kwargs):
