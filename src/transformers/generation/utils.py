@@ -754,9 +754,9 @@ class GenerationMixin:
         standardize_cache_format: bool = False,
     ) -> Dict[str, Any]:
         # update past_key_values
-        model_kwargs["past_key_values"] = self._extract_past_from_model_output(
-            outputs, standardize_cache_format=standardize_cache_format
-        )
+        # model_kwargs["past_key_values"] = self._extract_past_from_model_output(
+        #     outputs, standardize_cache_format=standardize_cache_format
+        # )
         if getattr(outputs, "state", None) is not None:
             model_kwargs["state"] = outputs.state
 
@@ -780,6 +780,12 @@ class GenerationMixin:
                     [decoder_attention_mask, decoder_attention_mask.new_ones((decoder_attention_mask.shape[0], 1))],
                     dim=-1,
                 )
+
+        if "past_index" in model_kwargs:
+            if model_kwargs["past_index"] is None:
+                raise ValueError("should not happen")
+
+            model_kwargs["past_index"] = model_kwargs["past_index"] + outputs.logits.shape[1]
 
         return model_kwargs
 
@@ -2334,6 +2340,21 @@ class GenerationMixin:
 
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
+            print("-----")
+            for key, inp in model_inputs.items():
+                if isinstance(inp, torch.Tensor):
+                    print(key, inp.shape)
+                elif isinstance(inp, tuple):
+                    for inp_ in inp:
+                        if isinstance(inp_, tuple):
+                            for inp__ in inp_:
+                                print("    ", key, inp__.shape)
+                        else:
+                            print("    ", key, inp_.shape)
+                else:
+                    print(key, type(inp))
+            # print(model_inputs["attention_mask"])
 
             # forward pass to get next token
             outputs = self(
