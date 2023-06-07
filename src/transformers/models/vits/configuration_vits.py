@@ -44,7 +44,7 @@ class VITSConfig(PretrainedConfig):
 
 
 
-
+ffn_kernel_size
 
 
 
@@ -206,72 +206,87 @@ class VITSConfig(PretrainedConfig):
 
     def __init__(
         self,
+        vocab_size=38,
+        hidden_size=192,
+
+# 'inter_channels': 192,
+# 'hidden_channels': 192,
+# 'filter_channels': 768,
+# 'n_heads': 2,
+# 'n_layers': 6,
+# 'kernel_size': 3,
+# 'p_dropout': 0.1,
+# 'resblock': '1',
+# 'resblock_kernel_sizes': [3, 7, 11],
+# 'resblock_dilation_sizes': [[1, 3, 5], [1, 3, 5], [1, 3, 5]],
+# 'upsample_rates': [8, 8, 2, 2],
+# 'upsample_initial_channel': 512,
+# 'upsample_kernel_sizes': [16, 16, 4, 4],
+# 'n_layers_q': 3,
+# 'use_spectral_norm': False
 
 
-
-
-
-
-
-
-
-        vocab_size=81,
-        hidden_size=768,
-        encoder_layers=12,
-        encoder_attention_heads=12,
-        encoder_ffn_dim=3072,
+        encoder_layers=6,
+        encoder_attention_heads=2,
+        encoder_ffn_dim=768,
         encoder_layerdrop=0.1,
-        decoder_layers=6,
-        decoder_ffn_dim=3072,
-        decoder_attention_heads=12,
-        decoder_layerdrop=0.1,
-        hidden_act="gelu",
-        positional_dropout=0.1,
-        hidden_dropout=0.1,
+        ffn_kernel_size=3,
+
+            decoder_layers=6,
+            decoder_ffn_dim=3072,
+            decoder_attention_heads=12,
+            decoder_layerdrop=0.1,
+        hidden_act="relu",  # or quick_gelu
+            positional_dropout=0.1,
+            hidden_dropout=0.1,
+
         attention_dropout=0.1,
         activation_dropout=0.1,
-        initializer_range=0.02,
+
+            initializer_range=0.02,
+
         layer_norm_eps=1e-5,
-        scale_embedding=False,
-        feat_extract_norm="group",
-        feat_proj_dropout=0.0,
-        feat_extract_activation="gelu",
-        conv_dim=(512, 512, 512, 512, 512, 512, 512),
-        conv_stride=(5, 2, 2, 2, 2, 2, 2),
-        conv_kernel=(10, 3, 3, 3, 3, 2, 2),
-        conv_bias=False,
-        num_conv_pos_embeddings=128,
-        num_conv_pos_embedding_groups=16,
-        apply_spec_augment=True,
-        mask_time_prob=0.05,
-        mask_time_length=10,
-        mask_time_min_masks=2,
-        mask_feature_prob=0.0,
-        mask_feature_length=10,
-        mask_feature_min_masks=0,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        decoder_start_token_id=2,
-        num_mel_bins=80,
-        speech_decoder_prenet_layers=2,
-        speech_decoder_prenet_units=256,
-        speech_decoder_prenet_dropout=0.5,
-        speaker_embedding_dim=512,
-        speech_decoder_postnet_layers=5,
-        speech_decoder_postnet_units=256,
-        speech_decoder_postnet_kernel=5,
-        speech_decoder_postnet_dropout=0.5,
-        reduction_factor=2,
-        max_speech_positions=4000,
-        max_text_positions=450,
-        encoder_max_relative_position=160,
-        use_guided_attention_loss=True,
-        guided_attention_loss_num_heads=2,
-        guided_attention_loss_sigma=0.4,
-        guided_attention_loss_scale=10.0,
-        use_cache=True,
-        is_encoder_decoder=True,
+
+            scale_embedding=False,
+            feat_extract_norm="group",
+            feat_proj_dropout=0.0,
+            feat_extract_activation="gelu",
+            conv_dim=(512, 512, 512, 512, 512, 512, 512),
+            conv_stride=(5, 2, 2, 2, 2, 2, 2),
+            conv_kernel=(10, 3, 3, 3, 3, 2, 2),
+            conv_bias=False,
+            num_conv_pos_embeddings=128,
+            num_conv_pos_embedding_groups=16,
+            apply_spec_augment=True,
+            mask_time_prob=0.05,
+            mask_time_length=10,
+            mask_time_min_masks=2,
+            mask_feature_prob=0.0,
+            mask_feature_length=10,
+            mask_feature_min_masks=0,
+            pad_token_id=1,
+            bos_token_id=0,
+            eos_token_id=2,
+            decoder_start_token_id=2,
+            num_mel_bins=80,
+            speech_decoder_prenet_layers=2,
+            speech_decoder_prenet_units=256,
+            speech_decoder_prenet_dropout=0.5,
+            speaker_embedding_dim=512,
+            speech_decoder_postnet_layers=5,
+            speech_decoder_postnet_units=256,
+            speech_decoder_postnet_kernel=5,
+            speech_decoder_postnet_dropout=0.5,
+            reduction_factor=2,
+            max_speech_positions=4000,
+            max_text_positions=450,
+            encoder_max_relative_position=160,
+            use_guided_attention_loss=True,
+            guided_attention_loss_num_heads=2,
+            guided_attention_loss_sigma=0.4,
+            guided_attention_loss_scale=10.0,
+            use_cache=False,
+            is_encoder_decoder=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -280,6 +295,7 @@ class VITSConfig(PretrainedConfig):
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_attention_heads = encoder_attention_heads
         self.encoder_layerdrop = encoder_layerdrop
+        self.ffn_kernel_size = ffn_kernel_size
         self.decoder_layers = decoder_layers
         self.decoder_ffn_dim = decoder_ffn_dim
         self.decoder_attention_heads = decoder_attention_heads

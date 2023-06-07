@@ -15,15 +15,15 @@
 """Convert VITS checkpoint."""
 
 import argparse
-
+import os
 import torch
 
 from transformers import (
     VITSConfig,
-    VITSFeatureExtractor,
+    # VITSFeatureExtractor,
     VITSModel,
-    VITSProcessor,
-    VITSTokenizer,
+    # VITSProcessor,
+    # VITSTokenizer,
     logging,
 )
 from transformers.tokenization_utils import AddedToken
@@ -32,120 +32,60 @@ from transformers.tokenization_utils import AddedToken
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.speecht5")
 
-MAPPING_SPEECH_ENCODER_PRENET = {
-    "speech_encoder_prenet.layer_norm": "speecht5.encoder.prenet.feature_projection.layer_norm",
-    "speech_encoder_prenet.post_extract_proj": "speecht5.encoder.prenet.feature_projection.projection",
-    "speech_encoder_prenet.pos_conv.0": "speecht5.encoder.prenet.pos_conv_embed.conv",
-    "speech_encoder_prenet.mask_emb": "speecht5.encoder.prenet.masked_spec_embed",
+# MAPPING_SPEECH_ENCODER_PRENET = {
+#     "speech_encoder_prenet.layer_norm": "speecht5.encoder.prenet.feature_projection.layer_norm",
+#     "speech_encoder_prenet.post_extract_proj": "speecht5.encoder.prenet.feature_projection.projection",
+#     "speech_encoder_prenet.pos_conv.0": "speecht5.encoder.prenet.pos_conv_embed.conv",
+#     "speech_encoder_prenet.mask_emb": "speecht5.encoder.prenet.masked_spec_embed",
+# }
+MAPPING_TEXT_ENCODER = {
+    "enc_p.emb": "text_encoder.embed_tokens",
+    # "text_encoder_prenet.encoder_prenet.1.alpha": "speecht5.encoder.prenet.encode_positions.alpha",
+    "enc_p.encoder.attn_layers.*.conv_k": "text_encoder.encoder.layers.*.attention.k_proj",
+    "enc_p.encoder.attn_layers.*.conv_v": "text_encoder.encoder.layers.*.attention.v_proj",
+    "enc_p.encoder.attn_layers.*.conv_q": "text_encoder.encoder.layers.*.attention.q_proj",
+    "enc_p.encoder.attn_layers.*.conv_o": "text_encoder.encoder.layers.*.attention.out_proj",
+    "enc_p.encoder.norm_layers_1.*.gamma": "text_encoder.encoder.layers.*.layer_norm.weight",
+    "enc_p.encoder.norm_layers_1.*.beta": "text_encoder.encoder.layers.*.layer_norm.bias",
+    "enc_p.encoder.ffn_layers.*.conv_1": "text_encoder.encoder.layers.*.feed_forward.conv_1",
+    "enc_p.encoder.ffn_layers.*.conv_2": "text_encoder.encoder.layers.*.feed_forward.conv_2",
+    "enc_p.encoder.norm_layers_2.*.gamma": "text_encoder.encoder.layers.*.final_layer_norm.weight",
+    "enc_p.encoder.norm_layers_2.*.beta": "text_encoder.encoder.layers.*.final_layer_norm.bias",
+
+    # "encoder.layers.*.final_layer_norm": "speecht5.encoder.wrapped_encoder.layers.*.final_layer_norm",
+    # "encoder.layer_norm": "speecht5.encoder.wrapped_encoder.layer_norm",
+    # "encoder.pos_emb.pe_k": "speecht5.encoder.wrapped_encoder.embed_positions.pe_k",
 }
-MAPPING_TEXT_ENCODER_PRENET = {
-    "text_encoder_prenet.encoder_prenet.0": "speecht5.encoder.prenet.embed_tokens",
-    "text_encoder_prenet.encoder_prenet.1.alpha": "speecht5.encoder.prenet.encode_positions.alpha",
-}
-MAPPING_SPEECH_DECODER_PRENET = {
-    "speech_decoder_prenet.decoder_prenet.0.0.prenet.0.0": "speecht5.decoder.prenet.layers.0",
-    "speech_decoder_prenet.decoder_prenet.0.0.prenet.1.0": "speecht5.decoder.prenet.layers.1",
-    "speech_decoder_prenet.decoder_prenet.0.1": "speecht5.decoder.prenet.final_layer",
-    "speech_decoder_prenet.decoder_prenet.1.alpha": "speecht5.decoder.prenet.encode_positions.alpha",
-    "speech_decoder_prenet.spkembs_layer.0": "speecht5.decoder.prenet.speaker_embeds_layer",
-}
-MAPPING_SPEECH_DECODER_POSTNET = {
-    "speech_decoder_postnet.feat_out": "speech_decoder_postnet.feat_out",
-    "speech_decoder_postnet.prob_out": "speech_decoder_postnet.prob_out",
-    "speech_decoder_postnet.postnet.postnet.0.0": "speech_decoder_postnet.layers.0.conv",
-    "speech_decoder_postnet.postnet.postnet.0.1": "speech_decoder_postnet.layers.0.batch_norm",
-    "speech_decoder_postnet.postnet.postnet.1.0": "speech_decoder_postnet.layers.1.conv",
-    "speech_decoder_postnet.postnet.postnet.1.1": "speech_decoder_postnet.layers.1.batch_norm",
-    "speech_decoder_postnet.postnet.postnet.2.0": "speech_decoder_postnet.layers.2.conv",
-    "speech_decoder_postnet.postnet.postnet.2.1": "speech_decoder_postnet.layers.2.batch_norm",
-    "speech_decoder_postnet.postnet.postnet.3.0": "speech_decoder_postnet.layers.3.conv",
-    "speech_decoder_postnet.postnet.postnet.3.1": "speech_decoder_postnet.layers.3.batch_norm",
-    "speech_decoder_postnet.postnet.postnet.4.0": "speech_decoder_postnet.layers.4.conv",
-    "speech_decoder_postnet.postnet.postnet.4.1": "speech_decoder_postnet.layers.4.batch_norm",
-}
-MAPPING_TEXT_DECODER_PRENET = {
-    "text_decoder_prenet.embed_tokens": "speecht5.decoder.prenet.embed_tokens",
-}
-MAPPING_TEXT_DECODER_POSTNET = {
-    "text_decoder_postnet.output_projection": "text_decoder_postnet.lm_head",
-}
-MAPPING_ENCODER = {
-    "encoder.layers.*.self_attn.k_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.k_proj",
-    "encoder.layers.*.self_attn.v_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.v_proj",
-    "encoder.layers.*.self_attn.q_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.q_proj",
-    "encoder.layers.*.self_attn.out_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.out_proj",
-    "encoder.layers.*.self_attn_layer_norm": "speecht5.encoder.wrapped_encoder.layers.*.layer_norm",
-    "encoder.layers.*.fc1": "speecht5.encoder.wrapped_encoder.layers.*.feed_forward.intermediate_dense",
-    "encoder.layers.*.fc2": "speecht5.encoder.wrapped_encoder.layers.*.feed_forward.output_dense",
-    "encoder.layers.*.final_layer_norm": "speecht5.encoder.wrapped_encoder.layers.*.final_layer_norm",
-    "encoder.layer_norm": "speecht5.encoder.wrapped_encoder.layer_norm",
-    "encoder.pos_emb.pe_k": "speecht5.encoder.wrapped_encoder.embed_positions.pe_k",
-}
-MAPPING_DECODER = {
-    "decoder.layers.*.self_attn.k_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.k_proj",
-    "decoder.layers.*.self_attn.v_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.v_proj",
-    "decoder.layers.*.self_attn.q_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.q_proj",
-    "decoder.layers.*.self_attn.out_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.out_proj",
-    "decoder.layers.*.self_attn_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.self_attn_layer_norm",
-    "decoder.layers.*.encoder_attn.k_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.k_proj",
-    "decoder.layers.*.encoder_attn.v_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.v_proj",
-    "decoder.layers.*.encoder_attn.q_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.q_proj",
-    "decoder.layers.*.encoder_attn.out_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.out_proj",
-    "decoder.layers.*.encoder_attn_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn_layer_norm",
-    "decoder.layers.*.fc1": "speecht5.decoder.wrapped_decoder.layers.*.feed_forward.intermediate_dense",
-    "decoder.layers.*.fc2": "speecht5.decoder.wrapped_decoder.layers.*.feed_forward.output_dense",
-    "decoder.layers.*.final_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.final_layer_norm",
-}
-MAPPING_S2T = {
-    **MAPPING_SPEECH_ENCODER_PRENET,
-    **MAPPING_ENCODER,
-    **MAPPING_DECODER,
-    **MAPPING_TEXT_DECODER_PRENET,
-    **MAPPING_TEXT_DECODER_POSTNET,
-}
-MAPPING_T2S = {
-    **MAPPING_TEXT_ENCODER_PRENET,
-    **MAPPING_ENCODER,
-    **MAPPING_DECODER,
-    **MAPPING_SPEECH_DECODER_PRENET,
-    **MAPPING_SPEECH_DECODER_POSTNET,
-}
-MAPPING_S2S = {
-    **MAPPING_SPEECH_ENCODER_PRENET,
-    **MAPPING_ENCODER,
-    **MAPPING_DECODER,
-    **MAPPING_SPEECH_DECODER_PRENET,
-    **MAPPING_SPEECH_DECODER_POSTNET,
+# MAPPING_DECODER = {
+#     "decoder.layers.*.self_attn.k_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.k_proj",
+#     "decoder.layers.*.self_attn.v_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.v_proj",
+#     "decoder.layers.*.self_attn.q_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.q_proj",
+#     "decoder.layers.*.self_attn.out_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.out_proj",
+#     "decoder.layers.*.self_attn_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.self_attn_layer_norm",
+#     "decoder.layers.*.encoder_attn.k_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.k_proj",
+#     "decoder.layers.*.encoder_attn.v_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.v_proj",
+#     "decoder.layers.*.encoder_attn.q_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.q_proj",
+#     "decoder.layers.*.encoder_attn.out_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.out_proj",
+#     "decoder.layers.*.encoder_attn_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn_layer_norm",
+#     "decoder.layers.*.fc1": "speecht5.decoder.wrapped_decoder.layers.*.feed_forward.intermediate_dense",
+#     "decoder.layers.*.fc2": "speecht5.decoder.wrapped_decoder.layers.*.feed_forward.output_dense",
+#     "decoder.layers.*.final_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.final_layer_norm",
+# }
+MAPPING = {
+    **MAPPING_TEXT_ENCODER,
 }
 TOP_LEVEL_KEYS = []
 IGNORE_KEYS = [
-    "encoder.version",
-    "encoder.layers.*.norm_k.weight",
-    "encoder.layers.*.norm_k.bias",
-    "decoder.version",
-    "decoder.layers.*.norm_k.weight",
-    "decoder.layers.*.norm_k.bias",
-    "decoder.pos_emb.pe_k",
-    "speech_encoder_prenet.embed_positions._float_tensor",
-    "text_decoder_prenet.embed_positions._float_tensor",
-]
-IGNORE_KEYS_S2T = IGNORE_KEYS + [
-    "encoder.proj",
-    "text_encoder_prenet.*",
-    "speech_decoder_prenet.*",
-    "speech_decoder_postnet.*",
-]
-IGNORE_KEYS_T2S = IGNORE_KEYS + [
-    "encoder.proj",
-    "speech_encoder_prenet.*",
-    "text_decoder_prenet.*",
-    "text_decoder_postnet.*",
-]
-IGNORE_KEYS_S2S = IGNORE_KEYS + [
-    "encoder.proj",
-    "text_encoder_prenet.*",
-    "text_decoder_prenet.*",
-    "text_decoder_postnet.*",
+    # "encoder.version",
+    # "encoder.layers.*.norm_k.weight",
+    # "encoder.layers.*.norm_k.bias",
+    # "decoder.version",
+    # "decoder.layers.*.norm_k.weight",
+    # "decoder.layers.*.norm_k.bias",
+    # "decoder.pos_emb.pe_k",
+    # "speech_encoder_prenet.embed_positions._float_tensor",
+    # "text_decoder_prenet.embed_positions._float_tensor",
+    # "encoder.proj",
 ]
 
 
@@ -157,6 +97,10 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
         hf_shape = getattr(hf_pointer, weight_type).shape
     else:
         hf_shape = hf_pointer.shape
+
+    # strip off the kernel dimension at the end (original weights are Conv1d)
+    if key.endswith(".k_proj") or key.endswith(".v_proj") or key.endswith(".q_proj") or key.endswith(".out_proj"):
+        value = value.squeeze(-1)
 
     if hf_shape != value.shape:
         raise ValueError(
@@ -198,23 +142,23 @@ def should_ignore(name, ignore_keys):
     return False
 
 
-def recursively_load_weights(fairseq_dict, hf_model, task):
+def recursively_load_weights(fairseq_dict, hf_model):
     unused_weights = []
 
-    if task == "s2t":
-        feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
-        MAPPING = MAPPING_S2T
-        IGNORE_KEYS = IGNORE_KEYS_S2T
-    elif task == "t2s":
-        feature_encoder = None
-        MAPPING = MAPPING_T2S
-        IGNORE_KEYS = IGNORE_KEYS_T2S
-    elif task == "s2s":
-        feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
-        MAPPING = MAPPING_S2S
-        IGNORE_KEYS = IGNORE_KEYS_S2S
-    else:
-        raise ValueError(f"Unsupported task: {task}")
+    # if task == "s2t":
+    #     feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
+    #     MAPPING = MAPPING_S2T
+    #     IGNORE_KEYS = IGNORE_KEYS_S2T
+    # elif task == "t2s":
+    #     feature_encoder = None
+    #     MAPPING = MAPPING_T2S
+    #     IGNORE_KEYS = IGNORE_KEYS_T2S
+    # elif task == "s2s":
+    #     feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
+    #     MAPPING = MAPPING_S2S
+    #     IGNORE_KEYS = IGNORE_KEYS_S2S
+    # else:
+    #     raise ValueError(f"Unsupported task: {task}")
 
     for name, value in fairseq_dict.items():
         if should_ignore(name, IGNORE_KEYS):
@@ -222,7 +166,7 @@ def recursively_load_weights(fairseq_dict, hf_model, task):
             continue
 
         is_used = False
-        if "conv_layers" in name:
+        if False and "conv_layers" in name:
             load_conv_layer(
                 name,
                 value,
@@ -235,15 +179,26 @@ def recursively_load_weights(fairseq_dict, hf_model, task):
             for key, mapped_key in MAPPING.items():
                 # mapped_key = "speecht5." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
 
+                # print(key, mapped_key)
+
                 if "*" in key:
+                    # if key.endswith(".*"):
+                    #     if key[:-2] in name:
+                    #         key = key#[:-1]
+                    # else:
                     prefix, suffix = key.split(".*.")
                     if prefix in name and suffix in name:
                         key = suffix
 
                 # if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
                 if key in name:
+                    # print(key, name, mapped_key)
                     is_used = True
                     if "*" in mapped_key:
+                        # print(key, name, mapped_key)
+                        # print(name.split(key))
+                        # print(name.split(key)[0])
+                        # print(name.split(key)[0].split("."))
                         layer_index = name.split(key)[0].split(".")[-2]
                         mapped_key = mapped_key.replace("*", layer_index)
                     if "weight_g" in name:
@@ -267,7 +222,7 @@ def recursively_load_weights(fairseq_dict, hf_model, task):
         if not is_used:
             unused_weights.append(name)
 
-    logger.warning(f"Unused weights: {unused_weights}")
+    #MIH logger.warning(f"Unused weights: {unused_weights}")
 
 
 def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
@@ -315,8 +270,7 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
 
 @torch.no_grad()
-def convert_speecht5_checkpoint(
-    task,
+def convert_checkpoint(
     checkpoint_path,
     pytorch_dump_folder_path,
     config_path=None,
@@ -327,59 +281,55 @@ def convert_speecht5_checkpoint(
     Copy/paste/tweak model's weights to transformers design.
     """
     if config_path is not None:
-        config = SpeechT5Config.from_pretrained(config_path)
+        config = VITSConfig.from_pretrained(config_path)
     else:
-        config = SpeechT5Config()
+        config = VITSConfig()
 
-    if task == "s2t":
-        config.max_length = config.max_text_positions
-        model = SpeechT5ForSpeechToText(config)
-    elif task == "t2s":
-        config.max_speech_positions = 1876
-        config.max_text_positions = 600
-        config.max_length = config.max_speech_positions
-        model = SpeechT5ForTextToSpeech(config)
-    elif task == "s2s":
-        config.max_speech_positions = 1876
-        config.max_length = config.max_speech_positions
-        model = SpeechT5ForSpeechToSpeech(config)
-    else:
-        raise ValueError(f"Unknown task name: {task}")
+    # if task == "s2t":
+    #     config.max_length = config.max_text_positions
+    #     model = SpeechT5ForSpeechToText(config)
+    # elif task == "t2s":
+    #     config.max_speech_positions = 1876
+    #     config.max_text_positions = 600
+    #     config.max_length = config.max_speech_positions
+    #     model = SpeechT5ForTextToSpeech(config)
+    # elif task == "s2s":
+    #     config.max_speech_positions = 1876
+    #     config.max_length = config.max_speech_positions
+    #     model = SpeechT5ForSpeechToSpeech(config)
+    # else:
+    #     raise ValueError(f"Unknown task name: {task}")
 
-    if vocab_path:
-        tokenizer = SpeechT5Tokenizer(vocab_path, model_max_length=config.max_text_positions)
+    model = VITSModel(config)
 
-        # Mask token behaves like a normal word, i.e. include the space before it
-        mask_token = AddedToken("<mask>", lstrip=True, rstrip=False)
-        tokenizer.mask_token = mask_token
-        tokenizer.add_special_tokens({"mask_token": mask_token})
-        tokenizer.add_tokens(["<ctc_blank>"])
+    # if vocab_path:
+    #     tokenizer = SpeechT5Tokenizer(vocab_path, model_max_length=config.max_text_positions)
 
-    feature_extractor = SpeechT5FeatureExtractor()
-    processor = SpeechT5Processor(tokenizer=tokenizer, feature_extractor=feature_extractor)
-    processor.save_pretrained(pytorch_dump_folder_path)
+    #     # Mask token behaves like a normal word, i.e. include the space before it
+    #     mask_token = AddedToken("<mask>", lstrip=True, rstrip=False)
+    #     tokenizer.mask_token = mask_token
+    #     tokenizer.add_special_tokens({"mask_token": mask_token})
+    #     tokenizer.add_tokens(["<ctc_blank>"])
 
-    fairseq_checkpoint = torch.load(checkpoint_path)
-    recursively_load_weights(fairseq_checkpoint["model"], model, task)
+    # feature_extractor = VITSFeatureExtractor()
+    # processor = VITSProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+    # processor.save_pretrained(pytorch_dump_folder_path)
+
+    orig_checkpoint = torch.load(os.path.join(checkpoint_path, "G_100000.pth"), map_location=torch.device("cpu"))
+    recursively_load_weights(orig_checkpoint["model"], model)
 
     model.save_pretrained(pytorch_dump_folder_path)
 
-    if repo_id:
-        print("Pushing to the hub...")
-        processor.push_to_hub(repo_id)
-        model.push_to_hub(repo_id)
+    # if repo_id:
+    #     print("Pushing to the hub...")
+    #     processor.push_to_hub(repo_id)
+    #     model.push_to_hub(repo_id)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--task",
-        default="s2t",
-        type=str,
-        help="Type of the SpeechT5 model you'd like to convert. Should be one of 's2t', 't2s', 's2s'.",
-    )
-    parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to fairseq checkpoint")
-    parser.add_argument("--vocab_path", default=None, type=str, help="Path to SentencePiece model")
+    parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
+    parser.add_argument("--vocab_path", default=None, type=str, help="Path to TODO")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument(
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
@@ -389,8 +339,7 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_speecht5_checkpoint(
-        args.task,
+    convert_checkpoint(
         args.checkpoint_path,
         args.pytorch_dump_folder_path,
         args.config_path,
