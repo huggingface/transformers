@@ -2049,14 +2049,15 @@ class GenerationMixin:
                         items.append(item.repeat_interleave(top_k, dim=0))
                 new_key_values.append(items)
             model_kwargs["past_key_values"] = new_key_values
-            print (top_k_ids.view(-1, 1))
+            print (top_k_ids)
+            print (top_k_ids[:, 0].unsqueeze(0))
 
             # if the used memory exceeds a threshold, do not batch
             if low_memory:
                 all_outputs = {key:[] for key in outputs} # defined in first loop iteration
                 for i in range(len(top_k_ids)):
                     # compute the candidate tokens by the language model and collect their hidden_states
-                    next_model_inputs = self.prepare_inputs_for_generation(top_k_ids.view(-1, 1)[i], **model_kwargs)
+                    next_model_inputs = self.prepare_inputs_for_generation(top_k_ids[:, i].unsqueeze(0), **model_kwargs)
                     outputs = self(
                         **next_model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions
                     )
