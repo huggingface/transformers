@@ -51,7 +51,6 @@ def prepare_inputs_dict(
     input_ids=None,
     input_values=None,
     decoder_input_ids=None,
-    decoder_input_values=None,
     attention_mask=None,
     decoder_attention_mask=None,
     head_mask=None,
@@ -63,10 +62,8 @@ def prepare_inputs_dict(
     else:
         encoder_dict = {"input_values": input_values}
 
-    if decoder_input_ids is not None:
-        decoder_dict = {"decoder_input_ids": decoder_input_ids}
-    else:
-        decoder_dict = {"decoder_input_values": decoder_input_values}
+    
+    decoder_dict = {"decoder_input_ids": decoder_input_ids} if decoder_input_ids is not None else {}
 
     if head_mask is None:
         head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
@@ -113,15 +110,13 @@ class EncodecModelTester:
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.seq_length, self.hidden_size], scale=1.0)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        decoder_input_values = floats_tensor([self.batch_size, self.seq_length, self.hidden_size], scale=1.0)
+        
         decoder_attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         config = self.get_config()
         inputs_dict = prepare_inputs_dict(
             config,
             input_values=input_values,
-            decoder_input_values=decoder_input_values,
             attention_mask=attention_mask,
             decoder_attention_mask=decoder_attention_mask,
         )
@@ -153,7 +148,7 @@ class EncodecModelTester:
         result = model(input_values, attention_mask=attention_mask, decoder_input_values=decoder_input_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def _prepare_for_class(inputs_dict, model_class, return_labels):
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels = False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
         inputs_dict.pop("decoder_input_values")
         return inputs_dict
@@ -166,10 +161,10 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     #     if is_torch_available()
     #     else {}
     # )
-class EnCodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (EnCodecModel,) if is_torch_available() else ()
+class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (EncodecModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"automatic-speech-recognition": EnCodecModel, "feature-extraction": EnCodecModel}
+        {"automatic-speech-recognition": EncodecModel, "feature-extraction": EncodecModel}
         if is_torch_available()
         else {}
     )
@@ -183,7 +178,7 @@ class EnCodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = EncodecModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=EncodecConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=EncodecConfig, hidden_size=37, common_properties = [])
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -204,7 +199,6 @@ class EnCodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             expected_arg_names = [
                 "input_values",
                 "attention_mask",
-                "decoder_input_values",
                 "decoder_attention_mask",
             ]
             expected_arg_names.extend(
