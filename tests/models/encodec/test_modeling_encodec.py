@@ -16,6 +16,8 @@
 
 import inspect
 import unittest
+import numpy as np
+from torch import exp
 
 from datasets import Audio, load_dataset
 
@@ -26,6 +28,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from datasets import load_dataset, Audio
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -205,16 +208,32 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                         )
 
 
+
+def normalize(arr):
+    norm = np.linalg.norm(arr)
+    normalized_arr = arr / norm
+    return normalized_arr
+
+
+def compute_rmse(arr1, arr2):
+    arr1_normalized = normalize(arr1)
+    arr2_normalized = normalize(arr2)
+    return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
+
+
 @slow
 @require_torch
 class EncodecIntegrationTest(unittest.TestCase):
-    def test_integration_ls(self):
-        import os
 
-        import soundfile as sf
-
-        home_folder = os.path.expanduser("~")
-
+    def test_integration_24kHz(self):
+        expected_rmse = {
+            "1.5": 0.0025,
+            "24.0": 0.0015,
+        }
+        expected_codesums = {
+            "1.5": [371955],
+            "24.0": [6644616],
+        }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "Matthijs/encodec_24khz"
 
@@ -222,25 +241,83 @@ class EncodecIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
-        audio_sample = librispeech_dummy[-1]
+        audio_sample = librispeech_dummy[-1]["audio"]["array"]
 
-        input_values = processor(audio=audio_sample["audio"]["array"], return_tensors="pt").input_values.to(
-            torch_device
-        )
+        input_values = processor(audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt").input_values.to(torch_device)
 
-        sf.write(os.path.join(home_folder, "original.wav"), input_values[0][0].cpu().numpy(), 24_000, subtype="PCM_24")
+        for bandwidth, expected_rmse in expected_rmse.items():
+            with torch.no_grad():
+                # use max bandwith for best possible reconstruction
+                audio_code = model.encode(input_values, bandwidth=float(bandwidth))
 
-        with torch.no_grad():
-            input_values_enc_dec = model(input_values)
+                audio_code_sums = [a[0][0].sum().cpu().item() for a in audio_code]
 
-        sf.write(
-            os.path.join(home_folder, "reconstruct.wav"),
-            input_values_enc_dec[0][0].cpu().numpy(),
-            24_000,
-            subtype="PCM_24",
-        )
+                # make sure audio encoded codes are correct
+                self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
 
-        self.assertTrue(input_values.shape == input_values_enc_dec.shape)
+                input_values_dec = model.decode(audio_code)
+                input_values_enc_dec = model(input_values, bandwidth=float(bandwidth))
 
-        # Matthijs: This currently doesn't work - shouldn't it work?
-        self.assertTrue(torch.allclose(input_values, input_values_enc_dec, atol=1e-3))
+            # make sure forward and decode gives same result
+            self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
+
+            # make sure shape matches
+            self.assertTrue(input_values.shape == input_values_enc_dec.shape)
+
+            arr = input_values[0].cpu().numpy()
+            arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
+
+            # make sure audios are more or less equal
+            # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
+            rmse = compute_rmse(arr, arr_enc_dec)
+            self.assertTrue(rmse < expected_rmse)
+
+    def test_integration_48kHz(self):
+        expected_rmse = {
+            "3.0": 0.001,
+            "24.0": 0.0005,
+        }
+        expected_codesums = {
+            "3.0": [144259, 146765, 156205, 176871, 102780],
+            "24.0": [1567904, 1297170, 1310040, 1464657, 813925],
+        }
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        model_id = "Matthijs/encodec_48khz"
+
+        model = EncodecModel.from_pretrained(model_id).to(torch_device)
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        audio_sample = librispeech_dummy[-1]["audio"]["array"]
+
+        # transform mono to stereo
+        audio_sample = np.array([audio_sample, audio_sample])
+
+        input_values = processor(audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt").input_values.to(torch_device)
+
+        for bandwidth, expected_rmse in expected_rmse.items():
+            with torch.no_grad():
+                # use max bandwith for best possible reconstruction
+                audio_code = model.encode(input_values, bandwidth=float(bandwidth))
+
+                audio_code_sums = [a[0][0].sum().cpu().item() for a in audio_code]
+
+                # make sure audio encoded codes are correct
+                self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
+
+                input_values_dec = model.decode(audio_code)
+                input_values_enc_dec = model(input_values, bandwidth=float(bandwidth))
+
+            # make sure forward and decode gives same result
+            self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
+
+            # make sure shape matches
+            self.assertTrue(input_values.shape == input_values_enc_dec.shape)
+
+            arr = input_values[0].cpu().numpy()
+            arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
+
+            # make sure audios are more or less equal
+            # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
+            rmse = compute_rmse(arr, arr_enc_dec)
+            self.assertTrue(rmse < expected_rmse)
