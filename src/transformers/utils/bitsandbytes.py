@@ -245,9 +245,9 @@ def get_keys_to_not_convert(model):
     tied_params = find_tied_parameters(tied_model)
     # For compatibility with Accelerate < 0.18
     if isinstance(tied_params, dict):
-        tied_keys = list(tied_params.values())
+        tied_keys = sum(list(tied_params.values()), []) + list(tied_params.keys())
     else:
-        tied_keys = sum([x[1:] for x in tied_params], [])
+        tied_keys = sum(tied_params, [])
     has_tied_params = len(tied_keys) > 0
 
     # Check if it is a base model
@@ -258,12 +258,12 @@ def get_keys_to_not_convert(model):
         return []
 
     # otherwise they have an attached head
-    list_modules = list(model.named_parameters())
+    list_modules = list(model.named_children())
     list_last_module = [list_modules[-1][0]]
 
     # add last module together with tied weights
     intersection = set(list_last_module) - set(tied_keys)
-    list_untouched = tied_keys + list(intersection)
+    list_untouched = list(set(tied_keys)) + list(intersection)
 
     # remove ".weight" from the keys
     names_to_remove = [".weight", ".bias"]
