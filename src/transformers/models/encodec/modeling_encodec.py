@@ -588,38 +588,9 @@ class SEANetDecoder(nn.Module):
 
 
 class EncodecEuclideanCodebook(nn.Module):
-    """Codebook with Euclidean distance.
-    Args:
-        dim (int): Dimension.
-        codebook_size (int): Codebook size.
-        kmeans_init (bool): Whether to use k-means to initialize the codebooks.
-            If set to true, run the k-means algorithm on the first training batch and use
-            the learned centroids as initialization.
-        kmeans_iters (int): Number of iterations used for k-means algorithm at initialization.
-        decay (float): Decay for exponential moving average over the codebooks.
-        epsilon (float): Epsilon value for numerical stability.
-        threshold_ema_dead_code (int): Threshold for dead code expiration. Replace any codes
-            that have an exponential moving average cluster size less than the specified threshold with
-            randomly selected vector from the current batch.
-    """
-    def __init__(
-        self,
-        config,
-        dim
-        # codebook_size: int,
-        # kmeans_init: int = False,
-        # kmeans_iters: int = 10,
-        # decay: float = 0.99,
-        # epsilon: float = 1e-5,
-        # threshold_ema_dead_code: int = 2,
-    ):
+    """Codebook with Euclidean distance."""
+    def __init__(self, config: EncodecConfig, dim: int):
         super().__init__()
-
-
-            # dim=codebook_dim, codebook_size=codebook_size,
-            #                                kmeans_init=kmeans_init, kmeans_iters=kmeans_iters,
-            #                                decay=decay, epsilon=epsilon,
-            #                                threshold_ema_dead_code=threshold_ema_dead_code)
 
         self.decay = config.decay
         init_fn: Union[Callable[..., torch.Tensor], Any] = _uniform_init if not config.kmeans_init else torch.zeros
@@ -709,49 +680,18 @@ class EncodecEuclideanCodebook(nn.Module):
         self.init_embed_(x)
 
         embed_ind = self.quantize(x)
-        embed_onehot = nn.functional.one_hot(embed_ind, self.codebook_size).type(dtype)
         embed_ind = self.postprocess_emb(embed_ind, shape)
         quantize = self.dequantize(embed_ind)
-
-        #TODO
-        # if self.training:
-        #     # We do the expiry of code at that point as buffers are in sync
-        #     # and all the workers will take the same decision.
-        #     self.expire_codes_(x)
-        #     ema_inplace(self.cluster_size, embed_onehot.sum(0), self.decay)
-        #     embed_sum = x.t() @ embed_onehot
-        #     ema_inplace(self.embed_avg, embed_sum.t(), self.decay)
-        #     cluster_size = (
-        #         laplace_smoothing(self.cluster_size, self.codebook_size, self.epsilon)
-        #         * self.cluster_size.sum()
-        #     )
-        #     embed_normalized = self.embed_avg / cluster_size.unsqueeze(1)
-        #     self.embed.data.copy_(embed_normalized)
 
         return quantize, embed_ind
 
 
 class EncodecVectorQuantization(nn.Module):
-    """Vector quantization implementation.
-    Currently supports only euclidean distance.
-    Args:
-        dim (int): Dimension
-        codebook_size (int): Codebook size
-
-        codebook_dim (int): Codebook dimension. If not defined, uses the specified dimension in dim.
-        decay (float): Decay for exponential moving average over the codebooks.
-        epsilon (float): Epsilon value for numerical stability.
-        kmeans_init (bool): Whether to use kmeans to initialize the codebooks.
-        kmeans_iters (int): Number of iterations used for kmeans initialization.
-        threshold_ema_dead_code (int): Threshold for dead code expiration. Replace any codes
-            that have an exponential moving average cluster size less than the specified threshold with
-            randomly selected vector from the current batch.
-        commitment_weight (float): Weight for commitment loss.
     """
-    def __init__(
-        self,
-        config
-    ):
+    Vector quantization implementation.
+    Currently supports only euclidean distance.
+    """
+    def __init__(self, config: EncodecConfig):
         super().__init__()
 
         codebook_dim = config.codebook_dim if config.codebook_dim is not None else config.dimension
@@ -801,7 +741,7 @@ class EncodecResidualVectorQuantization(nn.Module):
     Residual vector quantization implementation.
     Follows Algorithm 1. in https://arxiv.org/pdf/2107.03312.pdf
     """
-    def __init__(self, config, num_quantizers):
+    def __init__(self, config: EncodecConfig, num_quantizers: int):
         super().__init__()
         self.layers = nn.ModuleList(
             [EncodecVectorQuantization(config) for _ in range(num_quantizers)]
@@ -850,11 +790,7 @@ class EncodecResidualVectorQuantization(nn.Module):
 
 class EncodecResidualVectorQuantizer(nn.Module):
     """Residual Vector Quantizer."""
-    def __init__(
-        self,
-        config: EncodecConfig,
-        num_quantizers: int = 8,
-    ):
+    def __init__(self, config: EncodecConfig, num_quantizers: int):
         super().__init__()
         self.config = config
         self.num_quantizers = num_quantizers
