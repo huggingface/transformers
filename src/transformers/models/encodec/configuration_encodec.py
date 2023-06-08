@@ -91,7 +91,7 @@ class EncodecConfig(PretrainedConfig):
             in the residual network blocks.
         compress (int):
             Reduced dimensionality in residual branches (from Demucs v3).
-        lstm (int):
+        num_lstm_layers (int):
             Number of LSTM layers at the end of the encoder.
         trim_right_ratio (float):
             Ratio for trimming at the right of the transposed convolution under the causal setup.
@@ -149,7 +149,7 @@ class EncodecConfig(PretrainedConfig):
         pad_mode="reflect",
         true_skip=False,   # TODO: better name
         compress=2,
-        lstm=2,   # TODO: num_lstm_layers
+        num_lstm_layers=2,
         trim_right_ratio=1.0,
         bins=1024,  # TODO: rename to codebook_size
         codebook_dim=None,
@@ -186,7 +186,7 @@ class EncodecConfig(PretrainedConfig):
         self.pad_mode = pad_mode
         self.true_skip = true_skip
         self.compress = compress
-        self.lstm = lstm
+        self.num_lstm_layers = num_lstm_layers
         self.trim_right_ratio = trim_right_ratio
         self.bins = bins
         self.codebook_dim = codebook_dim

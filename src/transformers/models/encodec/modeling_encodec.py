@@ -444,12 +444,11 @@ class SConvTranspose1d(nn.Module):
         return y
 
 
-class SLSTM(nn.Module):
+class EncodecLSTM(nn.Module):
     """
     LSTM without worrying about the hidden state, nor the layout of the data.
     Expects input as convolutional layout.
     """
-
     def __init__(self, dimension: int, num_layers: int = 2, skip: bool = True):
         super().__init__()
         self.skip = skip
@@ -465,14 +464,15 @@ class SLSTM(nn.Module):
 
 
 class EncodecResnetBlock(nn.Module):
-    """Residual block from SEANet model.
+    """
+    Residual block from SEANet model as used by EnCodec.
+
     Args:
         config:
         dim (int): Dimension of the input/output
         kernel_sizes (list): List of kernel sizes for the convolutions.
         dilations (list): List of dilations for the convolutions.
     """
-
     def __init__(self, config: EncodecConfig, dim: int, kernel_sizes: List[int], dilations: List[int]):
         super().__init__()
 
@@ -524,8 +524,7 @@ class EncodecResnetBlock(nn.Module):
 
 
 class EncodecEncoder(nn.Module):
-    """SEANet encoder."""
-
+    """SEANet encoder as used by EnCodec."""
     def __init__(self, config: EncodecConfig):
         super().__init__()
 
@@ -544,7 +543,7 @@ class EncodecEncoder(nn.Module):
         ]
 
         # Downsample to raw audio scale
-        for i, ratio in enumerate(reversed(config.ratios)):
+        for ratio in reversed(config.ratios):
             # Add residual layers
             for j in range(config.num_residual_layers):
                 model += [
@@ -571,8 +570,8 @@ class EncodecEncoder(nn.Module):
             ]
             mult *= 2
 
-        if config.lstm:
-            model += [SLSTM(mult * config.num_filters, num_layers=config.lstm)]
+        if config.num_lstm_layers:
+            model += [EncodecLSTM(mult * config.num_filters, config.num_lstm_layers)]
 
         model += [
             act(**config.activation_params),
@@ -596,8 +595,7 @@ class EncodecEncoder(nn.Module):
 
 
 class EncodecDecoder(nn.Module):
-    """Encodec decoder."""
-
+    """SEANet decoder as used by EnCodec."""
     def __init__(self, config: EncodecConfig):
         super().__init__()
         act = getattr(nn, config.activation)
@@ -614,11 +612,11 @@ class EncodecDecoder(nn.Module):
             )
         ]
 
-        if config.lstm:
-            model += [SLSTM(mult * config.num_filters, num_layers=config.lstm)]
+        if config.num_lstm_layers:
+            model += [EncodecLSTM(mult * config.num_filters, config.num_lstm_layers)]
 
         # Upsample to raw audio scale
-        for i, ratio in enumerate(config.ratios):
+        for ratio in config.ratios:
             # Add upsampling layers
             model += [
                 act(**config.activation_params),
@@ -675,7 +673,6 @@ class EncodecDecoder(nn.Module):
 
 class EncodecEuclideanCodebook(nn.Module):
     """Codebook with Euclidean distance."""
-
     def __init__(self, config: EncodecConfig, dim: int):
         super().__init__()
 
@@ -772,7 +769,6 @@ class EncodecVectorQuantization(nn.Module):
     Vector quantization implementation.
     Currently supports only euclidean distance.
     """
-
     def __init__(self, config: EncodecConfig):
         super().__init__()
 
@@ -823,7 +819,6 @@ class EncodecResidualVectorQuantization(nn.Module):
     Residual vector quantization implementation.
     Follows Algorithm 1. in https://arxiv.org/pdf/2107.03312.pdf
     """
-
     def __init__(self, config: EncodecConfig, num_quantizers: int):
         super().__init__()
         self.layers = nn.ModuleList([EncodecVectorQuantization(config) for _ in range(num_quantizers)])
@@ -871,7 +866,6 @@ class EncodecResidualVectorQuantization(nn.Module):
 
 class EncodecResidualVectorQuantizer(nn.Module):
     """Residual Vector Quantizer."""
-
     def __init__(self, config: EncodecConfig, num_quantizers: int):
         super().__init__()
         self.config = config
