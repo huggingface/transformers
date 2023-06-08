@@ -1058,7 +1058,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     _no_split_modules = None
     _skip_keys_device_placement = None
     _keep_in_fp32_modules = None
-    _supports_static_kv_cache = False
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
     # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
@@ -1072,6 +1071,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     _keys_to_ignore_on_save = None
 
     is_parallelizable = False
+    supports_static_kv_cache = False
     supports_gradient_checkpointing = False
 
     @property
@@ -1640,6 +1640,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if not self.supports_static_kv_cache:
             raise ValueError(f"{self.__class__.__name__} does not support static kv cache.")
         self.apply(partial(self._set_static_kv_cache, value=True))
+    
+
+    def static_kv_cache_disable(self):
+        """
+        Disable static KV cache for generation 
+        """
+        if self.supports_static_kv_cache:
+            self.apply(partial(self._set_static_kv_cache, value=False))
 
 
     def gradient_checkpointing_disable(self):
