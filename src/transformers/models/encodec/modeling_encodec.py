@@ -280,8 +280,8 @@ def _kmeans(samples, num_clusters: int, num_iters: int = 10):
 
 class ConvLayerNorm(nn.LayerNorm):
     """
-    Convolution-friendly LayerNorm that moves channels to last dimensions
-    before running the normalization and moves them back to original position right after.
+    Convolution-friendly LayerNorm that moves channels to last dimensions before running the normalization and moves
+    them back to original position right after.
     """
 
     def __init__(self, normalized_shape: Union[int, List[int], torch.Size], **kwargs):
@@ -442,8 +442,7 @@ class SConvTranspose1d(nn.Module):
 
 class SLSTM(nn.Module):
     """
-    LSTM without worrying about the hidden state, nor the layout of the data.
-    Expects input as convolutional layout.
+    LSTM without worrying about the hidden state, nor the layout of the data. Expects input as convolutional layout.
     """
 
     def __init__(self, dimension: int, num_layers: int = 2, skip: bool = True):
@@ -658,7 +657,9 @@ class EncodecDecoder(nn.Module):
         # Add optional final activation to decoder (eg. tanh)
         if config.final_activation is not None:
             final_act = getattr(nn, config.final_activation)
-            final_activation_params = final_activation_params or {}
+            final_activation_params = (
+                config.final_activation_params if config.final_activation_params is not None else {}
+            )
             model += [final_act(**final_activation_params)]
 
         self.layers = nn.ModuleList(model)
@@ -765,8 +766,7 @@ class EncodecEuclideanCodebook(nn.Module):
 
 class EncodecVectorQuantization(nn.Module):
     """
-    Vector quantization implementation.
-    Currently supports only euclidean distance.
+    Vector quantization implementation. Currently supports only euclidean distance.
     """
 
     def __init__(self, config: EncodecConfig):
@@ -816,8 +816,7 @@ class EncodecVectorQuantization(nn.Module):
 
 class EncodecResidualVectorQuantization(nn.Module):
     """
-    Residual vector quantization implementation.
-    Follows Algorithm 1. in https://arxiv.org/pdf/2107.03312.pdf
+    Residual vector quantization implementation. Follows Algorithm 1. in https://arxiv.org/pdf/2107.03312.pdf
     """
 
     def __init__(self, config: EncodecConfig, num_quantizers: int):
@@ -876,15 +875,15 @@ class EncodecResidualVectorQuantizer(nn.Module):
 
     def forward(self, embeddings: torch.Tensor, frame_rate: int, bandwidth: Optional[float] = None) -> QuantizedResult:
         """
-        Residual vector quantization on the given input tensor.
         Args:
+        Residual vector quantization on the given input tensor.
             embeddings (torch.Tensor): Input tensor.
             frame_rate (int): Sample rate of the input tensor.
             bandwidth (float): Target bandwidth.
         Returns:
             QuantizedResult:
-                The quantized (or approximately quantized) representation with
-                the associated bandwidth and any penalty term for the loss.
+                The quantized (or approximately quantized) representation with the associated bandwidth and any penalty
+                term for the loss.
         """
         bw_per_q = self.get_bandwidth_per_quantizer(frame_rate)
         num_quantizers = self.get_num_quantizers_for_bandwidth(frame_rate, bandwidth)
@@ -904,16 +903,15 @@ class EncodecResidualVectorQuantizer(nn.Module):
 
     def get_bandwidth_per_quantizer(self, frame_rate: int):
         """
-        Returns bandwidth per quantizer for a given input frame rate.
-        Each quantizer encodes a frame with `log2(bins)` bits.
+        Returns bandwidth per quantizer for a given input frame rate. Each quantizer encodes a frame with `log2(bins)`
+        bits.
         """
         return math.log2(self.config.bins) * frame_rate
 
     def encode(self, embeddings: torch.Tensor, frame_rate: int, bandwidth: Optional[float] = None) -> torch.Tensor:
         """
-        Encode a given input tensor with the specified frame rate at the given bandwidth.
-        The RVQ encode method sets the appropriate number of quantizers to use
-        and returns indices for each quantizer.
+        Encode a given input tensor with the specified frame rate at the given bandwidth. The RVQ encode method sets
+        the appropriate number of quantizers to use and returns indices for each quantizer.
         """
         num_quantizers = self.get_num_quantizers_for_bandwidth(frame_rate, bandwidth)
         codes = self.vector_quantization.encode(embeddings, num_quantizers=num_quantizers)
@@ -1129,7 +1127,10 @@ class EncodecModel(EncodecPreTrainedModel):
         return self.decoder
 
     def encode(
-        self, input_values: torch.Tensor, bandwidth: Optional[float] = None, return_dict: Optional[bool] = None,
+        self,
+        input_values: torch.Tensor,
+        bandwidth: Optional[float] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput]:
         """
         Encodes the input audio waveform into discrete codes.
@@ -1138,14 +1139,14 @@ class EncodecModel(EncodecPreTrainedModel):
             input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
                 Float values of the input audio waveform.
             bandwidth (`float`, *optional*):
-                The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible bandwidth.
-                bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented as
-                bandwidth == 6.0
+                The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible
+                bandwidth. bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented
+                as bandwidth == 6.0
 
         Returns:
-            A list of frames containing the discrete encoded codes for the input audio waveform,
-            along with rescaling factors for each segment when `normalize` is True.
-            Each frames is a tuple `(codebook, scale)`, with `codebook` of shape `[B, K, T]`, with `K` the number of codebooks, `T` frames.
+            A list of frames containing the discrete encoded codes for the input audio waveform, along with rescaling
+            factors for each segment when `normalize` is True. Each frames is a tuple `(codebook, scale)`, with
+            `codebook` of shape `[B, K, T]`, with `K` the number of codebooks, `T` frames.
         """
         if bandwidth is None:
             bandwidth = self.config.target_bandwidths[0]
@@ -1172,7 +1173,7 @@ class EncodecModel(EncodecPreTrainedModel):
 
         padded_length = ((input_length) // stride + 1) * (stride) + segment_length
         padded_inputs = torch.nn.functional.pad(input_values, (0, padded_length - input_length))
-        for offset in range(0,  input_length, stride):
+        for offset in range(0, input_length, stride):
             frame = padded_inputs[:, :, offset : offset + segment_length]
             encoded_frame, scale = self._encode_frame(frame, bandwidth)
             encoded_frames.append(encoded_frame)
@@ -1214,8 +1215,8 @@ class EncodecModel(EncodecPreTrainedModel):
         """
         Decodes the given frames into an output audio waveform.
 
-        Note that the output might be a bit bigger than the input. In that case,
-        any extra steps at the end can be trimmed.
+        Note that the output might be a bit bigger than the input. In that case, any extra steps at the end can be
+        trimmed.
         """
         segment_length = self.config.segment_length
         if segment_length is None:
@@ -1264,8 +1265,8 @@ class EncodecModel(EncodecPreTrainedModel):
             Float values of the input audio waveform.
 
         bandwidth (`float`, *optional*):
-            The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible bandwidth.
-            bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented as
+            The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible
+            bandwidth. bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented as
             bandwidth == 6.0
 
         Returns:

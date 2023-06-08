@@ -59,9 +59,8 @@ class EncodecConfig(PretrainedConfig):
         num_residual_layers (int):
             Number of residual layers.
         ratios (Sequence[int]):
-            Kernel size and stride ratios. The encoder uses downsampling ratios instead of
-            upsampling ratios, hence it will use the ratios in the reverse order to the ones specified here
-            that must match the decoder order.
+            Kernel size and stride ratios. The encoder uses downsampling ratios instead of upsampling ratios, hence it
+            will use the ratios in the reverse order to the ones specified here that must match the decoder order.
         activation (str):
             Activation function.
         activation_params (dict):
@@ -87,15 +86,15 @@ class EncodecConfig(PretrainedConfig):
         pad_mode (str):
             Padding mode for the convolutions.
         true_skip (bool):
-            Whether to use true skip connection or a simple (streamable) convolution as the skip connection
-            in the residual network blocks.
+            Whether to use true skip connection or a simple (streamable) convolution as the skip connection in the
+            residual network blocks.
         compress (int):
             Reduced dimensionality in residual branches (from Demucs v3).
         lstm (int):
             Number of LSTM layers at the end of the encoder.
         trim_right_ratio (float):
-            Ratio for trimming at the right of the transposed convolution under the causal setup.
-            If equal to 1.0, it means that all the trimming is done at the right.
+            Ratio for trimming at the right of the transposed convolution under the causal setup. If equal to 1.0, it
+            means that all the trimming is done at the right.
         bins (int): Codebook size.
         codebook_dim (int): Codebook dimension. If not defined, uses the specified dimension in dim.
         decay (float): Decay for exponential moving average over the codebooks.
@@ -103,8 +102,8 @@ class EncodecConfig(PretrainedConfig):
         kmeans_init (bool): Whether to use kmeans to initialize the codebooks.
         kmeans_iters (int): Number of iterations used for kmeans initialization.
         threshold_ema_dead_code (int): Threshold for dead code expiration. Replace any codes
-            that have an exponential moving average cluster size less than the specified threshold with
-            randomly selected vector from the current batch.
+            that have an exponential moving average cluster size less than the specified threshold with randomly
+            selected vector from the current batch.
         commitment_weight (float): Weight for commitment loss.
 
     Example:

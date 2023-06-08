@@ -75,9 +75,9 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         Args:
             audio (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, *optional*):
                 The sequence or batch of sequences to be processed. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values.
-                The numpy array must be of shape `(num_samples,)` for mono audio (`feature_size = 1`),
-                or `(2, num_samples)` for stereo audio (`feature_size = 2`).
+                values, a list of numpy arrays or a list of list of float values. The numpy array must be of shape
+                `(num_samples,)` for mono audio (`feature_size = 1`), or `(2, num_samples)` for stereo audio
+                (`feature_size = 2`).
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
@@ -110,8 +110,8 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
-                The sampling rate at which the `audio` input was sampled. It is strongly recommended
-                to pass `sampling_rate` at the forward call to prevent silent errors.
+                The sampling rate at which the `audio` input was sampled. It is strongly recommended to pass
+                `sampling_rate` at the forward call to prevent silent errors.
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
