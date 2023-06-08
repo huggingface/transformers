@@ -730,9 +730,6 @@ class DisentangledSelfAttention(nn.Module):
 
         if rel_att is not None:
             attention_scores = attention_scores + rel_att
-        # attention_scores = (attention_scores - attention_scores.max(dim=-1, keepdim=True).values.detach()).to(
-        #     hidden_states
-        # )
         attention_scores = attention_scores
         attention_scores = attention_scores.view(
             -1, self.num_attention_heads, attention_scores.size(-2), attention_scores.size(-1)
@@ -804,7 +801,6 @@ class DisentangledSelfAttention(nn.Module):
         if "c2p" in self.pos_att_type:
             scale = 1 / torch.sqrt(torch.tensor(pos_key_layer.size(-1), dtype=torch.float) * scale_factor)
             c2p_att = torch.bmm(query_layer, pos_key_layer.transpose(-1, -2))
-            # c2p_att = torch.bmm(query_layer, pos_key_layer.transpose(-1, -2).to(query_layer) * scale)
             c2p_pos = torch.clamp(relative_pos + att_span, 0, att_span * 2 - 1)
             c2p_att = torch.gather(
                 c2p_att,
@@ -812,7 +808,6 @@ class DisentangledSelfAttention(nn.Module):
                 index=c2p_pos.squeeze(0).expand([query_layer.size(0), query_layer.size(1), relative_pos.size(-1)]),
             )
             score += c2p_att * scale.to(dtype=c2p_att.dtype)
-            # score += c2p_att
 
         # position->content
         if "p2c" in self.pos_att_type:
@@ -831,14 +826,12 @@ class DisentangledSelfAttention(nn.Module):
 
             p2c_pos = torch.clamp(-r_pos + att_span, 0, att_span * 2 - 1)
             p2c_att = torch.bmm(key_layer, pos_query_layer.transpose(-1, -2))
-            # p2c_att = torch.bmm(key_layer, pos_query_layer.transpose(-1, -2) * scale)
             p2c_att = torch.gather(
                 p2c_att,
                 dim=-1,
                 index=p2c_pos.squeeze(0).expand([query_layer.size(0), key_layer.size(-2), key_layer.size(-2)]),
             ).transpose(-1, -2)
             score += p2c_att * scale.to(dtype=p2c_att.dtype)
-            # score += p2c_att
 
         return score
 
