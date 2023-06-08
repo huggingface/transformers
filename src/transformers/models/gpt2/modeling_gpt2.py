@@ -329,7 +329,7 @@ class GPT2Attention(nn.Module):
             layer_past[0][:, :, valid_past_index:upper] = key  # Slice to keep dimension info
             layer_past[1][:, :, valid_past_index:upper] = value
 
-            # TODO (felix) Not sure this allocation is needed - maybe refactoring would be faster?
+            # TODO (felix) Would removing these two lines help?
             key = layer_past[0][:, :, :upper]
             value = layer_past[1][:, :, :upper]
 
