@@ -1123,7 +1123,12 @@ class EncodecModel(EncodecPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    def encode(self, input_values: torch.Tensor, bandwidth: Optional[float] = None, return_dict = None) ->  Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput] :
+    def encode(
+        self,
+        input_values: torch.Tensor,
+        bandwidth: Optional[float] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput]:
         """
         Encodes the input audio waveform into discrete codes.
 
@@ -1162,21 +1167,21 @@ class EncodecModel(EncodecPreTrainedModel):
 
         encoded_frames = []
         scales = []
-        
+
         padded_length = ((input_length - 1) // stride + 1) * stride + 1
         padded_inputs = torch.nn.functional.pad(input_values, (0, padded_length - input_length))
         for offset in range(0, input_length, stride):
             frame = padded_inputs[:, :, offset : offset + segment_length]
             encoded_frame, scale = self._encode_frame(frame, bandwidth)
-            scales.append(scale)
             encoded_frames.append(encoded_frame)
-        
-        
+            scales.append(scale)
+
         encoded_frames = torch.stack(encoded_frames)
 
         if return_dict:
             return EncodecEncoderOutput(encoded_frames, scales)
-        return (encoded_frames,scales)
+
+        return (encoded_frames, scales)
 
     def _encode_frame(self, input_values: torch.Tensor, bandwidth: float) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         length = input_values.shape[-1]
@@ -1196,9 +1201,13 @@ class EncodecModel(EncodecPreTrainedModel):
         embeddings = self.encoder(input_values)
         codes = self.quantizer.encode(embeddings, self.frame_rate, bandwidth)
         codes = codes.transpose(0, 1)
-        return codes, scale
+        return (codes, scale)
 
-    def decode(self, encoded_frames: Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput] , return_dict = None) -> Union[Tuple[torch.Tensor,torch.Tensor], EncodecDecoderOutput]:
+    def decode(
+        self,
+        encoded_frames: Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput],
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecDecoderOutput]:
         """
         Decodes the given frames into an output audio waveform.
 
@@ -1213,7 +1222,7 @@ class EncodecModel(EncodecPreTrainedModel):
 
         decoded_frames = []
         code_embeddings = []
-        
+
         for frame, scale in encoded_frames:
             frames, embeddings = self._decode_frame(frame, scale)
             decoded_frames.append(_linear_overlap_add(frames, self.config.segment_stride or 1))
@@ -1224,20 +1233,29 @@ class EncodecModel(EncodecPreTrainedModel):
 
         if return_dict:
             return EncodecDecoderOutput(decoded_frames, code_embeddings)
-        return (decoded_frames, code_embeddings)
-    
 
-    def _decode_frame(self, codes: Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput], scale = None) -> Tuple[torch.Tensor,torch.Tensor]:
+        return (decoded_frames, code_embeddings)
+
+    def _decode_frame(
+        self,
+        codes: Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput],
+        scale: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         codes = codes.transpose(0, 1)
         embeddings = self.quantizer.decode(codes)
         outputs = self.decoder(embeddings)
         if scale is not None:
             outputs = outputs * scale.view(-1, 1, 1)
-        return outputs, embeddings
+        return (outputs, embeddings)
 
     # TODO @add_start_docstrings_to_model_forward(ENCODEC_INPUTS_DOCSTRING)
     # TODO @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(self, input_values: torch.Tensor, bandwidth: Optional[float] = None, return_dict=None) -> torch.Tensor:
+    def forward(
+        self,
+        input_values: torch.Tensor,
+        bandwidth: Optional[float] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecDecoderOutput]:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
             Float values of the input audio waveform.
@@ -1251,9 +1269,9 @@ class EncodecModel(EncodecPreTrainedModel):
         """
         encoder_outputs = self.encode(input_values, bandwidth, return_dict)
         decoder_outputs = self.decode(encoder_outputs, return_dict)
-        codes_frames = decoder_outputs[0][..., : input_values.shape[-1]]
+        audio_output = decoder_outputs[0][..., : input_values.shape[-1]]
 
         if return_dict:
-            return EncodecOutput(encoder_outputs.audio_codes, codes_frames)
+            return EncodecOutput(encoder_outputs.audio_codes, audio_output)
 
-        return (encoder_outputs[0], codes_frames)
+        return (encoder_outputs[0], audio_output)
