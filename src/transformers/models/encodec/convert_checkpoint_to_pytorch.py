@@ -340,7 +340,7 @@ def convert_checkpoint(
         config.audio_channels = 2
         config.causal = False
         config.norm = "time_group_norm"
-        config.audio_normalize = True
+        config.normalize = True
         config.segment = 1.0
     else:
         raise ValueError(f"Unknown model name: {model_name}")

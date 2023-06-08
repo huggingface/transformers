@@ -262,7 +262,7 @@ class EncodecConfig(PretrainedConfig):
         audio_channels=1,
 
         normalize=False,
-        segment=None,
+        segment=None,   # TODO: segment length in seconds
         overlap=0.01,
 
         dimension=128,
