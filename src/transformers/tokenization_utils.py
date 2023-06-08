@@ -728,7 +728,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             elif is_split_into_words and not isinstance(ids_or_pair_ids[0], (list, tuple)):
                 ids, pair_ids = ids_or_pair_ids, None
             else:
-                ids, pair_ids = ids_or_pair_ids
+                if isinstance(ids_or_pair_ids, tuple):
+                    ids, pair_ids = ids_or_pair_ids
+                elif isinstance(ids_or_pair_ids, list):
+                    ids, pair_ids = ids_or_pair_ids, None
+                else:
+                    raise ValueError(
+                        "Input is not valid. Should be a list of strings, a list of list/tuple of strings or a list of list/tuple of integers."
+                    )
 
             first_ids = get_input_ids(ids)
             second_ids = get_input_ids(pair_ids) if pair_ids is not None else None
