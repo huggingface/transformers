@@ -12,18 +12,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch EnCodec model. """
+""" Testing suite for the PyTorch Encodec model. """
 
 import inspect
 import unittest
 
-from transformers import EnCodecConfig
+from transformers import EncodecConfig, AutoProcessor
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
     slow,
     torch_device,
 )
+from datasets import load_dataset, Audio
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -38,7 +39,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        EnCodecModel,
+        EncodecModel,
     )
 
 
@@ -83,7 +84,7 @@ def prepare_inputs_dict(
 
 
 @require_torch
-class EnCodecModelTester:
+class EncodecModelTester:
     def __init__(
         self,
         parent,
@@ -128,7 +129,7 @@ class EnCodecModelTester:
         return config, inputs_dict
 
     def get_config(self):
-        return EnCodecConfig(
+        return EncodecConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -140,7 +141,7 @@ class EnCodecModelTester:
         )
 
     def create_and_check_model_forward(self, config, inputs_dict):
-        model = EnCodecModel(config=config).to(torch_device).eval()
+        model = EncodecModel(config=config).to(torch_device).eval()
 
         input_values = inputs_dict["input_values"]
         attention_mask = inputs_dict["attention_mask"]
@@ -151,13 +152,13 @@ class EnCodecModelTester:
 
 
 @require_torch
-class EnCodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (EnCodecModel,) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {"automatic-speech-recognition": EnCodecForSpeechToText, "feature-extraction": EnCodecModel}
-        if is_torch_available()
-        else {}
-    )
+class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (EncodecModel,) if is_torch_available() else ()
+    # pipeline_model_mapping = (
+    #     {"automatic-speech-recognition": EncodecForSpeechToText, "feature-extraction": EncodecModel}
+    #     if is_torch_available()
+    #     else {}
+    # )
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
@@ -166,8 +167,8 @@ class EnCodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     input_name = "input_values"
 
     def setUp(self):
-        self.model_tester = EnCodecModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=EnCodecConfig, hidden_size=37)
+        self.model_tester = EncodecModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=EncodecConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -224,3 +225,27 @@ class EnCodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_torchscript_simple(self):
         # disabled because this model doesn't have decoder_input_ids
         pass
+
+@slow
+@require_torch
+class EncodecIntegrationTest(unittest.TestCase):
+
+    def test_integration_ls(self):
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        model_id = "Matthijs/encodec_24khz"
+
+        model = EncodecModel.from_pretrained(model_id).to(torch_device)
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        audio_sample = librispeech_dummy[-1]
+
+        input_values = processor(audio=audio_sample["audio"]["array"], return_tensors="pt").input_values.to(torch_device)
+
+        with torch.no_grad():
+            input_values_enc_dec = model(input_values)
+
+        self.assertTrue(input_values.shape == input_values_enc_dec.shape)
+
+        # Matthijs: This currently doesn't work - shouldn't it work?
+        self.assertTrue(torch.allclose(input_values, input_values_enc_dec, atol=1e-3))
