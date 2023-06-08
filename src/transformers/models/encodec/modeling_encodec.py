@@ -978,6 +978,12 @@ class EncodecPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LSTM):
+            for name, param in module.named_parameters():
+                if 'weight' in name:
+                    nn.init.xavier_uniform_(param)
+                elif 'bias' in name:
+                        nn.init.constant_(param, 0.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (EncodecEncoder, EncodecDecoder)):
