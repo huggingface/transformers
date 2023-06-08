@@ -15,24 +15,24 @@
 """ PyTorch EnCodec model."""
 
 import math
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-
-import numpy as np
-import torch
-import torch.utils.checkpoint
-from torch import nn
-
 
 # TODO: their stuff
 from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
 import einops
+import numpy as np
+import torch
+import torch.utils.checkpoint
 from einops import rearrange, repeat
+from torch import nn
 
-
-from ...deepspeed import is_deepspeed_zero3_enabled
-from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    ModelOutput,
+    add_start_docstrings,
+    logging,
+)
 from .configuration_encodec import EncodecConfig
 
 
@@ -52,8 +52,105 @@ ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 EncodedFrame = Tuple[torch.Tensor, Optional[torch.Tensor]]
 
-_CONV_NORMALIZATIONS = frozenset(['none', 'weight_norm', 'spectral_norm',
-                                 'time_layer_norm', 'layer_norm', 'time_group_norm'])
+_CONV_NORMALIZATIONS = frozenset(
+    ["none", "weight_norm", "spectral_norm", "time_layer_norm", "layer_norm", "time_group_norm"]
+)
+
+
+@dataclass
+class EncodecOutput(ModelOutput):
+    """
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+            Contrastive loss for audio-text similarity.
+        logits_per_audio:(`torch.FloatTensor` of shape `(audio_batch_size, text_batch_size)`):
+            The scaled dot product scores between `audio_embeds` and `text_embeds`. This represents the audio-text
+            similarity scores.
+        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, audio_batch_size)`):
+            The scaled dot product scores between `text_embeds` and `audio_embeds`. This represents the text-audio
+            similarity scores.
+        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The text embeddings obtained by applying the projection layer to the pooled output of [`ClapTextModel`].
+        audio_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The audio embeddings obtained by applying the projection layer to the pooled output of [`ClapAudioModel`].
+        text_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`ClapTextModel`].
+        audio_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`ClapAudioModel`].
+    """
+
+    audio_codes: torch.FloatTensor = None
+    code_frames: torch.FloatTensor = None
+
+    def to_tuple(self) -> Tuple[Any]:
+        return tuple(
+            self[k] if k not in ["text_model_output", "audio_model_output"] else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
+
+
+@dataclass
+class EncodecEncoderOutput(ModelOutput):
+    """
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+            Contrastive loss for audio-text similarity.
+        logits_per_audio:(`torch.FloatTensor` of shape `(audio_batch_size, text_batch_size)`):
+            The scaled dot product scores between `audio_embeds` and `text_embeds`. This represents the audio-text
+            similarity scores.
+        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, audio_batch_size)`):
+            The scaled dot product scores between `text_embeds` and `audio_embeds`. This represents the text-audio
+            similarity scores.
+        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The text embeddings obtained by applying the projection layer to the pooled output of [`ClapTextModel`].
+        audio_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The audio embeddings obtained by applying the projection layer to the pooled output of [`ClapAudioModel`].
+        text_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`ClapTextModel`].
+        audio_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`ClapAudioModel`].
+    """
+
+    loss: torch.FloatTensor = None
+    loss: torch.FloatTensor = None
+    loss: torch.FloatTensor = None
+
+    def to_tuple(self) -> Tuple[Any]:
+        return tuple(
+            self[k] if k not in ["text_model_output", "audio_model_output"] else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
+
+
+@dataclass
+class EncodecDecoderOutput(ModelOutput):
+    """
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+            Contrastive loss for audio-text similarity.
+        logits_per_audio:(`torch.FloatTensor` of shape `(audio_batch_size, text_batch_size)`):
+            The scaled dot product scores between `audio_embeds` and `text_embeds`. This represents the audio-text
+            similarity scores.
+        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, audio_batch_size)`):
+            The scaled dot product scores between `text_embeds` and `audio_embeds`. This represents the text-audio
+            similarity scores.
+        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The text embeddings obtained by applying the projection layer to the pooled output of [`ClapTextModel`].
+        audio_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The audio embeddings obtained by applying the projection layer to the pooled output of [`ClapAudioModel`].
+        text_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`ClapTextModel`].
+        audio_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`ClapAudioModel`].
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+
+    def to_tuple(self) -> Tuple[Any]:
+        return tuple(
+            self[k] if k not in ["text_model_output", "audio_model_output"] else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
 
 
 def _linear_overlap_add(frames: List[torch.Tensor], stride: int):
@@ -82,7 +179,7 @@ def _linear_overlap_add(frames: List[torch.Tensor], stride: int):
     total_size = stride * (len(frames) - 1) + frames[-1].shape[-1]
 
     frame_length = frames[0].shape[-1]
-    t = torch.linspace(0, 1, frame_length + 2, device=device, dtype=dtype)[1: -1]
+    t = torch.linspace(0, 1, frame_length + 2, device=device, dtype=dtype)[1:-1]
     weight = 0.5 - (t - 0.5).abs()
 
     sum_weight = torch.zeros(total_size, device=device, dtype=dtype)
@@ -91,19 +188,19 @@ def _linear_overlap_add(frames: List[torch.Tensor], stride: int):
 
     for frame in frames:
         frame_length = frame.shape[-1]
-        out[..., offset:offset + frame_length] += weight[:frame_length] * frame
-        sum_weight[offset:offset + frame_length] += weight[:frame_length]
+        out[..., offset : offset + frame_length] += weight[:frame_length] * frame
+        sum_weight[offset : offset + frame_length] += weight[:frame_length]
         offset += stride
     assert sum_weight.min() > 0
     return out / sum_weight
 
 
-def _apply_parametrization_norm(module: nn.Module, norm: str = 'none') -> nn.Module:
+def _apply_parametrization_norm(module: nn.Module, norm: str = "none") -> nn.Module:
     if norm not in _CONV_NORMALIZATIONS:
         raise ValueError(f"Invalid normalization option: {norm}")
-    if norm == 'weight_norm':
+    if norm == "weight_norm":
         return nn.utils.weight_norm(module)
-    elif norm == 'spectral_norm':
+    elif norm == "spectral_norm":
         return nn.utils.spectral_norm(module)
     else:
         # We already check was in CONV_NORMALIZATION, so any other choice
@@ -111,16 +208,16 @@ def _apply_parametrization_norm(module: nn.Module, norm: str = 'none') -> nn.Mod
         return module
 
 
-def _get_norm_module(module: nn.Module, causal: bool = False, norm: str = 'none', **norm_kwargs) -> nn.Module:
+def _get_norm_module(module: nn.Module, causal: bool = False, norm: str = "none", **norm_kwargs) -> nn.Module:
     """Return the proper normalization module. If causal is True, this will ensure the returned
     module is causal, or return an error if the normalization doesn't support causal evaluation.
     """
     if norm not in _CONV_NORMALIZATIONS:
         raise ValueError(f"Invalid normalization option: {norm}")
-    if norm == 'layer_norm':
+    if norm == "layer_norm":
         assert isinstance(module, nn.modules.conv._ConvNd)
         return ConvLayerNorm(module.out_channels, **norm_kwargs)
-    elif norm == 'time_group_norm':
+    elif norm == "time_group_norm":
         if causal:
             raise ValueError("GroupNorm doesn't support causal evaluation.")
         assert isinstance(module, nn.modules.conv._ConvNd)
@@ -129,24 +226,22 @@ def _get_norm_module(module: nn.Module, causal: bool = False, norm: str = 'none'
         return nn.Identity()
 
 
-def _get_extra_padding_for_conv1d(x: torch.Tensor, kernel_size: int, stride: int,
-                                 padding_total: int = 0) -> int:
-    """See `pad_for_conv1d`.
-    """
+def _get_extra_padding_for_conv1d(x: torch.Tensor, kernel_size: int, stride: int, padding_total: int = 0) -> int:
+    """See `pad_for_conv1d`."""
     length = x.shape[-1]
     n_frames = (length - kernel_size + padding_total) / stride + 1
     ideal_length = (math.ceil(n_frames) - 1) * stride + (kernel_size - padding_total)
     return ideal_length - length
 
 
-def _pad1d(x: torch.Tensor, paddings: Tuple[int, int], mode: str = 'zero', value: float = 0.):
+def _pad1d(x: torch.Tensor, paddings: Tuple[int, int], mode: str = "zero", value: float = 0.0):
     """Tiny wrapper around torch.nn.functional.pad, just to allow for reflect padding on small input.
     If this is the case, we insert extra 0 padding to the right before the reflection happen.
     """
     length = x.shape[-1]
     padding_left, padding_right = paddings
     assert padding_left >= 0 and padding_right >= 0, (padding_left, padding_right)
-    if mode == 'reflect':
+    if mode == "reflect":
         max_pad = max(padding_left, padding_right)
         extra_pad = 0
         if length <= max_pad:
@@ -165,7 +260,7 @@ def _unpad1d(x: torch.Tensor, paddings: Tuple[int, int]):
     assert padding_left >= 0 and padding_right >= 0, (padding_left, padding_right)
     assert (padding_left + padding_right) <= x.shape[-1]
     end = x.shape[-1] - padding_right
-    return x[..., padding_left: end]
+    return x[..., padding_left:end]
 
 
 def _uniform_init(*shape: int):
@@ -191,10 +286,8 @@ def _kmeans(samples, num_clusters: int, num_iters: int = 10):
     means = _sample_vectors(samples, num_clusters)
 
     for _ in range(num_iters):
-        diffs = rearrange(samples, "n d -> n () d") - rearrange(
-            means, "c d -> () c d"
-        )
-        dists = -(diffs ** 2).sum(dim=-1)
+        diffs = rearrange(samples, "n d -> n () d") - rearrange(means, "c d -> () c d")
+        dists = -(diffs**2).sum(dim=-1)
 
         buckets = dists.max(dim=-1).indices
         bins = torch.bincount(buckets, minlength=num_clusters)
@@ -215,13 +308,14 @@ class ConvLayerNorm(nn.LayerNorm):
     Convolution-friendly LayerNorm that moves channels to last dimensions
     before running the normalization and moves them back to original position right after.
     """
+
     def __init__(self, normalized_shape: Union[int, List[int], torch.Size], **kwargs):
         super().__init__(normalized_shape, **kwargs)
 
     def forward(self, x):
-        x = einops.rearrange(x, 'b ... t -> b t ...')
+        x = einops.rearrange(x, "b ... t -> b t ...")
         x = super().forward(x)
-        x = einops.rearrange(x, 'b t ... -> b ... t')
+        x = einops.rearrange(x, "b t ... -> b ... t")
         return
 
 
@@ -229,8 +323,8 @@ class NormConv1d(nn.Module):
     """Wrapper around Conv1d and normalization applied to this conv
     to provide a uniform interface across normalization approaches.
     """
-    def __init__(self, *args, causal: bool = False, norm: str = 'none',
-                 norm_kwargs: Dict[str, Any] = {}, **kwargs):
+
+    def __init__(self, *args, causal: bool = False, norm: str = "none", norm_kwargs: Dict[str, Any] = {}, **kwargs):
         super().__init__()
         self.conv = _apply_parametrization_norm(nn.Conv1d(*args, **kwargs), norm)
         self.norm = _get_norm_module(self.conv, causal, norm, **norm_kwargs)
@@ -246,8 +340,8 @@ class NormConvTranspose1d(nn.Module):
     """Wrapper around ConvTranspose1d and normalization applied to this conv
     to provide a uniform interface across normalization approaches.
     """
-    def __init__(self, *args, causal: bool = False, norm: str = 'none',
-                 norm_kwargs: Dict[str, Any] = {}, **kwargs):
+
+    def __init__(self, *args, causal: bool = False, norm: str = "none", norm_kwargs: Dict[str, Any] = {}, **kwargs):
         super().__init__()
         self.convtr = _apply_parametrization_norm(nn.ConvTranspose1d(*args, **kwargs), norm)
         self.norm = _get_norm_module(self.convtr, causal, norm, **norm_kwargs)
@@ -263,19 +357,40 @@ class SConv1d(nn.Module):
     """Conv1d with some builtin handling of asymmetric or causal padding
     and normalization.
     """
-    def __init__(self, in_channels: int, out_channels: int,
-                 kernel_size: int, stride: int = 1, dilation: int = 1,
-                 groups: int = 1, bias: bool = True, causal: bool = False,
-                 norm: str = 'none', norm_kwargs: Dict[str, Any] = {},
-                 pad_mode: str = 'reflect'):
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int = 1,
+        dilation: int = 1,
+        groups: int = 1,
+        bias: bool = True,
+        causal: bool = False,
+        norm: str = "none",
+        norm_kwargs: Dict[str, Any] = {},
+        pad_mode: str = "reflect",
+    ):
         super().__init__()
         # warn user on unusual setup between dilation and stride
         if stride > 1 and dilation > 1:
-            logger.warning('SConv1d has been initialized with stride > 1 and dilation > 1'
-                          f' (kernel_size={kernel_size} stride={stride}, dilation={dilation}).')
-        self.conv = NormConv1d(in_channels, out_channels, kernel_size, stride,
-                               dilation=dilation, groups=groups, bias=bias, causal=causal,
-                               norm=norm, norm_kwargs=norm_kwargs)
+            logger.warning(
+                "SConv1d has been initialized with stride > 1 and dilation > 1"
+                f" (kernel_size={kernel_size} stride={stride}, dilation={dilation})."
+            )
+        self.conv = NormConv1d(
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            dilation=dilation,
+            groups=groups,
+            bias=bias,
+            causal=causal,
+            norm=norm,
+            norm_kwargs=norm_kwargs,
+        )
         self.causal = causal
         self.pad_mode = pad_mode
 
@@ -302,18 +417,28 @@ class SConvTranspose1d(nn.Module):
     """ConvTranspose1d with some builtin handling of asymmetric or causal padding
     and normalization.
     """
-    def __init__(self, in_channels: int, out_channels: int,
-                 kernel_size: int, stride: int = 1, causal: bool = False,
-                 norm: str = 'none', trim_right_ratio: float = 1.,
-                 norm_kwargs: Dict[str, Any] = {}):
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int = 1,
+        causal: bool = False,
+        norm: str = "none",
+        trim_right_ratio: float = 1.0,
+        norm_kwargs: Dict[str, Any] = {},
+    ):
         super().__init__()
-        self.convtr = NormConvTranspose1d(in_channels, out_channels, kernel_size, stride,
-                                          causal=causal, norm=norm, norm_kwargs=norm_kwargs)
+        self.convtr = NormConvTranspose1d(
+            in_channels, out_channels, kernel_size, stride, causal=causal, norm=norm, norm_kwargs=norm_kwargs
+        )
         self.causal = causal
         self.trim_right_ratio = trim_right_ratio
-        assert self.causal or self.trim_right_ratio == 1., \
-            "`trim_right_ratio` != 1.0 only makes sense for causal convolutions"
-        assert self.trim_right_ratio >= 0. and self.trim_right_ratio <= 1.
+        assert (
+            self.causal or self.trim_right_ratio == 1.0
+        ), "`trim_right_ratio` != 1.0 only makes sense for causal convolutions"
+        assert self.trim_right_ratio >= 0.0 and self.trim_right_ratio <= 1.0
 
     def forward(self, x):
         kernel_size = self.convtr.convtr.kernel_size[0]
@@ -345,6 +470,7 @@ class SLSTM(nn.Module):
     LSTM without worrying about the hidden state, nor the layout of the data.
     Expects input as convolutional layout.
     """
+
     def __init__(self, dimension: int, num_layers: int = 2, skip: bool = True):
         super().__init__()
         self.skip = skip
@@ -374,12 +500,23 @@ class SEANetResnetBlock(nn.Module):
         compress (int): Reduced dimensionality in residual branches (from Demucs v3)
         true_skip (bool): Whether to use true skip connection or a simple convolution as the skip connection.
     """
-    def __init__(self, dim: int, kernel_sizes: List[int] = [3, 1], dilations: List[int] = [1, 1],
-                 activation: str = 'ELU', activation_params: dict = {'alpha': 1.0},
-                 norm: str = 'weight_norm', norm_params: Dict[str, Any] = {}, causal: bool = False,
-                 pad_mode: str = 'reflect', compress: int = 2, true_skip: bool = True):
+
+    def __init__(
+        self,
+        dim: int,
+        kernel_sizes: List[int] = [3, 1],
+        dilations: List[int] = [1, 1],
+        activation: str = "ELU",
+        activation_params: dict = {"alpha": 1.0},
+        norm: str = "weight_norm",
+        norm_params: Dict[str, Any] = {},
+        causal: bool = False,
+        pad_mode: str = "reflect",
+        compress: int = 2,
+        true_skip: bool = True,
+    ):
         super().__init__()
-        assert len(kernel_sizes) == len(dilations), 'Number of kernel sizes should match number of dilations'
+        assert len(kernel_sizes) == len(dilations), "Number of kernel sizes should match number of dilations"
         act = getattr(nn, activation)
         hidden = dim // compress
         block = []
@@ -388,17 +525,25 @@ class SEANetResnetBlock(nn.Module):
             out_chs = dim if i == len(kernel_sizes) - 1 else hidden
             block += [
                 act(**activation_params),
-                SConv1d(in_chs, out_chs, kernel_size=kernel_size, dilation=dilation,
-                        norm=norm, norm_kwargs=norm_params,
-                        causal=causal, pad_mode=pad_mode),
+                SConv1d(
+                    in_chs,
+                    out_chs,
+                    kernel_size=kernel_size,
+                    dilation=dilation,
+                    norm=norm,
+                    norm_kwargs=norm_params,
+                    causal=causal,
+                    pad_mode=pad_mode,
+                ),
             ]
         self.block = nn.Sequential(*block)
         self.shortcut: nn.Module
         if true_skip:
             self.shortcut = nn.Identity()
         else:
-            self.shortcut = SConv1d(dim, dim, kernel_size=1, norm=norm, norm_kwargs=norm_params,
-                                    causal=causal, pad_mode=pad_mode)
+            self.shortcut = SConv1d(
+                dim, dim, kernel_size=1, norm=norm, norm_kwargs=norm_params, causal=causal, pad_mode=pad_mode
+            )
 
     def forward(self, x):
         return self.shortcut(x) + self.block(x)
@@ -406,6 +551,7 @@ class SEANetResnetBlock(nn.Module):
 
 class SEANetEncoder(nn.Module):
     """SEANet encoder."""
+
     def __init__(self, config: EncodecConfig):
         super().__init__()
         self.channels = config.audio_channels
@@ -436,7 +582,7 @@ class SEANetEncoder(nn.Module):
                     SEANetResnetBlock(
                         mult * config.num_filters,
                         kernel_sizes=[config.residual_kernel_size, 1],
-                        dilations=[config.dilation_base ** j, 1],
+                        dilations=[config.dilation_base**j, 1],
                         norm=config.norm,
                         norm_params=config.norm_params,
                         activation=config.activation,
@@ -459,7 +605,7 @@ class SEANetEncoder(nn.Module):
                     norm_kwargs=config.norm_params,
                     causal=config.causal,
                     pad_mode=config.pad_mode,
-                )
+                ),
             ]
             mult *= 2
 
@@ -476,11 +622,11 @@ class SEANetEncoder(nn.Module):
                 norm_kwargs=config.norm_params,
                 causal=config.causal,
                 pad_mode=config.pad_mode,
-            )
+            ),
         ]
 
         self.model = nn.Sequential(*model)
-        #TODO: nn.ModuleList
+        # TODO: nn.ModuleList
 
     def forward(self, x):
         return self.model(x)
@@ -488,6 +634,7 @@ class SEANetEncoder(nn.Module):
 
 class SEANetDecoder(nn.Module):
     """SEANet decoder."""
+
     def __init__(self, config: EncodecConfig):
         super().__init__()
         # TODO: do we need these properties?
@@ -508,7 +655,7 @@ class SEANetDecoder(nn.Module):
                 norm=config.norm,
                 norm_kwargs=config.norm_params,
                 causal=config.causal,
-                pad_mode=config.pad_mode
+                pad_mode=config.pad_mode,
             )
         ]
 
@@ -529,7 +676,7 @@ class SEANetDecoder(nn.Module):
                     norm_kwargs=config.norm_params,
                     causal=config.causal,
                     trim_right_ratio=config.trim_right_ratio,
-                )
+                ),
             ]
             # Add residual layers
             for j in range(config.num_residual_layers):
@@ -537,7 +684,7 @@ class SEANetDecoder(nn.Module):
                     SEANetResnetBlock(
                         mult * config.num_filters // 2,
                         kernel_sizes=[config.residual_kernel_size, 1],
-                        dilations=[config.dilation_base ** j, 1],
+                        dilations=[config.dilation_base**j, 1],
                         activation=config.activation,
                         activation_params=config.activation_params,
                         norm=config.norm,
@@ -560,16 +707,14 @@ class SEANetDecoder(nn.Module):
                 norm=config.norm,
                 norm_kwargs=config.norm_params,
                 causal=config.causal,
-                pad_mode=config.pad_mode
-            )
+                pad_mode=config.pad_mode,
+            ),
         ]
         # Add optional final activation to decoder (eg. tanh)
         if config.final_activation is not None:
             final_act = getattr(nn, config.final_activation)
             final_activation_params = final_activation_params or {}
-            model += [
-                final_act(**final_activation_params)
-            ]
+            model += [final_act(**final_activation_params)]
         self.model = nn.Sequential(*model)
         # TODO: use ModuleList
 
@@ -593,6 +738,7 @@ class EuclideanCodebook(nn.Module):
             that have an exponential moving average cluster size less than the specified threshold with
             randomly selected vector from the current batch.
     """
+
     def __init__(
         self,
         dim: int,
@@ -630,12 +776,10 @@ class EuclideanCodebook(nn.Module):
         self.cluster_size.data.copy_(cluster_size)
         self.inited.data.copy_(torch.Tensor([True]))
         # Make sure all buffers across workers are in sync after initialization
-        #TODO distrib.broadcast_tensors(self.buffers())
+        # TODO distrib.broadcast_tensors(self.buffers())
 
     def replace_(self, samples, mask):
-        modified_codebook = torch.where(
-            mask[..., None], _sample_vectors(samples, self.codebook_size), self.embed
-        )
+        modified_codebook = torch.where(mask[..., None], _sample_vectors(samples, self.codebook_size), self.embed)
         self.embed.data.copy_(modified_codebook)
 
     def expire_codes_(self, batch_samples):
@@ -648,7 +792,7 @@ class EuclideanCodebook(nn.Module):
 
         batch_samples = rearrange(batch_samples, "... d -> (...) d")
         self.replace_(batch_samples, mask=expired_codes)
-        #TODO distrib.broadcast_tensors(self.buffers())
+        # TODO distrib.broadcast_tensors(self.buffers())
 
     def preprocess(self, x):
         x = rearrange(x, "... d -> (...) d")
@@ -656,11 +800,7 @@ class EuclideanCodebook(nn.Module):
 
     def quantize(self, x):
         embed = self.embed.t()
-        dist = -(
-            x.pow(2).sum(1, keepdim=True)
-            - 2 * x @ embed
-            + embed.pow(2).sum(0, keepdim=True)
-        )
+        dist = -(x.pow(2).sum(1, keepdim=True) - 2 * x @ embed + embed.pow(2).sum(0, keepdim=True))
         embed_ind = dist.max(dim=-1).indices
         return embed_ind
 
@@ -692,11 +832,11 @@ class EuclideanCodebook(nn.Module):
         self.init_embed_(x)
 
         embed_ind = self.quantize(x)
-        embed_onehot = nn.functional.one_hot(embed_ind, self.codebook_size).type(dtype)
+        nn.functional.one_hot(embed_ind, self.codebook_size).type(dtype)
         embed_ind = self.postprocess_emb(embed_ind, shape)
         quantize = self.dequantize(embed_ind)
 
-        #TODO
+        # TODO
         # if self.training:
         #     # We do the expiry of code at that point as buffers are in sync
         #     # and all the workers will take the same decision.
@@ -730,6 +870,7 @@ class VectorQuantization(nn.Module):
             randomly selected vector from the current batch.
         commitment_weight (float): Weight for commitment loss.
     """
+
     def __init__(
         self,
         dim: int,
@@ -740,22 +881,27 @@ class VectorQuantization(nn.Module):
         kmeans_init: bool = True,
         kmeans_iters: int = 50,
         threshold_ema_dead_code: int = 2,
-        commitment_weight: float = 1.,
+        commitment_weight: float = 1.0,
     ):
         super().__init__()
         _codebook_dim: int = codebook_dim if codebook_dim is not None else dim
 
         requires_projection = _codebook_dim != dim
-        self.project_in = (nn.Linear(dim, _codebook_dim) if requires_projection else nn.Identity())
-        self.project_out = (nn.Linear(_codebook_dim, dim) if requires_projection else nn.Identity())
+        self.project_in = nn.Linear(dim, _codebook_dim) if requires_projection else nn.Identity()
+        self.project_out = nn.Linear(_codebook_dim, dim) if requires_projection else nn.Identity()
 
         self.epsilon = epsilon
         self.commitment_weight = commitment_weight
 
-        self._codebook = EuclideanCodebook(dim=_codebook_dim, codebook_size=codebook_size,
-                                           kmeans_init=kmeans_init, kmeans_iters=kmeans_iters,
-                                           decay=decay, epsilon=epsilon,
-                                           threshold_ema_dead_code=threshold_ema_dead_code)
+        self._codebook = EuclideanCodebook(
+            dim=_codebook_dim,
+            codebook_size=codebook_size,
+            kmeans_init=kmeans_init,
+            kmeans_iters=kmeans_iters,
+            decay=decay,
+            epsilon=epsilon,
+            threshold_ema_dead_code=threshold_ema_dead_code,
+        )
         self.codebook_size = codebook_size
 
     @property
@@ -787,9 +933,11 @@ class VectorQuantization(nn.Module):
         loss = torch.tensor([0.0], device=device, requires_grad=self.training)
 
         if self.training:
-            logger.warning('When using RVQ in training model, first check '
-                          'https://github.com/facebookresearch/encodec/issues/25 . '
-                          'The bug wasn\'t fixed here for reproducibility.')
+            logger.warning(
+                "When using RVQ in training model, first check "
+                "https://github.com/facebookresearch/encodec/issues/25 . "
+                "The bug wasn't fixed here for reproducibility."
+            )
             if self.commitment_weight > 0:
                 commit_loss = nn.functional.mse_loss(quantize.detach(), x)
                 loss = loss + commit_loss * self.commitment_weight
@@ -803,11 +951,10 @@ class ResidualVectorQuantization(nn.Module):
     """Residual vector quantization implementation.
     Follows Algorithm 1. in https://arxiv.org/pdf/2107.03312.pdf
     """
+
     def __init__(self, *, num_quantizers, **kwargs):
         super().__init__()
-        self.layers = nn.ModuleList(
-            [VectorQuantization(**kwargs) for _ in range(num_quantizers)]
-        )
+        self.layers = nn.ModuleList([VectorQuantization(**kwargs) for _ in range(num_quantizers)])
 
     def forward(self, x, n_q: Optional[int] = None):
         quantized_out = 0.0
@@ -872,6 +1019,7 @@ class ResidualVectorQuantizer(nn.Module):
             that have an exponential moving average cluster size less than the specified threshold with
             randomly selected vector from the current batch.
     """
+
     def __init__(
         self,
         config: EncodecConfig,
@@ -915,11 +1063,10 @@ class ResidualVectorQuantizer(nn.Module):
         return QuantizedResult(quantized, codes, bw, penalty=torch.mean(commit_loss))
 
     def get_num_quantizers_for_bandwidth(self, frame_rate: int, bandwidth: Optional[float] = None) -> int:
-        """Return n_q based on specified target bandwidth.
-        """
+        """Return n_q based on specified target bandwidth."""
         bw_per_q = self.get_bandwidth_per_quantizer(frame_rate)
         n_q = self.n_q
-        if bandwidth and bandwidth > 0.:
+        if bandwidth and bandwidth > 0.0:
             # bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented as
             # bandwidth == 6.0
             n_q = int(max(1, math.floor(bandwidth * 1000 / bw_per_q)))
@@ -941,8 +1088,7 @@ class ResidualVectorQuantizer(nn.Module):
         return codes
 
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
-        """Decode the given codes to the quantized representation.
-        """
+        """Decode the given codes to the quantized representation."""
         quantized = self.vq.decode(codes)
         return quantized
 
@@ -980,17 +1126,17 @@ class EncodecPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LSTM):
             for name, param in module.named_parameters():
-                if 'weight' in name:
+                if "weight" in name:
                     nn.init.xavier_uniform_(param)
-                elif 'bias' in name:
-                        nn.init.constant_(param, 0.0)
+                elif "bias" in name:
+                    nn.init.constant_(param, 0.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (EncodecEncoder, EncodecDecoder)):
+        if isinstance(module, (SEANetEncoder, SEANetDecoder)):
             module.gradient_checkpointing = value
 
 
-#TODO
+# TODO
 # class EncodecEncoder(EncodecPreTrainedModel):
 #     """
 #     Transformer encoder consisting of *config.encoder_layers* layers. Each layer is a [`EncodecEncoderLayer`].
@@ -1132,7 +1278,7 @@ class EncodecPreTrainedModel(PreTrainedModel):
 #         )
 
 
-#TODO
+# TODO
 # class EncodecDecoder(EncodecPreTrainedModel):
 #     """
 #     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`EncodecDecoderLayer`]
@@ -1367,7 +1513,7 @@ class EncodecPreTrainedModel(PreTrainedModel):
 #         )
 
 
-#TODO
+# TODO
 ENCODEC_BASE_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1392,7 +1538,7 @@ ENCODEC_BASE_START_DOCSTRING = r"""
 """
 
 
-#TODO
+# TODO
 ENCODEC_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1410,7 +1556,7 @@ ENCODEC_START_DOCSTRING = r"""
 """
 
 
-#TODO
+# TODO
 ENCODEC_INPUTS_DOCSTRING = r"""
     Args:
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1509,13 +1655,15 @@ class EncodecModel(EncodecPreTrainedModel):
         self.encoder = SEANetEncoder(config)
         self.decoder = SEANetDecoder(config)
 
-        n_q = int(1000 * config.target_bandwidths[-1] // (math.ceil(config.sampling_rate / self.encoder.hop_length) * 10))
+        n_q = int(
+            1000 * config.target_bandwidths[-1] // (math.ceil(config.sampling_rate / self.encoder.hop_length) * 10)
+        )
         self.quantizer = ResidualVectorQuantizer(config, n_q)
 
         self.frame_rate = math.ceil(self.config.sampling_rate / np.prod(self.encoder.ratios))
         self.bits_per_codebook = int(math.log2(self.quantizer.bins))
 
-        if 2 ** self.bits_per_codebook != self.quantizer.bins:
+        if 2**self.bits_per_codebook != self.quantizer.bins:
             raise ValueError("Number of quantizer bins must be a power of 2.")
 
         # Initialize weights and apply final processing
@@ -1545,8 +1693,10 @@ class EncodecModel(EncodecPreTrainedModel):
         if bandwidth is None:
             bandwidth = self.config.target_bandwidths[0]
         if bandwidth not in self.config.target_bandwidths:
-            raise ValueError(f"This model doesn't support the bandwidth {bandwidth}. "
-                             f"Select one of {self.config.target_bandwidths}.")
+            raise ValueError(
+                f"This model doesn't support the bandwidth {bandwidth}. "
+                f"Select one of {self.config.target_bandwidths}."
+            )
 
         _, channels, input_length = input_values.shape
 
@@ -1612,9 +1762,9 @@ class EncodecModel(EncodecPreTrainedModel):
             outputs = outputs * scale.view(-1, 1, 1)
         return outputs
 
-    #TODO @add_start_docstrings_to_model_forward(ENCODEC_INPUTS_DOCSTRING)
-    #TODO @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(self, input_values: torch.Tensor, bandwidth: Optional[float] = None) -> torch.Tensor:
+    # TODO @add_start_docstrings_to_model_forward(ENCODEC_INPUTS_DOCSTRING)
+    # TODO @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(self, input_values: torch.Tensor, bandwidth: Optional[float] = None, return_dict=None) -> torch.Tensor:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
             Float values of the input audio waveform.
@@ -1624,4 +1774,9 @@ class EncodecModel(EncodecPreTrainedModel):
 
         Returns:
         """
-        return self.decode(self.encode(input_values, bandwidth))[..., :input_values.shape[-1]]
+        encoder_outputs = self.encode(input_values, bandwidth)
+        decoder_outputs = self.decode(encoder_outputs.audio_codes)[..., : input_values.shape[-1]]
+
+        if return_dict:
+            return EncodecOutput(encoder_outputs.audio_codes, decoder_outputs.code_frames)
+        return (*encoder_outputs, *decoder_outputs)

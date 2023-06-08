@@ -20,7 +20,7 @@ import unittest
 
 import numpy as np
 
-from transformers import BatchFeature, is_speech_available
+from transformers import is_speech_available
 from transformers.testing_utils import require_torch
 from transformers.utils.import_utils import is_torch_available
 

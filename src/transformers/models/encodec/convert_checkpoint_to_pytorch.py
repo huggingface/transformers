@@ -351,7 +351,7 @@ def convert_checkpoint(
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     original_checkpoint = torch.load(checkpoint_path)
-    #recursively_load_weights(original_checkpoint["model"], model, model_name)
+    # recursively_load_weights(original_checkpoint["model"], model, model_name)
     model.load_state_dict(original_checkpoint)
     model.save_pretrained(pytorch_dump_folder_path)
 
