@@ -1661,6 +1661,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         activations".
         """
         return any(hasattr(m, "gradient_checkpointing") and m.gradient_checkpointing for m in self.modules())
+    
+    @property
+    def is_using_static_kv_cache(self) -> bool:
+        """
+        Whether static KV cache is activated for this model or not.
+        """
+        return any(hasattr(m, "use_static_kv_cache") and m.gradient_checkpointing for m in self.modules())
 
     def save_pretrained(
         self,
