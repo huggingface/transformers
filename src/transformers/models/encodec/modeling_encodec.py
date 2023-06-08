@@ -368,49 +368,62 @@ class SLSTM(nn.Module):
         return y
 
 
-class SEANetResnetBlock(nn.Module):
+class EncodecResnetBlock(nn.Module):
     """Residual block from SEANet model.
     Args:
+        config:
         dim (int): Dimension of the input/output
         kernel_sizes (list): List of kernel sizes for the convolutions.
         dilations (list): List of dilations for the convolutions.
-        activation (str): Activation function.
-        activation_params (dict): Parameters to provide to the activation function
-        norm (str): Normalization method.
-        norm_params (dict): Parameters to provide to the underlying normalization used along with the convolution.
-        causal (bool): Whether to use fully causal convolution.
-        pad_mode (str): Padding mode for the convolutions.
-        compress (int): Reduced dimensionality in residual branches (from Demucs v3)
-        true_skip (bool): Whether to use true skip connection or a simple convolution as the skip connection.
     """
-    def __init__(self, dim: int, kernel_sizes: List[int] = [3, 1], dilations: List[int] = [1, 1],
-                 activation: str = 'ELU', activation_params: dict = {'alpha': 1.0},
-                 norm: str = 'weight_norm', norm_params: Dict[str, Any] = {}, causal: bool = False,
-                 pad_mode: str = 'reflect', compress: int = 2, true_skip: bool = True):
+    def __init__(self, config: EncodecConfig, dim: int, kernel_sizes: List[int], dilations: List[int]):
         super().__init__()
-        assert len(kernel_sizes) == len(dilations), 'Number of kernel sizes should match number of dilations'
-        act = getattr(nn, activation)
-        hidden = dim // compress
+
+        if len(kernel_sizes) != len(dilations):
+            raise ValueError("Number of kernel sizes should match number of dilations")
+
+        act = getattr(nn, config.activation)
+        hidden = dim // config.compress
         block = []
         for i, (kernel_size, dilation) in enumerate(zip(kernel_sizes, dilations)):
             in_chs = dim if i == 0 else hidden
             out_chs = dim if i == len(kernel_sizes) - 1 else hidden
             block += [
-                act(**activation_params),
-                SConv1d(in_chs, out_chs, kernel_size=kernel_size, dilation=dilation,
-                        norm=norm, norm_kwargs=norm_params,
-                        causal=causal, pad_mode=pad_mode),
+                act(**config.activation_params),
+                SConv1d(
+                    in_chs,
+                    out_chs,
+                    kernel_size=kernel_size,
+                    dilation=dilation,
+                    norm=config.norm,
+                    norm_kwargs=config.norm_params,
+                    causal=config.causal,
+                    pad_mode=config.pad_mode,
+                ),
             ]
-        self.block = nn.Sequential(*block)
-        self.shortcut: nn.Module
-        if true_skip:
-            self.shortcut = nn.Identity()
-        else:
-            self.shortcut = SConv1d(dim, dim, kernel_size=1, norm=norm, norm_kwargs=norm_params,
-                                    causal=causal, pad_mode=pad_mode)
+        self.block = nn.ModuleList(block)
+
+        self.use_shortcut = not config.true_skip
+        if self.use_shortcut:
+            self.shortcut = SConv1d(
+                dim,
+                dim,
+                kernel_size=1,
+                norm=config.norm,
+                norm_kwargs=config.norm_params,
+                causal=config.causal,
+                pad_mode=config.pad_mode
+            )
 
     def forward(self, x):
-        return self.shortcut(x) + self.block(x)
+        y = x
+        for layer in self.block:
+            y = layer(y)
+
+        if self.use_shortcut:
+            return self.shortcut(x) + y
+        else:
+            return y
 
 
 class EncodecEncoder(nn.Module):
@@ -437,18 +450,11 @@ class EncodecEncoder(nn.Module):
             # Add residual layers
             for j in range(config.num_residual_layers):
                 model += [
-                    SEANetResnetBlock(
+                    EncodecResnetBlock(
+                        config,
                         mult * config.num_filters,
                         kernel_sizes=[config.residual_kernel_size, 1],
                         dilations=[config.dilation_base ** j, 1],
-                        norm=config.norm,
-                        norm_params=config.norm_params,
-                        activation=config.activation,
-                        activation_params=config.activation_params,
-                        causal=config.causal,
-                        pad_mode=config.pad_mode,
-                        compress=config.compress,
-                        true_skip=config.true_skip,
                     )
                 ]
             # Add downsampling layers
@@ -531,18 +537,11 @@ class EncodecDecoder(nn.Module):
             # Add residual layers
             for j in range(config.num_residual_layers):
                 model += [
-                    SEANetResnetBlock(
+                    EncodecResnetBlock(
+                        config,
                         mult * config.num_filters // 2,
                         kernel_sizes=[config.residual_kernel_size, 1],
                         dilations=[config.dilation_base ** j, 1],
-                        activation=config.activation,
-                        activation_params=config.activation_params,
-                        norm=config.norm,
-                        norm_params=config.norm_params,
-                        causal=config.causal,
-                        pad_mode=config.pad_mode,
-                        compress=config.compress,
-                        true_skip=config.true_skip,
                     )
                 ]
             mult //= 2
