@@ -802,7 +802,8 @@ class DisentangledSelfAttention(nn.Module):
         score = 0
         # content->position
         if "c2p" in self.pos_att_type:
-            scale = 1 / math.sqrt(pos_key_layer.size(-1) * scale_factor)
+            scale = 1 / torch.sqrt(torch.tensor(pos_key_layer.size(-1), dtype=torch.float) * scale_factor)
+            # scale = 1 / math.sqrt(pos_key_layer.size(-1) * scale_factor)
             c2p_att = torch.bmm(query_layer, pos_key_layer.transpose(-1, -2))
             # c2p_att = torch.bmm(query_layer, pos_key_layer.transpose(-1, -2).to(query_layer) * scale)
             c2p_pos = torch.clamp(relative_pos + att_span, 0, att_span * 2 - 1)
@@ -816,7 +817,8 @@ class DisentangledSelfAttention(nn.Module):
 
         # position->content
         if "p2c" in self.pos_att_type:
-            scale = 1 / math.sqrt(pos_query_layer.size(-1) * scale_factor)
+            scale = 1 / torch.sqrt(torch.tensor(pos_query_layer.size(-1), dtype=torch.float) * scale_factor)
+            # scale = 1 / math.sqrt(pos_query_layer.size(-1) * scale_factor)
             if key_layer.size(-2) != query_layer.size(-2):
                 r_pos = build_relative_position(
                     key_layer.size(-2),
