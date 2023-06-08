@@ -15,17 +15,12 @@
 """ PyTorch EnCodec model."""
 
 import math
+from dataclasses import dataclass
+from typing import List, Optional, Tuple, Union
 
-# TODO: their stuff
-from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-
-# TODO: Need to get rid of this eventually
-import einops
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from einops import rearrange, repeat
 from torch import nn
 
 from ...modeling_utils import PreTrainedModel
@@ -51,20 +46,6 @@ ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-_CONV_NORMALIZATIONS = frozenset(
-    ["none", "weight_norm", "spectral_norm", "time_layer_norm", "layer_norm", "time_group_norm"]
-)
-
-
-@dataclass
-class QuantizedResult:
-    quantized: torch.Tensor
-    codes: torch.Tensor
-    bandwidth: torch.Tensor  # bandwidth in kb/s used, per batch item.
-    penalty: Optional[torch.Tensor] = None
-    metrics: dict = field(default_factory=dict)
-
-
 @dataclass
 class EncodecOutput(ModelOutput):
     """
@@ -76,13 +57,9 @@ class EncodecOutput(ModelOutput):
     """
 
     audio_codes: torch.FloatTensor = None
+    # TODO: can we rename this to codes_frames instead of audio_codes?
     code_frames: torch.FloatTensor = None
-
-    def to_tuple(self) -> Tuple[Any]:
-        return tuple(
-            self[k] if k not in ["text_model_output", "audio_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
+    # TODO: can we rename this to audio_output instead of code_frames?
 
 
 @dataclass
@@ -96,13 +73,10 @@ class EncodecEncoderOutput(ModelOutput):
     """
 
     audio_codes: torch.FloatTensor = None
+    # TODO: can we rename this to codes_frames instead of audio_codes?
     scales: torch.FloatTensor = None
 
-    def to_tuple(self) -> Tuple[Any]:
-        return tuple(
-            self[k] if k not in ["text_model_output", "audio_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
+    padding_mask: torch.FloatTensor = None
 
 
 @dataclass
@@ -114,222 +88,14 @@ class EncodecDecoderOutput(ModelOutput):
         # TODO
     """
 
-    code_frames: Optional[torch.FloatTensor] = None
-    code_embeddings: Optional[torch.FloatTensor] = None
-
-    def to_tuple(self) -> Tuple[Any]:
-        return tuple(
-            self[k] if k not in ["text_model_output", "audio_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
+    code_frames: torch.FloatTensor = None
+    # TODO: can we rename this to audio_output instead of code_frames?
+    code_embeddings: torch.FloatTensor = None
+    # TODO: can we name this hidden_states instead of code_embeddings?
 
 
-def _linear_overlap_add(frames: List[torch.Tensor], stride: int):
-    # Generic overlap add, with linear fade-in/fade-out, supporting complex scenario
-    # e.g., more than 2 frames per position.
-    # The core idea is to use a weight function that is a triangle,
-    # with a maximum value at the middle of the segment.
-    # We use this weighting when summing the frames, and divide by the sum of weights
-    # for each positions at the end. Thus:
-    #   - if a frame is the only one to cover a position, the weighting is a no-op.
-    #   - if 2 frames cover a position:
-    #          ...  ...
-    #         /   \/   \
-    #        /    /\    \
-    #            S  T       , i.e. S offset of second frame starts, T end of first frame.
-    # Then the weight function for each one is: (t - S), (T - t), with `t` a given offset.
-    # After the final normalization, the weight of the second frame at position `t` is
-    # (t - S) / (t - S + (T - t)) = (t - S) / (T - S), which is exactly what we want.
-    #
-    #   - if more than 2 frames overlap at a given point, we hope that by induction
-    #      something sensible happens.
-    assert len(frames)
-    device = frames[0].device
-    dtype = frames[0].dtype
-    shape = frames[0].shape[:-1]
-    total_size = stride * (len(frames) - 1) + frames[-1].shape[-1]
-
-    frame_length = frames[0].shape[-1]
-    t = torch.linspace(0, 1, frame_length + 2, device=device, dtype=dtype)[1:-1]
-    weight = 0.5 - (t - 0.5).abs()
-
-    sum_weight = torch.zeros(total_size, device=device, dtype=dtype)
-    out = torch.zeros(*shape, total_size, device=device, dtype=dtype)
-    offset: int = 0
-
-    for frame in frames:
-        frame_length = frame.shape[-1]
-        out[..., offset : offset + frame_length] += weight[:frame_length] * frame
-        sum_weight[offset : offset + frame_length] += weight[:frame_length]
-        offset += stride
-    assert sum_weight.min() > 0
-    return out / sum_weight
-
-
-# TODO: If possible I'd actually remove this. E.g. if both checkpoints only use either "Weight_norm" or 'spectral_norm' then let's just hardcode it for now
-def _apply_parametrization_norm(module: nn.Module, norm: str = "none") -> nn.Module:
-    if norm not in _CONV_NORMALIZATIONS:
-        raise ValueError(f"Invalid normalization option: {norm}")
-    if norm == "weight_norm":
-        return nn.utils.weight_norm(module)
-    elif norm == "spectral_norm":
-        return nn.utils.spectral_norm(module)
-    else:
-        # We already check was in CONV_NORMALIZATION, so any other choice
-        # doesn't need reparametrization.
-        return module
-
-
-# TODO: Let's try to get rid of this function. We probably don't need this function no? I'd directly add the correct classes in the code
-def _get_norm_module(module: nn.Module, causal: bool = False, norm: str = "none", **norm_kwargs) -> nn.Module:
-    """Return the proper normalization module. If causal is True, this will ensure the returned
-    module is causal, or return an error if the normalization doesn't support causal evaluation.
-    """
-    if norm not in _CONV_NORMALIZATIONS:
-        raise ValueError(f"Invalid normalization option: {norm}")
-    if norm == "layer_norm":
-        assert isinstance(module, nn.modules.conv._ConvNd)
-        return ConvLayerNorm(module.out_channels, **norm_kwargs)
-    elif norm == "time_group_norm":
-        if causal:
-            raise ValueError("GroupNorm doesn't support causal evaluation.")
-        assert isinstance(module, nn.modules.conv._ConvNd)
-        return nn.GroupNorm(1, module.out_channels, **norm_kwargs)
-    else:
-        return nn.Identity()
-
-
-def _get_extra_padding_for_conv1d(x: torch.Tensor, kernel_size: int, stride: int, padding_total: int = 0) -> int:
-    """See `pad_for_conv1d`."""
-    length = x.shape[-1]
-    n_frames = (length - kernel_size + padding_total) / stride + 1
-    ideal_length = (math.ceil(n_frames) - 1) * stride + (kernel_size - padding_total)
-    return ideal_length - length
-
-
-def _pad1d(x: torch.Tensor, paddings: Tuple[int, int], mode: str = "zero", value: float = 0.0):
-    """Tiny wrapper around torch.nn.functional.pad, just to allow for reflect padding on small input.
-    If this is the case, we insert extra 0 padding to the right before the reflection happen.
-    """
-    length = x.shape[-1]
-    padding_left, padding_right = paddings
-    assert padding_left >= 0 and padding_right >= 0, (padding_left, padding_right)
-    if mode == "reflect":
-        max_pad = max(padding_left, padding_right)
-        extra_pad = 0
-        if length <= max_pad:
-            extra_pad = max_pad - length + 1
-            x = nn.functional.pad(x, (0, extra_pad))
-        padded = nn.functional.pad(x, paddings, mode, value)
-        end = padded.shape[-1] - extra_pad
-        return padded[..., :end]
-    else:
-        return nn.functional.pad(x, paddings, mode, value)
-
-
-def _unpad1d(x: torch.Tensor, paddings: Tuple[int, int]):
-    """Remove padding from x, handling properly zero padding. Only for 1d!"""
-    padding_left, padding_right = paddings
-    assert padding_left >= 0 and padding_right >= 0, (padding_left, padding_right)
-    assert (padding_left + padding_right) <= x.shape[-1]
-    end = x.shape[-1] - padding_right
-    return x[..., padding_left:end]
-
-
-def _uniform_init(*shape: int):
-    t = torch.empty(shape)
-    nn.init.kaiming_uniform_(t)
-    return t
-
-
-def _sample_vectors(samples, num: int):
-    num_samples, device = samples.shape[0], samples.device
-
-    if num_samples >= num:
-        indices = torch.randperm(num_samples, device=device)[:num]
-    else:
-        indices = torch.randint(0, num_samples, (num,), device=device)
-
-    return samples[indices]
-
-
-def _kmeans(samples, num_clusters: int, num_iters: int = 10):
-    dim, dtype = samples.shape[-1], samples.dtype
-
-    means = _sample_vectors(samples, num_clusters)
-
-    for _ in range(num_iters):
-        diffs = rearrange(samples, "n d -> n () d") - rearrange(means, "c d -> () c d")
-        dists = -(diffs**2).sum(dim=-1)
-
-        buckets = dists.max(dim=-1).indices
-        bins = torch.bincount(buckets, minlength=num_clusters)
-        zero_mask = bins == 0
-        bins_min_clamped = bins.masked_fill(zero_mask, 1)
-
-        new_means = buckets.new_zeros(num_clusters, dim, dtype=dtype)
-        new_means.scatter_add_(0, repeat(buckets, "n -> n d", d=dim), samples)
-        new_means = new_means / bins_min_clamped[..., None]
-
-        means = torch.where(zero_mask[..., None], means, new_means)
-
-    return means, bins
-
-
-# class ConvLayerNorm(nn.LayerNorm):
-#     """
-#     Convolution-friendly LayerNorm that moves channels to last dimensions
-#     before running the normalization and moves them back to original position right after.
-#     """
-
-#     def __init__(self, normalized_shape: Union[int, List[int], torch.Size], **kwargs):
-#         super().__init__(normalized_shape, **kwargs)
-
-#     def forward(self, x):
-#         x = einops.rearrange(x, "b ... t -> b t ...")
-#         x = super().forward(x)
-#         x = einops.rearrange(x, "b t ... -> b ... t")
-#         return
-
-
-class EncodecNormConv1d(nn.Module):
-    """Wrapper around Conv1d and normalization applied to this conv
-    to provide a uniform interface across normalization approaches.
-    """
-
-    def __init__(self, *args, causal: bool = False, norm: str = "none", norm_kwargs: Dict[str, Any] = {}, **kwargs):
-        super().__init__()
-        self.conv = _apply_parametrization_norm(nn.Conv1d(*args, **kwargs), norm)
-        self.norm = _get_norm_module(self.conv, causal, norm, **norm_kwargs)
-        self.norm_type = norm
-
-    def forward(self, x):
-        x = self.conv(x)
-        x = self.norm(x)
-        return x
-
-
-class EncodecNormConvTranspose1d(nn.Module):
-    """Wrapper around ConvTranspose1d and normalization applied to this conv
-    to provide a uniform interface across normalization approaches.
-    """
-
-    def __init__(self, *args, causal: bool = False, norm: str = "none", norm_kwargs: Dict[str, Any] = {}, **kwargs):
-        super().__init__()
-        self.convtr = _apply_parametrization_norm(nn.ConvTranspose1d(*args, **kwargs), norm)
-        self.norm = _get_norm_module(self.convtr, causal, norm, **norm_kwargs)
-        self.norm_type = norm
-
-    def forward(self, x):
-        x = self.convtr(x)
-        x = self.norm(x)
-        return x
-
-
-class EncodecPaddedConv1d(nn.Module):
-    """Conv1d with some builtin handling of asymmetric or causal padding
-    and normalization.
-    """
+class EncodecConv1d(nn.Module):
+    """Conv1d with asymmetric or causal padding and normalization."""
 
     def __init__(
         self,
@@ -342,17 +108,19 @@ class EncodecPaddedConv1d(nn.Module):
         bias: bool = True,
         causal: bool = False,
         norm: str = "none",
-        norm_kwargs: Dict[str, Any] = {},
         pad_mode: str = "reflect",
     ):
         super().__init__()
+
         # warn user on unusual setup between dilation and stride
         if stride > 1 and dilation > 1:
             logger.warning(
-                "EncodecPaddedConv1d has been initialized with stride > 1 and dilation > 1"
+                "EncodecConv1d has been initialized with stride > 1 and dilation > 1"
                 f" (kernel_size={kernel_size} stride={stride}, dilation={dilation})."
             )
-        self.conv = EncodecNormConv1d(
+
+        self.norm_type = norm
+        self.conv = nn.Conv1d(
             in_channels,
             out_channels,
             kernel_size,
@@ -360,36 +128,67 @@ class EncodecPaddedConv1d(nn.Module):
             dilation=dilation,
             groups=groups,
             bias=bias,
-            causal=causal,
-            norm=norm,
-            norm_kwargs=norm_kwargs,
         )
+        if norm == "weight_norm":
+            self.conv = nn.utils.weight_norm(self.conv)
+        elif norm == "time_group_norm":
+            self.norm = nn.GroupNorm(1, out_channels)
+
         self.causal = causal
         self.pad_mode = pad_mode
 
+    @staticmethod
+    def _get_extra_padding_for_conv1d(x: torch.Tensor, kernel_size: int, stride: int, padding_total: int = 0) -> int:
+        """See `pad_for_conv1d`."""
+        length = x.shape[-1]
+        n_frames = (length - kernel_size + padding_total) / stride + 1
+        ideal_length = (math.ceil(n_frames) - 1) * stride + (kernel_size - padding_total)
+        return ideal_length - length
+
+    @staticmethod
+    def _pad1d(x: torch.Tensor, paddings: Tuple[int, int], mode: str = "zero", value: float = 0.0):
+        """Tiny wrapper around torch.nn.functional.pad, just to allow for reflect padding on small input.
+        If this is the case, we insert extra 0 padding to the right before the reflection happen.
+        """
+        length = x.shape[-1]
+        padding_left, padding_right = paddings
+        if mode == "reflect":
+            max_pad = max(padding_left, padding_right)
+            extra_pad = 0
+            if length <= max_pad:
+                extra_pad = max_pad - length + 1
+                x = nn.functional.pad(x, (0, extra_pad))
+            padded = nn.functional.pad(x, paddings, mode, value)
+            end = padded.shape[-1] - extra_pad
+            return padded[..., :end]
+        else:
+            return nn.functional.pad(x, paddings, mode, value)
+
     def forward(self, x):
-        B, C, T = x.shape  # TODO: batch, channel, time
-        kernel_size = self.conv.conv.kernel_size[0]
-        stride = self.conv.conv.stride[0]
-        dilation = self.conv.conv.dilation[0]
+        kernel_size = self.conv.kernel_size[0]
+        stride = self.conv.stride[0]
+        dilation = self.conv.dilation[0]
         kernel_size = (kernel_size - 1) * dilation + 1  # effective kernel size with dilations
         padding_total = kernel_size - stride
-        extra_padding = _get_extra_padding_for_conv1d(x, kernel_size, stride, padding_total)
+
+        extra_padding = self._get_extra_padding_for_conv1d(x, kernel_size, stride, padding_total)
         if self.causal:
             # Left padding for causal
-            x = _pad1d(x, (padding_total, extra_padding), mode=self.pad_mode)
+            x = self._pad1d(x, (padding_total, extra_padding), mode=self.pad_mode)
         else:
             # Asymmetric padding required for odd strides
             padding_right = padding_total // 2
             padding_left = padding_total - padding_right
-            x = _pad1d(x, (padding_left, padding_right + extra_padding), mode=self.pad_mode)
-        return self.conv(x)
+            x = self._pad1d(x, (padding_left, padding_right + extra_padding), mode=self.pad_mode)
+
+        x = self.conv(x)
+        if self.norm_type == "time_group_norm":
+            x = self.norm(x)
+        return x
 
 
-class EncodecPaddedConvTranspose1d(nn.Module):
-    """ConvTranspose1d with some builtin handling of asymmetric or causal padding
-    and normalization.
-    """
+class EncodecConvTranspose1d(nn.Module):
+    """ConvTranspose1d with asymmetric or causal padding and normalization."""
 
     def __init__(
         self,
@@ -400,25 +199,30 @@ class EncodecPaddedConvTranspose1d(nn.Module):
         causal: bool = False,
         norm: str = "none",
         trim_right_ratio: float = 1.0,
-        norm_kwargs: Dict[str, Any] = {},
     ):
         super().__init__()
-        self.convtr = EncodecNormConvTranspose1d(
-            in_channels, out_channels, kernel_size, stride, causal=causal, norm=norm, norm_kwargs=norm_kwargs
-        )
+
+        self.norm_type = norm
+        self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride)
+        if norm == "weight_norm":
+            self.conv = nn.utils.weight_norm(self.conv)
+        elif norm == "time_group_norm":
+            self.norm = nn.GroupNorm(1, out_channels)
+
         self.causal = causal
         self.trim_right_ratio = trim_right_ratio
-        assert (
-            self.causal or self.trim_right_ratio == 1.0
-        ), "`trim_right_ratio` != 1.0 only makes sense for causal convolutions"
-        assert self.trim_right_ratio >= 0.0 and self.trim_right_ratio <= 1.0
+
+        if not (self.causal or self.trim_right_ratio == 1.0):
+            raise ValueError("`trim_right_ratio` != 1.0 only makes sense for causal convolutions")
 
     def forward(self, x):
-        kernel_size = self.convtr.convtr.kernel_size[0]
-        stride = self.convtr.convtr.stride[0]
+        kernel_size = self.conv.kernel_size[0]
+        stride = self.conv.stride[0]
         padding_total = kernel_size - stride
 
-        y = self.convtr(x)
+        y = self.conv(x)
+        if self.norm_type == "time_group_norm":
+            y = self.norm(y)
 
         # We will only trim fixed padding. Extra padding from `pad_for_conv1d` would be
         # removed at the very end, when keeping only the right length for the output,
@@ -428,13 +232,15 @@ class EncodecPaddedConvTranspose1d(nn.Module):
             # Trim the padding on the right according to the specified ratio
             # if trim_right_ratio = 1.0, trim everything from right
             padding_right = math.ceil(padding_total * self.trim_right_ratio)
-            padding_left = padding_total - padding_right
-            y = _unpad1d(y, (padding_left, padding_right))
         else:
             # Asymmetric padding required for odd strides
             padding_right = padding_total // 2
-            padding_left = padding_total - padding_right
-            y = _unpad1d(y, (padding_left, padding_right))
+
+        padding_left = padding_total - padding_right
+
+        # unpad
+        end = y.shape[-1] - padding_right
+        y = y[..., padding_left:end]
         return y
 
 
@@ -482,13 +288,12 @@ class EncodecResnetBlock(nn.Module):
             out_chs = dim if i == len(kernel_sizes) - 1 else hidden
             block += [
                 act(**config.activation_params),
-                EncodecPaddedConv1d(
+                EncodecConv1d(
                     in_chs,
                     out_chs,
                     kernel_size=kernel_size,
                     dilation=dilation,
                     norm=config.norm,
-                    norm_kwargs=config.norm_params,
                     causal=config.causal,
                     pad_mode=config.pad_mode,
                 ),
@@ -497,12 +302,11 @@ class EncodecResnetBlock(nn.Module):
 
         self.use_shortcut = not config.true_skip
         if self.use_shortcut:
-            self.shortcut = EncodecPaddedConv1d(
+            self.shortcut = EncodecConv1d(
                 dim,
                 dim,
                 kernel_size=1,
                 norm=config.norm,
-                norm_kwargs=config.norm_params,
                 causal=config.causal,
                 pad_mode=config.pad_mode,
             )
@@ -527,12 +331,11 @@ class EncodecEncoder(nn.Module):
         act = getattr(nn, config.activation)
         mult = 1
         model = [
-            EncodecPaddedConv1d(
+            EncodecConv1d(
                 config.audio_channels,
                 mult * config.num_filters,
                 config.kernel_size,
                 norm=config.norm,
-                norm_kwargs=config.norm_params,
                 causal=config.causal,
                 pad_mode=config.pad_mode,
             )
@@ -553,13 +356,12 @@ class EncodecEncoder(nn.Module):
             # Add downsampling layers
             model += [
                 act(**config.activation_params),
-                EncodecPaddedConv1d(
+                EncodecConv1d(
                     mult * config.num_filters,
                     mult * config.num_filters * 2,
                     kernel_size=ratio * 2,
                     stride=ratio,
                     norm=config.norm,
-                    norm_kwargs=config.norm_params,
                     causal=config.causal,
                     pad_mode=config.pad_mode,
                 ),
@@ -571,12 +373,11 @@ class EncodecEncoder(nn.Module):
 
         model += [
             act(**config.activation_params),
-            EncodecPaddedConv1d(
+            EncodecConv1d(
                 mult * config.num_filters,
                 config.dimension,
                 config.last_kernel_size,
                 norm=config.norm,
-                norm_kwargs=config.norm_params,
                 causal=config.causal,
                 pad_mode=config.pad_mode,
             ),
@@ -598,12 +399,11 @@ class EncodecDecoder(nn.Module):
         act = getattr(nn, config.activation)
         mult = int(2 ** len(config.ratios))
         model = [
-            EncodecPaddedConv1d(
+            EncodecConv1d(
                 config.dimension,
                 mult * config.num_filters,
                 config.kernel_size,
                 norm=config.norm,
-                norm_kwargs=config.norm_params,
                 causal=config.causal,
                 pad_mode=config.pad_mode,
             )
@@ -617,13 +417,12 @@ class EncodecDecoder(nn.Module):
             # Add upsampling layers
             model += [
                 act(**config.activation_params),
-                EncodecPaddedConvTranspose1d(
+                EncodecConvTranspose1d(
                     mult * config.num_filters,
                     mult * config.num_filters // 2,
                     kernel_size=ratio * 2,
                     stride=ratio,
                     norm=config.norm,
-                    norm_kwargs=config.norm_params,
                     causal=config.causal,
                     trim_right_ratio=config.trim_right_ratio,
                 ),
@@ -643,12 +442,11 @@ class EncodecDecoder(nn.Module):
         # Add final layers
         model += [
             act(**config.activation_params),
-            EncodecPaddedConv1d(
+            EncodecConv1d(
                 config.num_filters,
                 config.audio_channels,
                 config.last_kernel_size,
                 norm=config.norm,
-                norm_kwargs=config.norm_params,
                 causal=config.causal,
                 pad_mode=config.pad_mode,
             ),
@@ -677,8 +475,7 @@ class EncodecEuclideanCodebook(nn.Module):
         super().__init__()
 
         self.decay = config.decay
-        init_fn: Union[Callable[..., torch.Tensor], Any] = _uniform_init if not config.kmeans_init else torch.zeros
-        embed = init_fn(config.bins, dim)
+        embed = torch.zeros(config.bins, dim)
 
         self.codebook_size = config.bins
 
@@ -691,77 +488,25 @@ class EncodecEuclideanCodebook(nn.Module):
         self.register_buffer("embed", embed)
         self.register_buffer("embed_avg", embed.clone())
 
-    @torch.jit.ignore
-    def init_embed_(self, data):
-        if self.inited:
-            return
-
-        embed, cluster_size = _kmeans(data, self.codebook_size, self.kmeans_iters)
-        self.embed.data.copy_(embed)
-        self.embed_avg.data.copy_(embed.clone())
-        self.cluster_size.data.copy_(cluster_size)
-        self.inited.data.copy_(torch.Tensor([True]))
-        # Make sure all buffers across workers are in sync after initialization
-        # TODO distrib.broadcast_tensors(self.buffers())
-
-    def replace_(self, samples, mask):
-        modified_codebook = torch.where(mask[..., None], _sample_vectors(samples, self.codebook_size), self.embed)
-        self.embed.data.copy_(modified_codebook)
-
-    def expire_codes_(self, batch_samples):
-        if self.threshold_ema_dead_code == 0:
-            return
-
-        expired_codes = self.cluster_size < self.threshold_ema_dead_code
-        if not torch.any(expired_codes):
-            return
-
-        batch_samples = rearrange(batch_samples, "... d -> (...) d")
-        self.replace_(batch_samples, mask=expired_codes)
-        # TODO distrib.broadcast_tensors(self.buffers())
-
-    def preprocess(self, x):
-        x = rearrange(x, "... d -> (...) d")
-        return x
-
     def quantize(self, x):
         embed = self.embed.t()
         dist = -(x.pow(2).sum(1, keepdim=True) - 2 * x @ embed + embed.pow(2).sum(0, keepdim=True))
         embed_ind = dist.max(dim=-1).indices
         return embed_ind
 
-    def postprocess_emb(self, embed_ind, shape):
-        return embed_ind.view(*shape[:-1])
-
-    def dequantize(self, embed_ind):
-        quantize = nn.functional.embedding(embed_ind, self.embed)
-        return quantize
-
     def encode(self, x):
         shape = x.shape
         # pre-process
-        x = self.preprocess(x)
+        x = x.reshape((-1, shape[-1]))
         # quantize
         embed_ind = self.quantize(x)
         # post-process
-        embed_ind = self.postprocess_emb(embed_ind, shape)
+        embed_ind = embed_ind.view(*shape[:-1])
         return embed_ind
 
     def decode(self, embed_ind):
-        quantize = self.dequantize(embed_ind)
+        quantize = nn.functional.embedding(embed_ind, self.embed)
         return quantize
-
-    def forward(self, x):
-        shape = x.shape
-        x = self.preprocess(x)
-
-        self.init_embed_(x)
-
-        embed_ind = self.quantize(x)
-        embed_ind = self.postprocess_emb(embed_ind, shape)
-        quantize = self.dequantize(embed_ind)
-
-        return quantize, embed_ind
 
 
 class EncodecVectorQuantization(nn.Module):
@@ -782,7 +527,7 @@ class EncodecVectorQuantization(nn.Module):
         self.codebook = EncodecEuclideanCodebook(config, codebook_dim)
 
     def encode(self, x):
-        x = rearrange(x, "b d n -> b n d")
+        x = x.permute(0, 2, 1)
         if self.requires_projection:
             x = self.project_in(x)
         embed_in = self.codebook.encode(x)
@@ -792,26 +537,9 @@ class EncodecVectorQuantization(nn.Module):
         quantize = self.codebook.decode(embed_ind)
         if self.requires_projection:
             quantize = self.project_out(quantize)
-        quantize = rearrange(quantize, "b n d -> b d n")
+
+        quantize = quantize.permute(0, 2, 1)
         return quantize
-
-    def forward(self, x):
-        device = x.device
-        x = rearrange(x, "b d n -> b n d")
-        if self.requires_projection:
-            x = self.project_in(x)
-
-        quantize, embed_ind = self.codebook(x)
-
-        if self.training:
-            logger.warning("Training not supported yet")
-
-        loss = torch.tensor([0.0], device=device, requires_grad=self.training)
-
-        if self.requires_projection:
-            quantize = self.project_out(quantize)
-        quantize = rearrange(quantize, "b n d -> b d n")
-        return quantize, embed_ind, loss
 
 
 class EncodecResidualVectorQuantization(nn.Module):
@@ -822,26 +550,6 @@ class EncodecResidualVectorQuantization(nn.Module):
     def __init__(self, config: EncodecConfig, num_quantizers: int):
         super().__init__()
         self.layers = nn.ModuleList([EncodecVectorQuantization(config) for _ in range(num_quantizers)])
-
-    def forward(self, x, num_quantizers: Optional[int] = None):
-        quantized_out = 0.0
-        residual = x
-
-        all_losses = []
-        all_indices = []
-
-        num_quantizers = num_quantizers or len(self.layers)
-
-        for layer in self.layers[:num_quantizers]:
-            quantized, indices, loss = layer(residual)
-            residual = residual - quantized
-            quantized_out = quantized_out + quantized
-
-            all_indices.append(indices)
-            all_losses.append(loss)
-
-        out_losses, out_indices = map(torch.stack, (all_losses, all_indices))
-        return quantized_out, out_indices, out_losses
 
     def encode(self, x: torch.Tensor, num_quantizers: Optional[int] = None) -> torch.Tensor:
         residual = x
@@ -873,46 +581,15 @@ class EncodecResidualVectorQuantizer(nn.Module):
         self.num_quantizers = num_quantizers
         self.vector_quantization = EncodecResidualVectorQuantization(config, num_quantizers)
 
-    def forward(self, embeddings: torch.Tensor, frame_rate: int, bandwidth: Optional[float] = None) -> QuantizedResult:
-        """
-        Residual vector quantization on the given input tensor.
-
-
-        Args:
-            embeddings (torch.Tensor): Input tensor.
-
-
-            frame_rate (int): Sample rate of the input tensor.
-
-
-            bandwidth (float): Target bandwidth.
-        Returns:
-            QuantizedResult:
-                The quantized (or approximately quantized) representation with the associated bandwidth and any penalty
-                term for the loss.
-        """
-        bw_per_q = self.get_bandwidth_per_quantizer(frame_rate)
-        num_quantizers = self.get_num_quantizers_for_bandwidth(frame_rate, bandwidth)
-        quantized, codes, commit_loss = self.vector_quantization(embeddings, num_quantizers=num_quantizers)
-        bw = torch.tensor(num_quantizers * bw_per_q).to(embeddings)
-        return QuantizedResult(quantized, codes, bw, penalty=torch.mean(commit_loss))
-
     # TODO: change this to QuantizerOutput class?
 
     def get_num_quantizers_for_bandwidth(self, frame_rate: int, bandwidth: Optional[float] = None) -> int:
         """Return num_quantizers based on specified target bandwidth."""
-        bw_per_q = self.get_bandwidth_per_quantizer(frame_rate)
+        bw_per_q = math.log2(self.config.bins) * frame_rate
         num_quantizers = self.num_quantizers
         if bandwidth is not None and bandwidth > 0.0:
             num_quantizers = int(max(1, math.floor(bandwidth * 1000 / bw_per_q)))
         return num_quantizers
-
-    def get_bandwidth_per_quantizer(self, frame_rate: int):
-        """
-        Returns bandwidth per quantizer for a given input frame rate. Each quantizer encodes a frame with `log2(bins)`
-        bits.
-        """
-        return math.log2(self.config.bins) * frame_rate
 
     def encode(self, embeddings: torch.Tensor, frame_rate: int, bandwidth: Optional[float] = None) -> torch.Tensor:
         """
@@ -1135,15 +812,18 @@ class EncodecModel(EncodecPreTrainedModel):
     def encode(
         self,
         input_values: torch.Tensor,
+        padding_mask: torch.Tensor = None,
         bandwidth: Optional[float] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput]:
+    ) -> Union[Tuple[torch.Tensor, Optional[torch.Tensor]], EncodecEncoderOutput]:
         """
         Encodes the input audio waveform into discrete codes.
 
         Args:
             input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
                 Float values of the input audio waveform.
+            padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
+                Padding mask used to pad the `input_values`.
             bandwidth (`float`, *optional*):
                 The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible
                 bandwidth. bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented
@@ -1154,6 +834,8 @@ class EncodecModel(EncodecPreTrainedModel):
             factors for each segment when `normalize` is True. Each frames is a tuple `(codebook, scale)`, with
             `codebook` of shape `[B, K, T]`, with `K` the number of codebooks, `T` frames.
         """
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
         if bandwidth is None:
             bandwidth = self.config.target_bandwidths[0]
         if bandwidth not in self.config.target_bandwidths:
@@ -1174,25 +856,37 @@ class EncodecModel(EncodecPreTrainedModel):
         else:
             stride = self.config.segment_stride
 
+        if padding_mask is None:
+            padding_mask = torch.ones_like(input_values).bool()
+
         encoded_frames = []
         scales = []
 
-        padded_length = ((input_length) // stride + 1) * (stride) + segment_length
-        padded_inputs = torch.nn.functional.pad(input_values, (0, padded_length - input_length))
-        for offset in range(0, input_length, stride):
-            frame = padded_inputs[:, :, offset : offset + segment_length]
-            encoded_frame, scale = self._encode_frame(frame, bandwidth)
+        step = segment_length - stride
+        if (input_length % stride) - step != 0:
+            raise ValueError(
+                "The input length is not properly padded for batched chunched decoding. Make sure to pad the input correctly."
+            )
+
+        breakpoint()
+
+        for offset in range(0, input_length - stride + 1, stride):
+            frame = (
+                input_values[:, :, offset : offset + segment_length]
+                * padding_mask[..., offset : offset + segment_length].bool()
+            )
+            encoded_frame, scale = self._encode_frame(frame, bandwidth, None)
             encoded_frames.append(encoded_frame)
             scales.append(scale)
 
         encoded_frames = torch.stack(encoded_frames)
 
         if return_dict:
-            return EncodecEncoderOutput(encoded_frames, scales)
-        return (encoded_frames, scales)
+            return EncodecEncoderOutput(encoded_frames, scales, padding_mask)
+        return (encoded_frames, scales, padding_mask)
 
     def _encode_frame(
-        self, input_values: torch.Tensor, bandwidth: float
+        self, input_values: torch.Tensor, bandwidth: float, padding_mask: int
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         length = input_values.shape[-1]
         duration = length / self.config.sampling_rate
@@ -1201,6 +895,7 @@ class EncodecModel(EncodecPreTrainedModel):
             raise RuntimeError(f"Duration of frame ({duration}) is longer than segment {self.config.segment}")
 
         if self.config.normalize:
+            # input_values = input_values * padding_mask
             mono = input_values.mean(dim=1, keepdim=True)
             scale = mono.pow(2).mean(dim=2, keepdim=True).sqrt() + 1e-8
             input_values = input_values / scale
@@ -1213,9 +908,58 @@ class EncodecModel(EncodecPreTrainedModel):
         codes = codes.transpose(0, 1)
         return (codes, scale)
 
+    @staticmethod
+    def _linear_overlap_add(frames: List[torch.Tensor], stride: int):
+        # Generic overlap add, with linear fade-in/fade-out, supporting complex scenario
+        # e.g., more than 2 frames per position.
+        # The core idea is to use a weight function that is a triangle,
+        # with a maximum value at the middle of the segment.
+        # We use this weighting when summing the frames, and divide by the sum of weights
+        # for each positions at the end. Thus:
+        #   - if a frame is the only one to cover a position, the weighting is a no-op.
+        #   - if 2 frames cover a position:
+        #          ...  ...
+        #         /   \/   \
+        #        /    /\    \
+        #            S  T       , i.e. S offset of second frame starts, T end of first frame.
+        # Then the weight function for each one is: (t - S), (T - t), with `t` a given offset.
+        # After the final normalization, the weight of the second frame at position `t` is
+        # (t - S) / (t - S + (T - t)) = (t - S) / (T - S), which is exactly what we want.
+        #
+        #   - if more than 2 frames overlap at a given point, we hope that by induction
+        #      something sensible happens.
+        if len(frames) == 0:
+            raise ValueError("`frames` cannot be an empty list.")
+
+        device = frames[0].device
+        dtype = frames[0].dtype
+        shape = frames[0].shape[:-1]
+        total_size = stride * (len(frames) - 1) + frames[-1].shape[-1]
+
+        frame_length = frames[0].shape[-1]
+        t = torch.linspace(0, 1, frame_length + 2, device=device, dtype=dtype)[1:-1]
+        weight = 0.5 - (t - 0.5).abs()
+
+        sum_weight = torch.zeros(total_size, device=device, dtype=dtype)
+        out = torch.zeros(*shape, total_size, device=device, dtype=dtype)
+        offset: int = 0
+
+        for frame in frames:
+            frame_length = frame.shape[-1]
+            out[..., offset : offset + frame_length] += weight[:frame_length] * frame
+            sum_weight[offset : offset + frame_length] += weight[:frame_length]
+            offset += stride
+
+        if sum_weight.min() == 0:
+            raise ValueError(f"`sum_weight` minimum element must be bigger than zero: {sum_weight}`")
+
+        return out / sum_weight
+
     def decode(
         self,
-        encoded_frames: Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput],
+        audio_codes,
+        scales,
+        padding_mask: torch.Tensor = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecDecoderOutput]:
         """
@@ -1224,26 +968,29 @@ class EncodecModel(EncodecPreTrainedModel):
         Note that the output might be a bit bigger than the input. In that case, any extra steps at the end can be
         trimmed.
         """
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         segment_length = self.config.segment_length
         if segment_length is None:
-            if len(encoded_frames[0]) != 1:
-                raise ValueError(f"Expected one frame, got {len(encoded_frames)}")
-            return self._decode_frame(encoded_frames[0][0], encoded_frames[1][0])
+            if len(audio_codes) != 1:
+                raise ValueError(f"Expected one frame, got {len(audio_codes)}")
+            decoded_frames, code_embeddings = self._decode_frame(audio_codes[0], scales[0])
+        else:
+            decoded_frames = []
+            code_embeddings = []
 
-        decoded_frames = []
-        code_embeddings = []
+            for frame, scale in zip(audio_codes, scales):
+                frames, embeddings = self._decode_frame(frame, scale)
+                decoded_frames.append(frames)
+                code_embeddings.append(embeddings)
+            code_embeddings = torch.stack(code_embeddings)
+            decoded_frames = self._linear_overlap_add(decoded_frames, self.config.segment_stride or 1)
 
-        for frame, scale in zip(*encoded_frames):
-            frames, embeddings = self._decode_frame(frame, scale)
-            decoded_frames.append(frames)
-            code_embeddings.append(embeddings)
-
-        decoded_frames = _linear_overlap_add(decoded_frames, self.config.segment_stride or 1)
-        code_embeddings = torch.stack(code_embeddings)
+        # truncate based on padding mask
+        if padding_mask.shape[-1] < decoded_frames.shape[-1]:
+            decoded_frames = decoded_frames[..., : padding_mask.shape[-1]]
 
         if return_dict:
             return EncodecDecoderOutput(decoded_frames, code_embeddings)
-
         return (decoded_frames, code_embeddings)
 
     def _decode_frame(
@@ -1263,9 +1010,10 @@ class EncodecModel(EncodecPreTrainedModel):
     def forward(
         self,
         input_values: torch.Tensor,
+        padding_mask: torch.Tensor = None,
         bandwidth: Optional[float] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecDecoderOutput]:
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecOutput]:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
             Float values of the input audio waveform.
@@ -1277,11 +1025,14 @@ class EncodecModel(EncodecPreTrainedModel):
 
         Returns:
         """
-        encoder_outputs = self.encode(input_values, bandwidth, return_dict)
-        decoder_outputs = self.decode(encoder_outputs, return_dict)
-        audio_output = decoder_outputs[0][..., : input_values.shape[-1]]
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        if padding_mask is None:
+            padding_mask = torch.ones_like(input_values).bool()
+
+        enc_out = self.encode(input_values, padding_mask, bandwidth, return_dict)
+        decoder_outputs = self.decode(enc_out[0], enc_out[1], enc_out[2], return_dict=return_dict)
 
         if return_dict:
-            return EncodecOutput(encoder_outputs.audio_codes, audio_output)
+            return EncodecOutput(enc_out[0], decoder_outputs.code_frames)
 
-        return (encoder_outputs[0], audio_output)
+        return (enc_out[0], decoder_outputs[0])
