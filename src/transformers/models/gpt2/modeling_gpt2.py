@@ -1039,7 +1039,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         token_type_ids = kwargs.get("token_type_ids", None)
 
         valid_past_index = kwargs.get("valid_past_index", None)
-        step_uses_cache = (valid_past_index is None and past_key_values is not None) or valid_past_index > 0
+        step_uses_cache = (valid_past_index is None and past_key_values is not None) or (valid_past_index is not None and valid_past_index > 0)
 
         # only last token for inputs_ids if past is defined in kwargs
         if step_uses_cache:
