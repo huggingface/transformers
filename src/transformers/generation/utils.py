@@ -1938,8 +1938,8 @@ class GenerationMixin:
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
             outputs = self(**model_inputs, output_hidden_states=True)
             hidden_dim = outputs.hidden_states[-1].shape[-1]
-            compression_factor = 8
-            compressor = torch.nn.Linear(hidden_dim, hidden_dim//compression_factor, bias=False, device=hidden_dim.device)
+            r = 8
+            compressor = torch.nn.Linear(hidden_dim, hidden_dim//r, bias=False, device=outputs.hidden_states.device)
 
         while True:
             if synced_gpus:
