@@ -105,12 +105,16 @@ class EncodecConfig(PretrainedConfig):
 
 
         bins (int): Codebook size.
+        codebook_dim (int): Codebook dimension. If not defined, uses the specified dimension in dim.
         decay (float): Decay for exponential moving average over the codebooks.
+        epsilon (float): Epsilon value for numerical stability.
         kmeans_init (bool): Whether to use kmeans to initialize the codebooks.
         kmeans_iters (int): Number of iterations used for kmeans initialization.
         threshold_ema_dead_code (int): Threshold for dead code expiration. Replace any codes
             that have an exponential moving average cluster size less than the specified threshold with
             randomly selected vector from the current batch.
+        commitment_weight (float): Weight for commitment loss.
+
 
 
 ===OLD STUFF===
@@ -295,11 +299,15 @@ class EncodecConfig(PretrainedConfig):
         lstm=2,
         trim_right_ratio=1.0,
 
-        bins=1024,
+        bins=1024,   # TODO: rename to codebook_size
+        codebook_dim=None,
         decay=0.99,
+        epsilon=1e-5,
         kmeans_init=True,
         kmeans_iters=50,
         threshold_ema_dead_code=2,
+        commitment_weight=1.0,
+
 
 
         # vocab_size=81,
@@ -390,16 +398,14 @@ class EncodecConfig(PretrainedConfig):
         self.lstm = lstm
         self.trim_right_ratio = trim_right_ratio
 
-        self.bins = bins   # TODO: quantizer_bins?
+        self.bins = bins
+        self.codebook_dim = codebook_dim
         self.decay = decay
+        self.epsilon = epsilon
         self.kmeans_init = kmeans_init
         self.kmeans_iters = kmeans_iters
         self.threshold_ema_dead_code = threshold_ema_dead_code
-
-
-
-
-
+        self.commitment_weight = commitment_weight
 
 
         # self.vocab_size = vocab_size
