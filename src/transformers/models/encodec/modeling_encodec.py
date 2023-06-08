@@ -293,13 +293,33 @@ def _kmeans(samples, num_clusters: int, num_iters: int = 10):
 
 
 class EncodecNormConv1d(nn.Module):
-    """Wrapper around Conv1d and normalization applied to this conv
-    to provide a uniform interface across normalization approaches.
-    """
-
-    def __init__(self, *args, causal: bool = False, norm: str = "none", norm_kwargs: Dict[str, Any] = {}, **kwargs):
+    """Applies normalization to a Conv1d."""
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        stride,
+        dilation,
+        groups,
+        bias,
+        causal: bool = False,
+        norm: str = "none",
+        norm_kwargs: Dict[str, Any] = {},
+    ):
         super().__init__()
-        self.conv = _apply_parametrization_norm(nn.Conv1d(*args, **kwargs), norm)
+        self.conv = _apply_parametrization_norm(
+            nn.Conv1d(
+                in_channels,
+                out_channels,
+                kernel_size,
+                stride,
+                dilation=dilation,
+                groups=groups,
+                bias=bias,
+            ),
+            norm
+        )
         self.norm = _get_norm_module(self.conv, causal, norm, **norm_kwargs)
         self.norm_type = norm
 
@@ -310,13 +330,22 @@ class EncodecNormConv1d(nn.Module):
 
 
 class EncodecNormConvTranspose1d(nn.Module):
-    """Wrapper around ConvTranspose1d and normalization applied to this conv
-    to provide a uniform interface across normalization approaches.
-    """
-
-    def __init__(self, *args, causal: bool = False, norm: str = "none", norm_kwargs: Dict[str, Any] = {}, **kwargs):
+    """Applies normalization to a ConvTranspose1d."""
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        stride,
+        causal: bool = False,
+        norm: str = "none",
+        norm_kwargs: Dict[str, Any] = {},
+    ):
         super().__init__()
-        self.convtr = _apply_parametrization_norm(nn.ConvTranspose1d(*args, **kwargs), norm)
+        self.convtr = _apply_parametrization_norm(
+            nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride), #*args, **kwargs),
+            norm
+        )
         self.norm = _get_norm_module(self.convtr, causal, norm, **norm_kwargs)
         self.norm_type = norm
 
