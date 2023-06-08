@@ -28,7 +28,7 @@ from ...test_sequence_feature_extraction_common import SequenceFeatureExtraction
 
 
 if is_speech_available():
-    from transformers import EnCodecFeatureExtractor
+    from transformers import EncodecFeatureExtractor
 
 if is_torch_available():
     import torch
@@ -103,7 +103,7 @@ class EnCodecFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-    feature_extraction_class = EnCodecFeatureExtractor if is_speech_available() else None
+    feature_extraction_class = EncodecFeatureExtractor if is_speech_available() else None
 
     def setUp(self):
         self.feat_extract_tester = EnCodecFeatureExtractionTester(self)
@@ -158,7 +158,7 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         )
         # fmt: on
         input_audio = self._load_datasamples(1)
-        feature_extractor = EnCodecFeatureExtractor()
+        feature_extractor = EncodecFeatureExtractor()
         input_values = feature_extractor(input_audio, return_tensors="pt").input_values
         self.assertEquals(input_values.shape, (1, 1, 93680))
         self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-6))
@@ -177,7 +177,7 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         input_audio = self._load_datasamples(1)
         input_audio = [np.tile(input_audio[0][None], reps=(2, 1))]
         input_audio[0][1] *= 0.5
-        feature_extractor = EnCodecFeatureExtractor(feature_size=2)
+        feature_extractor = EncodecFeatureExtractor(feature_size=2)
         input_values = feature_extractor(input_audio, return_tensors="pt").input_values
         self.assertEquals(input_values.shape, (1, 2, 93680))
         self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-6))
