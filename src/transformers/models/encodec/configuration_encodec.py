@@ -286,9 +286,11 @@ class EncodecConfig(PretrainedConfig):
         lstm=2,
         trim_right_ratio=1.0,
 
-
-
-
+        bins=1024,
+        decay=0.99,
+        kmeans_init=True,
+        kmeans_iters=50,
+        threshold_ema_dead_code=2,
 
 
         # vocab_size=81,
@@ -378,6 +380,13 @@ class EncodecConfig(PretrainedConfig):
         self.compress = compress
         self.lstm = lstm
         self.trim_right_ratio = trim_right_ratio
+
+        self.bins = bins
+        self.decay = decay
+        self.kmeans_init = kmeans_init
+        self.kmeans_iters = kmeans_iters
+        self.threshold_ema_dead_code = threshold_ema_dead_code
+
 
 
 

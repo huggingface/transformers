@@ -874,22 +874,19 @@ class ResidualVectorQuantizer(nn.Module):
     """
     def __init__(
         self,
-        dimension: int = 256,
+        config: EncodecConfig,
         n_q: int = 8,
-        bins: int = 1024,
-        decay: float = 0.99,
-        kmeans_init: bool = True,
-        kmeans_iters: int = 50,
-        threshold_ema_dead_code: int = 2,
     ):
         super().__init__()
+
         self.n_q = n_q
-        self.dimension = dimension
-        self.bins = bins
-        self.decay = decay
-        self.kmeans_init = kmeans_init
-        self.kmeans_iters = kmeans_iters
-        self.threshold_ema_dead_code = threshold_ema_dead_code
+        self.dimension = config.dimension
+        self.bins = config.bins
+        self.decay = config.decay
+        self.kmeans_init = config.kmeans_init
+        self.kmeans_iters = config.kmeans_iters
+        self.threshold_ema_dead_code = config.threshold_ema_dead_code
+
         self.vq = ResidualVectorQuantization(
             dim=self.dimension,
             codebook_size=self.bins,
@@ -1506,17 +1503,8 @@ class EncodecModel(EncodecPreTrainedModel):
         self.encoder = SEANetEncoder(config)
         self.decoder = SEANetDecoder(config)
 
-# self.encoder.hop_length
-# self.encoder.dimension
-
-        # TODO: put this in RVQ itself using config.xxx
-        # also put encoder.hop_length in config then?!
         n_q = int(1000 * config.target_bandwidths[-1] // (math.ceil(config.sampling_rate / self.encoder.hop_length) * 10))
-        self.quantizer = ResidualVectorQuantizer( #TODO:config
-            dimension=self.encoder.dimension,
-            n_q=n_q,
-            bins=1024,
-        )
+        self.quantizer = ResidualVectorQuantizer(config, n_q=n_q)
 
         self.frame_rate = math.ceil(self.config.sampling_rate / np.prod(self.encoder.ratios))
         self.bits_per_codebook = int(math.log2(self.quantizer.bins))
@@ -1526,13 +1514,6 @@ class EncodecModel(EncodecPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    # # TODO: probably just use this from config, or pass into forward / encode / decode
-    # def set_target_bandwidth(self, bandwidth: float):
-    #     if bandwidth not in self.config.target_bandwidths:
-    #         raise ValueError(f"This model doesn't support the bandwidth {bandwidth}. "
-    #                          f"Select one of {self.config.target_bandwidths}.")
-    #     self.bandwidth = bandwidth
 
     def get_encoder(self):
         return self.encoder
@@ -1553,8 +1534,6 @@ class EncodecModel(EncodecPreTrainedModel):
         if bandwidth not in self.config.target_bandwidths:
             raise ValueError(f"This model doesn't support the bandwidth {bandwidth}. "
                              f"Select one of {self.config.target_bandwidths}.")
-
-        print(bandwidth)
 
         assert x.dim() == 3
         _, channels, length = x.shape
