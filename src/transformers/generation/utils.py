@@ -2327,7 +2327,7 @@ class GenerationMixin:
 
         this_peer_finished = False  # used by synced_gpus only
 
-        model_kwargs["past_index"] = torch.tensor(-1, dtype=torch.int32)
+        model_kwargs["past_index"] = 0
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.

@@ -298,7 +298,7 @@ class GPT2Attention(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-        past_index: Optional[torch.tensor] = None,
+        past_index: Optional[int] = None,
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
         if encoder_hidden_states is not None:
             if not hasattr(self, "q_attn"):
@@ -317,12 +317,10 @@ class GPT2Attention(nn.Module):
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
-        if past_index >= 0:  # TODO: using a bool here would be faster
-            # TODO: shift past_index + 1 would avoid a aten::add call
-            new_index = past_index + 1
-            upper = past_index + 2
-            layer_past[0][:, :, new_index:upper] = key  # slice to keep dimension info
-            layer_past[1][:, :, new_index:upper] = value
+        if past_index > 0:
+            upper = past_index + 1
+            layer_past[0][:, :, past_index:upper] = key  # slice to keep dimension info
+            layer_past[1][:, :, past_index:upper] = value
 
             # TODO: not sure this allocation is needed - maybe refactoring would be faster?
             key = layer_past[0][:, :, :upper]
@@ -396,7 +394,7 @@ class GPT2Block(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-        past_index: Optional[torch.tensor] = None,
+        past_index: Optional[int] = None,
     ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
@@ -781,7 +779,7 @@ class GPT2Model(GPT2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        past_index: Optional[torch.tensor] = None,
+        past_index: Optional[int] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -809,9 +807,8 @@ class GPT2Model(GPT2PreTrainedModel):
         if position_ids is not None:
             position_ids = position_ids.view(-1, input_shape[-1])
 
-        if past_index < 0:
+        if past_index == 0:
             past_length = 0
-            # past_key_values = tuple([None] * len(self.h))
         else:
             past_length = past_index + 1
         
@@ -1030,7 +1027,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         past_index = kwargs.get("past_index", None)
 
         # only last token for inputs_ids if past is defined in kwargs
-        if past_index >= 0:
+        if past_index > 0:
             input_ids = input_ids[:, -1].unsqueeze(-1)
             if token_type_ids is not None:
                 token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
@@ -1042,13 +1039,13 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_index >= 0:
+            if past_index > 0:
                 position_ids = position_ids[:, -1].unsqueeze(-1)
         else:
             position_ids = None
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_index == -1:
+        if inputs_embeds is not None and past_index == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
@@ -1091,7 +1088,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        past_index: Optional[torch.tensor] = None,
+        past_index: Optional[int] = None,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
