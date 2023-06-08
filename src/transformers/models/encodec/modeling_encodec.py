@@ -54,6 +54,7 @@ _CONV_NORMALIZATIONS = frozenset(
     ["none", "weight_norm", "spectral_norm", "time_layer_norm", "layer_norm", "time_group_norm"]
 )
 
+
 @dataclass
 class QuantizedResult:
     quantized: torch.Tensor
@@ -63,8 +64,10 @@ class QuantizedResult:
     metrics: dict = field(default_factory=dict)
 
 
-_CONV_NORMALIZATIONS = frozenset(['none', 'weight_norm', 'spectral_norm',
-                                 'time_layer_norm', 'layer_norm', 'time_group_norm'])
+_CONV_NORMALIZATIONS = frozenset(
+    ["none", "weight_norm", "spectral_norm", "time_layer_norm", "layer_norm", "time_group_norm"]
+)
+
 
 @dataclass
 class EncodecOutput(ModelOutput):
@@ -98,6 +101,7 @@ class EncodecEncoderOutput(ModelOutput):
 
     audio_codes: torch.FloatTensor = None
     scales: torch.FloatTensor = None
+
     def to_tuple(self) -> Tuple[Any]:
         return tuple(
             self[k] if k not in ["text_model_output", "audio_model_output"] else getattr(self, k).to_tuple()
@@ -464,6 +468,7 @@ class EncodecResnetBlock(nn.Module):
         kernel_sizes (list): List of kernel sizes for the convolutions.
         dilations (list): List of dilations for the convolutions.
     """
+
     def __init__(self, config: EncodecConfig, dim: int, kernel_sizes: List[int], dilations: List[int]):
         super().__init__()
 
@@ -500,7 +505,7 @@ class EncodecResnetBlock(nn.Module):
                 norm=config.norm,
                 norm_kwargs=config.norm_params,
                 causal=config.causal,
-                pad_mode=config.pad_mode
+                pad_mode=config.pad_mode,
             )
 
     def forward(self, x):
@@ -543,7 +548,7 @@ class EncodecEncoder(nn.Module):
                         config,
                         mult * config.num_filters,
                         kernel_sizes=[config.residual_kernel_size, 1],
-                        dilations=[config.dilation_base ** j, 1],
+                        dilations=[config.dilation_base**j, 1],
                     )
                 ]
             # Add downsampling layers
@@ -631,7 +636,7 @@ class EncodecDecoder(nn.Module):
                         config,
                         mult * config.num_filters // 2,
                         kernel_sizes=[config.residual_kernel_size, 1],
-                        dilations=[config.dilation_base ** j, 1],
+                        dilations=[config.dilation_base**j, 1],
                     )
                 ]
             mult //= 2
@@ -654,9 +659,7 @@ class EncodecDecoder(nn.Module):
         if config.final_activation is not None:
             final_act = getattr(nn, config.final_activation)
             final_activation_params = final_activation_params or {}
-            model += [
-                final_act(**final_activation_params)
-            ]
+            model += [final_act(**final_activation_params)]
 
         self.layers = nn.ModuleList(model)
 
@@ -668,6 +671,7 @@ class EncodecDecoder(nn.Module):
 
 class EncodecEuclideanCodebook(nn.Module):
     """Codebook with Euclidean distance."""
+
     def __init__(self, config: EncodecConfig, dim: int):
         super().__init__()
 
@@ -747,7 +751,7 @@ class EncodecEuclideanCodebook(nn.Module):
         return quantize
 
     def forward(self, x):
-        shape, dtype = x.shape, x.dtype
+        shape = x.shape
         x = self.preprocess(x)
 
         self.init_embed_(x)
@@ -764,6 +768,7 @@ class EncodecVectorQuantization(nn.Module):
     Vector quantization implementation.
     Currently supports only euclidean distance.
     """
+
     def __init__(self, config: EncodecConfig):
         super().__init__()
 
@@ -814,11 +819,10 @@ class EncodecResidualVectorQuantization(nn.Module):
     Residual vector quantization implementation.
     Follows Algorithm 1. in https://arxiv.org/pdf/2107.03312.pdf
     """
+
     def __init__(self, config: EncodecConfig, num_quantizers: int):
         super().__init__()
-        self.layers = nn.ModuleList(
-            [EncodecVectorQuantization(config) for _ in range(num_quantizers)]
-        )
+        self.layers = nn.ModuleList([EncodecVectorQuantization(config) for _ in range(num_quantizers)])
 
     def forward(self, x, num_quantizers: Optional[int] = None):
         quantized_out = 0.0
@@ -863,6 +867,7 @@ class EncodecResidualVectorQuantization(nn.Module):
 
 class EncodecResidualVectorQuantizer(nn.Module):
     """Residual Vector Quantizer."""
+
     def __init__(self, config: EncodecConfig, num_quantizers: int):
         super().__init__()
         self.config = config
@@ -886,11 +891,11 @@ class EncodecResidualVectorQuantizer(nn.Module):
         quantized, codes, commit_loss = self.vector_quantization(embeddings, num_quantizers=num_quantizers)
         bw = torch.tensor(num_quantizers * bw_per_q).to(embeddings)
         return QuantizedResult(quantized, codes, bw, penalty=torch.mean(commit_loss))
-#TODO: change this to QuantizerOutput class?
+
+    # TODO: change this to QuantizerOutput class?
 
     def get_num_quantizers_for_bandwidth(self, frame_rate: int, bandwidth: Optional[float] = None) -> int:
-        """Return num_quantizers based on specified target bandwidth.
-        """
+        """Return num_quantizers based on specified target bandwidth."""
         bw_per_q = self.get_bandwidth_per_quantizer(frame_rate)
         num_quantizers = self.num_quantizers
         if bandwidth is not None and bandwidth > 0.0:
@@ -962,7 +967,7 @@ class EncodecPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-#TODO
+# TODO
 ENCODEC_BASE_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1111,7 +1116,7 @@ class EncodecModel(EncodecPreTrainedModel):
         self.quantizer = EncodecResidualVectorQuantizer(config, num_quantizers)
 
         self.bits_per_codebook = int(math.log2(self.config.bins))
-        if 2 ** self.bits_per_codebook != self.config.bins:
+        if 2**self.bits_per_codebook != self.config.bins:
             raise ValueError("Number of quantizer bins must be a power of 2.")
 
         # Initialize weights and apply final processing
@@ -1123,7 +1128,9 @@ class EncodecModel(EncodecPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    def encode(self, input_values: torch.Tensor, bandwidth: Optional[float] = None, return_dict = None) ->  Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput] :
+    def encode(
+        self, input_values: torch.Tensor, bandwidth: Optional[float] = None, return_dict=None
+    ) -> Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput]:
         """
         Encodes the input audio waveform into discrete codes.
 
@@ -1162,7 +1169,7 @@ class EncodecModel(EncodecPreTrainedModel):
 
         encoded_frames = []
         scales = []
-        
+
         padded_length = ((input_length - 1) // stride + 1) * stride + 1
         padded_inputs = torch.nn.functional.pad(input_values, (0, padded_length - input_length))
         for offset in range(0, input_length, stride):
@@ -1170,15 +1177,16 @@ class EncodecModel(EncodecPreTrainedModel):
             encoded_frame, scale = self._encode_frame(frame, bandwidth)
             scales.append(scale)
             encoded_frames.append(encoded_frame)
-        
-        
+
         encoded_frames = torch.stack(encoded_frames)
 
         if return_dict:
             return EncodecEncoderOutput(encoded_frames, scales)
-        return (encoded_frames,scales)
+        return (encoded_frames, scales)
 
-    def _encode_frame(self, input_values: torch.Tensor, bandwidth: float) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    def _encode_frame(
+        self, input_values: torch.Tensor, bandwidth: float
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         length = input_values.shape[-1]
         duration = length / self.config.sampling_rate
 
@@ -1198,7 +1206,11 @@ class EncodecModel(EncodecPreTrainedModel):
         codes = codes.transpose(0, 1)
         return codes, scale
 
-    def decode(self, encoded_frames: Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput] , return_dict = None) -> Union[Tuple[torch.Tensor,torch.Tensor], EncodecDecoderOutput]:
+    def decode(
+        self,
+        encoded_frames: Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput],
+        return_dict=None,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecDecoderOutput]:
         """
         Decodes the given frames into an output audio waveform.
 
@@ -1213,7 +1225,7 @@ class EncodecModel(EncodecPreTrainedModel):
 
         decoded_frames = []
         code_embeddings = []
-        
+
         for frame, scale in encoded_frames:
             frames, embeddings = self._decode_frame(frame, scale)
             decoded_frames.append(_linear_overlap_add(frames, self.config.segment_stride or 1))
@@ -1225,9 +1237,10 @@ class EncodecModel(EncodecPreTrainedModel):
         if return_dict:
             return EncodecDecoderOutput(decoded_frames, code_embeddings)
         return (decoded_frames, code_embeddings)
-    
 
-    def _decode_frame(self, codes: Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput], scale = None) -> Tuple[torch.Tensor,torch.Tensor]:
+    def _decode_frame(
+        self, codes: Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput], scale=None
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         codes = codes.transpose(0, 1)
         embeddings = self.quantizer.decode(codes)
         outputs = self.decoder(embeddings)

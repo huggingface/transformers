@@ -16,9 +16,9 @@
 
 import inspect
 import unittest
+from typing import Dict, List, Tuple
+
 import numpy as np
-from torch import exp
-from typing import List, Tuple, Dict
 from datasets import Audio, load_dataset
 
 from transformers import AutoProcessor, EncodecConfig
@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from datasets import load_dataset, Audio
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -99,13 +98,13 @@ class EncodecModelTester:
         return config, inputs_dict
 
     def get_config(self):
-        return EncodecConfig(audio_channels = self.num_channels, segment = None )
+        return EncodecConfig(audio_channels=self.num_channels, segment=None)
 
     def create_and_check_model_forward(self, config, inputs_dict):
         model = EncodecModel(config=config).to(torch_device).eval()
 
         input_values = inputs_dict["input_values"]
-        result = model(input_values, return_dict = True)
+        result = model(input_values, return_dict=True)
         self.parent.assertEqual(result.code_frames.shape, (self.batch_size, self.num_channels, self.intermediate_size))
 
 
@@ -136,7 +135,9 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = EncodecModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=EncodecConfig, hidden_size=37, common_properties=[], has_text_modality = False)
+        self.config_tester = ConfigTester(
+            self, config_class=EncodecConfig, hidden_size=37, common_properties=[], has_text_modality=False
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -187,15 +188,15 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_attention_outputs(self):
         # disabled because this model doesn't use attention
         pass
-    
+
     def test_feed_forward_chunking(self):
-        # model does not support chunking (yet?) 
-        # TODO arthur use segment_length in the decode and encode 
+        # model does not support chunking (yet?)
+        # TODO arthur use segment_length in the decode and encode
         pass
-    
+
     def test_hidden_states_output(self):
         # model does not output hidden states yet
-        pass 
+        pass
 
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -222,7 +223,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                     check_determinism(tensor1, tensor2)
             else:
                 check_determinism(first, second)
-                
+
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -269,8 +270,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
-                
-                
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -295,7 +295,6 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                         )
 
 
-
 def normalize(arr):
     norm = np.linalg.norm(arr)
     normalized_arr = arr / norm
@@ -311,7 +310,6 @@ def compute_rmse(arr1, arr2):
 @slow
 @require_torch
 class EncodecIntegrationTest(unittest.TestCase):
-
     def test_integration_24kHz(self):
         expected_rmse = {
             "1.5": 0.0025,
@@ -330,7 +328,9 @@ class EncodecIntegrationTest(unittest.TestCase):
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
         audio_sample = librispeech_dummy[-1]["audio"]["array"]
 
-        input_values = processor(audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt").input_values.to(torch_device)
+        input_values = processor(
+            audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt"
+        ).input_values.to(torch_device)
 
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
@@ -381,7 +381,9 @@ class EncodecIntegrationTest(unittest.TestCase):
         # transform mono to stereo
         audio_sample = np.array([audio_sample, audio_sample])
 
-        input_values = processor(audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt").input_values.to(torch_device)
+        input_values = processor(
+            audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt"
+        ).input_values.to(torch_device)
 
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
@@ -408,5 +410,3 @@ class EncodecIntegrationTest(unittest.TestCase):
             # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
             rmse = compute_rmse(arr, arr_enc_dec)
             self.assertTrue(rmse < expected_rmse)
-            
-

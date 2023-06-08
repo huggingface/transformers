@@ -129,9 +129,9 @@ class EncodecConfig(PretrainedConfig):
         sampling_rate=24_000,
         audio_channels=1,
         normalize=False,
-        segment=None,   # TODO: segment length in seconds
+        segment=None,  # TODO: segment length in seconds
         overlap=0.01,
-        dimension=128,   # TODO: hidden_size?
+        dimension=128,  # TODO: hidden_size?
         num_filters=32,
         num_residual_layers=1,
         ratios=[8, 5, 4, 2],
@@ -151,7 +151,7 @@ class EncodecConfig(PretrainedConfig):
         compress=2,
         lstm=2,
         trim_right_ratio=1.0,
-        bins=1024,   # TODO: rename to codebook_size
+        bins=1024,  # TODO: rename to codebook_size
         codebook_dim=None,
         decay=0.99,
         epsilon=1e-5,
