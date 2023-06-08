@@ -761,21 +761,17 @@ class EncodecVectorQuantization(nn.Module):
             self.project_in = nn.Linear(config.dimension, codebook_dim)
             self.project_out = nn.Linear(codebook_dim, config.dimension)
 
-        self._codebook = EncodecEuclideanCodebook(config, codebook_dim)
-
-    # @property
-    # def codebook(self):
-    #     return self._codebook.embed
+        self.codebook = EncodecEuclideanCodebook(config, codebook_dim)
 
     def encode(self, x):
         x = rearrange(x, "b d n -> b n d")
         if self.requires_projection:
             x = self.project_in(x)
-        embed_in = self._codebook.encode(x)
+        embed_in = self.codebook.encode(x)
         return embed_in
 
     def decode(self, embed_ind):
-        quantize = self._codebook.decode(embed_ind)
+        quantize = self.codebook.decode(embed_ind)
         if self.requires_projection:
             quantize = self.project_out(quantize)
         quantize = rearrange(quantize, "b n d -> b d n")
@@ -787,7 +783,7 @@ class EncodecVectorQuantization(nn.Module):
         if self.requires_projection:
             x = self.project_in(x)
 
-        quantize, embed_ind = self._codebook(x)
+        quantize, embed_ind = self.codebook(x)
 
         if self.training:
             logger.warning("Training not supported yet")
