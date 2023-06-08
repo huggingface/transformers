@@ -1549,6 +1549,7 @@ class GenerationMixin:
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
+                *low_memory=low_memory,
                 **model_kwargs,
             )
 
