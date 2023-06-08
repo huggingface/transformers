@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from datasets import load_dataset, Audio
 
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -306,6 +307,40 @@ class EncodecIntegrationTest(unittest.TestCase):
 
             arr = input_values[0, 0].cpu().numpy()
             arr_enc_dec = input_values_enc_dec[0, 0].cpu().numpy()
+
+            rmse = compute_rmse(arr, arr_enc_dec)
+
+            # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
+            self.assertTrue(rmse < expected_rmse)
+
+    def test_integration_48kHz(self):
+        expected_rmse = {
+            "3.0": 0.001,
+            "24.0": 0.0005,
+        }
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        model_id = "Matthijs/encodec_48khz"
+
+        model = EncodecModel.from_pretrained(model_id).to(torch_device)
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        audio_sample = librispeech_dummy[-1]["audio"]["array"]
+
+        # transform mono to stereo
+        audio_sample = np.array([audio_sample, audio_sample])
+
+        input_values = processor(audio=audio_sample, return_tensors="pt").input_values.to(torch_device)
+
+        for bandwith, expected_rmse in expected_rmse.items():
+            with torch.no_grad():
+                # use max bandwith for best possible reconstruction
+                input_values_enc_dec = model(input_values, bandwidth=float(bandwith))
+
+            self.assertTrue(input_values.shape == input_values_enc_dec.shape)
+
+            arr = input_values[0].cpu().numpy()
+            arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
 
             rmse = compute_rmse(arr, arr_enc_dec)
 
