@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_speech_available,
     is_torch_available,
 )
 
@@ -26,15 +25,8 @@ _import_structure = {
         "ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "EncodecConfig",
     ],
+    "feature_extraction_encodec": ["EncodecFeatureExtractor"]
 }
-
-try:
-    if not is_speech_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["feature_extraction_encodec"] = ["EncodecFeatureExtractor"]
 
 try:
     if not is_torch_available():
@@ -53,14 +45,7 @@ if TYPE_CHECKING:
         ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP,
         EncodecConfig,
     )
-
-    try:
-        if not is_speech_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .feature_extraction_encodec import EncodecFeatureExtractor
+    from .feature_extraction_encodec import EncodecFeatureExtractor
 
     try:
         if not is_torch_available():
