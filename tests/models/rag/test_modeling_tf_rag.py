@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import json
 import os
 import shutil
@@ -904,6 +905,7 @@ class TFRagModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_rag_sequence_generate_batch_from_context_input_ids(self):
+        gc.collect()
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
         retriever = RagRetriever.from_pretrained(
             "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True
