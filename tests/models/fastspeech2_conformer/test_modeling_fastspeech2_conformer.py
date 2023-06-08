@@ -1,11 +1,6 @@
-
-
-
-
 # # # # # # # # # # # # # # # # # # # # # # #
 #  WIP - Currently has old draft FS2 tests  #
 # # # # # # # # # # # # # # # # # # # # # # #
-
 
 
 # # coding=utf-8
@@ -22,242 +17,196 @@
 # # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # # See the License for the specific language governing permissions and
 # # limitations under the License.
-# """ Testing suite for the PyTorch FastSpeech2Conformer model. """
+""" Testing suite for the PyTorch FastSpeech2Conformer model. """
 
-# import unittest
+import unittest
 
-# import numpy as np
+from transformers import FastSpeech2ConformerConfig, is_torch_available
+from transformers.testing_utils import require_torch, slow, torch_device
 
-# from transformers import FastSpeech2ConformerConfig, is_torch_available
-# from transformers.testing_utils import require_torch, slow, torch_device
-
-# from ...test_configuration_common import ConfigTester
-# from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, _config_zero_init
 
 
-# if is_torch_available():
-#     import torch
+if is_torch_available():
+    import torch
 
-#     from transformers import FastSpeech2ConformerModel, FastSpeech2ConformerTokenizer
-
-
-# class FastSpeech2ConformerModelTester:
-#     def __init__(
-#         self,
-#         parent,
-#         batch_size=13,
-#         seq_length=7,
-#         is_training=False,
-#         encoder_embed_dim=256,
-#         speaker_embed_dim=64,
-#         max_source_positions=1024,
-#         encoder_attention_heads=2,
-#         fft_hidden_dim=1024,
-#         fft_kernel_size=9,
-#         fft_dropout=0.2,
-#         attention_dropout=0,
-#         encoder_layers=4,
-#         decoder_embed_dim=256,
-#         decoder_attention_heads=2,
-#         decoder_layers=4,
-#         add_postnet=False,
-#         postnet_conv_dim=512,
-#         postnet_conv_kernel_size=5,
-#         postnet_layers=5,
-#         postnet_dropout=0.5,
-#         vocab_size=75,
-#         num_speakers=1,
-#         var_pred_hidden_dim=256,
-#         var_pred_kernel_size=3,
-#         var_pred_dropout=0.5,
-#         pitch_max=5.733940816898645,
-#         pitch_min=-4.660287183665281,
-#         energy_max=3.2244551181793213,
-#         energy_min=-4.9544901847839355,
-#         initializer_range=0.0625,
-#         use_mean=True,
-#         use_standard_deviation=True,
-#     ):
-#         self.parent = parent
-#         self.batch_size = batch_size
-#         self.seq_length = seq_length
-#         self.is_training = is_training
-#         self.encoder_embed_dim = encoder_embed_dim
-#         self.speaker_embed_dim = speaker_embed_dim
-#         self.encoder_embed_dim = encoder_embed_dim
-#         self.max_source_positions = max_source_positions
-#         self.encoder_attention_heads = encoder_attention_heads
-#         self.fft_hidden_dim = fft_hidden_dim
-#         self.fft_kernel_size = fft_kernel_size
-#         self.fft_dropout = fft_dropout
-#         self.attention_dropout = attention_dropout
-#         self.encoder_layers = encoder_layers
-#         self.decoder_embed_dim = decoder_embed_dim
-#         self.decoder_attention_heads = decoder_attention_heads
-#         self.decoder_layers = decoder_layers
-#         self.add_postnet = add_postnet
-#         self.postnet_conv_dim = postnet_conv_dim
-#         self.postnet_conv_kernel_size = postnet_conv_kernel_size
-#         self.postnet_layers = postnet_layers
-#         self.postnet_dropout = postnet_dropout
-#         self.vocab_size = vocab_size
-#         self.num_speakers = num_speakers
-#         self.var_pred_hidden_dim = var_pred_hidden_dim
-#         self.var_pred_kernel_size = var_pred_kernel_size
-#         self.var_pred_dropout = var_pred_dropout
-#         self.pitch_min = pitch_min
-#         self.pitch_max = pitch_max
-#         self.energy_min = energy_min
-#         self.energy_max = energy_max
-#         self.initializer_range = initializer_range
-#         self.use_mean = use_mean
-#         self.use_standard_deviation = use_standard_deviation
-#         self.initializer_range = initializer_range
-
-#     def prepare_config_and_inputs(self):
-#         config = self.get_config()
-#         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-#         return config, input_ids
-
-#     def get_config(self):
-#         return FastSpeech2ConformerConfig(
-#             encoder_embed_dim=self.encoder_embed_dim,
-#             speaker_embed_dim=self.speaker_embed_dim,
-#             max_source_positions=self.max_source_positions,
-#             encoder_attention_heads=self.encoder_attention_heads,
-#             fft_dropout=self.fft_dropout,
-#             fft_hidden_dim=self.fft_hidden_dim,
-#             fft_kernel_size=self.fft_kernel_size,
-#             attention_dropout=self.attention_dropout,
-#             encoder_layers=self.encoder_layers,
-#             decoder_embed_dim=self.decoder_embed_dim,
-#             decoder_attention_heads=self.decoder_attention_heads,
-#             decoder_layers=self.decoder_layers,
-#             add_postnet=self.add_postnet,
-#             postnet_conv_dim=self.postnet_conv_dim,
-#             postnet_conv_kernel_size=self.postnet_conv_kernel_size,
-#             postnet_layer=self.postnet_layers,
-#             postnet_dropout=self.postnet_dropout,
-#             vocab_size=self.vocab_size,
-#             num_speakers=self.num_speakers,
-#             var_pred_hidden_dim=self.var_pred_hidden_dim,
-#             var_pred_kernel_size=self.var_pred_kernel_size,
-#             var_pred_dropout=self.var_pred_dropout,
-#             pitch_min=self.pitch_min,
-#             pitch_max=self.pitch_max,
-#             energy_min=self.energy_min,
-#             energy_max=self.energy_max,
-#             initializer_range=self.initializer_range,
-#             use_mean=self.use_mean,
-#             use_standard_deviation=self.use_standard_deviation,
-#         )
-
-#     def create_and_check_model(self, config, input_values, *args):
-#         model = FastSpeech2ConformerModel(config=config)
-#         model.to(torch_device)
-#         model.eval()
-#         result = model(input_values, return_dict=True)
-
-#         # total of 5 keys in result
-#         self.parent.assertEqual(len(result), 5)
-#         # check batch sizes match
-#         for value in result.values():
-#             self.parent.assertEqual(value.size(0), self.batch_size)
-#         # check log_duration, pitch, and energy have same shape
-#         for i in range(2, 4):
-#             self.parent.assertEqual(result[i].shape, result[i + 1].shape)
-#         # check predicted mel-spectrogram has correct dimension
-#         self.parent.assertEqual(result.mel_spectrogram.size(2), model.config.mel_dim)
-
-#     def prepare_config_and_inputs_for_common(self):
-#         config, input_ids = self.prepare_config_and_inputs()
-#         inputs_dict = {"input_ids": input_ids}
-#         return config, inputs_dict
+    from transformers import FastSpeech2ConformerModel
 
 
-# @require_torch
-# class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
-#     all_model_classes = (FastSpeech2ConformerModel,) if is_torch_available() else ()
-#     test_pruning = False
-#     test_headmasking = False
-#     test_torchscript = False
+class FastSpeech2ConformerModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=13,
+        num_hidden_layers=4,
+        hidden_size=24,
+        seq_length=7,
+        is_training=False,
+        vocab_size=20,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
 
-#     def setUp(self):
-#         self.model_tester = FastSpeech2ConformerModelTester(self)
-#         self.config_tester = ConfigTester(self, config_class=FastSpeech2ConformerConfig)
-#         # FastSpeech2ConformerConfig does not have `hidden_size`
-#         self.config_tester.create_and_test_config_common_properties = lambda: None
+    def prepare_config_and_inputs(self):
+        config = self.get_config()
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        return config, input_ids
 
-#     def test_config(self):
-#         self.config_tester.run_common_tests()
+    def get_config(self):
+        return FastSpeech2ConformerConfig(
+            hidden_size=self.hidden_size, encoder_layers=self.num_hidden_layers, decoder_layers=self.num_hidden_layers
+        )
 
-#     def test_model(self):
-#         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-#         self.model_tester.create_and_check_model(*config_and_inputs)
+    def create_and_check_model(self, config, input_ids, *args):
+        model = FastSpeech2ConformerModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, return_dict=True)
 
-#     @unittest.skip(reason="FastSpeech2 does not output attentions")
-#     def test_attention_outputs(self):
-#         pass
+        # total of 8 keys in result
+        self.parent.assertEqual(len(result), 5)
+        # check batch sizes match
+        for value in result.values():
+            self.parent.assertEqual(value.size(0), self.batch_size)
+        # check duration, pitch, and energy have the appopriate shapes
+        # duration: (batch_size, max_text_length), pitch and energy: (batch_size, max_text_length, 1)
+        self.parent.assertEqual(result["duration_outputs"].shape + (1,), result["pitch_outputs"].shape)
+        self.parent.assertEqual(result["pitch_outputs"].shape, result["energy_outputs"].shape)
+        # check predicted mel-spectrogram has correct dimension
+        self.parent.assertEqual(result["spectrogram"].size(2), model.config.num_mel_bins)
 
-#     @unittest.skip(reason="FastSpeech2 does not output attentions")
-#     def test_retain_grad_hidden_states_attentions(sef):
-#         pass
-
-#     @unittest.skip(reason="FastSpeech2 does not output hidden_states")
-#     def test_hidden_states_output(self):
-#         pass
-
-#     @unittest.skip(reason="FastSpeech2 does not accept inputs_embeds")
-#     def test_inputs_embeds(self):
-#         pass
-
-#     @unittest.skip(reason="Feed forward chunking is not implemented")
-#     def test_feed_forward_chunking(self):
-#         pass
-
-#     def test_initialization(self):
-#         # TODO
-#         pass
-
-#     @slow
-#     def test_model_from_pretrained(self):
-#         model = FastSpeech2ConformerModel.from_pretrained("jaketae/fastspeech2-commonvoice")
-#         self.assertIsNotNone(model)
+    def prepare_config_and_inputs_for_common(self):
+        config, input_ids = self.prepare_config_and_inputs()
+        inputs_dict = {"input_ids": input_ids}
+        return config, inputs_dict
 
 
-# @require_torch
-# @slow
-# class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
-#     @unittest.skipIf(torch_device != "cpu", "cannot make deterministic on GPU")
-#     def test_inference_integration(self):
-#         model = FastSpeech2ConformerModel.from_pretrained("jaketae/fastspeech2-ljspeech")
-#         model.to(torch_device)
-#         tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("jaketae/fastspeech2-ljspeech")
-#         text = ["This is a test sentence."]
-#         inputs = tokenizer(text, return_tensors="pt", padding=True).to(torch_device)
+@require_torch
+class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (FastSpeech2ConformerModel,) if is_torch_available() else ()
+    test_pruning = False
+    test_headmasking = False
+    test_torchscript = False
+    has_attentions = False
 
-#         torch.manual_seed(0)
-#         np.random.seed(0)
+    def setUp(self):
+        self.model_tester = FastSpeech2ConformerModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=FastSpeech2ConformerConfig)
+        # TODO confirm the below line should be deleted
+        # self.config_tester.create_and_test_config_common_properties = lambda: None
 
-#         with torch.no_grad():
-#             output = model(**inputs, return_dict=True)
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
-#         # mel-spectrogram is too large (123, 80),
-#         # so only check top-left 100 elements
-#         expected_mel_spectrogram = torch.tensor(
-#             [
-#                 [-7.4015, -7.0025, -6.5533, -6.4955, -6.4318, -5.9519, -5.6957, -5.7323, -5.8078, -5.7491],
-#                 [-6.8250, -6.3284, -5.7400, -5.3538, -4.1562, -2.9194, -2.1966, -2.1588, -2.4447, -2.5317],
-#                 [-6.2405, -5.6605, -4.9551, -4.7267, -3.7683, -2.1692, -1.1314, -1.4534, -1.9853, -1.8161],
-#                 [-6.2821, -5.5036, -4.6862, -4.6298, -4.2279, -2.4826, -0.7308, -1.0276, -2.2183, -2.4050],
-#                 [-6.2990, -5.5917, -4.8082, -4.9588, -4.6967, -2.7377, -0.3793, -0.4573, -2.6168, -3.7818],
-#                 [-6.1249, -5.5540, -4.8532, -4.9064, -4.3390, -2.4323, -0.0720, -0.0985, -2.3689, -3.8561],
-#                 [-5.9463, -5.5087, -4.8651, -4.7078, -3.5536, -1.7139, -0.0421, -0.4204, -2.4050, -3.7703],
-#                 [-5.7945, -5.4198, -4.8480, -4.6813, -3.1621, -1.3546, -0.5719, -1.4292, -2.9163, -3.7725],
-#                 [-5.7746, -5.4186, -4.8243, -4.6667, -3.5592, -2.2771, -1.8510, -2.6992, -3.8929, -4.3657],
-#                 [-5.9439, -5.5150, -4.9092, -4.8813, -4.5146, -3.5995, -2.8243, -3.0832, -4.2484, -4.7525],
-#             ],
-#             device=torch_device,
-#         )
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
-#         self.assertTrue(torch.allclose(output.mel_spectrogram[0, :10, :10], expected_mel_spectrogram, atol=1e-3))
+    # skip as this model does not output attentions
+    def test_attention_outputs(self):
+        pass
+
+    # skip as this model does not output attentions
+    def test_retain_grad_hidden_states_attentions(sef):
+        pass
+
+    def test_hidden_states_output(self):
+        # TODO
+        pass
+
+    @unittest.skip(reason="FastSpeech2Conformer does not accept inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="FastSpeech2Conformer has no input embeddings")
+    def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(reason="FastSpeech2Conformer does not have forward chunking implemented")
+    def test_feed_forward_chunking(self):
+        pass
+
+    def test_initialization(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    if "norm" in name:
+                        if "bias" in name:
+                            self.assertEqual(
+                                param.data.mean().item(),
+                                0.0,
+                                msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                            )
+                        if "weight" in name:
+                            self.assertEqual(
+                                param.data.mean().item(),
+                                1.0,
+                                msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                            )
+                    elif "conv" in name:
+                        # For Conv1D layers initialized with Kaiming Normal, the mean should be close to 0
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    elif "embed" in name:
+                        # For Embedding layers initialized with standard normal, the mean should be close to 0
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+
+    # TODO confirm this
+    @unittest.skip(reason="FastSpeech2Conformer does not use token embeddings")
+    def test_resize_tokens_embeddings(self):
+        pass
+
+    @slow
+    def test_model_from_pretrained(self):
+        model = FastSpeech2ConformerModel.from_pretrained("connor-henderson/fastspeech2_conformer")
+        self.assertIsNotNone(model)
+
+
+@require_torch
+@slow
+class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
+    # @unittest.skipIf(torch_device != "cpu", "cannot make deterministic on GPU")
+    # @unittest.skip(reason="Not pushed to hub yet")
+    def test_inference_integration(self):
+        model = FastSpeech2ConformerModel.from_pretrained("connor-henderson/fastspeech2_conformer")
+        model.to(torch_device)
+        # tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("jaketae/FastSpeech2Conformer-ljspeech")
+        # text = ["Test that this generates speech"]
+        # inputs_old = tokenizer(text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = torch.tensor([4, 15, 6, 4, 9, 18, 4, 9, 12, 6, 40, 15, 3, 21, 47, 4, 6, 6, 17, 27, 39])
+        outputs_dict = model(inputs, return_dict=True)
+        spectrogram = outputs_dict["spectrogram"]
+
+        # mel-spectrogram is too large (1, 205, 80),
+        # so only check top-left 100 elements
+        expected_mel_spectrogram = torch.tensor(
+            [
+                [-1.2426, -1.7286, -1.6754, -1.7451, -1.6402, -1.5219, -1.4480, -1.3345, -1.4031, -1.4497],
+                [-0.7858, -1.4966, -1.3602, -1.4876, -1.2949, -1.0723, -1.0021, -0.7553, -0.6521, -0.6929],
+                [-0.7298, -1.3908, -1.0369, -1.2656, -1.0342, -0.7883, -0.7420, -0.5249, -0.3734, -0.3977],
+                [-0.4784, -1.3508, -1.1558, -1.4678, -1.2820, -1.0252, -1.0868, -0.9006, -0.8947, -0.8448],
+                [-0.3963, -1.2895, -1.2813, -1.6147, -1.4658, -1.2560, -1.4134, -1.2650, -1.3255, -1.1715],
+                [-1.4914, -1.3097, -0.3821, -0.3898, -0.5748, -0.9040, -1.0755, -1.0575, -1.2205, -1.0572],
+                [0.0197, -0.0582, 0.9147, 1.1512, 1.1651, 0.6628, -0.1010, -0.3085, -0.2285, 0.2650],
+                [1.1780, 0.1803, 0.7251, 1.5728, 1.6678, 0.4542, -0.1572, -0.1787, 0.0744, 0.8168],
+                [-0.2078, -0.3211, 1.1096, 1.5085, 1.4632, 0.6299, -0.0515, 0.0589, 0.8609, 1.4429],
+                [0.7831, -0.2663, 1.0352, 1.4489, 0.9088, 0.0247, -0.3995, 0.0078, 1.2446, 1.6998],
+            ],
+            device=torch_device,
+        )
+
+        self.assertTrue(torch.allclose(spectrogram[0, :10, :10], expected_mel_spectrogram, atol=1e-4))

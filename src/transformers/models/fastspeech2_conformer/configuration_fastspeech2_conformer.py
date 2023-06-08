@@ -50,24 +50,25 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
     model_type = "fastspeech2_conformer"
+    attribute_map = {"num_hidden_layers": "encoder_layers"}
 
     def __init__(
         self,
         hidden_size=384,
-        input_dim=62,
+        input_dim=78,
         num_mel_bins=80,
-        num_attention_heads=4,
-        encoder_layers=6,
+        num_attention_heads=2,
+        encoder_layers=4,
         encoder_linear_units=1536,
-        decoder_layers=6,
+        decoder_layers=4,
         decoder_linear_units=1536,
         speech_decoder_postnet_layers=5,
         speech_decoder_postnet_units=256,
         speech_decoder_postnet_kernel=5,
-        positionwise_conv_kernel_size=1,
+        positionwise_conv_kernel_size=3,
         use_batch_norm=True,
-        encoder_normalize_before=True,
-        decoder_normalize_before=True,
+        encoder_normalize_before=False,
+        decoder_normalize_before=False,
         encoder_concat_after=False,
         decoder_concat_after=False,
         reduction_factor=1,
@@ -125,7 +126,6 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         if use_masking and use_weighted_masking:
             raise ValueError("Either use_masking or use_weighted_masking can be True, but not both.")
 
-        super().__init__(bos_token_id=bos_token_id, pad_token_id=pad_token_id, eos_token_id=eos_token_id, **kwargs)
         self.hidden_size = hidden_size
         self.input_dim = input_dim
         self.num_mel_bins = num_mel_bins
@@ -179,6 +179,8 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         self.decoder_concat_after = decoder_concat_after
         self.duration_predictor_dropout_rate = duration_predictor_dropout_rate
         self.vocab_size = vocab_size
+
+        super().__init__(bos_token_id=bos_token_id, pad_token_id=pad_token_id, eos_token_id=eos_token_id, **kwargs)
 
     @property
     def mel_dim(self):

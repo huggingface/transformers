@@ -4,16 +4,16 @@ Taken from ESPNet and IMS Toucan
 
 import math
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy
 import torch
 from torch import nn
 
-from ...file_utils import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging  # add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from .configuration_fastspeech2_conformer import FastSpeech2ConformerConfig, FastSpeech2ConformerHifiGanConfig
+from ...modeling_outputs import ModelOutput, BaseModelOutput
 
 
 logger = logging.get_logger(__name__)
@@ -22,16 +22,42 @@ logger = logging.get_logger(__name__)
 @dataclass
 class FastSpeech2ConformerModelOutput(ModelOutput):
     """
-    Args:
     Output type of [`FastSpeech2ConformerModel`].
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Spectrogram generation loss.
+        spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
+            The predicted spectrogram.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
+        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder of the model.
+        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
     """
 
-    outputs_before_postnet: torch.FloatTensor = None
-    outputs_after_postnet: torch.FloatTensor = None
+    loss: Optional[torch.FloatTensor] = None
+    spectrogram: torch.FloatTensor = None
     duration_outputs: torch.FloatTensor = None
     pitch_outputs: torch.FloatTensor = None
     energy_outputs: torch.FloatTensor = None
-    loss: torch.FloatTensor = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 def pad_list(xs, pad_value):
@@ -643,23 +669,18 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        std = 1  # self.config.initializer_range
-        if isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+        if isinstance(module, (nn.LayerNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            nn.init.xavier_uniform_(module.weight, nn.init.calculate_gain("relu"))
+            nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_()  # TODO: add std initializer range to config and here?
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, FastSpeech2ConformerEncoder):
@@ -668,7 +689,7 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
 
 def save_test_outputs(outputs):
     print("...creating new test outputs")
-    outputs_before_postnet, outputs_after_postnet, duration_outputs, pitch_outputs, energy_outputs = outputs
+    (outputs_before_postnet, outputs_after_postnet, duration_outputs, pitch_outputs, energy_outputs, *_) = outputs
     test = outputs_before_postnet.detach().clone()
     torch.save(test, "hf-decoder_outputs.pt")
 
@@ -820,6 +841,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         return_dict: Optional[bool] = None,
         alpha=1.0,
         lang_id=None,
+        output_hidden_states: Optional[bool] = None,
     ):
         """
         Calculate forward propagation.
@@ -834,6 +856,9 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             target_pitch (Tensor): Batch of padded token-averaged pitch (batch_size, max_text_length + 1, 1).
             target_energy (Tensor): Batch of padded token-averaged energy (batch_size, max_text_length + 1, 1).
             alpha (float, optional): Alpha to control the speed.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
 
         Returns:
             Tensor: Loss scalar value.
@@ -841,6 +866,10 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             Tensor: Weight value.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
         is_inference = target_spectrograms is None
         if is_inference:
             self.eval()
@@ -864,15 +893,26 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             input_ids,
             input_lengths,
             speech_lengths,
-            target_durations,
-            target_pitch,
-            target_energy,
+            target_durations=target_durations,
+            target_pitch=target_pitch,
+            target_energy=target_pitch,
             utterance_embedding=utterance_embedding,
             is_inference=is_inference,
             lang_ids=lang_id,
             alpha=alpha,
+            output_hidden_states=output_hidden_states,
         )
-        outputs_before_postnet, outputs_after_postnet, duration_outputs, pitch_outputs, energy_outputs = outputs
+
+        (
+            outputs_before_postnet,
+            outputs_after_postnet,
+            duration_outputs,
+            pitch_outputs,
+            energy_outputs,
+            encoder_last_hidden_state,
+            encoder_hidden_states,
+            decoder_hidden_states,
+        ) = outputs
 
         # Remove when pushing up, debugging only
         save_test_outputs(outputs)
@@ -904,15 +944,19 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             self.train()
 
         if not return_dict:
+            # outputs = (output for output in outputs[1:] if output is not None)
+            outputs = outputs[1:]
             return ((loss,) + outputs) if loss is not None else outputs
 
         return FastSpeech2ConformerModelOutput(
-            outputs_before_postnet=outputs_before_postnet,
-            outputs_after_postnet=outputs_after_postnet,
+            loss=loss,
+            spectrogram=outputs_after_postnet,
             duration_outputs=duration_outputs,
             pitch_outputs=pitch_outputs,
             energy_outputs=energy_outputs,
-            loss=loss,
+            encoder_last_hidden_state=encoder_last_hidden_state,
+            encoder_hidden_states=encoder_hidden_states,
+            decoder_hidden_states=decoder_hidden_states,
         )
 
     def _forward(
@@ -927,6 +971,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         alpha=1.0,
         utterance_embedding=None,
         lang_ids=None,
+        output_hidden_states: Optional[bool] = None,
     ):
         if not self.multilingual_model:
             lang_ids = None
@@ -937,36 +982,46 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         # forward encoder
         text_masks = self._source_mask(input_lengths)
 
-        encoded_texts, _ = self.encoder(
-            input_ids, text_masks, utterance_embedding=utterance_embedding, lang_ids=lang_ids
+        encoder_outputs = self.encoder(
+            input_ids,
+            text_masks,
+            utterance_embedding=utterance_embedding,
+            lang_ids=lang_ids,
+            output_hidden_states=output_hidden_states,
         )
+        encoder_last_hidden_state = encoder_outputs.last_hidden_state
 
         # forward duration predictor and variance predictors
         duration_masks = make_pad_mask(input_lengths, device=input_lengths.device)
 
         if self.stop_gradient_from_pitch_predictor:
-            pitch_predictions = self.pitch_predictor(encoded_texts.detach(), duration_masks.unsqueeze(-1))
+            pitch_predictions = self.pitch_predictor(encoder_last_hidden_state.detach(), duration_masks.unsqueeze(-1))
         else:
-            pitch_predictions = self.pitch_predictor(encoded_texts, duration_masks.unsqueeze(-1))
+            pitch_predictions = self.pitch_predictor(encoder_last_hidden_state, duration_masks.unsqueeze(-1))
 
         if self.stop_gradient_from_energy_predictor:
-            energy_predictions = self.energy_predictor(encoded_texts.detach(), duration_masks.unsqueeze(-1))
+            energy_predictions = self.energy_predictor(
+                encoder_last_hidden_state.detach(), duration_masks.unsqueeze(-1)
+            )
         else:
-            energy_predictions = self.energy_predictor(encoded_texts, duration_masks.unsqueeze(-1))
+            energy_predictions = self.energy_predictor(encoder_last_hidden_state, duration_masks.unsqueeze(-1))
 
-        duration_predictions = self.duration_predictor(encoded_texts, duration_masks, is_inference=is_inference)
+        duration_predictions = self.duration_predictor(
+            encoder_last_hidden_state, duration_masks, is_inference=is_inference
+        )
+
         if is_inference:
             # use prediction in inference
             embedded_pitch_curve = self.pitch_embed(pitch_predictions)
             embedded_energy_curve = self.energy_embed(energy_predictions)
-            encoded_texts = encoded_texts + embedded_energy_curve + embedded_pitch_curve
-            encoded_texts = self.length_regulator(encoded_texts, duration_predictions, alpha)
+            encoder_last_hidden_state = encoder_last_hidden_state + embedded_energy_curve + embedded_pitch_curve
+            encoder_last_hidden_state = self.length_regulator(encoder_last_hidden_state, duration_predictions, alpha)
         else:
             # use groundtruth in training
             embedded_pitch_curve = self.pitch_embed(target_pitch)
             embedded_energy_curve = self.energy_embed(target_energy)
-            encoded_texts = encoded_texts + embedded_energy_curve + embedded_pitch_curve
-            encoded_texts = self.length_regulator(encoded_texts, target_durations)
+            encoder_last_hidden_state = encoder_last_hidden_state + embedded_energy_curve + embedded_pitch_curve
+            encoder_last_hidden_state = self.length_regulator(encoder_last_hidden_state, target_durations)
 
         # forward decoder
         if spectrogram_lengths is not None and not is_inference:
@@ -980,9 +1035,13 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         else:
             h_masks = None
 
-        decoder_outputs, _ = self.decoder(encoded_texts, h_masks, utterance_embedding)
+        decoder_outputs = self.decoder(
+            encoder_last_hidden_state, h_masks, utterance_embedding, output_hidden_states=output_hidden_states
+        )
 
-        outputs_before_postnet, outputs_after_postnet, _ = self.speech_decoder_postnet(decoder_outputs)
+        outputs_before_postnet, outputs_after_postnet, _ = self.speech_decoder_postnet(
+            decoder_outputs.last_hidden_state
+        )
 
         return (
             outputs_before_postnet,
@@ -990,6 +1049,9 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             duration_predictions,
             pitch_predictions,
             energy_predictions,
+            encoder_last_hidden_state,
+            encoder_outputs.hidden_states,
+            decoder_outputs.hidden_states,
         )
 
     def _source_mask(self, input_lengths):
@@ -1568,7 +1630,6 @@ class FastSpeech2ConformerEncoder(nn.Module):
             if False, no additional linear will be applied. i.e. x -> x + att(x)
         positionwise_conv_kernel_size (int): Kernel size of positionwise conv1d layer.
         macaron_style (bool): Whether to use macaron style for positionwise layer.
-        selfattention_layer_type (str): Conformer attention layer type.
         activation_type (str): Conformer activation function type.
         use_cnn_module (bool): Whether to use convolution module.
         cnn_module_kernel (int): Kernel size of convolution module.
@@ -1633,7 +1694,7 @@ class FastSpeech2ConformerEncoder(nn.Module):
             ]
         )
 
-    def forward(self, hidden_states, masks, utterance_embedding=None, lang_ids=None):
+    def forward(self, hidden_states, masks, utterance_embedding=None, lang_ids=None, output_hidden_states=None):
         """
         Encode input sequence.
         Args:
@@ -1641,12 +1702,18 @@ class FastSpeech2ConformerEncoder(nn.Module):
             masks (torch.Tensor): Mask tensor (batch, time).
             utterance_embedding: embedding containing lots of conditioning signals
             lang_ids: ids of the languages per sample in the batch
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
         Returns:
             torch.Tensor: Output tensor (batch, time, attention_dim).
             torch.Tensor: Mask tensor (batch, time).
         """
+        all_hidden_states = () if output_hidden_states else None
+
         if self.embed is not None:
             hidden_states = self.embed(hidden_states)
+            all_hidden_states = (hidden_states,) if output_hidden_states else None
         if lang_ids is not None:
             lang_embs = self.language_embedding(lang_ids)
             # offset phoneme representation by language specific offset
@@ -1654,16 +1721,23 @@ class FastSpeech2ConformerEncoder(nn.Module):
 
         hidden_states = self.pos_enc(hidden_states)
 
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
         for conformer_layer in self.conformer_layers:
             hidden_states, masks = conformer_layer(hidden_states, masks)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
         if isinstance(hidden_states, tuple):
             hidden_states = hidden_states[0]
 
         if self.utt_embed:
             hidden_states = self._integrate_with_utt_embed(hidden_states, utterance_embedding)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
-        return hidden_states, masks
+        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
     def _integrate_with_utt_embed(self, hidden_states, utt_embeddings):
         # concat hidden states with spk embeds and then apply projection

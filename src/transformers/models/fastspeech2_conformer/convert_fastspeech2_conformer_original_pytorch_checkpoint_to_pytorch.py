@@ -75,6 +75,8 @@ CONFIG_MAPPING = {
     "use_weighted_masking": "use_weighted_masking",
     "idim": "input_dim",
     "odim": "num_mel_bins",
+    "utt_embed_dim": "utt_embed_dim",
+    "lang_embs": "lang_embs",
 }
 
 
@@ -100,9 +102,7 @@ def convert_espnet_state_dict_to_hf(state_dict):
         if "tts.generator.text2mel." in key:
             new_key = key.replace("tts.generator.text2mel.", "")
             if "postnet" in key:
-                # Replace the base path
                 new_key = new_key.replace("postnet.postnet", "speech_decoder_postnet.layers")
-                # Replace subpaths
                 new_key = new_key.replace(".0.weight", ".conv.weight")
                 new_key = new_key.replace(".1.weight", ".batch_norm.weight")
                 new_key = new_key.replace(".1.bias", ".batch_norm.bias")
