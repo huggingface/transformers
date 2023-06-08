@@ -2177,11 +2177,18 @@ class Trainer:
         logger.info(f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric}).")
         best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
         best_safe_model_path = os.path.join(self.state.best_model_checkpoint, SAFE_WEIGHTS_NAME)
+        adapter_model_path = os.path.join(self.state.best_model_checkpoint, "adapter_model.bin")
+
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
-        if os.path.exists(best_model_path) or os.path.exists(best_safe_model_path):
+        if (
+            os.path.exists(best_model_path)
+            or os.path.exists(best_safe_model_path)
+            or os.path.exists(adapter_model_path)
+        ):
             if self.is_deepspeed_enabled:
                 deepspeed_load_checkpoint(self.model_wrapped, self.state.best_model_checkpoint)
             else:
+                has_been_loaded = True
                 if is_sagemaker_mp_enabled():
                     if os.path.isfile(os.path.join(self.state.best_model_checkpoint, "user_content.pt")):
                         # If the 'user_content.pt' file exists, load with the new smp api.
@@ -2207,10 +2214,10 @@ class Trainer:
                         self.accelerator, model, self.state.best_model_checkpoint
                     )
                 else:
-                    if hasattr(model, "base_model") and getattr(model.base_model, "is_8bit_serializable", False):
-                        # If train base_8_bit_models using PEFT & LoRA, assume that adapter have been saved properly.
+                    if is_peft_available() and isinstance(model, PeftModel):
+                        # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
                         if hasattr(model, "active_adapter") and hasattr(model, "load_adapter"):
-                            if os.path.exists(os.path.join(self.state.best_model_checkpoint, "adapter_model.bin")):
+                            if os.path.exists(adapter_model_path):
                                 model.load_adapter(self.state.best_model_checkpoint, model.active_adapter)
                                 # Load_adapter has no return value present, modify it when appropriate.
                                 from torch.nn.modules.module import _IncompatibleKeys
@@ -2222,9 +2229,11 @@ class Trainer:
                                     "using `TrainerCallback` to save adapter_model.bin in corresponding folders, "
                                     "here are some examples https://github.com/huggingface/peft/issues/96"
                                 )
+                                has_been_loaded = False
                         else:
                             # We can't do pure 8bit training using transformers.
                             logger.warning("Could not loading a quantized checkpoint.")
+                            has_been_loaded = False
                     else:
                         # We load the model state dict on the CPU to avoid an OOM error.
                         if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
@@ -2236,7 +2245,7 @@ class Trainer:
                         # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
                         # which takes *args instead of **kwargs
                         load_result = model.load_state_dict(state_dict, False)
-                if not is_sagemaker_mp_enabled():
+                if not is_sagemaker_mp_enabled() and has_been_loaded:
                     self._issue_warnings_after_load(load_result)
         elif os.path.exists(os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
             load_result = load_sharded_checkpoint(
