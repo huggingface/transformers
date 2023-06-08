@@ -1807,7 +1807,6 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
-        subset_hidden: Optional[bool] = False,
         compress_hidden: Optional[bool] = False,
         low_memory: Optional[bool] = True,
         **model_kwargs,
@@ -1934,12 +1933,13 @@ class GenerationMixin:
         this_peer_finished = False  # used by synced_gpus only
         batch_size = input_ids.shape[0]
 
-        # compression mat mult init
-        model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-        outputs = self(**model_inputs, output_hidden_states=True)
-        hidden_dim = outputs.hidden_states[-1].shape[-1]
-        compression_factor = 8
-        compressor = torch.nn.Linear(hidden_dim, hidden_dim//compression_factor, bias=False)
+        # compression initialization
+        if compress_hidden:
+            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+            outputs = self(**model_inputs, output_hidden_states=True)
+            hidden_dim = outputs.hidden_states[-1].shape[-1]
+            compression_factor = 8
+            compressor = torch.nn.Linear(hidden_dim, hidden_dim//compression_factor, bias=False, device=hidden_dim.device)
 
         while True:
             if synced_gpus:
@@ -1972,11 +1972,7 @@ class GenerationMixin:
                 else:
                     last_hidden_states = outputs.hidden_states[-1]
 
-                if subset_hidden:
-                    print ('Using subset of last hidden layer')
-                    last_hidden_states = last_hidden_states[:, :, :500]
-
-                elif compress_hidden:
+                if compress_hidden:
                     print ('Using compressed last hidden layer')
                     last_hidden_states = compressor(last_hidden_states)
 
@@ -2013,7 +2009,6 @@ class GenerationMixin:
             # contrastive_search main logic start:
             # contrastive search decoding consists of two steps: (1) candidate tokens recall; (2) candidate re-rank by
             # degeneration penalty
-
             logit_for_next_step = logits_processor(input_ids, logit_for_next_step)
             logit_for_next_step = logits_warper(input_ids, logit_for_next_step)
             next_probs = nn.functional.softmax(logit_for_next_step, dim=-1)
@@ -2085,10 +2080,7 @@ class GenerationMixin:
                 next_hidden = outputs.hidden_states[-1]
                 full_hidden_states = outputs.hidden_states
 
-            if subset_hidden:
-                next_hidden = next_hidden[:, :, :500]
-
-            elif compress_hidden:
+            if compress_hidden:
                 next_hidden = compressor(next_hidden)
 
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
