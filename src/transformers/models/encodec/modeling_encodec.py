@@ -592,7 +592,7 @@ class EncodecEncoder(nn.Module):
 
 
 class EncodecDecoder(nn.Module):
-    """SEANet decoder."""
+    """Encodec decoder."""
 
     def __init__(self, config: EncodecConfig):
         super().__init__()
@@ -1170,9 +1170,9 @@ class EncodecModel(EncodecPreTrainedModel):
         encoded_frames = []
         scales = []
 
-        padded_length = ((input_length - 1) // stride + 1) * stride + 1
+        padded_length = ((input_length) // stride + 1) * (stride) + segment_length
         padded_inputs = torch.nn.functional.pad(input_values, (0, padded_length - input_length))
-        for offset in range(0, input_length, stride):
+        for offset in range(0,  input_length, stride):
             frame = padded_inputs[:, :, offset : offset + segment_length]
             encoded_frame, scale = self._encode_frame(frame, bandwidth)
             scales.append(scale)
