@@ -80,10 +80,10 @@ class PmiWordGraphTest(unittest.TestCase):
 class PredefinedWordGraphTest(unittest.TestCase):
     def setUp(self):
         self.entity_relations = [
-            ("I", "you", 0.3),
-            ("here", "there", 0.7),
+            ("dog", "labrador", 0.6),
+            ("cat", "garfield", 0.7),
             ("city", "montreal", 0.8),
-            ("weather", "rain", 0.6),
+            ("weather", "rain", 0.3),
         ]
         self.tokenizer = tfr.DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
         self.remove_stopwords = False

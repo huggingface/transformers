@@ -391,7 +391,6 @@ class VGCNBertModelTest(ModelTesterMixin, unittest.TestCase):
             *config_and_inputs, *wgraphs_and_tokenizer_id_maps
         )
 
-    # TODO: upload vgcn-bert model weights file to hub
     @slow
     def test_model_from_pretrained(self):
         for model_name in VGCNBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:

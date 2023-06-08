@@ -131,22 +131,8 @@ class VocabGraphConvolution(nn.Module):
         dropout_rate=0.1,
     ):
         super().__init__()
-        # self.wgraphs:VgcnParameterList = self._prepare_wgraphs(wgraphs) if wgraphs else VgcnParameterList(requires_grad=False)
-        # self.gvoc_ordered_tokenizer_id_arrays, self.tokenizer_id_to_wgraph_id_arrays=VgcnParameterList(requires_grad=False),VgcnParameterList(requires_grad=False)
-        # if wgraph_id_to_tokenizer_id_maps:
-        #     self.gvoc_ordered_tokenizer_id_arrays, self.tokenizer_id_to_wgraph_id_arrays = self._prepare_inverted_arrays(
-        #         wgraph_id_to_tokenizer_id_maps
-        #     )
-
         self.hid_dim = hid_dim
         self.out_dim = out_dim
-
-        # self.W_vh_list = VgcnParameterList(requires_grad=True)
-        # self.W_vh_list._is_vgcn_weights = True
-        # for g in self.wgraphs:
-        #     self.W_vh_list.append(nn.Parameter(torch.randn(g.shape[0], hid_dim)))
-        #     # self.W_vh_list.append(nn.Parameter(torch.ones(g.shape[0], hid_dim)))
-
         self.fc_hg = nn.Linear(hid_dim, out_dim)
         self.fc_hg._is_vgcn_linear = True
         self.activation = get_activation(activation) if activation else None
@@ -154,7 +140,7 @@ class VocabGraphConvolution(nn.Module):
         # TODO: add a Linear layer for vgcn fintune/pretrain task
 
         # after init.set_wgraphs, _init_weights will set again the mode (transparent,normal,uniform)
-        # but if load wgraph parameters from checkpoint/pretrain, the mode will be accoding to the checkpoint
+        # but if load wgraph parameters from checkpoint/pretrain, the mode weights will be updated from to checkpoint
         # you can call again set_parameters to change the mode
         self.set_wgraphs(wgraphs, wgraph_id_to_tokenizer_id_maps)
 
@@ -200,16 +186,6 @@ class VocabGraphConvolution(nn.Module):
             self.W_vh_list.append(nn.Parameter(torch.randn(g.shape[0], self.hid_dim)))
             # self.W_vh_list.append(nn.Parameter(torch.ones(g.shape[0], self.hid_dim)))
         self.set_parameters(mode=mode)
-
-    # def set_wgraphs(self, wgraphs: list, wgraph_id_to_tokenizer_id_maps: List[dict]):
-    #     self.wgraphs:VgcnParameterList = self._prepare_wgraphs(wgraphs)
-    #     self.W_vh_list = VgcnParameterList(requires_grad=True)
-    #     self.W_vh_list._is_vgcn_weights = True
-    #     for g in self.wgraphs:
-    #         self.W_vh_list.append(nn.Parameter(torch.randn(g.shape[0], self.hid_dim)))
-    #     self.gvoc_ordered_tokenizer_id_arrays, self.tokenizer_id_to_wgraph_id_arrays = self._prepare_inverted_arrays(
-    #         wgraph_id_to_tokenizer_id_maps
-    #     )
 
     def _prepare_wgraphs(self, wgraphs: list) -> VgcnParameterList:
         # def _zero_padding_graph(adj_matrix: torch.Tensor):
