@@ -41,6 +41,7 @@ class FillMaskPipelineTests(unittest.TestCase):
         gc.collect()
         if is_torch_available():
             import torch
+
             torch.cuda.empty_cache()
 
     @require_tf

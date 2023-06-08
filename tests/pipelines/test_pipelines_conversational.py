@@ -29,7 +29,14 @@ from transformers import (
     TFAutoModelForCausalLM,
     pipeline,
 )
-from transformers.testing_utils import is_pipeline_test, is_torch_available, require_tf, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    is_pipeline_test,
+    is_torch_available,
+    require_tf,
+    require_torch,
+    slow,
+    torch_device,
+)
 
 from .test_pipelines_common import ANY
 
@@ -45,6 +52,7 @@ class ConversationalPipelineTests(unittest.TestCase):
         gc.collect()
         if is_torch_available():
             import torch
+
             torch.cuda.empty_cache()
 
     model_mapping = dict(
