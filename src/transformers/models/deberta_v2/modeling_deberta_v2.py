@@ -841,7 +841,7 @@ class DisentangledSelfAttention(nn.Module):
                 dim=-1,
                 index=p2c_pos.squeeze(0).expand([query_layer.size(0), key_layer.size(-2), key_layer.size(-2)]),
             ).transpose(-1, -2)
-            score += p2c_att * scale.to(dtype=p2c_att.dtype)
+            score += p2c_att * scale
 
         return score
 
