@@ -875,10 +875,14 @@ class EncodecResidualVectorQuantizer(nn.Module):
 
     def forward(self, embeddings: torch.Tensor, frame_rate: int, bandwidth: Optional[float] = None) -> QuantizedResult:
         """
-        Args:
         Residual vector quantization on the given input tensor.
+        
+        Args:
+        
             embeddings (torch.Tensor): Input tensor.
+            
             frame_rate (int): Sample rate of the input tensor.
+            
             bandwidth (float): Target bandwidth.
         Returns:
             QuantizedResult:
