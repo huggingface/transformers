@@ -2327,9 +2327,9 @@ class GenerationMixin:
         this_peer_finished = False  # used by synced_gpus only
 
         if getattr(self, "use_static_kv_cache", False):
-            model_kwargs["valid_past_index"] = 0
-        else:
             model_kwargs["valid_past_index"] = None
+        else:
+            model_kwargs["valid_past_index"] = 0
         
         while True:
             if synced_gpus:
