@@ -267,6 +267,11 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 class EncodecIntegrationTest(unittest.TestCase):
 
     def test_integration_ls(self):
+        import soundfile as sf
+        import os
+
+        home_folder = os.path.expanduser("~")
+
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "Matthijs/encodec_24khz"
 
@@ -278,8 +283,12 @@ class EncodecIntegrationTest(unittest.TestCase):
 
         input_values = processor(audio=audio_sample["audio"]["array"], return_tensors="pt").input_values.to(torch_device)
 
+        sf.write(os.path.join(home_folder, "original.wav"), input_values[0][0].cpu().numpy(), 24_000, subtype="PCM_24")
+
         with torch.no_grad():
             input_values_enc_dec = model(input_values)
+
+        sf.write(os.path.join(home_folder, "reconstruct.wav"), input_values_enc_dec[0][0].cpu().numpy(), 24_000, subtype="PCM_24")
 
         self.assertTrue(input_values.shape == input_values_enc_dec.shape)
 
