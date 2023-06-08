@@ -54,6 +54,17 @@ _CONV_NORMALIZATIONS = frozenset(
     ["none", "weight_norm", "spectral_norm", "time_layer_norm", "layer_norm", "time_group_norm"]
 )
 
+@dataclass
+class QuantizedResult:
+    quantized: torch.Tensor
+    codes: torch.Tensor
+    bandwidth: torch.Tensor  # bandwidth in kb/s used, per batch item.
+    penalty: Optional[torch.Tensor] = None
+    metrics: dict = field(default_factory=dict)
+
+
+_CONV_NORMALIZATIONS = frozenset(['none', 'weight_norm', 'spectral_norm',
+                                 'time_layer_norm', 'layer_norm', 'time_group_norm'])
 
 @dataclass
 class EncodecOutput(ModelOutput):
@@ -445,81 +456,69 @@ class SLSTM(nn.Module):
         return y
 
 
-class SEANetResnetBlock(nn.Module):
+class EncodecResnetBlock(nn.Module):
     """Residual block from SEANet model.
     Args:
+        config:
         dim (int): Dimension of the input/output
         kernel_sizes (list): List of kernel sizes for the convolutions.
         dilations (list): List of dilations for the convolutions.
-        activation (str): Activation function.
-        activation_params (dict): Parameters to provide to the activation function
-        norm (str): Normalization method.
-        norm_params (dict): Parameters to provide to the underlying normalization used along with the convolution.
-        causal (bool): Whether to use fully causal convolution.
-        pad_mode (str): Padding mode for the convolutions.
-        compress (int): Reduced dimensionality in residual branches (from Demucs v3)
-        true_skip (bool): Whether to use true skip connection or a simple convolution as the skip connection.
     """
-
-    def __init__(
-        self,
-        dim: int,
-        kernel_sizes: List[int] = [3, 1],
-        dilations: List[int] = [1, 1],
-        activation: str = "ELU",
-        activation_params: dict = {"alpha": 1.0},
-        norm: str = "weight_norm",
-        norm_params: Dict[str, Any] = {},
-        causal: bool = False,
-        pad_mode: str = "reflect",
-        compress: int = 2,
-        true_skip: bool = True,
-    ):
+    def __init__(self, config: EncodecConfig, dim: int, kernel_sizes: List[int], dilations: List[int]):
         super().__init__()
-        assert len(kernel_sizes) == len(dilations), "Number of kernel sizes should match number of dilations"
-        act = getattr(nn, activation)
-        hidden = dim // compress
+
+        if len(kernel_sizes) != len(dilations):
+            raise ValueError("Number of kernel sizes should match number of dilations")
+
+        act = getattr(nn, config.activation)
+        hidden = dim // config.compress
         block = []
         for i, (kernel_size, dilation) in enumerate(zip(kernel_sizes, dilations)):
             in_chs = dim if i == 0 else hidden
             out_chs = dim if i == len(kernel_sizes) - 1 else hidden
             block += [
-                act(**activation_params),
+                act(**config.activation_params),
                 SConv1d(
                     in_chs,
                     out_chs,
                     kernel_size=kernel_size,
                     dilation=dilation,
-                    norm=norm,
-                    norm_kwargs=norm_params,
-                    causal=causal,
-                    pad_mode=pad_mode,
+                    norm=config.norm,
+                    norm_kwargs=config.norm_params,
+                    causal=config.causal,
+                    pad_mode=config.pad_mode,
                 ),
             ]
-        self.block = nn.Sequential(*block)
-        self.shortcut: nn.Module
-        if true_skip:
-            self.shortcut = nn.Identity()
-        else:
+        self.block = nn.ModuleList(block)
+
+        self.use_shortcut = not config.true_skip
+        if self.use_shortcut:
             self.shortcut = SConv1d(
-                dim, dim, kernel_size=1, norm=norm, norm_kwargs=norm_params, causal=causal, pad_mode=pad_mode
+                dim,
+                dim,
+                kernel_size=1,
+                norm=config.norm,
+                norm_kwargs=config.norm_params,
+                causal=config.causal,
+                pad_mode=config.pad_mode
             )
 
     def forward(self, x):
-        return self.shortcut(x) + self.block(x)
+        y = x
+        for layer in self.block:
+            y = layer(y)
+
+        if self.use_shortcut:
+            return self.shortcut(x) + y
+        else:
+            return y
 
 
-class SEANetEncoder(nn.Module):
+class EncodecEncoder(nn.Module):
     """SEANet encoder."""
 
     def __init__(self, config: EncodecConfig):
         super().__init__()
-        self.channels = config.audio_channels
-        self.dimension = config.dimension
-        self.n_filters = config.num_filters
-        self.ratios = list(reversed(config.ratios))
-        self.n_residual_layers = config.num_residual_layers
-        self.hop_length = np.prod(self.ratios)
 
         act = getattr(nn, config.activation)
         mult = 1
@@ -534,23 +533,17 @@ class SEANetEncoder(nn.Module):
                 pad_mode=config.pad_mode,
             )
         ]
+
         # Downsample to raw audio scale
-        for i, ratio in enumerate(self.ratios):
+        for i, ratio in enumerate(reversed(config.ratios)):
             # Add residual layers
             for j in range(config.num_residual_layers):
                 model += [
-                    SEANetResnetBlock(
+                    EncodecResnetBlock(
+                        config,
                         mult * config.num_filters,
                         kernel_sizes=[config.residual_kernel_size, 1],
-                        dilations=[config.dilation_base**j, 1],
-                        norm=config.norm,
-                        norm_params=config.norm_params,
-                        activation=config.activation,
-                        activation_params=config.activation_params,
-                        causal=config.causal,
-                        pad_mode=config.pad_mode,
-                        compress=config.compress,
-                        true_skip=config.true_skip,
+                        dilations=[config.dilation_base ** j, 1],
                     )
                 ]
             # Add downsampling layers
@@ -585,28 +578,21 @@ class SEANetEncoder(nn.Module):
             ),
         ]
 
-        self.model = nn.Sequential(*model)
-        # TODO: nn.ModuleList
+        self.layers = nn.ModuleList(model)
 
     def forward(self, x):
-        return self.model(x)
+        for layer in self.layers:
+            x = layer(x)
+        return x
 
 
-class SEANetDecoder(nn.Module):
+class EncodecDecoder(nn.Module):
     """SEANet decoder."""
 
     def __init__(self, config: EncodecConfig):
         super().__init__()
-        # TODO: do we need these properties?
-        self.dimension = config.dimension
-        self.channels = config.audio_channels
-        self.n_filters = config.num_filters
-        self.ratios = config.ratios
-        self.n_residual_layers = config.num_residual_layers
-        self.hop_length = np.prod(self.ratios)
-
         act = getattr(nn, config.activation)
-        mult = int(2 ** len(self.ratios))
+        mult = int(2 ** len(config.ratios))
         model = [
             SConv1d(
                 config.dimension,
@@ -623,7 +609,7 @@ class SEANetDecoder(nn.Module):
             model += [SLSTM(mult * config.num_filters, num_layers=config.lstm)]
 
         # Upsample to raw audio scale
-        for i, ratio in enumerate(self.ratios):
+        for i, ratio in enumerate(config.ratios):
             # Add upsampling layers
             model += [
                 act(**config.activation_params),
@@ -641,18 +627,11 @@ class SEANetDecoder(nn.Module):
             # Add residual layers
             for j in range(config.num_residual_layers):
                 model += [
-                    SEANetResnetBlock(
+                    EncodecResnetBlock(
+                        config,
                         mult * config.num_filters // 2,
                         kernel_sizes=[config.residual_kernel_size, 1],
-                        dilations=[config.dilation_base**j, 1],
-                        activation=config.activation,
-                        activation_params=config.activation_params,
-                        norm=config.norm,
-                        norm_params=config.norm_params,
-                        causal=config.causal,
-                        pad_mode=config.pad_mode,
-                        compress=config.compress,
-                        true_skip=config.true_skip,
+                        dilations=[config.dilation_base ** j, 1],
                     )
                 ]
             mult //= 2
@@ -670,58 +649,40 @@ class SEANetDecoder(nn.Module):
                 pad_mode=config.pad_mode,
             ),
         ]
+
         # Add optional final activation to decoder (eg. tanh)
         if config.final_activation is not None:
             final_act = getattr(nn, config.final_activation)
             final_activation_params = final_activation_params or {}
-            model += [final_act(**final_activation_params)]
-        self.model = nn.Sequential(*model)
-        # TODO: use ModuleList
+            model += [
+                final_act(**final_activation_params)
+            ]
+
+        self.layers = nn.ModuleList(model)
 
     def forward(self, z):
-        y = self.model(z)
-        return y
+        for layer in self.layers:
+            z = layer(z)
+        return z
 
 
-class EuclideanCodebook(nn.Module):
-    """Codebook with Euclidean distance.
-    Args:
-        dim (int): Dimension.
-        codebook_size (int): Codebook size.
-        kmeans_init (bool): Whether to use k-means to initialize the codebooks.
-            If set to true, run the k-means algorithm on the first training batch and use
-            the learned centroids as initialization.
-        kmeans_iters (int): Number of iterations used for k-means algorithm at initialization.
-        decay (float): Decay for exponential moving average over the codebooks.
-        epsilon (float): Epsilon value for numerical stability.
-        threshold_ema_dead_code (int): Threshold for dead code expiration. Replace any codes
-            that have an exponential moving average cluster size less than the specified threshold with
-            randomly selected vector from the current batch.
-    """
-
-    def __init__(
-        self,
-        dim: int,
-        codebook_size: int,
-        kmeans_init: int = False,
-        kmeans_iters: int = 10,
-        decay: float = 0.99,
-        epsilon: float = 1e-5,
-        threshold_ema_dead_code: int = 2,
-    ):
+class EncodecEuclideanCodebook(nn.Module):
+    """Codebook with Euclidean distance."""
+    def __init__(self, config: EncodecConfig, dim: int):
         super().__init__()
-        self.decay = decay
-        init_fn: Union[Callable[..., torch.Tensor], Any] = _uniform_init if not kmeans_init else torch.zeros
-        embed = init_fn(codebook_size, dim)
 
-        self.codebook_size = codebook_size
+        self.decay = config.decay
+        init_fn: Union[Callable[..., torch.Tensor], Any] = _uniform_init if not config.kmeans_init else torch.zeros
+        embed = init_fn(config.bins, dim)
 
-        self.kmeans_iters = kmeans_iters
-        self.epsilon = epsilon
-        self.threshold_ema_dead_code = threshold_ema_dead_code
+        self.codebook_size = config.bins
 
-        self.register_buffer("inited", torch.Tensor([not kmeans_init]))
-        self.register_buffer("cluster_size", torch.zeros(codebook_size))
+        self.kmeans_iters = config.kmeans_iters
+        self.epsilon = config.epsilon
+        self.threshold_ema_dead_code = config.threshold_ema_dead_code
+
+        self.register_buffer("inited", torch.Tensor([not config.kmeans_init]))
+        self.register_buffer("cluster_size", torch.zeros(config.bins))
         self.register_buffer("embed", embed)
         self.register_buffer("embed_avg", embed.clone())
 
@@ -792,129 +753,72 @@ class EuclideanCodebook(nn.Module):
         self.init_embed_(x)
 
         embed_ind = self.quantize(x)
-        nn.functional.one_hot(embed_ind, self.codebook_size).type(dtype)
         embed_ind = self.postprocess_emb(embed_ind, shape)
         quantize = self.dequantize(embed_ind)
-
-        # TODO
-        # if self.training:
-        #     # We do the expiry of code at that point as buffers are in sync
-        #     # and all the workers will take the same decision.
-        #     self.expire_codes_(x)
-        #     ema_inplace(self.cluster_size, embed_onehot.sum(0), self.decay)
-        #     embed_sum = x.t() @ embed_onehot
-        #     ema_inplace(self.embed_avg, embed_sum.t(), self.decay)
-        #     cluster_size = (
-        #         laplace_smoothing(self.cluster_size, self.codebook_size, self.epsilon)
-        #         * self.cluster_size.sum()
-        #     )
-        #     embed_normalized = self.embed_avg / cluster_size.unsqueeze(1)
-        #     self.embed.data.copy_(embed_normalized)
 
         return quantize, embed_ind
 
 
-class VectorQuantization(nn.Module):
-    """Vector quantization implementation.
-    Currently supports only euclidean distance.
-    Args:
-        dim (int): Dimension
-        codebook_size (int): Codebook size
-        codebook_dim (int): Codebook dimension. If not defined, uses the specified dimension in dim.
-        decay (float): Decay for exponential moving average over the codebooks.
-        epsilon (float): Epsilon value for numerical stability.
-        kmeans_init (bool): Whether to use kmeans to initialize the codebooks.
-        kmeans_iters (int): Number of iterations used for kmeans initialization.
-        threshold_ema_dead_code (int): Threshold for dead code expiration. Replace any codes
-            that have an exponential moving average cluster size less than the specified threshold with
-            randomly selected vector from the current batch.
-        commitment_weight (float): Weight for commitment loss.
+class EncodecVectorQuantization(nn.Module):
     """
-
-    def __init__(
-        self,
-        dim: int,
-        codebook_size: int,
-        codebook_dim: Optional[int] = None,
-        decay: float = 0.99,
-        epsilon: float = 1e-5,
-        kmeans_init: bool = True,
-        kmeans_iters: int = 50,
-        threshold_ema_dead_code: int = 2,
-        commitment_weight: float = 1.0,
-    ):
+    Vector quantization implementation.
+    Currently supports only euclidean distance.
+    """
+    def __init__(self, config: EncodecConfig):
         super().__init__()
-        _codebook_dim: int = codebook_dim if codebook_dim is not None else dim
 
-        requires_projection = _codebook_dim != dim
-        self.project_in = nn.Linear(dim, _codebook_dim) if requires_projection else nn.Identity()
-        self.project_out = nn.Linear(_codebook_dim, dim) if requires_projection else nn.Identity()
+        codebook_dim = config.codebook_dim if config.codebook_dim is not None else config.dimension
 
-        self.epsilon = epsilon
-        self.commitment_weight = commitment_weight
+        self.requires_projection = codebook_dim != config.dimension
+        if self.requires_projection:
+            self.project_in = nn.Linear(config.dimension, codebook_dim)
+            self.project_out = nn.Linear(codebook_dim, config.dimension)
 
-        self._codebook = EuclideanCodebook(
-            dim=_codebook_dim,
-            codebook_size=codebook_size,
-            kmeans_init=kmeans_init,
-            kmeans_iters=kmeans_iters,
-            decay=decay,
-            epsilon=epsilon,
-            threshold_ema_dead_code=threshold_ema_dead_code,
-        )
-        self.codebook_size = codebook_size
-
-    @property
-    def codebook(self):
-        return self._codebook.embed
+        self.codebook = EncodecEuclideanCodebook(config, codebook_dim)
 
     def encode(self, x):
         x = rearrange(x, "b d n -> b n d")
-        x = self.project_in(x)
-        embed_in = self._codebook.encode(x)
+        if self.requires_projection:
+            x = self.project_in(x)
+        embed_in = self.codebook.encode(x)
         return embed_in
 
     def decode(self, embed_ind):
-        quantize = self._codebook.decode(embed_ind)
-        quantize = self.project_out(quantize)
+        quantize = self.codebook.decode(embed_ind)
+        if self.requires_projection:
+            quantize = self.project_out(quantize)
         quantize = rearrange(quantize, "b n d -> b d n")
         return quantize
 
     def forward(self, x):
         device = x.device
         x = rearrange(x, "b d n -> b n d")
-        x = self.project_in(x)
+        if self.requires_projection:
+            x = self.project_in(x)
 
-        quantize, embed_ind = self._codebook(x)
+        quantize, embed_ind = self.codebook(x)
 
         if self.training:
-            quantize = x + (quantize - x).detach()
+            logger.warning("Training not supported yet")
 
         loss = torch.tensor([0.0], device=device, requires_grad=self.training)
 
-        if self.training:
-            logger.warning(
-                "When using RVQ in training model, first check "
-                "https://github.com/facebookresearch/encodec/issues/25 . "
-                "The bug wasn't fixed here for reproducibility."
-            )
-            if self.commitment_weight > 0:
-                commit_loss = nn.functional.mse_loss(quantize.detach(), x)
-                loss = loss + commit_loss * self.commitment_weight
-
-        quantize = self.project_out(quantize)
+        if self.requires_projection:
+            quantize = self.project_out(quantize)
         quantize = rearrange(quantize, "b n d -> b d n")
         return quantize, embed_ind, loss
 
 
-class ResidualVectorQuantization(nn.Module):
-    """Residual vector quantization implementation.
+class EncodecResidualVectorQuantization(nn.Module):
+    """
+    Residual vector quantization implementation.
     Follows Algorithm 1. in https://arxiv.org/pdf/2107.03312.pdf
     """
-
-    def __init__(self, *, num_quantizers, **kwargs):
+    def __init__(self, config: EncodecConfig, num_quantizers: int):
         super().__init__()
-        self.layers = nn.ModuleList([VectorQuantization(**kwargs) for _ in range(num_quantizers)])
+        self.layers = nn.ModuleList(
+            [EncodecVectorQuantization(config) for _ in range(num_quantizers)]
+        )
 
     def forward(self, x, num_quantizers: Optional[int] = None):
         quantized_out = 0.0
@@ -957,40 +861,19 @@ class ResidualVectorQuantization(nn.Module):
         return quantized_out
 
 
-@dataclass
-class QuantizedResult:
-    quantized: torch.Tensor
-    codes: torch.Tensor
-    bandwidth: torch.Tensor  # bandwidth in kb/s used, per batch item.
-    penalty: Optional[torch.Tensor] = None
-    metrics: dict = field(default_factory=dict)
-
-
 class EncodecResidualVectorQuantizer(nn.Module):
     """Residual Vector Quantizer."""
-    def __init__(
-        self,
-        config: EncodecConfig,
-        num_quantizers: int = 8,
-    ):
+    def __init__(self, config: EncodecConfig, num_quantizers: int):
         super().__init__()
         self.config = config
         self.num_quantizers = num_quantizers
-        self.bins = config.bins
-        self.vector_quantization = ResidualVectorQuantization(
-            dim=config.dimension,
-            codebook_size=config.bins,
-            num_quantizers=self.num_quantizers,
-            decay=config.decay,
-            kmeans_init=config.kmeans_init,
-            kmeans_iters=config.kmeans_iters,
-            threshold_ema_dead_code=config.threshold_ema_dead_code,
-        )
+        self.vector_quantization = EncodecResidualVectorQuantization(config, num_quantizers)
 
-    def forward(self, x: torch.Tensor, frame_rate: int, bandwidth: Optional[float] = None) -> QuantizedResult:
-        """Residual vector quantization on the given input tensor.
+    def forward(self, embeddings: torch.Tensor, frame_rate: int, bandwidth: Optional[float] = None) -> QuantizedResult:
+        """
+        Residual vector quantization on the given input tensor.
         Args:
-            x (torch.Tensor): Input tensor.
+            embeddings (torch.Tensor): Input tensor.
             frame_rate (int): Sample rate of the input tensor.
             bandwidth (float): Target bandwidth.
         Returns:
@@ -1000,41 +883,40 @@ class EncodecResidualVectorQuantizer(nn.Module):
         """
         bw_per_q = self.get_bandwidth_per_quantizer(frame_rate)
         num_quantizers = self.get_num_quantizers_for_bandwidth(frame_rate, bandwidth)
-        quantized, codes, commit_loss = self.vector_quantization(x, num_quantizers=num_quantizers)
-        bw = torch.tensor(num_quantizers * bw_per_q).to(x)
+        quantized, codes, commit_loss = self.vector_quantization(embeddings, num_quantizers=num_quantizers)
+        bw = torch.tensor(num_quantizers * bw_per_q).to(embeddings)
         return QuantizedResult(quantized, codes, bw, penalty=torch.mean(commit_loss))
+#TODO: change this to QuantizerOutput class?
 
     def get_num_quantizers_for_bandwidth(self, frame_rate: int, bandwidth: Optional[float] = None) -> int:
         """Return num_quantizers based on specified target bandwidth.
         """
         bw_per_q = self.get_bandwidth_per_quantizer(frame_rate)
         num_quantizers = self.num_quantizers
-        if bandwidth and bandwidth > 0.:
-            # bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented as
-            # bandwidth == 6.0
+        if bandwidth is not None and bandwidth > 0.0:
             num_quantizers = int(max(1, math.floor(bandwidth * 1000 / bw_per_q)))
         return num_quantizers
 
     def get_bandwidth_per_quantizer(self, frame_rate: int):
-        """Return bandwidth per quantizer for a given input frame rate.
-        Each quantizer encodes a frame with lg(bins) bits.
+        """
+        Returns bandwidth per quantizer for a given input frame rate.
+        Each quantizer encodes a frame with `log2(bins)` bits.
         """
         return math.log2(self.config.bins) * frame_rate
 
-    def encode(self, x: torch.Tensor, frame_rate: int, bandwidth: Optional[float] = None) -> torch.Tensor:
-        """Encode a given input tensor with the specified frame rate at the given bandwidth.
+    def encode(self, embeddings: torch.Tensor, frame_rate: int, bandwidth: Optional[float] = None) -> torch.Tensor:
+        """
+        Encode a given input tensor with the specified frame rate at the given bandwidth.
         The RVQ encode method sets the appropriate number of quantizers to use
         and returns indices for each quantizer.
         """
         num_quantizers = self.get_num_quantizers_for_bandwidth(frame_rate, bandwidth)
-        codes = self.vector_quantization.encode(x, num_quantizers=num_quantizers)
+        codes = self.vector_quantization.encode(embeddings, num_quantizers=num_quantizers)
         return codes
 
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
-        """Decode the given codes to the quantized representation.
-        """
-        quantized = self.vector_quantization.decode(codes)
-        return quantized
+        """Decode the given codes to the quantized representation."""
+        return self.vector_quantization.decode(codes)
 
 
 class EncodecPreTrainedModel(PreTrainedModel):
@@ -1219,18 +1101,17 @@ class EncodecModel(EncodecPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.encoder = SEANetEncoder(config)
-        self.decoder = SEANetDecoder(config)
+        self.encoder = EncodecEncoder(config)
+        self.decoder = EncodecDecoder(config)
 
-        n_q = int(
-            1000 * config.target_bandwidths[-1] // (math.ceil(config.sampling_rate / self.encoder.hop_length) * 10)
-        )
-        self.quantizer = EncodecResidualVectorQuantizer(config, n_q)
+        hop_length = np.prod(config.ratios)
+        self.frame_rate = math.ceil(config.sampling_rate / hop_length)
 
-        self.frame_rate = math.ceil(self.config.sampling_rate / np.prod(self.encoder.ratios))
+        num_quantizers = int(1000 * config.target_bandwidths[-1] // (self.frame_rate * 10))
+        self.quantizer = EncodecResidualVectorQuantizer(config, num_quantizers)
+
         self.bits_per_codebook = int(math.log2(self.config.bins))
-
-        if 2**self.bits_per_codebook != self.quantizer.bins:
+        if 2 ** self.bits_per_codebook != self.config.bins:
             raise ValueError("Number of quantizer bins must be a power of 2.")
 
         # Initialize weights and apply final processing
@@ -1251,6 +1132,8 @@ class EncodecModel(EncodecPreTrainedModel):
                 Float values of the input audio waveform.
             bandwidth (`float`, *optional*):
                 The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible bandwidth.
+                bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented as
+                bandwidth == 6.0
 
         Returns:
             A list of frames containing the discrete encoded codes for the input audio waveform,
@@ -1352,6 +1235,8 @@ class EncodecModel(EncodecPreTrainedModel):
 
         bandwidth (`float`, *optional*):
             The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible bandwidth.
+            bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented as
+            bandwidth == 6.0
 
         Returns:
         """
