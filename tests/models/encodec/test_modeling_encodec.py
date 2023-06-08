@@ -248,15 +248,15 @@ class EncodecIntegrationTest(unittest.TestCase):
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
                 # use max bandwith for best possible reconstruction
-                audio_code = model.encode(input_values, bandwidth=float(bandwidth))
+                audio_code = model.encode(input_values, bandwidth=float(bandwidth))[0]
 
-                audio_code_sums = [a[0][0].sum().cpu().item() for a in audio_code]
+                audio_code_sums = [a[0].sum().cpu().item() for a in audio_code]
 
                 # make sure audio encoded codes are correct
                 self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
 
-                input_values_dec = model.decode(audio_code)
-                input_values_enc_dec = model(input_values, bandwidth=float(bandwidth))
+                input_values_dec = model.decode(audio_code)[0]
+                input_values_enc_dec = model(input_values, bandwidth=float(bandwidth))[-1]
 
             # make sure forward and decode gives same result
             self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
@@ -298,14 +298,13 @@ class EncodecIntegrationTest(unittest.TestCase):
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
                 # use max bandwith for best possible reconstruction
-                audio_code = model.encode(input_values, bandwidth=float(bandwidth))
-
-                audio_code_sums = [a[0][0].sum().cpu().item() for a in audio_code]
+                audio_code = model.encode(input_values, bandwidth=float(bandwidth))[0]
+                audio_code_sums = [a[0].sum().cpu().item() for a in audio_code]
 
                 # make sure audio encoded codes are correct
                 self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
 
-                input_values_dec = model.decode(audio_code)
+                input_values_dec = model.decode(audio_code)[0]
                 input_values_enc_dec = model(input_values, bandwidth=float(bandwidth))
 
             # make sure forward and decode gives same result

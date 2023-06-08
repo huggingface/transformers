@@ -978,7 +978,7 @@ class EncodecResidualVectorQuantizer(nn.Module):
         super().__init__()
         self.config = config
         self.num_quantizers = num_quantizers
-
+        self.bins = config.bins
         self.vector_quantization = ResidualVectorQuantization(
             dim=config.dimension,
             codebook_size=config.bins,
@@ -1227,7 +1227,7 @@ class EncodecModel(EncodecPreTrainedModel):
         n_q = int(
             1000 * config.target_bandwidths[-1] // (math.ceil(config.sampling_rate / self.encoder.hop_length) * 10)
         )
-        self.quantizer = ResidualVectorQuantizer(config, n_q)
+        self.quantizer = EncodecResidualVectorQuantizer(config, n_q)
 
         self.frame_rate = math.ceil(self.config.sampling_rate / np.prod(self.encoder.ratios))
         self.bits_per_codebook = int(math.log2(self.config.bins))
