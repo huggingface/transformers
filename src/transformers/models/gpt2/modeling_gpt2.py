@@ -1065,7 +1065,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids}
 
-        if valid_past_index >= 0 and past_key_values is None:
+        if valid_past_index is not None and past_key_values is None:
             raise ValueError("This shound not happen.")
 
         model_inputs.update(

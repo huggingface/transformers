@@ -2327,9 +2327,9 @@ class GenerationMixin:
         this_peer_finished = False  # used by synced_gpus only
 
         if getattr(self, "use_static_kv_cache", False):
-            model_kwargs["valid_past_index"] = None
-        else:
             model_kwargs["valid_past_index"] = 0
+        else:
+            model_kwargs["valid_past_index"] = None
         
         while True:
             if synced_gpus:
@@ -2346,7 +2346,8 @@ class GenerationMixin:
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             """
-            print("-----") for key, inp in model_inputs.items():
+            print("-----")
+            for key, inp in model_inputs.items():
                 if isinstance(inp, torch.Tensor):
                     print(key, inp.shape)
                 elif isinstance(inp, tuple):
