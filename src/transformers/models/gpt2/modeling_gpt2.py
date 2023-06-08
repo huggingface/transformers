@@ -668,7 +668,7 @@ DEPARALLELIZE_DOCSTRING = r"""
     GPT2_START_DOCSTRING,
 )
 class GPT2Model(GPT2PreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"h\.\d+\.attn\.bias"]
+    _keys_to_ignore_on_load_unexpected = [r"h\.\d+\.attn\.bias", r"h\.\d+\.attn\.masked_bias"]
     _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias"]
 
     def __init__(self, config):
@@ -1150,7 +1150,7 @@ input sequence).
     GPT2_START_DOCSTRING,
 )
 class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"h\.\d+\.attn\.bias"]
+    _keys_to_ignore_on_load_unexpected = [r"h\.\d+\.attn\.bias", r"h\.\d+\.attn\.masked_bias"]
     _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
 
     def __init__(self, config):
@@ -1379,7 +1379,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     GPT2_START_DOCSTRING,
 )
 class GPT2ForSequenceClassification(GPT2PreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"h\.\d+\.attn\.bias"]
+    _keys_to_ignore_on_load_unexpected = [r"h\.\d+\.attn\.bias", r"h\.\d+\.attn\.masked_bias"]
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head.weight"]
 
     def __init__(self, config):
@@ -1603,7 +1603,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
     GPT2_START_DOCSTRING,
 )
 class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"h\.\d+\.attn\.bias"]
+    _keys_to_ignore_on_load_unexpected = [r"h\.\d+\.attn\.bias", r"h\.\d+\.attn\.masked_bias"]
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias", r"lm_head.weight"]
 
     def __init__(self, config):
