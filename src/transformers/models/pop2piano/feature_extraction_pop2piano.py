@@ -302,8 +302,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             steps_per_beat (`int`, *optional*, defaults to 2):
                 This is used in interpolating `beat_times`.
             do_infer_resample (`bool`, *optional*, defaults to True):
-                Determines whether to resample the audio to `sampling_rate` or not before processing.
-                Must be True during inference.
+                Determines whether to resample the audio to `sampling_rate` or not before processing. Must be True
+                during inference.
             return_attention_mask (`bool` *optional*, defaults to False):
                 Denotes if attention_mask for input_features, beatsteps and extrapolated_beatstep will be given as
                 output or not. Automatically set to True for batched inputs.
