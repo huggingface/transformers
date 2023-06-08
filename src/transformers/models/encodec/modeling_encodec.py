@@ -1231,7 +1231,7 @@ class EncodecModel(EncodecPreTrainedModel):
         decoded_frames = []
         code_embeddings = []
 
-        for frame, scale in encoded_frames:
+        for (frame, scale) in zip(*encoded_frames):
             frames, embeddings = self._decode_frame(frame, scale)
             decoded_frames.append(_linear_overlap_add(frames, self.config.segment_stride or 1))
             code_embeddings.append(embeddings)

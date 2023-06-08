@@ -463,7 +463,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("efficientformer", "EfficientFormer"),
         ("efficientnet", "EfficientNet"),
         ("electra", "ELECTRA"),
-        ("encodec", "Encodec"),
+        ("encodec", "EnCodec"),
         ("encoder-decoder", "Encoder decoder"),
         ("ernie", "ERNIE"),
         ("ernie_m", "ErnieM"),
