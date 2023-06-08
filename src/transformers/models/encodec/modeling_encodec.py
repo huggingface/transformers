@@ -20,12 +20,14 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-import einops
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from einops import rearrange, repeat
 from torch import nn
+
+# TODO: Need to get rid of this eventually
+import einops
+from einops import rearrange, repeat
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -170,6 +172,7 @@ def _linear_overlap_add(frames: List[torch.Tensor], stride: int):
     return out / sum_weight
 
 
+# TODO: If possible I'd actually remove this. E.g. if both checkpoints only use either "Weight_norm" or 'spectral_norm' then let's just hardcode it for now
 def _apply_parametrization_norm(module: nn.Module, norm: str = "none") -> nn.Module:
     if norm not in _CONV_NORMALIZATIONS:
         raise ValueError(f"Invalid normalization option: {norm}")
@@ -183,6 +186,7 @@ def _apply_parametrization_norm(module: nn.Module, norm: str = "none") -> nn.Mod
         return module
 
 
+# TODO: Let's try to get rid of this function. We probably don't need this function no? I'd directly add the correct classes in the code
 def _get_norm_module(module: nn.Module, causal: bool = False, norm: str = "none", **norm_kwargs) -> nn.Module:
     """Return the proper normalization module. If causal is True, this will ensure the returned
     module is causal, or return an error if the normalization doesn't support causal evaluation.
@@ -370,7 +374,7 @@ class SConv1d(nn.Module):
         self.pad_mode = pad_mode
 
     def forward(self, x):
-        B, C, T = x.shape
+        B, C, T = x.shape   #TODO: batch, channel, time
         kernel_size = self.conv.conv.kernel_size[0]
         stride = self.conv.conv.stride[0]
         dilation = self.conv.conv.dilation[0]

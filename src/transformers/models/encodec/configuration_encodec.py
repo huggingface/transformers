@@ -134,11 +134,11 @@ class EncodecConfig(PretrainedConfig):
         dimension=128,  # TODO: hidden_size?
         num_filters=32,
         num_residual_layers=1,
-        ratios=[8, 5, 4, 2],
+        ratios=[8, 5, 4, 2],  # TODO: better names
         activation="ELU",
-        activation_params={"alpha": 1.0},
+        activation_params={"alpha": 1.0},  # TODO: change this
         norm="weight_norm",
-        norm_params={},
+        norm_params={},  # TODO: change this
         final_activation=None,
         final_activation_params=None,
         kernel_size=7,
@@ -147,9 +147,9 @@ class EncodecConfig(PretrainedConfig):
         dilation_base=2,
         causal=True,
         pad_mode="reflect",
-        true_skip=False,
+        true_skip=False,   # TODO: better name
         compress=2,
-        lstm=2,
+        lstm=2,   # TODO: num_lstm_layers
         trim_right_ratio=1.0,
         bins=1024,  # TODO: rename to codebook_size
         codebook_dim=None,
