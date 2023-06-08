@@ -1503,14 +1503,6 @@ class EnCodecModel(EnCodecPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-# TODO: no longer copy to self!
-        self.target_bandwidths = config.target_bandwidths
-        self.sample_rate = config.sampling_rate
-        self.channels = config.audio_channels
-        self.normalize = config.audio_normalize
-        self.segment = config.segment
-        self.overlap = config.overlap
-
         self.encoder = SEANetEncoder(config)
         self.decoder = SEANetDecoder(config)
 
@@ -1526,20 +1518,21 @@ class EnCodecModel(EnCodecPreTrainedModel):
             bins=1024,
         )
 
-        self.frame_rate = math.ceil(self.sample_rate / np.prod(self.encoder.ratios))
+        self.frame_rate = math.ceil(self.config.sampling_rate / np.prod(self.encoder.ratios))
         self.bits_per_codebook = int(math.log2(self.quantizer.bins))
-        assert 2 ** self.bits_per_codebook == self.quantizer.bins, \
-            "quantizer bins must be a power of 2."
+
+        if 2 ** self.bits_per_codebook != self.quantizer.bins:
+            raise ValueError("Number of quantizer bins must be a power of 2.")
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    # TODO: probably just use this from config, or pass into forward / encode / decode
-    def set_target_bandwidth(self, bandwidth: float):
-        if bandwidth not in self.config.target_bandwidths:
-            raise ValueError(f"This model doesn't support the bandwidth {bandwidth}. "
-                             f"Select one of {self.config.target_bandwidths}.")
-        self.bandwidth = bandwidth
+    # # TODO: probably just use this from config, or pass into forward / encode / decode
+    # def set_target_bandwidth(self, bandwidth: float):
+    #     if bandwidth not in self.config.target_bandwidths:
+    #         raise ValueError(f"This model doesn't support the bandwidth {bandwidth}. "
+    #                          f"Select one of {self.config.target_bandwidths}.")
+    #     self.bandwidth = bandwidth
 
     def get_encoder(self):
         return self.encoder
@@ -1547,22 +1540,7 @@ class EnCodecModel(EnCodecPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-#TODO: need this? maybe put in Config
-    @property
-    def segment_length(self) -> Optional[int]:
-        if self.segment is None:
-            return None
-        return int(self.segment * self.sample_rate)
-
-#TODO: need this? maybe put in Config
-    @property
-    def segment_stride(self) -> Optional[int]:
-        segment_length = self.segment_length
-        if segment_length is None:
-            return None
-        return max(1, int((1 - self.overlap) * segment_length))
-
-    def encode(self, x: torch.Tensor) -> List[EncodedFrame]:
+    def encode(self, x: torch.Tensor, bandwidth: Optional[float] = None) -> List[EncodedFrame]:
         """Given a tensor `x`, returns a list of frames containing
         the discrete encoded codes for `x`, along with rescaling factors
         for each segment, when `self.normalize` is True.
@@ -1570,29 +1548,37 @@ class EnCodecModel(EnCodecPreTrainedModel):
         Each frames is a tuple `(codebook, scale)`, with `codebook` of
         shape `[B, K, T]`, with `K` the number of codebooks.
         """
+        if bandwidth is None:
+            bandwidth = self.config.target_bandwidths[0]
+        if bandwidth not in self.config.target_bandwidths:
+            raise ValueError(f"This model doesn't support the bandwidth {bandwidth}. "
+                             f"Select one of {self.config.target_bandwidths}.")
+
+        print(bandwidth)
+
         assert x.dim() == 3
         _, channels, length = x.shape
         assert channels > 0 and channels <= 2
-        segment_length = self.segment_length
+        segment_length = self.config.segment_length
         if segment_length is None:
             segment_length = length
             stride = length
         else:
-            stride = self.segment_stride  # type: ignore
+            stride = self.config.segment_stride  # type: ignore
             assert stride is not None
 
         encoded_frames: List[EncodedFrame] = []
         for offset in range(0, length, stride):
             frame = x[:, :, offset: offset + segment_length]
-            encoded_frames.append(self._encode_frame(frame))
+            encoded_frames.append(self._encode_frame(frame, bandwidth))
         return encoded_frames
 
-    def _encode_frame(self, x: torch.Tensor) -> EncodedFrame:
+    def _encode_frame(self, x: torch.Tensor, bandwidth: float) -> EncodedFrame:
         length = x.shape[-1]
-        duration = length / self.sample_rate
-        assert self.segment is None or duration <= 1e-5 + self.segment
+        duration = length / self.config.sampling_rate
+        assert self.config.segment is None or duration <= 1e-5 + self.config.segment
 
-        if self.normalize:
+        if self.config.normalize:
             mono = x.mean(dim=1, keepdim=True)
             volume = mono.pow(2).mean(dim=2, keepdim=True).sqrt()
             scale = 1e-8 + volume
@@ -1602,7 +1588,7 @@ class EnCodecModel(EnCodecPreTrainedModel):
             scale = None
 
         emb = self.encoder(x)
-        codes = self.quantizer.encode(emb, self.frame_rate, self.bandwidth)
+        codes = self.quantizer.encode(emb, self.frame_rate, bandwidth)
         codes = codes.transpose(0, 1)
         # codes is [B, K, T], with T frames, K nb of codebooks.
         return codes, scale
@@ -1612,13 +1598,13 @@ class EnCodecModel(EnCodecPreTrainedModel):
         Note that the output might be a bit bigger than the input. In that case,
         any extra steps at the end can be trimmed.
         """
-        segment_length = self.segment_length
+        segment_length = self.config.segment_length
         if segment_length is None:
             assert len(encoded_frames) == 1
             return self._decode_frame(encoded_frames[0])
 
         frames = [self._decode_frame(frame) for frame in encoded_frames]
-        return _linear_overlap_add(frames, self.segment_stride or 1)
+        return _linear_overlap_add(frames, self.config.segment_stride or 1)
 
     def _decode_frame(self, encoded_frame: EncodedFrame) -> torch.Tensor:
         codes, scale = encoded_frame
@@ -1638,27 +1624,4 @@ class EnCodecModel(EnCodecPreTrainedModel):
 
         Returns:
         """
-        #return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # if bandwidth is None:
-        #     bandwidth = self.target_bandwidths[0]
-        # if bandwidth not in self.target_bandwidths:
-        #     raise ValueError(f"This model doesn't support the bandwidth {bandwidth}. "
-        #                      f"Select one of {self.target_bandwidths}.")
-        # self.bandwidth = bandwidth
-
-    #     if not return_dict:
-    #         return decoder_outputs + encoder_outputs
-
-    #     return Seq2SeqModelOutput(
-    #         last_hidden_state=decoder_outputs.last_hidden_state,
-    #         past_key_values=decoder_outputs.past_key_values,
-    #         decoder_hidden_states=decoder_outputs.hidden_states,
-    #         decoder_attentions=decoder_outputs.attentions,
-    #         cross_attentions=decoder_outputs.cross_attentions,
-    #         encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-    #         encoder_hidden_states=encoder_outputs.hidden_states,
-    #         encoder_attentions=encoder_outputs.attentions,
-    #     )
-
-        return self.decode(self.encode(input_values))[..., :input_values.shape[-1]]
+        return self.decode(self.encode(input_values, bandwidth))[..., :input_values.shape[-1]]

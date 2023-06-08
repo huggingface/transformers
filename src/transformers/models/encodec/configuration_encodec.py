@@ -17,6 +17,8 @@
 import functools
 import operator
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -49,7 +51,7 @@ class EnCodecConfig(PretrainedConfig):
         audio_channels (`int`, *optional*, defaults to 1):
             Number of channels in the audio data. Either 1 for mono or 2 for stereo.
 
-        audio_normalize=False,
+        normalize=False,
             TODO
         segment=None,
             TODO
@@ -259,7 +261,7 @@ class EnCodecConfig(PretrainedConfig):
         sampling_rate=24_000,
         audio_channels=1,
 
-        audio_normalize=False,
+        normalize=False,
         segment=None,
         overlap=0.01,
 
@@ -352,7 +354,7 @@ class EnCodecConfig(PretrainedConfig):
         self.sampling_rate = sampling_rate
         self.audio_channels = audio_channels
 
-        self.audio_normalize = audio_normalize
+        self.normalize = normalize
         self.segment = segment
         self.overlap = overlap
 
@@ -465,3 +467,17 @@ class EnCodecConfig(PretrainedConfig):
             # decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
+
+    @property
+    def segment_length(self) -> Optional[int]:
+        if self.segment is None:
+            return None
+        else:
+            return int(self.segment * self.sampling_rate)
+
+    @property
+    def segment_stride(self) -> Optional[int]:
+        if self.segment is None:
+            return None
+        else:
+            return max(1, int((1.0 - self.overlap) * self.segment_length))
