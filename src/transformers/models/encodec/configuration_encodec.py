@@ -104,6 +104,15 @@ class EncodecConfig(PretrainedConfig):
             If equal to 1.0, it means that all the trimming is done at the right.
 
 
+        bins (int): Codebook size.
+        decay (float): Decay for exponential moving average over the codebooks.
+        kmeans_init (bool): Whether to use kmeans to initialize the codebooks.
+        kmeans_iters (int): Number of iterations used for kmeans initialization.
+        threshold_ema_dead_code (int): Threshold for dead code expiration. Replace any codes
+            that have an exponential moving average cluster size less than the specified threshold with
+            randomly selected vector from the current batch.
+
+
 ===OLD STUFF===
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
@@ -381,7 +390,7 @@ class EncodecConfig(PretrainedConfig):
         self.lstm = lstm
         self.trim_right_ratio = trim_right_ratio
 
-        self.bins = bins
+        self.bins = bins   # TODO: quantizer_bins?
         self.decay = decay
         self.kmeans_init = kmeans_init
         self.kmeans_iters = kmeans_iters
