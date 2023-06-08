@@ -18,7 +18,7 @@ import inspect
 import unittest
 import numpy as np
 from torch import exp
-
+from typing import List, Tuple, Dict
 from datasets import Audio, load_dataset
 
 from transformers import AutoProcessor, EncodecConfig
@@ -75,21 +75,21 @@ class EncodecModelTester:
         self,
         parent,
         batch_size=13,
-        channels=2,  # 2 channels actually
+        num_channels=2,  # 2 channels actually
         is_training=False,
         num_hidden_layers=4,
-        intermediate_size=4,
+        intermediate_size=40,
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.channels = channels
+        self.num_channels = num_channels
         self.is_training = is_training
 
         self.num_hidden_layers = num_hidden_layers
         self.intermediate_size = intermediate_size
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.channels, self.intermediate_size], scale=1.0)
+        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
         config = self.get_config()
         inputs_dict = {"input_values": input_values}
         return config, inputs_dict
@@ -99,14 +99,14 @@ class EncodecModelTester:
         return config, inputs_dict
 
     def get_config(self):
-        return EncodecConfig()
+        return EncodecConfig(audio_channels = self.num_channels, segment = None )
 
     def create_and_check_model_forward(self, config, inputs_dict):
         model = EncodecModel(config=config).to(torch_device).eval()
 
         input_values = inputs_dict["input_values"]
-        result = model(input_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        result = model(input_values, return_dict = True)
+        self.parent.assertEqual(result.code_frames.shape, (self.batch_size, self.num_channels, self.intermediate_size))
 
 
 @require_torch
@@ -136,7 +136,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = EncodecModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=EncodecConfig, hidden_size=37, common_properties=[])
+        self.config_tester = ConfigTester(self, config_class=EncodecConfig, hidden_size=37, common_properties=[], has_text_modality = False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -184,6 +184,93 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         # disabled because this model doesn't have decoder_input_ids
         pass
 
+    def test_attention_outputs(self):
+        # disabled because this model doesn't use attention
+        pass
+    
+    def test_feed_forward_chunking(self):
+        # model does not support chunking (yet?) 
+        # TODO arthur use segment_length in the decode and encode 
+        pass
+    
+    def test_hidden_states_output(self):
+        # model does not output hidden states yet
+        pass 
+
+    def test_determinism(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def check_determinism(first, second):
+            # outputs are not tensors but list (since each sequence don't have the same frame_length)
+            out_1 = first.cpu().numpy()
+            out_2 = second.cpu().numpy()
+            out_1 = out_1[~np.isnan(out_1)]
+            out_2 = out_2[~np.isnan(out_2)]
+            max_diff = np.amax(np.abs(out_1 - out_2))
+            self.assertLessEqual(max_diff, 1e-5)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+                second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+
+            if isinstance(first, tuple) and isinstance(second, tuple):
+                for tensor1, tensor2 in zip(first, second):
+                    check_determinism(tensor1, tensor2)
+            else:
+                check_determinism(first, second)
+                
+    def test_model_outputs_equivalence(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def set_nan_tensor_to_zero(t):
+            t[t != t] = 0
+            return t
+
+        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
+            with torch.no_grad():
+                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
+                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+
+                def recursive_check(tuple_object, dict_object):
+                    if isinstance(tuple_object, (List, Tuple)):
+                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif isinstance(tuple_object, Dict):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object.values(), dict_object.values()
+                        ):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif tuple_object is None:
+                        return
+                    else:
+                        self.assertTrue(
+                            torch.allclose(
+                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                            ),
+                            msg=(
+                                "Tuple and dict output are not equal. Difference:"
+                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
+                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
+                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
+                            ),
+                        )
+
+                recursive_check(tuple_output, dict_output)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+                
+                
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -252,6 +339,7 @@ class EncodecIntegrationTest(unittest.TestCase):
 
                 audio_code_sums = [a[0].sum().cpu().item() for a in audio_code]
 
+                breakpoint()
                 # make sure audio encoded codes are correct
                 self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
 
@@ -320,3 +408,5 @@ class EncodecIntegrationTest(unittest.TestCase):
             # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
             rmse = compute_rmse(arr, arr_enc_dec)
             self.assertTrue(rmse < expected_rmse)
+            
+

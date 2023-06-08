@@ -958,7 +958,7 @@ class EncodecPreTrainedModel(PreTrainedModel):
                     nn.init.constant_(param, 0.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (SEANetEncoder, SEANetDecoder)):
+        if isinstance(module, (EncodecEncoder, EncodecDecoder)):
             module.gradient_checkpointing = value
 
 
@@ -1162,11 +1162,17 @@ class EncodecModel(EncodecPreTrainedModel):
 
         encoded_frames = []
         scales = []
+        
+        padded_length = ((input_length - 1) // stride + 1) * stride + 1
+        padded_inputs = torch.nn.functional.pad(input_values, (0, padded_length - input_length))
         for offset in range(0, input_length, stride):
-            frame = input_values[:, :, offset : offset + segment_length]
+            frame = padded_inputs[:, :, offset : offset + segment_length]
             encoded_frame, scale = self._encode_frame(frame, bandwidth)
             scales.append(scale)
             encoded_frames.append(encoded_frame)
+        
+        
+        encoded_frames = torch.stack(encoded_frames)
 
         if return_dict:
             return EncodecEncoderOutput(encoded_frames, scales)
@@ -1212,6 +1218,9 @@ class EncodecModel(EncodecPreTrainedModel):
             frames, embeddings = self._decode_frame(frame, scale)
             decoded_frames.append(_linear_overlap_add(frames, self.config.segment_stride or 1))
             code_embeddings.append(embeddings)
+
+        decoded_frames = torch.stack(decoded_frames)
+        code_embeddings = torch.stack(code_embeddings)
 
         if return_dict:
             return EncodecDecoderOutput(decoded_frames, code_embeddings)
