@@ -299,6 +299,7 @@ class Wav2Vec2ModelTester:
 
         self.parent.assertIsNotNone(model._get_adapters())
 
+
         model.to(torch_device)
         model.eval()
         result = model(input_values, attention_mask=attention_mask)
@@ -1147,6 +1148,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
             logits = get_logits(model, input_features)
             adapter_weights = model._get_adapters()
+
 
             # save safe weights
             safe_filepath = os.path.join(tempdir, WAV2VEC2_ADAPTER_SAFE_FILE.format("eng"))
