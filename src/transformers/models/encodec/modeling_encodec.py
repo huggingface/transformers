@@ -71,7 +71,9 @@ class EncodecOutput(ModelOutput):
     """
 
     audio_codes: torch.FloatTensor = None
+        # TODO: can we rename this to codes_frames instead of audio_codes?
     code_frames: torch.FloatTensor = None
+        # TODO: can we rename this to audio_output instead of code_frames?
 
     def to_tuple(self) -> Tuple[Any]:
         return tuple(
@@ -91,6 +93,7 @@ class EncodecEncoderOutput(ModelOutput):
     """
 
     audio_codes: torch.FloatTensor = None
+        # TODO: can we rename this to codes_frames instead of audio_codes?
     scales: torch.FloatTensor = None
 
     def to_tuple(self) -> Tuple[Any]:
@@ -110,7 +113,9 @@ class EncodecDecoderOutput(ModelOutput):
     """
 
     code_frames: Optional[torch.FloatTensor] = None
+        # TODO: can we rename this to audio_output instead of code_frames?
     code_embeddings: Optional[torch.FloatTensor] = None
+        # TODO: can we name this hidden_states instead of code_embeddings?
 
     def to_tuple(self) -> Tuple[Any]:
         return tuple(
@@ -239,11 +244,7 @@ def _kmeans(samples, num_clusters: int, num_iters: int = 10):
 
 
 class EncodecConv1d(nn.Module):
-    """Conv1d with some builtin handling of asymmetric or causal padding
-    and normalization.
-    Applies normalization to a Conv1d.
-    """
-
+    """Conv1d with asymmetric or causal padding and normalization."""
     def __init__(
         self,
         in_channels: int,
@@ -258,6 +259,7 @@ class EncodecConv1d(nn.Module):
         pad_mode: str = "reflect",
     ):
         super().__init__()
+
         # warn user on unusual setup between dilation and stride
         if stride > 1 and dilation > 1:
             logger.warning(
@@ -284,12 +286,12 @@ class EncodecConv1d(nn.Module):
         self.pad_mode = pad_mode
 
     def forward(self, x):
-        B, C, T = x.shape  # TODO: batch, channel, time
         kernel_size = self.conv.kernel_size[0]
         stride = self.conv.stride[0]
         dilation = self.conv.dilation[0]
         kernel_size = (kernel_size - 1) * dilation + 1  # effective kernel size with dilations
         padding_total = kernel_size - stride
+
         extra_padding = _get_extra_padding_for_conv1d(x, kernel_size, stride, padding_total)
         if self.causal:
             # Left padding for causal
@@ -307,12 +309,7 @@ class EncodecConv1d(nn.Module):
 
 
 class EncodecConvTranspose1d(nn.Module):
-    """ConvTranspose1d with some builtin handling of asymmetric or causal padding
-    and normalization.
-    Applies normalization to a ConvTranspose1d.
-
-    """
-
+    """ConvTranspose1d with asymmetric or causal padding and normalization."""
     def __init__(
         self,
         in_channels: int,
@@ -1185,7 +1182,7 @@ class EncodecModel(EncodecPreTrainedModel):
         input_values: torch.Tensor,
         bandwidth: Optional[float] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecDecoderOutput]:
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecOutput]:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
             Float values of the input audio waveform.
