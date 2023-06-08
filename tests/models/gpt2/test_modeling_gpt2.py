@@ -502,6 +502,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.config_tester = ConfigTester(self, config_class=GPT2Config, n_embd=37)
 
     def tearDown(self):
+        super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
         torch.cuda.empty_cache()
