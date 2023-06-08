@@ -228,6 +228,12 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "rag"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
+    @property
+    def dummy_inputs(self):
+        dummies = super().dummy_inputs
+        dummies = {key: val for key, val in dummies.items() if not key.startswith("decoder")}
+        return dummies
+
     @classmethod
     def from_pretrained_question_encoder_generator(
         cls,
