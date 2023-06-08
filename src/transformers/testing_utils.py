@@ -1339,6 +1339,11 @@ class TestCasePlus(unittest.TestCase):
             AcceleratorState._reset_state()
             PartialState._reset_state()
 
+            # delete all the env variables having `ACCELERATE` in them
+            for k in list(os.environ.keys()):
+                if "ACCELERATE" in k:
+                    del os.environ[k]
+
 
 def mockenv(**kwargs):
     """
