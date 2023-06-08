@@ -803,24 +803,19 @@ class DisentangledSelfAttention(nn.Module):
         # content->position
         if "c2p" in self.pos_att_type:
             scale = 1 / math.sqrt(pos_key_layer.size(-1) * scale_factor)
-            c2p_att = torch.bmm(query_layer, pos_key_layer.transpose(-1, -2).to(query_layer) * scale)
-            c2p_pos = torch.clamp(relative_pos + att_span, 0, att_span * 2 - 1).squeeze(0).expand(
-                [query_layer.size(0), query_layer.size(1), relative_pos.size(-1)]
-            )
+            c2p_att = torch.bmm(query_layer, pos_key_layer.transpose(-1, -2))
+            # c2p_att = torch.bmm(query_layer, pos_key_layer.transpose(-1, -2).to(query_layer) * scale)
+            c2p_pos = torch.clamp(relative_pos + att_span, 0, att_span * 2 - 1)
             c2p_att = torch.gather(
                 c2p_att,
                 dim=-1,
-                index=c2p_pos
+                index=c2p_pos.squeeze(0).expand([query_layer.size(0), query_layer.size(1), relative_pos.size(-1)]),
             )
-            score += c2p_att
+            score += c2p_att * scale
+            # score += c2p_att
 
         # position->content
         if "p2c" in self.pos_att_type:
-            # scale = 1 / math.sqrt(pos_query_layer.size(-1) * scale_factor)
-            # p2c_att = torch.bmm(pos_query_layer.to(key_layer) * scale, key_layer.transpose(-1, -2))
-            # p2c_att = torch.gather(p2c_att, dim=-2, index=c2p_pos)
-            # score += p2c_att
-
             scale = 1 / math.sqrt(pos_query_layer.size(-1) * scale_factor)
             if key_layer.size(-2) != query_layer.size(-2):
                 r_pos = build_relative_position(
@@ -836,12 +831,14 @@ class DisentangledSelfAttention(nn.Module):
 
             p2c_pos = torch.clamp(-r_pos + att_span, 0, att_span * 2 - 1)
             p2c_att = torch.bmm(key_layer, pos_query_layer.transpose(-1, -2))
+            # p2c_att = torch.bmm(key_layer, pos_query_layer.transpose(-1, -2) * scale)
             p2c_att = torch.gather(
                 p2c_att,
                 dim=-1,
                 index=p2c_pos.squeeze(0).expand([query_layer.size(0), key_layer.size(-2), key_layer.size(-2)]),
             ).transpose(-1, -2)
             score += p2c_att * scale
+            # score += p2c_att
 
         return score
 
