@@ -298,7 +298,7 @@ class GPT2Attention(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-        past_index: Optional[int] = None,
+        valid_past_index: Optional[int] = None,
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
         if encoder_hidden_states is not None:
             if not hasattr(self, "q_attn"):
@@ -317,28 +317,29 @@ class GPT2Attention(nn.Module):
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
-        if getattr(self, "use_static_kv_cache", False):
-            if past_index > 0:
-                upper = past_index + 1
-                layer_past[0][:, :, past_index:upper] = key  # slice to keep dimension info
-                layer_past[1][:, :, past_index:upper] = value
-
-                # TODO (felix) not sure this allocation is needed - maybe refactoring would be faster?
-                key = layer_past[0][:, :, :upper]
-                value = layer_past[1][:, :, :upper]
-            else:
-                prompt_length = key.shape[-2]
-                layer_past[0][:, :, :prompt_length] = key
-                layer_past[1][:, :, :prompt_length] = value
-            # layer_past updated in place
-            present = None
-        else:
+        if valid_past_index is None:
             if layer_past is not None:
                 past_key, past_value = layer_past
                 key = torch.cat((past_key, key), dim=-2)
                 value = torch.cat((past_value, value), dim=-2)
             if use_cache is True:
                 present = (key, value)
+        elif valid_past_index > 0:
+            upper = valid_past_index + 1
+            layer_past[0][:, :, valid_past_index:upper] = key  # Slice to keep dimension info
+            layer_past[1][:, :, valid_past_index:upper] = value
+
+            # TODO (felix) Not sure this allocation is needed - maybe refactoring would be faster?
+            key = layer_past[0][:, :, :upper]
+            value = layer_past[1][:, :, :upper]
+
+            present = None  # layer_past is updated in place
+        else:
+            prompt_length = key.shape[-2]
+            layer_past[0][:, :, :prompt_length] = key
+            layer_past[1][:, :, :prompt_length] = value
+
+            present = None  # layer_past is updated in place
 
         if self.reorder_and_upcast_attn:
             attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
@@ -400,7 +401,7 @@ class GPT2Block(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-        past_index: Optional[int] = None,
+        valid_past_index: Optional[int] = None,
     ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
@@ -411,7 +412,7 @@ class GPT2Block(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            past_index=past_index,
+            valid_past_index=valid_past_index,
         )
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
@@ -502,10 +503,6 @@ class GPT2PreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, GPT2Model):
             module.gradient_checkpointing = value
-
-    def _set_static_kv_cache(self, module, value=False):
-        if isinstance(module, (GPT2Model, GPT2Attention)):
-            module.use_static_kv_cache = value
 
 
 @dataclass
@@ -708,7 +705,6 @@ class GPT2Model(GPT2PreTrainedModel):
         self.model_parallel = False
         self.device_map = None
         self.gradient_checkpointing = False
-        self.use_static_kv_cache = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -791,7 +787,7 @@ class GPT2Model(GPT2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        past_index: Optional[int] = None,
+        valid_past_index: Optional[int] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -818,16 +814,16 @@ class GPT2Model(GPT2PreTrainedModel):
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
         if position_ids is not None:
             position_ids = position_ids.view(-1, input_shape[-1])
-
-        if getattr(self, "use_static_kv_cache", False):
-            if past_index == 0:
-                past_length = 0
-
-        else:
+        
+        if valid_past_index is None:
             if past_key_values is None:
                 past_key_values = tuple([None] * len(self.h))
             else:
                 past_length = past_key_values[0][0].size(-2)
+        elif valid_past_index > 0:
+            past_length = valid_past_index + 1
+        else:
+            past_length = 0
 
         if position_ids is None:
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
@@ -937,7 +933,7 @@ class GPT2Model(GPT2PreTrainedModel):
                     encoder_attention_mask=encoder_attention_mask,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
-                    past_index=past_index,
+                    valid_past_index=valid_past_index,
                 )
 
             hidden_states = outputs[0]
@@ -997,6 +993,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         # Model parallel
         self.model_parallel = False
         self.device_map = None
+        self.use_static_kv_cache = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1040,13 +1037,12 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
-        use_static_kv_cache = getattr(self.transformer, "use_static_kv_cache", False)
 
-        past_index = kwargs.get("past_index", 0)
-        use_cache = (not use_static_kv_cache and past_key_values is not None) or past_index > 0
+        valid_past_index = kwargs.get("valid_past_index", None)
+        step_uses_cache = (valid_past_index is None and past_key_values is not None) or valid_past_index > 0
 
         # only last token for inputs_ids if past is defined in kwargs
-        if use_cache:
+        if step_uses_cache:
             input_ids = input_ids[:, -1].unsqueeze(-1)
             if token_type_ids is not None:
                 token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
@@ -1058,18 +1054,18 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if use_cache:
+            if step_uses_cache:
                 position_ids = position_ids[:, -1].unsqueeze(-1)
         else:
             position_ids = None
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_index == 0:
+        if inputs_embeds is not None and not step_uses_cache:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
 
-        if use_static_kv_cache and past_key_values is None:
+        if valid_past_index >= 0 and past_key_values is None:
             raise ValueError("This shound not happen.")
 
         model_inputs.update(
@@ -1079,7 +1075,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
                 "position_ids": position_ids,
                 "attention_mask": attention_mask,
                 "token_type_ids": token_type_ids,
-                "past_index": kwargs.get("past_index") if use_static_kv_cache else None,
+                "valid_past_index": valid_past_index,
             }
         )
         return model_inputs
@@ -1106,7 +1102,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        past_index: Optional[int] = None,
+        valid_past_index: Optional[int] = None,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1130,7 +1126,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            past_index=past_index,
+            valid_past_index=valid_past_index,
         )
         hidden_states = transformer_outputs[0]
 

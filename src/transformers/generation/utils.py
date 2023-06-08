@@ -753,11 +753,14 @@ class GenerationMixin:
         is_encoder_decoder: bool = False,
         standardize_cache_format: bool = False,
     ) -> Dict[str, Any]:
-        # update past_key_values
-        if not self.is_using_static_kv_cache:
+        # Update key-value cache
+        if model_kwargs["valid_past_index"] is None:
             model_kwargs["past_key_values"] = self._extract_past_from_model_output(
                 outputs, standardize_cache_format=standardize_cache_format
             )
+        else:
+            model_kwargs["valid_past_index"] += outputs.logits.shape[1]
+        
         if getattr(outputs, "state", None) is not None:
             model_kwargs["state"] = outputs.state
 
@@ -781,12 +784,6 @@ class GenerationMixin:
                     [decoder_attention_mask, decoder_attention_mask.new_ones((decoder_attention_mask.shape[0], 1))],
                     dim=-1,
                 )
-
-        if self.is_using_static_kv_cache:
-            if model_kwargs["past_index"] is None:
-                raise ValueError("should not happen")
-
-            model_kwargs["past_index"] = model_kwargs["past_index"] + outputs.logits.shape[1]
 
         return model_kwargs
 
@@ -2329,7 +2326,11 @@ class GenerationMixin:
 
         this_peer_finished = False  # used by synced_gpus only
 
-        model_kwargs["past_index"] = 0  # TODO (felix) this should be removed or made more elegant
+        if getattr(self, "use_static_kv_cache", False):
+            model_kwargs["valid_past_index"] = 0
+        else:
+            model_kwargs["valid_past_index"] = None
+        
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
