@@ -19,9 +19,9 @@ import argparse
 import torch
 
 from transformers import (
-    EnCodecConfig,
-    EnCodecFeatureExtractor,
-    EnCodecModel,
+    EncodecConfig,
+    EncodecFeatureExtractor,
+    EncodecModel,
     logging,
 )
 
@@ -328,9 +328,9 @@ def convert_checkpoint(
     Copy/paste/tweak model's weights to transformers design.
     """
     if config_path is not None:
-        config = EnCodecConfig.from_pretrained(config_path)
+        config = EncodecConfig.from_pretrained(config_path)
     else:
-        config = EnCodecConfig()
+        config = EncodecConfig()
 
     if model_name == "encodec_24khz":
         pass  # config is already correct
@@ -345,9 +345,9 @@ def convert_checkpoint(
     else:
         raise ValueError(f"Unknown model name: {model_name}")
 
-    model = EnCodecModel(config)
+    model = EncodecModel(config)
 
-    feature_extractor = EnCodecFeatureExtractor(feature_size=config.audio_channels, sampling_rate=config.sampling_rate)
+    feature_extractor = EncodecFeatureExtractor(feature_size=config.audio_channels, sampling_rate=config.sampling_rate)
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     original_checkpoint = torch.load(checkpoint_path)

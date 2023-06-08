@@ -26,7 +26,7 @@ from ...utils import PaddingStrategy, TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class EnCodecFeatureExtractor(SequenceFeatureExtractor):
+class EncodecFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs an EnCodec feature extractor.
 
@@ -41,7 +41,7 @@ class EnCodecFeatureExtractor(SequenceFeatureExtractor):
         padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding values.
         return_attention_mask (`bool`, *optional*, defaults to `True`):
-            Whether or not [`~EnCodecFeatureExtractor.__call__`] should return `attention_mask`.
+            Whether or not [`~EncodecFeatureExtractor.__call__`] should return `attention_mask`.
     """
 
     model_input_names = ["input_values", "attention_mask"]

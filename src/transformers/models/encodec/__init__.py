@@ -24,7 +24,7 @@ from ...utils import (
 _import_structure = {
     "configuration_encodec": [
         "ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "EnCodecConfig",
+        "EncodecConfig",
     ],
 }
 
@@ -34,7 +34,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_encodec"] = ["EnCodecFeatureExtractor"]
+    _import_structure["feature_extraction_encodec"] = ["EncodecFeatureExtractor"]
 
 try:
     if not is_torch_available():
@@ -44,14 +44,14 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_encodec"] = [
         "ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "EnCodecModel",
-        "EnCodecPreTrainedModel",
+        "EncodecModel",
+        "EncodecPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
     from .configuration_encodec import (
         ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        EnCodecConfig,
+        EncodecConfig,
     )
 
     try:
@@ -60,7 +60,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_encodec import EnCodecFeatureExtractor
+        from .feature_extraction_encodec import EncodecFeatureExtractor
 
     try:
         if not is_torch_available():
@@ -70,8 +70,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_encodec import (
             ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST,
-            EnCodecModel,
-            EnCodecPreTrainedModel,
+            EncodecModel,
+            EncodecPreTrainedModel,
         )
 
 else:

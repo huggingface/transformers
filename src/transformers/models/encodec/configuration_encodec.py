@@ -31,10 +31,10 @@ ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class EnCodecConfig(PretrainedConfig):
+class EncodecConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`EnCodecModel`]. It is used to instantiate a
-    EnCodec model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    This is the configuration class to store the configuration of an [`EncodecModel`]. It is used to instantiate a
+    Encodec model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [Matthijs/encodec_24khz](https://huggingface.co/Matthijs/encodec_24khz) architecture.
 
@@ -240,13 +240,13 @@ class EnCodecConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import EnCodecModel, EnCodecConfig
+    >>> from transformers import EncodecModel, EncodecConfig
 
     >>> # Initializing a "Matthijs/encodec_24khz" style configuration
-    >>> configuration = EnCodecConfig()
+    >>> configuration = EncodecConfig()
 
     >>> # Initializing a model (with random weights) from the "Matthijs/encodec_24khz" style configuration
-    >>> model = EnCodecModel(configuration)
+    >>> model = EncodecModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

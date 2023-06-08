@@ -33,14 +33,14 @@ from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_encodec import EnCodecConfig
+from .configuration_encodec import EncodecConfig
 
 
 logger = logging.get_logger(__name__)
 
 
 # General docstring
-_CONFIG_FOR_DOC = "EnCodecConfig"
+_CONFIG_FOR_DOC = "EncodecConfig"
 
 
 ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -406,7 +406,7 @@ class SEANetResnetBlock(nn.Module):
 
 class SEANetEncoder(nn.Module):
     """SEANet encoder."""
-    def __init__(self, config: EnCodecConfig):
+    def __init__(self, config: EncodecConfig):
         super().__init__()
         self.channels = config.audio_channels
         self.dimension = config.dimension
@@ -488,7 +488,7 @@ class SEANetEncoder(nn.Module):
 
 class SEANetDecoder(nn.Module):
     """SEANet decoder."""
-    def __init__(self, config: EnCodecConfig):
+    def __init__(self, config: EncodecConfig):
         super().__init__()
         # TODO: do we need these properties?
         self.dimension = config.dimension
@@ -950,13 +950,13 @@ class ResidualVectorQuantizer(nn.Module):
         return quantized
 
 
-class EnCodecPreTrainedModel(PreTrainedModel):
+class EncodecPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = EnCodecConfig
+    config_class = EncodecConfig
     base_model_prefix = "encodec"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
@@ -983,25 +983,25 @@ class EnCodecPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (EnCodecEncoder, EnCodecDecoder)):
+        if isinstance(module, (EncodecEncoder, EncodecDecoder)):
             module.gradient_checkpointing = value
 
 
 #TODO
-# class EnCodecEncoder(EnCodecPreTrainedModel):
+# class EncodecEncoder(EncodecPreTrainedModel):
 #     """
-#     Transformer encoder consisting of *config.encoder_layers* layers. Each layer is a [`EnCodecEncoderLayer`].
+#     Transformer encoder consisting of *config.encoder_layers* layers. Each layer is a [`EncodecEncoderLayer`].
 #     """
 
-#     def __init__(self, config: EnCodecConfig):
+#     def __init__(self, config: EncodecConfig):
 #         super().__init__(config)
 #         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 #         self.dropout = nn.Dropout(config.hidden_dropout)
 #         self.layerdrop = config.encoder_layerdrop
 
-#         self.layers = nn.ModuleList([EnCodecEncoderLayer(config) for _ in range(config.encoder_layers)])
+#         self.layers = nn.ModuleList([EncodecEncoderLayer(config) for _ in range(config.encoder_layers)])
 
-#         self.embed_positions = EnCodecRelativePositionalEncoding(
+#         self.embed_positions = EncodecRelativePositionalEncoding(
 #             config.hidden_size // config.encoder_attention_heads, config.encoder_max_relative_position
 #         )
 
@@ -1130,16 +1130,16 @@ class EnCodecPreTrainedModel(PreTrainedModel):
 
 
 #TODO
-# class EnCodecDecoder(EnCodecPreTrainedModel):
+# class EncodecDecoder(EncodecPreTrainedModel):
 #     """
-#     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`EnCodecDecoderLayer`]
+#     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`EncodecDecoderLayer`]
 #     """
 
-#     def __init__(self, config: EnCodecConfig):
+#     def __init__(self, config: EncodecConfig):
 #         super().__init__(config)
 #         self.layerdrop = config.decoder_layerdrop
 
-#         self.layers = nn.ModuleList([EnCodecDecoderLayer(config) for _ in range(config.decoder_layers)])
+#         self.layers = nn.ModuleList([EncodecDecoderLayer(config) for _ in range(config.decoder_layers)])
 
 #         self.gradient_checkpointing = False
 
@@ -1375,16 +1375,16 @@ ENCODEC_BASE_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`EnCodecConfig`]):
+        config ([`EncodecConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        encoder ([`EnCodecEncoderWithSpeechPrenet`] or [`EnCodecEncoderWithTextPrenet`] or `None`):
+        encoder ([`EncodecEncoderWithSpeechPrenet`] or [`EncodecEncoderWithTextPrenet`] or `None`):
             The Transformer encoder module that applies the appropiate speech or text encoder prenet. If `None`,
-            [`EnCodecEncoderWithoutPrenet`] will be used and the `input_values` are assumed to be hidden states.
-        decoder ([`EnCodecDecoderWithSpeechPrenet`] or [`EnCodecDecoderWithTextPrenet`] or `None`):
+            [`EncodecEncoderWithoutPrenet`] will be used and the `input_values` are assumed to be hidden states.
+        decoder ([`EncodecDecoderWithSpeechPrenet`] or [`EncodecDecoderWithTextPrenet`] or `None`):
             The Transformer decoder module that applies the appropiate speech or text decoder prenet. If `None`,
-            [`EnCodecDecoderWithoutPrenet`] will be used and the `decoder_input_values` are assumed to be hidden
+            [`EncodecDecoderWithoutPrenet`] will be used and the `decoder_input_values` are assumed to be hidden
             states.
 """
 
@@ -1400,7 +1400,7 @@ ENCODEC_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`EnCodecConfig`]):
+        config ([`EncodecConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -1433,7 +1433,7 @@ ENCODEC_INPUTS_DOCSTRING = r"""
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_values`. Causal mask will
             also be used by default.
 
-            If you want to change padding behavior, you should read [`EnCodecDecoder._prepare_decoder_attention_mask`]
+            If you want to change padding behavior, you should read [`EncodecDecoder._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
             information on the default strategy.
 
@@ -1498,8 +1498,8 @@ ENCODEC_INPUTS_DOCSTRING = r"""
     "The EnCodec neural audio codec model.",
     ENCODEC_BASE_START_DOCSTRING,
 )
-class EnCodecModel(EnCodecPreTrainedModel):
-    def __init__(self, config: EnCodecConfig):
+class EncodecModel(EncodecPreTrainedModel):
+    def __init__(self, config: EncodecConfig):
         super().__init__(config)
         self.config = config
 
