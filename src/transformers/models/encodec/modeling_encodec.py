@@ -50,8 +50,6 @@ ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-EncodedFrame = Tuple[torch.Tensor, Optional[torch.Tensor]]
-
 _CONV_NORMALIZATIONS = frozenset(
     ["none", "weight_norm", "spectral_norm", "time_layer_norm", "layer_norm", "time_group_norm"]
 )
@@ -1244,7 +1242,7 @@ class EncodecModel(EncodecPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    def encode(self, input_values: torch.Tensor, bandwidth: Optional[float] = None, return_dict = None) -> List[EncodedFrame]:
+    def encode(self, input_values: torch.Tensor, bandwidth: Optional[float] = None, return_dict = None) ->  Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput] :
         """
         Encodes the input audio waveform into discrete codes.
 
@@ -1283,16 +1281,15 @@ class EncodecModel(EncodecPreTrainedModel):
         scales = []
         for offset in range(0, input_length, stride):
             frame = input_values[:, :, offset : offset + segment_length]
-            breakpoint()
             encoded_frame, scale = self._encode_frame(frame, bandwidth)
             scales.append(scale)
             encoded_frames.append(encoded_frame)
 
-        if  return_dict:
+        if return_dict:
             return EncodecEncoderOutput(encoded_frames, scales)
         return (encoded_frames,scales)
 
-    def _encode_frame(self, input_values: torch.Tensor, bandwidth: float) -> EncodedFrame:
+    def _encode_frame(self, input_values: torch.Tensor, bandwidth: float) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         length = input_values.shape[-1]
         duration = length / self.config.sampling_rate
 
@@ -1312,7 +1309,7 @@ class EncodecModel(EncodecPreTrainedModel):
         codes = codes.transpose(0, 1)
         return codes, scale
 
-    def decode(self, encoded_frames: List[EncodedFrame], return_dict = None) -> torch.Tensor:
+    def decode(self, encoded_frames: Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput] , return_dict = None) -> Union[Tuple[torch.Tensor,torch.Tensor], EncodecDecoderOutput]:
         """
         Decodes the given frames into an output audio waveform.
 
@@ -1321,25 +1318,24 @@ class EncodecModel(EncodecPreTrainedModel):
         """
         segment_length = self.config.segment_length
         if segment_length is None:
-            if len(encoded_frames) != 1:
+            if len(encoded_frames[0]) != 1:
                 raise ValueError(f"Expected one frame, got {len(encoded_frames)}")
-            return self._decode_frame(encoded_frames[0])
+            return self._decode_frame(encoded_frames[0][0], encoded_frames[1][0])
 
         decoded_frames = []
         code_embeddings = []
         
-        for frame in encoded_frames:
-            frames, embeddings = self._decode_frame(frame)
+        for frame, scale in encoded_frames:
+            frames, embeddings = self._decode_frame(frame, scale)
             decoded_frames.append(_linear_overlap_add(frames, self.config.segment_stride or 1))
             code_embeddings.append(embeddings)
-            
+
         if return_dict:
             return EncodecDecoderOutput(decoded_frames, code_embeddings)
         return (decoded_frames, code_embeddings)
     
 
-    def _decode_frame(self, encoded_frame: EncodedFrame) -> torch.Tensor:
-        codes, scale = encoded_frame
+    def _decode_frame(self, codes: Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput], scale = None) -> Tuple[torch.Tensor,torch.Tensor]:
         codes = codes.transpose(0, 1)
         embeddings = self.quantizer.decode(codes)
         outputs = self.decoder(embeddings)
@@ -1360,9 +1356,10 @@ class EncodecModel(EncodecPreTrainedModel):
         Returns:
         """
         encoder_outputs = self.encode(input_values, bandwidth, return_dict)
-        decoder_outputs = self.decode(encoder_outputs[0], return_dict)[..., : input_values.shape[-1]]
+        decoder_outputs = self.decode(encoder_outputs, return_dict)
+        codes_frames = decoder_outputs[0][..., : input_values.shape[-1]]
 
         if return_dict:
-            return EncodecOutput(encoder_outputs.audio_codes, decoder_outputs.code_frames)
+            return EncodecOutput(encoder_outputs.audio_codes, codes_frames)
 
-        return (*encoder_outputs, *decoder_outputs)
+        return (encoder_outputs[0], codes_frames)
