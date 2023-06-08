@@ -67,8 +67,6 @@ class EncodecConfig(PretrainedConfig):
             Parameters to provide to the activation function.
         norm (`str`, *optional*, defaults to `"weight_norm"`):
             Normalization method.
-        norm_params (`Dict[str, Any]`, *optional*):
-            Parameters to provide to the underlying normalization used along with the convolution.
         final_activation (str):
             Final activation function after all convolutions.
         final_activation_params (dict):
@@ -137,7 +135,6 @@ class EncodecConfig(PretrainedConfig):
         activation="ELU",
         activation_params={"alpha": 1.0},  # TODO: change this
         norm="weight_norm",
-        norm_params={},  # TODO: change this
         final_activation=None,
         final_activation_params=None,
         kernel_size=7,
@@ -174,7 +171,6 @@ class EncodecConfig(PretrainedConfig):
         self.activation = activation
         self.activation_params = activation_params
         self.norm = norm
-        self.norm_params = norm_params
         self.final_activation = final_activation
         self.final_activation_params = final_activation_params
         self.kernel_size = kernel_size

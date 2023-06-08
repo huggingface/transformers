@@ -51,11 +51,6 @@ ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-_CONV_NORMALIZATIONS = frozenset(
-    ["none", "weight_norm", "spectral_norm", "time_layer_norm", "layer_norm", "time_group_norm"]
-)
-
-
 @dataclass
 class QuantizedResult:
     quantized: torch.Tensor
@@ -166,39 +161,6 @@ def _linear_overlap_add(frames: List[torch.Tensor], stride: int):
     return out / sum_weight
 
 
-# TODO: If possible I'd actually remove this. E.g. if both checkpoints only use either "Weight_norm" or 'spectral_norm' then let's just hardcode it for now
-def _apply_parametrization_norm(module: nn.Module, norm: str = "none") -> nn.Module:
-    if norm not in _CONV_NORMALIZATIONS:
-        raise ValueError(f"Invalid normalization option: {norm}")
-    if norm == "weight_norm":
-        return nn.utils.weight_norm(module)
-    elif norm == "spectral_norm":
-        return nn.utils.spectral_norm(module)
-    else:
-        # We already check was in CONV_NORMALIZATION, so any other choice
-        # doesn't need reparametrization.
-        return module
-
-
-# TODO: Let's try to get rid of this function. We probably don't need this function no? I'd directly add the correct classes in the code
-def _get_norm_module(module: nn.Module, causal: bool = False, norm: str = "none", **norm_kwargs) -> nn.Module:
-    """Return the proper normalization module. If causal is True, this will ensure the returned
-    module is causal, or return an error if the normalization doesn't support causal evaluation.
-    """
-    if norm not in _CONV_NORMALIZATIONS:
-        raise ValueError(f"Invalid normalization option: {norm}")
-    if norm == "layer_norm":
-        assert isinstance(module, nn.modules.conv._ConvNd)
-        return ConvLayerNorm(module.out_channels, **norm_kwargs)
-    elif norm == "time_group_norm":
-        if causal:
-            raise ValueError("GroupNorm doesn't support causal evaluation.")
-        assert isinstance(module, nn.modules.conv._ConvNd)
-        return nn.GroupNorm(1, module.out_channels, **norm_kwargs)
-    else:
-        return nn.Identity()
-
-
 def _get_extra_padding_for_conv1d(x: torch.Tensor, kernel_size: int, stride: int, padding_total: int = 0) -> int:
     """See `pad_for_conv1d`."""
     length = x.shape[-1]
@@ -276,22 +238,7 @@ def _kmeans(samples, num_clusters: int, num_iters: int = 10):
     return means, bins
 
 
-# class ConvLayerNorm(nn.LayerNorm):
-#     """
-#     Convolution-friendly LayerNorm that moves channels to last dimensions
-#     before running the normalization and moves them back to original position right after.
-#     """
-
-#     def __init__(self, normalized_shape: Union[int, List[int], torch.Size], **kwargs):
-#         super().__init__(normalized_shape, **kwargs)
-
-#     def forward(self, x):
-#         x = einops.rearrange(x, "b ... t -> b t ...")
-#         x = super().forward(x)
-#         x = einops.rearrange(x, "b t ... -> b ... t")
-#         return
-
-
+# TODO: might as well integrate this with EncodecPaddedConv1d
 class EncodecNormConv1d(nn.Module):
     """Applies normalization to a Conv1d."""
     def __init__(
@@ -303,32 +250,32 @@ class EncodecNormConv1d(nn.Module):
         dilation,
         groups,
         bias,
-        causal: bool = False,
         norm: str = "none",
-        norm_kwargs: Dict[str, Any] = {},
     ):
         super().__init__()
-        self.conv = _apply_parametrization_norm(
-            nn.Conv1d(
-                in_channels,
-                out_channels,
-                kernel_size,
-                stride,
-                dilation=dilation,
-                groups=groups,
-                bias=bias,
-            ),
-            norm
-        )
-        self.norm = _get_norm_module(self.conv, causal, norm, **norm_kwargs)
         self.norm_type = norm
+        self.conv = nn.Conv1d(
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            dilation=dilation,
+            groups=groups,
+            bias=bias,
+        )
+        if norm == "weight_norm":
+            self.conv = nn.utils.weight_norm(self.conv)
+        elif norm == "time_group_norm":
+            self.norm = nn.GroupNorm(1, out_channels)
 
     def forward(self, x):
         x = self.conv(x)
-        x = self.norm(x)
+        if self.norm_type == "time_group_norm":
+            x = self.norm(x)
         return x
 
 
+# TODO: might as well integrate this with EncodecPaddedConvTranspose1d
 class EncodecNormConvTranspose1d(nn.Module):
     """Applies normalization to a ConvTranspose1d."""
     def __init__(
@@ -337,21 +284,20 @@ class EncodecNormConvTranspose1d(nn.Module):
         out_channels,
         kernel_size,
         stride,
-        causal: bool = False,
         norm: str = "none",
-        norm_kwargs: Dict[str, Any] = {},
     ):
         super().__init__()
-        self.convtr = _apply_parametrization_norm(
-            nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride), #*args, **kwargs),
-            norm
-        )
-        self.norm = _get_norm_module(self.convtr, causal, norm, **norm_kwargs)
         self.norm_type = norm
+        self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride)
+        if norm == "weight_norm":
+            self.conv = nn.utils.weight_norm(self.conv)
+        elif norm == "time_group_norm":
+            self.norm = nn.GroupNorm(1, out_channels)
 
     def forward(self, x):
-        x = self.convtr(x)
-        x = self.norm(x)
+        x = self.conv(x)
+        if self.norm_type == "time_group_norm":
+            x = self.norm(x)
         return x
 
 
@@ -371,7 +317,6 @@ class EncodecPaddedConv1d(nn.Module):
         bias: bool = True,
         causal: bool = False,
         norm: str = "none",
-        norm_kwargs: Dict[str, Any] = {},
         pad_mode: str = "reflect",
     ):
         super().__init__()
@@ -389,9 +334,7 @@ class EncodecPaddedConv1d(nn.Module):
             dilation=dilation,
             groups=groups,
             bias=bias,
-            causal=causal,
             norm=norm,
-            norm_kwargs=norm_kwargs,
         )
         self.causal = causal
         self.pad_mode = pad_mode
@@ -429,11 +372,10 @@ class EncodecPaddedConvTranspose1d(nn.Module):
         causal: bool = False,
         norm: str = "none",
         trim_right_ratio: float = 1.0,
-        norm_kwargs: Dict[str, Any] = {},
     ):
         super().__init__()
-        self.convtr = EncodecNormConvTranspose1d(
-            in_channels, out_channels, kernel_size, stride, causal=causal, norm=norm, norm_kwargs=norm_kwargs
+        self.conv = EncodecNormConvTranspose1d(
+            in_channels, out_channels, kernel_size, stride, norm,
         )
         self.causal = causal
         self.trim_right_ratio = trim_right_ratio
@@ -443,11 +385,11 @@ class EncodecPaddedConvTranspose1d(nn.Module):
         assert self.trim_right_ratio >= 0.0 and self.trim_right_ratio <= 1.0
 
     def forward(self, x):
-        kernel_size = self.convtr.convtr.kernel_size[0]
-        stride = self.convtr.convtr.stride[0]
+        kernel_size = self.conv.conv.kernel_size[0]
+        stride = self.conv.conv.stride[0]
         padding_total = kernel_size - stride
 
-        y = self.convtr(x)
+        y = self.conv(x)
 
         # We will only trim fixed padding. Extra padding from `pad_for_conv1d` would be
         # removed at the very end, when keeping only the right length for the output,
@@ -517,7 +459,6 @@ class EncodecResnetBlock(nn.Module):
                     kernel_size=kernel_size,
                     dilation=dilation,
                     norm=config.norm,
-                    norm_kwargs=config.norm_params,
                     causal=config.causal,
                     pad_mode=config.pad_mode,
                 ),
@@ -531,7 +472,6 @@ class EncodecResnetBlock(nn.Module):
                 dim,
                 kernel_size=1,
                 norm=config.norm,
-                norm_kwargs=config.norm_params,
                 causal=config.causal,
                 pad_mode=config.pad_mode,
             )
@@ -561,7 +501,6 @@ class EncodecEncoder(nn.Module):
                 mult * config.num_filters,
                 config.kernel_size,
                 norm=config.norm,
-                norm_kwargs=config.norm_params,
                 causal=config.causal,
                 pad_mode=config.pad_mode,
             )
@@ -588,7 +527,6 @@ class EncodecEncoder(nn.Module):
                     kernel_size=ratio * 2,
                     stride=ratio,
                     norm=config.norm,
-                    norm_kwargs=config.norm_params,
                     causal=config.causal,
                     pad_mode=config.pad_mode,
                 ),
@@ -605,7 +543,6 @@ class EncodecEncoder(nn.Module):
                 config.dimension,
                 config.last_kernel_size,
                 norm=config.norm,
-                norm_kwargs=config.norm_params,
                 causal=config.causal,
                 pad_mode=config.pad_mode,
             ),
@@ -632,7 +569,6 @@ class EncodecDecoder(nn.Module):
                 mult * config.num_filters,
                 config.kernel_size,
                 norm=config.norm,
-                norm_kwargs=config.norm_params,
                 causal=config.causal,
                 pad_mode=config.pad_mode,
             )
@@ -652,7 +588,6 @@ class EncodecDecoder(nn.Module):
                     kernel_size=ratio * 2,
                     stride=ratio,
                     norm=config.norm,
-                    norm_kwargs=config.norm_params,
                     causal=config.causal,
                     trim_right_ratio=config.trim_right_ratio,
                 ),
@@ -677,7 +612,6 @@ class EncodecDecoder(nn.Module):
                 config.audio_channels,
                 config.last_kernel_size,
                 norm=config.norm,
-                norm_kwargs=config.norm_params,
                 causal=config.causal,
                 pad_mode=config.pad_mode,
             ),
