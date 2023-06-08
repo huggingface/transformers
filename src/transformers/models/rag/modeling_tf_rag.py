@@ -231,6 +231,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
     @property
     def dummy_inputs(self):
         dummies = super().dummy_inputs
+        # RAG doesn't actually need decoder inputs to build its weights
         dummies = {key: val for key, val in dummies.items() if not key.startswith("decoder")}
         return dummies
 
