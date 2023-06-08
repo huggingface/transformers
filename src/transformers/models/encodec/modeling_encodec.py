@@ -238,72 +238,10 @@ def _kmeans(samples, num_clusters: int, num_iters: int = 10):
     return means, bins
 
 
-# TODO: might as well integrate this with EncodecPaddedConv1d
-class EncodecNormConv1d(nn.Module):
-    """Applies normalization to a Conv1d."""
-    def __init__(
-        self,
-        in_channels,
-        out_channels,
-        kernel_size,
-        stride,
-        dilation,
-        groups,
-        bias,
-        norm: str = "none",
-    ):
-        super().__init__()
-        self.norm_type = norm
-        self.conv = nn.Conv1d(
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride,
-            dilation=dilation,
-            groups=groups,
-            bias=bias,
-        )
-        if norm == "weight_norm":
-            self.conv = nn.utils.weight_norm(self.conv)
-        elif norm == "time_group_norm":
-            self.norm = nn.GroupNorm(1, out_channels)
-
-    def forward(self, x):
-        x = self.conv(x)
-        if self.norm_type == "time_group_norm":
-            x = self.norm(x)
-        return x
-
-
-# TODO: might as well integrate this with EncodecPaddedConvTranspose1d
-class EncodecNormConvTranspose1d(nn.Module):
-    """Applies normalization to a ConvTranspose1d."""
-    def __init__(
-        self,
-        in_channels,
-        out_channels,
-        kernel_size,
-        stride,
-        norm: str = "none",
-    ):
-        super().__init__()
-        self.norm_type = norm
-        self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride)
-        if norm == "weight_norm":
-            self.conv = nn.utils.weight_norm(self.conv)
-        elif norm == "time_group_norm":
-            self.norm = nn.GroupNorm(1, out_channels)
-
-    def forward(self, x):
-        x = self.conv(x)
-        if self.norm_type == "time_group_norm":
-            x = self.norm(x)
-        return x
-
-
 class EncodecPaddedConv1d(nn.Module):
     """Conv1d with some builtin handling of asymmetric or causal padding
     and normalization.
+    Applies normalization to a Conv1d.
     """
 
     def __init__(
@@ -326,7 +264,9 @@ class EncodecPaddedConv1d(nn.Module):
                 "EncodecPaddedConv1d has been initialized with stride > 1 and dilation > 1"
                 f" (kernel_size={kernel_size} stride={stride}, dilation={dilation})."
             )
-        self.conv = EncodecNormConv1d(
+
+        self.norm_type = norm
+        self.conv = nn.Conv1d(
             in_channels,
             out_channels,
             kernel_size,
@@ -334,16 +274,20 @@ class EncodecPaddedConv1d(nn.Module):
             dilation=dilation,
             groups=groups,
             bias=bias,
-            norm=norm,
         )
+        if norm == "weight_norm":
+            self.conv = nn.utils.weight_norm(self.conv)
+        elif norm == "time_group_norm":
+            self.norm = nn.GroupNorm(1, out_channels)
+
         self.causal = causal
         self.pad_mode = pad_mode
 
     def forward(self, x):
         B, C, T = x.shape  # TODO: batch, channel, time
-        kernel_size = self.conv.conv.kernel_size[0]
-        stride = self.conv.conv.stride[0]
-        dilation = self.conv.conv.dilation[0]
+        kernel_size = self.conv.kernel_size[0]
+        stride = self.conv.stride[0]
+        dilation = self.conv.dilation[0]
         kernel_size = (kernel_size - 1) * dilation + 1  # effective kernel size with dilations
         padding_total = kernel_size - stride
         extra_padding = _get_extra_padding_for_conv1d(x, kernel_size, stride, padding_total)
@@ -355,12 +299,18 @@ class EncodecPaddedConv1d(nn.Module):
             padding_right = padding_total // 2
             padding_left = padding_total - padding_right
             x = _pad1d(x, (padding_left, padding_right + extra_padding), mode=self.pad_mode)
-        return self.conv(x)
+
+        x = self.conv(x)
+        if self.norm_type == "time_group_norm":
+            x = self.norm(x)
+        return x
 
 
 class EncodecPaddedConvTranspose1d(nn.Module):
     """ConvTranspose1d with some builtin handling of asymmetric or causal padding
     and normalization.
+    Applies normalization to a ConvTranspose1d.
+
     """
 
     def __init__(
@@ -374,9 +324,14 @@ class EncodecPaddedConvTranspose1d(nn.Module):
         trim_right_ratio: float = 1.0,
     ):
         super().__init__()
-        self.conv = EncodecNormConvTranspose1d(
-            in_channels, out_channels, kernel_size, stride, norm,
-        )
+
+        self.norm_type = norm
+        self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride)
+        if norm == "weight_norm":
+            self.conv = nn.utils.weight_norm(self.conv)
+        elif norm == "time_group_norm":
+            self.norm = nn.GroupNorm(1, out_channels)
+
         self.causal = causal
         self.trim_right_ratio = trim_right_ratio
         assert (
@@ -385,11 +340,13 @@ class EncodecPaddedConvTranspose1d(nn.Module):
         assert self.trim_right_ratio >= 0.0 and self.trim_right_ratio <= 1.0
 
     def forward(self, x):
-        kernel_size = self.conv.conv.kernel_size[0]
-        stride = self.conv.conv.stride[0]
+        kernel_size = self.conv.kernel_size[0]
+        stride = self.conv.stride[0]
         padding_total = kernel_size - stride
 
         y = self.conv(x)
+        if self.norm_type == "time_group_norm":
+            y = self.norm(y)
 
         # We will only trim fixed padding. Extra padding from `pad_for_conv1d` would be
         # removed at the very end, when keeping only the right length for the output,
