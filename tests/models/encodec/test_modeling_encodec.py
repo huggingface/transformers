@@ -16,6 +16,8 @@
 
 import inspect
 import unittest
+import numpy as np
+from torch import exp
 
 from transformers import EncodecConfig, AutoProcessor
 from transformers.testing_utils import (
@@ -226,16 +228,28 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         # disabled because this model doesn't have decoder_input_ids
         pass
 
+
+def normalize(arr):
+    norm = np.linalg.norm(arr)
+    normalized_arr = arr / norm
+    return normalized_arr
+
+
+def compute_rmse(arr1, arr2):
+    arr1_normalized = normalize(arr1)
+    arr2_normalized = normalize(arr2)
+    return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
+
+
 @slow
 @require_torch
 class EncodecIntegrationTest(unittest.TestCase):
 
-    def test_integration_ls(self):
-        import soundfile as sf
-        import os
-
-        home_folder = os.path.expanduser("~")
-
+    def test_integration_24kHz(self):
+        expected_rmse = {
+            "1.5": 0.0025,
+            "24.0": 0.0015,
+        }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "Matthijs/encodec_24khz"
 
@@ -247,14 +261,17 @@ class EncodecIntegrationTest(unittest.TestCase):
 
         input_values = processor(audio=audio_sample["audio"]["array"], return_tensors="pt").input_values.to(torch_device)
 
-        sf.write(os.path.join(home_folder, "original.wav"), input_values[0][0].cpu().numpy(), 24_000, subtype="PCM_24")
+        for bandwith, expected_rmse in expected_rmse.items():
+            with torch.no_grad():
+                # use max bandwith for best possible reconstruction
+                input_values_enc_dec = model(input_values, bandwidth=float(bandwith))
 
-        with torch.no_grad():
-            input_values_enc_dec = model(input_values)
+            self.assertTrue(input_values.shape == input_values_enc_dec.shape)
 
-        sf.write(os.path.join(home_folder, "reconstruct.wav"), input_values_enc_dec[0][0].cpu().numpy(), 24_000, subtype="PCM_24")
+            arr = input_values[0, 0].cpu().numpy()
+            arr_enc_dec = input_values_enc_dec[0, 0].cpu().numpy()
 
-        self.assertTrue(input_values.shape == input_values_enc_dec.shape)
+            rmse = compute_rmse(arr, arr_enc_dec)
 
-        # Matthijs: This currently doesn't work - shouldn't it work?
-        self.assertTrue(torch.allclose(input_values, input_values_enc_dec, atol=1e-3))
+            # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
+            self.assertTrue(rmse < expected_rmse)
