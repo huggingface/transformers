@@ -66,11 +66,6 @@ class QuantizedResult:
     metrics: dict = field(default_factory=dict)
 
 
-_CONV_NORMALIZATIONS = frozenset(
-    ["none", "weight_norm", "spectral_norm", "time_layer_norm", "layer_norm", "time_group_norm"]
-)
-
-
 @dataclass
 class EncodecOutput(ModelOutput):
     """
@@ -282,23 +277,23 @@ def _kmeans(samples, num_clusters: int, num_iters: int = 10):
     return means, bins
 
 
-class ConvLayerNorm(nn.LayerNorm):
-    """
-    Convolution-friendly LayerNorm that moves channels to last dimensions before running the normalization and moves
-    them back to original position right after.
-    """
+# class ConvLayerNorm(nn.LayerNorm):
+#     """
+#     Convolution-friendly LayerNorm that moves channels to last dimensions
+#     before running the normalization and moves them back to original position right after.
+#     """
 
-    def __init__(self, normalized_shape: Union[int, List[int], torch.Size], **kwargs):
-        super().__init__(normalized_shape, **kwargs)
+#     def __init__(self, normalized_shape: Union[int, List[int], torch.Size], **kwargs):
+#         super().__init__(normalized_shape, **kwargs)
 
-    def forward(self, x):
-        x = einops.rearrange(x, "b ... t -> b t ...")
-        x = super().forward(x)
-        x = einops.rearrange(x, "b t ... -> b ... t")
-        return
+#     def forward(self, x):
+#         x = einops.rearrange(x, "b ... t -> b t ...")
+#         x = super().forward(x)
+#         x = einops.rearrange(x, "b t ... -> b ... t")
+#         return
 
 
-class NormConv1d(nn.Module):
+class EncodecNormConv1d(nn.Module):
     """Wrapper around Conv1d and normalization applied to this conv
     to provide a uniform interface across normalization approaches.
     """
@@ -315,7 +310,7 @@ class NormConv1d(nn.Module):
         return x
 
 
-class NormConvTranspose1d(nn.Module):
+class EncodecNormConvTranspose1d(nn.Module):
     """Wrapper around ConvTranspose1d and normalization applied to this conv
     to provide a uniform interface across normalization approaches.
     """
@@ -332,7 +327,7 @@ class NormConvTranspose1d(nn.Module):
         return x
 
 
-class SConv1d(nn.Module):
+class EncodecPaddedConv1d(nn.Module):
     """Conv1d with some builtin handling of asymmetric or causal padding
     and normalization.
     """
@@ -355,10 +350,10 @@ class SConv1d(nn.Module):
         # warn user on unusual setup between dilation and stride
         if stride > 1 and dilation > 1:
             logger.warning(
-                "SConv1d has been initialized with stride > 1 and dilation > 1"
+                "EncodecPaddedConv1d has been initialized with stride > 1 and dilation > 1"
                 f" (kernel_size={kernel_size} stride={stride}, dilation={dilation})."
             )
-        self.conv = NormConv1d(
+        self.conv = EncodecNormConv1d(
             in_channels,
             out_channels,
             kernel_size,
@@ -392,7 +387,7 @@ class SConv1d(nn.Module):
         return self.conv(x)
 
 
-class SConvTranspose1d(nn.Module):
+class EncodecPaddedConvTranspose1d(nn.Module):
     """ConvTranspose1d with some builtin handling of asymmetric or causal padding
     and normalization.
     """
@@ -409,7 +404,7 @@ class SConvTranspose1d(nn.Module):
         norm_kwargs: Dict[str, Any] = {},
     ):
         super().__init__()
-        self.convtr = NormConvTranspose1d(
+        self.convtr = EncodecNormConvTranspose1d(
             in_channels, out_channels, kernel_size, stride, causal=causal, norm=norm, norm_kwargs=norm_kwargs
         )
         self.causal = causal
@@ -486,7 +481,7 @@ class EncodecResnetBlock(nn.Module):
             out_chs = dim if i == len(kernel_sizes) - 1 else hidden
             block += [
                 act(**config.activation_params),
-                SConv1d(
+                EncodecPaddedConv1d(
                     in_chs,
                     out_chs,
                     kernel_size=kernel_size,
@@ -501,7 +496,7 @@ class EncodecResnetBlock(nn.Module):
 
         self.use_shortcut = not config.true_skip
         if self.use_shortcut:
-            self.shortcut = SConv1d(
+            self.shortcut = EncodecPaddedConv1d(
                 dim,
                 dim,
                 kernel_size=1,
@@ -530,7 +525,7 @@ class EncodecEncoder(nn.Module):
         act = getattr(nn, config.activation)
         mult = 1
         model = [
-            SConv1d(
+            EncodecPaddedConv1d(
                 config.audio_channels,
                 mult * config.num_filters,
                 config.kernel_size,
@@ -556,7 +551,7 @@ class EncodecEncoder(nn.Module):
             # Add downsampling layers
             model += [
                 act(**config.activation_params),
-                SConv1d(
+                EncodecPaddedConv1d(
                     mult * config.num_filters,
                     mult * config.num_filters * 2,
                     kernel_size=ratio * 2,
@@ -574,7 +569,7 @@ class EncodecEncoder(nn.Module):
 
         model += [
             act(**config.activation_params),
-            SConv1d(
+            EncodecPaddedConv1d(
                 mult * config.num_filters,
                 config.dimension,
                 config.last_kernel_size,
@@ -600,7 +595,7 @@ class EncodecDecoder(nn.Module):
         act = getattr(nn, config.activation)
         mult = int(2 ** len(config.ratios))
         model = [
-            SConv1d(
+            EncodecPaddedConv1d(
                 config.dimension,
                 mult * config.num_filters,
                 config.kernel_size,
@@ -619,7 +614,7 @@ class EncodecDecoder(nn.Module):
             # Add upsampling layers
             model += [
                 act(**config.activation_params),
-                SConvTranspose1d(
+                EncodecPaddedConvTranspose1d(
                     mult * config.num_filters,
                     mult * config.num_filters // 2,
                     kernel_size=ratio * 2,
@@ -645,7 +640,7 @@ class EncodecDecoder(nn.Module):
         # Add final layers
         model += [
             act(**config.activation_params),
-            SConv1d(
+            EncodecPaddedConv1d(
                 config.num_filters,
                 config.audio_channels,
                 config.last_kernel_size,
@@ -874,13 +869,13 @@ class EncodecResidualVectorQuantizer(nn.Module):
     def forward(self, embeddings: torch.Tensor, frame_rate: int, bandwidth: Optional[float] = None) -> QuantizedResult:
         """
         Residual vector quantization on the given input tensor.
-        
+
         Args:
-        
+
             embeddings (torch.Tensor): Input tensor.
-            
+
             frame_rate (int): Sample rate of the input tensor.
-            
+
             bandwidth (float): Target bandwidth.
         Returns:
             QuantizedResult:
