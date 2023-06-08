@@ -1807,8 +1807,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
-        compress_hidden: Optional[bool] = False,
-        low_memory: Optional[bool] = True,
+        low_memory: Optional[bool] = False,
         **model_kwargs,
     ) -> Union[ContrastiveSearchOutput, torch.LongTensor]:
         r"""
@@ -1859,6 +1858,8 @@ class GenerationMixin:
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
+            low_memory (`bool`, *optional*):
+                Switches topk hidden state computation from parallel to sequential to reduce memory if True.
             model_kwargs:
                 Additional model specific keyword arguments will be forwarded to the `forward` function of the model.
                 If model is an encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -1933,19 +1934,6 @@ class GenerationMixin:
         this_peer_finished = False  # used by synced_gpus only
         batch_size = input_ids.shape[0]
 
-        # compression initialization
-        if compress_hidden:
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-            outputs = self(**model_inputs, output_hidden_states=True)
-            hidden_dim = outputs.hidden_states[-1].shape[-1]
-            r = 8
-            compressor = torch.nn.Linear(hidden_dim, 
-                hidden_dim//r, 
-                bias=False, 
-                device=outputs.hidden_states[-1].device, 
-                dtype=outputs.hidden_states[-1].dtype
-            )
-
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -1976,10 +1964,6 @@ class GenerationMixin:
                     last_hidden_states = outputs.decoder_hidden_states[-1]
                 else:
                     last_hidden_states = outputs.hidden_states[-1]
-
-                if compress_hidden:
-                    print ('Using compressed last hidden layer')
-                    last_hidden_states = compressor(last_hidden_states)
 
                 # next logit for contrastive search to select top-k candidate tokens
                 logit_for_next_step = outputs.logits[:, -1, :]
@@ -2084,9 +2068,6 @@ class GenerationMixin:
             else:
                 next_hidden = outputs.hidden_states[-1]
                 full_hidden_states = outputs.hidden_states
-
-            if compress_hidden:
-                next_hidden = compressor(next_hidden)
 
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
 
