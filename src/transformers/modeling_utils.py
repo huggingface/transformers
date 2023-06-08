@@ -1058,7 +1058,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     _no_split_modules = None
     _skip_keys_device_placement = None
     _keep_in_fp32_modules = None
-    _supports_static_kv_cache = False
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
     # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
@@ -1072,6 +1071,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     _keys_to_ignore_on_save = None
 
     is_parallelizable = False
+    supports_static_kv_cache = False
     supports_gradient_checkpointing = False
 
     @property
@@ -1649,7 +1649,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint
         activations".
         """
-        if self.supports_gradient_checkpointing:
+        if self.supports_static_kv_cache:
             self.apply(partial(self._set_gradient_checkpointing, value=False))
 
     @property
