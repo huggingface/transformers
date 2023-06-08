@@ -1637,7 +1637,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Enable static KV cache for generation - speedups generation a lot on PT eager 
         """
-        if not self.supports_static_kv_generation:
+        if not self.supports_static_kv_cache:
             raise ValueError(f"{self.__class__.__name__} does not support static kv cache.")
         self.apply(partial(self._set_static_kv_cache, value=True))
 

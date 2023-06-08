@@ -319,20 +319,19 @@ class GPT2Attention(nn.Module):
 
         if getattr(self, "use_static_kv_cache", False):
             if past_index > 0:
-              upper = past_index + 1
-              layer_past[0][:, :, past_index:upper] = key  # slice to keep dimension info
-              layer_past[1][:, :, past_index:upper] = value
+                upper = past_index + 1
+                layer_past[0][:, :, past_index:upper] = key  # slice to keep dimension info
+                layer_past[1][:, :, past_index:upper] = value
 
-              # TODO: not sure this allocation is needed - maybe refactoring would be faster?
-              key = layer_past[0][:, :, :upper]
-              value = layer_past[1][:, :, :upper]          
+                # TODO: not sure this allocation is needed - maybe refactoring would be faster?
+                key = layer_past[0][:, :, :upper]
+                value = layer_past[1][:, :, :upper]          
             else:
                 prompt_length = key.shape[-2]
                 layer_past[0][:, :, :prompt_length] = key
                 layer_past[1][:, :, :prompt_length] = value
             # layer_past updated in place
             present = None
-
         else:
             if layer_past is not None:
                 past_key, past_value = layer_past
@@ -340,7 +339,7 @@ class GPT2Attention(nn.Module):
                 value = torch.cat((past_value, value), dim=-2)
             if use_cache is True:
                 present = (key, value)
-
+        
         if self.reorder_and_upcast_attn:
             attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
         else:
@@ -468,7 +467,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPT2Block"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_static_kv_cache = True
+    supports_static_kv_cache = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -506,7 +505,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
     
     def _set_static_kv_cache(self, module, value=False):
         if isinstance(module, (GPT2Model, GPT2Attention)):
-            module.use_static_cache = value
+            module.use_static_kv_cache = value
 
 
 @dataclass
@@ -822,7 +821,7 @@ class GPT2Model(GPT2PreTrainedModel):
 
         if getattr(self, "use_static_kv_cache", False):
             if past_index == 0:
-              past_length = 0
+                past_length = 0
 
         else:
             if past_key_values is None:

@@ -754,6 +754,7 @@ class GenerationMixin:
         standardize_cache_format: bool = False,
     ) -> Dict[str, Any]:
         # update past_key_values
+        print("self.is_using_static_kv_cache", self.is_using_static_kv_cache)
         if not self.is_using_static_kv_cache:
             model_kwargs["past_key_values"] = self._extract_past_from_model_output(
                 outputs, standardize_cache_format=standardize_cache_format
