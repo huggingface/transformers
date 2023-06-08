@@ -1549,7 +1549,6 @@ class GenerationMixin:
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
-                *low_memory=low_memory,
                 **model_kwargs,
             )
 
@@ -1808,7 +1807,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
-        low_memory: Optional[bool] = False,
+        low_memory: Optional[bool] = True,
         **model_kwargs,
     ) -> Union[ContrastiveSearchOutput, torch.LongTensor]:
         r"""
