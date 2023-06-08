@@ -323,9 +323,9 @@ class GPT2Attention(nn.Module):
                 layer_past[0][:, :, past_index:upper] = key  # slice to keep dimension info
                 layer_past[1][:, :, past_index:upper] = value
 
-                # TODO: not sure this allocation is needed - maybe refactoring would be faster?
+                # TODO (felix) not sure this allocation is needed - maybe refactoring would be faster?
                 key = layer_past[0][:, :, :upper]
-                value = layer_past[1][:, :, :upper]          
+                value = layer_past[1][:, :, :upper]
             else:
                 prompt_length = key.shape[-2]
                 layer_past[0][:, :, :prompt_length] = key
@@ -339,7 +339,7 @@ class GPT2Attention(nn.Module):
                 value = torch.cat((past_value, value), dim=-2)
             if use_cache is True:
                 present = (key, value)
-        
+
         if self.reorder_and_upcast_attn:
             attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
         else:
@@ -502,7 +502,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, GPT2Model):
             module.gradient_checkpointing = value
-    
+
     def _set_static_kv_cache(self, module, value=False):
         if isinstance(module, (GPT2Model, GPT2Attention)):
             module.use_static_kv_cache = value
@@ -828,7 +828,7 @@ class GPT2Model(GPT2PreTrainedModel):
                 past_key_values = tuple([None] * len(self.h))
             else:
                 past_length = past_key_values[0][0].size(-2)
-        
+
         if position_ids is None:
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
@@ -1042,13 +1042,11 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         token_type_ids = kwargs.get("token_type_ids", None)
         use_static_kv_cache = getattr(self.transformer, "use_static_kv_cache", False)
 
-        if use_static_kv_cache:
-            past_index = kwargs.get("past_index", None)
-        else:
-            past_index = None
+        past_index = kwargs.get("past_index", 0)
+        use_cache = (not use_static_kv_cache and past_key_values is not None) or past_index > 0
 
         # only last token for inputs_ids if past is defined in kwargs
-        if past_key_values or (past_index is not None and past_index > 0):
+        if use_cache:
             input_ids = input_ids[:, -1].unsqueeze(-1)
             if token_type_ids is not None:
                 token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
@@ -1060,7 +1058,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values or (past_index is not None and past_index > 0):
+            if use_cache:
                 position_ids = position_ids[:, -1].unsqueeze(-1)
         else:
             position_ids = None
@@ -1070,8 +1068,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
-        
-        
+
         if use_static_kv_cache and past_key_values is None:
             raise ValueError("This shound not happen.")
 
@@ -1260,7 +1257,6 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         position_ids = kwargs.get("position_ids", None)
 
         if attention_mask is not None and position_ids is None:
-            print("GENERATING POSITION IDS")
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
