@@ -978,6 +978,12 @@ class EncodecPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LSTM):
+            for name, param in module.named_parameters():
+                if 'weight' in name:
+                    nn.init.xavier_uniform_(param)
+                elif 'bias' in name:
+                        nn.init.constant_(param, 0.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (EncodecEncoder, EncodecDecoder)):
@@ -1504,7 +1510,7 @@ class EncodecModel(EncodecPreTrainedModel):
         self.decoder = SEANetDecoder(config)
 
         n_q = int(1000 * config.target_bandwidths[-1] // (math.ceil(config.sampling_rate / self.encoder.hop_length) * 10))
-        self.quantizer = ResidualVectorQuantizer(config, n_q=n_q)
+        self.quantizer = ResidualVectorQuantizer(config, n_q)
 
         self.frame_rate = math.ceil(self.config.sampling_rate / np.prod(self.encoder.ratios))
         self.bits_per_codebook = int(math.log2(self.quantizer.bins))
@@ -1521,13 +1527,20 @@ class EncodecModel(EncodecPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    def encode(self, x: torch.Tensor, bandwidth: Optional[float] = None) -> List[EncodedFrame]:
-        """Given a tensor `x`, returns a list of frames containing
-        the discrete encoded codes for `x`, along with rescaling factors
-        for each segment, when `self.normalize` is True.
+    def encode(self, input_values: torch.Tensor, bandwidth: Optional[float] = None) -> List[EncodedFrame]:
+        """
+        Encodes the input audio waveform into discrete codes.
 
-        Each frames is a tuple `(codebook, scale)`, with `codebook` of
-        shape `[B, K, T]`, with `K` the number of codebooks.
+        Args:
+            input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
+                Float values of the input audio waveform.
+            bandwidth (`float`, *optional*):
+                The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible bandwidth.
+
+        Returns:
+            A list of frames containing the discrete encoded codes for the input audio waveform,
+            along with rescaling factors for each segment when `normalize` is True.
+            Each frames is a tuple `(codebook, scale)`, with `codebook` of shape `[B, K, T]`, with `K` the number of codebooks, `T` frames.
         """
         if bandwidth is None:
             bandwidth = self.config.target_bandwidths[0]
@@ -1535,51 +1548,56 @@ class EncodecModel(EncodecPreTrainedModel):
             raise ValueError(f"This model doesn't support the bandwidth {bandwidth}. "
                              f"Select one of {self.config.target_bandwidths}.")
 
-        assert x.dim() == 3
-        _, channels, length = x.shape
-        assert channels > 0 and channels <= 2
+        _, channels, input_length = input_values.shape
+
+        if channels < 1 or channels > 2:
+            raise ValueError(f"Number of audio channels must be 1 or 2, but got {channels}")
+
         segment_length = self.config.segment_length
         if segment_length is None:
-            segment_length = length
-            stride = length
+            segment_length = input_length
+            stride = input_length
         else:
-            stride = self.config.segment_stride  # type: ignore
-            assert stride is not None
+            stride = self.config.segment_stride
 
-        encoded_frames: List[EncodedFrame] = []
-        for offset in range(0, length, stride):
-            frame = x[:, :, offset: offset + segment_length]
+        encoded_frames = []
+        for offset in range(0, input_length, stride):
+            frame = input_values[:, :, offset : offset + segment_length]
             encoded_frames.append(self._encode_frame(frame, bandwidth))
+
         return encoded_frames
 
-    def _encode_frame(self, x: torch.Tensor, bandwidth: float) -> EncodedFrame:
-        length = x.shape[-1]
+    def _encode_frame(self, input_values: torch.Tensor, bandwidth: float) -> EncodedFrame:
+        length = input_values.shape[-1]
         duration = length / self.config.sampling_rate
-        assert self.config.segment is None or duration <= 1e-5 + self.config.segment
+
+        if self.config.segment is not None and duration > 1e-5 + self.config.segment:
+            raise RuntimeError(f"Duration of frame ({duration}) is longer than segment {self.config.segment}")
 
         if self.config.normalize:
-            mono = x.mean(dim=1, keepdim=True)
-            volume = mono.pow(2).mean(dim=2, keepdim=True).sqrt()
-            scale = 1e-8 + volume
-            x = x / scale
+            mono = input_values.mean(dim=1, keepdim=True)
+            scale = mono.pow(2).mean(dim=2, keepdim=True).sqrt() + 1e-8
+            input_values = input_values / scale
             scale = scale.view(-1, 1)
         else:
             scale = None
 
-        emb = self.encoder(x)
-        codes = self.quantizer.encode(emb, self.frame_rate, bandwidth)
+        embeddings = self.encoder(input_values)
+        codes = self.quantizer.encode(embeddings, self.frame_rate, bandwidth)
         codes = codes.transpose(0, 1)
-        # codes is [B, K, T], with T frames, K nb of codebooks.
         return codes, scale
 
     def decode(self, encoded_frames: List[EncodedFrame]) -> torch.Tensor:
-        """Decode the given frames into a waveform.
+        """
+        Decodes the given frames into an output audio waveform.
+
         Note that the output might be a bit bigger than the input. In that case,
         any extra steps at the end can be trimmed.
         """
         segment_length = self.config.segment_length
         if segment_length is None:
-            assert len(encoded_frames) == 1
+            if len(encoded_frames) != 1:
+                raise ValueError(f"Expected one frame, got {len(encoded_frames)}")
             return self._decode_frame(encoded_frames[0])
 
         frames = [self._decode_frame(frame) for frame in encoded_frames]
@@ -1588,11 +1606,11 @@ class EncodecModel(EncodecPreTrainedModel):
     def _decode_frame(self, encoded_frame: EncodedFrame) -> torch.Tensor:
         codes, scale = encoded_frame
         codes = codes.transpose(0, 1)
-        emb = self.quantizer.decode(codes)
-        out = self.decoder(emb)
+        embeddings = self.quantizer.decode(codes)
+        outputs = self.decoder(embeddings)
         if scale is not None:
-            out = out * scale.view(-1, 1, 1)
-        return out
+            outputs = outputs * scale.view(-1, 1, 1)
+        return outputs
 
     #TODO @add_start_docstrings_to_model_forward(ENCODEC_INPUTS_DOCSTRING)
     #TODO @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1600,6 +1618,9 @@ class EncodecModel(EncodecPreTrainedModel):
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
             Float values of the input audio waveform.
+
+        bandwidth (`float`, *optional*):
+            The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible bandwidth.
 
         Returns:
         """
