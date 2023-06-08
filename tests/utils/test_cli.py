@@ -18,7 +18,7 @@ import shutil
 import unittest
 from unittest.mock import patch
 
-from transformers.testing_utils import CaptureStd, is_pt_tf_cross_test
+from transformers.testing_utils import CaptureStd, is_pt_tf_cross_test, require_torch
 
 
 class CLITest(unittest.TestCase):
@@ -46,6 +46,7 @@ class CLITest(unittest.TestCase):
         # The original repo has no TF weights -- if they exist, they were created by the CLI
         self.assertTrue(os.path.exists("/tmp/hf-internal-testing/tiny-random-gptj/tf_model.h5"))
 
+    @require_torch
     @patch("sys.argv", ["fakeprogrampath", "download", "hf-internal-testing/tiny-random-gptj", "--cache-dir", "/tmp"])
     def test_cli_download(self):
         import transformers.commands.transformers_cli
@@ -61,6 +62,7 @@ class CLITest(unittest.TestCase):
         self.assertTrue(os.path.exists("/tmp/models--hf-internal-testing--tiny-random-gptj/refs"))
         self.assertTrue(os.path.exists("/tmp/models--hf-internal-testing--tiny-random-gptj/snapshots"))
 
+    @require_torch
     @patch(
         "sys.argv",
         [
