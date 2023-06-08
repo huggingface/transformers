@@ -34,286 +34,244 @@ from transformers import (
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.encodec")
 
-# MAPPING_SPEECH_ENCODER_PRENET = {
-#     "speech_encoder_prenet.layer_norm": "speecht5.encoder.prenet.feature_projection.layer_norm",
-#     "speech_encoder_prenet.post_extract_proj": "speecht5.encoder.prenet.feature_projection.projection",
-#     "speech_encoder_prenet.pos_conv.0": "speecht5.encoder.prenet.pos_conv_embed.conv",
-#     "speech_encoder_prenet.mask_emb": "speecht5.encoder.prenet.masked_spec_embed",
-# }
-# MAPPING_TEXT_ENCODER_PRENET = {
-#     "text_encoder_prenet.encoder_prenet.0": "speecht5.encoder.prenet.embed_tokens",
-#     "text_encoder_prenet.encoder_prenet.1.alpha": "speecht5.encoder.prenet.encode_positions.alpha",
-# }
-# MAPPING_SPEECH_DECODER_PRENET = {
-#     "speech_decoder_prenet.decoder_prenet.0.0.prenet.0.0": "speecht5.decoder.prenet.layers.0",
-#     "speech_decoder_prenet.decoder_prenet.0.0.prenet.1.0": "speecht5.decoder.prenet.layers.1",
-#     "speech_decoder_prenet.decoder_prenet.0.1": "speecht5.decoder.prenet.final_layer",
-#     "speech_decoder_prenet.decoder_prenet.1.alpha": "speecht5.decoder.prenet.encode_positions.alpha",
-#     "speech_decoder_prenet.spkembs_layer.0": "speecht5.decoder.prenet.speaker_embeds_layer",
-# }
-# MAPPING_SPEECH_DECODER_POSTNET = {
-#     "speech_decoder_postnet.feat_out": "speech_decoder_postnet.feat_out",
-#     "speech_decoder_postnet.prob_out": "speech_decoder_postnet.prob_out",
-#     "speech_decoder_postnet.postnet.postnet.0.0": "speech_decoder_postnet.layers.0.conv",
-#     "speech_decoder_postnet.postnet.postnet.0.1": "speech_decoder_postnet.layers.0.batch_norm",
-#     "speech_decoder_postnet.postnet.postnet.1.0": "speech_decoder_postnet.layers.1.conv",
-#     "speech_decoder_postnet.postnet.postnet.1.1": "speech_decoder_postnet.layers.1.batch_norm",
-#     "speech_decoder_postnet.postnet.postnet.2.0": "speech_decoder_postnet.layers.2.conv",
-#     "speech_decoder_postnet.postnet.postnet.2.1": "speech_decoder_postnet.layers.2.batch_norm",
-#     "speech_decoder_postnet.postnet.postnet.3.0": "speech_decoder_postnet.layers.3.conv",
-#     "speech_decoder_postnet.postnet.postnet.3.1": "speech_decoder_postnet.layers.3.batch_norm",
-#     "speech_decoder_postnet.postnet.postnet.4.0": "speech_decoder_postnet.layers.4.conv",
-#     "speech_decoder_postnet.postnet.postnet.4.1": "speech_decoder_postnet.layers.4.batch_norm",
-# }
-# MAPPING_TEXT_DECODER_PRENET = {
-#     "text_decoder_prenet.embed_tokens": "speecht5.decoder.prenet.embed_tokens",
-# }
-# MAPPING_TEXT_DECODER_POSTNET = {
-#     "text_decoder_postnet.output_projection": "text_decoder_postnet.lm_head",
-# }
-# MAPPING_ENCODER = {
-#     "encoder.layers.*.self_attn.k_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.k_proj",
-#     "encoder.layers.*.self_attn.v_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.v_proj",
-#     "encoder.layers.*.self_attn.q_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.q_proj",
-#     "encoder.layers.*.self_attn.out_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.out_proj",
-#     "encoder.layers.*.self_attn_layer_norm": "speecht5.encoder.wrapped_encoder.layers.*.layer_norm",
-#     "encoder.layers.*.fc1": "speecht5.encoder.wrapped_encoder.layers.*.feed_forward.intermediate_dense",
-#     "encoder.layers.*.fc2": "speecht5.encoder.wrapped_encoder.layers.*.feed_forward.output_dense",
-#     "encoder.layers.*.final_layer_norm": "speecht5.encoder.wrapped_encoder.layers.*.final_layer_norm",
-#     "encoder.layer_norm": "speecht5.encoder.wrapped_encoder.layer_norm",
-#     "encoder.pos_emb.pe_k": "speecht5.encoder.wrapped_encoder.embed_positions.pe_k",
-# }
-# MAPPING_DECODER = {
-#     "decoder.layers.*.self_attn.k_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.k_proj",
-#     "decoder.layers.*.self_attn.v_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.v_proj",
-#     "decoder.layers.*.self_attn.q_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.q_proj",
-#     "decoder.layers.*.self_attn.out_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.out_proj",
-#     "decoder.layers.*.self_attn_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.self_attn_layer_norm",
-#     "decoder.layers.*.encoder_attn.k_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.k_proj",
-#     "decoder.layers.*.encoder_attn.v_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.v_proj",
-#     "decoder.layers.*.encoder_attn.q_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.q_proj",
-#     "decoder.layers.*.encoder_attn.out_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.out_proj",
-#     "decoder.layers.*.encoder_attn_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn_layer_norm",
-#     "decoder.layers.*.fc1": "speecht5.decoder.wrapped_decoder.layers.*.feed_forward.intermediate_dense",
-#     "decoder.layers.*.fc2": "speecht5.decoder.wrapped_decoder.layers.*.feed_forward.output_dense",
-#     "decoder.layers.*.final_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.final_layer_norm",
-# }
-# MAPPING_S2T = {
-#     **MAPPING_SPEECH_ENCODER_PRENET,
-#     **MAPPING_ENCODER,
-#     **MAPPING_DECODER,
-#     **MAPPING_TEXT_DECODER_PRENET,
-#     **MAPPING_TEXT_DECODER_POSTNET,
-# }
-# MAPPING_T2S = {
-#     **MAPPING_TEXT_ENCODER_PRENET,
-#     **MAPPING_ENCODER,
-#     **MAPPING_DECODER,
-#     **MAPPING_SPEECH_DECODER_PRENET,
-#     **MAPPING_SPEECH_DECODER_POSTNET,
-# }
-# MAPPING_S2S = {
-#     **MAPPING_SPEECH_ENCODER_PRENET,
-#     **MAPPING_ENCODER,
-#     **MAPPING_DECODER,
-#     **MAPPING_SPEECH_DECODER_PRENET,
-#     **MAPPING_SPEECH_DECODER_POSTNET,
-# }
-# TOP_LEVEL_KEYS = []
-# IGNORE_KEYS = [
-#     "encoder.version",
-#     "encoder.layers.*.norm_k.weight",
-#     "encoder.layers.*.norm_k.bias",
-#     "decoder.version",
-#     "decoder.layers.*.norm_k.weight",
-#     "decoder.layers.*.norm_k.bias",
-#     "decoder.pos_emb.pe_k",
-#     "speech_encoder_prenet.embed_positions._float_tensor",
-#     "text_decoder_prenet.embed_positions._float_tensor",
-# ]
-# IGNORE_KEYS_S2T = IGNORE_KEYS + [
-#     "encoder.proj",
-#     "text_encoder_prenet.*",
-#     "speech_decoder_prenet.*",
-#     "speech_decoder_postnet.*",
-# ]
-# IGNORE_KEYS_T2S = IGNORE_KEYS + [
-#     "encoder.proj",
-#     "speech_encoder_prenet.*",
-#     "text_decoder_prenet.*",
-#     "text_decoder_postnet.*",
-# ]
-# IGNORE_KEYS_S2S = IGNORE_KEYS + [
-#     "encoder.proj",
-#     "text_encoder_prenet.*",
-#     "text_decoder_prenet.*",
-#     "text_decoder_postnet.*",
-# ]
+MAPPING_QUANTIZER = {
+    "quantizer.vq.layers.*._codebook.inited" : "quantizer.vector_quantization.layers.*._codebook.inited",
+    "quantizer.vq.layers.*._codebook.cluster_size" : "quantizer.vector_quantization.layers.*._codebook.cluster_size",
+    "quantizer.vq.layers.*._codebook.embed" : "quantizer.vector_quantization.layers.*._codebook.embed",
+    "quantizer.vq.layers.*._codebook.embed_avg" : "quantizer.vector_quantization.layers.*._codebook.embed_avg",
+}
+MAPPING_ENCODER = {
+    "encoder.model.0.conv.conv": "encoder.model.0.conv.conv",
+    "encoder.model.1.block.1.conv.conv" : "encoder.model.1.block.1.conv.conv",
+    "encoder.model.1.block.3.conv.conv" : "encoder.model.1.block.3.conv.conv",
+    "encoder.model.1.shortcut.conv.conv" : "encoder.model.1.shortcut.conv.conv",
+    "encoder.model.3.conv.conv" : "encoder.model.3.conv.conv",
+    "encoder.model.4.block.1.conv.conv" : "encoder.model.4.block.1.conv.conv",
+    "encoder.model.4.block.3.conv.conv" : "encoder.model.4.block.3.conv.conv",
+    "encoder.model.4.shortcut.conv.conv" : "encoder.model.4.shortcut.conv.conv",
+    "encoder.model.6.conv.conv" : "encoder.model.6.conv.conv",
+    "encoder.model.7.block.1.conv.conv" : "encoder.model.7.block.1.conv.conv",
+    "encoder.model.7.block.3.conv.conv" : "encoder.model.7.block.3.conv.conv",
+    "encoder.model.7.shortcut.conv.conv" : "encoder.model.7.shortcut.conv.conv",
+    "encoder.model.9.conv.conv" : "encoder.model.9.conv.conv",
+    "encoder.model.10.block.1.conv.conv" : "encoder.model.10.block.1.conv.conv",
+    "encoder.model.10.block.3.conv.conv" : "encoder.model.10.block.3.conv.conv",
+    "encoder.model.10.shortcut.conv.conv" : "encoder.model.10.shortcut.conv.conv",
+    "encoder.model.12.conv.conv" : "encoder.model.12.conv.conv",
+    "encoder.model.13.lstm" : "encoder.model.13.lstm",
+    "encoder.model.15.conv.conv" : "encoder.model.15.conv.conv",
+}
+MAPPING_ENCODER_48K = {
+    "encoder.model.0.conv.norm" : "encoder.model.0.conv.norm",
+    "encoder.model.1.block.1.conv.norm" : "encoder.model.1.block.1.conv.norm",
+    "encoder.model.1.block.3.conv.norm" : "encoder.model.1.block.3.conv.norm",
+    "encoder.model.1.shortcut.conv.norm" : "encoder.model.1.shortcut.conv.norm",
+    "encoder.model.3.conv.norm" : "encoder.model.3.conv.norm",
+    "encoder.model.4.block.1.conv.norm" : "encoder.model.4.block.1.conv.norm",
+    "encoder.model.4.block.3.conv.norm" : "encoder.model.4.block.3.conv.norm",
+    "encoder.model.4.shortcut.conv.norm" : "encoder.model.4.shortcut.conv.norm",
+    "encoder.model.6.conv.norm" : "encoder.model.6.conv.norm",
+    "encoder.model.7.block.1.conv.norm" : "encoder.model.7.block.1.conv.norm",
+    "encoder.model.7.block.3.conv.norm" : "encoder.model.7.block.3.conv.norm",
+    "encoder.model.7.shortcut.conv.norm" : "encoder.model.7.shortcut.conv.norm",
+    "encoder.model.9.conv.norm" : "encoder.model.9.conv.norm",
+    "encoder.model.10.block.1.conv.norm" : "encoder.model.10.block.1.conv.norm",
+    "encoder.model.10.block.3.conv.norm" : "encoder.model.10.block.3.conv.norm",
+    "encoder.model.10.shortcut.conv.norm" : "encoder.model.10.shortcut.conv.norm",
+    "encoder.model.12.conv.norm" : "encoder.model.12.conv.norm",
+    "encoder.model.15.conv.norm" : "encoder.model.15.conv.norm",
+}
+MAPPING_DECODER = {
+    "decoder.model.0.conv.conv" : "decoder.model.0.conv.conv",
+    "decoder.model.1.lstm" : "decoder.model.1.lstm",
+    "decoder.model.3.convtr.convtr" : "decoder.model.3.convtr.convtr",
+    "decoder.model.4.block.1.conv.conv" : "decoder.model.4.block.1.conv.conv",
+    "decoder.model.4.block.3.conv.conv" : "decoder.model.4.block.3.conv.conv",
+    "decoder.model.4.shortcut.conv.conv" : "decoder.model.4.shortcut.conv.conv",
+    "decoder.model.6.convtr.convtr" : "decoder.model.6.convtr.convtr",
+    "decoder.model.7.block.1.conv.conv" : "decoder.model.7.block.1.conv.conv",
+    "decoder.model.7.block.3.conv.conv" : "decoder.model.7.block.3.conv.conv",
+    "decoder.model.7.shortcut.conv.conv" : "decoder.model.7.shortcut.conv.conv",
+    "decoder.model.9.convtr.convtr" : "decoder.model.9.convtr.convtr",
+    "decoder.model.10.block.1.conv.conv" : "decoder.model.10.block.1.conv.conv",
+    "decoder.model.10.block.3.conv.conv" : "decoder.model.10.block.3.conv.conv",
+    "decoder.model.10.shortcut.conv.conv" : "decoder.model.10.shortcut.conv.conv",
+    "decoder.model.12.convtr.convtr" : "decoder.model.12.convtr.convtr",
+    "decoder.model.13.block.1.conv.conv" : "decoder.model.13.block.1.conv.conv",
+    "decoder.model.13.block.3.conv.conv" : "decoder.model.13.block.3.conv.conv",
+    "decoder.model.13.shortcut.conv.conv" : "decoder.model.13.shortcut.conv.conv",
+    "decoder.model.15.conv.conv" : "decoder.model.15.conv.conv",
+}
+MAPPING_DECODER_48K = {
+    "decoder.model.0.conv.norm" : "decoder.model.0.conv.norm",
+    "decoder.model.3.convtr.norm" : "decoder.model.3.convtr.norm",
+    "decoder.model.4.block.1.conv.norm" : "decoder.model.4.block.1.conv.norm",
+    "decoder.model.4.block.3.conv.norm" : "decoder.model.4.block.3.conv.norm",
+    "decoder.model.4.shortcut.conv.norm" : "decoder.model.4.shortcut.conv.norm",
+    "decoder.model.6.convtr.norm" : "decoder.model.6.convtr.norm",
+    "decoder.model.7.block.1.conv.norm" : "decoder.model.7.block.1.conv.norm",
+    "decoder.model.7.block.3.conv.norm" : "decoder.model.7.block.3.conv.norm",
+    "decoder.model.7.shortcut.conv.norm" : "decoder.model.7.shortcut.conv.norm",
+    "decoder.model.9.convtr.norm" : "decoder.model.9.convtr.norm",
+    "decoder.model.10.block.1.conv.norm" : "decoder.model.10.block.1.conv.norm",
+    "decoder.model.10.block.3.conv.norm" : "decoder.model.10.block.3.conv.norm",
+    "decoder.model.10.shortcut.conv.norm" : "decoder.model.10.shortcut.conv.norm",
+    "decoder.model.12.convtr.norm" : "decoder.model.12.convtr.norm",
+    "decoder.model.13.block.1.conv.norm" : "decoder.model.13.block.1.conv.norm",
+    "decoder.model.13.block.3.conv.norm" : "decoder.model.13.block.3.conv.norm",
+    "decoder.model.13.shortcut.conv.norm" : "decoder.model.13.shortcut.conv.norm",
+    "decoder.model.15.conv.norm" : "decoder.model.15.conv.norm",
+}
+MAPPING_24K = {
+    **MAPPING_QUANTIZER,
+    **MAPPING_ENCODER,
+    **MAPPING_DECODER,
+}
+MAPPING_48K = {
+    **MAPPING_QUANTIZER,
+    **MAPPING_ENCODER,
+    **MAPPING_ENCODER_48K,
+    **MAPPING_DECODER,
+    **MAPPING_DECODER_48K,
+}
+TOP_LEVEL_KEYS = []
+IGNORE_KEYS = []
 
 
-# def set_recursively(hf_pointer, key, value, full_name, weight_type):
-#     for attribute in key.split("."):
-#         hf_pointer = getattr(hf_pointer, attribute)
+def set_recursively(hf_pointer, key, value, full_name, weight_type):
+    for attribute in key.split("."):
+        hf_pointer = getattr(hf_pointer, attribute)
 
-#     if weight_type is not None:
-#         hf_shape = getattr(hf_pointer, weight_type).shape
-#     else:
-#         hf_shape = hf_pointer.shape
+    if weight_type is not None:
+        hf_shape = getattr(hf_pointer, weight_type).shape
+    else:
+        hf_shape = hf_pointer.shape
 
-#     if hf_shape != value.shape:
-#         raise ValueError(
-#             f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be"
-#             f" {value.shape} for {full_name}"
-#         )
+    if hf_shape != value.shape:
+        raise ValueError(
+            f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be"
+            f" {value.shape} for {full_name}"
+        )
 
-#     if weight_type == "weight":
-#         hf_pointer.weight.data = value
-#     elif weight_type == "weight_g":
-#         hf_pointer.weight_g.data = value
-#     elif weight_type == "weight_v":
-#         hf_pointer.weight_v.data = value
-#     elif weight_type == "bias":
-#         hf_pointer.bias.data = value
-#     elif weight_type == "running_mean":
-#         hf_pointer.running_mean.data = value
-#     elif weight_type == "running_var":
-#         hf_pointer.running_var.data = value
-#     elif weight_type == "num_batches_tracked":
-#         hf_pointer.num_batches_tracked.data = value
-#     else:
-#         hf_pointer.data = value
+    if weight_type == "weight":
+        hf_pointer.weight.data = value
+    elif weight_type == "weight_g":
+        hf_pointer.weight_g.data = value
+    elif weight_type == "weight_v":
+        hf_pointer.weight_v.data = value
+    elif weight_type == "bias":
+        hf_pointer.bias.data = value
+    elif weight_type == "running_mean":
+        hf_pointer.running_mean.data = value
+    elif weight_type == "running_var":
+        hf_pointer.running_var.data = value
+    elif weight_type == "num_batches_tracked":
+        hf_pointer.num_batches_tracked.data = value
+    elif weight_type == "weight_ih_l0":
+        hf_pointer.weight_ih_l0.data = value
+    elif weight_type == "weight_hh_l0":
+        hf_pointer.weight_hh_l0.data = value
+    elif weight_type == "bias_ih_l0":
+        hf_pointer.bias_ih_l0.data = value
+    elif weight_type == "bias_hh_l0":
+        hf_pointer.bias_hh_l0.data = value
+    elif weight_type == "weight_ih_l1":
+        hf_pointer.weight_ih_l1.data = value
+    elif weight_type == "weight_hh_l1":
+        hf_pointer.weight_hh_l1.data = value
+    elif weight_type == "bias_ih_l1":
+        hf_pointer.bias_ih_l1.data = value
+    elif weight_type == "bias_hh_l1":
+        hf_pointer.bias_hh_l1.data = value
+    else:
+        hf_pointer.data = value
 
-#     logger.info(f"{key + ('.' + weight_type if weight_type is not None else '')} was initialized from {full_name}.")
-
-
-# def should_ignore(name, ignore_keys):
-#     for key in ignore_keys:
-#         if key.endswith(".*"):
-#             if name.startswith(key[:-1]):
-#                 return True
-#         elif ".*." in key:
-#             prefix, suffix = key.split(".*.")
-#             if prefix in name and suffix in name:
-#                 return True
-#         elif key in name:
-#             return True
-#     return False
-
-
-# def recursively_load_weights(fairseq_dict, hf_model, task):
-#     unused_weights = []
-
-#     if task == "s2t":
-#         feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
-#         MAPPING = MAPPING_S2T
-#         IGNORE_KEYS = IGNORE_KEYS_S2T
-#     elif task == "t2s":
-#         feature_encoder = None
-#         MAPPING = MAPPING_T2S
-#         IGNORE_KEYS = IGNORE_KEYS_T2S
-#     elif task == "s2s":
-#         feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
-#         MAPPING = MAPPING_S2S
-#         IGNORE_KEYS = IGNORE_KEYS_S2S
-#     else:
-#         raise ValueError(f"Unsupported task: {task}")
-
-#     for name, value in fairseq_dict.items():
-#         if should_ignore(name, IGNORE_KEYS):
-#             logger.info(f"{name} was ignored")
-#             continue
-
-#         is_used = False
-#         if "conv_layers" in name:
-#             load_conv_layer(
-#                 name,
-#                 value,
-#                 feature_encoder,
-#                 unused_weights,
-#                 hf_model.config.feat_extract_norm == "group",
-#             )
-#             is_used = True
-#         else:
-#             for key, mapped_key in MAPPING.items():
-#                 # mapped_key = "speecht5." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
-
-#                 if "*" in key:
-#                     prefix, suffix = key.split(".*.")
-#                     if prefix in name and suffix in name:
-#                         key = suffix
-
-#                 # if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
-#                 if key in name:
-#                     is_used = True
-#                     if "*" in mapped_key:
-#                         layer_index = name.split(key)[0].split(".")[-2]
-#                         mapped_key = mapped_key.replace("*", layer_index)
-#                     if "weight_g" in name:
-#                         weight_type = "weight_g"
-#                     elif "weight_v" in name:
-#                         weight_type = "weight_v"
-#                     elif "bias" in name:
-#                         weight_type = "bias"
-#                     elif "weight" in name:
-#                         weight_type = "weight"
-#                     elif "running_mean" in name:
-#                         weight_type = "running_mean"
-#                     elif "running_var" in name:
-#                         weight_type = "running_var"
-#                     elif "num_batches_tracked" in name:
-#                         weight_type = "num_batches_tracked"
-#                     else:
-#                         weight_type = None
-#                     set_recursively(hf_model, mapped_key, value, name, weight_type)
-#                 continue
-#         if not is_used:
-#             unused_weights.append(name)
-
-#     logger.warning(f"Unused weights: {unused_weights}")
+    logger.info(f"{key + ('.' + weight_type if weight_type is not None else '')} was initialized from {full_name}.")
 
 
-# def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
-#     name = full_name.split("conv_layers.")[-1]
-#     items = name.split(".")
-#     layer_id = int(items[0])
-#     type_id = int(items[1])
+def should_ignore(name, ignore_keys):
+    for key in ignore_keys:
+        if key.endswith(".*"):
+            if name.startswith(key[:-1]):
+                return True
+        elif ".*." in key:
+            prefix, suffix = key.split(".*.")
+            if prefix in name and suffix in name:
+                return True
+        elif key in name:
+            return True
+    return False
 
-#     if type_id == 0:
-#         if "bias" in name:
-#             if value.shape != feature_extractor.conv_layers[layer_id].conv.bias.data.shape:
-#                 raise ValueError(
-#                     f"{full_name} has size {value.shape}, but"
-#                     f" {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
-#                 )
-#             feature_extractor.conv_layers[layer_id].conv.bias.data = value
-#             logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
-#         elif "weight" in name:
-#             if value.shape != feature_extractor.conv_layers[layer_id].conv.weight.data.shape:
-#                 raise ValueError(
-#                     f"{full_name} has size {value.shape}, but"
-#                     f" {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
-#                 )
-#             feature_extractor.conv_layers[layer_id].conv.weight.data = value
-#             logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
-#     elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
-#         if "bias" in name:
-#             if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape:
-#                 raise ValueError(
-#                     f"{full_name} has size {value.shape}, but"
-#                     f" {feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape} was found."
-#                 )
-#             feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
-#             logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
-#         elif "weight" in name:
-#             if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape:
-#                 raise ValueError(
-#                     f"{full_name} has size {value.shape}, but"
-#                     f" {feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape} was found."
-#                 )
-#             feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
-#             logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
-#     else:
-#         unused_weights.append(full_name)
+
+def recursively_load_weights(orig_dict, hf_model, model_name):
+    unused_weights = []
+
+    if model_name == "encodec_24khz":
+        MAPPING = MAPPING_24K
+    elif model_name == "encodec_48khz":
+        MAPPING = MAPPING_48K
+    else:
+        raise ValueError(f"Unsupported model: {model_name}")
+
+    for name, value in orig_dict.items():
+        if should_ignore(name, IGNORE_KEYS):
+            logger.info(f"{name} was ignored")
+            continue
+
+        is_used = False
+        for key, mapped_key in MAPPING.items():
+            if "*" in key:
+                prefix, suffix = key.split(".*.")
+                if prefix in name and suffix in name:
+                    key = suffix
+
+            if key in name:
+                # HACK otherwise .embed gets initialized with .embed_avg too
+                if key.endswith("embed") and name.endswith("embed_avg"):
+                    continue
+
+                is_used = True
+                if "*" in mapped_key:
+                    layer_index = name.split(key)[0].split(".")[-2]
+                    mapped_key = mapped_key.replace("*", layer_index)
+                if "weight_g" in name:
+                    weight_type = "weight_g"
+                elif "weight_v" in name:
+                    weight_type = "weight_v"
+                elif "weight_ih_l0" in name:
+                    weight_type = "weight_ih_l0"
+                elif "weight_hh_l0" in name:
+                    weight_type = "weight_hh_l0"
+                elif "bias_ih_l0" in name:
+                    weight_type = "bias_ih_l0"
+                elif "bias_hh_l0" in name:
+                    weight_type = "bias_hh_l0"
+                elif "weight_ih_l1" in name:
+                    weight_type = "weight_ih_l1"
+                elif "weight_hh_l1" in name:
+                    weight_type = "weight_hh_l1"
+                elif "bias_ih_l1" in name:
+                    weight_type = "bias_ih_l1"
+                elif "bias_hh_l1" in name:
+                    weight_type = "bias_hh_l1"
+                elif "bias" in name:
+                    weight_type = "bias"
+                elif "weight" in name:
+                    weight_type = "weight"
+                elif "running_mean" in name:
+                    weight_type = "running_mean"
+                elif "running_var" in name:
+                    weight_type = "running_var"
+                elif "num_batches_tracked" in name:
+                    weight_type = "num_batches_tracked"
+                else:
+                    weight_type = None
+                set_recursively(hf_model, mapped_key, value, name, weight_type)
+            continue
+        if not is_used:
+            unused_weights.append(name)
+
+    logger.warning(f"Unused weights: {unused_weights}")
 
 
 @torch.no_grad()
@@ -351,8 +309,7 @@ def convert_checkpoint(
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     original_checkpoint = torch.load(checkpoint_path)
-    #recursively_load_weights(original_checkpoint["model"], model, model_name)
-    model.load_state_dict(original_checkpoint)
+    recursively_load_weights(original_checkpoint, model, model_name)
     model.save_pretrained(pytorch_dump_folder_path)
 
     if repo_id:

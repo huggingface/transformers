@@ -870,8 +870,7 @@ class EncodecResidualVectorQuantizer(nn.Module):
         self.config = config
         self.num_quantizers = num_quantizers
 
-        # self.vector_quantization = ResidualVectorQuantization(
-        self.vq = ResidualVectorQuantization(
+        self.vector_quantization = ResidualVectorQuantization(
             dim=config.dimension,
             codebook_size=config.bins,
             num_quantizers=self.num_quantizers,
@@ -894,7 +893,7 @@ class EncodecResidualVectorQuantizer(nn.Module):
         """
         bw_per_q = self.get_bandwidth_per_quantizer(frame_rate)
         num_quantizers = self.get_num_quantizers_for_bandwidth(frame_rate, bandwidth)
-        quantized, codes, commit_loss = self.vq(x, num_quantizers=num_quantizers)
+        quantized, codes, commit_loss = self.vector_quantization(x, num_quantizers=num_quantizers)
         bw = torch.tensor(num_quantizers * bw_per_q).to(x)
         return QuantizedResult(quantized, codes, bw, penalty=torch.mean(commit_loss))
 
@@ -921,13 +920,13 @@ class EncodecResidualVectorQuantizer(nn.Module):
         and returns indices for each quantizer.
         """
         num_quantizers = self.get_num_quantizers_for_bandwidth(frame_rate, bandwidth)
-        codes = self.vq.encode(x, num_quantizers=num_quantizers)
+        codes = self.vector_quantization.encode(x, num_quantizers=num_quantizers)
         return codes
 
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
         """Decode the given codes to the quantized representation.
         """
-        quantized = self.vq.decode(codes)
+        quantized = self.vector_quantization.decode(codes)
         return quantized
 
 
