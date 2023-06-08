@@ -730,9 +730,10 @@ class DisentangledSelfAttention(nn.Module):
 
         if rel_att is not None:
             attention_scores = attention_scores + rel_att
-        attention_scores = (attention_scores - attention_scores.max(dim=-1, keepdim=True).values.detach()).to(
-            hidden_states
-        )
+        # attention_scores = (attention_scores - attention_scores.max(dim=-1, keepdim=True).values.detach()).to(
+        #     hidden_states
+        # )
+        attention_scores = attention_scores
         attention_scores = attention_scores.view(
             -1, self.num_attention_heads, attention_scores.size(-2), attention_scores.size(-1)
         )
