@@ -589,7 +589,7 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
 
     q_ids = torch.arange(0, query_size, device=device)
     k_ids = torch.arange(0, key_size, device=device)
-    rel_pos_ids = q_ids.view(-1, 1) - k_ids.view(1, -1)
+    rel_pos_ids = q_ids[:, None] - k_ids[None, :]
     if bucket_size > 0 and max_position > 0:
         rel_pos_ids = make_log_bucket_position(rel_pos_ids, bucket_size, max_position)
     rel_pos_ids = rel_pos_ids.to(torch.long)
@@ -777,7 +777,7 @@ class DisentangledSelfAttention(nn.Module):
         att_span = self.pos_ebd_size
         relative_pos = relative_pos.long().to(query_layer.device)
 
-        rel_embeddings = rel_embeddings[self.pos_ebd_size - att_span:self.pos_ebd_size + att_span, :].unsqueeze(0)  # .repeat(query_layer.size(0)//self.num_attention_heads, 1, 1)
+        rel_embeddings = rel_embeddings[0 : att_span * 2, :].unsqueeze(0)
         if self.share_att_key:
             pos_query_layer = self.transpose_for_scores(
                 self.query_proj(rel_embeddings), self.num_attention_heads
