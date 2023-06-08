@@ -2177,13 +2177,15 @@ class Trainer:
         logger.info(f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric}).")
         best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
         best_safe_model_path = os.path.join(self.state.best_model_checkpoint, SAFE_WEIGHTS_NAME)
-        adapter_model_path = os.path.join(self.state.best_model_checkpoint, "adapter_model.bin")
+        best_adapter_model_path = os.path.join(self.state.best_model_checkpoint, "adapter_model.bin")
+        best_safe_adapter_model_path = os.path.join(self.state.best_model_checkpoint, "adapter_model.safetensors")
 
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if (
             os.path.exists(best_model_path)
             or os.path.exists(best_safe_model_path)
-            or os.path.exists(adapter_model_path)
+            or os.path.exists(best_adapter_model_path)
+            or os.path.exists(best_safe_adapter_model_path)
         ):
             if self.is_deepspeed_enabled:
                 deepspeed_load_checkpoint(self.model_wrapped, self.state.best_model_checkpoint)
@@ -2217,7 +2219,7 @@ class Trainer:
                     if is_peft_available() and isinstance(model, PeftModel):
                         # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
                         if hasattr(model, "active_adapter") and hasattr(model, "load_adapter"):
-                            if os.path.exists(adapter_model_path):
+                            if os.path.exists(best_adapter_model_path) or os.path.exists(best_safe_adapter_model_path):
                                 model.load_adapter(self.state.best_model_checkpoint, model.active_adapter)
                                 # Load_adapter has no return value present, modify it when appropriate.
                                 from torch.nn.modules.module import _IncompatibleKeys
