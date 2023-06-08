@@ -589,7 +589,6 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
 
     q_ids = torch.arange(0, query_size, device=device)
     k_ids = torch.arange(0, key_size, device=device)
-    # rel_pos_ids = q_ids[:, None] - k_ids[None, :]
     rel_pos_ids = q_ids.view(-1, 1) - k_ids.view(1, -1)
     if bucket_size > 0 and max_position > 0:
         rel_pos_ids = make_log_bucket_position(rel_pos_ids, bucket_size, max_position)
@@ -724,8 +723,6 @@ class DisentangledSelfAttention(nn.Module):
             scale_factor += 1
         scale = 1 / math.sqrt(query_layer.size(-1) * scale_factor)
         attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2) * scale)
-        # scale = torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
-        # attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2)) / scale.to(dtype=query_layer.dtype)
         if self.relative_attention:
             rel_embeddings = self.pos_dropout(rel_embeddings)
             rel_att = self.disentangled_attention_bias(
@@ -742,8 +739,8 @@ class DisentangledSelfAttention(nn.Module):
         )
 
         # bsz x height x length x dimension
-        _attention_probs = XSoftmax.apply(attention_scores, attention_mask, -1)
-        attention_probs = self.dropout(_attention_probs)
+        attention_probs = XSoftmax.apply(attention_scores, attention_mask, -1)
+        attention_probs = self.dropout(attention_probs)
         context_layer = torch.bmm(
             attention_probs.view(-1, attention_probs.size(-2), attention_probs.size(-1)), value_layer
         )
@@ -784,10 +781,10 @@ class DisentangledSelfAttention(nn.Module):
         if self.share_att_key:
             pos_query_layer = self.transpose_for_scores(
                 self.query_proj(rel_embeddings), self.num_attention_heads
-            ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)  # .split(self.all_head_size, dim=-1)
+            ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)
             pos_key_layer = self.transpose_for_scores(self.key_proj(rel_embeddings), self.num_attention_heads).repeat(
                 query_layer.size(0) // self.num_attention_heads, 1, 1
-            )  # .split(self.all_head_size, dim=-1)
+            )
         else:
             if "c2p" in self.pos_att_type:
                 pos_key_layer = self.transpose_for_scores(
