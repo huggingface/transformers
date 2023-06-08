@@ -34,7 +34,13 @@ from ...modeling_tf_utils import (
     shape_list,
     unpack_inputs,
 )
-from ...utils import ModelOutput, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    DUMMY_INPUTS,
+    ModelOutput,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_rag import RagConfig
 from .retrieval_rag import RagRetriever
 
@@ -230,10 +236,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        dummies = super().dummy_inputs
-        # RAG doesn't actually need decoder inputs to build its weights
-        dummies = {key: val for key, val in dummies.items() if not key.startswith("decoder")}
-        return dummies
+        return {"input_ids": tf.constant(DUMMY_INPUTS)}
 
     @classmethod
     def from_pretrained_question_encoder_generator(
