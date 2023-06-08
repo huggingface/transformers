@@ -319,11 +319,15 @@ class GPT2Attention(nn.Module):
 
         if getattr(self, "use_static_kv_cache", False):
             if past_index >= 0:
-                layer_past[0][:, :, past_index + 1:past_index + 2] = key  # slice to keep dimension info
-                layer_past[1][:, :, past_index + 1:past_index + 2] = value
+                # TODO: shift past_index + 1 would avoid a aten::add call
+                new_index = past_index + 1
+                upper = past_index + 2
+                layer_past[0][:, :, new_index:upper] = key  # slice to keep dimension info
+                layer_past[1][:, :, new_index:upper] = value
 
-                key = layer_past[0][:, :, :past_index + 2]
-                value = layer_past[1][:, :, :past_index + 2]
+                # TODO: not sure this allocation is needed - maybe refactoring would be faster?
+                key = layer_past[0][:, :, :upper]
+                value = layer_past[1][:, :, :upper]                
             else:
                 prompt_length = key.shape[-2]
                 layer_past[0][:, :, :prompt_length] = key
