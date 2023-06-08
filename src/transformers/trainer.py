@@ -2233,8 +2233,7 @@ class Trainer:
                                 )
                                 has_been_loaded = False
                         else:
-                            # We can't do pure 8bit training using transformers.
-                            logger.warning("Could not loading a quantized checkpoint.")
+                            logger.warning("Could not load adapter model, make sure to have `peft>=0.3.0` installed")
                             has_been_loaded = False
                     else:
                         # We load the model state dict on the CPU to avoid an OOM error.
