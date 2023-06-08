@@ -111,6 +111,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         # additional features
         utt_embed_dim=None,  # confirm this, previously was 64
         lang_embs=None,  # confirm this, previously was 8000
+        is_encoder_decoder=True,
         vocab_size=75,
         bos_token_id=0,
         pad_token_id=1,
@@ -179,8 +180,9 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         self.decoder_concat_after = decoder_concat_after
         self.duration_predictor_dropout_rate = duration_predictor_dropout_rate
         self.vocab_size = vocab_size
+        self.is_encoder_decoder = is_encoder_decoder
 
-        super().__init__(bos_token_id=bos_token_id, pad_token_id=pad_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(bos_token_id=bos_token_id, pad_token_id=pad_token_id, eos_token_id=eos_token_id, is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
     def mel_dim(self):

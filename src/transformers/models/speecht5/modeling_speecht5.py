@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
-    Seq2SeqSpectrogramOutput,
+    Seq2SeqSpectrogramOutputWithPastAndCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -2645,7 +2645,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         return self.speecht5.get_decoder()
 
     @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqSpectrogramOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Seq2SeqSpectrogramOutputWithPastAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2663,7 +2663,8 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
         speaker_embeddings: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.FloatTensor] = None,
-    ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
+        stop_labels: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple, Seq2SeqSpectrogramOutputWithPastAndCrossAttentions]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -2751,7 +2752,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             output = (outputs_after_postnet,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return Seq2SeqSpectrogramOutput(
+        return Seq2SeqSpectrogramOutputWithPastAndCrossAttentions(
             loss=loss,
             spectrogram=outputs_after_postnet,
             past_key_values=outputs.past_key_values,
@@ -2963,7 +2964,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         self.get_encoder().prenet.freeze_feature_encoder()
 
     @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqSpectrogramOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Seq2SeqSpectrogramOutputWithPastAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_values: Optional[torch.FloatTensor] = None,
@@ -2981,7 +2982,8 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
         speaker_embeddings: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.FloatTensor] = None,
-    ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
+        stop_labels: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple, Seq2SeqSpectrogramOutputWithPastAndCrossAttentions]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
@@ -3063,7 +3065,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             output = (spectrogram,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return Seq2SeqSpectrogramOutput(
+        return Seq2SeqSpectrogramOutputWithPastAndCrossAttentions(
             loss=loss,
             spectrogram=spectrogram,
             past_key_values=outputs.past_key_values,
