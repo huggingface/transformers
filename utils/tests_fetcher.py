@@ -428,7 +428,7 @@ def get_module_dependencies(module_fname, cache=None):
                 # So we get the imports from that init then try to find where our objects come from.
                 new_imported_modules = extract_imports(module, cache=cache)
                 for new_module, new_imports in new_imported_modules:
-                    if any([i in new_imports for i in imports]):
+                    if any(i in new_imports for i in imports):
                         if new_module not in dependencies:
                             new_modules.append((new_module, [i for i in new_imports if i in imports]))
                         imports = [i for i in imports if i not in new_imports]

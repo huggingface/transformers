@@ -145,7 +145,7 @@ class OnnxExportTestCase(unittest.TestCase):
 
         # Assert all variables are present
         self.assertEqual(len(shapes), len(variable_names))
-        self.assertTrue(all([var_name in shapes for var_name in variable_names]))
+        self.assertTrue(all(var_name in shapes for var_name in variable_names))
         self.assertSequenceEqual(variable_names[:3], input_vars)
         self.assertSequenceEqual(variable_names[3:], output_vars)
 
