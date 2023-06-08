@@ -413,16 +413,10 @@ class SEANetResnetBlock(nn.Module):
         return self.shortcut(x) + self.block(x)
 
 
-class SEANetEncoder(nn.Module):
+class EncodecEncoder(nn.Module):
     """SEANet encoder."""
     def __init__(self, config: EncodecConfig):
         super().__init__()
-        self.channels = config.audio_channels
-        self.dimension = config.dimension
-        self.n_filters = config.num_filters
-        self.ratios = list(reversed(config.ratios))
-        self.n_residual_layers = config.num_residual_layers
-        self.hop_length = np.prod(self.ratios)
 
         act = getattr(nn, config.activation)
         mult = 1
@@ -438,7 +432,7 @@ class SEANetEncoder(nn.Module):
             )
         ]
         # Downsample to raw audio scale
-        for i, ratio in enumerate(self.ratios):
+        for i, ratio in enumerate(reversed(config.ratios)):
             # Add residual layers
             for j in range(config.num_residual_layers):
                 model += [
@@ -495,20 +489,12 @@ class SEANetEncoder(nn.Module):
         return self.model(x)
 
 
-class SEANetDecoder(nn.Module):
+class EncodecDecoder(nn.Module):
     """SEANet decoder."""
     def __init__(self, config: EncodecConfig):
         super().__init__()
-        # TODO: do we need these properties?
-        self.dimension = config.dimension
-        self.channels = config.audio_channels
-        self.n_filters = config.num_filters
-        self.ratios = config.ratios
-        self.n_residual_layers = config.num_residual_layers
-        self.hop_length = np.prod(self.ratios)
-
         act = getattr(nn, config.activation)
-        mult = int(2 ** len(self.ratios))
+        mult = int(2 ** len(config.ratios))
         model = [
             SConv1d(
                 config.dimension,
@@ -525,7 +511,7 @@ class SEANetDecoder(nn.Module):
             model += [SLSTM(mult * config.num_filters, num_layers=config.lstm)]
 
         # Upsample to raw audio scale
-        for i, ratio in enumerate(self.ratios):
+        for i, ratio in enumerate(config.ratios):
             # Add upsampling layers
             model += [
                 act(**config.activation_params),
@@ -1028,15 +1014,16 @@ class EncodecModel(EncodecPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.encoder = SEANetEncoder(config)
-        self.decoder = SEANetDecoder(config)
+        self.encoder = EncodecEncoder(config)
+        self.decoder = EncodecDecoder(config)
 
-        num_quantizers = int(1000 * config.target_bandwidths[-1] // (math.ceil(config.sampling_rate / self.encoder.hop_length) * 10))
+        hop_length = np.prod(config.ratios)
+        self.frame_rate = math.ceil(config.sampling_rate / hop_length)
+
+        num_quantizers = int(1000 * config.target_bandwidths[-1] // (self.frame_rate * 10))
         self.quantizer = EncodecResidualVectorQuantizer(config, num_quantizers)
 
-        self.frame_rate = math.ceil(self.config.sampling_rate / np.prod(self.encoder.ratios))
         self.bits_per_codebook = int(math.log2(self.config.bins))
-
         if 2 ** self.bits_per_codebook != self.config.bins:
             raise ValueError("Number of quantizer bins must be a power of 2.")
 
