@@ -1071,6 +1071,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     _keys_to_ignore_on_save = None
 
     is_parallelizable = False
+    supports_static_kv_cache = False
     supports_gradient_checkpointing = False
 
     @property
@@ -1631,6 +1632,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
         self.apply(partial(self._set_gradient_checkpointing, value=True))
 
+    def static_kv_cache_enable(self):
+        """
+        Enable static KV cache for generation - speedups generation a lot on PT eager
+        """
+        if not self.supports_static_kv_cache:
+            raise ValueError(f"{self.__class__.__name__} does not support static kv cache.")
+        self.apply(partial(self._set_static_kv_cache, value=True))
+
+    def static_kv_cache_disable(self):
+        """
+        Disable static KV cache for generation
+        """
+        if self.supports_static_kv_cache:
+            self.apply(partial(self._set_static_kv_cache, value=False))
+
     def gradient_checkpointing_disable(self):
         """
         Deactivates gradient checkpointing for the current model.
@@ -1650,6 +1666,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         activations".
         """
         return any(hasattr(m, "gradient_checkpointing") and m.gradient_checkpointing for m in self.modules())
+
+    @property
+    def is_using_static_kv_cache(self) -> bool:
+        """
+        Whether static KV cache is activated for this model or not.
+        """
+        # TODO (felix) this is likely extremely slow, and duplicate with use_static_kv_cache
+        return any(hasattr(m, "use_static_kv_cache") for m in self.modules())
 
     def save_pretrained(
         self,

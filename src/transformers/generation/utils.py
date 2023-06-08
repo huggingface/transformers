@@ -754,9 +754,10 @@ class GenerationMixin:
         standardize_cache_format: bool = False,
     ) -> Dict[str, Any]:
         # update past_key_values
-        # model_kwargs["past_key_values"] = self._extract_past_from_model_output(
-        #     outputs, standardize_cache_format=standardize_cache_format
-        # )
+        if not self.is_using_static_kv_cache:
+            model_kwargs["past_key_values"] = self._extract_past_from_model_output(
+                outputs, standardize_cache_format=standardize_cache_format
+            )
         if getattr(outputs, "state", None) is not None:
             model_kwargs["state"] = outputs.state
 
@@ -781,10 +782,11 @@ class GenerationMixin:
                     dim=-1,
                 )
 
-        if model_kwargs["past_index"] is None:
-            raise ValueError("should not happen")
+        if self.is_using_static_kv_cache:
+            if model_kwargs["past_index"] is None:
+                raise ValueError("should not happen")
 
-        model_kwargs["past_index"] = model_kwargs["past_index"] + outputs.logits.shape[1]
+            model_kwargs["past_index"] = model_kwargs["past_index"] + outputs.logits.shape[1]
 
         return model_kwargs
 
@@ -2327,7 +2329,7 @@ class GenerationMixin:
 
         this_peer_finished = False  # used by synced_gpus only
 
-        model_kwargs["past_index"] = 0
+        model_kwargs["past_index"] = 0  # TODO (felix) this should be removed or made more elegant
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -2343,21 +2345,19 @@ class GenerationMixin:
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             """
-            print("-----")
-            for key, inp in model_inputs.items():
+            print("-----") for key, inp in model_inputs.items():
                 if isinstance(inp, torch.Tensor):
                     print(key, inp.shape)
                 elif isinstance(inp, tuple):
                     for inp_ in inp:
                         if isinstance(inp_, tuple):
                             for inp__ in inp_:
-                                print("    ", key, inp__.shape)
+                                print(" ", key, inp__.shape)
                         else:
-                            print("    ", key, inp_.shape)
+                            print(" ", key, inp_.shape)
                 else:
                     print(key, type(inp))
             """
-            # print(model_inputs["attention_mask"])
 
             # forward pass to get next token
             outputs = self(
