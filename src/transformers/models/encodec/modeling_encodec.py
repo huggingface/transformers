@@ -431,6 +431,7 @@ class EncodecEncoder(nn.Module):
                 pad_mode=config.pad_mode,
             )
         ]
+
         # Downsample to raw audio scale
         for i, ratio in enumerate(reversed(config.ratios)):
             # Add residual layers
@@ -482,11 +483,12 @@ class EncodecEncoder(nn.Module):
             )
         ]
 
-        self.model = nn.Sequential(*model)
-        #TODO: nn.ModuleList
+        self.layers = nn.ModuleList(model)
 
     def forward(self, x):
-        return self.model(x)
+        for layer in self.layers:
+            x = layer(x)
+        return x
 
 
 class EncodecDecoder(nn.Module):
@@ -558,6 +560,7 @@ class EncodecDecoder(nn.Module):
                 pad_mode=config.pad_mode
             )
         ]
+
         # Add optional final activation to decoder (eg. tanh)
         if config.final_activation is not None:
             final_act = getattr(nn, config.final_activation)
@@ -565,12 +568,13 @@ class EncodecDecoder(nn.Module):
             model += [
                 final_act(**final_activation_params)
             ]
-        self.model = nn.Sequential(*model)
-        # TODO: use ModuleList
+
+        self.layers = nn.ModuleList(model)
 
     def forward(self, z):
-        y = self.model(z)
-        return y
+        for layer in self.layers:
+            z = layer(z)
+        return z
 
 
 class EncodecEuclideanCodebook(nn.Module):
