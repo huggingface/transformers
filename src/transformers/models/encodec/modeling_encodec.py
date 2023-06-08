@@ -63,20 +63,8 @@ class EncodecOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
             Contrastive loss for audio-text similarity.
-        logits_per_audio:(`torch.FloatTensor` of shape `(audio_batch_size, text_batch_size)`):
-            The scaled dot product scores between `audio_embeds` and `text_embeds`. This represents the audio-text
-            similarity scores.
-        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, audio_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `audio_embeds`. This represents the text-audio
-            similarity scores.
-        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`ClapTextModel`].
-        audio_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The audio embeddings obtained by applying the projection layer to the pooled output of [`ClapAudioModel`].
-        text_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`ClapTextModel`].
-        audio_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`ClapAudioModel`].
+        # TODO
+
     """
 
     audio_codes: torch.FloatTensor = None
@@ -95,26 +83,12 @@ class EncodecEncoderOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
             Contrastive loss for audio-text similarity.
-        logits_per_audio:(`torch.FloatTensor` of shape `(audio_batch_size, text_batch_size)`):
-            The scaled dot product scores between `audio_embeds` and `text_embeds`. This represents the audio-text
-            similarity scores.
-        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, audio_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `audio_embeds`. This represents the text-audio
-            similarity scores.
-        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`ClapTextModel`].
-        audio_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The audio embeddings obtained by applying the projection layer to the pooled output of [`ClapAudioModel`].
-        text_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`ClapTextModel`].
-        audio_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`ClapAudioModel`].
+        # TODO
+
     """
 
-    loss: torch.FloatTensor = None
-    loss: torch.FloatTensor = None
-    loss: torch.FloatTensor = None
-
+    audio_codes: torch.FloatTensor = None
+    scales: torch.FloatTensor = None
     def to_tuple(self) -> Tuple[Any]:
         return tuple(
             self[k] if k not in ["text_model_output", "audio_model_output"] else getattr(self, k).to_tuple()
@@ -128,23 +102,11 @@ class EncodecDecoderOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
             Contrastive loss for audio-text similarity.
-        logits_per_audio:(`torch.FloatTensor` of shape `(audio_batch_size, text_batch_size)`):
-            The scaled dot product scores between `audio_embeds` and `text_embeds`. This represents the audio-text
-            similarity scores.
-        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, audio_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `audio_embeds`. This represents the text-audio
-            similarity scores.
-        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`ClapTextModel`].
-        audio_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The audio embeddings obtained by applying the projection layer to the pooled output of [`ClapAudioModel`].
-        text_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`ClapTextModel`].
-        audio_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`ClapAudioModel`].
+        # TODO
     """
 
-    loss: Optional[torch.FloatTensor] = None
+    code_frames: Optional[torch.FloatTensor] = None
+    code_embeddings: Optional[torch.FloatTensor] = None
 
     def to_tuple(self) -> Tuple[Any]:
         return tuple(
@@ -1675,7 +1637,7 @@ class EncodecModel(EncodecPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    def encode(self, input_values: torch.Tensor, bandwidth: Optional[float] = None) -> List[EncodedFrame]:
+    def encode(self, input_values: torch.Tensor, bandwidth: Optional[float] = None, return_dict = None) -> List[EncodedFrame]:
         """
         Encodes the input audio waveform into discrete codes.
 
@@ -1711,11 +1673,17 @@ class EncodecModel(EncodecPreTrainedModel):
             stride = self.config.segment_stride
 
         encoded_frames = []
+        scales = []
         for offset in range(0, input_length, stride):
             frame = input_values[:, :, offset : offset + segment_length]
-            encoded_frames.append(self._encode_frame(frame, bandwidth))
+            breakpoint()
+            encoded_frame, scale = self._encode_frame(frame, bandwidth)
+            scales.append(scale)
+            encoded_frames.append(encoded_frame)
 
-        return encoded_frames
+        if  return_dict:
+            return EncodecEncoderOutput(encoded_frames, scales)
+        return (encoded_frames,scales)
 
     def _encode_frame(self, input_values: torch.Tensor, bandwidth: float) -> EncodedFrame:
         length = input_values.shape[-1]
@@ -1737,7 +1705,7 @@ class EncodecModel(EncodecPreTrainedModel):
         codes = codes.transpose(0, 1)
         return codes, scale
 
-    def decode(self, encoded_frames: List[EncodedFrame]) -> torch.Tensor:
+    def decode(self, encoded_frames: List[EncodedFrame], return_dict = None) -> torch.Tensor:
         """
         Decodes the given frames into an output audio waveform.
 
@@ -1750,8 +1718,18 @@ class EncodecModel(EncodecPreTrainedModel):
                 raise ValueError(f"Expected one frame, got {len(encoded_frames)}")
             return self._decode_frame(encoded_frames[0])
 
-        frames = [self._decode_frame(frame) for frame in encoded_frames]
-        return _linear_overlap_add(frames, self.config.segment_stride or 1)
+        decoded_frames = []
+        code_embeddings = []
+        
+        for frame in encoded_frames:
+            frames, embeddings = self._decode_frame(frame)
+            decoded_frames.append(_linear_overlap_add(frames, self.config.segment_stride or 1))
+            code_embeddings.append(embeddings)
+            
+        if return_dict:
+            return EncodecDecoderOutput(decoded_frames, code_embeddings)
+        return (decoded_frames, code_embeddings)
+    
 
     def _decode_frame(self, encoded_frame: EncodedFrame) -> torch.Tensor:
         codes, scale = encoded_frame
@@ -1760,7 +1738,7 @@ class EncodecModel(EncodecPreTrainedModel):
         outputs = self.decoder(embeddings)
         if scale is not None:
             outputs = outputs * scale.view(-1, 1, 1)
-        return outputs
+        return outputs, embeddings
 
     # TODO @add_start_docstrings_to_model_forward(ENCODEC_INPUTS_DOCSTRING)
     # TODO @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1774,9 +1752,10 @@ class EncodecModel(EncodecPreTrainedModel):
 
         Returns:
         """
-        encoder_outputs = self.encode(input_values, bandwidth)
-        decoder_outputs = self.decode(encoder_outputs.audio_codes)[..., : input_values.shape[-1]]
+        encoder_outputs = self.encode(input_values, bandwidth, return_dict)
+        decoder_outputs = self.decode(encoder_outputs[0], return_dict)[..., : input_values.shape[-1]]
 
         if return_dict:
             return EncodecOutput(encoder_outputs.audio_codes, decoder_outputs.code_frames)
+
         return (*encoder_outputs, *decoder_outputs)
