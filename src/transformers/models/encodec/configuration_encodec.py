@@ -146,7 +146,7 @@ class EncodecConfig(PretrainedConfig):
         dilation_base=2,
         causal=True,
         pad_mode="reflect",
-        true_skip=False,   # TODO: better name
+        true_skip=False,  # TODO: better name
         compress=2,
         num_lstm_layers=2,
         trim_right_ratio=1.0,

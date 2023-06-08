@@ -20,14 +20,13 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+# TODO: Need to get rid of this eventually
+import einops
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from torch import nn
-
-# TODO: Need to get rid of this eventually
-import einops
 from einops import rearrange, repeat
+from torch import nn
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -374,7 +373,7 @@ class SConv1d(nn.Module):
         self.pad_mode = pad_mode
 
     def forward(self, x):
-        B, C, T = x.shape   #TODO: batch, channel, time
+        B, C, T = x.shape  # TODO: batch, channel, time
         kernel_size = self.conv.conv.kernel_size[0]
         stride = self.conv.conv.stride[0]
         dilation = self.conv.conv.dilation[0]
@@ -448,6 +447,7 @@ class EncodecLSTM(nn.Module):
     """
     LSTM without worrying about the hidden state, nor the layout of the data. Expects input as convolutional layout.
     """
+
     def __init__(self, dimension: int, num_layers: int = 2, skip: bool = True):
         super().__init__()
         self.skip = skip
@@ -472,6 +472,7 @@ class EncodecResnetBlock(nn.Module):
         kernel_sizes (list): List of kernel sizes for the convolutions.
         dilations (list): List of dilations for the convolutions.
     """
+
     def __init__(self, config: EncodecConfig, dim: int, kernel_sizes: List[int], dilations: List[int]):
         super().__init__()
 
@@ -524,6 +525,7 @@ class EncodecResnetBlock(nn.Module):
 
 class EncodecEncoder(nn.Module):
     """SEANet encoder as used by EnCodec."""
+
     def __init__(self, config: EncodecConfig):
         super().__init__()
 
@@ -595,6 +597,7 @@ class EncodecEncoder(nn.Module):
 
 class EncodecDecoder(nn.Module):
     """SEANet decoder as used by EnCodec."""
+
     def __init__(self, config: EncodecConfig):
         super().__init__()
         act = getattr(nn, config.activation)
@@ -674,6 +677,7 @@ class EncodecDecoder(nn.Module):
 
 class EncodecEuclideanCodebook(nn.Module):
     """Codebook with Euclidean distance."""
+
     def __init__(self, config: EncodecConfig, dim: int):
         super().__init__()
 
@@ -769,6 +773,7 @@ class EncodecVectorQuantization(nn.Module):
     """
     Vector quantization implementation. Currently supports only euclidean distance.
     """
+
     def __init__(self, config: EncodecConfig):
         super().__init__()
 
@@ -818,6 +823,7 @@ class EncodecResidualVectorQuantization(nn.Module):
     """
     Residual vector quantization implementation. Follows Algorithm 1. in https://arxiv.org/pdf/2107.03312.pdf
     """
+
     def __init__(self, config: EncodecConfig, num_quantizers: int):
         super().__init__()
         self.layers = nn.ModuleList([EncodecVectorQuantization(config) for _ in range(num_quantizers)])
@@ -865,6 +871,7 @@ class EncodecResidualVectorQuantization(nn.Module):
 
 class EncodecResidualVectorQuantizer(nn.Module):
     """Residual Vector Quantizer."""
+
     def __init__(self, config: EncodecConfig, num_quantizers: int):
         super().__init__()
         self.config = config
@@ -874,13 +881,12 @@ class EncodecResidualVectorQuantizer(nn.Module):
     def forward(self, embeddings: torch.Tensor, frame_rate: int, bandwidth: Optional[float] = None) -> QuantizedResult:
         """
         Residual vector quantization on the given input tensor.
-        
+
         Args:
-        
             embeddings (torch.Tensor): Input tensor.
-            
+
             frame_rate (int): Sample rate of the input tensor.
-            
+
             bandwidth (float): Target bandwidth.
         Returns:
             QuantizedResult:
@@ -1229,7 +1235,7 @@ class EncodecModel(EncodecPreTrainedModel):
         decoded_frames = []
         code_embeddings = []
 
-        for (frame, scale) in zip(*encoded_frames):
+        for frame, scale in zip(*encoded_frames):
             frames, embeddings = self._decode_frame(frame, scale)
             decoded_frames.append(_linear_overlap_add(frames, self.config.segment_stride or 1))
             code_embeddings.append(embeddings)

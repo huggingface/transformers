@@ -25,7 +25,7 @@ _import_structure = {
         "ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "EncodecConfig",
     ],
-    "feature_extraction_encodec": ["EncodecFeatureExtractor"]
+    "feature_extraction_encodec": ["EncodecFeatureExtractor"],
 }
 
 try:
