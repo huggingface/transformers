@@ -29,7 +29,7 @@ AUDIOCRAFT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class AudiocraftConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AudiocraftModel`]. It is used to instantiate an
-    Audiocraft model according to the specified arguments, defining the model architecture. Instantiating a configuration 
+    Audiocraft model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Audiocraft
     [facebook/audiocraft-600m](https://huggingface.co/facebook/audiocraft-600m) architecture.
 

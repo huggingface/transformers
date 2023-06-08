@@ -13,22 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Audiocraft model."""
+import math
 import random
 from typing import Optional, Tuple, Union
 
-import math
-import torch.nn as nn
 import torch
+import torch.nn as nn
 
-from ...modeling_utils import PreTrainedModel
 from ...activations import ACT2FN
 from ...modeling_outputs import (
-    BaseModelOutputWithPast,
     BaseModelOutputWithPastAndCrossAttentions,
 )
+from ...modeling_utils import PreTrainedModel
+from ...utils import logging
 from .configuration_audiocraft import AudiocraftConfig
 
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 
 logger = logging.get_logger(__name__)
 
@@ -75,7 +74,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
- # Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding
+# Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding
 class AudiocraftSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
@@ -445,7 +444,8 @@ class AudiocraftPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, AudiocraftDecoder):
             module.gradient_checkpointing = value
-            
+
+
 AUDIOCRAFT_START_DOCSTRING = r"""
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
