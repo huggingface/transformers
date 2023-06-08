@@ -256,7 +256,7 @@ class BarkBlock(nn.Module):
             output_attentions=output_attentions)
          
         attn_output = attn_outputs[0] #output_attn: output, present_kv, (attn_weights)
-        outputs = attn_outputs
+        outputs = attn_outputs[1:]
         
         hidden_states = hidden_states + attn_output
         hidden_states = hidden_states + self.mlp(self.ln_2(hidden_states))
