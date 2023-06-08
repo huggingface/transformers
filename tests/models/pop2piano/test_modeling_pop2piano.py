@@ -622,13 +622,13 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
     def test_pass_with_input_features(self):
         input_features = BatchFeature(
             {
-                "inputs_embeds": torch.rand((75, 100, 512)).type(torch.float32),
+                "input_features": torch.rand((75, 100, 512)).type(torch.float32),
                 "beatsteps": torch.randint(size=(1, 955), low=0, high=100).type(torch.float32),
                 "extrapolated_beatstep": torch.randint(size=(1, 900), low=0, high=100).type(torch.float32),
             }
         )
         model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
-        model_opts = model.generate(inputs_embeds=input_features["inputs_embeds"], return_dict_in_generate=True)
+        model_opts = model.generate(input_features=input_features["input_features"], return_dict_in_generate=True)
 
         self.assertEqual(type(model_opts), GreedySearchEncoderDecoderOutput)
         self.assertEqual(model_opts.sequences.ndim, 2)
@@ -636,7 +636,7 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
     def test_pass_with_batched_input_features(self):
         input_features = BatchFeature(
             {
-                "inputs_embeds": torch.rand((220, 70, 512)).type(torch.float32),
+                "input_features": torch.rand((220, 70, 512)).type(torch.float32),
                 "beatsteps": torch.randint(size=(5, 955), low=0, high=100).type(torch.float32),
                 "extrapolated_beatstep": torch.randint(size=(5, 900), low=0, high=100).type(torch.float32),
                 "attention_mask": torch.concatenate(
@@ -656,7 +656,7 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         )
         model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
         model_opts = model.generate(
-            inputs_embeds=input_features["inputs_embeds"],
+            input_features=input_features["input_features"],
             attention_mask=input_features["attention_mask"],
             return_dict_in_generate=True,
         )
@@ -693,8 +693,10 @@ class Pop2PianoModelIntegrationTests(unittest.TestCase):
     def test_full_model_integration(self):
         model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
         model.eval()
-        input_features = BatchFeature({"inputs_embeds": torch.ones([75, 66, 512])})
-        outputs = model.generate(inputs_embeds=input_features["inputs_embeds"], return_dict_in_generate=True).sequences
+        input_features = BatchFeature({"input_features": torch.ones([75, 66, 512])})
+        outputs = model.generate(
+            input_features=input_features["input_features"], return_dict_in_generate=True
+        ).sequences
 
         # check for shapes
         self.assertEqual(outputs.size(0), 75)

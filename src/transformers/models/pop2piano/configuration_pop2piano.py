@@ -70,6 +70,8 @@ class Pop2PianoConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         dense_act_fn (`string`, *optional*, defaults to `"relu"`):
             Type of Activation Function to be used in `Pop2PianoDenseActDense` and in `Pop2PianoDenseGatedActDense`.
+        composer_vocab_size (`int`, *optional*, defaults to 21):
+            Denotes the number of composers.
     """
 
     model_type = "pop2piano"

@@ -52,7 +52,9 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
             {"beatsteps": torch.ones([1, 955]), "extrapolated_beatstep": torch.ones([1, 1000])}
         )
 
-        output = tokenizer(token_ids=model_output.sequences, input_features=input_features)
+        output = tokenizer(token_ids=model_output.sequences, feature_extractor_output=input_features)[
+            "pretty_midi_objects"
+        ][0]
         self.assertTrue(isinstance(output, pretty_midi.pretty_midi.PrettyMIDI))
 
     def test_call_batched(self):
@@ -86,7 +88,9 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
             }
         )
 
-        output = tokenizer(token_ids=model_output.sequences, input_features=input_features)
+        output = tokenizer(token_ids=model_output.sequences, feature_extractor_output=input_features)[
+            "pretty_midi_objects"
+        ]
         # check length
         self.assertTrue(len(output) == 2)
         # check object type
@@ -103,11 +107,13 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
 
         output_fe = feature_extractor(ds["audio"][0]["array"], sampling_rate=ds["audio"][0]["sampling_rate"])
-        output_model = model.generate(inputs_embeds=output_fe["inputs_embeds"], composer="composer1")
+        output_model = model.generate(input_features=output_fe["input_features"], composer="composer1")
         output_tokenizer = tokenizer(
             token_ids=output_model,
-            input_features=output_fe,
-        )
+            feature_extractor_output=output_fe,
+        )[
+            "pretty_midi_objects"
+        ][0]
 
         # Checking if no of notes are same
         self.assertEqual(len(output_tokenizer.instruments[0].notes), 59)

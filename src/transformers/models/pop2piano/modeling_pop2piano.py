@@ -70,7 +70,7 @@ POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-Pop2Piano_INPUTS_DOCSTRING = r"""
+POP2PIANO_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Pop2Piano is a model with relative position embeddings
@@ -120,6 +120,9 @@ Pop2Piano_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
+        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Does the same task as `inputs_embeds`. If `inputs_embeds` is not present but `input_features` is present
+            then `input_features` will be considered as `inputs_embeds`.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
@@ -685,8 +688,8 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
     config_class = Pop2PianoConfig
     base_model_prefix = "transformer"
     is_parallelizable = False
-    supports_gradient_checkpointing = False
-    _no_split_modules = None
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Pop2PianoBlock"]
     _keep_in_fp32_modules = ["wo"]
 
     def _init_weights(self, module):
@@ -1060,10 +1063,6 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
     def get_input_embeddings(self):
         return self.shared
 
@@ -1084,7 +1083,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    def get_mel_conditioner_outputs(self, inputs_embeds, composer, generation_config, attention_mask=None):
+    def get_mel_conditioner_outputs(self, input_features, composer, generation_config, attention_mask=None):
         composer_to_feature_token = generation_config.composer_to_feature_token
         if composer not in composer_to_feature_token.keys():
             raise ValueError(
@@ -1092,25 +1091,25 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
             )
         composer_value = composer_to_feature_token[composer]
         composer_value = torch.tensor(composer_value, device=self.device)
-        composer_value = composer_value.repeat(inputs_embeds.shape[0])
+        composer_value = composer_value.repeat(input_features.shape[0])
 
         embedding_offset = min(composer_to_feature_token.values())
 
-        inputs_embeds = self.mel_conditioner(
-            feature=inputs_embeds,
+        input_features = self.mel_conditioner(
+            feature=input_features,
             index_value=composer_value,
             embedding_offset=embedding_offset,
         )
         if attention_mask is not None:
-            inputs_embeds[~attention_mask[:, 0].bool()] = 0.0
+            input_features[~attention_mask[:, 0].bool()] = 0.0
 
             # since self.mel_conditioner adds a new array at the front of inputs_embeds we need to do the same for attention_mask to keep the shapes same
             attention_mask = torch.concatenate([attention_mask[:, 0].view(-1, 1), attention_mask], axis=1)
-            return inputs_embeds, attention_mask
+            return input_features, attention_mask
 
-        return inputs_embeds, None
+        return input_features, None
 
-    @add_start_docstrings_to_model_forward(Pop2Piano_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(POP2PIANO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1124,6 +1123,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        input_features: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1146,6 +1146,11 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
             if self.config.num_layers == self.config.num_decoder_layers:
                 warnings.warn(__HEAD_MASK_WARNING_MSG, FutureWarning)
                 decoder_head_mask = head_mask
+
+        if inputs_embeds is not None and input_features is not None:
+            raise ValueError("Both `inputs_embeds` and `input_features` received! Please provide only one of them")
+        elif input_features is not None and inputs_embeds is None:
+            inputs_embeds = input_features
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1221,7 +1226,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
     @torch.no_grad()
     def generate(
         self,
-        inputs_embeds,
+        input_features,
         attention_mask=None,
         composer="composer1",
         generation_config=None,
@@ -1240,10 +1245,10 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         </Tip>
 
         Parameters:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 This is the featurized version of audio generated by `Pop2PianoFeatureExtractor`.
             attention_mask:
-                For batched generation `inputs_embeds` are padded to have the same shape across all examples.
+                For batched generation `input_features` are padded to have the same shape across all examples.
                 `attention_mask` helps to determine which areas were padded and which were not.
                 - 1 for tokens that are **not padded**,
                 - 0 for tokens that are **padded**.
@@ -1293,8 +1298,8 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
                     f"Found {self.config.composer_vocab_size} vs {len(generation_config.composer_to_feature_token)}."
                 )
 
-        inputs_embeds, attention_mask = self.get_mel_conditioner_outputs(
-            inputs_embeds=inputs_embeds,
+        input_features, attention_mask = self.get_mel_conditioner_outputs(
+            input_features=input_features,
             attention_mask=attention_mask,
             composer=composer,
             generation_config=generation_config,
@@ -1302,7 +1307,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
 
         return super().generate(
             inputs=None,
-            inputs_embeds=inputs_embeds,
+            inputs_embeds=input_features,
             attention_mask=attention_mask,
             generation_config=generation_config,
             **kwargs,
