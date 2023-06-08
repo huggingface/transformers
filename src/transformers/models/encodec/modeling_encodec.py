@@ -1235,10 +1235,10 @@ class EncodecModel(EncodecPreTrainedModel):
 
         for frame, scale in zip(*encoded_frames):
             frames, embeddings = self._decode_frame(frame, scale)
-            decoded_frames.append(_linear_overlap_add(frames, self.config.segment_stride or 1))
+            decoded_frames.append(frames)
             code_embeddings.append(embeddings)
 
-        decoded_frames = torch.stack(decoded_frames)
+        decoded_frames = _linear_overlap_add(decoded_frames, self.config.segment_stride or 1)
         code_embeddings = torch.stack(code_embeddings)
 
         if return_dict:
