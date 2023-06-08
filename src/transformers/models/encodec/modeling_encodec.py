@@ -238,7 +238,7 @@ def _kmeans(samples, num_clusters: int, num_iters: int = 10):
     return means, bins
 
 
-class EncodecPaddedConv1d(nn.Module):
+class EncodecConv1d(nn.Module):
     """Conv1d with some builtin handling of asymmetric or causal padding
     and normalization.
     Applies normalization to a Conv1d.
@@ -261,7 +261,7 @@ class EncodecPaddedConv1d(nn.Module):
         # warn user on unusual setup between dilation and stride
         if stride > 1 and dilation > 1:
             logger.warning(
-                "EncodecPaddedConv1d has been initialized with stride > 1 and dilation > 1"
+                "EncodecConv1d has been initialized with stride > 1 and dilation > 1"
                 f" (kernel_size={kernel_size} stride={stride}, dilation={dilation})."
             )
 
@@ -306,7 +306,7 @@ class EncodecPaddedConv1d(nn.Module):
         return x
 
 
-class EncodecPaddedConvTranspose1d(nn.Module):
+class EncodecConvTranspose1d(nn.Module):
     """ConvTranspose1d with some builtin handling of asymmetric or causal padding
     and normalization.
     Applies normalization to a ConvTranspose1d.
@@ -410,7 +410,7 @@ class EncodecResnetBlock(nn.Module):
             out_chs = dim if i == len(kernel_sizes) - 1 else hidden
             block += [
                 act(**config.activation_params),
-                EncodecPaddedConv1d(
+                EncodecConv1d(
                     in_chs,
                     out_chs,
                     kernel_size=kernel_size,
@@ -424,7 +424,7 @@ class EncodecResnetBlock(nn.Module):
 
         self.use_shortcut = not config.true_skip
         if self.use_shortcut:
-            self.shortcut = EncodecPaddedConv1d(
+            self.shortcut = EncodecConv1d(
                 dim,
                 dim,
                 kernel_size=1,
@@ -453,7 +453,7 @@ class EncodecEncoder(nn.Module):
         act = getattr(nn, config.activation)
         mult = 1
         model = [
-            EncodecPaddedConv1d(
+            EncodecConv1d(
                 config.audio_channels,
                 mult * config.num_filters,
                 config.kernel_size,
@@ -478,7 +478,7 @@ class EncodecEncoder(nn.Module):
             # Add downsampling layers
             model += [
                 act(**config.activation_params),
-                EncodecPaddedConv1d(
+                EncodecConv1d(
                     mult * config.num_filters,
                     mult * config.num_filters * 2,
                     kernel_size=ratio * 2,
@@ -495,7 +495,7 @@ class EncodecEncoder(nn.Module):
 
         model += [
             act(**config.activation_params),
-            EncodecPaddedConv1d(
+            EncodecConv1d(
                 mult * config.num_filters,
                 config.dimension,
                 config.last_kernel_size,
@@ -521,7 +521,7 @@ class EncodecDecoder(nn.Module):
         act = getattr(nn, config.activation)
         mult = int(2 ** len(config.ratios))
         model = [
-            EncodecPaddedConv1d(
+            EncodecConv1d(
                 config.dimension,
                 mult * config.num_filters,
                 config.kernel_size,
@@ -539,7 +539,7 @@ class EncodecDecoder(nn.Module):
             # Add upsampling layers
             model += [
                 act(**config.activation_params),
-                EncodecPaddedConvTranspose1d(
+                EncodecConvTranspose1d(
                     mult * config.num_filters,
                     mult * config.num_filters // 2,
                     kernel_size=ratio * 2,
@@ -564,7 +564,7 @@ class EncodecDecoder(nn.Module):
         # Add final layers
         model += [
             act(**config.activation_params),
-            EncodecPaddedConv1d(
+            EncodecConv1d(
                 config.num_filters,
                 config.audio_channels,
                 config.last_kernel_size,
