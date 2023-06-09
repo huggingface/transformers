@@ -543,7 +543,7 @@ BLENDERBOT_SMALL_GENERATION_EXAMPLE = r"""
     >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors="pt")
     >>> next_reply_ids = model.generate(**inputs)
     >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
-    Bot:  they eat a lot of carbs. carbs are high in fat, protein, and carbohydrates.
+    Bot:  they eat a lot of carbs. carbs are high in fat, protein, and fats.
     ```
 """
 
