@@ -18,7 +18,7 @@ import unittest
 import uuid
 from pathlib import Path
 
-from transformers.testing_utils import get_tests_dir, require_soundfile, require_torch
+from transformers.testing_utils import get_tests_dir, require_soundfile, require_torch, require_vision
 from transformers.tools.agent_types import AgentAudio, AgentImage, AgentText
 from transformers.utils import is_soundfile_availble, is_torch_available, is_vision_available
 
@@ -69,7 +69,7 @@ class AgentAudioTests(unittest.TestCase):
         self.assertEqual(agent_type.to_string(), path)
 
 
-@require_soundfile
+@require_vision
 @require_torch
 class AgentImageTests(unittest.TestCase):
     def test_from_tensor(self):
