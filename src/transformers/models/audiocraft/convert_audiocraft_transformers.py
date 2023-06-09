@@ -16,13 +16,14 @@
 import argparse
 import os
 from pathlib import Path
-from typing import OrderedDict
+from typing import Dict, OrderedDict
 
 import torch
 from audiocraft.models import MusicGen
 from huggingface_hub import hf_hub_download
 
-from transformers.models.audiocraft.configuration_audiocraft import AudiocraftConfig
+from transformers import T5Config, T5EncoderModel
+from transformers.models.audiocraft.configuration_audiocraft import AudiocraftConfig, AudiocraftDecoderConfig
 from transformers.models.audiocraft.modeling_audiocraft import AudiocraftForConditionalGeneration
 from transformers.utils import logging
 
@@ -31,18 +32,19 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-EXPECTED_MISSING_KEYS = ["model.embed_positions.weights"]
-EXPECTED_UNEXPECTED_KEYS = [
-    "condition_provider.conditioners.description.output_proj.weight",
-    "condition_provider.conditioners.description.output_proj.bias",
-]
+CHECKPOINT_TO_T5 = {
+    "dummy": "t5-base",
+    "small": "t5-base",
+}
+
+EXPECTED_MISSING_DECODER_KEYS = ["embed_positions.weights"]
 
 
 def rename_key(name):
     if "emb" in name:
-        name = name.replace("emb", "model.embed_tokens")
+        name = name.replace("emb", "embed_tokens")
     if "transformer.layers" in name:
-        name = name.replace("transformer.layers", "model.layers")
+        name = name.replace("transformer.layers", "layers")
     if "cross_attention" in name:
         name = name.replace("cross_attention", "encoder_attn")
     if "linear1" in name:
@@ -56,50 +58,61 @@ def rename_key(name):
     if "norm2" in name:
         name = name.replace("norm2", "final_layer_norm")
     if "out_norm" in name:
-        name = name.replace("out_norm", "model.layer_norm")
+        name = name.replace("out_norm", "layer_norm")
     if "linears" in name:
         name = name.replace("linears", "lm_heads")
+    if "condition_provider.conditioners.description.output_proj" in name:
+        name = name.replace("condition_provider.conditioners.description.output_proj", "encoder_projection")
     return name
 
 
-def rename_state_dict(state_dict: OrderedDict, d_model: int) -> OrderedDict:
+def rename_decoder_state_dict(state_dict: OrderedDict, d_model: int) -> tuple[Dict, Dict, Dict]:
+    """Function that takes the fairseq Audiocraft state dict and renames it according to the HF
+    module names. It further partitions the state dict into three: the decoder state dict (state_dict),
+    the state dict for the LM head, and the state dict for the encoder projection."""
     keys = list(state_dict.keys())
+    lm_heads = {}
+    encoder_projection = {}
     for key in keys:
         val = state_dict.pop(key)
         key = rename_key(key)
-        if "in_proj_weight" in key:
+        if "lm_heads" in key:
+            lm_heads[key[len("lm_heads.") :]] = val
+
+        elif "encoder_projection" in key:
+            encoder_projection[key[len("encoder_projection.") :]] = val
+
+        elif "in_proj_weight" in key:
             # split fused qkv proj
             state_dict[key.replace("in_proj_weight", "q_proj.weight")] = val[:d_model, :]
             state_dict[key.replace("in_proj_weight", "k_proj.weight")] = val[d_model : 2 * d_model, :]
             state_dict[key.replace("in_proj_weight", "v_proj.weight")] = val[-d_model:, :]
+
         else:
             state_dict[key] = val
-    return state_dict
+    return state_dict, lm_heads, encoder_projection
 
 
-def config_from_checkpoint(checkpoint):
+def config_from_checkpoint(checkpoint: str) -> AudiocraftConfig:
     if checkpoint == "dummy":
         d_model = 1024
         ffn_dim = d_model * 4
         num_layers = 2
         num_codebooks = 4
-        config = AudiocraftConfig(
-            d_model=d_model, intermediate_size=ffn_dim, num_hidden_layers=num_layers, num_codebooks=num_codebooks
-        )
     elif checkpoint == "small":
         d_model = 1024
         ffn_dim = d_model * 4
         num_layers = 24
         num_codebooks = 4
-        config = AudiocraftConfig(
-            d_model=d_model, intermediate_size=ffn_dim, num_hidden_layers=num_layers, num_codebooks=num_codebooks
-        )
+    lm_config = AudiocraftDecoderConfig(
+        d_model=d_model, intermediate_size=ffn_dim, num_hidden_layers=num_layers, num_codebooks=num_codebooks
+    )
+    t5_config = T5Config.from_pretrained(CHECKPOINT_TO_T5[checkpoint])
+    config = AudiocraftConfig.from_t5_lm_config(t5_config=t5_config, lm_config=lm_config)
     return config
 
 
-def convert_audiocraft_checkpoint(
-    checkpoint, pytorch_dump_folder=None, push_to_hub=False, device="cpu"
-):
+def convert_audiocraft_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hub=False, device="cpu"):
     if checkpoint == "dummy":
         hf_hub_download("music-gen-sprint/audiocraft-dummy", filename="model.pt", local_dir=pytorch_dump_folder)
         state_dict = torch.load(os.path.join(pytorch_dump_folder, "model.pt"))
@@ -110,25 +123,22 @@ def convert_audiocraft_checkpoint(
         state_dict = fairseq_model.lm.state_dict()
         config = config_from_checkpoint(checkpoint)
 
-    state_dict = rename_state_dict(state_dict, d_model=config.d_model)
+    state_dict, lm_heads, encoder_projection = rename_decoder_state_dict(state_dict, d_model=config.lm_config.d_model)
 
     model = AudiocraftForConditionalGeneration(config).eval()
-    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    model.model.encoder = T5EncoderModel.from_pretrained(CHECKPOINT_TO_T5[checkpoint])
+    model.model.encoder_projection.load_state_dict(encoder_projection)
+    missing_decoder_keys, unexpected_decoder_keys = model.model.decoder.load_state_dict(state_dict, strict=False)
+    model.lm_heads.load_state_dict(
+        lm_heads,
+    )
 
-    if not set(missing_keys) == set(EXPECTED_MISSING_KEYS):
-        raise ValueError(f"Missing key(s) in state_dict: {list(set(missing_keys) - set(EXPECTED_MISSING_KEYS))}")
-
-    if not set(unexpected_keys) == set(EXPECTED_UNEXPECTED_KEYS):
+    if set(missing_decoder_keys) != set(EXPECTED_MISSING_DECODER_KEYS):
         raise ValueError(
-            f"Unexpected key(s) in state_dict:  {list(set(unexpected_keys) - set(EXPECTED_UNEXPECTED_KEYS))}"
+            f"Missing key(s) in state_dict: {list(set(missing_decoder_keys) - set(EXPECTED_MISSING_DECODER_KEYS))}"
         )
-
-    # Check we can do a forward pass
-    input_values = torch.ones((2, 4, 1), dtype=torch.long)
-    cross_attention_inputs = torch.ones((1, 2, 1, 1024))
-
-    with torch.no_grad():
-        model.forward(input_values, encoder_hidden_states=cross_attention_inputs)
+    if len(unexpected_decoder_keys) > 0:
+        raise ValueError(f"Unexpected key(s) in state_dict: {unexpected_decoder_keys}")
 
     if pytorch_dump_folder is not None:
         Path(pytorch_dump_folder).mkdir(exist_ok=True)
@@ -149,7 +159,10 @@ if __name__ == "__main__":
         help="Checkpoint size of the Audiocraft model you'd like to convert. Can be one of: small, medium, large.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder",
+        default="/Users/sanchitgandhi/convert-audiocraft",
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
         "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
