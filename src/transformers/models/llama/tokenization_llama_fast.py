@@ -48,6 +48,12 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
     >>> [1, 15043, 445, 338, 263, 1243]
     ```
 
+    If you want to change the `bos_token` or the `eos_token`, make sure to specify them when initializing the model, or
+    call `tokenizer.update_post_processor()` to make sure that the post-processing is correctly done (otherwise the
+    values of the first token and final token of an encoded sequence will not be correct). For more details, checkout
+    [post-processors] (https://huggingface.co/docs/tokenizers/api/post-processors) documentation.
+
+
     This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
 
@@ -108,6 +114,9 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
     def update_post_processor(self):
+        """
+        Updates the underlying post processor with the current `bos_token` and `eos_token`.
+        """
         bos = self.bos_token
         bos_token_id = self.bos_token_id
 
