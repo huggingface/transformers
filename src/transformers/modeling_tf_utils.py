@@ -1173,7 +1173,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
         if not hasattr(self, "serving"):  # Don't overwrite existing serving signatures
             self.serving = tf.function(
-                self.eager_serving, input_signature=[self._prune_signature(self.input_signature)]
+                self._get_eager_serving_fn(), input_signature=[self._prune_signature(self.input_signature)]
             )
         # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
         self._set_save_spec(self.serving.input_signature[0])
@@ -1226,18 +1226,21 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         head_mask = tf.cast(head_mask, tf.float32)  # switch to float if need + fp16 compatibility
         return head_mask
 
-    def eager_serving(self, inputs):
+    def _get_eager_serving_fn(self):
         """
-        Method used for serving the model. Intended not to be compiled with a tf.function decorator so that we can use
-        it to generate multiple signatures later.
+        Returns a function used for serving the model. Note that we do not make this function a method of the class
+        with a tf.function decorator because we won't know what its signature should be until we have the model config.
 
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
+        We also don't directly make this an eager method because compiling a method bound to a class greatly
+        complicates cleanup of that class.
         """
-        output = self.call(inputs)
 
-        return self.serving_output(output)
+        def eager_serving(self, inputs):
+            output = self.call(inputs)
+
+            return self.serving_output(output)
+
+        return eager_serving
 
     @property
     def input_signature(self) -> Dict[str, tf.TensorSpec]:
@@ -2416,7 +2419,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         )
                         for key, spec in self.serving.input_signature[0].items()
                     }
-                    int64_serving = tf.function(self.eager_serving, input_signature=[int64_spec])
+                    int64_serving = tf.function(self._get_eager_serving_fn(), input_signature=[int64_spec])
                     signatures = {"serving_default": self.serving, "int64_serving": int64_serving}
                 else:
                     signatures = self.serving
