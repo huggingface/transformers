@@ -146,7 +146,6 @@ class AudiocraftSinusoidalPositionalEmbedding(nn.Module):
         return incremental_indices.long() + padding_idx
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention
 class AudiocraftAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -155,8 +154,8 @@ class AudiocraftAttention(nn.Module):
         embed_dim: int,
         num_heads: int,
         dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
+        is_decoder: bool = True,
+        bias: bool = False,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -177,9 +176,11 @@ class AudiocraftAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
+    # Copied from transformers.models.bart.modeling_bart.BartAttention._shape
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
+    # Copied from transformers.models.bart.modeling_bart.BartAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -301,7 +302,6 @@ class AudiocraftAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->Audiocraft
 class AudiocraftDecoderLayer(nn.Module):
     def __init__(self, config: AudiocraftConfig):
         super().__init__()
@@ -309,9 +309,8 @@ class AudiocraftDecoderLayer(nn.Module):
 
         self.self_attn = AudiocraftAttention(
             embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
+            num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
-            is_decoder=True,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -320,15 +319,15 @@ class AudiocraftDecoderLayer(nn.Module):
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.encoder_attn = AudiocraftAttention(
             self.embed_dim,
-            config.decoder_attention_heads,
+            config.num_attention_heads,
             dropout=config.attention_dropout,
-            is_decoder=True,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
+        self.fc1 = nn.Linear(self.embed_dim, config.ffn_dim, bias=False)
+        self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim, bias=False)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
+    # Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -522,7 +521,7 @@ AUDIOCRAFT_INPUTS_DOCSTRING = r"""
 
 class AudiocraftDecoder(AudiocraftPreTrainedModel):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`MBartDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MBartDecoderLayer`]
 
     Args:
         config: MBartConfig
@@ -531,7 +530,7 @@ class AudiocraftDecoder(AudiocraftPreTrainedModel):
     def __init__(self, config: AudiocraftConfig):
         super().__init__(config)
         self.dropout = config.dropout
-        self.layerdrop = config.decoder_layerdrop
+        self.layerdrop = config.layerdrop
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
         self.d_model = config.d_model
@@ -540,16 +539,16 @@ class AudiocraftDecoder(AudiocraftPreTrainedModel):
 
         embed_dim = config.vocab_size + 1
         self.embed_tokens = nn.ModuleList(
-            [nn.Embedding(embed_dim, config.d_model, self.padding_idx) for _ in range(config.num_codebooks)]
+            [nn.Embedding(embed_dim, config.d_model) for _ in range(config.num_codebooks)]
         )
 
         self.embed_positions = AudiocraftSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
+            padding_idx=self.padding_idx,
         )
 
-        self.layers = nn.ModuleList([AudiocraftDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.layernorm_embedding = nn.LayerNorm(config.d_model)
+        self.layers = nn.ModuleList([AudiocraftDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
@@ -679,7 +678,7 @@ class AudiocraftDecoder(AudiocraftPreTrainedModel):
         elif input_ids is not None:
             input = input_ids
             input_shape = input.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
+            bsz, codebooks, seq_len = input_shape
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
             input = inputs_embeds[:, :, -1]
@@ -690,12 +689,10 @@ class AudiocraftDecoder(AudiocraftPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            inputs_embeds = torch.zeros(
-                (input_shape[:-1], self.d_model), dtype=input_ids.dtype, device=input_ids.device
-            )
+            inputs_embeds = torch.zeros((bsz, seq_len, self.d_model), device=input_ids.device)
 
             for codebook in range(self.num_codebooks):
-                inputs_embeds += self.embed_tokens[codebook](input_ids[:, codebook])
+                inputs_embeds += self.embed_tokens[codebook](input[:, codebook])
 
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -707,10 +704,12 @@ class AudiocraftDecoder(AudiocraftPreTrainedModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(input, past_key_values_length)
+        # positions = self.embed_positions(input, past_key_values_length)
+
+        # TODO(SG): fix embed positions
+        positions = torch.concat([torch.ones((2, 1, 512)), torch.zeros((2, 1, 512))], dim=-1)
 
         hidden_states = inputs_embeds + positions.to(inputs_embeds.device)
-        hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -817,7 +816,7 @@ class AudiocraftForConditionalGeneration(AudiocraftPreTrainedModel):
 
         self.model = AudiocraftDecoder(config)
         self.lm_heads = nn.ModuleList(
-            [nn.Linear(config.d_model, config.vocab_size) for _ in range(config.num_codebooks)]
+            [nn.Linear(config.d_model, config.vocab_size, bias=False) for _ in range(config.num_codebooks)]
         )
 
         # Initialize weights and apply final processing

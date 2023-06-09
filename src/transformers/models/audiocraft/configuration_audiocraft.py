@@ -43,20 +43,14 @@ class AudiocraftConfig(PretrainedConfig):
             `inputs_ids` passed when calling [`MBartModel`] or [`TFMBartModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
-        encoder_layers (`int`, *optional*, defaults to 12):
-            Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 4096):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 4096):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer block.
+        ffn_dim (`int`, *optional*, defaults to 4096):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer block.
         activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            The non-linear activation function (function or string) in the decoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
@@ -71,10 +65,7 @@ class AudiocraftConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
-        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
+        layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         scale_embedding (`bool`, *optional*, defaults to `False`):
@@ -107,14 +98,13 @@ class AudiocraftConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50265,
+        vocab_size=2048,
         max_position_embeddings=1024,
-        decoder_layers=12,
-        decoder_ffn_dim=4096,
-        decoder_attention_heads=16,
-        decoder_layerdrop=0.0,
+        num_hidden_layers=12,
+        ffn_dim=4096,
+        num_attention_heads=16,
+        layerdrop=0.0,
         use_cache=True,
-        is_encoder_decoder=True,
         activation_function="gelu",
         d_model=1024,
         dropout=0.1,
@@ -124,7 +114,7 @@ class AudiocraftConfig(PretrainedConfig):
         classifier_dropout=0.0,
         scale_embedding=False,
         num_codebooks=8,
-        pad_token_id=1,
+        pad_token_id=-1,
         bos_token_id=0,
         eos_token_id=2,
         forced_eos_token_id=2,
@@ -133,15 +123,15 @@ class AudiocraftConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
+        self.ffn_dim = ffn_dim
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.activation_function = activation_function
         self.init_std = init_std
-        self.decoder_layerdrop = decoder_layerdrop
+        self.layerdrop = layerdrop
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
@@ -150,7 +140,6 @@ class AudiocraftConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
             forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
