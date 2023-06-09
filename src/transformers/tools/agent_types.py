@@ -1,4 +1,18 @@
-import inspect
+# coding=utf-8
+# Copyright 2023 HuggingFace Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import tempfile
 
 import numpy as np
@@ -189,23 +203,6 @@ def handle_agent_inputs(*args, **kwargs):
     args = [(arg.to_raw() if isinstance(arg, AgentType) else arg) for arg in args]
     kwargs = {k: (v.to_raw() if isinstance(v, AgentType) else v) for k, v in kwargs.items()}
     return args, kwargs
-
-
-def old_handle_agent_inputs(*args, tool_class, **kwargs):
-    signature_args = list(inspect.signature(tool_class.encode).parameters.keys())
-    all_args = {signature_args[idx]: arg for idx, arg in enumerate(args)}
-
-    if len(kwargs.keys() & all_args.keys()):
-        raise TypeError(f"got multiple values for argument {kwargs.keys() & all_args.keys()}")
-
-    kwargs.update(all_args)
-
-    for i, _input in enumerate(tool_class.inputs):
-        _input_type = AGENT_TYPE_MAPPING[_input]
-        if not isinstance(kwargs[signature_args[i]], _input_type):
-            all_args[signature_args[i]] = _input_type(kwargs[signature_args[i]])
-
-    return all_args
 
 
 def handle_agent_outputs(outputs, output_types=None):
