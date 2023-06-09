@@ -84,6 +84,8 @@ class AudiocraftConfig(PretrainedConfig):
         forced_eos_token_id (`int`, *optional*, defaults to 2):
             The id of the token to force as the last generated token when `max_length` is reached. Usually set to
             `eos_token_id`.
+        num_codebooks (`int`, *optional*, defaults to 8):
+            The number of parallel codebooks forwarded to the model.
 
     Example:
 
@@ -121,6 +123,7 @@ class AudiocraftConfig(PretrainedConfig):
         init_std=0.02,
         classifier_dropout=0.0,
         scale_embedding=False,
+        num_codebooks=8,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -142,6 +145,7 @@ class AudiocraftConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.num_codebooks = num_codebooks
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

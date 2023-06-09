@@ -23,6 +23,7 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
+    CausalLMOutputWithCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -533,9 +534,15 @@ class AudiocraftDecoder(AudiocraftPreTrainedModel):
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
+        self.d_model = config.d_model
+        self.num_codebooks = config.num_codebooks
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+        embed_dim = config.vocab_size + 1
+        self.embed_tokens = nn.ModuleList(
+            [nn.Embedding(embed_dim, config.d_model, self.padding_idx) for _ in range(config.num_codebooks)]
+        )
+
         self.embed_positions = AudiocraftSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
@@ -683,7 +690,12 @@ class AudiocraftDecoder(AudiocraftPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = torch.zeros(
+                (input_shape[:-1], self.d_model), dtype=input_ids.dtype, device=input_ids.device
+            )
+
+            for codebook in range(self.num_codebooks):
+                inputs_embeds += self.embed_tokens[codebook](input_ids[:, codebook])
 
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -796,4 +808,78 @@ class AudiocraftDecoder(AudiocraftPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
+        )
+
+
+class AudiocraftForConditionalGeneration(AudiocraftPreTrainedModel):
+    def __init__(self, config: AudiocraftConfig):
+        super().__init__(config)
+
+        self.model = AudiocraftDecoder(config)
+        self.lm_heads = nn.ModuleList(
+            [nn.Linear(config.d_model, config.vocab_size) for _ in range(config.num_codebooks)]
+        )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
+            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
+            are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        decoder_outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            encoder_hidden_states=encoder_hidden_states[0],
+            encoder_attention_mask=encoder_attention_mask,
+            head_mask=head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = decoder_outputs[0]
+
+        lm_logits = torch.stack([head(hidden_states) for head in self.lm_heads], dim=1)
+
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not implemented for Audiocraft.")
+
+        if not return_dict:
+            output = (lm_logits,) + decoder_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return CausalLMOutputWithCrossAttentions(
+            loss=loss,
+            logits=lm_logits,
+            past_key_values=decoder_outputs.past_key_values,
+            hidden_states=decoder_outputs.hidden_states,
+            attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
         )
