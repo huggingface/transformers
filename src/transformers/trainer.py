@@ -1749,7 +1749,13 @@ class Trainer:
 
         # prepare using `accelerator` prepare
         if use_accelerator_prepare:
-            model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
+            if hasattr(self.lr_scheduler, "step"):
+                model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
+            else:
+                # to handle cases wherein we pass "DummyScheduler" such as when it is sopecified in DeepSpeed config.
+                model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
+                    self.model, self.optimizer, self.lr_scheduler
+                )
 
         if self.is_fsdp_enabled:
             self.model = model
