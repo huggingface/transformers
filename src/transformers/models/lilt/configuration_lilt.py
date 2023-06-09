@@ -14,8 +14,13 @@
 # limitations under the License.
 """ LiLT configuration"""
 
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from collections import OrderedDict
+from typing import Any, List, Mapping, Optional
+
+from ... import PretrainedConfig, PreTrainedTokenizer
+from ...onnx import OnnxConfig, PatchingSpec
+from ...onnx.utils import compute_effective_axis_dimension
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
@@ -131,3 +136,61 @@ class LiltConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.channel_shrink_ratio = channel_shrink_ratio
         self.max_2d_position_embeddings = max_2d_position_embeddings
+
+
+class LiltOnnxConfig(OnnxConfig):
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        task: str = "default",
+        patching_specs: List[PatchingSpec] = None,
+    ):
+        super().__init__(config, task=task, patching_specs=patching_specs)
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("input_ids", {0: "batch", 1: "sequence"}),
+                ("bbox", {0: "batch", 1: "sequence"}),
+                ("attention_mask", {0: "batch", 1: "sequence"}),
+            ]
+        )
+
+    def generate_dummy_inputs(
+        self,
+        preprocessor: PreTrainedTokenizer,
+        batch_size: int = -1,
+        seq_length: int = -1,
+        is_pair: bool = False,
+        framework: Optional[TensorType] = None,
+        tokenizer: PreTrainedTokenizer = None,
+    ) -> Mapping[str, Any]:
+        """
+        Args:
+        Generate inputs to provide to the ONNX exporter for the specific framework
+            preprocessor: ([`PreTrainedTokenizerBase`], [`FeatureExtractionMixin`], or [`ImageProcessingMixin`]):
+                The preprocessor associated with this model configuration.
+            batch_size: The batch size (int) to export the model for (-1 means dynamic axis)
+            seq_length: The sequence length (int) to export the model for (-1 means dynamic axis)
+            is_pair: Indicate if the input is a pair (sentence 1, sentence 2)
+            framework: The framework (optional) the tokenizer will generate tensor for
+        Returns:
+            Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
+        """
+        # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
+        batch_size = compute_effective_axis_dimension(
+            batch_size, fixed_dimension=OnnxConfig.default_fixed_batch, num_token_to_add=0
+        )
+        # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
+        token_to_add = preprocessor.num_special_tokens_to_add(is_pair)
+        seq_length = compute_effective_axis_dimension(
+            seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence, num_token_to_add=token_to_add
+        )
+        # Generate dummy inputs according to compute batch and sequence
+        dummy_text = [[preprocessor.unk_token] * seq_length] * batch_size
+        # Generate dummy bounding boxes
+        dummy_bboxes = [[[48, 84, 73, 128]] * seq_length] * batch_size
+        input_dict = preprocessor(dummy_text, boxes=dummy_bboxes, return_tensors=framework)
+
+        return input_dict.data

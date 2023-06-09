@@ -194,6 +194,7 @@ PYTORCH_EXPORT_MODELS = {
     ("levit", "facebook/levit-128S"),
     ("layoutlm", "hf-internal-testing/tiny-random-LayoutLMModel"),
     ("layoutlmv3", "microsoft/layoutlmv3-base"),
+    ("lilt", "SCUT-DLVCLab/lilt-roberta-en-base"),
     ("longformer", "allenai/longformer-base-4096"),
     ("mobilebert", "hf-internal-testing/tiny-random-MobileBertModel"),
     ("mobilenet_v1", "google/mobilenet_v1_0.75_192"),

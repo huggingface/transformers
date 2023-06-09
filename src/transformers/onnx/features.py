@@ -363,6 +363,13 @@ class FeaturesManager:
         "levit": supported_features_mapping(
             "default", "image-classification", onnx_config_cls="models.levit.LevitOnnxConfig"
         ),
+        "lilt": supported_features_mapping(
+            "default",
+            "question-answering",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls="models.lilt.LiltOnnxConfig",
+        ),
         "longt5": supported_features_mapping(
             "default",
             "default-with-past",
