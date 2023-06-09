@@ -536,14 +536,14 @@ BLENDERBOT_SMALL_GENERATION_EXAMPLE = r"""
     Human: I'm not sure
 
     >>> NEXT_UTTERANCE = (
-    ...     "My friends are cool but they eat too many carbs.</s> <s>what kind of carbs do they eat? "
-    ...     "i don't know much about carbs</s> "
-    ...     "<s> I'm not sure."
+    ...     "My friends are cool but they eat too many carbs.__end__ __start__what kind of carbs do they eat? "
+    ...     "i don't know much about carbs__end__ "
+    ...     "__start__ I'm not sure."
     ... )
     >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors="pt")
     >>> next_reply_ids = model.generate(**inputs)
     >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
-    Bot:  they eat a lot of carbs. carbs are high in fat, protein, and carbohydrates.
+    Bot:  they eat a lot of carbs. carbs are high in fat, protein, and fats.
     ```
 """
 
