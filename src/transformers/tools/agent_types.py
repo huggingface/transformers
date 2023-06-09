@@ -12,8 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import os
+import pathlib
 import tempfile
+import uuid
 
 import numpy as np
 
@@ -48,7 +50,7 @@ class AgentType:
     """
 
     def __init__(self, value):
-        self.value = value
+        self._value = value
 
     def __str__(self):
         return self.to_string()
@@ -57,13 +59,13 @@ class AgentType:
         logger.error(
             "This is a raw AgentType of unknown type. Display in notebooks and string conversion will be unreliable"
         )
-        return self.value
+        return self._value
 
     def to_string(self) -> str:
         logger.error(
             "This is a raw AgentType of unknown type. Display in notebooks and string conversion will be unreliable"
         )
-        return str(self.value)
+        return str(self._value)
 
 
 class AgentText(AgentType, str):
@@ -72,10 +74,10 @@ class AgentText(AgentType, str):
     """
 
     def to_raw(self):
-        return self.value
+        return self._value
 
     def to_string(self):
-        return self.value
+        return self._value
 
 
 class AgentImage(AgentType, ImageType):
@@ -95,7 +97,7 @@ class AgentImage(AgentType, ImageType):
 
         if isinstance(value, ImageType):
             self._raw = value
-        elif isinstance(value, str):
+        elif isinstance(value, (str, pathlib.Path)):
             self._path = value
         elif isinstance(value, torch.Tensor):
             self._tensor = value
@@ -118,7 +120,8 @@ class AgentImage(AgentType, ImageType):
             return self._raw
 
         if self._path is not None:
-            return Image.open(self._path)
+            self._raw = Image.open(self._path)
+            return self._raw
 
     def to_string(self):
         """
@@ -129,21 +132,24 @@ class AgentImage(AgentType, ImageType):
             return self._path
 
         if self._raw is not None:
-            temp = tempfile.NamedTemporaryFile(suffix=".png")
-            self._path = temp.name
+            directory = tempfile.mkdtemp()
+            self._path = os.path.join(directory, str(uuid.uuid4()) + ".png")
             self._raw.save(self._path)
 
             return self._path
 
         if self._tensor is not None:
             array = self._tensor.cpu().detach().numpy()
-            array[array <= 0] = 0
-            array[array > 0] = 1
 
             # There is likely simpler than load into image into save
             img = Image.fromarray((array * 255).astype(np.uint8))
-            temp = tempfile.NamedTemporaryFile(suffix=".png")
-            img.save(temp.name)
+
+            directory = tempfile.mkdtemp()
+            self._path = os.path.join(directory, str(uuid.uuid4()) + ".png")
+
+            img.save(self._path)
+
+            return self._path
 
 
 class AgentAudio(AgentType):
@@ -162,7 +168,7 @@ class AgentAudio(AgentType):
 
         self.samplerate = samplerate
 
-        if isinstance(value, str):
+        if isinstance(value, (str, pathlib.Path)):
             self._path = value
         elif isinstance(value, torch.Tensor):
             self._tensor = value
@@ -170,24 +176,36 @@ class AgentAudio(AgentType):
             raise ValueError(f"Unsupported audio type: {type(value)}")
 
     def _ipython_display_(self, include=None, exclude=None):
+        """
+        Displays correctly this type in an ipython notebook (ipython, colab, jupyter, ...)
+        """
         from IPython.display import Audio, display
 
         display(Audio(self.to_string(), rate=self.samplerate))
 
     def to_raw(self):
+        """
+        Returns the "raw" version of that object. It is a `torch.Tensor` object.
+        """
         if self._tensor is not None:
             return self._tensor
 
         if self._path is not None:
-            return sf.read(self._path, samplerate=self.samplerate)
+            tensor, self.samplerate = sf.read(self._path)
+            self._tensor = torch.tensor(tensor)
+            return self._tensor
 
     def to_string(self):
+        """
+        Returns the stringified version of that object. In the case of an AgentAudio, it is a path to the serialized
+        version of the audio.
+        """
         if self._path is not None:
             return self._path
 
         if self._tensor is not None:
-            temp = tempfile.NamedTemporaryFile(suffix=".wav")
-            self._path = temp.name
+            directory = tempfile.mkdtemp()
+            self._path = os.path.join(directory, str(uuid.uuid4()) + ".wav")
             sf.write(self._path, self._tensor, samplerate=self.samplerate)
             return self._path
 
