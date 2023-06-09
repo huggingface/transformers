@@ -2850,6 +2850,7 @@ class Trainer:
             or self.is_fsdp_enabled
         ):
             if self.is_fsdp_enabled:
+                os.makedirs(output_dir, exist_ok=True)
                 self.accelerator.state.fsdp_plugin.save_model(self.accelerator, self.model, output_dir)
             else:
                 state_dict = self.model.state_dict()
