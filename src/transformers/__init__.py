@@ -2132,9 +2132,9 @@ else:
     _import_structure["models.fastspeech2_conformer"].extend(
         [
             "FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FastSpeech2ConformerHifiGan",
             "FastSpeech2ConformerModel",
             "FastSpeech2ConformerPreTrainedModel",
-            "FastSpeech2ConformerHifiGan",
         ]
     )
     _import_structure["models.flaubert"].extend(

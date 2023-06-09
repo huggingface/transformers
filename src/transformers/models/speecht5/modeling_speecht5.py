@@ -2645,7 +2645,9 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         return self.speecht5.get_decoder()
 
     @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqSpectrogramOutputWithPastAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=Seq2SeqSpectrogramOutputWithPastAndCrossAttentions, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2964,7 +2966,9 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         self.get_encoder().prenet.freeze_feature_encoder()
 
     @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqSpectrogramOutputWithPastAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=Seq2SeqSpectrogramOutputWithPastAndCrossAttentions, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_values: Optional[torch.FloatTensor] = None,

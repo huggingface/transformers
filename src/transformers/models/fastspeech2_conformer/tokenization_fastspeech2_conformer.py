@@ -17,6 +17,8 @@ import json
 import os
 from typing import Optional, Tuple
 
+import regex
+
 from ...file_utils import requires_backends
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
@@ -28,14 +30,14 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "jaketae/fastspeech2-ljspeech": "https://huggingface.co/jaketae/fastspeech2-ljspeech/resolve/main/vocab.txt",
-        "jaketae/fastspeech2-commonvoice": "https://huggingface.co/jaketae/fastspeech2-commonvoice/resolve/main/vocab.txt",
+        "connor-henderson/fastspeech2_conformer": "https://huggingface.co/connor-henderson/fastspeech2_conformer/raw/main/vocab.json",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "jaketae/fastspeech2-ljspeech": 1024,
-    "jaketae/fastspeech2-commonvoice": 1024,
+    # Set to somewhat arbitrary large number as the model input
+    # isn't constrained by the relative positional encoding
+    "connor-henderson/fastspeech2_conformer": 4096,
 }
 
 
@@ -50,31 +52,42 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    model_input_names = ["input_ids", "attention_mask"]
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["input_ids"]
 
     def __init__(
         self,
         vocab_file,
+        bos_token="<sos/eos>",
+        eos_token="<sos/eos>",
+        pad_token="<blank>",
         unk_token="<unk>",
-        bos_token="<s>",
-        eos_token="</s>",
-        pad_token="<pad>",
-        do_phonemize=True,
-        preserve_punctuation=False,
+        should_strip_spaces=False,
         **kwargs,
     ):
-        requires_backends(self, "g2p_en")
+        self.init_backend()
         import g2p_en
 
-        # make attribute to avoid creating g2p object every call
-        self.g2p = g2p_en.G2p()
-        super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, pad_token=pad_token, **kwargs)
-        self.do_phonemize = do_phonemize
-        self.preserve_punctuation = preserve_punctuation
+        # Not immediately instantiated to keep the tokenizer pickleable
+        self.G2p = g2p_en.G2p
+
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            should_strip_spaces=should_strip_spaces,
+            **kwargs,
+        )
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
+
         self.decoder = {v: k for k, v in self.encoder.items()}
+        self.should_strip_spaces = should_strip_spaces
+
+    def init_backend(self):
+        """Initializes the backend."""
+        requires_backends(self, "g2p_en")
 
     @property
     def vocab_size(self):
@@ -84,44 +97,42 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
         "Returns vocab as a dict"
         return dict(self.encoder, **self.added_tokens_encoder)
 
-    def phonemize(self, text):
-        if self.preserve_punctuation:
-            return " ".join("|" if p == " " else p for p in self.g2p(text))
-        res = [{",": "sp", ";": "sp"}.get(p, p) for p in self.g2p(text)]
-        return " ".join(p for p in res if p.isalnum())
-
     def _tokenize(self, text):
         """Returns a tokenized string."""
-
-        # make sure whitespace is stripped to prevent <unk>
-        text = text.strip()
+        # strip whitespaces
+        _whitespace_re = regex.compile(r"\s+")
+        text = regex.sub(_whitespace_re, " ", text)
 
         # phonemize
-        if self.do_phonemize:
-            text = self.phonemize(text)
+        g2p = self.G2p()
+        tokens = g2p(text)
 
-        # make sure ' ' is between phonemes
-        tokens = text.split(" ")
-
-        tokens = list(filter(lambda p: p.strip() != "", tokens))
-
-        # fastspeech2 needs eos at the end
-        tokens.append(self.eos_token)
+        if self.should_strip_spaces:
+            tokens = list(filter(lambda s: s != " ", tokens))
 
         return tokens
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        return self.encoder.get(token, self.encoder[self.unk_token])
+        return self.encoder.get(token, self.encoder.get(self.unk_token))
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        return self.decoder.get(index, self.encoder[self.unk_token])
+        return self.decoder.get(index, self.unk_token)
 
-    def convert_tokens_to_string(self, tokens):
-        """Converts a sequence of tokens (string) in a single string."""
-        # TODO
-        raise NotImplementedError
+    # Override since phonemes cannot be converted back to strings
+    def decode(self, token_ids, **kwargs):
+        logger.warn(
+            "Phonemes cannot be reliably converted to a string due to the one-many mapping, converting to tokens instead."
+        )
+        return self.convert_ids_to_tokens(token_ids)
+
+    # Override since phonemes cannot be converted back to strings
+    def convert_tokens_to_string(self, token_ids, **kwargs):
+        logger.warn(
+            "Phonemes cannot be reliably converted to a string due to the one-many mapping, converting to tokens instead."
+        )
+        return self.convert_ids_to_tokens(token_ids)
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
@@ -145,3 +156,17 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
             f.write(json.dumps(self.get_vocab(), ensure_ascii=False))
 
         return (vocab_file,)
+
+
+class G2p_en_Wrapper:
+    """
+    g2p_en.G2p isn't pickalable and it can't be copied to the other processes via multiprocessing module.
+    As a workaround, g2p_en.G2p is instantiated upon calling this class.
+    """
+
+    def __init__(self, g2p_en):
+        self.g2p_en = g2p_en
+
+    def __call__(self, text):
+        g2p_en.G2p_en()
+        return self.g2p(text)

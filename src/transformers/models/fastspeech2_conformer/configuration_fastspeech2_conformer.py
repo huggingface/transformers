@@ -23,18 +23,16 @@ logger = logging.get_logger(__name__)
 
 class FastSpeech2ConformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FastSpeech2ConformerModel`]. It is used to instantiate an
-    FastSpeech2Conformer model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the FastSpeech2Conformer
-    [fastspeech2_conformer](https://huggingface.co/put a link here) architecture.
+    This is the configuration class to store the configuration of a [`FastSpeech2ConformerModel`]. It is used to
+    instantiate an FastSpeech2Conformer model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    FastSpeech2Conformer [fastspeech2_conformer](https://huggingface.co/put a link here) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-
-
     Example:
 
     ```python
@@ -109,13 +107,14 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         use_masking=True,
         use_weighted_masking=False,
         # additional features
-        utt_embed_dim=None,  # confirm this, previously was 64
-        lang_embs=None,  # confirm this, previously was 8000
+        utt_embed_dim=None,
+        lang_embs=None,
+        vocab_size=78,
         is_encoder_decoder=True,
-        vocab_size=75,
-        bos_token_id=0,
-        pad_token_id=1,
-        eos_token_id=2,
+        pad_token_id=0,
+        # same token for bos and eos: <sos/eos>
+        bos_token_id=77,
+        eos_token_id=77,
         **kwargs,
     ):
         local_vars = locals()
@@ -182,7 +181,13 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.is_encoder_decoder = is_encoder_decoder
 
-        super().__init__(bos_token_id=bos_token_id, pad_token_id=pad_token_id, eos_token_id=eos_token_id, is_encoder_decoder=is_encoder_decoder, **kwargs)
+        super().__init__(
+            bos_token_id=bos_token_id,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            **kwargs,
+        )
 
     @property
     def mel_dim(self):

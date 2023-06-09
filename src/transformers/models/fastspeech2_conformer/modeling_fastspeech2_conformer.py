@@ -4,16 +4,16 @@ Taken from ESPNet and IMS Toucan
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy
 import torch
 from torch import nn
 
+from ...modeling_outputs import BaseModelOutput, Seq2SeqSpectrogramOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging  # add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from .configuration_fastspeech2_conformer import FastSpeech2ConformerConfig, FastSpeech2ConformerHifiGanConfig
-from ...modeling_outputs import Seq2SeqSpectrogramOutput, BaseModelOutput
 
 
 logger = logging.get_logger(__name__)
@@ -22,6 +22,7 @@ logger = logging.get_logger(__name__)
 @dataclass
 class FastSpeech2ConformerModelOutput(Seq2SeqSpectrogramOutput):
     """Output type of [`FastSpeech2ConformerModel`]."""
+
     duration_outputs: torch.LongTensor = None
     pitch_outputs: torch.FloatTensor = None
     energy_outputs: torch.FloatTensor = None
@@ -657,17 +658,17 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
 def save_test_outputs(outputs):
     print("...creating new test outputs")
     (
-            outputs_before_postnet,
-            outputs_after_postnet,
-            encoder_last_hidden_state,
-            encoder_hidden_states,
-            encoder_attentions,
-            decoder_hidden_states,
-            decoder_attentions,
-            duration_outputs,
-            pitch_outputs,
-            energy_outputs,
-        ) = outputs
+        outputs_before_postnet,
+        outputs_after_postnet,
+        encoder_last_hidden_state,
+        encoder_hidden_states,
+        encoder_attentions,
+        decoder_hidden_states,
+        decoder_attentions,
+        duration_outputs,
+        pitch_outputs,
+        energy_outputs,
+    ) = outputs
     test = outputs_before_postnet.detach().clone()
     torch.save(test, "hf-decoder_outputs.pt")
 
@@ -1020,7 +1021,11 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             h_masks = None
 
         decoder_outputs = self.decoder(
-            encoder_last_hidden_state, h_masks, utterance_embedding, output_hidden_states=output_hidden_states, output_attentions=output_attentions
+            encoder_last_hidden_state,
+            h_masks,
+            utterance_embedding,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
         )
 
         outputs_before_postnet, outputs_after_postnet, _ = self.speech_decoder_postnet(
@@ -1136,7 +1141,7 @@ class FastSpeech2ConformerMultiHeadedAttention(nn.Module):
         x = x.transpose(1, 2).contiguous().view(n_batch, -1, self.h * self.d_k)
 
         attention_output = self.linear_out(x)
-        
+
         return attention_output, attn
 
     def forward(self, query, key, value, mask):
@@ -1243,7 +1248,7 @@ class FastSpeech2ConformerRelPositionMultiHeadedAttention(FastSpeech2ConformerMu
         scores = (matrix_ac + matrix_bd) / math.sqrt(self.d_k)
 
         attention_output, attention_scores = self.forward_attention(v, scores, mask)
-        
+
         return attention_output, attention_scores
 
 
@@ -1431,9 +1436,13 @@ class FastSpeech2ConformerEncoderLayer(nn.Module):
             mask = None if mask is None else mask[:, -1:, :]
 
         if pos_emb is not None:
-            attention_output, attention_scores = self.self_attn(query_hidden_states, hidden_states, hidden_states, pos_emb, mask)
+            attention_output, attention_scores = self.self_attn(
+                query_hidden_states, hidden_states, hidden_states, pos_emb, mask
+            )
         else:
-            attention_output, attention_scores = self.self_attn(query_hidden_states, hidden_states, hidden_states, mask)
+            attention_output, attention_scores = self.self_attn(
+                query_hidden_states, hidden_states, hidden_states, mask
+            )
 
         if self.concat_after:
             x_concat = torch.cat((hidden_states, attention_output), dim=-1)
@@ -1676,7 +1685,15 @@ class FastSpeech2ConformerEncoder(nn.Module):
             ]
         )
 
-    def forward(self, input_tensor, masks, utterance_embedding=None, lang_ids=None, output_hidden_states=None, output_attentions=None):
+    def forward(
+        self,
+        input_tensor,
+        masks,
+        utterance_embedding=None,
+        lang_ids=None,
+        output_hidden_states=None,
+        output_attentions=None,
+    ):
         """
         Encode input sequence.
         Args:
@@ -1703,24 +1720,26 @@ class FastSpeech2ConformerEncoder(nn.Module):
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        
+
         for conformer_layer in self.conformer_layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-                
+
             hidden_states, attention_output, pos_emb, masks = conformer_layer(hidden_states, pos_emb, masks)
-            
+
             if output_attentions:
                 all_self_attentions = all_self_attentions + (attention_output,)
 
         if self.utt_embed:
             hidden_states = self._integrate_with_utt_embed(hidden_states, utterance_embedding)
-        
+
         # Add last layer
         if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
-        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions
+        )
 
     def _integrate_with_utt_embed(self, hidden_states, utt_embeddings):
         # concat hidden states with spk embeds and then apply projection

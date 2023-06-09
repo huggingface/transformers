@@ -1542,6 +1542,7 @@ class Seq2SeqSpectrogramOutput(ModelOutput):
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
+
 @dataclass
 class Seq2SeqSpectrogramOutputWithPastAndCrossAttentions(ModelOutput):
     """

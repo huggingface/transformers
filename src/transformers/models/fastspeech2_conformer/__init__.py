@@ -17,8 +17,12 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_torch_available
-
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_g2p_en_available,
+    is_torch_available,
+)
 
 _import_structure = {
     "configuration_fastspeech2_conformer": [
@@ -26,15 +30,22 @@ _import_structure = {
         "FastSpeech2ConformerConfig",
         "FastSpeech2ConformerHifiGanConfig",
     ],
-    "tokenization_fastspeech2_conformer": ["FastSpeech2ConformerTokenizer"],
 }
+
+try:
+    if not is_g2p_en_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_fastspeech2_conformer"] = ["FastSpeech2ConformerTokenizer"]
 
 if is_torch_available():
     _import_structure["modeling_fastspeech2_conformer"] = [
         "FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "FastSpeech2ConformerHifiGan",
         "FastSpeech2ConformerModel",
         "FastSpeech2ConformerPreTrainedModel",
-        "FastSpeech2ConformerHifiGan",
     ]
 
 
@@ -44,7 +55,14 @@ if TYPE_CHECKING:
         FastSpeech2ConformerConfig,
         FastSpeech2ConformerHifiGanConfig,
     )
-    from .tokenization_fastspeech2_conformer import FastSpeech2ConformerConformerTokenizer
+
+    try:
+        if not is_g2p_en_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_fastspeech2_conformer import FastSpeech2ConformerTokenizer
 
     if is_torch_available():
         from .modeling_fastspeech2_conformer import (

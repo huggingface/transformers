@@ -15,7 +15,9 @@
 """Convert FastSpeech2Conformer checkpoint."""
 
 import argparse
+import json
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import torch
 import yaml
@@ -23,6 +25,7 @@ import yaml
 from transformers import (
     FastSpeech2ConformerConfig,
     FastSpeech2ConformerModel,
+    FastSpeech2ConformerTokenizer,
     logging,
 )
 
@@ -80,20 +83,20 @@ CONFIG_MAPPING = {
 }
 
 
-def remap_yaml_config(yaml_config_path):
+def process_yaml_config(yaml_config_path):
     with Path(yaml_config_path).open("r", encoding="utf-8") as f:
         args = yaml.safe_load(f)
         args = argparse.Namespace(**args)
 
-    remapped_dict = {}
-    model_params = args.tts_conf["text2mel_params"]
+    remapped_config = {}
 
+    model_params = args.tts_conf["text2mel_params"]
     # espnet_config_key -> hf_config_key, any keys not included are ignored
     for espnet_config_key, hf_config_key in CONFIG_MAPPING.items():
         if espnet_config_key in model_params:
-            remapped_dict[hf_config_key] = model_params[espnet_config_key]
+            remapped_config[hf_config_key] = model_params[espnet_config_key]
 
-    return remapped_dict
+    return remapped_config, args.g2p, args.token_list
 
 
 def convert_espnet_state_dict_to_hf(state_dict):
@@ -135,16 +138,14 @@ def convert_espnet_state_dict_to_hf(state_dict):
 @torch.no_grad()
 def convert_FastSpeech2ConformerModel_checkpoint(
     checkpoint_path,
+    yaml_config_path,
     pytorch_dump_folder_path,
-    yaml_config_path=None,
     repo_id=None,
 ):
-    if yaml_config_path is not None:
-        config_kwargs = remap_yaml_config(yaml_config_path)
-        config = FastSpeech2ConformerConfig(**config_kwargs)
-    else:
-        config = FastSpeech2ConformerConfig()
+    model_params, tokenizer_name, vocab = process_yaml_config(yaml_config_path)
+    config = FastSpeech2ConformerConfig(**model_params)
 
+    # Prepare the model
     model = FastSpeech2ConformerModel(config)
 
     espnet_checkpoint = torch.load(checkpoint_path)
@@ -153,15 +154,31 @@ def convert_FastSpeech2ConformerModel_checkpoint(
 
     model.save_pretrained(pytorch_dump_folder_path)
 
+    # Prepare the tokenizer
+    with TemporaryDirectory() as tempdir:
+        vocab = {token: id for id, token in enumerate(vocab)}
+        vocab_file = Path(tempdir) / "vocab.json"
+        with open(vocab_file, "w") as f:
+            json.dump(vocab, f)
+        should_strip_spaces = "no_space" in tokenizer_name
+        print(tokenizer_name, should_strip_spaces)
+        tokenizer = FastSpeech2ConformerTokenizer(str(vocab_file), should_strip_spaces=should_strip_spaces)
+        print(tokenizer.should_strip_spaces)
+
+    tokenizer.save_pretrained(pytorch_dump_folder_path)
+
     if repo_id:
         print("Pushing to the hub...")
         model.push_to_hub(repo_id)
+        tokenizer.push_to_hub(repo_id)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
-    parser.add_argument("--yaml_config_path", default=None, type=str, help="Path to config.yaml of model to convert")
+    parser.add_argument(
+        "--yaml_config_path", required=True, default=None, type=str, help="Path to config.yaml of model to convert"
+    )
     parser.add_argument(
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
     )
@@ -172,7 +189,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     convert_FastSpeech2ConformerModel_checkpoint(
         args.checkpoint_path,
-        args.pytorch_dump_folder_path,
         args.yaml_config_path,
+        args.pytorch_dump_folder_path,
         args.push_to_hub,
     )
