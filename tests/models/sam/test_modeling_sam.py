@@ -15,6 +15,7 @@
 """ Testing suite for the PyTorch SAM model. """
 
 
+import gc
 import inspect
 import unittest
 
@@ -461,6 +462,12 @@ def prepare_dog_img():
 
 @slow
 class SamModelIntegrationTest(unittest.TestCase):
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        torch.cuda.empty_cache()
+
     def test_inference_mask_generation_no_point(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
