@@ -15,7 +15,6 @@
 
 from __future__ import annotations
 
-import gc
 import unittest
 
 from transformers import XGLMConfig, XGLMTokenizer, is_tf_available
@@ -191,11 +190,6 @@ class TFXGLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
 @require_tf
 class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
-    def tearDown(self):
-        super().tearDown()
-        # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-
     @slow
     def test_lm_generate_xglm(self, verify_outputs=True):
         model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M")

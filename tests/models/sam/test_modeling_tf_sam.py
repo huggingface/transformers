@@ -431,11 +431,6 @@ def prepare_dog_img():
 @require_tf
 @slow
 class TFSamModelIntegrationTest(unittest.TestCase):
-    def tearDown(self):
-        super().tearDown()
-        # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-
     def test_inference_mask_generation_no_point(self):
         model = TFSamModel.from_pretrained("facebook/sam-vit-base")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
