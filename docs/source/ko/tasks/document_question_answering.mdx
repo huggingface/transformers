@@ -37,9 +37,9 @@ specific language governing permissions and limitations under the License.
 
 LayoutLMv2는 토큰의 마지막 은닉층 위에 질의 응답 헤드를 추가하여 답변의 시작 토큰과 끝 토큰의 위치를 예측함으로써 문서 질의 응답 태스크를 해결합니다.
 즉, 문맥이 주어졌을 때 질문에 답하는 정보를 추출하는 추출형 질의 응답(Extractive question answering)으로 문제를 처리합니다.
-문맥은 OCR 엔진의 출력에서 비롯되며, 여기서는 Google의 Tesseract를 사용합니다.
+문맥은 OCR 엔진의 출력에서 비롯되며, 여기서는 Google의 테서랙트(Tesseract)를 사용합니다.
 
-시작하기 전에 필요한 라이브러리가 모두 설치되어 있는지 확인하세요. LayoutLMv2는 detectron2, torchvision 및 tesseract을 필요로 합니다.
+시작하기 전에 필요한 라이브러리가 모두 설치되어 있는지 확인하세요. LayoutLMv2는 detectron2, torchvision 및 테서랙트를 필요로 합니다.
 
 ```bash
 pip install -q transformers datasets
@@ -122,25 +122,22 @@ DatasetDict({
 
 이 가이드에서 사용하는 LayoutLMv2 체크포인트는 `max_position_embeddings = 512`로 훈련되었습니다.(이 정보는 [checkpoint's `config.json` file](https://huggingface.co/microsoft/layoutlmv2-base-uncased/blob/main/config.json#L18)에서 확인할 수 있습니다.)
 바로 예제를 잘라낼 수도 있지만, 긴 문서의 끝에 답변이 있어 잘리는 상황을 피하기 위해 여기서는 임베딩이 512보다 길어질 가능성이 있는 몇 가지 예제를 제거하겠습니다.
-
-If most of the documents in your dataset are long, you can implement a sliding window strategy - check out [this notebook](https://github.com/huggingface/notebooks/blob/main/examples/question_answering.ipynb) for details.
+데이터 세트에 있는 대부분의 문서가 긴 경우 슬라이딩 윈도우 방법을 사용할 수 있습니다 - 자세한 내용을 확인하고 싶으면 이 [notebook](https://github.com/huggingface/notebooks/blob/main/examples/question_answering.ipynb)을 확인하세요.
 
 ```py
 >>> updated_dataset = updated_dataset.filter(lambda x: len(x["words"]) + len(x["question"].split()) < 512)
 ```
 
-At this point let's also remove the OCR features from this dataset. These are a result of OCR for fine-tuning a different
-model. They would still require some processing if we wanted to use them, as they do not match the input requirements
-of the model we use in this guide. Instead, we can use the [`LayoutLMv2Processor`] on the original data for both OCR and
-tokenization. This way we'll get the inputs that match model's expected input. If you want to process images manually,
-check out the [`LayoutLMv2` model documentation](../model_doc/layoutlmv2) to learn what input format the model expects.
+이 시점에서 이 데이터 세트의 OCR 특성도 제거해 보겠습니다. OCR 특성은 다른 모델을 미세 조정하기 위한 것으로, 이 가이드에서 사용하는 모델의 입력 요구 사항과 일치하지 않기 때문에 이 특성을 사용하기 위해서는 일부 처리가 필요합니다. 
+대신, 원본 데이터에 [`LayoutLMv2Processor`]를 사용하여 OCR 및 토큰화를 모두 수행할 수 있습니다. 이렇게 하면 모델이 요구하는 입력을 얻을 수 있습니다. 
+이미지를 수동으로 처리하려면, [`LayoutLMv2` model documentation](../model_doc/layoutlmv2)에서 모델이 요구하는 입력 포맷을 확인해보세요.
 
 ```py
 >>> updated_dataset = updated_dataset.remove_columns("words")
 >>> updated_dataset = updated_dataset.remove_columns("bounding_boxes")
 ```
 
-Finally, the data exploration won't be complete if we don't peek at an image example.
+마지막으로, 데이터 탐색을 완료하기 위해 이미지 예시를 살펴봅시다.
 
 ```py
 >>> updated_dataset["train"][11]["image"]
@@ -150,10 +147,10 @@ Finally, the data exploration won't be complete if we don't peek at an image exa
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/docvqa_example.jpg" alt="DocVQA Image Example"/>
  </div>
 
-## Preprocess the data
+## 데이터 전처리 [[preprocess-the-data]]
 
-The Document Question Answering task is a multimodal task, and you need to make sure that the inputs from each modality
-are preprocessed according to the model's expectations. Let's start by loading the [`LayoutLMv2Processor`], which internally combines an image processor that can handle image data and a tokenizer that can encode text data.
+문서 질의 응답 태스크는 멀티모달 태스크이며, 각 모달리티의 입력이 모델의 요구에 맞게 전처리 되었는지 확인해야 합니다.
+이미지 데이터를 처리할 수 있는 이미지 프로세서와 텍스트 데이터를 인코딩할 수 있는 토크나이저를 결합한 [`LayoutLMv2Processor`]를 로드하는 것부터 시작해 보겠습니다.
 
 ```py
 >>> from transformers import AutoProcessor
@@ -161,12 +158,11 @@ are preprocessed according to the model's expectations. Let's start by loading t
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 ```
 
-### Preprocessing document images
+### 문서 이미지 전처리 [[preprocessing-document-images]]
 
-First, let's prepare the document images for the model with the help of the `image_processor` from the processor.
-By default, image processor resizes the images to 224x224, makes sure they have the correct order of color channels,
-applies OCR with tesseract to get words and normalized bounding boxes. In this tutorial, all of these defaults are exactly what we need.
-Write a function that applies the default image processing to a batch of images and returns the results of OCR.
+먼저, 프로세서의 `image_processor`를 사용해 모델에 대한 문서 이미지를 준비해 보겠습니다.
+기본적으로 이미지 프로세서는 이미지 크기를 224x224로 조정하고, 색상 채널의 순서가 올바른지 확인한 후, 단어와 정규화된 바운딩 박스를 얻기 위해 테서랙트를 사용해 OCR를 적용합니다.
+이 튜토리얼에서는 이러한 모든 기본값이 정확히 필요한 것입니다. 이미지 배치에 기본 이미지 처리를 적용하고 OCR의 결과를 변환하는 함수를 작성합니다.
 
 ```py
 >>> image_processor = processor.image_processor
@@ -176,6 +172,7 @@ Write a function that applies the default image processing to a batch of images 
 ...     images = [image.convert("RGB") for image in examples["image"]]
 ...     encoded_inputs = image_processor(images)
 
+
 ...     examples["image"] = encoded_inputs.pixel_values
 ...     examples["words"] = encoded_inputs.words
 ...     examples["boxes"] = encoded_inputs.boxes
@@ -183,26 +180,25 @@ Write a function that applies the default image processing to a batch of images 
 ...     return examples
 ```
 
-To apply this preprocessing to the entire dataset in a fast way, use [`~datasets.Dataset.map`].
+이 전처리를 데이터 세트 전체에 빠르게 적용하려면 [`~datasets.Dataset.map`]를 사용하세요.
 
 ```py
 >>> dataset_with_ocr = updated_dataset.map(get_ocr_words_and_boxes, batched=True, batch_size=2)
 ```
 
-### Preprocessing text data
+### 텍스트 데이터 전처리 [[preprocessing-text-data]]
 
-Once we have applied OCR to the images, we need to encode the text part of the dataset to prepare it for the model.
-This involves converting the words and boxes that we got in the previous step to token-level `input_ids`, `attention_mask`,
-`token_type_ids` and `bbox`. For preprocessing text, we'll need the `tokenizer` from the processor.
+이미지에 OCR을 적용했으면 데이터 세트의 텍스트 부분을 모델에 맞게 인코딩해야 합니다.
+이 인코딩에는 이전 단계에서 가져온 단어와 박스를 토큰 수준의 `input_ids`, `attention_mask`, `token_type_ids` 및 `bbox`로 변환하는 작업이 포함됩니다. 
+텍스트를 전처리하려면 프로세서의 `tokenizer`가 필요합니다.
 
 ```py
 >>> tokenizer = processor.tokenizer
 ```
 
-On top of the preprocessing mentioned above, we also need to add the labels for the model. For `xxxForQuestionAnswering` models
-in 🤗 Transformers, the labels consist of the `start_positions` and `end_positions`, indicating which token is at the
-start and which token is at the end of the answer.
+위에서 언급한 전처리 외에도 모델에 대한 레이블을 추가해야 합니다. 🤗 Transformers의 `xxxForQuestionAnswering` 모델의 경우, 레이블은 `start_positions`와 `end_positions`로 구성되며 어떤 토큰이 답변의 시작과 끝에 있는지를 나타냅니다.
 
+방금 말한 레이블 추가를 시작해보겠습니다. 
 Let's start with that. Define a helper function that can find a sublist (the answer split into words) in a larger list (the words list).
 
 This function will take two lists as input, `words_list` and `answer_list`. It will then iterate over the `words_list` and check
