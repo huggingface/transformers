@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections
 import copy
 import gc
 import glob
@@ -22,6 +23,7 @@ import os
 import os.path
 import pickle
 import random
+import re
 import sys
 import tempfile
 import unittest
@@ -1661,6 +1663,29 @@ class ModelTesterMixin:
                         1,
                         f"The shared pointers are incorrect, found different pointers for keys {shared_names}",
                     )
+    
+    def test_tied_weights_keys(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.tie_word_embeddings = True
+        for model_class in self.all_model_classes:
+            model_tied = model_class(config)
+
+            ptrs = collections.defaultdict(list)
+            for name, tensor in model_tied.state_dict().items():
+                ident = (tensor.data_ptr(), tensor.device, tensor.shape, tensor.stride())
+                ptrs[ident].append(name)
+
+            # These are all the pointers of shared tensors.
+            tied_params = [names for _, names in ptrs.items() if len(names) > 1]
+            
+            tied_weight_keys = model_tied._tied_weights_keys if model_tied._tied_weights_keys is not None else []
+            for key in tied_weight_keys:
+                for i in range(len(tied_params)):
+                    tied_params[i] = [p for p in tied_params[i] if re.search(key, p) is None]
+
+            tied_params = [group for group in tied_params if len(group) > 1]
+            self.assertListEqual(tied_params, [])
+
 
     def test_tied_model_weights_key_ignore(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
