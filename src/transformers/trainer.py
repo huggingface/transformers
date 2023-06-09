@@ -1755,7 +1755,7 @@ class Trainer:
                 else:
                     model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
             else:
-                # to handle cases wherein we pass "DummyScheduler" such as when it is sopecified in DeepSpeed config.
+                # to handle cases wherein we pass "DummyScheduler" such as when it is specified in DeepSpeed config.
                 model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
                     self.model, self.optimizer, self.lr_scheduler
                 )
