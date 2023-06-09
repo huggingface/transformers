@@ -13,6 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Audiocraft model configuration"""
+import copy
+
+from transformers import T5Config
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -26,11 +29,11 @@ AUDIOCRAFT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class AudiocraftConfig(PretrainedConfig):
+class AudiocraftDecoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AudiocraftModel`]. It is used to instantiate an
-    Audiocraft model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Audiocraft
+    This is the configuration class to store the configuration of an [`AudiocraftDecoder`]. It is used to instantiate an
+    Audiocraft language model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the Audiocraft
     [facebook/audiocraft-600m](https://huggingface.co/facebook/audiocraft-600m) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -81,18 +84,18 @@ class AudiocraftConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import AudiocraftConfig, AudiocraftModel
+    >>> from transformers import AudiocraftDecoderConfig, AudiocraftDecoderModel
 
-    >>> # Initializing a Audiocraft facebook/audiocraft-600m style configuration
+    >>> # Initializing a Audiocraft decoder facebook/audiocraft-600m style configuration
     >>> configuration = AudiocraftConfig()
 
-    >>> # Initializing a model (with random weights) from the facebook/audiocraft-600m style configuration
-    >>> model = AudiocraftModel(configuration)
+    >>> # Initializing an Audiocraft language model (with random weights) from the facebook/audiocraft-600m style configuration
+    >>> model = AudiocraftDecoderModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "audiocraft"
+    model_type = "audiocraft_decoder"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
@@ -143,3 +146,107 @@ class AudiocraftConfig(PretrainedConfig):
             forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
+
+
+class AudiocraftConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`AudiocraftModel`]. It is used to instantiate an
+    Audiocraft model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Audiocraft
+    [facebook/audiocraft-600m](https://huggingface.co/facebook/audiocraft-600m) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        t5_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`T5Config`].
+        lm_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`AudiocraftDecoderConfig`].
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+
+        kwargs (*optional*):
+            Dictionary of keyword arguments.
+
+    Example:
+
+    ```python
+    >>> from transformers import (
+    ...     AudiocraftConfig,
+    ...     AudiocraftDecoderConfig,
+    ...     AudiocraftForConditionalGeneration,
+    ...     T5Config,
+    ... )
+
+    >>> # Initializing an Audiocraft with facebook/audiocraft-600m style configuration
+    >>> configuration = AudiocraftConfig()
+
+    >>> # Initializing a AudiocraftForConditionalGeneration (with random weights) from the facebook/audiocraft-600m style configuration
+    >>> model = AudiocraftForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+
+    >>> # We can also initialize a AudiocraftConfig from a T5Config and AudiocraftDecoderConfig
+
+    >>> # Initializing T5 and language model configurations
+    >>> t5_config = T5Config()
+    >>> lm_config = AudiocraftDecoderConfig()
+
+    >>> config = AudiocraftConfig.from_t5_lm_config(t5_config, lm_config)
+    ```"""
+
+    model_type = "audiocraft"
+    is_composition = True
+
+    def __init__(self, t5_config=None, lm_config=None, init_std=0.02, is_encoder_decoder=True, **kwargs):
+        super().__init__(**kwargs)
+
+        if t5_config is None:
+            t5_config = {}
+            logger.info("t5_config is None. initializing the T5Config with default values.")
+
+        if lm_config is None:
+            lm_config = {}
+            logger.info("lm_config is None. Initializing the AudiocraftDecoderConfig with default values.")
+
+        self.t5_config = T5Config(**t5_config)
+        self.lm_config = AudiocraftDecoderConfig(**lm_config)
+
+        self.init_std = init_std
+        self.is_encoder_decoder = is_encoder_decoder
+
+    @classmethod
+    def from_t5_lm_config(
+        cls,
+        t5_config: T5Config,
+        lm_config: AudiocraftDecoderConfig,
+        **kwargs,
+    ):
+        r"""
+        Instantiate a [`AudiocraftConfig`] (or a derived class) from T5 and Audiocraft language model
+        configurations.
+
+        Returns:
+            [`AudiocraftConfig`]: An instance of a configuration object
+        """
+
+        return cls(
+            t5_config=t5_config.to_dict(),
+            lm_config=lm_config.to_dict(),
+            **kwargs,
+        )
+
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+
+        Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["t5_config"] = self.t5_config.to_dict()
+        output["lm_config"] = self.lm_config.to_dict()
+        output["model_type"] = self.__class__.model_type
+        return output

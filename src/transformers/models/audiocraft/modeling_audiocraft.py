@@ -31,7 +31,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from .configuration_audiocraft import AudiocraftConfig
+from .configuration_audiocraft import AudiocraftConfig, AudiocraftDecoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -307,7 +307,7 @@ class AudiocraftAttention(nn.Module):
 
 
 class AudiocraftDecoderLayer(nn.Module):
-    def __init__(self, config: AudiocraftConfig):
+    def __init__(self, config: AudiocraftDecoderConfig):
         super().__init__()
         self.embed_dim = config.d_model
 
@@ -557,7 +557,7 @@ class AudiocraftDecoder(AudiocraftPreTrainedModel):
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`AudiocraftDecoderLayer`]
     """
 
-    def __init__(self, config: AudiocraftConfig):
+    def __init__(self, config: AudiocraftDecoderConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.layerdrop
@@ -847,8 +847,10 @@ class AudiocraftModel(AudiocraftPreTrainedModel):
         super().__init__(config)
 
         # TODO(SG): switch this for an AutoModel class
-        self.encoder = T5EncoderModel(config)
-        self.decoder = AudiocraftDecoder(config)
+        self.encoder = T5EncoderModel(config.t5_config)
+        self.decoder = AudiocraftDecoder(config.lm_config)
+
+        self.encoder_projection = nn.Linear(config.t5_config.d_model, config.lm_config.d_model)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -941,8 +943,9 @@ class AudiocraftForConditionalGeneration(AudiocraftPreTrainedModel):
         super().__init__(config)
 
         self.model = AudiocraftModel(config)
+        lm_config = config.lm_config
         self.lm_heads = nn.ModuleList(
-            [nn.Linear(config.d_model, config.vocab_size, bias=False) for _ in range(config.num_codebooks)]
+            [nn.Linear(lm_config.d_model, lm_config.vocab_size, bias=False) for _ in range(lm_config.num_codebooks)]
         )
 
         # Initialize weights and apply final processing
