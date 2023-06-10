@@ -50,7 +50,7 @@ class EncodecConfig(PretrainedConfig):
             Whether the audio shall be normalized when passed.
         chunk_in_sec (`float`, *optional*):
             If defined the audio is pre-processed into chunks of lengths `chunk_in_sec` and then encoded.
-        dimension (int):
+        dimension (`int`, defaults to 128):
             Intermediate representation dimension.
         num_filters (int):
             Base width for the model.
@@ -71,9 +71,9 @@ class EncodecConfig(PretrainedConfig):
             How much to increase the dilation with each layer.
         causal (`bool`, *optional*, defaults to True):
             Whether to use fully causal convolution.
-        pad_mode (str):
+        pad_mode (`str`, defaults to `"reflect"`):
             Padding mode for the convolutions.
-        compress (int):
+        compress (`int`, defaults to 2):
             Reduced dimensionality in residual branches (from Demucs v3).
         num_lstm_layers (int):
             Number of LSTM layers at the end of the encoder.

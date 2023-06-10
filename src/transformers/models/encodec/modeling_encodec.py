@@ -913,7 +913,7 @@ class EncodecModel(EncodecPreTrainedModel):
     def decode(
         self,
         audio_codes,
-        scales,
+        audio_scales,
         padding_mask: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecDecoderOutput]:
@@ -929,11 +929,11 @@ class EncodecModel(EncodecPreTrainedModel):
         if chunk_length is None:
             if len(audio_codes) != 1:
                 raise ValueError(f"Expected one frame, got {len(audio_codes)}")
-            audio_values = self._decode_frame(audio_codes[0], scales[0])
+            audio_values = self._decode_frame(audio_codes[0], audio_scales[0])
         else:
             decoded_frames = []
 
-            for frame, scale in zip(audio_codes, scales):
+            for frame, scale in zip(audio_codes, audio_scales):
                 frames = self._decode_frame(frame, scale)
                 decoded_frames.append(frames)
 
