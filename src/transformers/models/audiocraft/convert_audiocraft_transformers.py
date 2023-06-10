@@ -127,9 +127,7 @@ def convert_audiocraft_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_
             missing_keys.remove(key)
 
     if len(missing_keys) > 0:
-        raise ValueError(
-            f"Missing key(s) in state_dict: {missing_keys}"
-        )
+        raise ValueError(f"Missing key(s) in state_dict: {missing_keys}")
 
     if len(unexpected_keys) > 0:
         raise ValueError(f"Unexpected key(s) in state_dict: {unexpected_keys}")
