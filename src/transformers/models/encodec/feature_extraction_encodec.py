@@ -51,11 +51,15 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         feature_size: int = 1,
         sampling_rate: int = 24000,
         padding_value: float = 0.0,
+        segment_length: int = 48000,
+        segment_stride: int = 47520,
         return_attention_mask: bool = True,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.return_attention_mask = return_attention_mask
+        self.segment_stride = segment_stride
+        self.segment_length = segment_length
 
     def __call__(
         self,
@@ -146,27 +150,31 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         for idx, example in enumerate(audio):
             if example.ndim == 1:
                 example = example[..., None]
+                audio[idx] = example
             if example.ndim > 2:
                 raise ValueError(f"Expected input shape (channels, length) but got shape {example.T.shape}")
             if self.feature_size == 1 and example.shape[-1] != 1:
                 raise ValueError(f"Expected mono audio but example has {example.shape[-1]} channels")
             if self.feature_size == 2 and example.shape[-1] != 2:
                 raise ValueError(f"Expected stereo audio but example has {example.shape[-1]} channels")
-            if example.shape[-1] == 1:
-                audio[idx] = example[..., 0]  # strip off mono channel dimension
 
-        # convert into correct format for padding
-        encoded_inputs = BatchFeature({"input_values": audio})
+        # Get nax length:
+        max_length = max([array.shape[0] for array in audio])
+        nb_step = int(np.ceil(max_length / self.segment_stride))
+        max_length = (nb_step - 1) * self.segment_stride + self.segment_length
 
-        padded_inputs = self.pad(
-            encoded_inputs,
-            padding=padding,
-            max_length=max_length,
-            truncation=truncation,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=return_attention_mask,
-            **kwargs,
-        )
+        audios = []
+        padding_masks = []
+        for sample in audio:
+            padding_length = max_length - sample.shape[0]
+            sample = np.pad(sample, pad_width=((0, padding_length), (0, 0)), mode="constant", constant_values=0)
+            audios.append(sample)
+            if return_attention_mask:
+                padding_mask = np.ones(max_length)
+                padding_mask[..., -padding_length:] = 0
+                padding_masks.append(padding_mask)
+
+        padded_inputs = BatchFeature({"input_values": audios})
 
         # output shape is (batch, channels, num_samples)
         input_values = []
@@ -190,9 +198,8 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["input_values"] = input_values
 
         # convert attention_mask to correct format
-        attention_mask = padded_inputs.get("attention_mask")
-        if attention_mask is not None:
-            padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
+        if return_attention_mask and padding_masks is not None:
+            padded_inputs["padding_mask"] = [np.asarray(array, dtype=np.int32) for array in padding_masks]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
