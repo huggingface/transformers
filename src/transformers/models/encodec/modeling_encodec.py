@@ -15,8 +15,8 @@
 """ PyTorch EnCodec model."""
 
 import math
-from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -57,9 +57,9 @@ class EncodecOutput(ModelOutput):
     """
 
     audio_codes: torch.FloatTensor = None
-    # TODO: can we rename this to codes_frames instead of audio_codes?
+        # TODO: can we rename this to codes_frames instead of audio_codes?
     code_frames: torch.FloatTensor = None
-    # TODO: can we rename this to audio_output instead of code_frames?
+        # TODO: can we rename this to audio_output instead of code_frames?
 
 
 @dataclass
@@ -73,7 +73,7 @@ class EncodecEncoderOutput(ModelOutput):
     """
 
     audio_codes: torch.FloatTensor = None
-    # TODO: can we rename this to codes_frames instead of audio_codes?
+        # TODO: can we rename this to codes_frames instead of audio_codes?
     scales: torch.FloatTensor = None
 
     padding_mask: torch.FloatTensor = None
@@ -88,15 +88,18 @@ class EncodecDecoderOutput(ModelOutput):
         # TODO
     """
 
-    code_frames: torch.FloatTensor = None
-    # TODO: can we rename this to audio_output instead of code_frames?
-    code_embeddings: torch.FloatTensor = None
-    # TODO: can we name this hidden_states instead of code_embeddings?
+    code_frames: Optional[torch.FloatTensor] = None
+        # TODO: can we rename this to audio_output instead of code_frames?
+    code_embeddings: Optional[torch.FloatTensor] = None
+        # TODO: can we name this hidden_states instead of code_embeddings?
 
 
 class EncodecConv1d(nn.Module):
     """Conv1d with asymmetric or causal padding and normalization."""
 
+
+class EncodecConv1d(nn.Module):
+    """Conv1d with asymmetric or causal padding and normalization."""
     def __init__(
         self,
         in_channels: int,
@@ -189,7 +192,6 @@ class EncodecConv1d(nn.Module):
 
 class EncodecConvTranspose1d(nn.Module):
     """ConvTranspose1d with asymmetric or causal padding and normalization."""
-
     def __init__(
         self,
         in_channels: int,
@@ -540,7 +542,6 @@ class EncodecVectorQuantization(nn.Module):
 
         quantize = quantize.permute(0, 2, 1)
         return quantize
-
 
 class EncodecResidualVectorQuantization(nn.Module):
     """
@@ -929,7 +930,7 @@ class EncodecModel(EncodecPreTrainedModel):
         #   - if more than 2 frames overlap at a given point, we hope that by induction
         #      something sensible happens.
         if len(frames) == 0:
-            raise ValueError("`frames` cannot be an empty list.")
+            raise ValueError(f"`frames` cannot be an empty list.")
 
         device = frames[0].device
         dtype = frames[0].dtype
