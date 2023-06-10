@@ -272,15 +272,13 @@ class EncodecResnetBlock(nn.Module):
         if len(kernel_sizes) != len(dilations):
             raise ValueError("Number of kernel sizes should match number of dilations")
 
-        # TODO(PVP) - remove config.activation
-        # act = getattr(nn, config.activation)
         hidden = dim // config.compress
         block = []
         for i, (kernel_size, dilation) in enumerate(zip(kernel_sizes, dilations)):
             in_chs = dim if i == 0 else hidden
             out_chs = dim if i == len(kernel_sizes) - 1 else hidden
             block += [
-                nn.ELU(**config.activation_params),
+                nn.ELU(),
                 EncodecConv1d(
                     in_chs,
                     out_chs,
@@ -341,7 +339,7 @@ class EncodecEncoder(nn.Module):
                 ]
             # Add downsampling layers
             model += [
-                nn.ELU(**config.activation_params),
+                nn.ELU(),
                 EncodecConv1d(
                     mult * config.num_filters,
                     mult * config.num_filters * 2,
@@ -357,7 +355,7 @@ class EncodecEncoder(nn.Module):
         model += [EncodecLSTM(mult * config.num_filters, config.num_lstm_layers)]
 
         model += [
-            nn.ELU(**config.activation_params),
+            nn.ELU(),
             EncodecConv1d(
                 mult * config.num_filters,
                 config.dimension,
@@ -399,7 +397,7 @@ class EncodecDecoder(nn.Module):
         for ratio in config.ratios:
             # Add upsampling layers
             model += [
-                nn.ELU(**config.activation_params),
+                nn.ELU(),
                 EncodecConvTranspose1d(
                     mult * config.num_filters,
                     mult * config.num_filters // 2,
@@ -424,7 +422,7 @@ class EncodecDecoder(nn.Module):
 
         # Add final layers
         model += [
-            nn.ELU(**config.activation_params),
+            nn.ELU(),
             EncodecConv1d(
                 config.num_filters,
                 config.audio_channels,
@@ -447,13 +445,11 @@ class EncodecEuclideanCodebook(nn.Module):
 
     def __init__(self, config: EncodecConfig, dim: int):
         super().__init__()
-
-        self.decay = config.decay
         embed = torch.zeros(config.bins, dim)
 
         self.codebook_size = config.bins
 
-        self.register_buffer("inited", torch.Tensor([not config.kmeans_init]))
+        self.register_buffer("inited", torch.Tensor([True]))
         self.register_buffer("cluster_size", torch.zeros(config.bins))
         self.register_buffer("embed", embed)
         self.register_buffer("embed_avg", embed.clone())
@@ -544,8 +540,6 @@ class EncodecResidualVectorQuantizer(nn.Module):
         self.config = config
         self.num_quantizers = num_quantizers
         self.vector_quantization = EncodecResidualVectorQuantization(config, num_quantizers)
-
-    # TODO: change this to QuantizerOutput class?
 
     def get_num_quantizers_for_bandwidth(self, frame_rate: int, bandwidth: Optional[float] = None) -> int:
         """Return num_quantizers based on specified target bandwidth."""
@@ -795,7 +789,7 @@ class EncodecModel(EncodecPreTrainedModel):
 
         Returns:
             A list of frames containing the discrete encoded codes for the input audio waveform, along with rescaling
-            factors for each segment when `normalize` is True. Each frames is a tuple `(codebook, scale)`, with
+            factors for each chunk when `normalize` is True. Each frames is a tuple `(codebook, scale)`, with
             `codebook` of shape `[B, K, T]`, with `K` the number of codebooks, `T` frames.
         """
         return_dict = return_dict or self.config.return_dict
@@ -813,12 +807,12 @@ class EncodecModel(EncodecPreTrainedModel):
         if channels < 1 or channels > 2:
             raise ValueError(f"Number of audio channels must be 1 or 2, but got {channels}")
 
-        segment_length = self.config.segment_length
-        if segment_length is None:
-            segment_length = input_length
+        chunk_length = self.config.chunk_length
+        if chunk_length is None:
+            chunk_length = input_length
             stride = input_length
         else:
-            stride = self.config.segment_stride
+            stride = self.config.chunk_stride
 
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
@@ -826,7 +820,7 @@ class EncodecModel(EncodecPreTrainedModel):
         encoded_frames = []
         scales = []
 
-        step = segment_length - stride
+        step = chunk_length - stride
         if (input_length % stride) - step != 0:
             raise ValueError(
                 "The input length is not properly padded for batched chunched decoding. Make sure to pad the input correctly."
@@ -834,8 +828,8 @@ class EncodecModel(EncodecPreTrainedModel):
 
         for offset in range(0, input_length - stride + 1, stride):
             frame = (
-                input_values[:, :, offset : offset + segment_length]
-                * padding_mask[..., offset : offset + segment_length].bool()
+                input_values[:, :, offset : offset + chunk_length]
+                * padding_mask[..., offset : offset + chunk_length].bool()
             )
             encoded_frame, scale = self._encode_frame(frame, bandwidth, None)
             encoded_frames.append(encoded_frame)
@@ -854,8 +848,8 @@ class EncodecModel(EncodecPreTrainedModel):
         length = input_values.shape[-1]
         duration = length / self.config.sampling_rate
 
-        if self.config.segment is not None and duration > 1e-5 + self.config.segment:
-            raise RuntimeError(f"Duration of frame ({duration}) is longer than segment {self.config.segment}")
+        if self.config.chunk_in_sec is not None and duration > 1e-5 + self.config.chunk_in_sec:
+            raise RuntimeError(f"Duration of frame ({duration}) is longer than chunk {self.config.chunk_in_sec}")
 
         scale = None
         if self.config.normalize:
@@ -874,7 +868,7 @@ class EncodecModel(EncodecPreTrainedModel):
         # Generic overlap add, with linear fade-in/fade-out, supporting complex scenario
         # e.g., more than 2 frames per position.
         # The core idea is to use a weight function that is a triangle,
-        # with a maximum value at the middle of the segment.
+        # with a maximum value at the middle of the chunk.
         # We use this weighting when summing the frames, and divide by the sum of weights
         # for each positions at the end. Thus:
         #   - if a frame is the only one to cover a position, the weighting is a no-op.
@@ -931,8 +925,8 @@ class EncodecModel(EncodecPreTrainedModel):
         """
         return_dict = return_dict or self.config.return_dict
 
-        segment_length = self.config.segment_length
-        if segment_length is None:
+        chunk_length = self.config.chunk_length
+        if chunk_length is None:
             if len(audio_codes) != 1:
                 raise ValueError(f"Expected one frame, got {len(audio_codes)}")
             audio_values = self._decode_frame(audio_codes[0], scales[0])
@@ -943,7 +937,7 @@ class EncodecModel(EncodecPreTrainedModel):
                 frames = self._decode_frame(frame, scale)
                 decoded_frames.append(frames)
 
-            audio_values = self._linear_overlap_add(decoded_frames, self.config.segment_stride or 1)
+            audio_values = self._linear_overlap_add(decoded_frames, self.config.chunk_stride or 1)
 
         # truncate based on padding mask
         if padding_mask is not None and padding_mask.shape[-1] < audio_values.shape[-1]:

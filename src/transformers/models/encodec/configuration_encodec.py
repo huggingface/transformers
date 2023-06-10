@@ -41,17 +41,15 @@ class EncodecConfig(PretrainedConfig):
 
     Args:
         target_bandwidths (`List[float]`, *optional*):
-            TODO
+            The range of diffent bandwiths the model can encode audio with.
         sampling_rate (`int`, *optional*, defaults to 24000):
             The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
         audio_channels (`int`, *optional*, defaults to 1):
             Number of channels in the audio data. Either 1 for mono or 2 for stereo.
-        normalize=False,
-            TODO
-        segment=None,
-            TODO
-        overlap=0.01,
-            TODO
+        normalize (`bool`, *optional*, defaults to `"False"`):
+            Whether the audio shall be normalized when passed.
+        chunk_in_sec (`float`, *optional*):
+            If defined the audio is pre-processed into chunks of lengths `chunk_in_sec` and then encoded.
         dimension (int):
             Intermediate representation dimension.
         num_filters (int):
@@ -61,16 +59,8 @@ class EncodecConfig(PretrainedConfig):
         ratios (Sequence[int]):
             Kernel size and stride ratios. The encoder uses downsampling ratios instead of upsampling ratios, hence it
             will use the ratios in the reverse order to the ones specified here that must match the decoder order.
-        activation (str):
-            Activation function.
-        activation_params (dict):
-            Parameters to provide to the activation function.
         norm (`str`, *optional*, defaults to `"weight_norm"`):
             Normalization method.
-        final_activation (str):
-            Final activation function after all convolutions.
-        final_activation_params (dict):
-            Parameters to provide to the activation function.
         kernel_size (int):
             Kernel size for the initial convolution.
         last_kernel_size (int):
@@ -83,9 +73,6 @@ class EncodecConfig(PretrainedConfig):
             Whether to use fully causal convolution.
         pad_mode (str):
             Padding mode for the convolutions.
-        true_skip (bool):
-            Whether to use true skip connection or a simple (streamable) convolution as the skip connection in the
-            residual network blocks.
         compress (int):
             Reduced dimensionality in residual branches (from Demucs v3).
         num_lstm_layers (int):
@@ -95,14 +82,6 @@ class EncodecConfig(PretrainedConfig):
             means that all the trimming is done at the right.
         bins (int): Codebook size.
         codebook_dim (int): Codebook dimension. If not defined, uses the specified dimension in dim.
-        decay (float): Decay for exponential moving average over the codebooks.
-        epsilon (float): Epsilon value for numerical stability.
-        kmeans_init (bool): Whether to use kmeans to initialize the codebooks.
-        kmeans_iters (int): Number of iterations used for kmeans initialization.
-        threshold_ema_dead_code (int): Threshold for dead code expiration. Replace any codes
-            that have an exponential moving average cluster size less than the specified threshold with randomly
-            selected vector from the current batch.
-        commitment_weight (float): Weight for commitment loss.
 
     Example:
 
@@ -126,88 +105,59 @@ class EncodecConfig(PretrainedConfig):
         sampling_rate=24_000,
         audio_channels=1,
         normalize=False,
-        segment=None,  # TODO: segment length in seconds
-        overlap=0.01,
+        chunk_in_sec=None,  # TODO: chunk length in seconds
         dimension=128,  # TODO: hidden_size?
         num_filters=32,
         num_residual_layers=1,
         ratios=[8, 5, 4, 2],  # TODO: better names
-        activation="ELU",
-        activation_params={"alpha": 1.0},  # TODO: change this
         norm="weight_norm",
-        final_activation=None,
-        final_activation_params=None,
         kernel_size=7,
         last_kernel_size=7,
         residual_kernel_size=3,
         dilation_base=2,
         causal=True,
         pad_mode="reflect",
-        true_skip=False,  # TODO: better name
         compress=2,
         num_lstm_layers=2,
         trim_right_ratio=1.0,
         bins=1024,  # TODO: rename to codebook_size
         codebook_dim=None,
-        decay=0.99,
-        epsilon=1e-5,
-        kmeans_init=True,
-        kmeans_iters=50,
-        threshold_ema_dead_code=2,
-        commitment_weight=1.0,
-        is_encoder_decoder=True,
         **kwargs,
     ):
         self.target_bandwidths = target_bandwidths
         self.sampling_rate = sampling_rate
         self.audio_channels = audio_channels
         self.normalize = normalize
-        self.segment = segment
-        self.overlap = overlap
+        self.chunk_in_sec = chunk_in_sec
         self.dimension = dimension
         self.num_filters = num_filters
         self.num_residual_layers = num_residual_layers
         self.ratios = ratios
-        self.activation = activation
-        self.activation_params = activation_params
         self.norm = norm
-        self.final_activation = final_activation
-        self.final_activation_params = final_activation_params
         self.kernel_size = kernel_size
         self.last_kernel_size = last_kernel_size
         self.residual_kernel_size = residual_kernel_size
         self.dilation_base = dilation_base
         self.causal = causal
         self.pad_mode = pad_mode
-        self.true_skip = true_skip
         self.compress = compress
         self.num_lstm_layers = num_lstm_layers
         self.trim_right_ratio = trim_right_ratio
         self.bins = bins
         self.codebook_dim = codebook_dim
-        self.decay = decay
-        self.epsilon = epsilon
-        self.kmeans_init = kmeans_init
-        self.kmeans_iters = kmeans_iters
-        self.threshold_ema_dead_code = threshold_ema_dead_code
-        self.commitment_weight = commitment_weight
-        self.is_encoder_decoder = is_encoder_decoder
 
-        super().__init__(
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        super().__init__(**kwargs,)
 
     @property
-    def segment_length(self) -> Optional[int]:
-        if self.segment is None:
+    def chunk_length(self) -> Optional[int]:
+        if self.chunk_in_sec is None:
             return None
         else:
-            return int(self.segment * self.sampling_rate)
+            return int(self.chunk_in_sec * self.sampling_rate)
 
     @property
-    def segment_stride(self) -> Optional[int]:
-        if self.segment is None:
+    def chunk_stride(self) -> Optional[int]:
+        if self.chunk_in_sec is None:
             return None
         else:
-            return max(1, int((1.0 - self.overlap) * self.segment_length))
+            return max(1, int((1.0 - self.overlap) * self.chunk_length))

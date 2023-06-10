@@ -98,7 +98,7 @@ class EncodecModelTester:
         return config, inputs_dict
 
     def get_config(self):
-        return EncodecConfig(audio_channels=self.num_channels, segment=None)
+        return EncodecConfig(audio_channels=self.num_channels, chunk_in_sec=None)
 
     def create_and_check_model_forward(self, config, inputs_dict):
         model = EncodecModel(config=config).to(torch_device).eval()
@@ -193,7 +193,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_feed_forward_chunking(self):
         # model does not support chunking (yet?)
-        # TODO arthur use segment_length in the decode and encode
+        # TODO arthur use chunk_length in the decode and encode
         pass
 
     def test_hidden_states_output(self):
@@ -389,10 +389,10 @@ class EncodecIntegrationTest(unittest.TestCase):
                 encoder_outputs = model.encode(
                     inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth), return_dict=False
                 )
-                [a[0].sum().cpu().item() for a in encoder_outputs[0]]
+                audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
 
                 # make sure audio encoded codes are correct
-                # self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
+                self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
                 input_values_dec = model.decode(*encoder_outputs)[0]
                 input_values_enc_dec = model(
                     inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth)
