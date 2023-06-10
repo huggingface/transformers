@@ -692,6 +692,7 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
     base_model_prefix = "gptsan_japanese"
     supports_gradient_checkpointing = False
     _no_split_modules = ["GPTSanJapaneseBlock"]
+    _skip_keys_device_placement = "past_key_values"
 
     @property
     def dummy_inputs(self):

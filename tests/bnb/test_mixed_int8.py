@@ -118,6 +118,19 @@ class MixedInt8Test(BaseMixedInt8Test):
         gc.collect()
         torch.cuda.empty_cache()
 
+    def test_quantization_config_json_serialization(self):
+        r"""
+        A simple test to check if the quantization config is correctly serialized and deserialized
+        """
+        config = self.model_8bit.config
+
+        self.assertTrue(hasattr(config, "quantization_config"))
+
+        _ = config.to_dict()
+        _ = config.to_diff_dict()
+
+        _ = config.to_json_string()
+
     def test_memory_footprint(self):
         r"""
         A simple test to check if the model conversion has been done correctly by checking on the
@@ -130,6 +143,41 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         self.assertAlmostEqual(mem_fp16 / mem_8bit, self.EXPECTED_RELATIVE_DIFFERENCE)
         self.assertTrue(self.model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+
+    def test_linear_are_8bit(self):
+        r"""
+        A simple test to check if the model conversion has been done correctly by checking on the
+        memory footprint of the converted model and the class type of the linear layers of the converted models
+        """
+        from transformers import T5PreTrainedModel
+
+        self.model_fp16.get_memory_footprint()
+        self.model_8bit.get_memory_footprint()
+
+        for name, module in self.model_8bit.named_modules():
+            if isinstance(module, torch.nn.Linear):
+                if name not in ["lm_head"] + T5PreTrainedModel._keep_in_fp32_modules:
+                    self.assertTrue(module.weight.dtype == torch.int8)
+
+    def test_llm_skip(self):
+        r"""
+        A simple test to check if `llm_int8_skip_modules` works as expected
+        """
+        import bitsandbytes as bnb
+
+        quantization_config = BitsAndBytesConfig(load_in_8bit=True, llm_int8_skip_modules=["classifier"])
+        seq_classification_model = AutoModelForSequenceClassification.from_pretrained(
+            "roberta-large-mnli", quantization_config=quantization_config
+        )
+        self.assertTrue(seq_classification_model.roberta.encoder.layer[0].output.dense.weight.dtype == torch.int8)
+        self.assertTrue(
+            isinstance(seq_classification_model.roberta.encoder.layer[0].output.dense, bnb.nn.Linear8bitLt)
+        )
+
+        self.assertTrue(isinstance(seq_classification_model.classifier.dense, nn.Linear))
+        self.assertTrue(seq_classification_model.classifier.dense.weight.dtype != torch.int8)
+        self.assertTrue(isinstance(seq_classification_model.classifier.out_proj, nn.Linear))
+        self.assertTrue(seq_classification_model.classifier.out_proj != torch.int8)
 
     def test_generate_quality(self):
         r"""
@@ -147,6 +195,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         Test that loading the model with the config is equivalent
         """
         bnb_config = BitsAndBytesConfig()
+        bnb_config.load_in_8bit = True
 
         model_8bit_from_config = AutoModelForCausalLM.from_pretrained(
             self.model_name, quantization_config=bnb_config, device_map="auto"
@@ -329,6 +378,7 @@ class MixedInt8T5Test(unittest.TestCase):
         """
         from transformers import T5ForConditionalGeneration
 
+        modules = T5ForConditionalGeneration._keep_in_fp32_modules
         T5ForConditionalGeneration._keep_in_fp32_modules = None
 
         # test with `t5-small`
@@ -342,6 +392,7 @@ class MixedInt8T5Test(unittest.TestCase):
         )
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
         _ = model.generate(**encoded_input)
+        T5ForConditionalGeneration._keep_in_fp32_modules = modules
 
     def test_inference_with_keep_in_fp32(self):
         r"""
@@ -666,7 +717,9 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
             return
 
         # Step 1: freeze all parameters
-        model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True)
+
+        self.assertEqual(set(model.hf_device_map.values()), {torch.cuda.current_device()})
 
         for param in model.parameters():
             param.requires_grad = False  # freeze the model - train adapters later

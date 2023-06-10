@@ -41,7 +41,7 @@ body:
         
         Integrations:
         
-          - deepspeed: HF Trainer: @stas00, Accelerate: @pacman100
+          - deepspeed: HF Trainer/Accelerate: @pacman100
           - ray/raytune: @richardliaw, @amogkam
           - Big Model Inference: @sgugger @muellerzr
         

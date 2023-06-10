@@ -159,7 +159,7 @@ class RwkvLinearAttention(torch.autograd.Function):
 
     @staticmethod
     # g stands for grad
-    def backward(ctx, g_output):
+    def backward(ctx, g_output, g_state=None):
         input_dtype = ctx.input_dtype
 
         time_decay, time_first, key, value, output = ctx.saved_tensors
@@ -188,17 +188,14 @@ class RwkvLinearAttention(torch.autograd.Function):
             g_key,
             g_value,
         )
-        g_time_decay = torch.sum(g_time_decay, dim=0)
-        g_time_first = torch.sum(g_time_first, dim=0)
 
         return (
-            None,
-            None,
-            None,
             g_time_decay.to(input_dtype),
             g_time_first.to(input_dtype),
             g_key.to(input_dtype),
             g_value.to(input_dtype),
+            None,
+            None,
         )
 
 
@@ -713,6 +710,13 @@ class RwkvModel(RwkvPreTrainedModel):
                         if hasattr(block.attention.output.weight, "SCB"):
                             block.attention.output.weight.SCB.div_(2 ** int(block_id // self.config.rescale_every))
                             block.feed_forward.value.weight.SCB.div_(2 ** int(block_id // self.config.rescale_every))
+                        elif hasattr(block.attention.output.weight, "quant_state"):
+                            block.attention.output.weight.quant_state[0].div_(
+                                2 ** int(block_id // self.config.rescale_every)
+                            )
+                            block.feed_forward.value.weight.quant_state[0].div_(
+                                2 ** int(block_id // self.config.rescale_every)
+                            )
                         else:
                             block.attention.output.weight.div_(2 ** int(block_id // self.config.rescale_every))
                             block.feed_forward.value.weight.div_(2 ** int(block_id // self.config.rescale_every))

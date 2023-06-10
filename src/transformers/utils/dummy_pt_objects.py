@@ -772,6 +772,30 @@ class AutoModelWithLMHead(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class AutoformerForPrediction(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoformerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoformerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 BART_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -4719,6 +4743,37 @@ class MobileViTPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class MobileViTV2ForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MobileViTV2ForSemanticSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MobileViTV2Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MobileViTV2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 MPNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -6745,6 +6800,13 @@ class TimesformerModel(metaclass=DummyObject):
 
 
 class TimesformerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TimmBackbone(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
