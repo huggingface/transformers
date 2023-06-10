@@ -15,17 +15,12 @@
 """ PyTorch EnCodec model."""
 
 import math
-
-# TODO: their stuff
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-# TODO: Need to get rid of this eventually
-import einops
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from einops import rearrange, repeat
 from torch import nn
 
 from ...modeling_utils import PreTrainedModel
@@ -49,15 +44,6 @@ ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Matthijs/encodec_48khz",
     # See all EnCodec models at https://huggingface.co/models?filter=encodec
 ]
-
-
-@dataclass
-class QuantizedResult:
-    quantized: torch.Tensor
-    codes: torch.Tensor
-    bandwidth: torch.Tensor  # bandwidth in kb/s used, per batch item.
-    penalty: Optional[torch.Tensor] = None
-    metrics: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -124,124 +110,6 @@ class EncodecDecoderOutput(ModelOutput):
         )
 
 
-def _linear_overlap_add(frames: List[torch.Tensor], stride: int):
-    # Generic overlap add, with linear fade-in/fade-out, supporting complex scenario
-    # e.g., more than 2 frames per position.
-    # The core idea is to use a weight function that is a triangle,
-    # with a maximum value at the middle of the segment.
-    # We use this weighting when summing the frames, and divide by the sum of weights
-    # for each positions at the end. Thus:
-    #   - if a frame is the only one to cover a position, the weighting is a no-op.
-    #   - if 2 frames cover a position:
-    #          ...  ...
-    #         /   \/   \
-    #        /    /\    \
-    #            S  T       , i.e. S offset of second frame starts, T end of first frame.
-    # Then the weight function for each one is: (t - S), (T - t), with `t` a given offset.
-    # After the final normalization, the weight of the second frame at position `t` is
-    # (t - S) / (t - S + (T - t)) = (t - S) / (T - S), which is exactly what we want.
-    #
-    #   - if more than 2 frames overlap at a given point, we hope that by induction
-    #      something sensible happens.
-    assert len(frames)
-    device = frames[0].device
-    dtype = frames[0].dtype
-    shape = frames[0].shape[:-1]
-    total_size = stride * (len(frames) - 1) + frames[-1].shape[-1]
-
-    frame_length = frames[0].shape[-1]
-    t = torch.linspace(0, 1, frame_length + 2, device=device, dtype=dtype)[1:-1]
-    weight = 0.5 - (t - 0.5).abs()
-
-    sum_weight = torch.zeros(total_size, device=device, dtype=dtype)
-    out = torch.zeros(*shape, total_size, device=device, dtype=dtype)
-    offset: int = 0
-
-    for frame in frames:
-        frame_length = frame.shape[-1]
-        out[..., offset : offset + frame_length] += weight[:frame_length] * frame
-        sum_weight[offset : offset + frame_length] += weight[:frame_length]
-        offset += stride
-    assert sum_weight.min() > 0
-    return out / sum_weight
-
-
-def _get_extra_padding_for_conv1d(x: torch.Tensor, kernel_size: int, stride: int, padding_total: int = 0) -> int:
-    """See `pad_for_conv1d`."""
-    length = x.shape[-1]
-    n_frames = (length - kernel_size + padding_total) / stride + 1
-    ideal_length = (math.ceil(n_frames) - 1) * stride + (kernel_size - padding_total)
-    return ideal_length - length
-
-
-def _pad1d(x: torch.Tensor, paddings: Tuple[int, int], mode: str = "zero", value: float = 0.0):
-    """Tiny wrapper around torch.nn.functional.pad, just to allow for reflect padding on small input.
-    If this is the case, we insert extra 0 padding to the right before the reflection happen.
-    """
-    length = x.shape[-1]
-    padding_left, padding_right = paddings
-    assert padding_left >= 0 and padding_right >= 0, (padding_left, padding_right)
-    if mode == "reflect":
-        max_pad = max(padding_left, padding_right)
-        extra_pad = 0
-        if length <= max_pad:
-            extra_pad = max_pad - length + 1
-            x = nn.functional.pad(x, (0, extra_pad))
-        padded = nn.functional.pad(x, paddings, mode, value)
-        end = padded.shape[-1] - extra_pad
-        return padded[..., :end]
-    else:
-        return nn.functional.pad(x, paddings, mode, value)
-
-
-def _unpad1d(x: torch.Tensor, paddings: Tuple[int, int]):
-    """Remove padding from x, handling properly zero padding. Only for 1d!"""
-    padding_left, padding_right = paddings
-    assert padding_left >= 0 and padding_right >= 0, (padding_left, padding_right)
-    assert (padding_left + padding_right) <= x.shape[-1]
-    end = x.shape[-1] - padding_right
-    return x[..., padding_left:end]
-
-
-def _uniform_init(*shape: int):
-    t = torch.empty(shape)
-    nn.init.kaiming_uniform_(t)
-    return t
-
-
-def _sample_vectors(samples, num: int):
-    num_samples, device = samples.shape[0], samples.device
-
-    if num_samples >= num:
-        indices = torch.randperm(num_samples, device=device)[:num]
-    else:
-        indices = torch.randint(0, num_samples, (num,), device=device)
-
-    return samples[indices]
-
-
-def _kmeans(samples, num_clusters: int, num_iters: int = 10):
-    dim, dtype = samples.shape[-1], samples.dtype
-
-    means = _sample_vectors(samples, num_clusters)
-
-    for _ in range(num_iters):
-        diffs = rearrange(samples, "n d -> n () d") - rearrange(means, "c d -> () c d")
-        dists = -(diffs**2).sum(dim=-1)
-
-        buckets = dists.max(dim=-1).indices
-        bins = torch.bincount(buckets, minlength=num_clusters)
-        zero_mask = bins == 0
-        bins_min_clamped = bins.masked_fill(zero_mask, 1)
-
-        new_means = buckets.new_zeros(num_clusters, dim, dtype=dtype)
-        new_means.scatter_add_(0, repeat(buckets, "n -> n d", d=dim), samples)
-        new_means = new_means / bins_min_clamped[..., None]
-
-        means = torch.where(zero_mask[..., None], means, new_means)
-
-    return means, bins
-
 
 class EncodecConv1d(nn.Module):
     """Conv1d with asymmetric or causal padding and normalization."""
@@ -285,6 +153,33 @@ class EncodecConv1d(nn.Module):
         self.causal = causal
         self.pad_mode = pad_mode
 
+    @staticmethod
+    def _get_extra_padding_for_conv1d(x: torch.Tensor, kernel_size: int, stride: int, padding_total: int = 0) -> int:
+        """See `pad_for_conv1d`."""
+        length = x.shape[-1]
+        n_frames = (length - kernel_size + padding_total) / stride + 1
+        ideal_length = (math.ceil(n_frames) - 1) * stride + (kernel_size - padding_total)
+        return ideal_length - length
+
+    @staticmethod
+    def _pad1d(x: torch.Tensor, paddings: Tuple[int, int], mode: str = "zero", value: float = 0.0):
+        """Tiny wrapper around torch.nn.functional.pad, just to allow for reflect padding on small input.
+        If this is the case, we insert extra 0 padding to the right before the reflection happen.
+        """
+        length = x.shape[-1]
+        padding_left, padding_right = paddings
+        if mode == "reflect":
+            max_pad = max(padding_left, padding_right)
+            extra_pad = 0
+            if length <= max_pad:
+                extra_pad = max_pad - length + 1
+                x = nn.functional.pad(x, (0, extra_pad))
+            padded = nn.functional.pad(x, paddings, mode, value)
+            end = padded.shape[-1] - extra_pad
+            return padded[..., :end]
+        else:
+            return nn.functional.pad(x, paddings, mode, value)
+
     def forward(self, x):
         kernel_size = self.conv.kernel_size[0]
         stride = self.conv.stride[0]
@@ -292,15 +187,15 @@ class EncodecConv1d(nn.Module):
         kernel_size = (kernel_size - 1) * dilation + 1  # effective kernel size with dilations
         padding_total = kernel_size - stride
 
-        extra_padding = _get_extra_padding_for_conv1d(x, kernel_size, stride, padding_total)
+        extra_padding = self._get_extra_padding_for_conv1d(x, kernel_size, stride, padding_total)
         if self.causal:
             # Left padding for causal
-            x = _pad1d(x, (padding_total, extra_padding), mode=self.pad_mode)
+            x = self._pad1d(x, (padding_total, extra_padding), mode=self.pad_mode)
         else:
             # Asymmetric padding required for odd strides
             padding_right = padding_total // 2
             padding_left = padding_total - padding_right
-            x = _pad1d(x, (padding_left, padding_right + extra_padding), mode=self.pad_mode)
+            x = self._pad1d(x, (padding_left, padding_right + extra_padding), mode=self.pad_mode)
 
         x = self.conv(x)
         if self.norm_type == "time_group_norm":
@@ -331,10 +226,9 @@ class EncodecConvTranspose1d(nn.Module):
 
         self.causal = causal
         self.trim_right_ratio = trim_right_ratio
-        assert (
-            self.causal or self.trim_right_ratio == 1.0
-        ), "`trim_right_ratio` != 1.0 only makes sense for causal convolutions"
-        assert self.trim_right_ratio >= 0.0 and self.trim_right_ratio <= 1.0
+
+        if not (self.causal or self.trim_right_ratio == 1.0):
+            raise ValueError("`trim_right_ratio` != 1.0 only makes sense for causal convolutions")
 
     def forward(self, x):
         kernel_size = self.conv.kernel_size[0]
@@ -353,13 +247,15 @@ class EncodecConvTranspose1d(nn.Module):
             # Trim the padding on the right according to the specified ratio
             # if trim_right_ratio = 1.0, trim everything from right
             padding_right = math.ceil(padding_total * self.trim_right_ratio)
-            padding_left = padding_total - padding_right
-            y = _unpad1d(y, (padding_left, padding_right))
         else:
             # Asymmetric padding required for odd strides
             padding_right = padding_total // 2
-            padding_left = padding_total - padding_right
-            y = _unpad1d(y, (padding_left, padding_right))
+
+        padding_left = padding_total - padding_right
+
+        # unpad
+        end = y.shape[-1] - padding_right
+        y = y[..., padding_left:end]
         return y
 
 
@@ -594,8 +490,7 @@ class EncodecEuclideanCodebook(nn.Module):
         super().__init__()
 
         self.decay = config.decay
-        init_fn: Union[Callable[..., torch.Tensor], Any] = _uniform_init if not config.kmeans_init else torch.zeros
-        embed = init_fn(config.bins, dim)
+        embed = torch.zeros(config.bins, dim)
 
         self.codebook_size = config.bins
 
@@ -608,77 +503,25 @@ class EncodecEuclideanCodebook(nn.Module):
         self.register_buffer("embed", embed)
         self.register_buffer("embed_avg", embed.clone())
 
-    @torch.jit.ignore
-    def init_embed_(self, data):
-        if self.inited:
-            return
-
-        embed, cluster_size = _kmeans(data, self.codebook_size, self.kmeans_iters)
-        self.embed.data.copy_(embed)
-        self.embed_avg.data.copy_(embed.clone())
-        self.cluster_size.data.copy_(cluster_size)
-        self.inited.data.copy_(torch.Tensor([True]))
-        # Make sure all buffers across workers are in sync after initialization
-        # TODO distrib.broadcast_tensors(self.buffers())
-
-    def replace_(self, samples, mask):
-        modified_codebook = torch.where(mask[..., None], _sample_vectors(samples, self.codebook_size), self.embed)
-        self.embed.data.copy_(modified_codebook)
-
-    def expire_codes_(self, batch_samples):
-        if self.threshold_ema_dead_code == 0:
-            return
-
-        expired_codes = self.cluster_size < self.threshold_ema_dead_code
-        if not torch.any(expired_codes):
-            return
-
-        batch_samples = rearrange(batch_samples, "... d -> (...) d")
-        self.replace_(batch_samples, mask=expired_codes)
-        # TODO distrib.broadcast_tensors(self.buffers())
-
-    def preprocess(self, x):
-        x = rearrange(x, "... d -> (...) d")
-        return x
-
     def quantize(self, x):
         embed = self.embed.t()
         dist = -(x.pow(2).sum(1, keepdim=True) - 2 * x @ embed + embed.pow(2).sum(0, keepdim=True))
         embed_ind = dist.max(dim=-1).indices
         return embed_ind
 
-    def postprocess_emb(self, embed_ind, shape):
-        return embed_ind.view(*shape[:-1])
-
-    def dequantize(self, embed_ind):
-        quantize = nn.functional.embedding(embed_ind, self.embed)
-        return quantize
-
     def encode(self, x):
         shape = x.shape
         # pre-process
-        x = self.preprocess(x)
+        x = x.reshape((-1, shape[-1]))
         # quantize
         embed_ind = self.quantize(x)
         # post-process
-        embed_ind = self.postprocess_emb(embed_ind, shape)
+        embed_ind = embed_ind.view(*shape[:-1])
         return embed_ind
 
     def decode(self, embed_ind):
-        quantize = self.dequantize(embed_ind)
+        quantize = nn.functional.embedding(embed_ind, self.embed)
         return quantize
-
-    def forward(self, x):
-        shape = x.shape
-        x = self.preprocess(x)
-
-        self.init_embed_(x)
-
-        embed_ind = self.quantize(x)
-        embed_ind = self.postprocess_emb(embed_ind, shape)
-        quantize = self.dequantize(embed_ind)
-
-        return quantize, embed_ind
 
 
 class EncodecVectorQuantization(nn.Module):
@@ -699,7 +542,7 @@ class EncodecVectorQuantization(nn.Module):
         self.codebook = EncodecEuclideanCodebook(config, codebook_dim)
 
     def encode(self, x):
-        x = rearrange(x, "b d n -> b n d")
+        x = x.permute(0, 2, 1)
         if self.requires_projection:
             x = self.project_in(x)
         embed_in = self.codebook.encode(x)
@@ -709,27 +552,9 @@ class EncodecVectorQuantization(nn.Module):
         quantize = self.codebook.decode(embed_ind)
         if self.requires_projection:
             quantize = self.project_out(quantize)
-        quantize = rearrange(quantize, "b n d -> b d n")
+
+        quantize = quantize.permute(0, 2, 1)
         return quantize
-
-    def forward(self, x):
-        device = x.device
-        x = rearrange(x, "b d n -> b n d")
-        if self.requires_projection:
-            x = self.project_in(x)
-
-        quantize, embed_ind = self.codebook(x)
-
-        if self.training:
-            logger.warning("Training not supported yet")
-
-        loss = torch.tensor([0.0], device=device, requires_grad=self.training)
-
-        if self.requires_projection:
-            quantize = self.project_out(quantize)
-        quantize = rearrange(quantize, "b n d -> b d n")
-        return quantize, embed_ind, loss
-
 
 class EncodecResidualVectorQuantization(nn.Module):
     """
@@ -739,26 +564,6 @@ class EncodecResidualVectorQuantization(nn.Module):
     def __init__(self, config: EncodecConfig, num_quantizers: int):
         super().__init__()
         self.layers = nn.ModuleList([EncodecVectorQuantization(config) for _ in range(num_quantizers)])
-
-    def forward(self, x, num_quantizers: Optional[int] = None):
-        quantized_out = 0.0
-        residual = x
-
-        all_losses = []
-        all_indices = []
-
-        num_quantizers = num_quantizers or len(self.layers)
-
-        for layer in self.layers[:num_quantizers]:
-            quantized, indices, loss = layer(residual)
-            residual = residual - quantized
-            quantized_out = quantized_out + quantized
-
-            all_indices.append(indices)
-            all_losses.append(loss)
-
-        out_losses, out_indices = map(torch.stack, (all_losses, all_indices))
-        return quantized_out, out_indices, out_losses
 
     def encode(self, x: torch.Tensor, num_quantizers: Optional[int] = None) -> torch.Tensor:
         residual = x
@@ -790,46 +595,15 @@ class EncodecResidualVectorQuantizer(nn.Module):
         self.num_quantizers = num_quantizers
         self.vector_quantization = EncodecResidualVectorQuantization(config, num_quantizers)
 
-    def forward(self, embeddings: torch.Tensor, frame_rate: int, bandwidth: Optional[float] = None) -> QuantizedResult:
-        """
-        Residual vector quantization on the given input tensor.
-
-
-        Args:
-            embeddings (torch.Tensor): Input tensor.
-
-
-            frame_rate (int): Sample rate of the input tensor.
-
-
-            bandwidth (float): Target bandwidth.
-        Returns:
-            QuantizedResult:
-                The quantized (or approximately quantized) representation with the associated bandwidth and any penalty
-                term for the loss.
-        """
-        bw_per_q = self.get_bandwidth_per_quantizer(frame_rate)
-        num_quantizers = self.get_num_quantizers_for_bandwidth(frame_rate, bandwidth)
-        quantized, codes, commit_loss = self.vector_quantization(embeddings, num_quantizers=num_quantizers)
-        bw = torch.tensor(num_quantizers * bw_per_q).to(embeddings)
-        return QuantizedResult(quantized, codes, bw, penalty=torch.mean(commit_loss))
-
     # TODO: change this to QuantizerOutput class?
 
     def get_num_quantizers_for_bandwidth(self, frame_rate: int, bandwidth: Optional[float] = None) -> int:
         """Return num_quantizers based on specified target bandwidth."""
-        bw_per_q = self.get_bandwidth_per_quantizer(frame_rate)
+        bw_per_q = math.log2(self.config.bins) * frame_rate
         num_quantizers = self.num_quantizers
         if bandwidth is not None and bandwidth > 0.0:
             num_quantizers = int(max(1, math.floor(bandwidth * 1000 / bw_per_q)))
         return num_quantizers
-
-    def get_bandwidth_per_quantizer(self, frame_rate: int):
-        """
-        Returns bandwidth per quantizer for a given input frame rate. Each quantizer encodes a frame with `log2(bins)`
-        bits.
-        """
-        return math.log2(self.config.bins) * frame_rate
 
     def encode(self, embeddings: torch.Tensor, frame_rate: int, bandwidth: Optional[float] = None) -> torch.Tensor:
         """
@@ -1130,6 +904,53 @@ class EncodecModel(EncodecPreTrainedModel):
         codes = codes.transpose(0, 1)
         return (codes, scale)
 
+    @staticmethod
+    def _linear_overlap_add(frames: List[torch.Tensor], stride: int):
+        # Generic overlap add, with linear fade-in/fade-out, supporting complex scenario
+        # e.g., more than 2 frames per position.
+        # The core idea is to use a weight function that is a triangle,
+        # with a maximum value at the middle of the segment.
+        # We use this weighting when summing the frames, and divide by the sum of weights
+        # for each positions at the end. Thus:
+        #   - if a frame is the only one to cover a position, the weighting is a no-op.
+        #   - if 2 frames cover a position:
+        #          ...  ...
+        #         /   \/   \
+        #        /    /\    \
+        #            S  T       , i.e. S offset of second frame starts, T end of first frame.
+        # Then the weight function for each one is: (t - S), (T - t), with `t` a given offset.
+        # After the final normalization, the weight of the second frame at position `t` is
+        # (t - S) / (t - S + (T - t)) = (t - S) / (T - S), which is exactly what we want.
+        #
+        #   - if more than 2 frames overlap at a given point, we hope that by induction
+        #      something sensible happens.
+        if len(frames) == 0:
+            raise ValueError(f"`frames` cannot be an empty list.")
+
+        device = frames[0].device
+        dtype = frames[0].dtype
+        shape = frames[0].shape[:-1]
+        total_size = stride * (len(frames) - 1) + frames[-1].shape[-1]
+
+        frame_length = frames[0].shape[-1]
+        t = torch.linspace(0, 1, frame_length + 2, device=device, dtype=dtype)[1:-1]
+        weight = 0.5 - (t - 0.5).abs()
+
+        sum_weight = torch.zeros(total_size, device=device, dtype=dtype)
+        out = torch.zeros(*shape, total_size, device=device, dtype=dtype)
+        offset: int = 0
+
+        for frame in frames:
+            frame_length = frame.shape[-1]
+            out[..., offset : offset + frame_length] += weight[:frame_length] * frame
+            sum_weight[offset : offset + frame_length] += weight[:frame_length]
+            offset += stride
+
+        if sum_weight.min() == 0:
+            raise ValueError(f"`sum_weight` minimum element must be bigger than zero: {sum_weight}`")
+
+        return out / sum_weight
+
     def decode(
         self,
         encoded_frames: Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput],
@@ -1155,7 +976,7 @@ class EncodecModel(EncodecPreTrainedModel):
             decoded_frames.append(frames)
             code_embeddings.append(embeddings)
 
-        decoded_frames = _linear_overlap_add(decoded_frames, self.config.segment_stride or 1)
+        decoded_frames = self._linear_overlap_add(decoded_frames, self.config.segment_stride or 1)
         code_embeddings = torch.stack(code_embeddings)
 
         if return_dict:

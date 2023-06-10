@@ -321,6 +321,7 @@ class EncodecIntegrationTest(unittest.TestCase):
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "Matthijs/encodec_24khz"
+        # model_id = "/home/patrick/encodec_24khz/"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
