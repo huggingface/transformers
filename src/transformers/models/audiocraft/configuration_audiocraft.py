@@ -117,7 +117,7 @@ class AudiocraftDecoderConfig(PretrainedConfig):
         classifier_dropout=0.0,
         scale_embedding=False,
         num_codebooks=8,
-        pad_token_id=-1,
+        pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
         forced_eos_token_id=2,
@@ -200,9 +200,7 @@ class AudiocraftConfig(PretrainedConfig):
     model_type = "audiocraft"
     is_composition = True
 
-    def __init__(self, t5_config=None, lm_config=None, init_std=0.02, is_encoder_decoder=True, **kwargs):
-        super().__init__(**kwargs)
-
+    def __init__(self, t5_config=None, lm_config=None, init_std=0.02, use_cache=True, **kwargs):
         if t5_config is None:
             t5_config = {}
             logger.info("t5_config is None. initializing the T5Config with default values.")
@@ -215,7 +213,10 @@ class AudiocraftConfig(PretrainedConfig):
         self.lm_config = AudiocraftDecoderConfig(**lm_config)
 
         self.init_std = init_std
-        self.is_encoder_decoder = is_encoder_decoder
+        self.is_encoder_decoder = True
+        self.use_cache = use_cache
+
+        super().__init__(**kwargs)
 
     @classmethod
     def from_t5_lm_config(

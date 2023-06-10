@@ -37,14 +37,16 @@ CHECKPOINT_TO_T5 = {
     "small": "t5-base",
 }
 
-EXPECTED_MISSING_DECODER_KEYS = ["embed_positions.weights"]
+EXPECTED_MISSING_KEYS = ["model.decoder.embed_positions.weights"]
 
 
 def rename_key(name):
+    if "condition_provider.conditioners.description.output_proj" in name:
+        name = name.replace("condition_provider.conditioners.description.output_proj", "model.encoder_projection")
     if "emb" in name:
-        name = name.replace("emb", "embed_tokens")
-    if "transformer.layers" in name:
-        name = name.replace("transformer.layers", "layers")
+        name = name.replace("emb", "model.decoder.embed_tokens")
+    if "transformer" in name:
+        name = name.replace("transformer", "model.decoder")
     if "cross_attention" in name:
         name = name.replace("cross_attention", "encoder_attn")
     if "linear1" in name:
@@ -58,39 +60,28 @@ def rename_key(name):
     if "norm2" in name:
         name = name.replace("norm2", "final_layer_norm")
     if "out_norm" in name:
-        name = name.replace("out_norm", "layer_norm")
+        name = name.replace("out_norm", "model.decoder.layer_norm")
     if "linears" in name:
         name = name.replace("linears", "lm_heads")
-    if "condition_provider.conditioners.description.output_proj" in name:
-        name = name.replace("condition_provider.conditioners.description.output_proj", "encoder_projection")
     return name
 
 
-def rename_decoder_state_dict(state_dict: OrderedDict, d_model: int) -> tuple[Dict, Dict, Dict]:
+def rename_decoder_state_dict(state_dict: OrderedDict, d_model: int) -> Dict:
     """Function that takes the fairseq Audiocraft state dict and renames it according to the HF
     module names. It further partitions the state dict into three: the decoder state dict (state_dict),
     the state dict for the LM head, and the state dict for the encoder projection."""
     keys = list(state_dict.keys())
-    lm_heads = {}
-    encoder_projection = {}
     for key in keys:
         val = state_dict.pop(key)
         key = rename_key(key)
-        if "lm_heads" in key:
-            lm_heads[key[len("lm_heads.") :]] = val
-
-        elif "encoder_projection" in key:
-            encoder_projection[key[len("encoder_projection.") :]] = val
-
-        elif "in_proj_weight" in key:
+        if "in_proj_weight" in key:
             # split fused qkv proj
             state_dict[key.replace("in_proj_weight", "q_proj.weight")] = val[:d_model, :]
             state_dict[key.replace("in_proj_weight", "k_proj.weight")] = val[d_model : 2 * d_model, :]
             state_dict[key.replace("in_proj_weight", "v_proj.weight")] = val[-d_model:, :]
-
         else:
             state_dict[key] = val
-    return state_dict, lm_heads, encoder_projection
+    return state_dict
 
 
 def config_from_checkpoint(checkpoint: str) -> AudiocraftConfig:
@@ -123,22 +114,40 @@ def convert_audiocraft_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_
         state_dict = fairseq_model.lm.state_dict()
         config = config_from_checkpoint(checkpoint)
 
-    state_dict, lm_heads, encoder_projection = rename_decoder_state_dict(state_dict, d_model=config.lm_config.d_model)
+    state_dict = rename_decoder_state_dict(state_dict, d_model=config.lm_config.d_model)
 
     model = AudiocraftForConditionalGeneration(config).eval()
+    # load the encoder model
     model.model.encoder = T5EncoderModel.from_pretrained(CHECKPOINT_TO_T5[checkpoint])
-    model.model.encoder_projection.load_state_dict(encoder_projection)
-    missing_decoder_keys, unexpected_decoder_keys = model.model.decoder.load_state_dict(state_dict, strict=False)
-    model.lm_heads.load_state_dict(
-        lm_heads,
-    )
+    # load all other weights (encoder proj + decoder + lm heads) - expect that we'll be missing all enc weights
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
 
-    if set(missing_decoder_keys) != set(EXPECTED_MISSING_DECODER_KEYS):
+    for key in missing_keys.copy():
+        if key.startswith("model.encoder") or key in EXPECTED_MISSING_KEYS:
+            missing_keys.remove(key)
+
+    if len(missing_keys) > 0:
         raise ValueError(
-            f"Missing key(s) in state_dict: {list(set(missing_decoder_keys) - set(EXPECTED_MISSING_DECODER_KEYS))}"
+            f"Missing key(s) in state_dict: {missing_keys}"
         )
-    if len(unexpected_decoder_keys) > 0:
-        raise ValueError(f"Unexpected key(s) in state_dict: {unexpected_decoder_keys}")
+
+    if len(unexpected_keys) > 0:
+        raise ValueError(f"Unexpected key(s) in state_dict: {unexpected_keys}")
+
+    # check we can do a forward pass
+    decoder_input_ids = torch.ones((2, 4, 1), dtype=torch.long)
+    encoder_outputs = torch.ones((1, 2, 1, 768))
+
+    with torch.no_grad():
+        logits = model(decoder_input_ids=decoder_input_ids, encoder_outputs=encoder_outputs).logits
+
+    if logits.shape != (2, 4, 1, 2048):
+        raise ValueError("Incorrect shape for logits")
+
+    EXPECTED_SLICE = [-3.3508, -1.5245, -2.4789, -1.2670, -1.1452, -2.5689, -0.3024, -5.5820, -0.0186, -1.1492]
+
+    if torch.max(torch.abs(logits[0, 0, 0, :10] - torch.tensor(EXPECTED_SLICE))) > 1e-4:
+        raise ValueError("Logits exceed tolerance threshold")
 
     if pytorch_dump_folder is not None:
         Path(pytorch_dump_folder).mkdir(exist_ok=True)
