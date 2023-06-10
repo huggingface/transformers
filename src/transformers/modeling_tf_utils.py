@@ -81,7 +81,7 @@ elif parse(tf.__version__).minor >= 11:
     from keras.engine.keras_tensor import KerasTensor
 else:
     from tensorflow.python.keras import backend as K
-    from tensorflow.python.keras.engine import call_context
+    from tensorflow.python.keras.engine.base_layer_utils import call_context
     from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 
 
@@ -1156,8 +1156,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if self.built or call_context().in_call:
             self.built = True
         else:
-            self(self.dummy_inputs, training=False)
             self.built = True
+            self(self.dummy_inputs, training=False)
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
