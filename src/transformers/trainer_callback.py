@@ -484,9 +484,7 @@ class ProgressCallback(TrainerCallback):
     def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
         if state.is_local_process_zero and has_length(eval_dataloader):
             if self.prediction_bar is None:
-                self.prediction_bar = tqdm(
-                    total=len(eval_dataloader), leave=self.training_bar is None, dynamic_ncols=True
-                )
+                self.prediction_bar = tqdm(total=len(eval_dataloader), leave=self.training_bar is None, dynamic_ncols=True)
             self.prediction_bar.update(1)
 
     def on_evaluate(self, args, state, control, **kwargs):
