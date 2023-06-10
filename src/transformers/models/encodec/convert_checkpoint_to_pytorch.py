@@ -314,7 +314,7 @@ def convert_checkpoint(
 
     if repo_id:
         print("Pushing to the hub...")
-        #feature_extractor.push_to_hub(repo_id)
+        # feature_extractor.push_to_hub(repo_id)
         model.push_to_hub(repo_id)
 
 

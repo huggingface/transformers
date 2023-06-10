@@ -15,8 +15,8 @@
 """ PyTorch EnCodec model."""
 
 import math
-from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from dataclasses import dataclass
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -50,69 +50,39 @@ ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
 class EncodecOutput(ModelOutput):
     """
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for audio-text similarity.
         # TODO
 
     """
 
     audio_codes: torch.FloatTensor = None
-        # TODO: can we rename this to codes_frames instead of audio_codes?
-    code_frames: torch.FloatTensor = None
-        # TODO: can we rename this to audio_output instead of code_frames?
-
-    def to_tuple(self) -> Tuple[Any]:
-        return tuple(
-            self[k] if k not in ["text_model_output", "audio_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
+    audio_values: torch.FloatTensor = None
 
 
 @dataclass
 class EncodecEncoderOutput(ModelOutput):
     """
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for audio-text similarity.
         # TODO
 
     """
 
     audio_codes: torch.FloatTensor = None
-        # TODO: can we rename this to codes_frames instead of audio_codes?
-    scales: torch.FloatTensor = None
-
-    def to_tuple(self) -> Tuple[Any]:
-        return tuple(
-            self[k] if k not in ["text_model_output", "audio_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
+    audio_scales: Optional[torch.Tensor] = None
 
 
 @dataclass
 class EncodecDecoderOutput(ModelOutput):
     """
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for audio-text similarity.
         # TODO
     """
 
-    code_frames: Optional[torch.FloatTensor] = None
-        # TODO: can we rename this to audio_output instead of code_frames?
-    code_embeddings: Optional[torch.FloatTensor] = None
-        # TODO: can we name this hidden_states instead of code_embeddings?
-
-    def to_tuple(self) -> Tuple[Any]:
-        return tuple(
-            self[k] if k not in ["text_model_output", "audio_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
-
+    audio_values: Optional[torch.FloatTensor] = None
 
 
 class EncodecConv1d(nn.Module):
     """Conv1d with asymmetric or causal padding and normalization."""
+
     def __init__(
         self,
         in_channels: int,
@@ -154,57 +124,66 @@ class EncodecConv1d(nn.Module):
         self.pad_mode = pad_mode
 
     @staticmethod
-    def _get_extra_padding_for_conv1d(x: torch.Tensor, kernel_size: int, stride: int, padding_total: int = 0) -> int:
+    def _get_extra_padding_for_conv1d(
+        hidden_states: torch.Tensor, kernel_size: int, stride: int, padding_total: int = 0
+    ) -> int:
         """See `pad_for_conv1d`."""
-        length = x.shape[-1]
+        length = hidden_states.shape[-1]
         n_frames = (length - kernel_size + padding_total) / stride + 1
         ideal_length = (math.ceil(n_frames) - 1) * stride + (kernel_size - padding_total)
         return ideal_length - length
 
     @staticmethod
-    def _pad1d(x: torch.Tensor, paddings: Tuple[int, int], mode: str = "zero", value: float = 0.0):
+    def _pad1d(hidden_states: torch.Tensor, paddings: Tuple[int, int], mode: str = "zero", value: float = 0.0):
         """Tiny wrapper around torch.nn.functional.pad, just to allow for reflect padding on small input.
         If this is the case, we insert extra 0 padding to the right before the reflection happen.
         """
-        length = x.shape[-1]
+        length = hidden_states.shape[-1]
         padding_left, padding_right = paddings
         if mode == "reflect":
             max_pad = max(padding_left, padding_right)
             extra_pad = 0
             if length <= max_pad:
                 extra_pad = max_pad - length + 1
-                x = nn.functional.pad(x, (0, extra_pad))
-            padded = nn.functional.pad(x, paddings, mode, value)
+                hidden_states = nn.functional.pad(hidden_states, (0, extra_pad))
+            padded = nn.functional.pad(hidden_states, paddings, mode, value)
             end = padded.shape[-1] - extra_pad
             return padded[..., :end]
         else:
-            return nn.functional.pad(x, paddings, mode, value)
+            return nn.functional.pad(hidden_states, paddings, mode, value)
 
-    def forward(self, x):
+    def forward(self, hidden_states):
         kernel_size = self.conv.kernel_size[0]
         stride = self.conv.stride[0]
         dilation = self.conv.dilation[0]
         kernel_size = (kernel_size - 1) * dilation + 1  # effective kernel size with dilations
         padding_total = kernel_size - stride
 
-        extra_padding = self._get_extra_padding_for_conv1d(x, kernel_size, stride, padding_total)
+        ehidden_statestra_padding = self._get_extra_padding_for_conv1d(
+            hidden_states, kernel_size, stride, padding_total
+        )
         if self.causal:
             # Left padding for causal
-            x = self._pad1d(x, (padding_total, extra_padding), mode=self.pad_mode)
+            hidden_states = self._pad1d(hidden_states, (padding_total, ehidden_statestra_padding), mode=self.pad_mode)
         else:
             # Asymmetric padding required for odd strides
             padding_right = padding_total // 2
             padding_left = padding_total - padding_right
-            x = self._pad1d(x, (padding_left, padding_right + extra_padding), mode=self.pad_mode)
+            hidden_states = self._pad1d(
+                hidden_states, (padding_left, padding_right + ehidden_statestra_padding), mode=self.pad_mode
+            )
 
-        x = self.conv(x)
+        hidden_states = self.conv(hidden_states)
+
         if self.norm_type == "time_group_norm":
-            x = self.norm(x)
-        return x
+            hidden_states = self.norm(hidden_states)
+
+        return hidden_states
 
 
 class EncodecConvTranspose1d(nn.Module):
     """ConvTranspose1d with asymmetric or causal padding and normalization."""
+
     def __init__(
         self,
         in_channels: int,
@@ -230,14 +209,15 @@ class EncodecConvTranspose1d(nn.Module):
         if not (self.causal or self.trim_right_ratio == 1.0):
             raise ValueError("`trim_right_ratio` != 1.0 only makes sense for causal convolutions")
 
-    def forward(self, x):
+    def forward(self, hidden_states):
         kernel_size = self.conv.kernel_size[0]
         stride = self.conv.stride[0]
         padding_total = kernel_size - stride
 
-        y = self.conv(x)
+        hidden_states = self.conv(hidden_states)
+
         if self.norm_type == "time_group_norm":
-            y = self.norm(y)
+            hidden_states = self.norm(hidden_states)
 
         # We will only trim fixed padding. Extra padding from `pad_for_conv1d` would be
         # removed at the very end, when keeping only the right length for the output,
@@ -254,9 +234,9 @@ class EncodecConvTranspose1d(nn.Module):
         padding_left = padding_total - padding_right
 
         # unpad
-        end = y.shape[-1] - padding_right
-        y = y[..., padding_left:end]
-        return y
+        end = hidden_states.shape[-1] - padding_right
+        hidden_states = hidden_states[..., padding_left:end]
+        return hidden_states
 
 
 class EncodecLSTM(nn.Module):
@@ -264,18 +244,15 @@ class EncodecLSTM(nn.Module):
     LSTM without worrying about the hidden state, nor the layout of the data. Expects input as convolutional layout.
     """
 
-    def __init__(self, dimension: int, num_layers: int = 2, skip: bool = True):
+    def __init__(self, dimension: int, num_layers: int = 2):
         super().__init__()
-        self.skip = skip
         self.lstm = nn.LSTM(dimension, dimension, num_layers)
 
-    def forward(self, x):
-        x = x.permute(2, 0, 1)
-        y, _ = self.lstm(x)
-        if self.skip:
-            y = y + x
-        y = y.permute(1, 2, 0)
-        return y
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.permute(2, 0, 1)
+        hidden_states = self.lstm(hidden_states)[0] + hidden_states
+        hidden_states = hidden_states.permute(1, 2, 0)
+        return hidden_states
 
 
 class EncodecResnetBlock(nn.Module):
@@ -295,14 +272,15 @@ class EncodecResnetBlock(nn.Module):
         if len(kernel_sizes) != len(dilations):
             raise ValueError("Number of kernel sizes should match number of dilations")
 
-        act = getattr(nn, config.activation)
+        # TODO(PVP) - remove config.activation
+        # act = getattr(nn, config.activation)
         hidden = dim // config.compress
         block = []
         for i, (kernel_size, dilation) in enumerate(zip(kernel_sizes, dilations)):
             in_chs = dim if i == 0 else hidden
             out_chs = dim if i == len(kernel_sizes) - 1 else hidden
             block += [
-                act(**config.activation_params),
+                nn.ELU(**config.activation_params),
                 EncodecConv1d(
                     in_chs,
                     out_chs,
@@ -315,26 +293,21 @@ class EncodecResnetBlock(nn.Module):
             ]
         self.block = nn.ModuleList(block)
 
-        self.use_shortcut = not config.true_skip
-        if self.use_shortcut:
-            self.shortcut = EncodecConv1d(
-                dim,
-                dim,
-                kernel_size=1,
-                norm=config.norm,
-                causal=config.causal,
-                pad_mode=config.pad_mode,
-            )
+        self.shortcut = EncodecConv1d(
+            dim,
+            dim,
+            kernel_size=1,
+            norm=config.norm,
+            causal=config.causal,
+            pad_mode=config.pad_mode,
+        )
 
-    def forward(self, x):
-        y = x
+    def forward(self, hidden_states):
+        residual = hidden_states
         for layer in self.block:
-            y = layer(y)
+            hidden_states = layer(hidden_states)
 
-        if self.use_shortcut:
-            return self.shortcut(x) + y
-        else:
-            return y
+        return self.shortcut(residual) + hidden_states
 
 
 class EncodecEncoder(nn.Module):
@@ -342,8 +315,6 @@ class EncodecEncoder(nn.Module):
 
     def __init__(self, config: EncodecConfig):
         super().__init__()
-
-        act = getattr(nn, config.activation)
         mult = 1
         model = [
             EncodecConv1d(
@@ -370,7 +341,7 @@ class EncodecEncoder(nn.Module):
                 ]
             # Add downsampling layers
             model += [
-                act(**config.activation_params),
+                nn.ELU(**config.activation_params),
                 EncodecConv1d(
                     mult * config.num_filters,
                     mult * config.num_filters * 2,
@@ -383,11 +354,10 @@ class EncodecEncoder(nn.Module):
             ]
             mult *= 2
 
-        if config.num_lstm_layers:
-            model += [EncodecLSTM(mult * config.num_filters, config.num_lstm_layers)]
+        model += [EncodecLSTM(mult * config.num_filters, config.num_lstm_layers)]
 
         model += [
-            act(**config.activation_params),
+            nn.ELU(**config.activation_params),
             EncodecConv1d(
                 mult * config.num_filters,
                 config.dimension,
@@ -400,10 +370,10 @@ class EncodecEncoder(nn.Module):
 
         self.layers = nn.ModuleList(model)
 
-    def forward(self, x):
+    def forward(self, hidden_states):
         for layer in self.layers:
-            x = layer(x)
-        return x
+            hidden_states = layer(hidden_states)
+        return hidden_states
 
 
 class EncodecDecoder(nn.Module):
@@ -411,7 +381,6 @@ class EncodecDecoder(nn.Module):
 
     def __init__(self, config: EncodecConfig):
         super().__init__()
-        act = getattr(nn, config.activation)
         mult = int(2 ** len(config.ratios))
         model = [
             EncodecConv1d(
@@ -424,14 +393,13 @@ class EncodecDecoder(nn.Module):
             )
         ]
 
-        if config.num_lstm_layers:
-            model += [EncodecLSTM(mult * config.num_filters, config.num_lstm_layers)]
+        model += [EncodecLSTM(mult * config.num_filters, config.num_lstm_layers)]
 
         # Upsample to raw audio scale
         for ratio in config.ratios:
             # Add upsampling layers
             model += [
-                act(**config.activation_params),
+                nn.ELU(**config.activation_params),
                 EncodecConvTranspose1d(
                     mult * config.num_filters,
                     mult * config.num_filters // 2,
@@ -456,7 +424,7 @@ class EncodecDecoder(nn.Module):
 
         # Add final layers
         model += [
-            act(**config.activation_params),
+            nn.ELU(**config.activation_params),
             EncodecConv1d(
                 config.num_filters,
                 config.audio_channels,
@@ -466,21 +434,12 @@ class EncodecDecoder(nn.Module):
                 pad_mode=config.pad_mode,
             ),
         ]
-
-        # Add optional final activation to decoder (eg. tanh)
-        if config.final_activation is not None:
-            final_act = getattr(nn, config.final_activation)
-            final_activation_params = (
-                config.final_activation_params if config.final_activation_params is not None else {}
-            )
-            model += [final_act(**final_activation_params)]
-
         self.layers = nn.ModuleList(model)
 
-    def forward(self, z):
+    def forward(self, hidden_states):
         for layer in self.layers:
-            z = layer(z)
-        return z
+            hidden_states = layer(hidden_states)
+        return hidden_states
 
 
 class EncodecEuclideanCodebook(nn.Module):
@@ -494,27 +453,25 @@ class EncodecEuclideanCodebook(nn.Module):
 
         self.codebook_size = config.bins
 
-        self.kmeans_iters = config.kmeans_iters
-        self.epsilon = config.epsilon
-        self.threshold_ema_dead_code = config.threshold_ema_dead_code
-
         self.register_buffer("inited", torch.Tensor([not config.kmeans_init]))
         self.register_buffer("cluster_size", torch.zeros(config.bins))
         self.register_buffer("embed", embed)
         self.register_buffer("embed_avg", embed.clone())
 
-    def quantize(self, x):
+    def quantize(self, hidden_states):
         embed = self.embed.t()
-        dist = -(x.pow(2).sum(1, keepdim=True) - 2 * x @ embed + embed.pow(2).sum(0, keepdim=True))
+        dist = -(
+            hidden_states.pow(2).sum(1, keepdim=True) - 2 * hidden_states @ embed + embed.pow(2).sum(0, keepdim=True)
+        )
         embed_ind = dist.max(dim=-1).indices
         return embed_ind
 
-    def encode(self, x):
-        shape = x.shape
+    def encode(self, hidden_states):
+        shape = hidden_states.shape
         # pre-process
-        x = x.reshape((-1, shape[-1]))
+        hidden_states = hidden_states.reshape((-1, shape[-1]))
         # quantize
-        embed_ind = self.quantize(x)
+        embed_ind = self.quantize(hidden_states)
         # post-process
         embed_ind = embed_ind.view(*shape[:-1])
         return embed_ind
@@ -535,26 +492,18 @@ class EncodecVectorQuantization(nn.Module):
         codebook_dim = config.codebook_dim if config.codebook_dim is not None else config.dimension
 
         self.requires_projection = codebook_dim != config.dimension
-        if self.requires_projection:
-            self.project_in = nn.Linear(config.dimension, codebook_dim)
-            self.project_out = nn.Linear(codebook_dim, config.dimension)
-
         self.codebook = EncodecEuclideanCodebook(config, codebook_dim)
 
-    def encode(self, x):
-        x = x.permute(0, 2, 1)
-        if self.requires_projection:
-            x = self.project_in(x)
-        embed_in = self.codebook.encode(x)
+    def encode(self, hidden_states):
+        hidden_states = hidden_states.permute(0, 2, 1)
+        embed_in = self.codebook.encode(hidden_states)
         return embed_in
 
     def decode(self, embed_ind):
         quantize = self.codebook.decode(embed_ind)
-        if self.requires_projection:
-            quantize = self.project_out(quantize)
-
         quantize = quantize.permute(0, 2, 1)
         return quantize
+
 
 class EncodecResidualVectorQuantization(nn.Module):
     """
@@ -565,8 +514,8 @@ class EncodecResidualVectorQuantization(nn.Module):
         super().__init__()
         self.layers = nn.ModuleList([EncodecVectorQuantization(config) for _ in range(num_quantizers)])
 
-    def encode(self, x: torch.Tensor, num_quantizers: Optional[int] = None) -> torch.Tensor:
-        residual = x
+    def encode(self, hidden_states: torch.Tensor, num_quantizers: Optional[int] = None) -> torch.Tensor:
+        residual = hidden_states
         all_indices = []
         num_quantizers = num_quantizers or len(self.layers)
         for layer in self.layers[:num_quantizers]:
@@ -574,6 +523,7 @@ class EncodecResidualVectorQuantization(nn.Module):
             quantized = layer.decode(indices)
             residual = residual - quantized
             all_indices.append(indices)
+
         out_indices = torch.stack(all_indices)
         return out_indices
 
@@ -845,6 +795,8 @@ class EncodecModel(EncodecPreTrainedModel):
             factors for each segment when `normalize` is True. Each frames is a tuple `(codebook, scale)`, with
             `codebook` of shape `[B, K, T]`, with `K` the number of codebooks, `T` frames.
         """
+        return_dict = return_dict or self.config.return_dict
+
         if bandwidth is None:
             bandwidth = self.config.target_bandwidths[0]
         if bandwidth not in self.config.target_bandwidths:
@@ -880,6 +832,7 @@ class EncodecModel(EncodecPreTrainedModel):
 
         if return_dict:
             return EncodecEncoderOutput(encoded_frames, scales)
+
         return (encoded_frames, scales)
 
     def _encode_frame(
@@ -891,18 +844,16 @@ class EncodecModel(EncodecPreTrainedModel):
         if self.config.segment is not None and duration > 1e-5 + self.config.segment:
             raise RuntimeError(f"Duration of frame ({duration}) is longer than segment {self.config.segment}")
 
+        scale = None
         if self.config.normalize:
             mono = input_values.mean(dim=1, keepdim=True)
             scale = mono.pow(2).mean(dim=2, keepdim=True).sqrt() + 1e-8
             input_values = input_values / scale
-            scale = scale.view(-1, 1)
-        else:
-            scale = None
 
         embeddings = self.encoder(input_values)
         codes = self.quantizer.encode(embeddings, self.frame_rate, bandwidth)
         codes = codes.transpose(0, 1)
-        return (codes, scale)
+        return codes, scale
 
     @staticmethod
     def _linear_overlap_add(frames: List[torch.Tensor], stride: int):
@@ -925,7 +876,7 @@ class EncodecModel(EncodecPreTrainedModel):
         #   - if more than 2 frames overlap at a given point, we hope that by induction
         #      something sensible happens.
         if len(frames) == 0:
-            raise ValueError(f"`frames` cannot be an empty list.")
+            raise ValueError("`frames` cannot be an empty list.")
 
         device = frames[0].device
         dtype = frames[0].dtype
@@ -962,6 +913,8 @@ class EncodecModel(EncodecPreTrainedModel):
         Note that the output might be a bit bigger than the input. In that case, any extra steps at the end can be
         trimmed.
         """
+        return_dict = return_dict or self.config.return_dict
+
         segment_length = self.config.segment_length
         if segment_length is None:
             if len(encoded_frames[0]) != 1:
@@ -969,20 +922,17 @@ class EncodecModel(EncodecPreTrainedModel):
             return self._decode_frame(encoded_frames[0][0], encoded_frames[1][0])
 
         decoded_frames = []
-        code_embeddings = []
 
         for frame, scale in zip(*encoded_frames):
-            frames, embeddings = self._decode_frame(frame, scale)
+            frames = self._decode_frame(frame, scale)
             decoded_frames.append(frames)
-            code_embeddings.append(embeddings)
 
-        decoded_frames = self._linear_overlap_add(decoded_frames, self.config.segment_stride or 1)
-        code_embeddings = torch.stack(code_embeddings)
+        audio_values = self._linear_overlap_add(decoded_frames, self.config.segment_stride or 1)
 
         if return_dict:
-            return EncodecDecoderOutput(decoded_frames, code_embeddings)
+            return EncodecDecoderOutput(audio_values)
 
-        return (decoded_frames, code_embeddings)
+        return (audio_values,)
 
     def _decode_frame(
         self,
@@ -994,7 +944,7 @@ class EncodecModel(EncodecPreTrainedModel):
         outputs = self.decoder(embeddings)
         if scale is not None:
             outputs = outputs * scale.view(-1, 1, 1)
-        return (outputs, embeddings)
+        return outputs
 
     # TODO @add_start_docstrings_to_model_forward(ENCODEC_INPUTS_DOCSTRING)
     # TODO @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1003,7 +953,7 @@ class EncodecModel(EncodecPreTrainedModel):
         input_values: torch.Tensor,
         bandwidth: Optional[float] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecOutput]:
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecDecoderOutput]:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
             Float values of the input audio waveform.
@@ -1015,11 +965,13 @@ class EncodecModel(EncodecPreTrainedModel):
 
         Returns:
         """
-        encoder_outputs = self.encode(input_values, bandwidth, return_dict)
-        decoder_outputs = self.decode(encoder_outputs, return_dict)
-        audio_output = decoder_outputs[0][..., : input_values.shape[-1]]
+        return_dict = return_dict or self.config.return_dict
+
+        encoder_outputs = self.encode(input_values, bandwidth, return_dict=return_dict)
+        decoder_outputs = self.decode(encoder_outputs, return_dict=return_dict)
+        audio_output = decoder_outputs[..., : input_values.shape[-1]]
 
         if return_dict:
             return EncodecOutput(encoder_outputs.audio_codes, audio_output)
 
-        return (encoder_outputs[0], audio_output)
+        return (encoder_outputs, audio_output)
