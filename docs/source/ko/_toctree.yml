@@ -97,6 +97,8 @@
       title: (번역중) Notebooks with examples
     - local: in_translation
       title: (번역중) Community resources
+    - local: custom_tools
+      title: 사용자 정의 도구와 프롬프트
     - local: troubleshooting
       title: 문제 해결
   title: (번역중) 개발자 가이드
