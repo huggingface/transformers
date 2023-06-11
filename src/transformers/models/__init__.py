@@ -208,6 +208,7 @@ from . import (
     vit_mae,
     vit_msn,
     vivit,
+    vitdet,
     wav2vec2,
     wav2vec2_conformer,
     wav2vec2_phoneme,

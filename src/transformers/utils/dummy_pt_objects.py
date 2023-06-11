@@ -7743,6 +7743,10 @@ VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class VivitForVideoClassification(metaclass=DummyObject):
+VITDET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class VitDetModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -7757,6 +7761,7 @@ class VivitModel(metaclass=DummyObject):
 
 
 class VivitPreTrainedModel(metaclass=DummyObject):
+class VitDetPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
