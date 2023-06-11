@@ -57,93 +57,10 @@ VITDET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEmbeddings with ViT->VitDet
 class VitDetEmbeddings(nn.Module):
     """
-    Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
-    """
-
-    def __init__(self, config: VitDetConfig, use_mask_token: bool = False) -> None:
-        super().__init__()
-
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
-        self.patch_embeddings = VitDetPatchEmbeddings(config)
-        num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.config = config
-
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images.
-
-        Source:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
-        """
-
-        num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
-        if num_patches == num_positions and height == width:
-            return self.position_embeddings
-        class_pos_embed = self.position_embeddings[:, 0]
-        patch_pos_embed = self.position_embeddings[:, 1:]
-        dim = embeddings.shape[-1]
-        h0 = height // self.config.patch_size
-        w0 = width // self.config.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        h0, w0 = h0 + 0.1, w0 + 0.1
-        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed,
-            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
-            mode="bicubic",
-            align_corners=False,
-        )
-        assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
-
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: bool = False,
-    ) -> torch.Tensor:
-        batch_size, num_channels, height, width = pixel_values.shape
-        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
-
-        if bool_masked_pos is not None:
-            seq_length = embeddings.shape[1]
-            mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
-            # replace the masked visual tokens by mask_tokens
-            mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
-            embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
-
-        # add the [CLS] token to the embedded patch tokens
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
-
-        # add positional encoding to each token
-        if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-        else:
-            embeddings = embeddings + self.position_embeddings
-
-        embeddings = self.dropout(embeddings)
-
-        return embeddings
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTPatchEmbeddings with ViT->VitDet
-class VitDetPatchEmbeddings(nn.Module):
-    """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
-    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-    Transformer.
+    `hidden_states` (patch embeddings) to be consumed by a Transformer.
     """
 
     def __init__(self, config):
@@ -159,22 +76,64 @@ class VitDetPatchEmbeddings(nn.Module):
         self.num_channels = num_channels
         self.num_patches = num_patches
 
+        if config.use_abs_pos:
+            # Initialize absolute positional embedding with pretrain image size.
+            num_positions = num_patches + 1
+            self.pos_embed = nn.Parameter(torch.zeros(1, num_positions, config.hidden_size))
+        else:
+            self.pos_embed = None
+
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+    def get_abs_pos(self, abs_pos, has_cls_token, hw):
+        """
+        Calculate absolute positional embeddings. If needed, resize embeddings and remove cls_token dimension for the
+        original embeddings.
+
+        Args:
+            abs_pos (Tensor): absolute positional embeddings with (1, num_position, C).
+            has_cls_token (bool): If true, has 1 embedding in abs_pos for cls token.
+            hw (Tuple): size of input image tokens.
+
+        Returns:
+            Absolute positional embeddings after processing with shape (1, H, W, C)
+        """
+        h, w = hw
+        if has_cls_token:
+            abs_pos = abs_pos[:, 1:]
+        xy_num = abs_pos.shape[1]
+        size = int(math.sqrt(xy_num))
+        assert size * size == xy_num
+
+        if size != h or size != w:
+            new_abs_pos = nn.functionalinterpolate(
+                abs_pos.reshape(1, size, size, -1).permute(0, 3, 1, 2),
+                size=(h, w),
+                mode="bicubic",
+                align_corners=False,
+            )
+
+            return new_abs_pos.permute(0, 2, 3, 1)
+        else:
+            return abs_pos.reshape(1, h, w, -1)
+
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
                 f" Expected {self.num_channels} but got {num_channels}."
             )
-        if not interpolate_pos_encoding:
-            if height != self.image_size[0] or width != self.image_size[1]:
-                raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model"
-                    f" ({self.image_size[0]}*{self.image_size[1]})."
-                )
-        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        embeddings = self.projection(pixel_values)
+
+        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
+        embeddings = embeddings.permute(0, 2, 3, 1)
+
+        if self.pos_embed is not None:
+            embeddings = embeddings + self.get_abs_pos(
+                self.pos_embed, True, (embeddings.shape[1], embeddings.shape[2])
+            )
+
         return embeddings
 
 
@@ -247,44 +206,37 @@ def add_decomposed_rel_pos(attn, q, rel_pos_h, rel_pos_w, q_size, k_size):
 class VitDetAttention(nn.Module):
     """Multi-head Attention block with relative position embeddings."""
 
-    def __init__(
-        self,
-        dim,
-        num_heads=8,
-        qkv_bias=True,
-        use_rel_pos=False,
-        # rel_pos_zero_init=True,
-        input_size=None,
-    ):
+    def __init__(self, config, input_size=None):
         """
         Args:
-            dim (int): Number of input channels.
-            num_heads (int): Number of attention heads.
-            qkv_bias (bool:  If True, add a learnable bias to query, key, value.
-            rel_pos (bool): If True, add relative positional embeddings to the attention map.
-            input_size (int or None): Input resolution for calculating the relative positional
-                parameter size.
+            config (obj): Model configuration.
+            input_size (int or None): Input resolution for calculating the relative positional parameter size.
         """
         super().__init__()
+
+        dim = config.hidden_size
+        num_heads = config.num_attention_heads
+
         self.num_heads = num_heads
         head_dim = dim // num_heads
         self.scale = head_dim**-0.5
 
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.qkv = nn.Linear(dim, dim * 3, bias=config.qkv_bias)
         self.proj = nn.Linear(dim, dim)
 
-        self.use_rel_pos = use_rel_pos
+        self.use_rel_pos = config.use_rel_pos
         if self.use_rel_pos:
             # initialize relative positional embeddings
             self.rel_pos_h = nn.Parameter(torch.zeros(2 * input_size[0] - 1, head_dim))
             self.rel_pos_w = nn.Parameter(torch.zeros(2 * input_size[1] - 1, head_dim))
 
             # TODO define this in init_weights
+            # rel_pos_zero_init=True,
             # if not rel_pos_zero_init:
             #     nn.init.trunc_normal_(self.rel_pos_h, std=0.02)
             #     nn.init.trunc_normal_(self.rel_pos_w, std=0.02)
 
-    def forward(self, x):
+    def forward(self, x, output_attentions=False):
         B, H, W, _ = x.shape
         # qkv with shape (3, B, nHead, H * W, C)
         qkv = self.qkv(x).reshape(B, H * W, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
@@ -300,7 +252,9 @@ class VitDetAttention(nn.Module):
         x = (attn @ v).view(B, self.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
         x = self.proj(x)
 
-        return x
+        outputs = (x, attn) if output_attentions else (x,)
+
+        return outputs
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -407,7 +361,7 @@ class VitDetMlp(nn.Module):
         self.fc1 = nn.Linear(in_features, hidden_features)
         self.act = nn.GELU()
         self.fc2 = nn.Linear(hidden_features, in_features)
-        self.drop = nn.Dropout(config.dropout_rate)
+        self.drop = nn.Dropout(config.dropout_prob)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.fc1(x)
@@ -472,9 +426,12 @@ class VitDetLayer(nn.Module):
         super().__init__()
 
         dim = config.hidden_size
+        input_size = (config.image_size // config.patch_size, config.image_size // config.patch_size)
 
         self.norm1 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.attention = VitDetAttention(config)
+        self.attention = VitDetAttention(
+            config, input_size=input_size if window_size == 0 else (window_size, window_size)
+        )
 
         self.drop_path = VitDetDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.norm2 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
@@ -483,7 +440,7 @@ class VitDetLayer(nn.Module):
         self.window_size = window_size
 
         self.use_residual_block = use_residual_block
-        if config.use_residual_block:
+        if self.use_residual_block:
             # Use a residual block with bottleneck channel as dim // 2
             self.residual = VitDetResBottleneckBlock(
                 in_channels=dim,
@@ -510,7 +467,6 @@ class VitDetLayer(nn.Module):
 
         self_attention_outputs = self.attention(
             hidden_states,
-            head_mask,
             output_attentions=output_attentions,
         )
         hidden_states = self_attention_outputs[0]
@@ -533,12 +489,27 @@ class VitDetLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->VitDet
 class VitDetEncoder(nn.Module):
     def __init__(self, config: VitDetConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([VitDetLayer(config) for _ in range(config.num_hidden_layers)])
+
+        # stochastic depth decay rule
+        depth = config.num_hidden_layers
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, depth)]
+
+        layers = []
+        for i in range(depth):
+            layers.append(
+                VitDetLayer(
+                    config,
+                    drop_path_rate=dpr[i],
+                    window_size=config.window_size if i in config.window_block_indices else 0,
+                    use_residual_block=i in config.residual_block_indices,
+                )
+            )
+
+        self.layer = nn.ModuleList(layers)
         self.gradient_checkpointing = False
 
     def forward(
@@ -617,18 +588,18 @@ class VitDetPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, VitDetEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.position_embeddings.dtype)
+        # elif isinstance(module, VitDetEmbeddings):
+        #     module.position_embeddings.data = nn.init.trunc_normal_(
+        #         module.position_embeddings.data.to(torch.float32),
+        #         mean=0.0,
+        #         std=self.config.initializer_range,
+        #     ).to(module.position_embeddings.dtype)
 
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.cls_token.dtype)
+        #     module.cls_token.data = nn.init.trunc_normal_(
+        #         module.cls_token.data.to(torch.float32),
+        #         mean=0.0,
+        #         std=self.config.initializer_range,
+        #     ).to(module.cls_token.dtype)
 
     def _set_gradient_checkpointing(self, module: VitDetEncoder, value: bool = False) -> None:
         if isinstance(module, VitDetEncoder):
@@ -664,8 +635,6 @@ VITDET_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        interpolate_pos_encoding (`bool`, *optional*):
-            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -675,13 +644,12 @@ VITDET_INPUTS_DOCSTRING = r"""
     "The bare VitDet Model transformer outputting raw hidden-states without any specific head on top.",
     VITDET_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->VITDET,ViT->VitDet
 class VitDetModel(VitDetPreTrainedModel):
-    def __init__(self, config: VitDetConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
+    def __init__(self, config: VitDetConfig, add_pooling_layer: bool = True):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = VitDetEmbeddings(config, use_mask_token=use_mask_token)
+        self.embeddings = VitDetEmbeddings(config)
         self.encoder = VitDetEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -690,8 +658,8 @@ class VitDetModel(VitDetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> VitDetPatchEmbeddings:
-        return self.embeddings.patch_embeddings
+    def get_input_embeddings(self) -> VitDetEmbeddings:
+        return self.embeddings.projection
 
     def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
         """
@@ -712,17 +680,11 @@ class VitDetModel(VitDetPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -739,14 +701,7 @@ class VitDetModel(VitDetPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
-        expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
-        if pixel_values.dtype != expected_dtype:
-            pixel_values = pixel_values.to(expected_dtype)
-
-        embedding_output = self.embeddings(
-            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
-        )
+        embedding_output = self.embeddings(pixel_values)
 
         encoder_outputs = self.encoder(
             embedding_output,

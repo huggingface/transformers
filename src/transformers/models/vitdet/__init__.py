@@ -20,9 +20,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_vitdet": ["VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitDetConfig", "VitDetOnnxConfig"]
-}
+_import_structure = {"configuration_vitdet": ["VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitDetConfig"]}
 
 try:
     if not is_torch_available():
@@ -37,7 +35,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_vitdet import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP, VitDetConfig, VitDetOnnxConfig
+    from .configuration_vitdet import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP, VitDetConfig
 
     try:
         if not is_torch_available():
