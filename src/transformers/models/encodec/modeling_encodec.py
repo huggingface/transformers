@@ -322,7 +322,7 @@ class EncodecDecoder(nn.Module):
 
         # Upsample to raw audio scale
         for ratio in config.ratios:
-            current_scale = scaling * config.num_filters // é
+            current_scale = scaling * config.num_filters // 2
             # Add upsampling layers
             model += [nn.ELU()]
             model += [
