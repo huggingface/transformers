@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch VitDet model. """
+""" Testing suite for the PyTorch ViTDet model. """
 
 
 import inspect
@@ -20,14 +20,11 @@ import unittest
 
 from transformers import VitDetConfig
 from transformers.testing_utils import (
-    require_accelerate,
     require_torch,
-    require_torch_gpu,
-    require_vision,
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -35,17 +32,14 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
-    import torch
     from torch import nn
 
-    from transformers import VitDetForImageClassification, VitDetForMaskedImageModeling, VitDetModel
+    from transformers import VitDetBackbone, VitDetModel
     from transformers.models.vitdet.modeling_vitdet import VITDET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
-    from PIL import Image
-
-    from transformers import ViTFeatureExtractor
+    pass
 
 
 class VitDetModelTester:
@@ -128,43 +122,6 @@ class VitDetModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_for_masked_image_modeling(self, config, pixel_values, labels):
-        model = VitDetForMaskedImageModeling(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-        self.parent.assertEqual(
-            result.reconstruction.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
-        )
-
-        # test greyscale images
-        config.num_channels = 1
-        model = VitDetForMaskedImageModeling(config)
-        model.to(torch_device)
-        model.eval()
-
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
-        result = model(pixel_values)
-        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, 1, self.image_size, self.image_size))
-
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
-        model = VitDetForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
-
-        # test greyscale images
-        config.num_channels = 1
-        model = VitDetForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
-        result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -186,8 +143,7 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             VitDetModel,
-            VitDetForImageClassification,
-            VitDetForMaskedImageModeling,
+            VitDetBackbone,
         )
         if is_torch_available()
         else ()
@@ -234,95 +190,8 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_masked_image_modeling(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
-
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in VITDET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = VitDetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-
-# We will verify our results on an image of cute cats
-def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-    return image
-
-
-@require_torch
-@require_vision
-class VitDetModelIntegrationTest(unittest.TestCase):
-    @cached_property
-    def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("google/vitdet-base-patch16-224") if is_vision_available() else None
-
-    @slow
-    def test_inference_image_classification_head(self):
-        model = VitDetForImageClassification.from_pretrained("google/vitdet-base-patch16-224").to(torch_device)
-
-        feature_extractor = self.default_feature_extractor
-        image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
-
-    @slow
-    def test_inference_interpolate_pos_encoding(self):
-        # VitDet models have an `interpolate_pos_encoding` argument in their forward method,
-        # allowing to interpolate the pre-trained position embeddings in order to use
-        # the model on higher resolutions. The DINO model by Facebook AI leverages this
-        # to visualize self-attention on higher resolution images.
-        model = VitDetModel.from_pretrained("facebook/dino-vitdets8").to(torch_device)
-
-        feature_extractor = ViTFeatureExtractor.from_pretrained("facebook/dino-vitdets8", size=480)
-        image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(pixel_values, interpolate_pos_encoding=True)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 3601, 384))
-        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[4.2340, 4.3906, -6.6692], [4.5463, 1.8928, -6.7257], [4.4429, 0.8496, -5.8585]]
-        ).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
-
-    @slow
-    @require_accelerate
-    @require_torch_gpu
-    def test_inference_fp16(self):
-        r"""
-        A small test to make sure that inference work in half precision without any problem.
-        """
-        model = VitDetModel.from_pretrained("facebook/dino-vitdets8", torch_dtype=torch.float16, device_map="auto")
-        feature_extractor = self.default_feature_extractor
-
-        image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device)
-
-        # forward pass to make sure inference works in fp16
-        with torch.no_grad():
-            _ = model(pixel_values)

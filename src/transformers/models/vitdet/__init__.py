@@ -32,6 +32,7 @@ else:
         "VITDET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "VitDetModel",
         "VitDetPreTrainedModel",
+        "VitDetBackbone",
     ]
 
 if TYPE_CHECKING:
@@ -45,6 +46,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_vitdet import (
             VITDET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VitDetBackbone,
             VitDetModel,
             VitDetPreTrainedModel,
         )
