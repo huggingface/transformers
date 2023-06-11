@@ -14,11 +14,11 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The RWKV model was proposed in [this repo](https://github.com/BlinkDL/RWKV-LM)
+The RWKV model was proposed in [this repository](https://github.com/BlinkDL/RWKV-LM)
 
-It suggests a tweak in the traditional Transformer attention to make it linear. This way, the model can be used as recurrent network: passing inputs for timestamp 0 and timestamp 1 together is the same as passing inputs at timestamp 0, then inputs at timestamp 1 along with the state of timestamp 0 (see example below).
+It suggests a tweak in the traditional Transformer attention to make it linear. This way, the model is akin to a Recurrent Neural Network (RNN): passing inputs for timestamp 0 and timestamp 1 together is the same as passing inputs at timestamp 0, then inputs at timestamp 1 along with the state of timestamp 0 (see example below).
 
-This can be more efficient than a regular Transformer and can deal with sentence of any length (even if the model uses a fixed context length for training).
+This can be more computationally efficient than a regular Transformer, and allows for input token sequences of any length (even if the model uses a fixed context length for training).
 
 This model was contributed by [sgugger](https://huggingface.co/sgugger).
 The original code can be found [here](https://github.com/BlinkDL/RWKV-LM).
@@ -64,23 +64,23 @@ torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e
 
 ## Rwkv attention and the recurrent formulas
 
-In a traditional auto-regressive Transformer, attention is written as
+In a traditional autoregressive Transformer, attention is written as
 
 $$O = \hbox{softmax}(QK^{T} / \sqrt{d}) V$$
 
-with \\(Q\\), \\(K\\) and \\(V\\) are matrices of shape `seq_len x hidden_size` named query, key and value (they are actually bigger matrices with a batch dimension and an attention head dimension but we're only interested in the last two, which is where the matrix product is taken, so for the sake of simplicity we only consider those two). The product \\(QK^{T}\\) then has shape `seq_len x seq_len` and we can take the maxtrix product with \\(V\\) to get the output \\(O\\) of the same shape as the others.  
+where \\(Q\\), \\(K\\) and \\(V\\) are matrices of shape `seq_len x hidden_size` named the Query, Key, and Value (in reality, these are matrices with higher dimensionality to account for a batch dimension and an attention head dimension. In this instance, we are only interested in the last two dimensions, which is where the matrix product is taken, so for the sake of simplicity we only consider those two). The product \\(QK^{T}\\) then has shape `seq_len x seq_len` and we can take the maxtrix product with \\(V\\) to get the output \\(O\\) of the same shape as the others.  
 
 Replacing the softmax by its value gives:
 
 $$O_{i} = \frac{\sum_{j=1}^{i} e^{Q_{i} K_{j}^{T} / \sqrt{d}} V_{j}}{\sum_{j=1}^{i} e^{Q_{i} K_{j}^{T} / \sqrt{d}}}$$
 
-Note that the entries in \\(QK^{T}\\) corresponding to \\(j > i\\) are masked (the sum stops at j) because the attention is not allowed to look at future tokens (only past ones).
+Note that the entries in \\(QK^{T}\\) corresponding to \\(j > i\\) are masked (the sum stops at \\(j)\\) because the attention is not allowed to look at future tokens (only past ones).
 
 In comparison, the RWKV attention is given by
 
 $$O_{i} = \sigma(R_{i}) \frac{\sum_{j=1}^{i} e^{W_{i-j} + K_{j}} V_{j}}{\sum_{j=1}^{i} e^{W_{i-j} + K_{j}}}$$
 
-where \\(R\\) is a new matrix called receptance by the author, \\(K\\) and \\(V\\) are still the key and value (\\(\sigma\\) here is the sigmoid function). \\(W\\) is a new vector that represents the position of the token and is given by
+where \\(R\\) is a new matrix called Receptance by the author, \\(K\\) and \\(V\\) are the same Key and Value matrices. \\(\sigma\\) is the sigmoid activation function. \\(W\\) is a new vector that represents the position of an input token, and is given by
 
 $$W_{0} = u \hbox{  and  } W_{k} = (k-1)w \hbox{ for } k \geq 1$$
 
@@ -88,7 +88,7 @@ with \\(u\\) and \\(w\\) learnable parameters called in the code `time_first` an
 
 $$N_{i} = e^{u + K_{i}} V_{i} + \hat{N}_{i} \hbox{  where  } \hat{N}_{i} = e^{K_{i-1}} V_{i-1} + e^{w + K_{i-2}} V_{i-2} \cdots + e^{(i-2)w + K_{1}} V_{1}$$
 
-so \\(\hat{N}_{i}\\) (called `numerator_state` in the code) satistfies
+so \\(\hat{N}_{i}\\) (called `numerator_state` in the code) satisfies
 
 $$\hat{N}_{0} = 0 \hbox{  and  } \hat{N}_{j+1} = e^{K_{j}} V_{j} + e^{w} \hat{N}_{j}$$
 
@@ -96,11 +96,11 @@ and
 
 $$D_{i} = e^{u + K_{i}} + \hat{D}_{i} \hbox{  where  } \hat{D}_{i} = e^{K_{i-1}} + e^{w + K_{i-2}} \cdots + e^{(i-2)w + K_{1}}$$
 
-so \\(\hat{D}_{i}\\) (called `denominator_state` in the code) satistfies
+so \\(\hat{D}_{i}\\) (called `denominator_state` in the code) satisfies
 
 $$\hat{D}_{0} = 0 \hbox{  and  } \hat{D}_{j+1} = e^{K_{j}} + e^{w} \hat{D}_{j}$$
 
-The actual recurrent formula used are a tiny bit more complex, as for numerical stability we don't want to compute exponentials of big numbers. Usually the softmax is not computed as is, but the exponential of the maximum term is divided of the numerator and denominator:
+The actual recurrent formula used is marginally more complex: for numerical stability, we don't want to compute exponentials of big numbers. Usually the softmax is not computed as is, but the exponential of the maximum term is divided of the numerator and denominator:
 
 $$\frac{e^{x_{i}}}{\sum_{j=1}^{n} e^{x_{j}}} = \frac{e^{x_{i} - M}}{\sum_{j=1}^{n} e^{x_{j} - M}}$$
 
