@@ -17,6 +17,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto.configuration_auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -37,8 +38,8 @@ class VitMatteConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
+        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `VitDetConfig()`):
+            The configuration of the backbone model.
 
     Example:
 
@@ -58,9 +59,17 @@ class VitMatteConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=768,
+        backbone_config=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        self.hidden_size = hidden_size
+        if backbone_config is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `VitDet` backbone.")
+            backbone_config = CONFIG_MAPPING["vitdet"](out_features=["stage4"])
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.get("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
+
+        self.backbone_config = backbone_config
