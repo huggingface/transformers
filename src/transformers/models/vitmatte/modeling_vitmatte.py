@@ -41,14 +41,10 @@ class VitMattePreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         if isinstance(module, VitMattePreTrainedModel):
             module.backbone.init_weights()
-            module.decode_head.init_weights()
-            module.auxiliary_head.init_weights()
 
     def init_weights(self):
         """Initialize the weights"""
         self.backbone.init_weights()
-        self.decode_head.init_weights()
-        self.auxiliary_head.init_weights()
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, BackboneMixin):
@@ -57,10 +53,10 @@ class VitMattePreTrainedModel(PreTrainedModel):
 
 class VitMatteForImageMatting(VitMattePreTrainedModel):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.config = config
 
-        self.backbone = AutoBackbone.from_config(config)
+        self.backbone = AutoBackbone.from_config(config.backbone_config)
         self.decoder = nn.Identity()
 
         # Initialize weights and apply final processing

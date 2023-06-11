@@ -17,6 +17,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -108,6 +109,8 @@ class VitDetConfig(PretrainedConfig):
         residual_block_indices=[],
         use_absolute_position_embeddings=True,
         use_relative_position_embeddings=False,
+        out_features=None,
+        out_indices=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -129,3 +132,8 @@ class VitDetConfig(PretrainedConfig):
         self.residual_block_indices = residual_block_indices
         self.use_absolute_position_embeddings = use_absolute_position_embeddings
         self.use_relative_position_embeddings = use_relative_position_embeddings
+
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )
