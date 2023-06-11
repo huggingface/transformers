@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Google AI, Ross Wightman, The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Meta AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch VitDet model."""
+""" PyTorch ViT Det backbone."""
 
 
 import collections.abc
@@ -76,12 +76,12 @@ class VitDetEmbeddings(nn.Module):
         self.num_channels = num_channels
         self.num_patches = num_patches
 
-        if config.use_abs_pos:
+        if config.use_absolute_position_embeddings:
             # Initialize absolute positional embedding with pretrain image size.
             num_positions = num_patches + 1
-            self.pos_embed = nn.Parameter(torch.zeros(1, num_positions, config.hidden_size))
+            self.position_embeddings = nn.Parameter(torch.zeros(1, num_positions, config.hidden_size))
         else:
-            self.pos_embed = None
+            self.position_embeddings = None
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
@@ -118,7 +118,7 @@ class VitDetEmbeddings(nn.Module):
             return abs_pos.reshape(1, h, w, -1)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        batch_size, num_channels, height, width = pixel_values.shape
+        num_channels = pixel_values.shape[1]
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
@@ -129,9 +129,9 @@ class VitDetEmbeddings(nn.Module):
         # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
         embeddings = embeddings.permute(0, 2, 3, 1)
 
-        if self.pos_embed is not None:
+        if self.position_embeddings is not None:
             embeddings = embeddings + self.get_abs_pos(
-                self.pos_embed, True, (embeddings.shape[1], embeddings.shape[2])
+                self.position_embeddings, True, (embeddings.shape[1], embeddings.shape[2])
             )
 
         return embeddings
@@ -224,8 +224,8 @@ class VitDetAttention(nn.Module):
         self.qkv = nn.Linear(dim, dim * 3, bias=config.qkv_bias)
         self.proj = nn.Linear(dim, dim)
 
-        self.use_rel_pos = config.use_rel_pos
-        if self.use_rel_pos:
+        self.use_relative_position_embeddings = config.use_relative_position_embeddings
+        if self.use_relative_position_embeddings:
             # initialize relative positional embeddings
             self.rel_pos_h = nn.Parameter(torch.zeros(2 * input_size[0] - 1, head_dim))
             self.rel_pos_w = nn.Parameter(torch.zeros(2 * input_size[1] - 1, head_dim))
@@ -237,19 +237,19 @@ class VitDetAttention(nn.Module):
             #     nn.init.trunc_normal_(self.rel_pos_w, std=0.02)
 
     def forward(self, x, output_attentions=False):
-        B, H, W, _ = x.shape
-        # qkv with shape (3, B, nHead, H * W, C)
-        qkv = self.qkv(x).reshape(B, H * W, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
-        # q, k, v with shape (B * nHead, H * W, C)
-        q, k, v = qkv.reshape(3, B * self.num_heads, H * W, -1).unbind(0)
+        batch_size, height, width, _ = x.shape
+        # qkv with shape (3, batch_size, num_heads, height * width, num_channels)
+        qkv = self.qkv(x).reshape(batch_size, height * width, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
+        # q, k, v with shape (batch_size * num_heads, height * width, num_channels)
+        q, k, v = qkv.reshape(3, batch_size * self.num_heads, height * width, -1).unbind(0)
 
         attn = (q * self.scale) @ k.transpose(-2, -1)
 
-        if self.use_rel_pos:
-            attn = add_decomposed_rel_pos(attn, q, self.rel_pos_h, self.rel_pos_w, (H, W), (H, W))
+        if self.use_relative_position_embeddings:
+            attn = add_decomposed_rel_pos(attn, q, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width))
 
         attn = attn.softmax(dim=-1)
-        x = (attn @ v).view(B, self.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
+        x = (attn @ v).view(batch_size, self.num_heads, height, width, -1).permute(0, 2, 3, 1, 4).reshape(batch_size, height, width, -1)
         x = self.proj(x)
 
         outputs = (x, attn) if output_attentions else (x,)
@@ -375,25 +375,29 @@ class VitDetMlp(nn.Module):
 
 def window_partition(x, window_size):
     """
-    Args:
     Partition into non-overlapping windows with padding if needed.
-        x (tensor): input tokens with [B, H, W, C]. window_size (int): window size.
+
+    Args:
+        x (tensor):
+            Input tokens with [B, H, W, C].
+        window_size (int):
+            Window size.
 
     Returns:
-        windows: windows after partition with [B * num_windows, window_size, window_size, C]. (Hp, Wp): padded height
-        and width before partition
+        windows: windows after partition with [B * num_windows, window_size, window_size, C].
+        (Hp, Wp): padded height and width before partition
     """
-    B, H, W, C = x.shape
+    batch_size, height, width, num_channels = x.shape
 
-    pad_h = (window_size - H % window_size) % window_size
-    pad_w = (window_size - W % window_size) % window_size
-    if pad_h > 0 or pad_w > 0:
-        x = nn.functional.pad(x, (0, 0, 0, pad_w, 0, pad_h))
-    Hp, Wp = H + pad_h, W + pad_w
+    pad_height = (window_size - height % window_size) % window_size
+    pad_width = (window_size - width % window_size) % window_size
+    if pad_height > 0 or pad_width > 0:
+        x = nn.functional.pad(x, (0, 0, 0, pad_width, 0, pad_height))
+    patch_height, patch_width = height + pad_height, width + pad_width
 
-    x = x.view(B, Hp // window_size, window_size, Wp // window_size, window_size, C)
-    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
-    return windows, (Hp, Wp)
+    x = x.view(batch_size, patch_height // window_size, window_size, patch_width // window_size, window_size, num_channels)
+    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels)
+    return windows, (patch_height, patch_width)
 
 
 def window_unpartition(windows, window_size, pad_hw, hw):
@@ -493,9 +497,9 @@ class VitDetEncoder(nn.Module):
     def __init__(self, config: VitDetConfig) -> None:
         super().__init__()
         self.config = config
+        depth = config.num_hidden_layers
 
         # stochastic depth decay rule
-        depth = config.num_hidden_layers
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, depth)]
 
         layers = []

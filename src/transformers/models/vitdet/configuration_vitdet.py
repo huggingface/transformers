@@ -68,9 +68,9 @@ class VitDetConfig(PretrainedConfig):
             List of indices of blocks that should have window attention instead of regular global self-attention.
         residual_block_indices (`List[int]`, *optional*):
             List of indices of blocks that should have an extra residual block after the MLP.
-        use_abs_pos (`bool`, *optional*, defaults to `True`):
+        use_absolute_position_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to add absolute position embeddings to the patch embeddings.
-        use_rel_pos (`bool`, *optional*, defaults to `False`):
+        use_relative_position_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to add relative position embeddings to the attention maps.
 
     Example:
@@ -106,8 +106,8 @@ class VitDetConfig(PretrainedConfig):
         drop_path_rate=0.0,
         window_block_indices=[],
         residual_block_indices=[],
-        use_abs_pos=True,
-        use_rel_pos=False,
+        use_absolute_position_embeddings=True,
+        use_relative_position_embeddings=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -127,5 +127,5 @@ class VitDetConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.window_block_indices = window_block_indices
         self.residual_block_indices = residual_block_indices
-        self.use_abs_pos = use_abs_pos
-        self.use_rel_pos = use_rel_pos
+        self.use_absolute_position_embeddings = use_absolute_position_embeddings
+        self.use_relative_position_embeddings = use_relative_position_embeddings
