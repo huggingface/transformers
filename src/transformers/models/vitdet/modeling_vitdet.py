@@ -17,19 +17,17 @@
 
 import collections.abc
 import math
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -180,172 +178,321 @@ class VitDetPatchEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->VitDet
-class VitDetSelfAttention(nn.Module):
-    def __init__(self, config: VitDetConfig) -> None:
-        super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
-            )
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
-    def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
-
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->VitDet
-class VitDetSelfOutput(nn.Module):
+def get_rel_pos(q_size, k_size, rel_pos):
     """
-    The residual connection is defined in VitDetLayer instead of here (as is the case with other models), due to the
-    layernorm applied before each block.
+    Get relative positional embeddings according to the relative positions of
+        query and key sizes.
+    Args:
+        q_size (int): size of query q.
+        k_size (int): size of key k.
+        rel_pos (Tensor): relative position embeddings (L, C).
+
+    Returns:
+        Extracted positional embeddings according to relative positions.
     """
-
-    def __init__(self, config: VitDetConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        return hidden_states
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VitDet
-class VitDetAttention(nn.Module):
-    def __init__(self, config: VitDetConfig) -> None:
-        super().__init__()
-        self.attention = VitDetSelfAttention(config)
-        self.output = VitDetSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: Set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
+    max_rel_dist = int(2 * max(q_size, k_size) - 1)
+    # Interpolate rel pos if needed.
+    if rel_pos.shape[0] != max_rel_dist:
+        # Interpolate rel pos.
+        rel_pos_resized = nn.functional.interpolate(
+            rel_pos.reshape(1, rel_pos.shape[0], -1).permute(0, 2, 1),
+            size=max_rel_dist,
+            mode="linear",
         )
+        rel_pos_resized = rel_pos_resized.reshape(-1, max_rel_dist).permute(1, 0)
+    else:
+        rel_pos_resized = rel_pos
 
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+    # Scale the coords with short length if shapes for q and k are different.
+    q_coords = torch.arange(q_size)[:, None] * max(k_size / q_size, 1.0)
+    k_coords = torch.arange(k_size)[None, :] * max(q_size / k_size, 1.0)
+    relative_coords = (q_coords - k_coords) + (k_size - 1) * max(q_size / k_size, 1.0)
 
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
+    return rel_pos_resized[relative_coords.long()]
 
-    def forward(
+
+def add_decomposed_rel_pos(attn, q, rel_pos_h, rel_pos_w, q_size, k_size):
+    """
+    Calculate decomposed Relative Positional Embeddings as introduced in
+    [MViT2](https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py)
+
+    Args:
+        attn (Tensor): attention map.
+        q (Tensor): query q in the attention layer with shape (B, q_h * q_w, C).
+        rel_pos_h (Tensor): relative position embeddings (Lh, C) for height axis.
+        rel_pos_w (Tensor): relative position embeddings (Lw, C) for width axis.
+        q_size (Tuple): spatial sequence size of query q with (q_h, q_w).
+        k_size (Tuple): spatial sequence size of key k with (k_h, k_w).
+
+    Returns:
+        attn (Tensor): attention map with added relative positional embeddings.
+    """
+    q_h, q_w = q_size
+    k_h, k_w = k_size
+    Rh = get_rel_pos(q_h, k_h, rel_pos_h)
+    Rw = get_rel_pos(q_w, k_w, rel_pos_w)
+
+    B, _, dim = q.shape
+    r_q = q.reshape(B, q_h, q_w, dim)
+    rel_h = torch.einsum("bhwc,hkc->bhwk", r_q, Rh)
+    rel_w = torch.einsum("bhwc,wkc->bhwk", r_q, Rw)
+
+    attn = (attn.view(B, q_h, q_w, k_h, k_w) + rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]).view(
+        B, q_h * q_w, k_h * k_w
+    )
+
+    return attn
+
+
+class VitDetAttention(nn.Module):
+    """Multi-head Attention block with relative position embeddings."""
+
+    def __init__(
         self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
-
-        attention_output = self.output(self_outputs[0], hidden_states)
-
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->VitDet
-class VitDetIntermediate(nn.Module):
-    def __init__(self, config: VitDetConfig) -> None:
+        dim,
+        num_heads=8,
+        qkv_bias=True,
+        use_rel_pos=False,
+        # rel_pos_zero_init=True,
+        input_size=None,
+    ):
+        """
+        Args:
+            dim (int): Number of input channels.
+            num_heads (int): Number of attention heads.
+            qkv_bias (bool:  If True, add a learnable bias to query, key, value.
+            rel_pos (bool): If True, add relative positional embeddings to the attention map.
+            input_size (int or None): Input resolution for calculating the relative positional
+                parameter size.
+        """
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = head_dim**-0.5
+
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.proj = nn.Linear(dim, dim)
+
+        self.use_rel_pos = use_rel_pos
+        if self.use_rel_pos:
+            # initialize relative positional embeddings
+            self.rel_pos_h = nn.Parameter(torch.zeros(2 * input_size[0] - 1, head_dim))
+            self.rel_pos_w = nn.Parameter(torch.zeros(2 * input_size[1] - 1, head_dim))
+
+            # TODO define this in init_weights
+            # if not rel_pos_zero_init:
+            #     nn.init.trunc_normal_(self.rel_pos_h, std=0.02)
+            #     nn.init.trunc_normal_(self.rel_pos_w, std=0.02)
+
+    def forward(self, x):
+        B, H, W, _ = x.shape
+        # qkv with shape (3, B, nHead, H * W, C)
+        qkv = self.qkv(x).reshape(B, H * W, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
+        # q, k, v with shape (B * nHead, H * W, C)
+        q, k, v = qkv.reshape(3, B * self.num_heads, H * W, -1).unbind(0)
+
+        attn = (q * self.scale) @ k.transpose(-2, -1)
+
+        if self.use_rel_pos:
+            attn = add_decomposed_rel_pos(attn, q, self.rel_pos_h, self.rel_pos_w, (H, W), (H, W))
+
+        attn = attn.softmax(dim=-1)
+        x = (attn @ v).view(B, self.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
+        x = self.proj(x)
+
+        return x
+
+
+# Copied from transformers.models.beit.modeling_beit.drop_path
+def drop_path(drop_prob: float, x: torch.Tensor, training: bool = False):
+    """
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
+    """
+    if drop_prob == 0.0 or not training:
+        return input
+    keep_prob = 1 - drop_prob
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    random_tensor.floor_()  # binarize
+    output = input.div(keep_prob) * random_tensor
+    return output
+
+
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath
+class VitDetDropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob: Optional[float] = None) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
+        return drop_path(hidden_states, self.drop_prob, self.training)
 
-        return hidden_states
+    def extra_repr(self) -> str:
+        return "p={}".format(self.drop_prob)
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->VitDet
-class VitDetOutput(nn.Module):
-    def __init__(self, config: VitDetConfig) -> None:
+class VitDetResBottleneckBlock(nn.Module):
+    """
+    The standard bottleneck residual block without the last activation layer. It contains 3 conv layers with kernels
+    1x1, 3x3, 1x1.
+    """
+
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        bottleneck_channels,
+        norm="LN",
+        act_layer=nn.GELU,
+    ):
+        """
+        Args:
+            in_channels (int): Number of input channels.
+            out_channels (int): Number of output channels.
+            bottleneck_channels (int): number of output channels for the 3x3
+                "bottleneck" conv layers.
+            norm (str or callable): normalization for all conv layers.
+                See :func:`layers.nn.LayerNorm` for supported format.
+            act_layer (callable): activation for all conv layers.
+        """
+        super().__init__(in_channels, out_channels, 1)
+
+        self.conv1 = nn.Conv2d(in_channels, bottleneck_channels, 1, bias=False)
+        self.norm1 = nn.LayerNorm(norm, bottleneck_channels)
+        self.act1 = act_layer()
+
+        self.conv2 = nn.Conv2d(
+            bottleneck_channels,
+            bottleneck_channels,
+            3,
+            padding=1,
+            bias=False,
+        )
+        self.norm2 = nn.LayerNorm(norm, bottleneck_channels)
+        self.act2 = act_layer()
+
+        self.conv3 = nn.Conv2d(bottleneck_channels, out_channels, 1, bias=False)
+        self.norm3 = nn.LayerNorm(norm, out_channels)
+
+        # TODO define this in init_weights
+        # for layer in [self.conv1, self.conv2, self.conv3]:
+        #     weight_init.c2_msra_fill(layer)
+        # for layer in [self.norm1, self.norm2]:
+        #     layer.weight.data.fill_(1.0)
+        #     layer.bias.data.zero_()
+        # zero init last norm layer.
+        # self.norm3.weight.data.zero_()
+        # self.norm3.bias.data.zero_()
+
+    def forward(self, x):
+        out = x
+        for layer in self.children():
+            out = layer(out)
+
+        out = x + out
+        return out
+
+
+class VitDetMlp(nn.Module):
+    def __init__(self, config, in_features: int, hidden_features: int) -> None:
         super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.act = nn.GELU()
+        self.fc2 = nn.Linear(hidden_features, in_features)
+        self.drop = nn.Dropout(config.dropout_rate)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.drop(x)
+        x = self.fc2(x)
+        x = self.drop(x)
 
-        hidden_states = hidden_states + input_tensor
-
-        return hidden_states
+        return x
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->VitDet
+def window_partition(x, window_size):
+    """
+    Partition into non-overlapping windows with padding if needed.
+    Args:
+        x (tensor): input tokens with [B, H, W, C].
+        window_size (int): window size.
+
+    Returns:
+        windows: windows after partition with [B * num_windows, window_size, window_size, C].
+        (Hp, Wp): padded height and width before partition
+    """
+    B, H, W, C = x.shape
+
+    pad_h = (window_size - H % window_size) % window_size
+    pad_w = (window_size - W % window_size) % window_size
+    if pad_h > 0 or pad_w > 0:
+        x = F.pad(x, (0, 0, 0, pad_w, 0, pad_h))
+    Hp, Wp = H + pad_h, W + pad_w
+
+    x = x.view(B, Hp // window_size, window_size, Wp // window_size, window_size, C)
+    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
+    return windows, (Hp, Wp)
+
+
+def window_unpartition(windows, window_size, pad_hw, hw):
+    """
+    Window unpartition into original sequences and removing padding.
+    Args:
+        x (tensor): input tokens with [B * num_windows, window_size, window_size, C].
+        window_size (int): window size.
+        pad_hw (Tuple): padded height and width (Hp, Wp).
+        hw (Tuple): original height and width (H, W) before padding.
+
+    Returns:
+        x: unpartitioned sequences with [B, H, W, C].
+    """
+    Hp, Wp = pad_hw
+    H, W = hw
+    B = windows.shape[0] // (Hp * Wp // window_size // window_size)
+    x = windows.view(B, Hp // window_size, Wp // window_size, window_size, window_size, -1)
+    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, Hp, Wp, -1)
+
+    if Hp > H or Wp > W:
+        x = x[:, :H, :W, :].contiguous()
+    return x
+
+
 class VitDetLayer(nn.Module):
-    """This corresponds to the Block class in the timm implementation."""
+    """This corresponds to the Block class in the original implementation."""
 
-    def __init__(self, config: VitDetConfig) -> None:
+    def __init__(self, config: VitDetConfig, drop_path_rate: float = 0, window_size: int = 0, use_residual_block: bool = False) -> None:
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
+
+        dim = config.hidden_size
+
+        self.norm1 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = VitDetAttention(config)
-        self.intermediate = VitDetIntermediate(config)
-        self.output = VitDetOutput(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        self.drop_path = VitDetDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.norm2 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
+        self.mlp = VitDetMlp(config=config, in_features=dim, hidden_features=int(dim * config.mlp_ratio))
+
+        self.window_size = window_size
+
+        self.use_residual_block = use_residual_block
+        if config.use_residual_block:
+            # Use a residual block with bottleneck channel as dim // 2
+            self.residual = VitDetResBottleneckBlock(
+                in_channels=dim,
+                out_channels=dim,
+                bottleneck_channels=dim // 2,
+                norm="LN",
+                # act_layer=act_layer,
+            )
 
     def forward(
         self,
@@ -353,25 +500,37 @@ class VitDetLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        
+        shortcut = hidden_states
+
+        hidden_states = self.norm1(hidden_states)
+
+        # Window partition
+        if self.window_size > 0:
+            height, width = hidden_states.shape[1], hidden_states.shape[2]
+            hidden_states, pad_hw = window_partition(hidden_states, self.window_size)
+
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in VitDet, layernorm is applied before self-attention
+            hidden_states,
             head_mask,
             output_attentions=output_attentions,
         )
-        attention_output = self_attention_outputs[0]
+        hidden_states = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
+        # Reverse window partition
+        if self.window_size > 0:
+            hidden_states = window_unpartition(hidden_states, self.window_size, pad_hw, (height, width))
+
         # first residual connection
-        hidden_states = attention_output + hidden_states
+        hidden_states = shortcut + self.drop_path(hidden_states)
 
-        # in VitDet, layernorm is also applied after self-attention
-        layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.intermediate(layer_output)
+        hidden_states = hidden_states + self.drop_path(self.mlp(self.norm2(hidden_states)))
 
-        # second residual connection is done here
-        layer_output = self.output(layer_output, hidden_states)
+        if self.use_residual_block:
+            hidden_states = self.residual(hidden_states.permute(0, 3, 1, 2)).permute(0, 2, 3, 1)
 
-        outputs = (layer_output,) + outputs
+        outputs = (hidden_states,) + outputs
 
         return outputs
 
