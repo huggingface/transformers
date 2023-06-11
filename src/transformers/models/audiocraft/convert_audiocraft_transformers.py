@@ -14,16 +14,13 @@
 # limitations under the License.
 """Convert Audiocraft checkpoints from the original repository."""
 import argparse
-import os
 from pathlib import Path
 from typing import Dict, OrderedDict
 
 import torch
 from audiocraft.models import MusicGen
-from huggingface_hub import hf_hub_download
 
-from transformers import T5Config, T5EncoderModel
-from transformers.models.audiocraft.configuration_audiocraft import AudiocraftConfig, AudiocraftDecoderConfig
+from transformers.models.audiocraft.configuration_audiocraft import AudiocraftConfig, AudiocraftDecoderConfig, T5Config
 from transformers.models.audiocraft.modeling_audiocraft import AudiocraftForConditionalGeneration
 from transformers.utils import logging
 
@@ -68,8 +65,8 @@ def rename_key(name):
 
 def rename_decoder_state_dict(state_dict: OrderedDict, d_model: int) -> Dict:
     """Function that takes the fairseq Audiocraft state dict and renames it according to the HF
-    module names. It further partitions the state dict into three: the decoder state dict (state_dict),
-    the state dict for the LM head, and the state dict for the encoder projection."""
+    module names. It further partitions the state dict into three: the decoder state dict (state_dict), the state dict
+    for the LM head, and the state dict for the encoder projection."""
     keys = list(state_dict.keys())
     for key in keys:
         val = state_dict.pop(key)
@@ -85,12 +82,7 @@ def rename_decoder_state_dict(state_dict: OrderedDict, d_model: int) -> Dict:
 
 
 def config_from_checkpoint(checkpoint: str) -> AudiocraftConfig:
-    if checkpoint == "dummy":
-        d_model = 1024
-        ffn_dim = d_model * 4
-        num_layers = 2
-        num_codebooks = 4
-    elif checkpoint == "small":
+    if checkpoint == "small":
         d_model = 1024
         ffn_dim = d_model * 4
         num_layers = 24
@@ -104,23 +96,24 @@ def config_from_checkpoint(checkpoint: str) -> AudiocraftConfig:
 
 
 def convert_audiocraft_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hub=False, device="cpu"):
-    if checkpoint == "dummy":
-        hf_hub_download("music-gen-sprint/audiocraft-dummy", filename="model.pt", local_dir=pytorch_dump_folder)
-        state_dict = torch.load(os.path.join(pytorch_dump_folder, "model.pt"))
-        os.remove(os.path.join(pytorch_dump_folder, "model.pt"))
-        config = config_from_checkpoint(checkpoint)
-    else:
-        fairseq_model = MusicGen.get_pretrained(checkpoint, device=device)
-        state_dict = fairseq_model.lm.state_dict()
-        config = config_from_checkpoint(checkpoint)
+    fairseq_model = MusicGen.get_pretrained(checkpoint, device=device)
+    config = config_from_checkpoint(checkpoint)
 
-    state_dict = rename_decoder_state_dict(state_dict, d_model=config.lm_config.d_model)
+    # TODO(SG): remove debugging statement
+    fairseq_model.lm.transformer.layers = fairseq_model.lm.transformer.layers[:2]
+    config.lm_config.num_hidden_layers = 2
+
+    # the t5 encoder state dict is 'hidden', so we retrieve using this hack
+    t5_state_dict = fairseq_model.lm.condition_provider.conditioners.description.__dict__["t5"].state_dict()
+    lm_state_dict = fairseq_model.lm.state_dict()
+
+    lm_state_dict = rename_decoder_state_dict(lm_state_dict, d_model=config.lm_config.d_model)
 
     model = AudiocraftForConditionalGeneration(config).eval()
     # load the encoder model
-    model.model.encoder = T5EncoderModel.from_pretrained(CHECKPOINT_TO_T5[checkpoint])
+    model.model.encoder.load_state_dict(t5_state_dict)
     # load all other weights (encoder proj + decoder + lm heads) - expect that we'll be missing all enc weights
-    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    missing_keys, unexpected_keys = model.load_state_dict(lm_state_dict, strict=False)
 
     for key in missing_keys.copy():
         if key.startswith("model.encoder") or key in EXPECTED_MISSING_KEYS:
@@ -161,7 +154,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint",
-        default="dummy",
+        default="small",
         type=str,
         help="Checkpoint size of the Audiocraft model you'd like to convert. Can be one of: small, medium, large.",
     )

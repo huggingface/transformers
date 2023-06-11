@@ -139,8 +139,8 @@ class T5Config(PretrainedConfig):
 
 class AudiocraftDecoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`AudiocraftDecoder`]. It is used to instantiate an
-    Audiocraft language model according to the specified arguments, defining the model architecture. Instantiating a
+    This is the configuration class to store the configuration of an [`AudiocraftDecoder`]. It is used to instantiate
+    an Audiocraft language model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Audiocraft
     [facebook/audiocraft-600m](https://huggingface.co/facebook/audiocraft-600m) architecture.
 
@@ -149,9 +149,9 @@ class AudiocraftDecoderConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50265):
-            Vocabulary size of the MBART model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`MBartModel`] or [`TFMBartModel`].
+        vocab_size (`int`, *optional*, defaults to 2048):
+            Vocabulary size of the AudiocraftDecoder model. Defines the number of different tokens that can be
+            represented by the `inputs_ids` passed when calling [`AudiocraftDecoder`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -259,8 +259,8 @@ class AudiocraftDecoderConfig(PretrainedConfig):
 class AudiocraftConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AudiocraftModel`]. It is used to instantiate an
-    Audiocraft model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Audiocraft
+    Audiocraft model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the Audiocraft
     [facebook/audiocraft-600m](https://huggingface.co/facebook/audiocraft-600m) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -309,6 +309,7 @@ class AudiocraftConfig(PretrainedConfig):
     is_composition = True
 
     def __init__(self, t5_config=None, lm_config=None, init_std=0.02, use_cache=True, **kwargs):
+        super().__init__(**kwargs)
         if t5_config is None:
             t5_config = {}
             logger.info("t5_config is None. initializing the T5Config with default values.")
@@ -324,8 +325,6 @@ class AudiocraftConfig(PretrainedConfig):
         self.is_encoder_decoder = True
         self.use_cache = use_cache
 
-        super().__init__(**kwargs)
-
     @classmethod
     def from_t5_lm_config(
         cls,
@@ -334,8 +333,7 @@ class AudiocraftConfig(PretrainedConfig):
         **kwargs,
     ):
         r"""
-        Instantiate a [`AudiocraftConfig`] (or a derived class) from T5 and Audiocraft language model
-        configurations.
+        Instantiate a [`AudiocraftConfig`] (or a derived class) from T5 and Audiocraft language model configurations.
 
         Returns:
             [`AudiocraftConfig`]: An instance of a configuration object
