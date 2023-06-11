@@ -243,21 +243,23 @@ class VitDetAttention(nn.Module):
         # q, k, v with shape (batch_size * num_heads, height * width, num_channels)
         q, k, v = qkv.reshape(3, batch_size * self.num_heads, height * width, -1).unbind(0)
 
-        attn = (q * self.scale) @ k.transpose(-2, -1)
+        attention_scores = (q * self.scale) @ k.transpose(-2, -1)
 
         if self.use_relative_position_embeddings:
-            attn = add_decomposed_rel_pos(attn, q, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width))
+            attention_scores = add_decomposed_rel_pos(
+                attention_scores, q, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+            )
 
-        attn = attn.softmax(dim=-1)
+        attention_probs = attention_scores.softmax(dim=-1)
         x = (
-            (attn @ v)
+            (attention_probs @ v)
             .view(batch_size, self.num_heads, height, width, -1)
             .permute(0, 2, 3, 1, 4)
             .reshape(batch_size, height, width, -1)
         )
         x = self.proj(x)
 
-        outputs = (x, attn) if output_attentions else (x,)
+        outputs = (x, attention_probs) if output_attentions else (x,)
 
         return outputs
 
@@ -771,7 +773,6 @@ class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
 
         self.embeddings = VitDetEmbeddings(config)
         self.encoder = VitDetEncoder(config)
-        self.num_features = [config.hidden_sizes[0]] + config.hidden_sizes
 
         # initialize weights and apply final processing
         self.post_init()
@@ -823,7 +824,6 @@ class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
         # we skip the stem
         for idx, (stage, hidden_state) in enumerate(zip(self.stage_names[1:], hidden_states[1:])):
             if stage in self.out_features:
-                hidden_state = self.hidden_states_norms[stage](hidden_state)
                 feature_maps += (hidden_state,)
 
         if not return_dict:
