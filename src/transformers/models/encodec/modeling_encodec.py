@@ -83,7 +83,9 @@ class EncodecDecoderOutput(ModelOutput):
 class EncodecConv1d(nn.Module):
     """Conv1d with asymmetric or causal padding and normalization."""
 
-    def __init__(self,config,in_channels: int,out_channels: int,kernel_size: int,stride: int = 1,dilation: int = 1):
+    def __init__(
+        self, config, in_channels: int, out_channels: int, kernel_size: int, stride: int = 1, dilation: int = 1
+    ):
         super().__init__()
         self.causal = config.causal
         self.pad_mode = config.pad_mode
@@ -163,7 +165,7 @@ class EncodecConv1d(nn.Module):
 class EncodecConvTranspose1d(nn.Module):
     """ConvTranspose1d with asymmetric or causal padding and normalization."""
 
-    def __init__(self, config,in_channels: int,out_channels: int,kernel_size: int,stride: int = 1):
+    def __init__(self, config, in_channels: int, out_channels: int, kernel_size: int, stride: int = 1):
         super().__init__()
         causal = config.causal
         trim_right_ratio = config.trim_right_ratio
@@ -310,11 +312,11 @@ class EncodecDecoder(nn.Module):
             # Add upsampling layers
             model += [nn.ELU()]
             model += [
-                EncodecConvTranspose1d(config, current_scale , current_scale//2, kernel_size=ratio * 2, stride=ratio)
+                EncodecConvTranspose1d(config, current_scale, current_scale // 2, kernel_size=ratio * 2, stride=ratio)
             ]
             # Add residual layers
             for j in range(config.num_residual_layers):
-                model += [EncodecResnetBlock(config, current_scale//2, (config.dilation_base**j, 1))]
+                model += [EncodecResnetBlock(config, current_scale // 2, (config.dilation_base**j, 1))]
             scaling //= 2
 
         # Add final layers
