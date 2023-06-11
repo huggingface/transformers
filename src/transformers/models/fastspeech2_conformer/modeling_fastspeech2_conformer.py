@@ -18,6 +18,11 @@ from .configuration_fastspeech2_conformer import FastSpeech2ConformerConfig, Fas
 
 logger = logging.get_logger(__name__)
 
+FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "connor-henderson/fastspeech2_conformer",
+    # See all FastSpeech2Conformer models at https://huggingface.co/models?filter=fastspeech2_conformer
+]
+
 
 @dataclass
 class FastSpeech2ConformerModelOutput(Seq2SeqSpectrogramOutput):
@@ -63,8 +68,7 @@ def make_pad_mask(lengths, xs=None, length_dim=-1, device=None):
 
     Returns:
         Tensor: Mask tensor containing indices of padded part.
-                dtype=torch.uint8 in PyTorch 1.2-
-                dtype=torch.bool in PyTorch 1.2+ (including 1.2)
+                dtype=torch.uint8 in PyTorch 1.2- dtype=torch.bool in PyTorch 1.2+ (including 1.2)
 
     """
     if length_dim == 0:
@@ -111,8 +115,7 @@ def make_non_pad_mask(lengths, xs=None, length_dim=-1, device=None):
 
     Returns:
         ByteTensor: mask tensor containing indices of padded part.
-                    dtype=torch.uint8 in PyTorch 1.2-
-                    dtype=torch.bool in PyTorch 1.2+ (including 1.2)
+                    dtype=torch.uint8 in PyTorch 1.2- dtype=torch.bool in PyTorch 1.2+ (including 1.2)
 
     """
     return ~make_pad_mask(lengths, xs, length_dim, device=device)
@@ -122,19 +125,15 @@ class FastSpeech2ConformerDurationPredictor(nn.Module):
     """
     Duration predictor module.
 
-    This is a module of duration predictor described
-    in `FastSpeech: Fast, Robust and Controllable Text to Speech`_.
-    The duration predictor predicts a duration of each frame in log domain
-    from the hidden embeddings of encoder.
+    This is a module of duration predictor described in `FastSpeech: Fast, Robust and Controllable Text to Speech`_.
+    The duration predictor predicts a duration of each frame in log domain from the hidden embeddings of encoder.
 
     .. _`FastSpeech: Fast, Robust and Controllable Text to Speech`:
         https://arxiv.org/pdf/1905.09263.pdf
 
     Note:
-        The calculation domain of outputs is different
-        between in `forward` and in `inference`. In `forward`,
-        the outputs are calculated in log domain but in `inference`,
-        those are calculated in linear domain.
+        The calculation domain of outputs is different between in `forward` and in `inference`. In `forward`, the
+        outputs are calculated in log domain but in `inference`, those are calculated in linear domain.
 
     """
 
@@ -208,11 +207,9 @@ class FastSpeech2ConformerLengthRegulator(nn.Module):
     """
     Length regulator module for feed-forward Transformer.
 
-    This is a module of length regulator described in
-    `FastSpeech: Fast, Robust and Controllable Text to Speech`_.
-    The length regulator expands char or
-    phoneme-level embedding features to frame-level by repeating each
-    feature based on the corresponding predicted durations.
+    This is a module of length regulator described in `FastSpeech: Fast, Robust and Controllable Text to Speech`_. The
+    length regulator expands char or phoneme-level embedding features to frame-level by repeating each feature based on
+    the corresponding predicted durations.
 
     .. _`FastSpeech: Fast, Robust and Controllable Text to Speech`:
         https://arxiv.org/pdf/1905.09263.pdf
@@ -234,7 +231,8 @@ class FastSpeech2ConformerLengthRegulator(nn.Module):
         Calculate forward propagation.
 
         Args:
-            encoded_embeddings (Tensor): Batch of sequences of char or phoneme embeddings (batch_size, max_text_length, embedding_dim).
+            encoded_embeddings (Tensor):
+                Batch of sequences of char or phoneme embeddings (batch_size, max_text_length, embedding_dim).
             target_durations (LongTensor): Batch of durations of each frame (batch_size, T).
             alpha (float, optional): Alpha value to control speed of speech.
 
@@ -373,8 +371,8 @@ class FastSpeech2ConformerVariancePredictor(nn.Module):
     """
     Variance predictor module.
 
-    This is a module of variance predictor described in `FastSpeech 2:
-    Fast and High-Quality End-to-End Text to Speech`_.
+    This is a module of variance predictor described in `FastSpeech 2: Fast and High-Quality End-to-End Text to
+    Speech`_.
 
     .. _`FastSpeech 2: Fast and High-Quality End-to-End Text to Speech`:
         https://arxiv.org/abs/2006.04558
@@ -553,8 +551,10 @@ class FastSpeech2ConformerLoss(torch.nn.Module):
     ):
         """
         Args:
-            outputs_after_postnet (Tensor): Batch of outputs after postnet (batch_size, max_spectrogram_length, num_mel_bins).
-            outputs_before_postnet (Tensor): Batch of outputs before postnet (batch_size, max_spectrogram_length, num_mel_bins).
+            outputs_after_postnet (Tensor):
+                Batch of outputs after postnet (batch_size, max_spectrogram_length, num_mel_bins).
+            outputs_before_postnet (Tensor):
+                Batch of outputs before postnet (batch_size, max_spectrogram_length, num_mel_bins).
             duration_outputs (LongTensor): Batch of outputs of duration predictor (batch_size, max_text_length).
             pitch_outputs (Tensor): Batch of outputs of pitch predictor (batch_size, max_text_length, 1).
             energy_outputs (Tensor): Batch of outputs of energy predictor (batch_size, max_text_length, 1).
@@ -566,10 +566,8 @@ class FastSpeech2ConformerLoss(torch.nn.Module):
             target_lengths (LongTensor): Batch of the lengths of each target (batch_size,).
 
         Returns:
-            Tensor: L1 loss value.
-            Tensor: Duration predictor loss value.
-            Tensor: Pitch predictor loss value.
-            Tensor: Energy predictor loss value.
+            Tensor: L1 loss value. Tensor: Duration predictor loss value. Tensor: Pitch predictor loss value. Tensor:
+            Energy predictor loss value.
 
         """
         # apply mask to remove padded part
@@ -630,7 +628,6 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
 
     config_class = FastSpeech2ConformerConfig
     base_model_prefix = "fastspeech2_conformer"
-    supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     main_input_name = "input_ids"
@@ -646,58 +643,27 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_()  # TODO: add std initializer range to config and here?
+            module.weight.data.normal_()
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, FastSpeech2ConformerRelPositionMultiHeadedAttention):
+            nn.init.xavier_uniform_(module.pos_bias_u)
+            nn.init.xavier_uniform_(module.pos_bias_v)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, FastSpeech2ConformerEncoder):
             module.gradient_checkpointing = value
 
 
-def save_test_outputs(outputs):
-    print("...creating new test outputs")
-    (
-        outputs_before_postnet,
-        outputs_after_postnet,
-        encoder_last_hidden_state,
-        encoder_hidden_states,
-        encoder_attentions,
-        decoder_hidden_states,
-        decoder_attentions,
-        duration_outputs,
-        pitch_outputs,
-        energy_outputs,
-    ) = outputs
-    test = outputs_before_postnet.detach().clone()
-    torch.save(test, "hf-decoder_outputs.pt")
-
-    test = outputs_after_postnet.detach().clone()
-    torch.save(test, "hf-postnet_outputs.pt")
-
-    test = duration_outputs.detach().clone()
-    torch.save(test, "hf-duration_predictions.pt")
-
-    test = pitch_outputs.detach().clone()
-    torch.save(test, "hf-pitch_predictions.pt")
-
-    test = energy_outputs.detach().clone()
-    torch.save(test, "hf-energy_predictions.pt")
-
-
 class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
     """
     FastSpeech 2 module.
 
-    This is a module of FastSpeech 2 described in FastSpeech 2: Fast and
-    High-Quality End-to-End Text to Speech. Instead of quantized pitch and
-    energy, we use token-averaged value introduced in FastPitch: Parallel
-    Text-to-speech with Pitch Prediction. The encoder and decoder are Conformers
-    instead of regular Transformers.
+    This is a module of FastSpeech 2 described in FastSpeech 2: Fast and High-Quality End-to-End Text to Speech.
+    Instead of quantized pitch and energy, we use token-averaged value introduced in FastPitch: Parallel Text-to-speech
+    with Pitch Prediction. The encoder and decoder are Conformers instead of regular Transformers.
 
-        https://arxiv.org/abs/2006.04558
-        https://arxiv.org/abs/2006.06873
-        https://arxiv.org/pdf/2005.08100
+        https://arxiv.org/abs/2006.04558 https://arxiv.org/abs/2006.06873 https://arxiv.org/pdf/2005.08100
 
     """
 
@@ -812,7 +778,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         input_ids,
         input_lengths=None,
         target_spectrograms=None,
-        speech_lengths=None,
+        spectrogram_lengths=None,
         target_durations=None,
         target_pitch=None,
         target_energy=None,
@@ -828,10 +794,13 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
 
         Args:
             return_mels: Whether to return the predicted spectrogram
-            input_ids (LongTensor): Input sequence of text vectors, either batched and padded (batch_size, max_text_length) or not (text_length,).
+            input_ids (LongTensor):
+                Input sequence of text vectors, either batched and padded (batch_size, max_text_length) or not
+                (text_length,).
             input_lengths (LongTensor): Batch of lengths of each input (batch_size,).
-            target_spectrograms (Tensor): Batch of padded target features (batch_size, max_spectrogram_length, num_mel_bins).
-            speech_lengths (LongTensor): Batch of the lengths of each target (batch_size,).
+            target_spectrograms (Tensor):
+                Batch of padded target features (batch_size, max_spectrogram_length, num_mel_bins).
+            spectrogram_lengths (LongTensor): Batch of the lengths of each target (batch_size,).
             target_durations (LongTensor): Batch of padded durations (batch_size, max_text_length + 1).
             target_pitch (Tensor): Batch of padded token-averaged pitch (batch_size, max_text_length + 1, 1).
             target_energy (Tensor): Batch of padded token-averaged energy (batch_size, max_text_length + 1, 1).
@@ -844,22 +813,13 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
                 for more detail.
 
         Returns:
-            Tensor: Loss scalar value.
-            Dict: Statistics to be monitored.
-            Tensor: Weight value.
+            Tensor: Loss scalar value. Dict: Statistics to be monitored. Tensor: Weight value.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-
-        if input_ids.dim() < 2:
-            # add end_of_sequence at the last of sequence
-            input_ids = torch.nn.functional.pad(input_ids, [0, 1], "constant", self.eos_token_id)
-
-            # set up batch axis
-            input_ids = input_ids.unsqueeze(0)
 
         input_lengths = torch.tensor([input_ids.shape[1]], dtype=torch.long, device=input_ids.device)
 
@@ -873,7 +833,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         outputs = self._forward(
             input_ids,
             input_lengths,
-            speech_lengths,
+            spectrogram_lengths,
             target_durations=target_durations,
             target_pitch=target_pitch,
             target_energy=target_pitch,
@@ -898,13 +858,10 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             energy_outputs,
         ) = outputs
 
-        # Remove when pushing up, debugging only
-        save_test_outputs(outputs)
-
         # modify mod part of groundtruth (speaking pace)
         if self.reduction_factor > 1:
-            speech_lengths = speech_lengths.new(
-                [original_length - original_length % self.reduction_factor for original_length in speech_lengths]
+            spectrogram_lengths = spectrogram_lengths.new(
+                [original_length - original_length % self.reduction_factor for original_length in spectrogram_lengths]
             )
 
         loss = None
@@ -921,7 +878,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
                 target_pitch=target_pitch,
                 target_energy=target_energy,
                 input_lengths=input_lengths,
-                target_lengths=speech_lengths,
+                target_lengths=spectrogram_lengths,
             )
             loss = l1_loss + duration_loss + pitch_loss + energy_loss
 
@@ -1095,9 +1052,8 @@ class FastSpeech2ConformerMultiHeadedAttention(nn.Module):
             value (torch.Tensor): Value tensor (batch, time2, size).
 
         Returns:
-            torch.Tensor: Transformed query tensor (batch, n_head, time1, d_k).
-            torch.Tensor: Transformed key tensor (batch, n_head, time2, d_k).
-            torch.Tensor: Transformed value tensor (batch, n_head, time2, d_k).
+            torch.Tensor: Transformed query tensor (batch, n_head, time1, d_k). torch.Tensor: Transformed key tensor
+            (batch, n_head, time2, d_k). torch.Tensor: Transformed value tensor (batch, n_head, time2, d_k).
         """
         n_batch = query.size(0)
         q = self.linear_q(query).view(n_batch, -1, self.h, self.d_k)
@@ -1165,13 +1121,10 @@ class FastSpeech2ConformerMultiHeadedAttention(nn.Module):
 
 class FastSpeech2ConformerRelPositionMultiHeadedAttention(FastSpeech2ConformerMultiHeadedAttention):
     """
-    Multi-Head Attention layer with relative position encoding.
-    Details can be found in https://github.com/espnet/espnet/pull/2816.
-    Paper: https://arxiv.org/abs/1901.02860
     Args:
-        n_head (int): The number of heads.
-        n_feat (int): The number of features.
-        dropout_rate (float): Dropout rate.
+    Multi-Head Attention layer with relative position encoding. Details can be found in
+    https://github.com/espnet/espnet/pull/2816. Paper: https://arxiv.org/abs/1901.02860
+        n_head (int): The number of heads. n_feat (int): The number of features. dropout_rate (float): Dropout rate.
     """
 
     def __init__(self, n_head, n_feat, dropout_rate):
@@ -1183,16 +1136,13 @@ class FastSpeech2ConformerRelPositionMultiHeadedAttention(FastSpeech2ConformerMu
         # as described in https://arxiv.org/abs/1901.02860 Section 3.3
         self.pos_bias_u = nn.Parameter(torch.Tensor(self.h, self.d_k))
         self.pos_bias_v = nn.Parameter(torch.Tensor(self.h, self.d_k))
-        # TODO: Move these to init weights
-        torch.nn.init.xavier_uniform_(self.pos_bias_u)
-        torch.nn.init.xavier_uniform_(self.pos_bias_v)
 
     def rel_shift(self, x):
         """
-        Compute relative positional encoding.
         Args:
-            x (torch.Tensor): Input tensor (batch_size, head, time1, 2*time1-1).
-            time1 means the length of query vector.
+        Compute relative positional encoding.
+            x (torch.Tensor): Input tensor (batch_size, head, time1, 2*time1-1). time1 means the length of query
+            vector.
         Returns:
             torch.Tensor: Output tensor.
         """
@@ -1207,12 +1157,11 @@ class FastSpeech2ConformerRelPositionMultiHeadedAttention(FastSpeech2ConformerMu
 
     def forward(self, query, key, value, pos_emb, mask):
         """
-        Compute 'Scaled Dot Product Attention' with rel. positional encoding.
         Args:
-            query (torch.Tensor): Query tensor (batch, time1, size).
-            key (torch.Tensor): Key tensor (batch, time2, size).
-            value (torch.Tensor): Value tensor (batch, time2, size).
-            pos_emb (torch.Tensor): Positional embedding tensor
+        Compute 'Scaled Dot Product Attention' with rel. positional encoding.
+            query (torch.Tensor): Query tensor (batch, time1, size). key (torch.Tensor): Key tensor (batch, time2,
+            size). value (torch.Tensor): Value tensor (batch, time2, size). pos_emb (torch.Tensor): Positional
+            embedding tensor
                 (batch, 2*time1-1, size).
             mask (torch.Tensor): Mask tensor (batch, 1, time2) or
                 (batch, time1, time2).
@@ -1333,22 +1282,21 @@ class FastSpeech2ConformerEncoderLayer(nn.Module):
     Args:
         size (int): Input dimension.
         self_attn (torch.nn.Module): Self-attention module instance.
-            `FastSpeech2ConformerMultiHeadedAttention` or `FastSpeech2ConformerRelPositionMultiHeadedAttention` instance
-            can be used as the argument.
+            `FastSpeech2ConformerMultiHeadedAttention` or `FastSpeech2ConformerRelPositionMultiHeadedAttention`
+            instance can be used as the argument.
         feed_forward (torch.nn.Module): Feed-forward module instance.
-            `PositionwiseFeedForward`, `FastSpeech2ConformerMultiLayeredConv1d`, or `Conv1dLinear` instance
-            can be used as the argument.
+            `PositionwiseFeedForward`, `FastSpeech2ConformerMultiLayeredConv1d`, or `Conv1dLinear` instance can be used
+            as the argument.
         feed_forward_macaron (torch.nn.Module): Additional feed-forward module instance.
-            `PositionwiseFeedForward`, `FastSpeech2ConformerMultiLayeredConv1d`, or `Conv1dLinear` instance
-            can be used as the argument.
+            `PositionwiseFeedForward`, `FastSpeech2ConformerMultiLayeredConv1d`, or `Conv1dLinear` instance can be used
+            as the argument.
         conv_module (torch.nn.Module): Convolution module instance.
             `ConvlutionModule` instance can be used as the argument.
         dropout_rate (float): Dropout rate.
         normalize_before (bool): Whether to use layer_norm before the first block.
         concat_after (bool): Whether to concat attention layer's input and output.
-            if True, additional linear will be applied.
-            i.e. x -> x + linear(concat(x, att(x)))
-            if False, no additional linear will be applied. i.e. x -> x + att(x)
+            if True, additional linear will be applied. i.e. x -> x + linear(concat(x, att(x))) if False, no additional
+            linear will be applied. i.e. x -> x + att(x)
     """
 
     def __init__(
@@ -1394,7 +1342,7 @@ class FastSpeech2ConformerEncoderLayer(nn.Module):
         if self.concat_after:
             self.concat_linear = nn.Linear(size + size, size)
 
-    def forward(self, hidden_states, pos_emb, mask, cache=None):
+    def forward(self, hidden_states, pos_emb, mask):
         """
         Compute encoded features.
 
@@ -1402,11 +1350,9 @@ class FastSpeech2ConformerEncoderLayer(nn.Module):
             hidden_states (torch.Tensor): Tensor (batch, time, size).
             pos_emb (torch.Tensor): Tensor (1, time, size).
             mask (torch.Tensor): Mask tensor for the input (batch, time).
-            cache (torch.Tensor): Cache tensor of the input (batch, time - 1, size).
 
         Returns:
-            torch.Tensor: Output tensor (batch, time, size).
-            torch.Tensor: Mask tensor (batch, time).
+            torch.Tensor: Output tensor (batch, time, size). torch.Tensor: Mask tensor (batch, time).
 
         """
         # whether to use macaron style
@@ -1423,26 +1369,12 @@ class FastSpeech2ConformerEncoderLayer(nn.Module):
         if self.normalize_before:
             hidden_states = self.norm_mha(hidden_states)
 
-        if cache is None:
-            query_hidden_states = hidden_states
-        else:
-            if cache.shape != (hidden_states.shape[0], hidden_states.shape[1] - 1, self.size):
-                raise ValueError(
-                    f"Shape mismatch: cache shape {cache.shape} does not match expected shape {(hidden_states.shape[0], hidden_states.shape[1] - 1, self.size)}"
-                )
-
-            query_hidden_states = hidden_states[:, -1:, :]
-            residual = residual[:, -1:, :]
-            mask = None if mask is None else mask[:, -1:, :]
-
         if pos_emb is not None:
             attention_output, attention_scores = self.self_attn(
-                query_hidden_states, hidden_states, hidden_states, pos_emb, mask
+                hidden_states, hidden_states, hidden_states, pos_emb, mask
             )
         else:
-            attention_output, attention_scores = self.self_attn(
-                query_hidden_states, hidden_states, hidden_states, mask
-            )
+            attention_output, attention_scores = self.self_attn(hidden_states, hidden_states, hidden_states, mask)
 
         if self.concat_after:
             x_concat = torch.cat((hidden_states, attention_output), dim=-1)
@@ -1472,9 +1404,6 @@ class FastSpeech2ConformerEncoderLayer(nn.Module):
         if self.conv_module is not None:
             hidden_states = self.norm_final(hidden_states)
 
-        if cache is not None:
-            hidden_states = torch.cat([cache, hidden_states], dim=1)
-
         return hidden_states, attention_scores, pos_emb, mask
 
 
@@ -1482,10 +1411,8 @@ class FastSpeech2ConformerMultiLayeredConv1d(nn.Module):
     """
     Multi-layered conv1d for Transformer block.
 
-    This is a module of multi-layered conv1d designed
-    to replace positionwise feed-forward network
-    in Transformer block, which is introduced in
-    `FastSpeech: Fast, Robust and Controllable Text to Speech`_.
+    This is a module of multi-layered conv1d designed to replace positionwise feed-forward network in Transformer
+    block, which is introduced in `FastSpeech: Fast, Robust and Controllable Text to Speech`_.
 
     .. _`FastSpeech: Fast, Robust and Controllable Text to Speech`:
         https://arxiv.org/pdf/1905.09263.pdf
@@ -1534,13 +1461,10 @@ class FastSpeech2ConformerMultiLayeredConv1d(nn.Module):
 
 class FastSpeech2ConformerRelPositionalEncoding(nn.Module):
     """
-    Relative positional encoding module (new implementation).
-    Details can be found in https://github.com/espnet/espnet/pull/2816.
-    See : Appendix Batch in https://arxiv.org/abs/1901.02860
     Args:
-        d_model (int): Embedding dimension.
-        dropout_rate (float): Dropout rate.
-        max_len (int): Maximum input length.
+    Relative positional encoding module (new implementation). Details can be found in
+    https://github.com/espnet/espnet/pull/2816. See : Appendix Batch in https://arxiv.org/abs/1901.02860
+        d_model (int): Embedding dimension. dropout_rate (float): Dropout rate. max_len (int): Maximum input length.
     """
 
     def __init__(self, d_model, dropout_rate, max_len=5000):
@@ -1587,8 +1511,8 @@ class FastSpeech2ConformerRelPositionalEncoding(nn.Module):
 
     def forward(self, feature_representation):
         """
-        Add positional encoding.
         Args:
+        Add positional encoding.
             feature_representation (torch.Tensor): Input tensor (batch_size, time, `*`).
         Returns:
             torch.Tensor: Encoded tensor (batch_size, time, `*`).
@@ -1616,9 +1540,8 @@ class FastSpeech2ConformerEncoder(nn.Module):
         input_layer (Union[str, nn.Module]): Input layer type.
         normalize_before (bool): Whether to use layer_norm before the first block.
         concat_after (bool): Whether to concat attention layer's input and output.
-            if True, additional linear will be applied.
-            i.e. x -> x + linear(concat(x, att(x)))
-            if False, no additional linear will be applied. i.e. x -> x + att(x)
+            if True, additional linear will be applied. i.e. x -> x + linear(concat(x, att(x))) if False, no additional
+            linear will be applied. i.e. x -> x + att(x)
         positionwise_conv_kernel_size (int): Kernel size of positionwise conv1d layer.
         macaron_style (bool): Whether to use macaron style for positionwise layer.
         activation_type (str): Conformer activation function type.
@@ -1695,18 +1618,15 @@ class FastSpeech2ConformerEncoder(nn.Module):
         output_attentions=None,
     ):
         """
-        Encode input sequence.
         Args:
-            input_tensor (torch.Tensor): Input tensor (batch, time, input_dim).
-            masks (torch.Tensor): Mask tensor (batch, time).
-            utterance_embedding: embedding containing lots of conditioning signals
-            lang_ids: ids of the languages per sample in the batch
-            output_hidden_states (`bool`, *optional*):
+        Encode input sequence.
+            input_tensor (torch.Tensor): Input tensor (batch, time, input_dim). masks (torch.Tensor): Mask tensor
+            (batch, time). utterance_embedding: embedding containing lots of conditioning signals lang_ids: ids of the
+            languages per sample in the batch output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
         Returns:
-            torch.Tensor: Output tensor (batch, time, attention_dim).
-            torch.Tensor: Mask tensor (batch, time).
+            torch.Tensor: Output tensor (batch, time, attention_dim). torch.Tensor: Mask tensor (batch, time).
         """
         feature_representation = input_tensor
         if self.embed is not None:

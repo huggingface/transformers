@@ -15,10 +15,11 @@
 """ FastSpeech2Conformer model configuration"""
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
 
 
-logger = logging.get_logger(__name__)
+FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "connor-henderson/fastspeech2_conformer": "https://huggingface.co/connor-henderson/fastspeech2_conformer/raw/main/config.json",
+}
 
 
 class FastSpeech2ConformerConfig(PretrainedConfig):

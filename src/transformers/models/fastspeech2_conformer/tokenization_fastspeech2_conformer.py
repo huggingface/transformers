@@ -52,7 +52,7 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    model_input_names = ["input_ids", "attention_mask"]
+    model_input_names = ["input_ids"]
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
@@ -99,9 +99,7 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text):
         """Returns a tokenized string."""
-        # strip whitespaces
-        _whitespace_re = regex.compile(r"\s+")
-        text = regex.sub(_whitespace_re, " ", text)
+        text = self._clean_text(text)
 
         # phonemize
         g2p = self.G2p()
@@ -110,7 +108,26 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
         if self.should_strip_spaces:
             tokens = list(filter(lambda s: s != " ", tokens))
 
+        tokens.append(self.eos_token)
+
         return tokens
+
+    def _clean_text(self, text):
+        # strip whitespaces
+        text = regex.sub(r"\s+", " ", text)
+
+        # expand symbols
+        text = regex.sub("\\;", ",", text)
+        text = regex.sub("\\:", ",", text)
+        text = regex.sub("\\-", " ", text)
+        text = regex.sub("\\&", "and", text)
+
+        # strip unnecessary symbols
+        text = regex.sub(r"[\(\)\[\]\<\>\"]+", "", text)
+
+        text = text.upper()
+
+        return text
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
@@ -128,11 +145,11 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
         return self.convert_ids_to_tokens(token_ids)
 
     # Override since phonemes cannot be converted back to strings
-    def convert_tokens_to_string(self, token_ids, **kwargs):
+    def convert_tokens_to_string(self, tokens, **kwargs):
         logger.warn(
-            "Phonemes cannot be reliably converted to a string due to the one-many mapping, converting to tokens instead."
+            "Phonemes cannot be reliably converted to a string due to the one-many mapping, returning the tokens."
         )
-        return self.convert_ids_to_tokens(token_ids)
+        return tokens
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
@@ -156,17 +173,3 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
             f.write(json.dumps(self.get_vocab(), ensure_ascii=False))
 
         return (vocab_file,)
-
-
-class G2p_en_Wrapper:
-    """
-    g2p_en.G2p isn't pickalable and it can't be copied to the other processes via multiprocessing module.
-    As a workaround, g2p_en.G2p is instantiated upon calling this class.
-    """
-
-    def __init__(self, g2p_en):
-        self.g2p_en = g2p_en
-
-    def __call__(self, text):
-        g2p_en.G2p_en()
-        return self.g2p(text)

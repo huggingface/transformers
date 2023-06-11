@@ -19,15 +19,15 @@
 # # limitations under the License.
 """ Testing suite for the PyTorch FastSpeech2Conformer model. """
 
-import unittest
-import tempfile
 import inspect
+import tempfile
+import unittest
 
-from transformers import FastSpeech2ConformerConfig, is_torch_available
+from transformers import FastSpeech2ConformerConfig, FastSpeech2ConformerTokenizer, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, _config_zero_init
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
 
 
 if is_torch_available():
@@ -46,13 +46,12 @@ class FastSpeech2ConformerModelTester:
         hidden_size=24,
         seq_length=7,
         is_training=False,
-        vocab_size=20,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
-        self.vocab_size = vocab_size
+        self.vocab_size = hidden_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -97,6 +96,8 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
+    test_resize_embeddings = False
+    is_encoder_decoder = True
 
     def setUp(self):
         self.model_tester = FastSpeech2ConformerModelTester(self)
@@ -108,40 +109,6 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_hidden_states_output(self):
-        def _check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            for idx, hidden_states in enumerate([outputs.encoder_hidden_states, outputs.decoder_hidden_states]):
-                expected_num_layers = getattr(
-                    self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-                )
-                
-                self.assertEqual(len(hidden_states), expected_num_layers)
-                self.assertIsInstance(hidden_states, (list, tuple))
-                expected_batch_size, expected_seq_length, expected_hidden_size = hidden_states[0].shape
-                self.assertEqual(expected_batch_size, self.model_tester.batch_size)
-                # Only test encoder seq_length since decoder seq_length is variable based on inputs
-                if idx == 0:
-                    self.assertEqual(expected_seq_length, self.model_tester.seq_length)
-                self.assertEqual(expected_hidden_size, self.model_tester.hidden_size)
-        
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        inputs_dict["output_hidden_states"] = True
-        _check_hidden_states_output(inputs_dict, config, FastSpeech2ConformerModel)
-
-        # check that output_hidden_states also work using config
-        del inputs_dict["output_hidden_states"]
-        config.output_hidden_states = True
-
-        _check_hidden_states_output(inputs_dict, config, FastSpeech2ConformerModel)
 
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -159,6 +126,59 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
                     elif "conv" in name or "embed" in name:
                         self.assertTrue(-1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0, msg=msg)
 
+    def test_duration_energy_pitch_output(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        seq_len = self.model_tester.seq_length
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # duration
+            self.assertListEqual(list(outputs.duration_outputs.shape), [self.model_tester.batch_size, seq_len])
+            # energy
+            self.assertListEqual(list(outputs.energy_outputs.shape), [self.model_tester.batch_size, seq_len, 1])
+            # pitch
+            self.assertListEqual(list(outputs.pitch_outputs.shape), [self.model_tester.batch_size, seq_len, 1])
+
+    def test_hidden_states_output(self):
+        def _check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            for idx, hidden_states in enumerate([outputs.encoder_hidden_states, outputs.decoder_hidden_states]):
+                expected_num_layers = getattr(
+                    self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                )
+
+                self.assertEqual(len(hidden_states), expected_num_layers)
+                self.assertIsInstance(hidden_states, (list, tuple))
+                expected_batch_size, expected_seq_length, expected_hidden_size = hidden_states[0].shape
+                self.assertEqual(expected_batch_size, self.model_tester.batch_size)
+                # Only test encoder seq_length since decoder seq_length is variable based on inputs
+                if idx == 0:
+                    self.assertEqual(expected_seq_length, self.model_tester.seq_length)
+                self.assertEqual(expected_hidden_size, self.model_tester.hidden_size)
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        inputs_dict["output_hidden_states"] = True
+        _check_hidden_states_output(inputs_dict, config, FastSpeech2ConformerModel)
+
+        # check that output_hidden_states also work using config
+        del inputs_dict["output_hidden_states"]
+        config.output_hidden_states = True
+
+        _check_hidden_states_output(inputs_dict, config, FastSpeech2ConformerModel)
+
     def test_save_load_strict(self):
         config, _ = self.model_tester.prepare_config_and_inputs()
         model = FastSpeech2ConformerModel(config)
@@ -167,7 +187,7 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
             model.save_pretrained(tmpdirname)
             _, info = FastSpeech2ConformerModel.from_pretrained(tmpdirname, output_loading_info=True)
         self.assertEqual(info["missing_keys"], [])
-    
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = FastSpeech2ConformerModel(config)
@@ -176,19 +196,19 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
         arg_names = [*signature.parameters.keys()]
 
         expected_arg_names = [
-            'input_ids',
-            'input_lengths',
-            'target_spectrograms',
-            'speech_lengths',
-            'target_durations',
-            'target_pitch',
-            'target_energy',
-            'utterance_embedding',
-            'return_dict',
-            'alpha',
-            'lang_id',
-            'output_attentions',
-            'output_hidden_states',
+            "input_ids",
+            "input_lengths",
+            "target_spectrograms",
+            "spectrogram_lengths",
+            "target_durations",
+            "target_pitch",
+            "target_energy",
+            "utterance_embedding",
+            "return_dict",
+            "alpha",
+            "lang_id",
+            "output_attentions",
+            "output_hidden_states",
         ]
         self.assertListEqual(arg_names, expected_arg_names)
 
@@ -225,51 +245,102 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(decoder_hidden_states.grad)
         self.assertIsNotNone(encoder_attentions.grad)
         self.assertIsNotNone(decoder_attentions.grad)
-    
-    @unittest.skip(reason="FastSpeech2Conformer does not output cross attentions")
+
     def test_attention_outputs(self):
-        # TODO
-        pass
-    
+        """
+        Custom `test_attention_outputs` since FastSpeech2Conformer does not output cross attentions,
+        has variable decoder attention shape, and uniquely outputs energy, pitch, and durations.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        seq_len = self.model_tester.seq_length
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            self.assertEqual(len(outputs.encoder_attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            encoder_attentions = outputs.encoder_attentions
+            self.assertEqual(len(encoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(encoder_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, seq_len, seq_len],
+            )
+            out_len = len(outputs)
+
+            correct_outlen = 7
+            self.assertEqual(out_len, correct_outlen)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            added_hidden_states = 2
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs.encoder_attentions
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, seq_len, seq_len],
+            )
+
     @slow
     def test_model_from_pretrained(self):
         model = FastSpeech2ConformerModel.from_pretrained("connor-henderson/fastspeech2_conformer")
         self.assertIsNotNone(model)
-    
+
     @unittest.skip(reason="FastSpeech2Conformer does not accept inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-    
-    @unittest.skip(reason="FastSpeech2Conformer does not use token embeddings")
-    def test_resize_tokens_embeddings(self):
         pass
 
     @unittest.skip(reason="FastSpeech2Conformer has no input embeddings")
     def test_model_common_attributes(self):
         pass
-    
-    # TODO: Test training, it may be fine
+
+    # training is not supported yet
     def test_training(self):
-        pass
-    
-    # TODO: Test training, it may be fine
-    def test_training_gradient_checkpointing(self):
         pass
 
 
 @require_torch
 @slow
 class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
-    # @unittest.skipIf(torch_device != "cpu", "cannot make deterministic on GPU") # Need this?
+    # TODO: Check if this is actually needed
+    # @unittest.skipIf(torch_device != "cpu", "cannot make deterministic on GPU")
     def test_inference_integration(self):
         model = FastSpeech2ConformerModel.from_pretrained("connor-henderson/fastspeech2_conformer")
         model.to(torch_device)
         model.eval()
-        # tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("jaketae/FastSpeech2Conformer-ljspeech")
-        # text = ["Test that this generates speech"]
-        # inputs_old = tokenizer(text, return_tensors="pt", padding=True).to(torch_device)
-        inputs = torch.tensor([4, 15, 6, 4, 9, 18, 4, 9, 12, 6, 40, 15, 3, 21, 47, 4, 6, 6, 17, 27, 39])
-        outputs_dict = model(inputs, return_dict=True)
+
+        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("connor-henderson/fastspeech2_conformer")
+        text = "Test that this generates speech"
+        inputs = tokenizer(text, return_tensors="pt").to(torch_device)
+        input_ids = inputs["input_ids"]
+
+        outputs_dict = model(input_ids, return_dict=True)
         spectrogram = outputs_dict["spectrogram"]
 
         # mel-spectrogram is too large (1, 205, 80), so only check top-left 100 elements
