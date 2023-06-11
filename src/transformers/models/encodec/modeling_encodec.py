@@ -83,15 +83,7 @@ class EncodecDecoderOutput(ModelOutput):
 class EncodecConv1d(nn.Module):
     """Conv1d with asymmetric or causal padding and normalization."""
 
-    def __init__(
-        self,
-        config,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        stride: int = 1,
-        dilation: int = 1,
-    ):
+    def __init__(self,config,in_channels: int,out_channels: int,kernel_size: int,stride: int = 1,dilation: int = 1):
         super().__init__()
         self.causal = config.causal
         self.pad_mode = config.pad_mode
@@ -171,24 +163,16 @@ class EncodecConv1d(nn.Module):
 class EncodecConvTranspose1d(nn.Module):
     """ConvTranspose1d with asymmetric or causal padding and normalization."""
 
-    def __init__(
-        config,
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        stride: int = 1,
-    ):
-        norm = (config.norm,)
-        causal = (config.causal,)
-        trim_right_ratio = (config.trim_right_ratio,)
+    def __init__(self, config,in_channels: int,out_channels: int,kernel_size: int,stride: int = 1):
         super().__init__()
+        causal = config.causal
+        trim_right_ratio = config.trim_right_ratio
 
-        self.norm_type = norm
+        self.norm_type = config.norm
         self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride)
-        if norm == "weight_norm":
+        if config.norm == "weight_norm":
             self.conv = nn.utils.weight_norm(self.conv)
-        elif norm == "time_group_norm":
+        elif config.norm == "time_group_norm":
             self.norm = nn.GroupNorm(1, out_channels)
 
         self.causal = causal
@@ -316,26 +300,26 @@ class EncodecDecoder(nn.Module):
     def __init__(self, config: EncodecConfig):
         super().__init__()
         scaling = int(2 ** len(config.ratios))
-        model = [EncodecConv1d(config.dimension, scaling * config.num_filters, config.kernel_size)]
+        model = [EncodecConv1d(config, config.dimension, scaling * config.num_filters, config.kernel_size)]
 
         model += [EncodecLSTM(scaling * config.num_filters, config.num_lstm_layers)]
 
         # Upsample to raw audio scale
         for ratio in config.ratios:
-            current_scale = scaling * config.num_filters // 2
+            current_scale = scaling * config.num_filters
             # Add upsampling layers
             model += [nn.ELU()]
             model += [
-                EncodecConvTranspose1d(config, scaling * config.num_filters, kernel_size=ratio * 2, stride=ratio)
+                EncodecConvTranspose1d(config, current_scale , current_scale//2, kernel_size=ratio * 2, stride=ratio)
             ]
             # Add residual layers
             for j in range(config.num_residual_layers):
-                model += [EncodecResnetBlock(config, current_scale, (config.dilation_base**j, 1))]
+                model += [EncodecResnetBlock(config, current_scale//2, (config.dilation_base**j, 1))]
             scaling //= 2
 
         # Add final layers
         model += [nn.ELU()]
-        model += [EncodecConv1d(config.num_filters, config.audio_channels, config.last_kernel_size)]
+        model += [EncodecConv1d(config, config.num_filters, config.audio_channels, config.last_kernel_size)]
         self.layers = nn.ModuleList(model)
 
     def forward(self, hidden_states):
