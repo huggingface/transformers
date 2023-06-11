@@ -47,10 +47,6 @@ _CONFIG_FOR_DOC = "VitDetConfig"
 _CHECKPOINT_FOR_DOC = "facebook/vit-det-base"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "google/vitdet-base-patch16-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
-
 
 VITDET_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/vit-det-base",
@@ -307,6 +303,7 @@ class VitDetResBottleneckBlock(nn.Module):
 
     def __init__(
         self,
+        config,
         in_channels,
         out_channels,
         bottleneck_channels,
@@ -460,6 +457,7 @@ class VitDetLayer(nn.Module):
         if self.use_residual_block:
             # Use a residual block with bottleneck channel as dim // 2
             self.residual = VitDetResBottleneckBlock(
+                config=config,
                 in_channels=dim,
                 out_channels=dim,
                 bottleneck_channels=dim // 2,
@@ -578,7 +576,6 @@ class VitDetEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->VitDet,vit->vitdet
 class VitDetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
