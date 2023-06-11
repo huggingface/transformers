@@ -289,7 +289,7 @@ You're ready to start training your model now! Load ViT with [`AutoModelForImage
 
 At this point, only three steps remain:
 
-1. Define your training hyperparameters in [`TrainingArguments`]. It is important you don't remove unused columns because this'll drop the `image` column. Without the `image` column, you can't create `pixel_values`. Set `remove_unused_columns=False` to prevent this behavior! The only other required parameter is `output_dir` which specifies where to save your model. You'll push this model to the Hub by setting `push_to_hub=True` (you need to be signed in to Hugging Face to upload your model). At the end of each epoch, the [`Trainer`] will evaluate the accuracy and save the training checkpoint.
+1. Define your training hyperparameters in [`TrainingArguments`]. It is important you don't remove unused columns because that'll drop the `image` column. Without the `image` column, you can't create `pixel_values`. Set `remove_unused_columns=False` to prevent this behavior! The only other required parameter is `output_dir` which specifies where to save your model. You'll push this model to the Hub by setting `push_to_hub=True` (you need to be signed in to Hugging Face to upload your model). At the end of each epoch, the [`Trainer`] will evaluate the accuracy and save the training checkpoint.
 2. Pass the training arguments to [`Trainer`] along with the model, dataset, tokenizer, data collator, and `compute_metrics` function.
 3. Call [`~Trainer.train`] to finetune your model.
 
@@ -343,7 +343,7 @@ If you are unfamiliar with fine-tuning a model with Keras, check out the [basic 
 
 To fine-tune a model in TensorFlow, follow these steps:
 1. Define the training hyperparameters, and set up an optimizer and a learning rate schedule.
-2. Instantiate a pre-treined model.
+2. Instantiate a pre-trained model.
 3. Convert a 🤗 Dataset to a `tf.data.Dataset`.
 4. Compile your model.
 5. Add callbacks and use the `fit()` method to run the training.
