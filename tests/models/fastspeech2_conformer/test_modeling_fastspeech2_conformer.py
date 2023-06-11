@@ -24,7 +24,7 @@ import tempfile
 import unittest
 
 from transformers import FastSpeech2ConformerConfig, FastSpeech2ConformerTokenizer, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_g2p_en, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
@@ -326,10 +326,9 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
+@require_g2p_en
 @slow
 class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
-    # TODO: Check if this is actually needed
-    # @unittest.skipIf(torch_device != "cpu", "cannot make deterministic on GPU")
     def test_inference_integration(self):
         model = FastSpeech2ConformerModel.from_pretrained("connor-henderson/fastspeech2_conformer")
         model.to(torch_device)
