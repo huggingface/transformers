@@ -26,18 +26,21 @@ from transformers import VitDetConfig, VitMatteConfig, VitMatteForImageMatting
 
 
 def get_config(model_name):
-    backbone_config = VitDetConfig(num_channels=4,
-                                   image_size=224, # TODO: change to 512?
-                                   patch_size=16,
-                                   hidden_size=384,
-                                   num_attention_heads=6,
-                                   use_absolute_position_embeddings=True,
-                                   use_relative_position_embeddings=True,
-                                   window_size=14,
-                                   # 2, 5, 8 11 for global attention
-                                   window_block_indices=[0, 1, 3, 4, 6, 7, 9, 10],
-                                   residual_block_indices=[2, 5, 8, 11],
-                                   out_features=["stage4"])
+    backbone_config = VitDetConfig(
+        num_channels=4,
+        image_size=512,
+        pretrain_image_size=224,
+        patch_size=16,
+        hidden_size=384,
+        num_attention_heads=6,
+        use_absolute_position_embeddings=True,
+        use_relative_position_embeddings=True,
+        window_size=14,
+        # 2, 5, 8 11 for global attention
+        window_block_indices=[0, 1, 3, 4, 6, 7, 9, 10],
+        residual_block_indices=[2, 5, 8, 11],
+        out_features=["stage4"],
+    )
 
     return VitMatteConfig(backbone_config=backbone_config)
 

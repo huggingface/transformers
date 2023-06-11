@@ -65,7 +65,7 @@ class VitDetEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
+        image_size, patch_size = config.pretrain_image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
 
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
@@ -315,12 +315,12 @@ class VitDetResBottleneckBlock(nn.Module):
     ):
         """
         Args:
-            in_channels (int): Number of input channels.
-            out_channels (int): Number of output channels.
-            bottleneck_channels (int): number of output channels for the 3x3
-                "bottleneck" conv layers.
-            norm (str or callable): normalization for all conv layers.
-                See [`layers.nn.LayerNorm`] for supported format.
+            in_channels (int):
+                Number of input channels.
+            out_channels (int):
+                Number of output channels.
+            bottleneck_channels (int):
+                Number of output channels for the 3x3 "bottleneck" conv layers.
         """
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels, bottleneck_channels, 1, bias=False)
@@ -445,7 +445,6 @@ class VitDetLayer(nn.Module):
         dim = config.hidden_size
         input_size = (config.image_size // config.patch_size, config.image_size // config.patch_size)
 
-        print("Window size:", window_size)
         self.norm1 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = VitDetAttention(
             config, input_size=input_size if window_size == 0 else (window_size, window_size)
