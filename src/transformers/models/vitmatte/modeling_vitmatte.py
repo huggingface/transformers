@@ -14,6 +14,9 @@
 # limitations under the License.
 """ PyTorch ViTMatte backbone."""
 
+from typing import Optional
+
+import torch
 from torch import nn
 
 from ... import AutoBackbone
@@ -62,7 +65,14 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def forward(self, pixel_values, labels=None):
+    def forward(
+        self,
+        pixel_values: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = None,
+    ):
         """
         Returns:
 
@@ -83,14 +93,22 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
         ```"""
-        outputs = self.backbone(pixel_values)
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
-        sequence_output = outputs.hidden_states[-1]
-        logits = self.classifier(sequence_output)
+        outputs = self.backbone.forward_with_filtered_kwargs(
+            pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
+        )
 
-        loss = None
+        features = outputs.feature_maps
+
+        # TODO: permute + apply decoder
+        # features = features.permute(0, 3, 1, 2)
+
         if labels is not None:
-            loss_fct = nn.MSELoss()
-            loss = loss_fct(logits.view(-1), labels.view(-1))
+            raise NotImplementedError("Training is not yet supported")
 
-        return (loss, logits) if loss is not None else logits
+        return features

@@ -36,7 +36,7 @@ def get_config(model_name):
         use_absolute_position_embeddings=True,
         use_relative_position_embeddings=True,
         window_size=14,
-        # 2, 5, 8 11 for global attention
+        # 2, 5, 8, 11 for global attention
         window_block_indices=[0, 1, 3, 4, 6, 7, 9, 10],
         residual_block_indices=[2, 5, 8, 11],
         out_features=["stage4"],
@@ -99,17 +99,22 @@ def convert_vitmatte_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
         if "decoder" not in key:
             print(key)
 
-    # TODO verify on image
-    # url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
-    # image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-
-    # processor = SegformerImageProcessor()
+    # verify on dummy inputs
+    # TODO use processor
     # pixel_values = processor(image, return_tensors="pt").pixel_values
+    filepath = hf_hub_download(repo_id="nielsr/vitmatte-dummy-data", filename="images.pt", repo_type="dataset")
+    images = torch.load(filepath, map_location="cpu")
 
-    # with torch.no_grad():
-    #     outputs = model(pixel_values)
+    print("Shape of images:", images.shape)
+    with torch.no_grad():
+        outputs = model(images)
 
-    # print("Logits:", outputs.logits[0, 0, :3, :3])
+    features = outputs
+    features = features[-1].permute(0, 3, 1, 2)
+    print(len(features))
+    print(features.shape)
+    print(features[0, 0, :3, :3])
+
     # assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)
     # print("Looks ok!")
 
