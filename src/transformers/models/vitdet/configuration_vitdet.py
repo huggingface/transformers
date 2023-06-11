@@ -109,6 +109,7 @@ class VitDetConfig(PretrainedConfig):
         residual_block_indices=[],
         use_absolute_position_embeddings=True,
         use_relative_position_embeddings=False,
+        window_size=0,
         out_features=None,
         out_indices=None,
         **kwargs,
@@ -132,6 +133,7 @@ class VitDetConfig(PretrainedConfig):
         self.residual_block_indices = residual_block_indices
         self.use_absolute_position_embeddings = use_absolute_position_embeddings
         self.use_relative_position_embeddings = use_relative_position_embeddings
+        self.window_size = window_size
 
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(

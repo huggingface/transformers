@@ -26,7 +26,18 @@ from transformers import VitDetConfig, VitMatteConfig, VitMatteForImageMatting
 
 
 def get_config(model_name):
-    backbone_config = VitDetConfig(out_features=["stage4"])
+    backbone_config = VitDetConfig(num_channels=4,
+                                   image_size=224, # TODO: change to 512?
+                                   patch_size=16,
+                                   hidden_size=384,
+                                   num_attention_heads=6,
+                                   use_absolute_position_embeddings=True,
+                                   use_relative_position_embeddings=True,
+                                   window_size=14,
+                                   # 2, 5, 8 11 for global attention
+                                   window_block_indices=[0, 1, 3, 4, 6, 7, 9, 10],
+                                   residual_block_indices=[2, 5, 8, 11],
+                                   out_features=["stage4"])
 
     return VitMatteConfig(backbone_config=backbone_config)
 
@@ -37,30 +48,9 @@ def create_rename_keys(config):
 
     # fmt: off
     # stem
-    rename_keys.append(("backbone.downsample_layers.0.0.weight", "backbone.embeddings.patch_embeddings.weight"))
-    rename_keys.append(("backbone.downsample_layers.0.0.bias", "backbone.embeddings.patch_embeddings.bias"))
-    rename_keys.append(("backbone.downsample_layers.0.1.weight", "backbone.embeddings.layernorm.weight"))
-    rename_keys.append(("backbone.downsample_layers.0.1.bias", "backbone.embeddings.layernorm.bias"))
-    # stages
-    for i in range(len(config.backbone_config.depths)):
-        for j in range(config.backbone_config.depths[i]):
-            rename_keys.append((f"backbone.stages.{i}.{j}.gamma", f"backbone.encoder.stages.{i}.layers.{j}.layer_scale_parameter"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.depthwise_conv.weight", f"backbone.encoder.stages.{i}.layers.{j}.dwconv.weight"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.depthwise_conv.bias", f"backbone.encoder.stages.{i}.layers.{j}.dwconv.bias"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.norm.weight", f"backbone.encoder.stages.{i}.layers.{j}.layernorm.weight"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.norm.bias", f"backbone.encoder.stages.{i}.layers.{j}.layernorm.bias"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv1.weight", f"backbone.encoder.stages.{i}.layers.{j}.pwconv1.weight"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv1.bias", f"backbone.encoder.stages.{i}.layers.{j}.pwconv1.bias"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv2.weight", f"backbone.encoder.stages.{i}.layers.{j}.pwconv2.weight"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv2.bias", f"backbone.encoder.stages.{i}.layers.{j}.pwconv2.bias"))
-        if i > 0:
-            rename_keys.append((f"backbone.downsample_layers.{i}.0.weight", f"backbone.encoder.stages.{i}.downsampling_layer.0.weight"))
-            rename_keys.append((f"backbone.downsample_layers.{i}.0.bias", f"backbone.encoder.stages.{i}.downsampling_layer.0.bias"))
-            rename_keys.append((f"backbone.downsample_layers.{i}.1.weight", f"backbone.encoder.stages.{i}.downsampling_layer.1.weight"))
-            rename_keys.append((f"backbone.downsample_layers.{i}.1.bias", f"backbone.encoder.stages.{i}.downsampling_layer.1.bias"))
-
-        rename_keys.append((f"backbone.norm{i}.weight", f"backbone.hidden_states_norms.stage{i+1}.weight"))
-        rename_keys.append((f"backbone.norm{i}.bias", f"backbone.hidden_states_norms.stage{i+1}.bias"))
+    rename_keys.append(("backbone.pos_embed", "backbone.embeddings.position_embeddings"))
+    rename_keys.append(("backbone.patch_embed.proj.weight", "backbone.embeddings.projection.weight"))
+    rename_keys.append(("backbone.patch_embed.proj.bias", "backbone.embeddings.projection.bias"))
 
     # TODO decode head
     # fmt: on
@@ -83,8 +73,10 @@ def convert_vitmatte_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     # rename keys
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
-        if "bn" in key:
-            key = key.replace("bn", "batch_norm")
+        if "backbone.blocks" in key:
+            key = key.replace("backbone.blocks", "backbone.encoder.layer")
+        if "attn" in key:
+            key = key.replace("attn", "attention")
         state_dict[key] = val
 
     # rename keys
@@ -97,7 +89,12 @@ def convert_vitmatte_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     model.eval()
 
     # load state dict
-    model.load_state_dict(state_dict)
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    print("Missing keys:", missing_keys)
+    print("Unexpected keys:")
+    for key in unexpected_keys:
+        if "decoder" not in key:
+            print(key)
 
     # TODO verify on image
     # url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"

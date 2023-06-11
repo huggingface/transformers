@@ -312,7 +312,6 @@ class VitDetResBottleneckBlock(nn.Module):
         in_channels,
         out_channels,
         bottleneck_channels,
-        norm="LN",
     ):
         """
         Args:
@@ -323,10 +322,9 @@ class VitDetResBottleneckBlock(nn.Module):
             norm (str or callable): normalization for all conv layers.
                 See [`layers.nn.LayerNorm`] for supported format.
         """
-        super().__init__(in_channels, out_channels, 1)
-
+        super().__init__()
         self.conv1 = nn.Conv2d(in_channels, bottleneck_channels, 1, bias=False)
-        self.norm1 = nn.LayerNorm(norm, bottleneck_channels)
+        self.norm1 = nn.LayerNorm(bottleneck_channels)
         self.act1 = ACT2FN[config.hidden_act]
 
         self.conv2 = nn.Conv2d(
@@ -336,11 +334,11 @@ class VitDetResBottleneckBlock(nn.Module):
             padding=1,
             bias=False,
         )
-        self.norm2 = nn.LayerNorm(norm, bottleneck_channels)
+        self.norm2 = nn.LayerNorm(bottleneck_channels)
         self.act2 = ACT2FN[config.hidden_act]
 
         self.conv3 = nn.Conv2d(bottleneck_channels, out_channels, 1, bias=False)
-        self.norm3 = nn.LayerNorm(norm, out_channels)
+        self.norm3 = nn.LayerNorm(out_channels)
 
         # TODO define this in init_weights
         # for layer in [self.conv1, self.conv2, self.conv3]:
@@ -447,6 +445,7 @@ class VitDetLayer(nn.Module):
         dim = config.hidden_size
         input_size = (config.image_size // config.patch_size, config.image_size // config.patch_size)
 
+        print("Window size:", window_size)
         self.norm1 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = VitDetAttention(
             config, input_size=input_size if window_size == 0 else (window_size, window_size)
@@ -466,7 +465,6 @@ class VitDetLayer(nn.Module):
                 in_channels=dim,
                 out_channels=dim,
                 bottleneck_channels=dim // 2,
-                norm="LN",
             )
 
     def forward(
