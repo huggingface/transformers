@@ -23,6 +23,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -310,7 +311,6 @@ class VitDetResBottleneckBlock(nn.Module):
         out_channels,
         bottleneck_channels,
         norm="LN",
-        act_layer=nn.GELU,
     ):
         """
         Args:
@@ -320,13 +320,12 @@ class VitDetResBottleneckBlock(nn.Module):
                 "bottleneck" conv layers.
             norm (str or callable): normalization for all conv layers.
                 See [`layers.nn.LayerNorm`] for supported format.
-            act_layer (callable): activation for all conv layers.
         """
         super().__init__(in_channels, out_channels, 1)
 
         self.conv1 = nn.Conv2d(in_channels, bottleneck_channels, 1, bias=False)
         self.norm1 = nn.LayerNorm(norm, bottleneck_channels)
-        self.act1 = act_layer()
+        self.act1 = ACT2FN[config.hidden_act]
 
         self.conv2 = nn.Conv2d(
             bottleneck_channels,
@@ -336,7 +335,7 @@ class VitDetResBottleneckBlock(nn.Module):
             bias=False,
         )
         self.norm2 = nn.LayerNorm(norm, bottleneck_channels)
-        self.act2 = act_layer()
+        self.act2 = ACT2FN[config.hidden_act]
 
         self.conv3 = nn.Conv2d(bottleneck_channels, out_channels, 1, bias=False)
         self.norm3 = nn.LayerNorm(norm, out_channels)
@@ -364,7 +363,7 @@ class VitDetMlp(nn.Module):
     def __init__(self, config, in_features: int, hidden_features: int) -> None:
         super().__init__()
         self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = nn.GELU()
+        self.act = ACT2FN[config.hidden_act]
         self.fc2 = nn.Linear(hidden_features, in_features)
         self.drop = nn.Dropout(config.dropout_prob)
 
@@ -465,7 +464,6 @@ class VitDetLayer(nn.Module):
                 out_channels=dim,
                 bottleneck_channels=dim // 2,
                 norm="LN",
-                # act_layer=act_layer,
             )
 
     def forward(
