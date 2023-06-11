@@ -360,7 +360,7 @@ class VitDetResBottleneckBlock(nn.Module):
             bottleneck_channels (int): number of output channels for the 3x3
                 "bottleneck" conv layers.
             norm (str or callable): normalization for all conv layers.
-                See :func:`layers.nn.LayerNorm` for supported format.
+                See [`layers.nn.LayerNorm`] for supported format.
             act_layer (callable): activation for all conv layers.
         """
         super().__init__(in_channels, out_channels, 1)
@@ -421,21 +421,20 @@ class VitDetMlp(nn.Module):
 
 def window_partition(x, window_size):
     """
-    Partition into non-overlapping windows with padding if needed.
     Args:
-        x (tensor): input tokens with [B, H, W, C].
-        window_size (int): window size.
+    Partition into non-overlapping windows with padding if needed.
+        x (tensor): input tokens with [B, H, W, C]. window_size (int): window size.
 
     Returns:
-        windows: windows after partition with [B * num_windows, window_size, window_size, C].
-        (Hp, Wp): padded height and width before partition
+        windows: windows after partition with [B * num_windows, window_size, window_size, C]. (Hp, Wp): padded height
+        and width before partition
     """
     B, H, W, C = x.shape
 
     pad_h = (window_size - H % window_size) % window_size
     pad_w = (window_size - W % window_size) % window_size
     if pad_h > 0 or pad_w > 0:
-        x = F.pad(x, (0, 0, 0, pad_w, 0, pad_h))
+        x = nn.functional.pad(x, (0, 0, 0, pad_w, 0, pad_h))
     Hp, Wp = H + pad_h, W + pad_w
 
     x = x.view(B, Hp // window_size, window_size, Wp // window_size, window_size, C)
@@ -445,12 +444,10 @@ def window_partition(x, window_size):
 
 def window_unpartition(windows, window_size, pad_hw, hw):
     """
-    Window unpartition into original sequences and removing padding.
     Args:
-        x (tensor): input tokens with [B * num_windows, window_size, window_size, C].
-        window_size (int): window size.
-        pad_hw (Tuple): padded height and width (Hp, Wp).
-        hw (Tuple): original height and width (H, W) before padding.
+    Window unpartition into original sequences and removing padding.
+        x (tensor): input tokens with [B * num_windows, window_size, window_size, C]. window_size (int): window size.
+        pad_hw (Tuple): padded height and width (Hp, Wp). hw (Tuple): original height and width (H, W) before padding.
 
     Returns:
         x: unpartitioned sequences with [B, H, W, C].
@@ -469,7 +466,9 @@ def window_unpartition(windows, window_size, pad_hw, hw):
 class VitDetLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
-    def __init__(self, config: VitDetConfig, drop_path_rate: float = 0, window_size: int = 0, use_residual_block: bool = False) -> None:
+    def __init__(
+        self, config: VitDetConfig, drop_path_rate: float = 0, window_size: int = 0, use_residual_block: bool = False
+    ) -> None:
         super().__init__()
 
         dim = config.hidden_size
@@ -500,7 +499,6 @@ class VitDetLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        
         shortcut = hidden_states
 
         hidden_states = self.norm1(hidden_states)
