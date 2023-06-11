@@ -16,7 +16,7 @@
 import copy
 import math
 import random
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -449,15 +449,21 @@ class T5Block(nn.Module):
         self.layer.append(T5LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
         self.layer.append(T5LayerFF(config))
 
+    # keep the forward signature the same as the original T5 block so that we can copy the remaining T5 modules
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         position_bias=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        encoder_decoder_position_bias=None,
         layer_head_mask=None,
+        cross_attn_layer_head_mask=None,
         past_key_value=None,
         use_cache=False,
         output_attentions=False,
+        return_dict=True,
     ):
         self_attention_outputs = self.layer[0](
             hidden_states,
@@ -1846,9 +1852,15 @@ class AudiocraftForConditionalGeneration(AudiocraftPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_encoder(self):
+        return self.model.get_encoder()
+
+    def get_decoder(self):
+        return self.model.get_decoder()
+
     def forward(
         self,
-        input_features: Optional[torch.FloatTensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -1874,7 +1886,7 @@ class AudiocraftForConditionalGeneration(AudiocraftPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.model(
-            input_features,
+            input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
@@ -1893,6 +1905,7 @@ class AudiocraftForConditionalGeneration(AudiocraftPreTrainedModel):
         hidden_states = outputs[0]
 
         lm_logits = torch.stack([head(hidden_states) for head in self.lm_heads], dim=1)
+        lm_logits = lm_logits.permute(0, 2, 1, 3)  # (bsz, num_codebooks, seq_len, vocab_size)
 
         loss = None
         if labels is not None:
@@ -1913,3 +1926,40 @@ class AudiocraftForConditionalGeneration(AudiocraftPreTrainedModel):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
+
+    def prepare_inputs_for_generation(
+        self,
+        decoder_input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        use_cache=None,
+        encoder_outputs=None,
+        **kwargs,
+    ):
+        # cut decoder_input_ids if past is used
+        if past_key_values is not None:
+            decoder_input_ids = decoder_input_ids[..., -1:]
+
+        return {
+            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
+            "encoder_outputs": encoder_outputs,
+            "past_key_values": past_key_values,
+            "decoder_input_ids": decoder_input_ids,
+            "attention_mask": attention_mask,
+            "head_mask": head_mask,
+            "decoder_head_mask": decoder_head_mask,
+            "cross_attn_head_mask": cross_attn_head_mask,
+            "use_cache": use_cache,  # change this to avoid caching
+        }
+
+    def _prepare_decoder_input_ids_for_generation(
+        self,
+        *args,
+        **kwargs,
+    ) -> Tuple[torch.LongTensor, Dict[str, torch.Tensor]]:
+        decoder_input_ids, model_kwargs = super()._prepare_decoder_input_ids_for_generation(*args, **kwargs)
+        decoder_input_ids = decoder_input_ids.repeat(1, self.num_codebooks).unsqueeze(-1)
+        return decoder_input_ids, model_kwargs

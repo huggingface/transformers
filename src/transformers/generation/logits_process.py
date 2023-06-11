@@ -1061,3 +1061,37 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                 scores[k, : self.timestamp_begin] = -float("inf")
 
         return scores
+
+
+class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
+    def __init__(self, guidance_scale):
+        self.guidance_scale = guidance_scale
+
+    def __call__(self, input_ids, scores):
+        unguided_bsz = scores.shape[0] / 2
+        cond_logits, uncond_logits = scores.split(unguided_bsz, dim=0)
+        scores = uncond_logits + (cond_logits - uncond_logits) * self.guidance_scale
+        return scores
+
+
+class AudiocraftDelayPatternLogitsProcessor(LogitsProcessor):
+    r"""This processor applies a delayed pattern mask to the codebook scores. For the logit scores at the current
+    generated step, the pattern mask determines whether the logits scores are valid or whether they should be masked.
+    Each codebook is offset by the previous codebook by one, giving a delayed pattern mask (or an upper triangular mask
+    matrix). The logit scores for masked tokens are modified such that the padding token is forced for that codebook.
+    Otherwise, the scores are unchanged.
+    """
+
+    def __init__(self, pad_token_id):
+        self.pad_token_id = pad_token_id
+
+    def __call__(self, input_ids, scores):
+        bsz, codebooks, seq_len = input_ids.shape
+        vocab_size = scores.shape[-1]
+        # construct a pattern mask that takes value 1 for codebook with valid scores, and -inf for all masked scores
+        delay_pattern = torch.triu(torch.ones((codebooks, seq_len)))
+        mask = delay_pattern[:, -1:].repeat(1, vocab_size)
+        scores = torch.where(mask.bool(), scores, -float("inf"))
+        # ensure padding token id takes non-inf score so that it is always sampled
+        scores[:, :, self.pad_token_id] = torch.where(torch.isinf(scores[:, :, self.pad_token_id]), 0, 1)
+        return scores
