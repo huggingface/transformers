@@ -146,7 +146,9 @@ class EncodecConfig(PretrainedConfig):
         self.bins = bins
         self.codebook_dim = codebook_dim
 
-        super().__init__(**kwargs,)
+        super().__init__(
+            **kwargs,
+        )
 
     @property
     def chunk_length(self) -> Optional[int]:
