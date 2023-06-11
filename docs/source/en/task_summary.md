@@ -319,7 +319,7 @@ Although multimodal models work with different data types, internally, the prepr
 
 ### Document question answering
 
-Document question answering is a task that answers natural language questions from a document. Unlike a token-level question answering task which takes text as input, document question answering takes an image of a document as input along with a question about the document and returns an answer. Document question answering can be used to parse structured documents and extract key information from documents. In the example below, the total amount and change due can be extracted from a receipt.
+Document question answering is a task that answers natural language questions from a document. Unlike a token-level question answering task which takes text as input, document question answering takes an image of a document as input along with a question about the document and returns an answer. Document question answering can be used to parse structured documents and extract key information from it. In the example below, the total amount and change due can be extracted from a receipt.
 
 ```py
 >>> from transformers import pipeline
