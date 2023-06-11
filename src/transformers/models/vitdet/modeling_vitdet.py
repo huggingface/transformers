@@ -249,7 +249,12 @@ class VitDetAttention(nn.Module):
             attn = add_decomposed_rel_pos(attn, q, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width))
 
         attn = attn.softmax(dim=-1)
-        x = (attn @ v).view(batch_size, self.num_heads, height, width, -1).permute(0, 2, 3, 1, 4).reshape(batch_size, height, width, -1)
+        x = (
+            (attn @ v)
+            .view(batch_size, self.num_heads, height, width, -1)
+            .permute(0, 2, 3, 1, 4)
+            .reshape(batch_size, height, width, -1)
+        )
         x = self.proj(x)
 
         outputs = (x, attn) if output_attentions else (x,)
@@ -384,8 +389,8 @@ def window_partition(x, window_size):
             Window size.
 
     Returns:
-        windows: windows after partition with [B * num_windows, window_size, window_size, C].
-        (Hp, Wp): padded height and width before partition
+        windows: windows after partition with [B * num_windows, window_size, window_size, C]. (patch_height,
+        patch_width): padded height and width before partition
     """
     batch_size, height, width, num_channels = x.shape
 
@@ -395,29 +400,38 @@ def window_partition(x, window_size):
         x = nn.functional.pad(x, (0, 0, 0, pad_width, 0, pad_height))
     patch_height, patch_width = height + pad_height, width + pad_width
 
-    x = x.view(batch_size, patch_height // window_size, window_size, patch_width // window_size, window_size, num_channels)
+    x = x.view(
+        batch_size, patch_height // window_size, window_size, patch_width // window_size, window_size, num_channels
+    )
     windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels)
     return windows, (patch_height, patch_width)
 
 
 def window_unpartition(windows, window_size, pad_hw, hw):
     """
-    Args:
     Window unpartition into original sequences and removing padding.
-        x (tensor): input tokens with [B * num_windows, window_size, window_size, C]. window_size (int): window size.
-        pad_hw (Tuple): padded height and width (Hp, Wp). hw (Tuple): original height and width (H, W) before padding.
+
+    Args:
+        x (tensor):
+            Input tokens with [B * num_windows, window_size, window_size, C].
+        window_size (int):
+            Window size.
+        pad_hw (Tuple):
+            Padded height and width (patch_height, patch_width).
+        hw (Tuple):
+            Original height and width (H, W) before padding.
 
     Returns:
         x: unpartitioned sequences with [B, H, W, C].
     """
-    Hp, Wp = pad_hw
-    H, W = hw
-    B = windows.shape[0] // (Hp * Wp // window_size // window_size)
-    x = windows.view(B, Hp // window_size, Wp // window_size, window_size, window_size, -1)
-    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, Hp, Wp, -1)
+    patch_height, patch_width = pad_hw
+    height, width = hw
+    batch_size = windows.shape[0] // (patch_height * patch_width // window_size // window_size)
+    x = windows.view(batch_size, patch_height // window_size, patch_width // window_size, window_size, window_size, -1)
+    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(batch_size, patch_height, patch_width, -1)
 
-    if Hp > H or Wp > W:
-        x = x[:, :H, :W, :].contiguous()
+    if patch_height > height or patch_width > width:
+        x = x[:, :height, :width, :].contiguous()
     return x
 
 
