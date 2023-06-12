@@ -906,10 +906,10 @@ T5_ENCODER_INPUTS_DOCSTRING = r"""
     "The bare T5 Model transformer outputting encoder's raw hidden-states without any specific head on top.",
     T5_START_DOCSTRING,
 )
-# Copied from transformers.models.t5.modeling_t5.T5EncoderModel
 class T5EncoderModel(T5PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
 
+    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.__init__
     def __init__(self, config: T5Config):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
@@ -926,18 +926,22 @@ class T5EncoderModel(T5PreTrainedModel):
         self.model_parallel = False
         self.device_map = None
 
+    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.get_input_embeddings
     def get_input_embeddings(self):
         return self.shared
 
+    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.set_input_embeddings
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
 
+    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.get_encoder
     def get_encoder(self):
         return self.encoder
 
     @add_start_docstrings_to_model_forward(T5_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1009,7 +1013,7 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
         emb = math.log(10000) / (half_dim - 1)
         emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
         emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
-        emb = torch.cat([torch.cos(emb), torch.sin(emb)], dim=1).view(num_embeddings, -1)
+        emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
         if embedding_dim % 2 == 1:
             # zero pad
             emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
