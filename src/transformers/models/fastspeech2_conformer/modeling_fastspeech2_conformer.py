@@ -24,8 +24,9 @@ from torch import nn
 
 from ...modeling_outputs import BaseModelOutput, Seq2SeqSpectrogramOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging, add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...utils import logging
 from .configuration_fastspeech2_conformer import FastSpeech2ConformerConfig, FastSpeech2ConformerHifiGanConfig
+
 
 # General docstring
 _CONFIG_FOR_DOC = "FastSpeech2ConformerConfig"
@@ -45,6 +46,39 @@ class FastSpeech2ConformerModelOutput(Seq2SeqSpectrogramOutput):
     duration_outputs: torch.LongTensor = None
     pitch_outputs: torch.FloatTensor = None
     energy_outputs: torch.FloatTensor = None
+
+
+HIFIGAN_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`FastSpeech2ConformerConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+FASTSPEECH2_CONFORMER_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`FastSpeech2ConformerConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
 
 
 def pad_list(xs, pad_value):
@@ -669,23 +703,6 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-FASTSPEECH2_CONFORMER_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`FastSpeech2ConformerConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-add_start_docstrings(FASTSPEECH2_CONFORMER_START_DOCSTRING)
 class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
     """
     FastSpeech 2 module.
@@ -804,10 +821,6 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
 
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
-    @replace_return_docstrings(
-        output_type=FastSpeech2ConformerModelOutput, config_class=_CONFIG_FOR_DOC
-    )
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -858,21 +871,25 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
                 for more detail.
 
         Returns:
-        
+
         Example:
 
         ```python
-        >>> from transformers import FastSpeech2ConformerTokenizer, FastSpeech2ConformerModel, FastSpeech2ConformerHifiGan
+        >>> from transformers import (
+        ...     FastSpeech2ConformerTokenizer,
+        ...     FastSpeech2ConformerModel,
+        ...     FastSpeech2ConformerHifiGan,
+        ... )
 
-        >>> tokenizer = FastSpeech2ConformerTokenizer.from_pretrained('connor-henderson/fastspeech2_conformer')
+        >>> tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("connor-henderson/fastspeech2_conformer")
         >>> inputs = tokenizer("some text to convert to speech", return_tensors="pt")
         >>> input_ids = inputs["input_ids"]
 
-        >>> model = FastSpeech2ConformerModel.from_pretrained('connor-henderson/fastspeech2_conformer')
+        >>> model = FastSpeech2ConformerModel.from_pretrained("connor-henderson/fastspeech2_conformer")
         >>> output_dict = model(input_ids, return_dict=True)
         >>> spectrogram = output_dict["spectrogram"]
 
-        >>> vocoder = FastSpeech2ConformerHifiGan.from_pretrained('connor-henderson/fastspeech2_conformer_hifigan')
+        >>> vocoder = FastSpeech2ConformerHifiGan.from_pretrained("connor-henderson/fastspeech2_conformer_hifigan")
         >>> waveform = vocoder(spectrogram)
         >>> print(waveform.shape)
         torch.Size([1, 49664])
@@ -1791,26 +1808,7 @@ class HifiGanResidualBlock(nn.Module):
             hidden_states = hidden_states + residual
         return hidden_states
 
-HIFIGAN_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
 
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`FastSpeech2ConformerConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-@add_start_docstrings(
-    """HiFi-GAN vocoder.""",
-    HIFIGAN_START_DOCSTRING,
-)
 # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan with SpeechT5->FastSpeech2Conformer
 class FastSpeech2ConformerHifiGan(PreTrainedModel):
     config_class = FastSpeech2ConformerHifiGanConfig
