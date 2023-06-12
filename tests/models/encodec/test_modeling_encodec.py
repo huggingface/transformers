@@ -444,6 +444,8 @@ class EncodecIntegrationTest(unittest.TestCase):
             "3.0": 0.001,
             "24.0": 0.0005,
         }
+        audio_code_sums = []
+        expected_codesums = {}
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "Matthijs/encodec_48khz"
 
@@ -479,7 +481,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                 encoder_outputs = model.encode(
                     input_values, padding_mask, bandwidth=float(bandwidth), return_dict=False
                 )
-                [a[0].sum().cpu().item() for a in encoder_outputs[0]]
+                audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
 
                 # make sure audio encoded codes are correct
                 self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
