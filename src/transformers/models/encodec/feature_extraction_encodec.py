@@ -33,6 +33,9 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
+    Instantiating a feature extractor with the defaults will yield a similar configuration to that of the
+    [Matthijs/encodec_24khz](https://huggingface.co/Matthijs/encodec_24khz) architecture.
+    
     Args:
         feature_size (`int`, *optional*, defaults to 1):
             The feature dimension of the extracted features. Use 1 for mono, 2 for stereo.
@@ -40,6 +43,14 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
         padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding values.
+        chunk_length (`float`, *optional*):
+            The length of each chunk of audio that will be processed sequentially . If `chunk_length = None` then 
+            chunking is disabled.ß˛ÇÒ
+            available for CTC models, e.g. [`Wav2Vec2ForCTC`].
+        chunk_stride(`float`, *optional*):
+            The length of the right stride use to split the audio in smaller chunkgs. If `chunk_stride = None` then 
+            chunking is disabled.
+        
         return_attention_mask (`bool`, *optional*, defaults to `True`):
             Whether or not [`~EncodecFeatureExtractor.__call__`] should return `attention_mask`.
     """
@@ -51,15 +62,15 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         feature_size: int = 1,
         sampling_rate: int = 24000,
         padding_value: float = 0.0,
-        segment_length: int = 48000,
-        segment_stride: int = 47520,
+        chunk_length: int = 48000,
+        chunk_stride: int = 47520,
         return_attention_mask: bool = True,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.return_attention_mask = return_attention_mask
-        self.segment_stride = segment_stride
-        self.segment_length = segment_length
+        self.chunk_stride = chunk_stride
+        self.chunk_length = chunk_length
 
     def __call__(
         self,
@@ -158,11 +169,11 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             if self.feature_size == 2 and example.shape[-1] != 2:
                 raise ValueError(f"Expected stereo audio but example has {example.shape[-1]} channels")
 
-        if self.segment_stride is not None and self.segment_length is not None:
+        if self.chunk_stride is not None and self.chunk_length is not None:
             # Get nax length:
             max_length = max([array.shape[0] for array in audios])
-            nb_step = int(np.ceil(max_length / self.segment_stride))
-            max_length = (nb_step - 1) * self.segment_stride + self.segment_length
+            nb_step = int(np.ceil(max_length / self.chunk_stride))
+            max_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
 
             padded_audios = []
             padding_masks = []
