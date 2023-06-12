@@ -481,7 +481,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                     input_values, padding_mask, bandwidth=float(bandwidth), return_dict=False
                 )
                 audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
-                
+
                 # make sure audio encoded codes are correct
                 self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
 
