@@ -17,6 +17,7 @@
 import math
 import random
 import warnings
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -28,6 +29,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, L1Loss
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
+    ModelOutput,
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
@@ -54,56 +56,33 @@ VITS_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
-# def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
-#     """
-#     Shift input ids one token to the right.
-#     """
-#     shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-#     shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
-#     shifted_input_ids[:, 0] = decoder_start_token_id
+@dataclass
+class TextEncoderOutput(ModelOutput):
+    """
+    Base class for model's outputs, with potential hidden states and attentions.
 
-#     if pad_token_id is None:
-#         raise ValueError("self.model.config.pad_token_id has to be defined.")
-#     # replace possible -100 values in labels by `pad_token_id`
-#     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
-#     return shifted_input_ids
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
 
-# def shift_spectrograms_right(input_values: torch.Tensor, reduction_factor: int = 1):
-#     """
-#     Shift input spectrograms one timestep to the right. Also applies the reduction factor to the sequence length.
-#     """
-#     # thin out frames for reduction factor
-#     if reduction_factor > 1:
-#         input_values = input_values[:, reduction_factor - 1 :: reduction_factor]
-
-#     shifted_input_values = input_values.new_zeros(input_values.shape)
-#     shifted_input_values[:, 1:] = input_values[:, :-1].clone()
-
-#     # replace possible -100 values in labels by zeros
-#     shifted_input_values.masked_fill_(shifted_input_values == -100.0, 0.0)
-
-#     return shifted_input_values
-
-
-# # Copied from transformers.models.bart.modeling_bart._make_causal_mask
-# def _make_causal_mask(
-#     input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
-# ):
-#     """
-#     Make causal mask used for bi-directional self-attention.
-#     """
-#     bsz, tgt_len = input_ids_shape
-#     mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min, device=device), device=device)
-#     mask_cond = torch.arange(mask.size(-1), device=device)
-#     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
-#     mask = mask.to(dtype)
-
-#     if past_key_values_length > 0:
-#         mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
-#     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+    last_hidden_state: torch.FloatTensor = None
+    m: torch.FloatTensor = None    # TODO: name!
+    logs: torch.FloatTensor = None    # TODO: name!
+    padding_mask: torch.LongTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
@@ -121,249 +100,8 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->SpeechT5
-# class SpeechT5NoLayerNormConvLayer(nn.Module):
-#     def __init__(self, config, layer_id=0):
-#         super().__init__()
-#         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
-#         self.out_conv_dim = config.conv_dim[layer_id]
-
-#         self.conv = nn.Conv1d(
-#             self.in_conv_dim,
-#             self.out_conv_dim,
-#             kernel_size=config.conv_kernel[layer_id],
-#             stride=config.conv_stride[layer_id],
-#             bias=config.conv_bias,
-#         )
-#         self.activation = ACT2FN[config.feat_extract_activation]
-
-#     def forward(self, hidden_states):
-#         hidden_states = self.conv(hidden_states)
-#         hidden_states = self.activation(hidden_states)
-#         return hidden_states
-
-
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2LayerNormConvLayer with Wav2Vec2->SpeechT5
-# class SpeechT5LayerNormConvLayer(nn.Module):
-#     def __init__(self, config, layer_id=0):
-#         super().__init__()
-#         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
-#         self.out_conv_dim = config.conv_dim[layer_id]
-
-#         self.conv = nn.Conv1d(
-#             self.in_conv_dim,
-#             self.out_conv_dim,
-#             kernel_size=config.conv_kernel[layer_id],
-#             stride=config.conv_stride[layer_id],
-#             bias=config.conv_bias,
-#         )
-#         self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
-#         self.activation = ACT2FN[config.feat_extract_activation]
-
-#     def forward(self, hidden_states):
-#         hidden_states = self.conv(hidden_states)
-
-#         hidden_states = hidden_states.transpose(-2, -1)
-#         hidden_states = self.layer_norm(hidden_states)
-#         hidden_states = hidden_states.transpose(-2, -1)
-
-#         hidden_states = self.activation(hidden_states)
-#         return hidden_states
-
-
-# # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GroupNormConvLayer with Wav2Vec2->SpeechT5
-# class SpeechT5GroupNormConvLayer(nn.Module):
-#     def __init__(self, config, layer_id=0):
-#         super().__init__()
-#         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
-#         self.out_conv_dim = config.conv_dim[layer_id]
-
-#         self.conv = nn.Conv1d(
-#             self.in_conv_dim,
-#             self.out_conv_dim,
-#             kernel_size=config.conv_kernel[layer_id],
-#             stride=config.conv_stride[layer_id],
-#             bias=config.conv_bias,
-#         )
-#         self.activation = ACT2FN[config.feat_extract_activation]
-
-#         self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
-
-#     def forward(self, hidden_states):
-#         hidden_states = self.conv(hidden_states)
-#         hidden_states = self.layer_norm(hidden_states)
-#         hidden_states = self.activation(hidden_states)
-#         return hidden_states
-
-
-# Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding with Speech2Text->SpeechT5
-# class SpeechT5SinusoidalPositionalEmbedding(nn.Module):
-#     """This module produces sinusoidal positional embeddings of any length."""
-
-#     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
-#         super().__init__()
-#         self.offset = 2
-#         self.embedding_dim = embedding_dim
-#         self.padding_idx = padding_idx
-#         self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
-
-#     def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
-#         emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
-#         if hasattr(self, "weights"):
-#             # in forward put the weights on the correct dtype and device of the param
-#             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
-
-#         self.weights = nn.Parameter(emb_weights)
-#         self.weights.requires_grad = False
-#         self.weights.detach_()
-
-#     @staticmethod
-#     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
-#         """
-#         Build sinusoidal embeddings. This matches the implementation in tensor2tensor, but differs slightly from the
-#         description in Section 3.5 of "Attention Is All You Need".
-#         """
-#         half_dim = embedding_dim // 2
-#         emb = math.log(10000) / (half_dim - 1)
-#         emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
-#         emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
-#         emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
-#         if embedding_dim % 2 == 1:
-#             # zero pad
-#             emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
-#         if padding_idx is not None:
-#             emb[padding_idx, :] = 0
-#         return emb.to(torch.get_default_dtype())
-
-#     @torch.no_grad()
-#     def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
-#         bsz, seq_len = input_ids.size()
-#         # Create the position ids from the input token ids. Any padded tokens remain padded.
-#         position_ids = self.create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length).to(
-#             input_ids.device
-#         )
-
-#         # expand embeddings if needed
-#         max_pos = self.padding_idx + 1 + seq_len
-#         if max_pos > self.weights.size(0):
-#             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
-
-#         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
-
-#     def create_position_ids_from_input_ids(
-#         self, input_ids: torch.Tensor, padding_idx: int, past_key_values_length: Optional[int] = 0
-#     ):
-#         """
-#         Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
-#         symbols are ignored. This is modified from fairseq's `utils.make_positions`.
-
-#         Args:
-#             x: torch.Tensor x:
-#         Returns: torch.Tensor
-#         """
-#         # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
-#         mask = input_ids.ne(padding_idx).int()
-#         incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
-#         return incremental_indices.long() + padding_idx
-
-
-
-# class SpeechT5RelativePositionalEncoding(torch.nn.Module):
-#     def __init__(self, dim, max_length=1000):
-#         super().__init__()
-#         self.dim = dim
-#         self.max_length = max_length
-#         self.pe_k = torch.nn.Embedding(2 * max_length, dim)
-
-#     def forward(self, hidden_states):
-#         seq_len = hidden_states.shape[1]
-#         pos_seq = torch.arange(0, seq_len).long().to(hidden_states.device)
-#         pos_seq = pos_seq[:, None] - pos_seq[None, :]
-
-#         pos_seq[pos_seq < -self.max_length] = -self.max_length
-#         pos_seq[pos_seq >= self.max_length] = self.max_length - 1
-#         pos_seq = pos_seq + self.max_length
-
-#         return self.pe_k(pos_seq)
-
-
-
-# class SpeechT5BatchNormConvLayer(nn.Module):
-#     def __init__(self, config, layer_id=0):
-#         super().__init__()
-
-#         if layer_id == 0:
-#             in_conv_dim = config.num_mel_bins
-#         else:
-#             in_conv_dim = config.speech_decoder_postnet_units
-
-#         if layer_id == config.speech_decoder_postnet_layers - 1:
-#             out_conv_dim = config.num_mel_bins
-#         else:
-#             out_conv_dim = config.speech_decoder_postnet_units
-
-#         self.conv = nn.Conv1d(
-#             in_conv_dim,
-#             out_conv_dim,
-#             kernel_size=config.speech_decoder_postnet_kernel,
-#             stride=1,
-#             padding=(config.speech_decoder_postnet_kernel - 1) // 2,
-#             bias=False,
-#         )
-#         self.batch_norm = nn.BatchNorm1d(out_conv_dim)
-
-#         if layer_id < config.speech_decoder_postnet_layers - 1:
-#             self.activation = nn.Tanh()
-#         else:
-#             self.activation = None
-
-#         self.dropout = nn.Dropout(config.speech_decoder_postnet_dropout)
-
-#     def forward(self, hidden_states):
-#         hidden_states = self.conv(hidden_states)
-#         hidden_states = self.batch_norm(hidden_states)
-#         if self.activation is not None:
-#             hidden_states = self.activation(hidden_states)
-#         hidden_states = self.dropout(hidden_states)
-#         return hidden_states
-
-
-# class SpeechT5TextEncoderPrenet(nn.Module):
-#     def __init__(self, config):
-#         super().__init__()
-#         self.config = config
-#         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
-#         self.encode_positions = SpeechT5ScaledPositionalEncoding(
-#             config.positional_dropout,
-#             config.hidden_size,
-#             config.max_text_positions,
-#         )
-
-#     def get_input_embeddings(self):
-#         return self.embed_tokens
-
-#     def set_input_embeddings(self, value):
-#         self.embed_tokens = value
-
-#     def forward(self, input_ids: torch.Tensor):
-#         inputs_embeds = self.embed_tokens(input_ids)
-#         inputs_embeds = self.encode_positions(inputs_embeds)
-#         return inputs_embeds
-
-
-
-#   self.attn_layers.append(MultiHeadAttention(hidden_channels, hidden_channels, n_heads, p_dropout=p_dropout, window_size=window_size))
-#   def __init__(self, channels, out_channels, n_heads, p_dropout=0., window_size=None, heads_share=True, block_length=None, proximal_bias=False, proximal_init=False):
-
-# TODO? # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Wav2Vec2
 class VITSAttention(nn.Module):
-    """
-    Multi-headed attention from 'Attention Is All You Need' paper with relative position bias (see
-    https://aclanthology.org/N18-2074.pdf)
-    """
-# TODO?!
-
+    """Multi-headed attention with relative positional representation."""
     def __init__(
         self,
         embed_dim: int,
@@ -371,12 +109,14 @@ class VITSAttention(nn.Module):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
+        window_size: Optional[int] = 4,
     ):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
+        self.window_size = window_size
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -391,6 +131,10 @@ class VITSAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
+        if window_size:
+            self.emb_rel_k = nn.Parameter(torch.randn(1, window_size * 2 + 1, self.head_dim) * self.scaling)
+            self.emb_rel_v = nn.Parameter(torch.randn(1, window_size * 2 + 1, self.head_dim) * self.scaling)
+
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
@@ -401,12 +145,10 @@ class VITSAttention(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
-        # position_bias: Optional[torch.Tensor] = None,  #MIH????
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-#TODO: can probably use a simpler one here since we never have cross attention / decoder / past
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
@@ -459,46 +201,21 @@ class VITSAttention(nn.Module):
                 f" {attn_weights.size()}"
             )
 
+        # TODO: do this better!
+        if self.window_size is not None:
+            key_relative_embeddings = self._get_relative_embeddings(self.emb_rel_k, src_len)
+            relative_logits = torch.matmul(query_states, key_relative_embeddings.transpose(-2, -1))
+            rel_pos_bias = self._relative_position_to_absolute_position(relative_logits.unsqueeze(0))
+            rel_pos_bias = rel_pos_bias.view(bsz * self.num_heads, rel_pos_bias.size(-2), rel_pos_bias.size(-1))
+            attn_weights += rel_pos_bias
 
-    # TODO: search for "relative attention"
-    # if self.window_size is not None:
-    #   assert t_s == t_t, "Relative attention is only available for self-attention."
-    #   key_relative_embeddings = self._get_relative_embeddings(self.emb_rel_k, t_s)
-    #   rel_logits = self._matmul_with_relative_keys(query /math.sqrt(self.k_channels), key_relative_embeddings)
-    #   scores_local = self._relative_position_to_absolute_position(rel_logits)
-    #   scores = scores + scores_local
-
-
-        # relative attention bias
-        # if position_bias is not None:
-        #     reshape_q = query_states.contiguous().view(bsz * self.num_heads, -1, self.head_dim).transpose(0, 1)
-        #     rel_pos_bias = torch.matmul(reshape_q, position_bias.transpose(-2, -1))
-        #     rel_pos_bias = rel_pos_bias.transpose(0, 1).view(
-        #         bsz * self.num_heads, position_bias.size(0), position_bias.size(1)
-        #     )
-        #     attn_weights += rel_pos_bias
-
-
-    # TODO: how is this different? oh, they use a different fill value
-    # block_length is None
-    # ---> it looks like maybe the mask is different at this point too since I can't get
-    # the results to match up...
-    #
-    # if mask is not None:
-    #   scores = scores.masked_fill(mask == 0, -1e4)
-    #   if self.block_length is not None:
-    #     assert t_s == t_t, "Local attention is only available for self-attention."
-    #     block_mask = torch.ones_like(scores).triu(-self.block_length).tril(self.block_length)
-    #     scores = scores.masked_fill(block_mask == 0, -1e4)
-
-        # if attention_mask is not None:
-        #     if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-        #         raise ValueError(
-        #             f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-        #         )
-        #     attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-        #     attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-        # return (attn_weigths, None, None) #MIH
+        if attention_mask is not None:
+            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                )
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -531,6 +248,14 @@ class VITSAttention(nn.Module):
                 f" {attn_output.size()}"
             )
 
+        # TODO: do this better!
+        if self.window_size is not None:
+            value_relative_embeddings = self._get_relative_embeddings(self.emb_rel_v, src_len)
+            relative_weights = self._absolute_position_to_relative_position(attn_probs.unsqueeze(0))
+            rel_pos_bias = torch.matmul(relative_weights, value_relative_embeddings)
+            rel_pos_bias = rel_pos_bias.view(bsz * self.num_heads, rel_pos_bias.size(-2), rel_pos_bias.size(-1))
+            attn_output += rel_pos_bias
+
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
 
@@ -541,6 +266,51 @@ class VITSAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights_reshaped, past_key_value
+
+    def _get_relative_embeddings(self, relative_embeddings, length):
+        pad_length = max(length - (self.window_size + 1), 0)
+        if pad_length > 0:
+            relative_embeddings = nn.functional.pad(relative_embeddings, [0, 0, pad_length, pad_length, 0, 0])
+
+        slice_start_position = max((self.window_size + 1) - length, 0)
+        slice_end_position = slice_start_position + 2 * length - 1
+        return relative_embeddings[:, slice_start_position : slice_end_position]
+
+    def _relative_position_to_absolute_position(self, x):
+        """
+        x: [b, h, l, 2*l-1]
+        ret: [b, h, l, l]
+        """
+        # TODO: we actually have shape (1, b*h, l, 2*l-1) and return (1, b*h, l, l)
+        # so make this work with 3 dimensions instead of 4! then the unsqueeze() and view()
+        # can be removed too
+
+        batch, heads, length, _ = x.size()
+        # Concat columns of pad to shift from relative to absolute indexing.
+        x = nn.functional.pad(x, [0, 1, 0, 0, 0, 0, 0, 0])
+
+        # Concat extra elements so to add up to shape (len+1, 2*len-1).
+        x_flat = x.view([batch, heads, length * 2 * length])
+        x_flat = nn.functional.pad(x_flat, [0, length - 1, 0, 0, 0, 0])
+
+        # Reshape and slice out the padded elements.
+        x_final = x_flat.view([batch, heads, length + 1, 2*length - 1])[:, :, :length, length - 1:]
+        return x_final
+
+    def _absolute_position_to_relative_position(self, x):
+        """
+        x: [b, h, l, l]
+        ret: [b, h, l, 2*l-1]
+        """
+        # TODO: same remarks as for _relative_position_to_absolute_position
+        batch, heads, length, _ = x.size()
+        # pad along column
+        x = nn.functional.pad(x, [0, length - 1, 0, 0, 0, 0, 0, 0])
+        x_flat = x.view([batch, heads, length**2 + length*(length -1)])
+        # add 0's in the beginning that will skew the elements after reshape
+        x_flat = nn.functional.pad(x_flat, [length, 0, 0, 0, 0, 0])
+        x_final = x_flat.view([batch, heads, length, 2*length])[:,:,:,1:]
+        return x_final
 
 
 class VITSFeedForward(nn.Module):
@@ -567,7 +337,6 @@ class VITSFeedForward(nn.Module):
         padding_mask = padding_mask.permute(0, 2, 1)
 
         hidden_states = hidden_states * padding_mask
-        print(hidden_states.shape)
         if self.padding is not None:
             hidden_states = nn.functional.pad(hidden_states, self.padding)
 
@@ -606,31 +375,13 @@ class VITSEncoderLayer(nn.Module):
         padding_mask: torch.LongTensor,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
-        # position_bias: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`):
-                input to the layer of shape `(batch, seq_len, hidden_size)`
-            padding_mask
-            attention_mask (`torch.FloatTensor`):
-                attention mask of size `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very
-                large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(config.encoder_attention_heads,)`.
-            # position_bias (`torch.FloatTensor`):
-            #     relative position embeddings of size `(seq_len, seq_len, hidden_size // encoder_attention_heads)`
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
         residual = hidden_states
         hidden_states, attn_weights, _ = self.attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
-            # position_bias=position_bias,
             output_attentions=output_attentions,
         )
 
@@ -651,28 +402,10 @@ class VITSEncoderLayer(nn.Module):
 
 
 class VITSEncoder(nn.Module):
-
-    # self.encoder = Encoder(
-    #   hidden_channels,
-    #   filter_channels,
-    #   n_heads,
-    #   n_layers,
-    #   kernel_size,
-    #   p_dropout)
-
     def __init__(self, config: VITSConfig):
         super().__init__()
         self.config = config
-
-        # self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        # self.dropout = nn.Dropout(config.hidden_dropout)
-
         self.layers = nn.ModuleList([VITSEncoderLayer(config) for _ in range(config.encoder_layers)])
-
-        # self.embed_positions = VITSRelativePositionalEncoding(
-        #     config.hidden_size // config.encoder_attention_heads, config.encoder_max_relative_position
-        # )
-
         self.gradient_checkpointing = False
 
     def forward(
@@ -694,28 +427,9 @@ class VITSEncoder(nn.Module):
 
         hidden_states = hidden_states * padding_mask
 
-    #TODO: or use W2V2?
-        # if attention_mask is not None:
-        #     # make sure padded tokens output 0
-        #     expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-        #     hidden_states[~expand_attention_mask] = 0
-
-        #     # extend attention_mask
-        #     attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
-        #     attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
-        #     attention_mask = attention_mask.expand(
-        #         attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-        #     )
-
-        # hidden_states = self.layer_norm(hidden_states)
-        # hidden_states = self.dropout(hidden_states)
-
-        # position_bias = self.embed_positions(hidden_states)
-
         deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
 
         for encoder_layer in self.layers:
-            print("***")
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -748,8 +462,6 @@ class VITSEncoder(nn.Module):
                     )
                 hidden_states = layer_outputs[0]
 
-                #break #MIH ##################
-
             if skip_the_layer:
                 layer_outputs = (None, None)
 
@@ -773,18 +485,15 @@ class VITSEncoder(nn.Module):
 
 class VITSTextEncoder(nn.Module):
     """
+    Transformer encoder that uses relative positional representation instead
+    of absolute positional encoding.
     """
-
     def __init__(self, config: VITSConfig):
         super().__init__()
         self.config = config
-
-        #TODO: init for the embedding layer
-        # self.emb = nn.Embedding(n_vocab, hidden_channels)
-        # nn.init.normal_(self.emb.weight, 0.0, hidden_channels**-0.5)
-
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
         self.encoder = VITSEncoder(config)
+        self.project = nn.Conv1d(config.hidden_size, config.inter_channels * 2, kernel_size=1)
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -798,8 +507,8 @@ class VITSTextEncoder(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+        return_dict: Optional[bool] = True,
+    ) -> Union[Tuple, TextEncoderOutput]:
         hidden_states = self.embed_tokens(input_ids) * math.sqrt(self.config.hidden_size)
 
         # TODO: may not be needed for final model but is needed to get same outputs
@@ -814,21 +523,31 @@ class VITSTextEncoder(nn.Module):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        sequence_output = encoder_outputs[0]
+        # TODO: "a linear projection layer above the text encoder that produces the mean and variance
+        # used for constructing the prior distribution." m = mean, logs = log variance?
+        stats = self.project(encoder_outputs.last_hidden_state.transpose(1, 2)).transpose(1, 2) * padding_mask
+        m, logs = torch.split(stats, self.config.inter_channels, dim=2)
 
-        # TODO: make this work even if return_dict enabled etc
-    # stats = self.proj(x) * x_mask
+        if return_dict:
+            return TextEncoderOutput(
+                last_hidden_state=encoder_outputs.last_hidden_state,
+                m=m,
+                logs=logs,
+                padding_mask=padding_mask,  # TODO: do we need to return this?
+                hidden_states=encoder_outputs.hidden_states,
+                attentions=encoder_outputs.attentions,
+            )
 
-    # m, logs = torch.split(stats, self.out_channels, dim=1)
-    # return x, m, logs, x_mask
-
-        # TODO: special kind of output class?
-
-        return sequence_output
-        return outputs
+        return tuple(
+            v
+            for v in [
+                encoder_outputs.last_hidden_state, m, logs, padding_mask, encoder_outputs.hidden_states, encoder_outputs.attentions
+            ]
+            if v is not None
+        )
 
 
 class VITSPreTrainedModel(PreTrainedModel):
@@ -862,6 +581,10 @@ class VITSPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+        #TODO: init for the embedding layer
+        # self.emb = nn.Embedding(n_vocab, hidden_channels)
+        # nn.init.normal_(self.emb.weight, 0.0, hidden_channels**-0.5)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (VITSTextEncoder)):

@@ -232,6 +232,8 @@ ffn_kernel_size
         encoder_layerdrop=0.1,
         ffn_kernel_size=3,
 
+        inter_channels=192,  # TODO: better name?
+
             decoder_layers=6,
             decoder_ffn_dim=3072,
             decoder_attention_heads=12,
@@ -296,6 +298,7 @@ ffn_kernel_size
         self.encoder_attention_heads = encoder_attention_heads
         self.encoder_layerdrop = encoder_layerdrop
         self.ffn_kernel_size = ffn_kernel_size
+        self.inter_channels = inter_channels
         self.decoder_layers = decoder_layers
         self.decoder_ffn_dim = decoder_ffn_dim
         self.decoder_attention_heads = decoder_attention_heads
