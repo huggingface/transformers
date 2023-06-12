@@ -14,13 +14,15 @@
 # limitations under the License.
 """ PyTorch ViTMatte model."""
 
-from typing import Optional
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 import torch
 from torch import nn
 
 from ... import AutoBackbone
 from ...modeling_utils import PreTrainedModel
+from ...utils import ModelOutput
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_vitmatte import VitMatteConfig
 
@@ -29,6 +31,34 @@ VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "hustvl/vitmatte-small-composition-1k",
     # See all VitMatte models at https://huggingface.co/models?filter=vitmatte
 ]
+
+
+@dataclass
+class ImageMattingOutput(ModelOutput):
+    """
+    Class for outputs of image matting models.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Loss.
+        alphas (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+           Estimated alpha values.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
+            (also called feature maps) of the model at the output of each stage.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, patch_size,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    alpha: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class VitMattePreTrainedModel(PreTrainedModel):
@@ -229,6 +259,8 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
 
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
+
+        >>> alphas = outputs.alphas
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
@@ -244,10 +276,19 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
 
         # TODO: already permute in backbone?
         features = features.permute(0, 3, 1, 2)
-        print("Shape of backbone features:", features.shape)
-        outputs = self.decoder(features, pixel_values)
+        alphas = self.decoder(features, pixel_values)
 
+        loss = None
         if labels is not None:
             raise NotImplementedError("Training is not yet supported")
 
-        return outputs
+        if not return_dict:
+            output = (alphas,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return ImageMattingOutput(
+            loss=loss,
+            alphas=alphas,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
