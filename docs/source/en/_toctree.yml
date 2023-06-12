@@ -27,47 +27,48 @@
     title: Generation with LLMs
   title: Tutorials
 - sections:
-  - sections:
-      - local: tasks/sequence_classification
-        title: Text classification
-      - local: tasks/token_classification
-        title: Token classification
-      - local: tasks/question_answering
-        title: Question answering
-      - local: tasks/language_modeling
-        title: Causal language modeling
-      - local: tasks/masked_language_modeling
-        title: Masked language modeling
-      - local: tasks/translation
-        title: Translation
-      - local: tasks/summarization
-        title: Summarization
-      - local: tasks/multiple_choice
-        title: Multiple choice
+  - isExpanded: false
+    sections:
+    - local: tasks/sequence_classification
+      title: Text classification
+    - local: tasks/token_classification
+      title: Token classification
+    - local: tasks/question_answering
+      title: Question answering
+    - local: tasks/language_modeling
+      title: Causal language modeling
+    - local: tasks/masked_language_modeling
+      title: Masked language modeling
+    - local: tasks/translation
+      title: Translation
+    - local: tasks/summarization
+      title: Summarization
+    - local: tasks/multiple_choice
+      title: Multiple choice
     title: Natural Language Processing
-    isExpanded: false
-  - sections:
-      - local: tasks/audio_classification
-        title: Audio classification
-      - local: tasks/asr
-        title: Automatic speech recognition
+  - isExpanded: false
+    sections:
+    - local: tasks/audio_classification
+      title: Audio classification
+    - local: tasks/asr
+      title: Automatic speech recognition
     title: Audio
-    isExpanded: false
-  - sections:
-      - local: tasks/image_classification
-        title: Image classification
-      - local: tasks/semantic_segmentation
-        title: Semantic segmentation
-      - local: tasks/video_classification
-        title: Video classification
-      - local: tasks/object_detection
-        title: Object detection
-      - local: tasks/zero_shot_object_detection
-        title: Zero-shot object detection
-      - local: tasks/zero_shot_image_classification
-        title: Zero-shot image classification
-      - local: tasks/monocular_depth_estimation
-        title: Depth estimation
+  - isExpanded: false
+    sections:
+    - local: tasks/image_classification
+      title: Image classification
+    - local: tasks/semantic_segmentation
+      title: Semantic segmentation
+    - local: tasks/video_classification
+      title: Video classification
+    - local: tasks/object_detection
+      title: Object detection
+    - local: tasks/zero_shot_object_detection
+      title: Zero-shot object detection
+    - local: tasks/zero_shot_image_classification
+      title: Zero-shot image classification
+    - local: tasks/monocular_depth_estimation
+      title: Depth estimation
     title: Computer Vision
     isExpanded: false
   - sections:
@@ -158,20 +159,19 @@
       title: Optimize inference using `torch.compile()`
   title: Performance and scalability
 - sections:
-    - local: contributing
-      title: How to contribute to transformers?
-    - local: add_new_model
-      title: How to add a model to 🤗 Transformers?
-    - local: add_tensorflow_model
-      title: How to convert a 🤗 Transformers model to TensorFlow?
-    - local: add_new_pipeline
-      title: How to add a pipeline to 🤗 Transformers?
-    - local: testing
-      title: Testing
-    - local: pr_checks
-      title: Checks on a Pull Request
+  - local: contributing
+    title: How to contribute to transformers?
+  - local: add_new_model
+    title: How to add a model to 🤗 Transformers?
+  - local: add_tensorflow_model
+    title: How to convert a 🤗 Transformers model to TensorFlow?
+  - local: add_new_pipeline
+    title: How to add a pipeline to 🤗 Transformers?
+  - local: testing
+    title: Testing
+  - local: pr_checks
+    title: Checks on a Pull Request
   title: Contribute
-
 - sections:
   - local: philosophy
     title: Philosophy
@@ -555,6 +555,8 @@
         title: Vision Transformer (ViT)
       - local: model_doc/vit_hybrid
         title: ViT Hybrid
+      - local: model_doc/vitdet
+        title: VitDet
       - local: model_doc/vit_mae
         title: ViTMAE
       - local: model_doc/vit_msn
@@ -685,6 +687,8 @@
         title: Vision Text Dual Encoder
       - local: model_doc/visual_bert
         title: VisualBERT
+      - local: model_doc/vitmatte
+        title: VitMatte
       - local: model_doc/xclip
         title: X-CLIP
       title: Multimodal models

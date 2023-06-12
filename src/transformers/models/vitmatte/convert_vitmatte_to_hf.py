@@ -80,6 +80,8 @@ def convert_vitmatte_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
             key = key.replace("backbone.blocks", "backbone.encoder.layer")
         if "attn" in key:
             key = key.replace("attn", "attention")
+        if "fusion_blks" in key:
+            key = key.replace("fusion_blks", "fusion_blocks")
         state_dict[key] = val
 
     # rename keys
@@ -109,11 +111,8 @@ def convert_vitmatte_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     with torch.no_grad():
         outputs = model(images)
 
-    features = outputs
-    features = features[-1].permute(0, 3, 1, 2)
-    print(len(features))
-    print(features.shape)
-    print(features[0, 0, :3, :3])
+    print(outputs.shape)
+    print(outputs[0, 0, :3, :3])
 
     # assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)
     # print("Looks ok!")

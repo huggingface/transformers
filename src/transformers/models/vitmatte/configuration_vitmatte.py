@@ -40,6 +40,8 @@ class VitMatteConfig(PretrainedConfig):
     Args:
         backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `VitDetConfig()`):
             The configuration of the backbone model.
+        in_channels (`int`, *optional*, defaults to 384):
+            The number of input channels of the decoder.
 
     Example:
 
@@ -60,6 +62,7 @@ class VitMatteConfig(PretrainedConfig):
     def __init__(
         self,
         backbone_config=None,
+        in_channels=384,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -73,3 +76,4 @@ class VitMatteConfig(PretrainedConfig):
             backbone_config = config_class.from_dict(backbone_config)
 
         self.backbone_config = backbone_config
+        self.in_channels = in_channels
