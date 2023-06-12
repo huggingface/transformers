@@ -27,7 +27,6 @@ from ...activations import ACT2FN
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutput,
-    BaseModelOutputWithPooling,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -85,18 +84,21 @@ class VitDetEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def get_abs_pos(self, abs_pos, has_cls_token, hw):
+    def get_absolute_positions(self, abs_pos, has_cls_token, hw):
         """
         Calculate absolute positional embeddings. If needed, resize embeddings and remove cls_token dimension for the
         original embeddings.
 
         Args:
-            abs_pos (Tensor): absolute positional embeddings with (1, num_position, C).
-            has_cls_token (bool): If true, has 1 embedding in abs_pos for cls token.
-            hw (Tuple): size of input image tokens.
+            abs_pos (`torch.Tensor`):
+                Absolute positional embeddings with (1, num_position, num_channels).
+            has_cls_token (`bool`):
+                If true, has 1 embedding in abs_pos for cls token.
+            hw (`Tuple[int]`):
+                Size of input image tokens.
 
         Returns:
-            Absolute positional embeddings after processing with shape (1, H, W, C)
+            Absolute positional embeddings after processing with shape (1, height, width, num_channels)
         """
         h, w = hw
         if has_cls_token:
@@ -130,7 +132,7 @@ class VitDetEmbeddings(nn.Module):
         embeddings = embeddings.permute(0, 2, 3, 1)
 
         if self.position_embeddings is not None:
-            embeddings = embeddings + self.get_abs_pos(
+            embeddings = embeddings + self.get_absolute_positions(
                 self.position_embeddings, True, (embeddings.shape[1], embeddings.shape[2])
             )
 
@@ -170,7 +172,7 @@ def get_rel_pos(q_size, k_size, rel_pos):
     return rel_pos_resized[relative_coords.long()]
 
 
-def add_decomposed_rel_pos(attn, q, rel_pos_h, rel_pos_w, q_size, k_size):
+def add_decomposed_relative_positions(attn, q, rel_pos_h, rel_pos_w, q_size, k_size):
     """
     Calculate decomposed Relative Positional Embeddings as introduced in
     [MViT2](https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py)
@@ -209,8 +211,10 @@ class VitDetAttention(nn.Module):
     def __init__(self, config, input_size=None):
         """
         Args:
-            config (obj): Model configuration.
-            input_size (int or None): Input resolution for calculating the relative positional parameter size.
+            config (`VitDetConfig`):
+                Model configuration.
+            input_size (`Tuple[int]`, *optional*):
+                Input resolution, only required in case relative position embeddings are added.
         """
         super().__init__()
 
@@ -236,30 +240,30 @@ class VitDetAttention(nn.Module):
             #     nn.init.trunc_normal_(self.rel_pos_h, std=0.02)
             #     nn.init.trunc_normal_(self.rel_pos_w, std=0.02)
 
-    def forward(self, x, output_attentions=False):
-        batch_size, height, width, _ = x.shape
+    def forward(self, hidden_state, output_attentions=False):
+        batch_size, height, width, _ = hidden_state.shape
         # qkv with shape (3, batch_size, num_heads, height * width, num_channels)
-        qkv = self.qkv(x).reshape(batch_size, height * width, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
-        # q, k, v with shape (batch_size * num_heads, height * width, num_channels)
-        q, k, v = qkv.reshape(3, batch_size * self.num_heads, height * width, -1).unbind(0)
+        qkv = self.qkv(hidden_state).reshape(batch_size, height * width, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
+        # queries, keys and values have shape (batch_size * num_heads, height * width, num_channels)
+        queries, keys, values = qkv.reshape(3, batch_size * self.num_heads, height * width, -1).unbind(0)
 
-        attention_scores = (q * self.scale) @ k.transpose(-2, -1)
+        attention_scores = (queries * self.scale) @ keys.transpose(-2, -1)
 
         if self.use_relative_position_embeddings:
-            attention_scores = add_decomposed_rel_pos(
-                attention_scores, q, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+            attention_scores = add_decomposed_relative_positions(
+                attention_scores, queries, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
             )
 
         attention_probs = attention_scores.softmax(dim=-1)
-        x = (
-            (attention_probs @ v)
+        hidden_state = (
+            (attention_probs @ values)
             .view(batch_size, self.num_heads, height, width, -1)
             .permute(0, 2, 3, 1, 4)
             .reshape(batch_size, height, width, -1)
         )
-        x = self.proj(x)
+        hidden_state = self.proj(hidden_state)
 
-        outputs = (x, attention_probs) if output_attentions else (x,)
+        outputs = (hidden_state, attention_probs) if output_attentions else (hidden_state,)
 
         return outputs
 
@@ -305,7 +309,6 @@ class VitDetLayerNorm(nn.Module):
     A LayerNorm variant, popularized by Transformers, that performs point-wise mean and variance normalization over the
     channel dimension for inputs that have shape (batch_size, channels, height, width).
     https://github.com/facebookresearch/ConvNeXt/blob/d1fa8f6fef0a165b27399986cc2bdacc92777e40/models/convnext.py#L119
-    # noqa B950
     """
 
     def __init__(self, normalized_shape, eps=1e-6):
@@ -679,19 +682,16 @@ VITDET_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare VitDet Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare VitDet Transformer model outputting raw hidden-states without any specific head on top.",
     VITDET_START_DOCSTRING,
 )
 class VitDetModel(VitDetPreTrainedModel):
-    def __init__(self, config: VitDetConfig, add_pooling_layer: bool = True):
+    def __init__(self, config: VitDetConfig):
         super().__init__(config)
         self.config = config
 
         self.embeddings = VitDetEmbeddings(config)
         self.encoder = VitDetEncoder(config)
-
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = VitDetPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -710,7 +710,7 @@ class VitDetModel(VitDetPreTrainedModel):
     @add_start_docstrings_to_model_forward(VITDET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPooling,
+        output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -722,7 +722,7 @@ class VitDetModel(VitDetPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[Tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -749,35 +749,15 @@ class VitDetModel(VitDetPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
-            return head_outputs + encoder_outputs[1:]
+            return (sequence_output,) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutput(
             last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->VitDet
-class VitDetPooler(nn.Module):
-    def __init__(self, config: VitDetConfig):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
-
-    def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
 
 
 @add_start_docstrings(
@@ -842,7 +822,7 @@ class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
 
         feature_maps = ()
         # we skip the stem
-        for idx, (stage, hidden_state) in enumerate(zip(self.stage_names[1:], hidden_states[1:])):
+        for stage, hidden_state in zip(self.stage_names[1:], hidden_states[1:]):
             if stage in self.out_features:
                 feature_maps += (hidden_state,)
 

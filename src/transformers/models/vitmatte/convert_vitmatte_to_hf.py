@@ -105,10 +105,10 @@ def convert_vitmatte_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
 
     print("Shape of images:", images.shape)
     with torch.no_grad():
-        outputs = model(images)
+        alphas = model(images).alphas
 
-    print(outputs.shape)
-    print(outputs[0, 0, :3, :3])
+    print(alphas.shape)
+    print(alphas[0, 0, :3, :3])
 
     # assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)
     # print("Looks ok!")
