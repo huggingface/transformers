@@ -816,7 +816,7 @@ class EncodecModel(EncodecPreTrainedModel):
         >>> model = EncodecModel.from_pretrained(model_id)
         >>> processor = AutoProcessor.from_pretrained(model_id)
 
-        >>> inputs = processor(audios=audio_sample, return_tensors="pt")
+        >>> inputs = processor(raw_audio=audio_sample, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> audio_codes = outputs.audio_codes
