@@ -1264,9 +1264,10 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             )
 
         self.post_init()
-    
+
     def get_input_embeddings(self):
         return self.text_model.get_input_embeddings()
+
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 

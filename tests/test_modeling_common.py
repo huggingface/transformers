@@ -1663,7 +1663,7 @@ class ModelTesterMixin:
                         1,
                         f"The shared pointers are incorrect, found different pointers for keys {shared_names}",
                     )
-    
+
     def test_tied_weights_keys(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         config.tie_word_embeddings = True
@@ -1695,7 +1695,6 @@ class ModelTesterMixin:
             print(tied_params)
             tied_params = [group for group in tied_params if len(group) > 1]
             self.assertListEqual(tied_params, [])
-
 
     def test_tied_model_weights_key_ignore(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
