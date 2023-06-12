@@ -34,7 +34,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     from torch import nn
 
-    from transformers import VitMatteForImageMatting
+    from transformers import VitDetConfig, VitMatteForImageMatting
     from transformers.models.vitmatte.modeling_vitmatte import VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -49,20 +49,17 @@ class VitMatteModelTester:
         batch_size=13,
         image_size=30,
         patch_size=2,
-        num_channels=3,
+        num_channels=4,
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
-        intermediate_size=37,
+        num_hidden_layers=6,
+        num_attention_heads=8,
         hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
         type_sequence_label_size=10,
         initializer_range=0.02,
         scope=None,
-        encoder_stride=2,
+        out_features=["stage5"],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -74,18 +71,11 @@ class VitMatteModelTester:
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
-        self.encoder_stride = encoder_stride
-
-        # in VitMatte, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        self.out_features = out_features
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -98,21 +88,23 @@ class VitMatteModelTester:
 
         return config, pixel_values, labels
 
-    def get_config(self):
-        return VitMatteConfig(
+    def get_backbone_config(self):
+        return VitDetConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
-            hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
+            hidden_size=self.hidden_size,
+            is_training=self.is_training,
             hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-            encoder_stride=self.encoder_stride,
+            out_features=self.out_features,
+        )
+
+    def get_config(self):
+        return VitMatteConfig(
+            backbone_config=self.get_backbone_config(),
+            hidden_size=self.hidden_size,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -124,11 +116,7 @@ class VitMatteModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        config, pixel_values, labels = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -141,6 +129,7 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     """
 
     all_model_classes = (VitMatteForImageMatting,) if is_torch_available() else ()
+    pipeline_model_mapping = {}
 
     fx_compatible = False
     test_pruning = False
