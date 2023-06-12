@@ -23,7 +23,6 @@ import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
-from ...generation.logits_process import MusicgenDelayPatternLogitsProcessor
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1919,6 +1918,9 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         encoder_outputs=None,
         **kwargs,
     ):
+        # apply the delay pattern mask
+        decoder_input_ids = self.apply_delay_pattern_mask(decoder_input_ids)
+
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[..., -1:]
@@ -1934,6 +1936,31 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,  # change this to avoid caching
         }
+
+    def apply_delay_pattern_mask(self, decoder_input_ids):
+        """Apply a delayed pattern mask to the decoder_input_ids. Each codebook is offset by the previous codebook by
+        one, giving a delayed pattern mask at the start of sequence and end of sequence. Taking the example where there
+        are 4 codebooks and a max sequence length of 8, we have the delayed pattern mask of shape `(codebooks,
+        seq_len)`:
+        - [P, a, b, c, d, P, P, P]
+        - [P, P, e, f, g, h, P, P]
+        - [P, P, P, i, j, k, l, P]
+        - [P, P, P, P, m, n, o, q]
+        where P is the special padding token id. All other input ids are unchanged.
+        """
+        bsz, codebooks, seq_len = decoder_input_ids.shape
+        max_length = self.generation_config.max_length
+        # construct a pattern mask that indicates the positions of padding tokens for each codebook
+        # first fill the upper triangular part (the EOS padding)
+        delay_pattern = torch.triu(
+            torch.ones((codebooks, max_length), dtype=torch.bool), diagonal=max_length - codebooks + 1
+        )
+        # then fill the lower triangular part (the BOS padding)
+        delay_pattern = delay_pattern + torch.tril(torch.ones((codebooks, max_length), dtype=torch.bool))
+        mask = ~delay_pattern[:, :seq_len]
+        # ablate input ids at masked indices and replace with pad token id
+        decoder_input_ids = mask * decoder_input_ids + ~mask * self.generation_config.pad_token_id
+        return decoder_input_ids
 
     def _prepare_decoder_input_ids_for_generation(
         self,
@@ -2028,18 +2055,12 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
             generation_config = self.generation_config
 
         # TODO(SG): update this when we're using audio prompt as input since we'll have to offset new tokens
-        specified_max_length = kwargs.pop("max_new_tokens", None) or kwargs.pop("max_length", None)
-        default_max_length = generation_config.max_new_tokens or generation_config.max_length
-        max_length = specified_max_length or default_max_length
-        kwargs["max_new_tokens"] = max_length
-
-        delay_pattern_processor = MusicgenDelayPatternLogitsProcessor(
-            pad_token_id=self.generation_config.pad_token_id, max_length=max_length
-        )
-        if logits_processor is not None:
-            logits_processor.append(delay_pattern_processor)
-        else:
-            logits_processor = [delay_pattern_processor]
+        if kwargs.get("max_new_tokens") is not None:
+            generation_config.max_new_tokens = kwargs.get("max_new_tokens")
+            generation_config.max_length = kwargs.get("max_new_tokens") + 1
+        if kwargs.get("max_length") is not None:
+            generation_config.max_new_tokens = kwargs.get("max_length") - 1
+            generation_config.max_length = kwargs.get("max_length")
 
         outputs = super().generate(
             inputs,
@@ -2060,13 +2081,9 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         else:
             input_ids = outputs
 
-        # revert the pattern delay mask by shifting pred ids by offset 1
-        # [P, a, b, c, d, P, P, P]      [a, b, c, d]
-        # [P, P, e, f, g, h, P, P]      [e, f, g, h]
-        # [P, P, P, i, j, k, l, P]  ->  [i, j, k, l]
-        # [P, P, P, P, m, n, o, q]      [m, n, o, q]
-        # where P is the special padding token id
         bsz, codebooks, seq_len = input_ids.shape
+        input_ids = self.apply_delay_pattern_mask(input_ids)
+        # revert the pattern delay mask by filtering the pad token id
         input_ids = input_ids[input_ids != self.generation_config.pad_token_id].reshape(bsz, codebooks, -1)
 
         # TODO(SG): put the outputs through encodec to get the audio output, defining a new output class (audio + gen scores)
