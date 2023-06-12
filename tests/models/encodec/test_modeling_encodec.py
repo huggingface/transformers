@@ -337,9 +337,12 @@ class EncodecIntegrationTest(unittest.TestCase):
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
         audio_sample = librispeech_dummy[-1]["audio"]["array"]
 
-        inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt", return_attention_mask = True).to(
-            torch_device
-        )
+        inputs = processor(
+            raw_audio=audio_sample,
+            sampling_rate=processor.sampling_rate,
+            return_tensors="pt",
+            return_attention_mask=True,
+        ).to(torch_device)
 
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():

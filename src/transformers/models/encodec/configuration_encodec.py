@@ -53,7 +53,7 @@ class EncodecConfig(PretrainedConfig):
         hidden_size (`int`, *optional*, defaults to 128):
             Intermediate representation dimension.
         num_filters (`int`, *optional*, defaults to 32):
-            Base width for the model. ??? Width?? 
+            Base width for the model. ??? Width??
         num_residual_layers (`int`,  *optional*, defaults to 1):
             Number of residual layers.
         upsampling_ratios (`Sequence[int]` , *optional*, defaults to `[8, 5, 4, 2]`):

@@ -55,7 +55,7 @@ class EncodecOutput(ModelOutput):
         audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
             Discret code embeddings computed using `model.encode`.
         audio_values (`torch.FlaotTensor` of shape `(batch_size, sequence_length)`, *optional*)
-            Decoded audio values, obtained using the decoder part of Encodec. 
+            Decoded audio values, obtained using the decoder part of Encodec.
 
     """
 
@@ -82,7 +82,7 @@ class EncodecDecoderOutput(ModelOutput):
     """
     Args:
         audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
-            Decoded audio values, obtained using the decoder part of Encodec. 
+            Decoded audio values, obtained using the decoder part of Encodec.
     """
 
     audio_values: Optional[torch.FloatTensor] = None
@@ -742,8 +742,8 @@ class EncodecModel(EncodecPreTrainedModel):
 
     def decode(
         self,
-        audio_codes,
-        audio_scales,
+        audio_codes: torch.Tensor,
+        audio_scales: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecDecoderOutput]:
@@ -752,6 +752,17 @@ class EncodecModel(EncodecPreTrainedModel):
 
         Note that the output might be a bit bigger than the input. In that case, any extra steps at the end can be
         trimmed.
+
+        Args:
+            audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+                Discret code embeddings computed using `model.encode`.
+            audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
+                Scaling factor for each `audio_codes` input.
+            padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
+                Padding mask used to pad the `input_values`.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+
         """
         return_dict = return_dict or self.config.return_dict
 
@@ -777,11 +788,7 @@ class EncodecModel(EncodecPreTrainedModel):
             return EncodecDecoderOutput(audio_values)
         return (audio_values,)
 
-    def _decode_frame(
-        self,
-        codes: Union[List[Tuple[torch.Tensor, Optional[torch.Tensor]]], EncodecEncoderOutput],
-        scale: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _decode_frame(self, codes: torch.Tensor, scale: Optional[torch.Tensor] = None) -> torch.Tensor:
         codes = codes.transpose(0, 1)
         embeddings = self.quantizer.decode(codes)
         outputs = self.decoder(embeddings)
@@ -794,7 +801,7 @@ class EncodecModel(EncodecPreTrainedModel):
     def forward(
         self,
         input_values: torch.Tensor,
-        padding_mask: torch.Tensor = None,
+        padding_mask: Optional[torch.Tensor] = None,
         bandwidth: Optional[float] = None,
         audio_codes: Optional[torch.Tensor] = None,
         audio_scales: Optional[torch.Tensor] = None,
