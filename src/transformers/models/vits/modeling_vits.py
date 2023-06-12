@@ -38,14 +38,14 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_vits import VITSConfig
+from .configuration_vits import VitsConfig
 
 
 logger = logging.get_logger(__name__)
 
 
 # General docstring
-_CONFIG_FOR_DOC = "VITSConfig"
+_CONFIG_FOR_DOC = "VitsConfig"
 
 
 VITS_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -100,7 +100,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-class VITSAttention(nn.Module):
+class VitsAttention(nn.Module):
     """Multi-headed attention with relative positional representation."""
     def __init__(
         self,
@@ -313,7 +313,7 @@ class VITSAttention(nn.Module):
         return x_final
 
 
-class VITSFeedForward(nn.Module):
+class VitsFeedForward(nn.Module):
     def __init__(self, config, intermediate_size):
         super().__init__()
         self.conv_1 = nn.Conv1d(config.hidden_size, intermediate_size, config.ffn_kernel_size)
@@ -355,10 +355,10 @@ class VITSFeedForward(nn.Module):
         return hidden_states
 
 
-class VITSEncoderLayer(nn.Module):
-    def __init__(self, config: VITSConfig):
+class VitsEncoderLayer(nn.Module):
+    def __init__(self, config: VitsConfig):
         super().__init__()
-        self.attention = VITSAttention(
+        self.attention = VitsAttention(
             embed_dim=config.hidden_size,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -366,7 +366,7 @@ class VITSEncoderLayer(nn.Module):
         )
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.feed_forward = VITSFeedForward(config, config.encoder_ffn_dim)
+        self.feed_forward = VitsFeedForward(config, config.encoder_ffn_dim)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
@@ -374,14 +374,12 @@ class VITSEncoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         padding_mask: torch.LongTensor,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
         residual = hidden_states
         hidden_states, attn_weights, _ = self.attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
 
@@ -401,11 +399,11 @@ class VITSEncoderLayer(nn.Module):
         return outputs
 
 
-class VITSEncoder(nn.Module):
-    def __init__(self, config: VITSConfig):
+class VitsEncoder(nn.Module):
+    def __init__(self, config: VitsConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([VITSEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([VitsEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -483,16 +481,16 @@ class VITSEncoder(nn.Module):
         )
 
 
-class VITSTextEncoder(nn.Module):
+class VitsTextEncoder(nn.Module):
     """
     Transformer encoder that uses relative positional representation instead
     of absolute positional encoding.
     """
-    def __init__(self, config: VITSConfig):
+    def __init__(self, config: VitsConfig):
         super().__init__()
         self.config = config
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
-        self.encoder = VITSEncoder(config)
+        self.encoder = VitsEncoder(config)
         self.project = nn.Conv1d(config.hidden_size, config.inter_channels * 2, kernel_size=1)
 
     def get_input_embeddings(self):
@@ -531,6 +529,8 @@ class VITSTextEncoder(nn.Module):
         stats = self.project(encoder_outputs.last_hidden_state.transpose(1, 2)).transpose(1, 2) * padding_mask
         m, logs = torch.split(stats, self.config.inter_channels, dim=2)
 
+        # TODO: maybe just always return a tuple here, not a custom output object
+
         if return_dict:
             return TextEncoderOutput(
                 last_hidden_state=encoder_outputs.last_hidden_state,
@@ -550,13 +550,13 @@ class VITSTextEncoder(nn.Module):
         )
 
 
-class VITSPreTrainedModel(PreTrainedModel):
+class VitsPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = VITSConfig
+    config_class = VitsConfig
     base_model_prefix = "vits"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
@@ -587,7 +587,7 @@ class VITSPreTrainedModel(PreTrainedModel):
         # nn.init.normal_(self.emb.weight, 0.0, hidden_channels**-0.5)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (VITSTextEncoder)):
+        if isinstance(module, (VitsTextEncoder)):
             module.gradient_checkpointing = value
 
 
@@ -601,16 +601,16 @@ VITS_BASE_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`VITSConfig`]):
+        config ([`VitsConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        encoder ([`VITSEncoderWithSpeechPrenet`] or [`VITSEncoderWithTextPrenet`] or `None`):
+        encoder ([`VitsEncoderWithSpeechPrenet`] or [`VitsEncoderWithTextPrenet`] or `None`):
             The Transformer encoder module that applies the appropiate speech or text encoder prenet. If `None`,
-            [`VITSEncoderWithoutPrenet`] will be used and the `input_values` are assumed to be hidden states.
-        decoder ([`VITSDecoderWithSpeechPrenet`] or [`VITSDecoderWithTextPrenet`] or `None`):
+            [`VitsEncoderWithoutPrenet`] will be used and the `input_values` are assumed to be hidden states.
+        decoder ([`VitsDecoderWithSpeechPrenet`] or [`VitsDecoderWithTextPrenet`] or `None`):
             The Transformer decoder module that applies the appropiate speech or text decoder prenet. If `None`,
-            [`VITSDecoderWithoutPrenet`] will be used and the `decoder_input_values` are assumed to be hidden
+            [`VitsDecoderWithoutPrenet`] will be used and the `decoder_input_values` are assumed to be hidden
             states.
 """
 
@@ -625,7 +625,7 @@ VITS_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`VITSConfig`]):
+        config ([`VitsConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -657,7 +657,7 @@ VITS_INPUTS_DOCSTRING = r"""
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_values`. Causal mask will
             also be used by default.
 
-            If you want to change padding behavior, you should read [`VITSDecoder._prepare_decoder_attention_mask`]
+            If you want to change padding behavior, you should read [`VitsDecoder._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
             information on the default strategy.
 
@@ -722,29 +722,29 @@ VITS_INPUTS_DOCSTRING = r"""
     "The bare VITS Encoder-Decoder Model outputting raw hidden-states without any specific pre- or post-nets.",
     VITS_BASE_START_DOCSTRING,
 )
-class VITSModel(VITSPreTrainedModel):
+class VitsModel(VitsPreTrainedModel):
     def __init__(
         self,
-        config: VITSConfig,
+        config: VitsConfig,
     ):
         super().__init__(config)
         self.config = config
-        self.text_encoder = VITSTextEncoder(config)
+        self.text_encoder = VitsTextEncoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     # def get_input_embeddings(self):
-    #     if isinstance(self.encoder, VITSEncoderWithTextPrenet):
+    #     if isinstance(self.encoder, VitsEncoderWithTextPrenet):
     #         return self.encoder.get_input_embeddings()
-    #     if isinstance(self.decoder, VITSDecoderWithTextPrenet):
+    #     if isinstance(self.decoder, VitsDecoderWithTextPrenet):
     #         return self.decoder.get_input_embeddings()
     #     return None
 
     # def set_input_embeddings(self, value):
-    #     if isinstance(self.encoder, VITSEncoderWithTextPrenet):
+    #     if isinstance(self.encoder, VitsEncoderWithTextPrenet):
     #         self.encoder.set_input_embeddings(value)
-    #     if isinstance(self.decoder, VITSDecoderWithTextPrenet):
+    #     if isinstance(self.decoder, VitsDecoderWithTextPrenet):
     #         self.decoder.set_input_embeddings(value)
 
     def get_encoder(self):
@@ -816,14 +816,14 @@ class VITSModel(VITSPreTrainedModel):
             )
 
         # # downsample encoder attention mask (only for encoders with speech input)
-        # if attention_mask is not None and isinstance(self.encoder, VITSEncoderWithSpeechPrenet):
+        # if attention_mask is not None and isinstance(self.encoder, VitsEncoderWithSpeechPrenet):
         #     encoder_attention_mask = self.encoder.prenet._get_feature_vector_attention_mask(
         #         encoder_outputs[0].shape[1], attention_mask
         #     )
         # else:
         #     encoder_attention_mask = attention_mask
 
-        # if isinstance(self.decoder, VITSDecoderWithSpeechPrenet):
+        # if isinstance(self.decoder, VitsDecoderWithSpeechPrenet):
         #     decoder_args = {"speaker_embeddings": speaker_embeddings}
         # else:
         #     decoder_args = {}
@@ -856,225 +856,3 @@ class VITSModel(VITSPreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
-
-
-# @add_start_docstrings(
-#     """VITS Model with a text encoder and a speech decoder.""",
-#     VITS_START_DOCSTRING,
-# )
-# class VITSForTextToSpeech(VITSPreTrainedModel):
-#     _keys_to_ignore_on_load_missing = []
-#     _keys_to_ignore_on_save = []
-
-#     main_input_name = "input_ids"
-
-#     def __init__(self, config: VITSConfig):
-#         super().__init__(config)
-
-#         if config.vocab_size is None:
-#             raise ValueError(
-#                 f"You are trying to instantiate {self.__class__} with a configuration that does not define the"
-#                 " vocabulary size of the language model head. Please instantiate the model as follows:"
-#                 " `VITSForTextToSpeech.from_pretrained(..., vocab_size=vocab_size)`. or define `vocab_size` of"
-#                 " your model's configuration."
-#             )
-
-#         text_encoder = VITSEncoderWithTextPrenet(config)
-#         speech_decoder = VITSDecoderWithSpeechPrenet(config)
-#         self.VITS = VITSModel(config, text_encoder, speech_decoder)
-
-#         self.speech_decoder_postnet = VITSSpeechDecoderPostnet(config)
-
-#         # Initialize weights and apply final processing
-#         self.post_init()
-
-#     def get_encoder(self):
-#         return self.VITS.get_encoder()
-
-#     def get_decoder(self):
-#         return self.VITS.get_decoder()
-
-#     @add_start_docstrings_to_model_forward(VITS_INPUTS_DOCSTRING)
-#     @replace_return_docstrings(output_type=Seq2SeqSpectrogramOutput, config_class=_CONFIG_FOR_DOC)
-#     def forward(
-#         self,
-#         input_ids: Optional[torch.LongTensor] = None,
-#         attention_mask: Optional[torch.LongTensor] = None,
-#         decoder_input_values: Optional[torch.FloatTensor] = None,
-#         decoder_attention_mask: Optional[torch.LongTensor] = None,
-#         head_mask: Optional[torch.FloatTensor] = None,
-#         decoder_head_mask: Optional[torch.FloatTensor] = None,
-#         cross_attn_head_mask: Optional[torch.Tensor] = None,
-#         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-#         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-#         use_cache: Optional[bool] = None,
-#         output_attentions: Optional[bool] = None,
-#         output_hidden_states: Optional[bool] = None,
-#         return_dict: Optional[bool] = None,
-#         speaker_embeddings: Optional[torch.FloatTensor] = None,
-#         labels: Optional[torch.FloatTensor] = None,
-#         stop_labels: Optional[torch.Tensor] = None,
-#     ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
-#         r"""
-#         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-#             Indices of input sequence tokens in the vocabulary. The `batch_size` should be 1 currently.
-
-#             Indices can be obtained using [`VITSTokenizer`]. See [`~PreTrainedTokenizer.encode`] and
-#             [`~PreTrainedTokenizer.__call__`] for details.
-
-#             [What are input IDs?](../glossary#input-ids)
-#         decoder_input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`):
-#             Float values of input mel spectrogram.
-
-#             VITS uses an all-zero spectrum as the starting token for `decoder_input_values` generation. If
-#             `past_key_values` is used, optionally only the last `decoder_input_values` have to be input (see
-#             `past_key_values`).
-#         speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
-#             Tensor containing the speaker embeddings.
-#         labels (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`, *optional*):
-#             Float values of target mel spectrogram. Timesteps set to `-100.0` are ignored (masked) for the loss
-#             computation. Spectrograms can be obtained using [`VITSProcessor`]. See [`VITSProcessor.__call__`]
-#             for details.
-
-#         Returns:
-
-#         Example:
-
-#         ```python
-#         >>> from transformers import VITSProcessor, VITSForTextToSpeech, VITSHifiGan, set_seed
-#         >>> import torch
-
-#         >>> processor = VITSProcessor.from_pretrained("microsoft/VITS_tts")
-#         >>> model = VITSForTextToSpeech.from_pretrained("microsoft/VITS_tts")
-#         >>> vocoder = VITSHifiGan.from_pretrained("microsoft/VITS_hifigan")
-
-#         >>> inputs = processor(text="Hello, my dog is cute", return_tensors="pt")
-#         >>> speaker_embeddings = torch.zeros((1, 512))  # or load xvectors from a file
-
-#         >>> set_seed(555)  # make deterministic
-
-#         >>> # generate speech
-#         >>> speech = model.generate_speech(inputs["input_ids"], speaker_embeddings, vocoder=vocoder)
-#         >>> speech.shape
-#         torch.Size([15872])
-#         ```
-#         """
-#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-#         if stop_labels is not None:
-#             warnings.warn(
-#                 "The argument `stop_labels` is deprecated and will be removed in version 4.30.0 of Transformers",
-#                 FutureWarning,
-#             )
-
-#         if labels is not None:
-#             if decoder_input_values is None:
-#                 decoder_input_values = shift_spectrograms_right(labels, self.config.reduction_factor)
-#             if self.config.use_guided_attention_loss:
-#                 output_attentions = True
-
-#         outputs = self.vits(
-#             input_values=input_ids,
-#             attention_mask=attention_mask,
-#             decoder_input_values=decoder_input_values,
-#             decoder_attention_mask=decoder_attention_mask,
-#             head_mask=head_mask,
-#             decoder_head_mask=decoder_head_mask,
-#             cross_attn_head_mask=cross_attn_head_mask,
-#             encoder_outputs=encoder_outputs,
-#             past_key_values=past_key_values,
-#             use_cache=use_cache,
-#             speaker_embeddings=speaker_embeddings,
-#             output_attentions=output_attentions,
-#             output_hidden_states=output_hidden_states,
-#             return_dict=True,
-#         )
-
-#         outputs_before_postnet, outputs_after_postnet, logits = self.speech_decoder_postnet(outputs[0])
-
-#         loss = None
-#         if labels is not None:
-#             criterion = VITSSpectrogramLoss(self.config)
-#             loss = criterion(
-#                 attention_mask,
-#                 outputs_before_postnet,
-#                 outputs_after_postnet,
-#                 logits,
-#                 labels,
-#                 outputs.cross_attentions,
-#             )
-
-#         if not return_dict:
-#             output = (outputs_after_postnet,) + outputs[1:]
-#             return ((loss,) + output) if loss is not None else output
-
-#         return Seq2SeqSpectrogramOutput(
-#             loss=loss,
-#             spectrogram=outputs_after_postnet,
-#             past_key_values=outputs.past_key_values,
-#             decoder_hidden_states=outputs.decoder_hidden_states,
-#             decoder_attentions=outputs.decoder_attentions,
-#             cross_attentions=outputs.cross_attentions,
-#             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-#             encoder_hidden_states=outputs.encoder_hidden_states,
-#             encoder_attentions=outputs.encoder_attentions,
-#         )
-
-#     @torch.no_grad()
-#     def generate_speech(
-#         self,
-#         input_ids: torch.LongTensor,
-#         speaker_embeddings: Optional[torch.FloatTensor] = None,
-#         threshold: float = 0.5,
-#         minlenratio: float = 0.0,
-#         maxlenratio: float = 20.0,
-#         vocoder: Optional[nn.Module] = None,
-#         output_cross_attentions: bool = False,
-#     ) -> Union[torch.FloatTensor, Tuple[torch.FloatTensor, torch.FloatTensor]]:
-#         r"""
-#         Converts a sequence of input tokens into a sequence of mel spectrograms, which are subsequently turned into a
-#         speech waveform using a vocoder.
-
-#         Args:
-#             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-#                 Indices of input sequence tokens in the vocabulary. The `batch_size` should be 1 currently.
-
-#                 Indices can be obtained using [`SpeechT5Tokenizer`]. See [`~PreTrainedTokenizer.encode`] and
-#                 [`~PreTrainedTokenizer.__call__`] for details.
-
-#                 [What are input IDs?](../glossary#input-ids)
-#             speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
-#                 Tensor containing the speaker embeddings.
-#             threshold (`float`, *optional*, defaults to 0.5):
-#                 The generated sequence ends when the predicted stop token probability exceeds this value.
-#             minlenratio (`float`, *optional*, defaults to 0.0):
-#                 Used to calculate the minimum required length for the output sequence.
-#             maxlenratio (`float`, *optional*, defaults to 20.0):
-#                 Used to calculate the maximum allowed length for the output sequence.
-#             vocoder (`nn.Module`, *optional*, defaults to `None`):
-#                 The vocoder that converts the mel spectrogram into a speech waveform. If `None`, the output is the mel
-#                 spectrogram.
-#             output_cross_attentions (`bool`, *optional*, defaults to `False`):
-#                 Whether or not to return the attentions tensors of the decoder's cross-attention layers.
-
-#         Returns:
-#             `tuple(torch.FloatTensor)` comprising various elements depending on the inputs:
-#             - **spectrogram** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
-#               `(output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrogram.
-#             - **waveform** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
-#               `(num_frames,)` -- The predicted speech waveform.
-#             - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`) `torch.FloatTensor`
-#               of shape `(config.decoder_layers, config.decoder_attention_heads, output_sequence_length,
-#               input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
-#         """
-#         return _generate_speech(
-#             self,
-#             input_ids,
-#             speaker_embeddings,
-#             threshold,
-#             minlenratio,
-#             maxlenratio,
-#             vocoder,
-#             output_cross_attentions,
-#         )
-

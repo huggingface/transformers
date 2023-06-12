@@ -19,11 +19,11 @@ import os
 import torch
 
 from transformers import (
-    VITSConfig,
-    # VITSFeatureExtractor,
-    VITSModel,
-    # VITSProcessor,
-    # VITSTokenizer,
+    VitsConfig,
+    # VitsFeatureExtractor,
+    VitsModel,
+    # VitsProcessor,
+    # VitsTokenizer,
     logging,
 )
 from transformers.tokenization_utils import AddedToken
@@ -284,9 +284,9 @@ def convert_checkpoint(
     Copy/paste/tweak model's weights to transformers design.
     """
     if config_path is not None:
-        config = VITSConfig.from_pretrained(config_path)
+        config = VitsConfig.from_pretrained(config_path)
     else:
-        config = VITSConfig()
+        config = VitsConfig()
 
     # if task == "s2t":
     #     config.max_length = config.max_text_positions
@@ -303,7 +303,7 @@ def convert_checkpoint(
     # else:
     #     raise ValueError(f"Unknown task name: {task}")
 
-    model = VITSModel(config)
+    model = VitsModel(config)
 
     # if vocab_path:
     #     tokenizer = SpeechT5Tokenizer(vocab_path, model_max_length=config.max_text_positions)
@@ -314,8 +314,8 @@ def convert_checkpoint(
     #     tokenizer.add_special_tokens({"mask_token": mask_token})
     #     tokenizer.add_tokens(["<ctc_blank>"])
 
-    # feature_extractor = VITSFeatureExtractor()
-    # processor = VITSProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+    # feature_extractor = VitsFeatureExtractor()
+    # processor = VitsProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
     # processor.save_pretrained(pytorch_dump_folder_path)
 
     orig_checkpoint = torch.load(os.path.join(checkpoint_path, "G_100000.pth"), map_location=torch.device("cpu"))

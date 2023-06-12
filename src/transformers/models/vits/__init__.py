@@ -25,10 +25,10 @@ from ...utils import (
 _import_structure = {
     "configuration_vits": [
         "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "VITSConfig",
+        "VitsConfig",
     ],
-    "processing_vits": ["VITSProcessor"],
-    "tokenization_vits": ["VITSTokenizer"],
+    "processing_vits": ["VitsProcessor"],
+    "tokenization_vits": ["VitsTokenizer"],
 }
 
 try:
@@ -37,7 +37,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_vits"] = ["VITSFeatureExtractor"]
+    _import_structure["feature_extraction_vits"] = ["VitsFeatureExtractor"]
 
 try:
     if not is_torch_available():
@@ -47,17 +47,17 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_vits"] = [
         "VITS_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "VITSModel",
-        "VITSPreTrainedModel",
+        "VitsModel",
+        "VitsPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
     from .configuration_vits import (
         VITS_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        VITSConfig,
+        VitsConfig,
     )
-    from .processing_vits import VITSProcessor
-    from .tokenization_vits import VITSTokenizer
+    from .processing_vits import VitsProcessor
+    from .tokenization_vits import VitsTokenizer
 
     try:
         if not is_speech_available():
@@ -65,7 +65,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_vits import VITSFeatureExtractor
+        from .feature_extraction_vits import VitsFeatureExtractor
 
     try:
         if not is_torch_available():
@@ -75,8 +75,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_vits import (
             VITS_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VITSModel,
-            VITSPreTrainedModel,
+            VitsModel,
+            VitsPreTrainedModel,
         )
 
 else:

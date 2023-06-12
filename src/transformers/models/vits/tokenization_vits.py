@@ -44,7 +44,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-class VITSTokenizer(PreTrainedTokenizer):
+class VitsTokenizer(PreTrainedTokenizer):
     """
     Construct a VITS tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
 

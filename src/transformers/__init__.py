@@ -588,9 +588,9 @@ _import_structure = {
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
     "models.vits": [
         "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "VITSConfig",
-        "VITSProcessor",
-        "VITSTokenizer",
+        "VitsConfig",
+        "VitsProcessor",
+        "VitsTokenizer",
     ],
     "models.vivit": [
         "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -897,6 +897,7 @@ else:
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
     _import_structure["models.speecht5"].append("SpeechT5FeatureExtractor")
     _import_structure["models.tvlt"].append("TvltFeatureExtractor")
+    _import_structure["models.vits"].append("VitsFeatureExtractor")
 
 # Tensorflow-text-specific objects
 try:
@@ -2920,6 +2921,13 @@ else:
             "ViTMSNPreTrainedModel",
         ]
     )
+    _import_structure["models.vits"].extend(
+        [
+            "VITS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VitsModel",
+            "VitsPreTrainedModel",
+        ]
+    )
     _import_structure["models.wav2vec2"].extend(
         [
             "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4611,6 +4619,12 @@ if TYPE_CHECKING:
     from .models.vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
+    from .models.vits import (
+        VITS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        VitsConfig,
+        VitsProcessor,
+        VitsTokenizer,
+    )
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2Config,
@@ -4891,6 +4905,7 @@ if TYPE_CHECKING:
         from .models.speech_to_text import Speech2TextFeatureExtractor
         from .models.speecht5 import SpeechT5FeatureExtractor
         from .models.tvlt import TvltFeatureExtractor
+        from .models.vits import VitsFeatureExtractor
 
     try:
         if not is_tensorflow_text_available():
@@ -6541,6 +6556,11 @@ if TYPE_CHECKING:
             ViTMSNForImageClassification,
             ViTMSNModel,
             ViTMSNPreTrainedModel,
+        )
+        from .models.vits import (
+            VITS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VitsModel,
+            VitsPreTrainedModel,
         )
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,

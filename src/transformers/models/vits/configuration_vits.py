@@ -30,9 +30,9 @@ VITS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class VITSConfig(PretrainedConfig):
+class VitsConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VITSModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`VitsModel`]. It is used to instantiate a
     VITS model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the VITS
     [TODO](https://huggingface.co/TODO) architecture.
@@ -190,13 +190,13 @@ ffn_kernel_size
     Example:
 
     ```python
-    >>> from transformers import VITSModel, VITSConfig
+    >>> from transformers import VitsModel, VitsConfig
 
     >>> # Initializing a "TODO" style configuration
-    >>> configuration = VITSConfig()
+    >>> configuration = VitsConfig()
 
     >>> # Initializing a model (with random weights) from the "TODO" style configuration
-    >>> model = VITSModel(configuration)
+    >>> model = VitsModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

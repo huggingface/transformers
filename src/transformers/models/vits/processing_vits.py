@@ -17,21 +17,21 @@
 from ...processing_utils import ProcessorMixin
 
 
-class VITSProcessor(ProcessorMixin):
+class VitsProcessor(ProcessorMixin):
     r"""
     Constructs a VITS processor which wraps a feature extractor and a tokenizer into a single processor.
 
-    [`VITSProcessor`] offers all the functionalities of [`VITSFeatureExtractor`] and [`VITSTokenizer`]. See
-    the docstring of [`~VITSProcessor.__call__`] and [`~VITSProcessor.decode`] for more information.
+    [`VitsProcessor`] offers all the functionalities of [`VitsFeatureExtractor`] and [`VitsTokenizer`]. See
+    the docstring of [`~VitsProcessor.__call__`] and [`~VitsProcessor.decode`] for more information.
 
     Args:
-        feature_extractor (`VITSFeatureExtractor`):
-            An instance of [`VITSFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`VITSTokenizer`):
-            An instance of [`VITSTokenizer`]. The tokenizer is a required input.
+        feature_extractor (`VitsFeatureExtractor`):
+            An instance of [`VitsFeatureExtractor`]. The feature extractor is a required input.
+        tokenizer (`VitsTokenizer`):
+            An instance of [`VitsTokenizer`]. The tokenizer is a required input.
     """
-    feature_extractor_class = "VITSFeatureExtractor"
-    tokenizer_class = "VITSTokenizer"
+    feature_extractor_class = "VitsFeatureExtractor"
+    tokenizer_class = "VitsTokenizer"
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
@@ -41,11 +41,11 @@ class VITSProcessor(ProcessorMixin):
         Processes audio and text input, as well as audio and text targets.
 
         You can process audio by using the argument `audio`, or process audio targets by using the argument
-        `audio_target`. This forwards the arguments to VITSFeatureExtractor's
-        [`~VITSFeatureExtractor.__call__`].
+        `audio_target`. This forwards the arguments to VitsFeatureExtractor's
+        [`~VitsFeatureExtractor.__call__`].
 
         You can process text by using the argument `text`, or process text labels by using the argument `text_target`.
-        This forwards the arguments to VITSTokenizer's [`~VITSTokenizer.__call__`].
+        This forwards the arguments to VitsTokenizer's [`~VitsTokenizer.__call__`].
 
         Valid input combinations are:
 
@@ -111,8 +111,8 @@ class VITSProcessor(ProcessorMixin):
         """
         Collates the audio and text inputs, as well as their targets, into a padded batch.
 
-        Audio inputs are padded by VITSFeatureExtractor's [`~VITSFeatureExtractor.pad`]. Text inputs are padded
-        by VITSTokenizer's [`~VITSTokenizer.pad`].
+        Audio inputs are padded by VitsFeatureExtractor's [`~VitsFeatureExtractor.pad`]. Text inputs are padded
+        by VitsTokenizer's [`~VitsTokenizer.pad`].
 
         Valid input combinations are:
 
@@ -169,14 +169,14 @@ class VITSProcessor(ProcessorMixin):
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to VITSTokenizer's [`~VITSTokenizer.batch_decode`]. Please refer
+        This method forwards all its arguments to VitsTokenizer's [`~VitsTokenizer.batch_decode`]. Please refer
         to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to VITSTokenizer's [`~VITSTokenizer.decode`]. Please refer to
+        This method forwards all its arguments to VitsTokenizer's [`~VitsTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)

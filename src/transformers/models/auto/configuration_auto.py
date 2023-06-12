@@ -217,7 +217,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("vit_hybrid", "ViTHybridConfig"),
         ("vit_mae", "ViTMAEConfig"),
         ("vit_msn", "ViTMSNConfig"),
-        ("vits", "VITSConfig"),
+        ("vits", "VitsConfig"),
         ("vivit", "VivitConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
