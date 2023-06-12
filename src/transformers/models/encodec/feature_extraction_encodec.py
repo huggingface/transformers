@@ -35,7 +35,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
 
     Instantiating a feature extractor with the defaults will yield a similar configuration to that of the
     [Matthijs/encodec_24khz](https://huggingface.co/Matthijs/encodec_24khz) architecture.
-    
+
     Args:
         feature_size (`int`, *optional*, defaults to 1):
             The feature dimension of the extracted features. Use 1 for mono, 2 for stereo.
@@ -44,10 +44,10 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding values.
         chunk_length (`float`, *optional*):
-            The length of each chunk of audio that will be processed sequentially . If `chunk_length = None` then 
+            The length of each chunk of audio that will be processed sequentially . If `chunk_length = None` then
             chunking is disabled.
         chunk_stride(`float`, *optional*):
-            The length of the right stride use to split the audio in smaller chunkgs. If `chunk_stride = None` then 
+            The length of the right stride use to split the audio in smaller chunkgs. If `chunk_stride = None` then
             chunking is disabled.
         return_attention_mask (`bool`, *optional*, defaults to `True`):
             Whether or not [`~EncodecFeatureExtractor.__call__`] should return `attention_mask`.

@@ -150,6 +150,7 @@ class EncodecConfig(PretrainedConfig):
             **kwargs,
         )
 
+    # This is a property because you might want to change the chunk_in_sec on the fly
     @property
     def chunk_length(self) -> Optional[int]:
         if self.chunk_in_sec is None:
@@ -157,6 +158,7 @@ class EncodecConfig(PretrainedConfig):
         else:
             return int(self.chunk_in_sec * self.sampling_rate)
 
+    # This is a property because you might want to change the chunk_in_sec on the fly
     @property
     def chunk_stride(self) -> Optional[int]:
         if self.chunk_in_sec is None:
