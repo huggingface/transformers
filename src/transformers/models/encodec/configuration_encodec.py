@@ -107,11 +107,11 @@ class EncodecConfig(PretrainedConfig):
         sampling_rate=24_000,
         audio_channels=1,
         normalize=False,
-        chunk_length_s=None,  # TODO: chunk length in seconds
-        hidden_size=128,  # TODO: hidden_size?
+        chunk_length_s=None,
+        hidden_size=128,
         num_filters=32,
         num_residual_layers=1,
-        upsampling_ratios=[8, 5, 4, 2],  # TODO: better names
+        upsampling_ratios=[8, 5, 4, 2],
         norm_type="weight_norm",
         kernel_size=7,
         last_kernel_size=7,
@@ -122,7 +122,7 @@ class EncodecConfig(PretrainedConfig):
         compress=2,
         num_lstm_layers=2,
         trim_right_ratio=1.0,
-        codebook_size=1024,  # TODO: rename to codebook_size
+        codebook_size=1024,
         codebook_dim=None,
         **kwargs,
     ):

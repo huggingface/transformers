@@ -349,7 +349,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                 audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
 
                 # make sure audio encoded codes are correct
-                # self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
+                self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
 
                 audio_codes, scales = encoder_outputs.to_tuple()
                 input_values_dec = model.decode(audio_codes, scales, inputs["padding_mask"])[0]
@@ -415,7 +415,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                 audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
 
                 # make sure audio encoded codes are correct
-                # self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
+                self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
                 audio_codes, scales = encoder_outputs
                 input_values_dec = model.decode(audio_codes, scales, inputs["padding_mask"])[0]
                 input_values_enc_dec = model(
@@ -479,7 +479,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                 [a[0].sum().cpu().item() for a in encoder_outputs[0]]
 
                 # make sure audio encoded codes are correct
-                # self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
+                self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
 
                 audio_codes, scales = encoder_outputs
                 input_values_dec = model.decode(audio_codes, scales, padding_mask)[0]
