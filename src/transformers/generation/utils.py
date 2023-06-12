@@ -4235,7 +4235,10 @@ class GenerationMixin:
         assistant_kv_indexing = (
             1
             if "bloom" in assistant_model.__class__.__name__.lower()
-            or "bloom" in assistant_model.config.architectures.get(0, "").lower()
+            or (
+                assistant_model.config.architectures is not None
+                and "bloom" in assistant_model.config.architectures[0].lower()
+            )
             else 0
         )
 
@@ -4518,7 +4521,9 @@ def _crop_past_key_values(model, past_key_values, maximum_length):
             )
         past_key_values = tuple(new_past)
     # bloom is special
-    elif "bloom" in model.__class__.__name__.lower() or "bloom" in model.config.architectures.get(0, "").lower():
+    elif "bloom" in model.__class__.__name__.lower() or (
+        model.config.architectures is not None and "bloom" in model.config.architectures[0].lower()
+    ):
         for idx in range(len(past_key_values)):
             new_past.append(
                 (
@@ -4528,9 +4533,8 @@ def _crop_past_key_values(model, past_key_values, maximum_length):
             )
         past_key_values = tuple(new_past)
     # gptbigcode is too
-    elif (
-        "gptbigcode" in model.__class__.__name__.lower()
-        or "gptbigcode" in model.config.architectures.get(0, "").lower()
+    elif "gptbigcode" in model.__class__.__name__.lower() or (
+        model.config.architectures is not None and "gptbigcode" in model.config.architectures[0].lower()
     ):
         if model.config.multi_query:
             for idx in range(len(past_key_values)):
