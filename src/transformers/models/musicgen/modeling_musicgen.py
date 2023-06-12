@@ -23,6 +23,7 @@ import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
+from ...generation.logits_process import MusicgenDelayPatternLogitsProcessor
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1823,6 +1824,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
 
         self.model = MusicgenModel(config)
         lm_config = config.lm_config
+        self.num_codebooks = config.lm_config.num_codebooks
         self.lm_heads = nn.ModuleList(
             [nn.Linear(lm_config.d_model, lm_config.vocab_size, bias=False) for _ in range(lm_config.num_codebooks)]
         )
@@ -1941,3 +1943,126 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         decoder_input_ids, model_kwargs = super()._prepare_decoder_input_ids_for_generation(*args, **kwargs)
         decoder_input_ids = decoder_input_ids.repeat(1, self.num_codebooks).unsqueeze(-1)
         return decoder_input_ids, model_kwargs
+
+    def generate(
+        self,
+        inputs: Optional[torch.Tensor] = None,
+        generation_config=None,
+        logits_processor=None,
+        stopping_criteria=None,
+        prefix_allowed_tokens_fn=None,
+        synced_gpus=False,
+        **kwargs,
+    ):
+        """
+
+        Generates sequences of token ids for models with a language modeling head.
+
+        <Tip warning={true}>
+
+        Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
+        model's default generation configuration. You can override any `generation_config` by passing the corresponding
+        parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
+
+        For an overview of generation strategies and code examples, check out the [following
+        guide](./generation_strategies).
+
+        </Tip>
+
+        Parameters:
+            inputs (`torch.Tensor` of varying shape depending on the modality, *optional*):
+                The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
+                method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
+                should be in the format `input_ids`. For encoder-decoder models *inputs* can represent any of
+                `input_ids`, `input_values`, `input_features`, or `pixel_values`.
+            generation_config (`~generation.GenerationConfig`, *optional*):
+                The generation configuration to be used as base parametrization for the generation call. `**kwargs`
+                passed to generate matching the attributes of `generation_config` will override them. If
+                `generation_config` is not provided, the default will be used, which had the following loading
+                priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
+                configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
+                default values, whose documentation should be checked to parameterize generation.
+            logits_processor (`LogitsProcessorList`, *optional*):
+                Custom logits processors that complement the default logits processors built from arguments and
+                generation config. If a logit processor is passed that is already created with the arguments or a
+                generation config an error is thrown. This feature is intended for advanced users.
+            stopping_criteria (`StoppingCriteriaList`, *optional*):
+                Custom stopping criteria that complement the default stopping criteria built from arguments and a
+                generation config. If a stopping criteria is passed that is already created with the arguments or a
+                generation config an error is thrown. This feature is intended for advanced users.
+            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
+                If provided, this function constraints the beam search to allowed tokens only at each step. If not
+                provided, no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
+                `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
+                on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This argument is useful
+                for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
+                Retrieval](https://arxiv.org/abs/2010.00904).
+            synced_gpus (`bool`, *optional*, defaults to `False`):
+                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            kwargs:
+                Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
+                forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
+                specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
+
+        Return:
+            [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
+            or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`.
+
+                If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
+                [`~utils.ModelOutput`] types are:
+
+                    - [`~generation.GreedySearchDecoderOnlyOutput`],
+                    - [`~generation.SampleDecoderOnlyOutput`],
+                    - [`~generation.BeamSearchDecoderOnlyOutput`],
+                    - [`~generation.BeamSampleDecoderOnlyOutput`]
+
+                If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
+                [`~utils.ModelOutput`] types are:
+
+                    - [`~generation.GreedySearchEncoderDecoderOutput`],
+                    - [`~generation.SampleEncoderDecoderOutput`],
+                    - [`~generation.BeamSearchEncoderDecoderOutput`],
+                    - [`~generation.BeamSampleEncoderDecoderOutput`]
+        """
+        if generation_config is None:
+            generation_config = self.generation_config
+
+        # TODO(SG): update this when we're using audio prompt as input
+        specified_max_length = kwargs.pop("max_new_tokens", None) or kwargs.pop("max_length", None)
+        default_max_length = generation_config.max_new_tokens or generation_config.max_length
+        max_length = specified_max_length or default_max_length
+        kwargs["max_new_tokens"] = max_length
+
+        delay_pattern_processor = MusicgenDelayPatternLogitsProcessor(
+            pad_token_id=self.generation_config.pad_token_id, max_length=max_length
+        )
+        if logits_processor is not None:
+            logits_processor.append(delay_pattern_processor)
+        else:
+            logits_processor = [delay_pattern_processor]
+
+        outputs = super().generate(
+            inputs,
+            generation_config,
+            logits_processor,
+            stopping_criteria,
+            prefix_allowed_tokens_fn,
+            synced_gpus,
+            **kwargs,
+        )
+
+        # TODO(SG): revert the pattern delay mask here:
+        # [P, a, b, c, d, P, P, P]
+        # [P, P, e, f, g, h, P, P]
+        # [P, P, P, i, j, k, l, P]
+        # [P, P, P, P, m, n, o, q]
+        # where P is the special padding token id
+        # ->
+        # [a, b, c, d]
+        # [e, f, g, h]
+        # [i, j, k, l]
+        # [m, n, o, q]
+
+        # TODO(SG): put the outputs through encodec to get the audio output, defining a new output class (audio + gen scores)
+
+        return outputs
