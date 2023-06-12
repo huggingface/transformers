@@ -94,12 +94,7 @@ def convert_vitmatte_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     model.eval()
 
     # load state dict
-    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    print("Missing keys:", missing_keys)
-    print("Unexpected keys:")
-    for key in unexpected_keys:
-        if "decoder" not in key:
-            print(key)
+    model.load_state_dict(state_dict)
 
     # verify on dummy inputs
     # TODO use processor
