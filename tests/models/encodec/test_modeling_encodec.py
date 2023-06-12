@@ -62,10 +62,7 @@ def prepare_inputs_dict(
 
     decoder_dict = {"decoder_input_ids": decoder_input_ids} if decoder_input_ids is not None else {}
 
-    return {
-        **encoder_dict,
-        **decoder_dict,
-    }
+    return {**encoder_dict, **decoder_dict}
 
 
 @require_torch

@@ -614,7 +614,7 @@ class EncodecModel(EncodecPreTrainedModel):
         Returns:
             A list of frames containing the discrete encoded codes for the input audio waveform, along with rescaling
             factors for each chunk when `normalize` is True. Each frames is a tuple `(codebook, scale)`, with
-            `codebook` of shape `[B, K, T]`, with `K` the number of codebooks, `T` frames.
+            `codebook` of shape `[batch_size, num_codebooks, frames]`.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
