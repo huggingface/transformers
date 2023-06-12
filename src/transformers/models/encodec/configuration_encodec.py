@@ -40,49 +40,49 @@ class EncodecConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        target_bandwidths (`List[float]`, *optional*):
+        target_bandwidths (`List[float]`, *optional*, defaults to `[1.5, 3.0, 6.0, 12.0, 24.0]`):
             The range of diffent bandwiths the model can encode audio with.
         sampling_rate (`int`, *optional*, defaults to 24000):
             The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
         audio_channels (`int`, *optional*, defaults to 1):
             Number of channels in the audio data. Either 1 for mono or 2 for stereo.
-        normalize (`bool`, *optional*, defaults to `"False"`):
+        normalize (`bool`, *optional*, defaults to `False`):
             Whether the audio shall be normalized when passed.
         chunk_length_s (`float`, *optional*):
             If defined the audio is pre-processed into chunks of lengths `chunk_length_s` and then encoded.
-        dimension (`int`, defaults to 128):
+        hidden_size (`int`, *optional*, defaults to 128):
             Intermediate representation dimension.
-        num_filters (`int`):
-            Base width for the model.
-        num_residual_layers (`int`):
+        num_filters (`int`, *optional*, defaults to 32):
+            Base width for the model. ??? Width?? 
+        num_residual_layers (`int`,  *optional*, defaults to 1):
             Number of residual layers.
-        upsampling_ratios (`Sequence[int]`):
+        upsampling_ratios (`Sequence[int]` , *optional*, defaults to `[8, 5, 4, 2]`):
             Kernel size and stride ratios. The encoder uses downsampling ratios instead of upsampling ratios, hence it
             will use the ratios in the reverse order to the ones specified here that must match the decoder order.
         norm_type (`str`, *optional*, defaults to `"weight_norm"`):
             Normalization method. Should be in `["weight_norm", "time_group_norm"]`
-        kernel_size (`int`):
+        kernel_size (`int`, *optional*, defaults to 7):
             Kernel size for the initial convolution.
-        last_kernel_size (int):
+        last_kernel_size (`int`, *optional*, defaults to) 7:
             Kernel size for the last convolution layer.
-        residual_kernel_size (`int`):
+        residual_kernel_size (`int`, *optional*, defaults to 3):
             Kernel size for the residual layers.
-        dilation_growth_rate (`int`):
+        dilation_growth_rate (`int`, *optional*, defaults to 2):
             How much to increase the dilation with each layer.
-        use_causal_conv (`bool`, *optional*, defaults to True):
+        use_causal_conv (`bool`, *optional*, defaults to `True`):
             Whether to use fully causal convolution.
-        pad_mode (`str`, defaults to `"reflect"`):
+        pad_mode (`str`, *optional*, defaults to `"reflect"`):
             Padding mode for the convolutions.
-        compress (`int`, defaults to 2):
+        compress (`int`, *optional*, defaults to 2):
             Reduced dimensionality in residual branches (from Demucs v3).
-        num_lstm_layers (`int`, *optional*, defaults to ):
+        num_lstm_layers (`int`, *optional*, defaults to 2):
             Number of LSTM layers at the end of the encoder.
-        trim_right_ratio (`float`, *optional*, defaults to ):
+        trim_right_ratio (`float`, *optional*, defaults to 1.0):
             Ratio for trimming at the right of the transposed convolution under the `use_causal_conv = True` setup. If
             equal to 1.0, it means that all the trimming is done at the right.
-        bins (int):
+        codebook_size (`int`, *optional*, defaults to 1024):
             Codebook size.
-        codebook_dim (int):
+        codebook_dim (`int`, *optional*):
             Codebook dimension. If not defined, uses the specified dimension in dim.
 
     Example:
