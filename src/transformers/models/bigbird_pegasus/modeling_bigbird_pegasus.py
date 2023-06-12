@@ -2354,6 +2354,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
 )
 class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: BigBirdPegasusConfig):
         super().__init__(config)
@@ -2490,6 +2491,7 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
         "encoder.embed_tokens.weight",
         "decoder.embed_tokens.weight",
     ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: BigBirdPegasusConfig):
         super().__init__(config)
@@ -2663,6 +2665,7 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
 )
 class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: BigBirdPegasusConfig, **kwargs):
         super().__init__(config, **kwargs)
@@ -2792,6 +2795,7 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
 )
 class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -2924,6 +2928,7 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
 
 class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         config = copy.deepcopy(config)

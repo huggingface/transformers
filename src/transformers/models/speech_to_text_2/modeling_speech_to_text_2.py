@@ -757,6 +757,7 @@ class Speech2Text2DecoderWrapper(Speech2Text2PreTrainedModel):
 )
 class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         config = copy.deepcopy(config)

@@ -757,6 +757,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel):
     _keys_to_ignore_on_save = [
         r"model.embed_positions.weights",
     ]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)

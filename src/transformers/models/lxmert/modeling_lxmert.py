@@ -1019,6 +1019,7 @@ class LxmertModel(LxmertPreTrainedModel):
 )
 class LxmertForPreTraining(LxmertPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.weight"]
+    _tied_weights_keys = ["cls.predictions.decoder.weight"]
 
     def __init__(self, config):
         super().__init__(config)
