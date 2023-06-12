@@ -172,7 +172,7 @@ class AudiocraftDecoderConfig(PretrainedConfig):
         classifier_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for classifier.
         max_position_embeddings (`int`, *optional*, defaults to 1024):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            The maximum sequence length that this model might ever be used with. Typically, set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -182,7 +182,7 @@ class AudiocraftDecoderConfig(PretrainedConfig):
         scale_embedding (`bool`, *optional*, defaults to `False`):
             Scale embeddings by diving by sqrt(d_model).
         use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models)
+            Whether the model should return the last key/values attentions (not used by all models)
         forced_eos_token_id (`int`, *optional*, defaults to 2):
             The id of the token to force as the last generated token when `max_length` is reached. Usually set to
             `eos_token_id`.
@@ -225,10 +225,9 @@ class AudiocraftDecoderConfig(PretrainedConfig):
         classifier_dropout=0.0,
         scale_embedding=False,
         num_codebooks=8,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        forced_eos_token_id=2,
+        pad_token_id=2048,
+        bos_token_id=2048,
+        eos_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -251,7 +250,6 @@ class AudiocraftDecoderConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
 

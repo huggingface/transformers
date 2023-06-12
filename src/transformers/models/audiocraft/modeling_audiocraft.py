@@ -979,17 +979,15 @@ class T5EncoderModel(T5PreTrainedModel):
         return encoder_outputs
 
 
-# Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding
 class AudiocraftSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
+    def __init__(self, num_positions: int, embedding_dim: int):
         super().__init__()
-        self.offset = 2
         self.embedding_dim = embedding_dim
-        self.padding_idx = padding_idx
-        self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
+        self.make_weights(num_positions, embedding_dim)
 
+    # Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding.make_weights
     def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
         emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
         if hasattr(self, "weights"):
@@ -1001,6 +999,7 @@ class AudiocraftSinusoidalPositionalEmbedding(nn.Module):
         self.weights.detach_()
 
     @staticmethod
+    # Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding.get_embedding
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
         """
         Build sinusoidal embeddings. This matches the implementation in tensor2tensor, but differs slightly from the
@@ -1010,7 +1009,7 @@ class AudiocraftSinusoidalPositionalEmbedding(nn.Module):
         emb = math.log(10000) / (half_dim - 1)
         emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
         emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
-        emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
+        emb = torch.cat([torch.cos(emb), torch.sin(emb)], dim=1).view(num_embeddings, -1)
         if embedding_dim % 2 == 1:
             # zero pad
             emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
@@ -1020,35 +1019,22 @@ class AudiocraftSinusoidalPositionalEmbedding(nn.Module):
 
     @torch.no_grad()
     def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
-        bsz, seq_len = input_ids.size()
+        bsz, codebooks, seq_len = input_ids.size()
         # Create the position ids from the input token ids. Any padded tokens remain padded.
-        position_ids = self.create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length).to(
+        position_ids = self.create_position_ids_from_input_ids(input_ids, past_key_values_length).to(
             input_ids.device
         )
-
         # expand embeddings if needed
-        max_pos = self.padding_idx + 1 + seq_len
-        if max_pos > self.weights.size(0):
-            self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
-
-        return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
+        if seq_len > self.weights.size(0):
+            self.make_weights(seq_len + self.offset, self.embedding_dim)
+        return self.weights.index_select(0, position_ids.view(-1)).detach()
 
     def create_position_ids_from_input_ids(
-        self, input_ids: torch.Tensor, padding_idx: int, past_key_values_length: Optional[int] = 0
+        self, input_ids: torch.Tensor, past_key_values_length: Optional[int] = 0
     ):
-        """
-        Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
-        symbols are ignored. This is modified from fairseq's `utils.make_positions`.
-
-        Args:
-            x: torch.Tensor x:
-        Returns: torch.Tensor
-        """
-        # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
-        mask = input_ids.ne(padding_idx).int()
-        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
-        return incremental_indices.long() + padding_idx
-
+        seq_len = input_ids.shape[-1]
+        position_ids = torch.arange(seq_len)
+        return position_ids + past_key_values_length
 
 class AudiocraftAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -1461,7 +1447,6 @@ class AudiocraftDecoder(AudiocraftPreTrainedModel):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.layerdrop
-        self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
         self.d_model = config.d_model
         self.num_codebooks = config.num_codebooks
@@ -1475,7 +1460,6 @@ class AudiocraftDecoder(AudiocraftPreTrainedModel):
         self.embed_positions = AudiocraftSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
-            padding_idx=self.padding_idx,
         )
 
         self.layers = nn.ModuleList([AudiocraftDecoderLayer(config) for _ in range(config.num_hidden_layers)])
@@ -1634,10 +1618,7 @@ class AudiocraftDecoder(AudiocraftPreTrainedModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        # positions = self.embed_positions(input, past_key_values_length)
-
-        # TODO(SG): fix embed positions
-        positions = torch.concat([torch.ones((2, 1, 512)), torch.zeros((2, 1, 512))], dim=-1)
+        positions = self.embed_positions(input, past_key_values_length)
 
         hidden_states = inputs_embeds + positions.to(inputs_embeds.device)
 
