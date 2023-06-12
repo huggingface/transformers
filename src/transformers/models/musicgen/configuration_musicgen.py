@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Audiocraft model configuration"""
+""" Musicgen model configuration"""
 import copy
 
 from ...configuration_utils import PretrainedConfig
@@ -22,8 +22,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 AUDIOCRAFT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/audiocraft-600m": "https://huggingface.co/facebook/audiocraft-600m/resolve/main/config.json",
-    # See all Audiocraft models at https://huggingface.co/models?filter=audiocraft
+    "facebook/musicgen-600m": "https://huggingface.co/facebook/musicgen-600m/resolve/main/config.json",
+    # See all Musicgen models at https://huggingface.co/models?filter=musicgen
 }
 
 
@@ -137,12 +137,12 @@ class T5Config(PretrainedConfig):
         )
 
 
-class AudiocraftDecoderConfig(PretrainedConfig):
+class MusicgenDecoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`AudiocraftDecoder`]. It is used to instantiate
-    an Audiocraft language model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Audiocraft
-    [facebook/audiocraft-600m](https://huggingface.co/facebook/audiocraft-600m) architecture.
+    This is the configuration class to store the configuration of an [`MusicgenDecoder`]. It is used to instantiate an
+    Musicgen language model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the Musicgen
+    [facebook/musicgen-600m](https://huggingface.co/facebook/musicgen-600m) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -150,8 +150,8 @@ class AudiocraftDecoderConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 2048):
-            Vocabulary size of the AudiocraftDecoder model. Defines the number of different tokens that can be
-            represented by the `inputs_ids` passed when calling [`AudiocraftDecoder`].
+            Vocabulary size of the MusicgenDecoder model. Defines the number of different tokens that can be
+            represented by the `inputs_ids` passed when calling [`MusicgenDecoder`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -192,18 +192,18 @@ class AudiocraftDecoderConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import AudiocraftDecoderConfig, AudiocraftDecoderModel
+    >>> from transformers import MusicgenDecoderConfig, MusicgenDecoderModel
 
-    >>> # Initializing a Audiocraft decoder facebook/audiocraft-600m style configuration
-    >>> configuration = AudiocraftConfig()
+    >>> # Initializing a Musicgen decoder facebook/musicgen-600m style configuration
+    >>> configuration = MusicgenConfig()
 
-    >>> # Initializing an Audiocraft language model (with random weights) from the facebook/audiocraft-600m style configuration
-    >>> model = AudiocraftDecoderModel(configuration)
+    >>> # Initializing an Musicgen language model (with random weights) from the facebook/musicgen-600m style configuration
+    >>> model = MusicgenDecoderModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "audiocraft_decoder"
+    model_type = "musicgen_decoder"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
@@ -254,12 +254,12 @@ class AudiocraftDecoderConfig(PretrainedConfig):
         )
 
 
-class AudiocraftConfig(PretrainedConfig):
+class MusicgenConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AudiocraftModel`]. It is used to instantiate an
-    Audiocraft model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Audiocraft
-    [facebook/audiocraft-600m](https://huggingface.co/facebook/audiocraft-600m) architecture.
+    This is the configuration class to store the configuration of a [`MusicgenModel`]. It is used to instantiate an
+    Musicgen model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Musicgen
+    [facebook/musicgen-600m](https://huggingface.co/facebook/musicgen-600m) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -268,7 +268,7 @@ class AudiocraftConfig(PretrainedConfig):
         t5_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`T5Config`].
         lm_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`AudiocraftDecoderConfig`].
+            Dictionary of configuration options used to initialize [`MusicgenDecoderConfig`].
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
@@ -279,31 +279,31 @@ class AudiocraftConfig(PretrainedConfig):
 
     ```python
     >>> from transformers import (
-    ...     AudiocraftConfig,
-    ...     AudiocraftDecoderConfig,
-    ...     AudiocraftForConditionalGeneration,
+    ...     MusicgenConfig,
+    ...     MusicgenDecoderConfig,
+    ...     MusicgenForConditionalGeneration,
     ...     T5Config,
     ... )
 
-    >>> # Initializing an Audiocraft with facebook/audiocraft-600m style configuration
-    >>> configuration = AudiocraftConfig()
+    >>> # Initializing an Musicgen with facebook/musicgen-600m style configuration
+    >>> configuration = MusicgenConfig()
 
-    >>> # Initializing a AudiocraftForConditionalGeneration (with random weights) from the facebook/audiocraft-600m style configuration
-    >>> model = AudiocraftForConditionalGeneration(configuration)
+    >>> # Initializing a MusicgenForConditionalGeneration (with random weights) from the facebook/musicgen-600m style configuration
+    >>> model = MusicgenForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a AudiocraftConfig from a T5Config and AudiocraftDecoderConfig
+    >>> # We can also initialize a MusicgenConfig from a T5Config and MusicgenDecoderConfig
 
     >>> # Initializing T5 and language model configurations
     >>> t5_config = T5Config()
-    >>> lm_config = AudiocraftDecoderConfig()
+    >>> lm_config = MusicgenDecoderConfig()
 
-    >>> config = AudiocraftConfig.from_t5_lm_config(t5_config, lm_config)
+    >>> config = MusicgenConfig.from_t5_lm_config(t5_config, lm_config)
     ```"""
 
-    model_type = "audiocraft"
+    model_type = "musicgen"
     is_composition = True
 
     def __init__(self, t5_config=None, lm_config=None, init_std=0.02, use_cache=True, **kwargs):
@@ -314,10 +314,10 @@ class AudiocraftConfig(PretrainedConfig):
 
         if lm_config is None:
             lm_config = {}
-            logger.info("lm_config is None. Initializing the AudiocraftDecoderConfig with default values.")
+            logger.info("lm_config is None. Initializing the MusicgenDecoderConfig with default values.")
 
         self.t5_config = T5Config(**t5_config)
-        self.lm_config = AudiocraftDecoderConfig(**lm_config)
+        self.lm_config = MusicgenDecoderConfig(**lm_config)
 
         self.init_std = init_std
         self.is_encoder_decoder = True
@@ -327,14 +327,14 @@ class AudiocraftConfig(PretrainedConfig):
     def from_t5_lm_config(
         cls,
         t5_config: T5Config,
-        lm_config: AudiocraftDecoderConfig,
+        lm_config: MusicgenDecoderConfig,
         **kwargs,
     ):
         r"""
-        Instantiate a [`AudiocraftConfig`] (or a derived class) from T5 and Audiocraft language model configurations.
+        Instantiate a [`MusicgenConfig`] (or a derived class) from T5 and Musicgen language model configurations.
 
         Returns:
-            [`AudiocraftConfig`]: An instance of a configuration object
+            [`MusicgenConfig`]: An instance of a configuration object
         """
 
         return cls(

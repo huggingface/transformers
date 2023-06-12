@@ -12,16 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Audiocraft checkpoints from the original repository."""
+"""Convert Musicgen checkpoints from the original repository."""
 import argparse
 from pathlib import Path
 from typing import Dict, OrderedDict
 
 import torch
-from audiocraft.models import MusicGen
+from musicgen.models import MusicGen
 
-from transformers.models.audiocraft.configuration_audiocraft import AudiocraftConfig, AudiocraftDecoderConfig, T5Config
-from transformers.models.audiocraft.modeling_audiocraft import AudiocraftForConditionalGeneration
+from transformers.models.musicgen.configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig, T5Config
+from transformers.models.musicgen.modeling_musicgen import MusicgenForConditionalGeneration
 from transformers.utils import logging
 
 
@@ -64,7 +64,7 @@ def rename_key(name):
 
 
 def rename_decoder_state_dict(state_dict: OrderedDict, d_model: int) -> Dict:
-    """Function that takes the fairseq Audiocraft state dict and renames it according to the HF
+    """Function that takes the fairseq Musicgen state dict and renames it according to the HF
     module names. It further partitions the state dict into three: the decoder state dict (state_dict), the state dict
     for the LM head, and the state dict for the encoder projection."""
     keys = list(state_dict.keys())
@@ -81,21 +81,21 @@ def rename_decoder_state_dict(state_dict: OrderedDict, d_model: int) -> Dict:
     return state_dict
 
 
-def config_from_checkpoint(checkpoint: str) -> AudiocraftConfig:
+def config_from_checkpoint(checkpoint: str) -> MusicgenConfig:
     if checkpoint == "small":
         d_model = 1024
         ffn_dim = d_model * 4
         num_layers = 24
         num_codebooks = 4
-    lm_config = AudiocraftDecoderConfig(
+    lm_config = MusicgenDecoderConfig(
         d_model=d_model, intermediate_size=ffn_dim, num_hidden_layers=num_layers, num_codebooks=num_codebooks
     )
     t5_config = T5Config.from_pretrained(CHECKPOINT_TO_T5[checkpoint])
-    config = AudiocraftConfig.from_t5_lm_config(t5_config=t5_config, lm_config=lm_config)
+    config = MusicgenConfig.from_t5_lm_config(t5_config=t5_config, lm_config=lm_config)
     return config
 
 
-def convert_audiocraft_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hub=False, device="cpu"):
+def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hub=False, device="cpu"):
     fairseq_model = MusicGen.get_pretrained(checkpoint, device=device)
     config = config_from_checkpoint(checkpoint)
 
@@ -109,7 +109,7 @@ def convert_audiocraft_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_
 
     lm_state_dict = rename_decoder_state_dict(lm_state_dict, d_model=config.lm_config.d_model)
 
-    model = AudiocraftForConditionalGeneration(config).eval()
+    model = MusicgenForConditionalGeneration(config).eval()
     # load the encoder model
     model.model.encoder.load_state_dict(t5_state_dict)
     # load all other weights (encoder proj + decoder + lm heads) - expect that we'll be missing all enc weights
@@ -156,11 +156,11 @@ if __name__ == "__main__":
         "--checkpoint",
         default="small",
         type=str,
-        help="Checkpoint size of the Audiocraft model you'd like to convert. Can be one of: small, medium, large.",
+        help="Checkpoint size of the Musicgen model you'd like to convert. Can be one of: small, medium, large.",
     )
     parser.add_argument(
         "--pytorch_dump_folder",
-        default="/Users/sanchitgandhi/convert-audiocraft",
+        default="/Users/sanchitgandhi/convert-musicgen",
         type=str,
         help="Path to the output PyTorch model directory.",
     )
@@ -172,4 +172,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_audiocraft_checkpoint(args.checkpoint, args.pytorch_dump_folder, args.push_to_hub)
+    convert_musicgen_checkpoint(args.checkpoint, args.pytorch_dump_folder, args.push_to_hub)

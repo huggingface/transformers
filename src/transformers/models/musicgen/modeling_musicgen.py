@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Audiocraft model."""
+""" PyTorch Musicgen model."""
 import copy
 import math
 import random
@@ -37,19 +37,19 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_audiocraft import AudiocraftConfig, AudiocraftDecoderConfig, T5Config
+from .configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig, T5Config
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "AudiocraftConfig"
+_CONFIG_FOR_DOC = "MusicgenConfig"
 
 AUDIOCRAFT_PRETRAINED_CONFIG_ARCHIVE_LIST = [
-    "facebook/audiocraft-600m",
-    # See all Audiocraft models at https://huggingface.co/models?filter=audiocraft
+    "facebook/musicgen-600m",
+    # See all Musicgen models at https://huggingface.co/models?filter=musicgen
 ]
 
-_CHECKPOINT_FOR_DOC = "facebook/audiocraft-600m"
+_CHECKPOINT_FOR_DOC = "facebook/musicgen-600m"
 
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
@@ -979,7 +979,7 @@ class T5EncoderModel(T5PreTrainedModel):
         return encoder_outputs
 
 
-class AudiocraftSinusoidalPositionalEmbedding(nn.Module):
+class MusicgenSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, num_positions: int, embedding_dim: int):
@@ -1033,7 +1033,7 @@ class AudiocraftSinusoidalPositionalEmbedding(nn.Module):
         return position_ids + past_key_values_length
 
 
-class AudiocraftAttention(nn.Module):
+class MusicgenAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -1189,12 +1189,12 @@ class AudiocraftAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class AudiocraftDecoderLayer(nn.Module):
-    def __init__(self, config: AudiocraftDecoderConfig):
+class MusicgenDecoderLayer(nn.Module):
+    def __init__(self, config: MusicgenDecoderConfig):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = AudiocraftAttention(
+        self.self_attn = MusicgenAttention(
             embed_dim=self.embed_dim,
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
@@ -1204,7 +1204,7 @@ class AudiocraftDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = AudiocraftAttention(
+        self.encoder_attn = MusicgenAttention(
             self.embed_dim,
             config.num_attention_heads,
             dropout=config.attention_dropout,
@@ -1305,16 +1305,16 @@ class AudiocraftDecoderLayer(nn.Module):
         return outputs
 
 
-class AudiocraftPreTrainedModel(PreTrainedModel):
+class MusicgenPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = AudiocraftConfig
+    config_class = MusicgenConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["AudiocraftBlock"]
+    _no_split_modules = ["MusicgenBlock"]
     _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
@@ -1329,7 +1329,7 @@ class AudiocraftPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, AudiocraftDecoder):
+        if isinstance(module, MusicgenDecoder):
             module.gradient_checkpointing = value
 
 
@@ -1344,7 +1344,7 @@ AUDIOCRAFT_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`AudiocraftConfig`]): Model configuration class with all the parameters of the model.
+        config ([`MusicgenConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -1435,12 +1435,12 @@ AUDIOCRAFT_INPUTS_DOCSTRING = r"""
 """
 
 
-class AudiocraftDecoder(AudiocraftPreTrainedModel):
+class MusicgenDecoder(MusicgenPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`AudiocraftDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MusicgenDecoderLayer`]
     """
 
-    def __init__(self, config: AudiocraftDecoderConfig):
+    def __init__(self, config: MusicgenDecoderConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.layerdrop
@@ -1454,12 +1454,12 @@ class AudiocraftDecoder(AudiocraftPreTrainedModel):
             [nn.Embedding(embed_dim, config.d_model) for _ in range(config.num_codebooks)]
         )
 
-        self.embed_positions = AudiocraftSinusoidalPositionalEmbedding(
+        self.embed_positions = MusicgenSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
         )
 
-        self.layers = nn.ModuleList([AudiocraftDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([MusicgenDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
@@ -1718,14 +1718,14 @@ class AudiocraftDecoder(AudiocraftPreTrainedModel):
         )
 
 
-class AudiocraftModel(AudiocraftPreTrainedModel):
+class MusicgenModel(MusicgenPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
-    def __init__(self, config: AudiocraftConfig):
+    def __init__(self, config: MusicgenConfig):
         super().__init__(config)
 
         self.encoder = T5EncoderModel(config.t5_config)
-        self.decoder = AudiocraftDecoder(config.lm_config)
+        self.decoder = MusicgenDecoder(config.lm_config)
 
         self.encoder_projection = nn.Linear(config.t5_config.d_model, config.lm_config.d_model)
 
@@ -1817,11 +1817,11 @@ class AudiocraftModel(AudiocraftPreTrainedModel):
         )
 
 
-class AudiocraftForConditionalGeneration(AudiocraftPreTrainedModel):
-    def __init__(self, config: AudiocraftConfig):
+class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
+    def __init__(self, config: MusicgenConfig):
         super().__init__(config)
 
-        self.model = AudiocraftModel(config)
+        self.model = MusicgenModel(config)
         lm_config = config.lm_config
         self.lm_heads = nn.ModuleList(
             [nn.Linear(lm_config.d_model, lm_config.vocab_size, bias=False) for _ in range(lm_config.num_codebooks)]
@@ -1887,7 +1887,7 @@ class AudiocraftForConditionalGeneration(AudiocraftPreTrainedModel):
 
         loss = None
         if labels is not None:
-            raise NotImplementedError("Training is not implemented for Audiocraft.")
+            raise NotImplementedError("Training is not implemented for Musicgen.")
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
