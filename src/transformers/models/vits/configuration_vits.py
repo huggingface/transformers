@@ -210,7 +210,7 @@ ffn_kernel_size
         hidden_size=192,
 
 # 'inter_channels': 192,
-# 'hidden_channels': 192,
+# 'hidden_channels': 192,       hidden_size
 # 'filter_channels': 768,
 # 'n_heads': 2,
 # 'n_layers': 6,
@@ -224,6 +224,27 @@ ffn_kernel_size
 # 'upsample_kernel_sizes': [16, 16, 4, 4],
 # 'n_layers_q': 3,
 # 'use_spectral_norm': False
+
+
+    # n_vocab,
+    # spec_channels,
+    # segment_size,
+    # inter_channels,
+    # hidden_channels,
+    # filter_channels,
+    # n_heads,
+    # n_layers,
+    # kernel_size,
+    # p_dropout,
+    # resblock,
+    # resblock_kernel_sizes,
+    # resblock_dilation_sizes,
+    # upsample_rates,
+    # upsample_initial_channel,
+    # upsample_kernel_sizes,
+    # n_speakers=0,
+    # gin_channels=0,
+    # use_sdp=True,
 
 
         encoder_layers=6,
@@ -248,6 +269,14 @@ ffn_kernel_size
             initializer_range=0.02,
 
         layer_norm_eps=1e-5,
+
+        use_stochastic_duration_prediction=True,
+
+        num_speakers=1,
+        gin_channels=0,  # TODO name (speaker_embedding_channels?)
+
+
+
 
             scale_embedding=False,
             feat_extract_norm="group",
@@ -311,6 +340,10 @@ ffn_kernel_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.scale_embedding = scale_embedding
+
+        self.use_stochastic_duration_prediction = use_stochastic_duration_prediction
+        self.num_speakers = num_speakers
+        self.gin_channels = gin_channels
 
         self.feat_extract_norm = feat_extract_norm
         self.feat_proj_dropout = feat_proj_dropout

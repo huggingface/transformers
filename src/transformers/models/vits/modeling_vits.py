@@ -56,6 +56,11 @@ VITS_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+DEFAULT_MIN_BIN_WIDTH = 1e-3
+DEFAULT_MIN_BIN_HEIGHT = 1e-3
+DEFAULT_MIN_DERIVATIVE = 1e-3
+
+
 @dataclass
 class TextEncoderOutput(ModelOutput):
     """
@@ -98,6 +103,395 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     inverted_mask = 1.0 - expanded_mask
 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+
+
+class VitsDilatedDepthSeparableConv(nn.Module):
+    def __init__(self, channels, kernel_size, n_layers, p_dropout=0.):
+        super().__init__()
+        self.n_layers = n_layers
+
+        self.drop = nn.Dropout(p_dropout)
+        self.convs_sep = nn.ModuleList()
+        self.convs_1x1 = nn.ModuleList()
+        self.norms_1 = nn.ModuleList()
+        self.norms_2 = nn.ModuleList()
+        for i in range(n_layers):
+            dilation = kernel_size ** i
+            padding = (kernel_size * dilation - dilation) // 2
+            self.convs_sep.append(nn.Conv1d(channels, channels, kernel_size,
+                groups=channels, dilation=dilation, padding=padding
+            ))
+            self.convs_1x1.append(nn.Conv1d(channels, channels, 1))
+            self.norms_1.append(nn.LayerNorm(channels))
+            self.norms_2.append(nn.LayerNorm(channels))
+
+    def forward(self, x, x_mask, g=None):
+        if g is not None:
+            x = x + g
+        for i in range(self.n_layers):
+            y = self.convs_sep[i](x * x_mask)
+            y = self.norms_1[i](y.transpose(1, -1)).transpose(1, -1)
+            y = nn.functional.gelu(y)
+            y = self.convs_1x1[i](y)
+            y = self.norms_2[i](y.transpose(1, -1)).transpose(1, -1)
+            y = nn.functional.gelu(y)
+            y = self.drop(y)
+            x = x + y
+        return x * x_mask
+
+
+def searchsorted(bin_locations, inputs, eps=1e-6):
+    bin_locations[..., -1] += eps
+    return torch.sum(inputs[..., None] >= bin_locations, dim=-1) - 1
+
+
+# TODO: move into VitsConvFlow?
+def rational_quadratic_spline(
+    inputs,
+    unnormalized_widths,
+    unnormalized_heights,
+    unnormalized_derivatives,
+    inverse=False,
+    left=0., right=1., bottom=0., top=1.,
+    min_bin_width=DEFAULT_MIN_BIN_WIDTH,
+    min_bin_height=DEFAULT_MIN_BIN_HEIGHT,
+    min_derivative=DEFAULT_MIN_DERIVATIVE
+):
+    if torch.min(inputs) < left or torch.max(inputs) > right:
+        raise ValueError('Input to a transform is not within its domain')
+
+    num_bins = unnormalized_widths.shape[-1]
+
+    if min_bin_width * num_bins > 1.0:
+        raise ValueError('Minimal bin width too large for the number of bins')
+    if min_bin_height * num_bins > 1.0:
+        raise ValueError('Minimal bin height too large for the number of bins')
+
+    widths = nn.functional.softmax(unnormalized_widths, dim=-1)
+    widths = min_bin_width + (1 - min_bin_width * num_bins) * widths
+    cumwidths = torch.cumsum(widths, dim=-1)
+    cumwidths = nn.functional.pad(cumwidths, pad=(1, 0), mode='constant', value=0.0)
+    cumwidths = (right - left) * cumwidths + left
+    cumwidths[..., 0] = left
+    cumwidths[..., -1] = right
+    widths = cumwidths[..., 1:] - cumwidths[..., :-1]
+
+    derivatives = min_derivative + nn.functional.softplus(unnormalized_derivatives)
+
+    heights = nn.functional.softmax(unnormalized_heights, dim=-1)
+    heights = min_bin_height + (1 - min_bin_height * num_bins) * heights
+    cumheights = torch.cumsum(heights, dim=-1)
+    cumheights = nn.functional.pad(cumheights, pad=(1, 0), mode='constant', value=0.0)
+    cumheights = (top - bottom) * cumheights + bottom
+    cumheights[..., 0] = bottom
+    cumheights[..., -1] = top
+    heights = cumheights[..., 1:] - cumheights[..., :-1]
+
+    if inverse:
+        bin_idx = searchsorted(cumheights, inputs)[..., None]
+    else:
+        bin_idx = searchsorted(cumwidths, inputs)[..., None]
+
+    input_cumwidths = cumwidths.gather(-1, bin_idx)[..., 0]
+    input_bin_widths = widths.gather(-1, bin_idx)[..., 0]
+
+    input_cumheights = cumheights.gather(-1, bin_idx)[..., 0]
+    delta = heights / widths
+    input_delta = delta.gather(-1, bin_idx)[..., 0]
+
+    input_derivatives = derivatives.gather(-1, bin_idx)[..., 0]
+    input_derivatives_plus_one = derivatives[..., 1:].gather(-1, bin_idx)[..., 0]
+
+    input_heights = heights.gather(-1, bin_idx)[..., 0]
+
+    if inverse:
+        a = (((inputs - input_cumheights) * (input_derivatives
+                                             + input_derivatives_plus_one
+                                             - 2 * input_delta)
+              + input_heights * (input_delta - input_derivatives)))
+        b = (input_heights * input_derivatives
+             - (inputs - input_cumheights) * (input_derivatives
+                                              + input_derivatives_plus_one
+                                              - 2 * input_delta))
+        c = - input_delta * (inputs - input_cumheights)
+
+        discriminant = b.pow(2) - 4 * a * c
+        assert (discriminant >= 0).all()
+
+        root = (2 * c) / (-b - torch.sqrt(discriminant))
+        outputs = root * input_bin_widths + input_cumwidths
+
+        theta_one_minus_theta = root * (1 - root)
+        denominator = input_delta + ((input_derivatives + input_derivatives_plus_one - 2 * input_delta)
+                                     * theta_one_minus_theta)
+        derivative_numerator = input_delta.pow(2) * (input_derivatives_plus_one * root.pow(2)
+                                                     + 2 * input_delta * theta_one_minus_theta
+                                                     + input_derivatives * (1 - root).pow(2))
+        logabsdet = torch.log(derivative_numerator) - 2 * torch.log(denominator)
+
+        return outputs, -logabsdet
+    else:
+        theta = (inputs - input_cumwidths) / input_bin_widths
+        theta_one_minus_theta = theta * (1 - theta)
+
+        numerator = input_heights * (input_delta * theta.pow(2)
+                                     + input_derivatives * theta_one_minus_theta)
+        denominator = input_delta + ((input_derivatives + input_derivatives_plus_one - 2 * input_delta)
+                                     * theta_one_minus_theta)
+        outputs = input_cumheights + numerator / denominator
+
+        derivative_numerator = input_delta.pow(2) * (input_derivatives_plus_one * theta.pow(2)
+                                                     + 2 * input_delta * theta_one_minus_theta
+                                                     + input_derivatives * (1 - theta).pow(2))
+        logabsdet = torch.log(derivative_numerator) - 2 * torch.log(denominator)
+
+        return outputs, logabsdet
+
+
+# TODO: move into VitsConvFlow?
+def unconstrained_rational_quadratic_spline(
+    inputs,
+    unnormalized_widths,
+    unnormalized_heights,
+    unnormalized_derivatives,
+    inverse=False,
+    tails='linear',
+    tail_bound=1.,
+    min_bin_width=DEFAULT_MIN_BIN_WIDTH,
+    min_bin_height=DEFAULT_MIN_BIN_HEIGHT,
+    min_derivative=DEFAULT_MIN_DERIVATIVE
+):
+    inside_interval_mask = (inputs >= -tail_bound) & (inputs <= tail_bound)
+    outside_interval_mask = ~inside_interval_mask
+
+    outputs = torch.zeros_like(inputs)
+    logabsdet = torch.zeros_like(inputs)
+
+    if tails == 'linear':
+        unnormalized_derivatives = nn.functional.pad(unnormalized_derivatives, pad=(1, 1))
+        constant = np.log(np.exp(1 - min_derivative) - 1)
+        unnormalized_derivatives[..., 0] = constant
+        unnormalized_derivatives[..., -1] = constant
+
+        outputs[outside_interval_mask] = inputs[outside_interval_mask]
+        logabsdet[outside_interval_mask] = 0
+    else:
+        raise RuntimeError('{} tails are not implemented.'.format(tails))
+
+    outputs[inside_interval_mask], logabsdet[inside_interval_mask] = rational_quadratic_spline(
+        inputs=inputs[inside_interval_mask],
+        unnormalized_widths=unnormalized_widths[inside_interval_mask, :],
+        unnormalized_heights=unnormalized_heights[inside_interval_mask, :],
+        unnormalized_derivatives=unnormalized_derivatives[inside_interval_mask, :],
+        inverse=inverse,
+        left=-tail_bound, right=tail_bound, bottom=-tail_bound, top=tail_bound,
+        min_bin_width=min_bin_width,
+        min_bin_height=min_bin_height,
+        min_derivative=min_derivative
+    )
+
+    return outputs, logabsdet
+
+
+# TODO: move into VitsConvFlow?
+def piecewise_rational_quadratic_transform(
+    inputs,
+    unnormalized_widths,
+    unnormalized_heights,
+    unnormalized_derivatives,
+    inverse=False,
+    tails=None,
+    tail_bound=1.,
+    min_bin_width=DEFAULT_MIN_BIN_WIDTH,
+    min_bin_height=DEFAULT_MIN_BIN_HEIGHT,
+    min_derivative=DEFAULT_MIN_DERIVATIVE
+):
+    if tails is None:
+        spline_fn = rational_quadratic_spline
+        spline_kwargs = {}
+    else:
+        spline_fn = unconstrained_rational_quadratic_spline
+        spline_kwargs = {
+            'tails': tails,
+            'tail_bound': tail_bound
+        }
+
+    outputs, logabsdet = spline_fn(
+        inputs=inputs,
+        unnormalized_widths=unnormalized_widths,
+        unnormalized_heights=unnormalized_heights,
+        unnormalized_derivatives=unnormalized_derivatives,
+        inverse=inverse,
+        min_bin_width=min_bin_width,
+        min_bin_height=min_bin_height,
+        min_derivative=min_derivative,
+        **spline_kwargs
+    )
+    return outputs, logabsdet
+
+
+class VitsConvFlow(nn.Module):
+    def __init__(self, in_channels, filter_channels, kernel_size, n_layers, num_bins=10, tail_bound=5.0):
+        super().__init__()
+        self.in_channels = in_channels
+        self.filter_channels = filter_channels
+        self.kernel_size = kernel_size
+        self.n_layers = n_layers
+        self.num_bins = num_bins
+        self.tail_bound = tail_bound
+        self.half_channels = in_channels // 2
+
+        self.pre = nn.Conv1d(self.half_channels, filter_channels, 1)
+        self.convs = VitsDilatedDepthSeparableConv(filter_channels, kernel_size, n_layers, p_dropout=0.)
+        self.proj = nn.Conv1d(filter_channels, self.half_channels * (num_bins * 3 - 1), 1)
+        self.proj.weight.data.zero_()
+        self.proj.bias.data.zero_()
+
+    def forward(self, x, x_mask, g=None, reverse=False):
+        x0, x1 = torch.split(x, [self.half_channels]*2, 1)
+        h = self.pre(x0)
+        h = self.convs(h, x_mask, g=g)
+        h = self.proj(h) * x_mask
+
+        b, c, t = x0.shape
+        h = h.reshape(b, c, -1, t).permute(0, 1, 3, 2) # [b, cx?, t] -> [b, c, t, ?]
+
+        unnormalized_widths = h[..., :self.num_bins] / math.sqrt(self.filter_channels)
+        unnormalized_heights = h[..., self.num_bins:2*self.num_bins] / math.sqrt(self.filter_channels)
+        unnormalized_derivatives = h[..., 2 * self.num_bins:]
+
+        x1, logabsdet = piecewise_rational_quadratic_transform(x1,
+            unnormalized_widths,
+            unnormalized_heights,
+            unnormalized_derivatives,
+            inverse=reverse,
+            tails='linear',
+            tail_bound=self.tail_bound
+        )
+
+        x = torch.cat([x0, x1], 1) * x_mask
+        logdet = torch.sum(logabsdet * x_mask, [1,2])
+        # TODO: may not need to do `not reverse`
+        if not reverse:
+            return x, logdet
+        else:
+            return x
+
+
+class VitsFlip(nn.Module):
+    def forward(self, x, *args, reverse=False, **kwargs):
+        x = torch.flip(x, [1])
+        # TODO: may not need to do `not reverse`
+        if not reverse:
+            logdet = torch.zeros(x.size(0)).to(dtype=x.dtype, device=x.device)
+            return x, logdet
+        else:
+            return x
+
+
+class VitsElementwiseAffine(nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        self.channels = channels
+        self.m = nn.Parameter(torch.zeros(channels,1))
+        self.logs = nn.Parameter(torch.zeros(channels,1))
+
+    def forward(self, x, x_mask, reverse=False, **kwargs):
+        # TODO: may not need to do `not reverse`
+        if not reverse:
+            y = self.m + torch.exp(self.logs) * x
+            y = y * x_mask
+            logdet = torch.sum(self.logs * x_mask, [1,2])
+            return y, logdet
+        else:
+            x = (x - self.m) * torch.exp(-self.logs) * x_mask
+            return x
+
+
+class VitsStochasticDurationPredictor(nn.Module):
+    def __init__(self, config, in_channels, kernel_size, p_dropout, num_flows=4):
+        super().__init__()
+        filter_channels = in_channels # it needs to be removed from future version.
+
+        self.pre = nn.Conv1d(in_channels, filter_channels, 1)
+        self.proj = nn.Conv1d(filter_channels, filter_channels, 1)
+        self.convs = VitsDilatedDepthSeparableConv(filter_channels, kernel_size, n_layers=3, p_dropout=p_dropout)
+
+        if config.gin_channels != 0:
+            self.cond = nn.Conv1d(config.gin_channels, filter_channels, 1)
+
+        self.flows = nn.ModuleList()
+        self.flows.append(VitsElementwiseAffine(2))
+        for _ in range(num_flows):
+            self.flows.append(VitsConvFlow(2, filter_channels, kernel_size, n_layers=3))
+            self.flows.append(VitsFlip())
+
+        # TODO: this stuff is used only by reverse=False, which I don't think we need to support
+        # self.log_flow = Log()
+        # self.post_pre = nn.Conv1d(1, filter_channels, 1)
+        # self.post_proj = nn.Conv1d(filter_channels, filter_channels, 1)
+        # self.post_convs = DDSConv(filter_channels, kernel_size, n_layers=3, p_dropout=p_dropout)
+        # self.post_flows = nn.ModuleList()
+        # self.post_flows.append(ElementwiseAffine(2))
+        # for i in range(4):
+        #     self.post_flows.append(ConvFlow(2, filter_channels, kernel_size, n_layers=3))
+        #     self.post_flows.append(Flip())
+
+    def forward(self, x, x_mask, w=None, g=None, reverse=False, noise_scale=1.0):
+        x = torch.detach(x)
+        x = self.pre(x)
+
+        if g is not None:
+            g = torch.detach(g)
+            x = x + self.cond(g)
+
+        x = self.convs(x, x_mask)
+        x = self.proj(x) * x_mask
+
+        # TODO: is reverse mode ever used? if not, simplify the code!!!
+        if not reverse:
+            raise RuntimeError("reverse=False not implemented yet!")
+        else:
+            flows = list(reversed(self.flows))
+            flows = flows[:-2] + [flows[-1]] # remove a useless vflow
+            z = torch.randn(x.size(0), 2, x.size(2)).to(device=x.device, dtype=x.dtype) * noise_scale
+            for flow in flows:
+                z = flow(z, x_mask, g=x, reverse=reverse)
+            z0, z1 = torch.split(z, [1, 1], 1)
+            logw = z0
+            return logw
+
+
+# TODO: this has not been tested (do we have a checkpoint that uses it?)
+class VitsDurationPredictor(nn.Module):
+    def __init__(self, config, in_channels, filter_channels, kernel_size, p_dropout):
+        super().__init__()
+
+        self.drop = nn.Dropout(p_dropout)
+        self.conv_1 = nn.Conv1d(in_channels, filter_channels, kernel_size, padding=kernel_size//2)
+        self.norm_1 = nn.LayerNorm(filter_channels, eps=config.layer_norm_eps)
+        self.conv_2 = nn.Conv1d(filter_channels, filter_channels, kernel_size, padding=kernel_size//2)
+        self.norm_2 = nn.LayerNorm(filter_channels, eps=config.layer_norm_eps)
+        self.proj = nn.Conv1d(filter_channels, 1, 1)
+
+        if config.gin_channels != 0:
+            self.cond = nn.Conv1d(config.gin_channels, in_channels, 1)
+
+    def forward(self, x, x_mask, g=None):
+        x = torch.detach(x)
+        if g is not None:
+            g = torch.detach(g)
+            x = x + self.cond(g)
+        x = self.conv_1(x * x_mask)
+        x = torch.relu(x)
+        x = self.norm_1(x)
+        x = self.drop(x)
+        x = self.conv_2(x * x_mask)
+        x = torch.relu(x)
+        x = self.norm_2(x)
+        x = self.drop(x)
+        x = self.proj(x * x_mask)
+        return x * x_mask
 
 
 class VitsAttention(nn.Module):
@@ -719,7 +1113,7 @@ VITS_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare VITS Encoder-Decoder Model outputting raw hidden-states without any specific pre- or post-nets.",
+    "The VITS model.",
     VITS_BASE_START_DOCSTRING,
 )
 class VitsModel(VitsPreTrainedModel):
@@ -731,128 +1125,87 @@ class VitsModel(VitsPreTrainedModel):
         self.config = config
         self.text_encoder = VitsTextEncoder(config)
 
+        # self.dec = Generator(inter_channels, resblock, resblock_kernel_sizes, resblock_dilation_sizes, upsample_rates, upsample_initial_channel, upsample_kernel_sizes, gin_channels=gin_channels)
+        # self.flow = ResidualCouplingBlock(inter_channels, hidden_channels, 5, 1, 4, gin_channels=gin_channels)
+
+        # TODO: only used during training / voice conversion, not for TTS
+        # self.enc_q = PosteriorEncoder(spec_channels, inter_channels, hidden_channels, 5, 1, 16, gin_channels=gin_channels)
+
+        if config.use_stochastic_duration_prediction:
+            self.duration_predictor = VitsStochasticDurationPredictor(config, config.hidden_size, 3, 0.5, 4)
+        else:
+            self.duration_predictor = VitsDurationPredictor(config, config.hidden_size, 256, 3, 0.5)
+        # TODO: try checkpoint with use_sdp=False
+
+        # TODO: are there any checkpoints that have more than one speaker? yes, VCTK
+        if config.num_speakers > 1:
+            self.emb_g = nn.Embedding(config.num_speakers, config.gin_channels)
+
         # Initialize weights and apply final processing
         self.post_init()
 
     # def get_input_embeddings(self):
-    #     if isinstance(self.encoder, VitsEncoderWithTextPrenet):
-    #         return self.encoder.get_input_embeddings()
-    #     if isinstance(self.decoder, VitsDecoderWithTextPrenet):
-    #         return self.decoder.get_input_embeddings()
-    #     return None
+    #     return self.encoder.get_input_embeddings()
 
     # def set_input_embeddings(self, value):
-    #     if isinstance(self.encoder, VitsEncoderWithTextPrenet):
-    #         self.encoder.set_input_embeddings(value)
-    #     if isinstance(self.decoder, VitsDecoderWithTextPrenet):
-    #         self.decoder.set_input_embeddings(value)
+    #     self.encoder.set_input_embeddings(value)
 
     def get_encoder(self):
         return self.text_encoder
 
-    # def get_decoder(self):
-    #     return self.decoder
-
-    @add_start_docstrings_to_model_forward(VITS_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
+    # @add_start_docstrings_to_model_forward(VITS_INPUTS_DOCSTRING)
+    # @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_values: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        decoder_input_values: Optional[torch.Tensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        decoder_head_mask: Optional[torch.FloatTensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        use_cache: Optional[bool] = None,
-        speaker_embeddings: Optional[torch.FloatTensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        speaker_id: Optional[int] = None, # TODO: maybe Tensor?
+        noise_scale_w: float = 1.0,   # TODO!
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqModelOutput]:
-        r"""
-        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-            Depending on which encoder is being used, the `input_values` are either: float values of the input raw
-            speech waveform, or indices of input sequence tokens in the vocabulary, or hidden states.
-
-        decoder_input_values (`torch.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Depending on which decoder is being used, the `decoder_input_values` are either: float values of log-mel
-            filterbank features extracted from the raw speech waveform, or indices of decoder input sequence tokens in
-            the vocabulary, or hidden states.
-
-        speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
-            Tensor containing the speaker embeddings.
-
-        Returns:
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # TODO!!!!!!!!!!
+        # TODO: make padding_mask here
 
+        text_encoder_outputs = self.text_encoder(input_ids, attention_mask)
 
-        # Encode if needed (training, first prediction pass)
-        if encoder_outputs is None:
-            encoder_outputs = self.encoder(
-                input_values=input_values,
-                attention_mask=attention_mask,
-                head_mask=head_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
+        # TODO: haven't tested yet (use VCTK checkpoint)
+        if self.config.num_speakers > 1:
+            # TODO: verify speaker_id is not None
+            g = self.emb_g(speaker_id).unsqueeze(-1)
+        else:
+            g = None
 
-        # # downsample encoder attention mask (only for encoders with speech input)
-        # if attention_mask is not None and isinstance(self.encoder, VitsEncoderWithSpeechPrenet):
-        #     encoder_attention_mask = self.encoder.prenet._get_feature_vector_attention_mask(
-        #         encoder_outputs[0].shape[1], attention_mask
-        #     )
-        # else:
-        #     encoder_attention_mask = attention_mask
+        # TODO: make betterer!
+        x = text_encoder_outputs.last_hidden_state.transpose(1, 2)
+        x_mask = text_encoder_outputs.padding_mask.transpose(1, 2)
 
-        # if isinstance(self.decoder, VitsDecoderWithSpeechPrenet):
-        #     decoder_args = {"speaker_embeddings": speaker_embeddings}
-        # else:
-        #     decoder_args = {}
+        if self.config.use_stochastic_duration_prediction:
+            logw = self.duration_predictor(x, x_mask, g=g, reverse=True, noise_scale=noise_scale_w)
+        else:
+            logw = self.duration_predictor(x, x_mask, g=g)
 
-        decoder_outputs = self.decoder(
-            input_values=decoder_input_values,
-            attention_mask=decoder_attention_mask,
-            encoder_hidden_states=encoder_outputs[0],
-            # encoder_attention_mask=encoder_attention_mask,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            # **decoder_args,
-        )
+        return logw
 
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
+        # w = torch.exp(logw) * x_mask * length_scale
+        # w_ceil = torch.ceil(w)
+        # y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
+        # y_mask = torch.unsqueeze(sequence_mask(y_lengths, None), 1).to(x_mask.dtype)
+        # attn_mask = torch.unsqueeze(x_mask, 2) * torch.unsqueeze(y_mask, -1)
+        # attn = generate_path(w_ceil, attn_mask)
 
-        return Seq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
-        )
+        # m_p = torch.matmul(attn.squeeze(1), m_p.transpose(1, 2)).transpose(1, 2) # [b, t', t], [b, t, d] -> [b, d, t']
+        # logs_p = torch.matmul(attn.squeeze(1), logs_p.transpose(1, 2)).transpose(1, 2) # [b, t', t], [b, t, d] -> [b, d, t']
+
+        # z_p = m_p + torch.randn_like(m_p) * torch.exp(logs_p) * noise_scale
+        # z = self.flow(z_p, y_mask, g=g, reverse=True)
+        # o = self.dec((z * y_mask)[:,:,:max_len], g=g)
+        # return o, attn, y_mask, (z, z_p, m_p, logs_p)
+
+        # TODO: return outputs using Output object

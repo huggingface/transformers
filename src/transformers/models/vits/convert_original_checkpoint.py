@@ -32,15 +32,8 @@ from transformers.tokenization_utils import AddedToken
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.speecht5")
 
-# MAPPING_SPEECH_ENCODER_PRENET = {
-#     "speech_encoder_prenet.layer_norm": "speecht5.encoder.prenet.feature_projection.layer_norm",
-#     "speech_encoder_prenet.post_extract_proj": "speecht5.encoder.prenet.feature_projection.projection",
-#     "speech_encoder_prenet.pos_conv.0": "speecht5.encoder.prenet.pos_conv_embed.conv",
-#     "speech_encoder_prenet.mask_emb": "speecht5.encoder.prenet.masked_spec_embed",
-# }
 MAPPING_TEXT_ENCODER = {
     "enc_p.emb": "text_encoder.embed_tokens",
-    # "text_encoder_prenet.encoder_prenet.1.alpha": "speecht5.encoder.prenet.encode_positions.alpha",
     "enc_p.encoder.attn_layers.*.conv_k": "text_encoder.encoder.layers.*.attention.k_proj",
     "enc_p.encoder.attn_layers.*.conv_v": "text_encoder.encoder.layers.*.attention.v_proj",
     "enc_p.encoder.attn_layers.*.conv_q": "text_encoder.encoder.layers.*.attention.q_proj",
@@ -54,28 +47,68 @@ MAPPING_TEXT_ENCODER = {
     "enc_p.encoder.norm_layers_2.*.gamma": "text_encoder.encoder.layers.*.final_layer_norm.weight",
     "enc_p.encoder.norm_layers_2.*.beta": "text_encoder.encoder.layers.*.final_layer_norm.bias",
     "enc_p.proj": "text_encoder.project",
-
-    # "encoder.layers.*.final_layer_norm": "speecht5.encoder.wrapped_encoder.layers.*.final_layer_norm",
-    # "encoder.layer_norm": "speecht5.encoder.wrapped_encoder.layer_norm",
-    # "encoder.pos_emb.pe_k": "speecht5.encoder.wrapped_encoder.embed_positions.pe_k",
 }
-# MAPPING_DECODER = {
-#     "decoder.layers.*.self_attn.k_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.k_proj",
-#     "decoder.layers.*.self_attn.v_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.v_proj",
-#     "decoder.layers.*.self_attn.q_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.q_proj",
-#     "decoder.layers.*.self_attn.out_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.out_proj",
-#     "decoder.layers.*.self_attn_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.self_attn_layer_norm",
-#     "decoder.layers.*.encoder_attn.k_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.k_proj",
-#     "decoder.layers.*.encoder_attn.v_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.v_proj",
-#     "decoder.layers.*.encoder_attn.q_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.q_proj",
-#     "decoder.layers.*.encoder_attn.out_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.out_proj",
-#     "decoder.layers.*.encoder_attn_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn_layer_norm",
-#     "decoder.layers.*.fc1": "speecht5.decoder.wrapped_decoder.layers.*.feed_forward.intermediate_dense",
-#     "decoder.layers.*.fc2": "speecht5.decoder.wrapped_decoder.layers.*.feed_forward.output_dense",
-#     "decoder.layers.*.final_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.final_layer_norm",
-# }
+MAPPING_STOCHASTIC_DURATION_PREDICTOR = {
+    "dp.pre": "duration_predictor.pre",
+    "dp.proj": "duration_predictor.proj",
+    "dp.convs.convs_sep.0" : "duration_predictor.convs.convs_sep.0",
+    "dp.convs.convs_sep.1" : "duration_predictor.convs.convs_sep.1",
+    "dp.convs.convs_sep.2" : "duration_predictor.convs.convs_sep.2",
+    "dp.convs.convs_1x1.0" : "duration_predictor.convs.convs_1x1.0",
+    "dp.convs.convs_1x1.1" : "duration_predictor.convs.convs_1x1.1",
+    "dp.convs.convs_1x1.2" : "duration_predictor.convs.convs_1x1.2",
+    "dp.convs.norms_1.*.gamma" : "duration_predictor.convs.norms_1.*.weight",
+    "dp.convs.norms_1.*.beta" : "duration_predictor.convs.norms_1.*.bias",
+    "dp.convs.norms_2.*.gamma" : "duration_predictor.convs.norms_2.*.weight",
+    "dp.convs.norms_2.*.beta" : "duration_predictor.convs.norms_2.*.bias",
+    "dp.flows.0.logs" : "duration_predictor.flows.0.logs",
+    "dp.flows.0.m" : "duration_predictor.flows.0.m",
+    "dp.flows.*.pre" : "duration_predictor.flows.*.pre",
+    "dp.flows.*.proj" : "duration_predictor.flows.*.proj",
+
+"dp.flows.*.convs.convs_1x1.0" : "duration_predictor.flows.*.convs.convs_1x1.0",
+"dp.flows.*.convs.convs_1x1.1" : "duration_predictor.flows.*.convs.convs_1x1.1",
+"dp.flows.*.convs.convs_1x1.2" : "duration_predictor.flows.*.convs.convs_1x1.2",
+"dp.flows.*.convs.convs_sep.0" : "duration_predictor.flows.*.convs.convs_sep.0",
+"dp.flows.*.convs.convs_sep.1" : "duration_predictor.flows.*.convs.convs_sep.1",
+"dp.flows.*.convs.convs_sep.2" : "duration_predictor.flows.*.convs.convs_sep.2",
+"dp.flows.*.convs.norms_1.0.gamma" : "duration_predictor.flows.*.convs.norms_1.0.weight",
+"dp.flows.*.convs.norms_1.0.beta" : "duration_predictor.flows.*.convs.norms_1.0.bias",
+"dp.flows.*.convs.norms_1.1.gamma" : "duration_predictor.flows.*.convs.norms_1.1.weight",
+"dp.flows.*.convs.norms_1.1.beta" : "duration_predictor.flows.*.convs.norms_1.1.bias",
+"dp.flows.*.convs.norms_1.2.gamma" : "duration_predictor.flows.*.convs.norms_1.2.weight",
+"dp.flows.*.convs.norms_1.2.beta" : "duration_predictor.flows.*.convs.norms_1.2.bias",
+"dp.flows.*.convs.norms_2.0.gamma" : "duration_predictor.flows.*.convs.norms_2.0.weight",
+"dp.flows.*.convs.norms_2.0.beta" : "duration_predictor.flows.*.convs.norms_2.0.bias",
+"dp.flows.*.convs.norms_2.1.gamma" : "duration_predictor.flows.*.convs.norms_2.1.weight",
+"dp.flows.*.convs.norms_2.1.beta" : "duration_predictor.flows.*.convs.norms_2.1.bias",
+"dp.flows.*.convs.norms_2.2.gamma" : "duration_predictor.flows.*.convs.norms_2.2.weight",
+"dp.flows.*.convs.norms_2.2.beta" : "duration_predictor.flows.*.convs.norms_2.2.bias",
+
+
+    # "xxx" : "xxx",
+    # "xxx" : "xxx",
+    # "xxx" : "xxx",
+    # "xxx" : "xxx",
+    # "xxx" : "xxx",
+    # "xxx" : "xxx",
+    # "xxx" : "xxx",
+    # "xxx" : "xxx",
+    # "xxx" : "xxx",
+    # "xxx" : "xxx",
+    # "xxx" : "xxx",
+    # "xxx" : "xxx",
+    # "xxx" : "xxx",
+    # "xxx" : "xxx",
+    # "xxx" : "xxx",
+    # "xxx" : "xxx",
+
+
+ #TODO: flows
+}
 MAPPING = {
     **MAPPING_TEXT_ENCODER,
+    **MAPPING_STOCHASTIC_DURATION_PREDICTOR,
 }
 TOP_LEVEL_KEYS = []
 IGNORE_KEYS = [
