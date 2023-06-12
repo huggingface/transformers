@@ -45,12 +45,10 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             The value that is used to fill the padding values.
         chunk_length (`float`, *optional*):
             The length of each chunk of audio that will be processed sequentially . If `chunk_length = None` then 
-            chunking is disabled.ß˛ÇÒ
-            available for CTC models, e.g. [`Wav2Vec2ForCTC`].
+            chunking is disabled.
         chunk_stride(`float`, *optional*):
             The length of the right stride use to split the audio in smaller chunkgs. If `chunk_stride = None` then 
             chunking is disabled.
-        
         return_attention_mask (`bool`, *optional*, defaults to `True`):
             Whether or not [`~EncodecFeatureExtractor.__call__`] should return `attention_mask`.
     """
