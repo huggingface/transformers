@@ -242,7 +242,6 @@ class TextGenerationPipeline(Pipeline):
 
         # If there is a prefix, we may need to adjust the generation length. Do so without permanently modifying
         # generate_kwargs, as some of the parameterization may come from the initialization of the pipeline.
-        generate_kwargs = copy.copy(generate_kwargs)
         prefix_length = generate_kwargs.pop("prefix_length", 0)
         if prefix_length > 0:
             has_max_new_tokens = "max_new_tokens" in generate_kwargs or (
