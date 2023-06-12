@@ -428,8 +428,9 @@ def prepare_dog_img():
     return raw_image
 
 
+@require_tf
 @slow
-class SamModelIntegrationTest(unittest.TestCase):
+class TFSamModelIntegrationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
