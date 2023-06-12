@@ -1101,6 +1101,9 @@ class MusicgenDelayPatternLogitsProcessor(LogitsProcessor):
         delay_pattern = delay_pattern + torch.tril(torch.ones((codebooks, self.max_length)), diagonal=-1)
         # slice the pattern to get the mask for the current position
         # and expand the mask to match the dimensionality of the vocabulary
+        if self.pad_token_id >= vocab_size:
+            scores = torch.nn.functional.pad(scores, pad=(0, self.pad_token_id - vocab_size + 1), value=-float("inf"))
+            vocab_size += self.pad_token_id - vocab_size + 1
         mask = delay_pattern[:, seq_len - 1 : seq_len].repeat(1, vocab_size)
         scores = torch.where(mask.bool(), -float("inf"), scores)
         # ensure padding token id takes non-inf score so that it is always sampled
