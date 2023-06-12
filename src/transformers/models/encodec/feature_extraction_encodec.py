@@ -62,7 +62,6 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         padding_value: float = 0.0,
         chunk_length: int = 48000,
         chunk_stride: int = 47520,
-        return_attention_mask: bool = True,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -77,10 +76,8 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         max_length: Optional[int] = None,
         truncation: bool = False,
         pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
-        **kwargs,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).
