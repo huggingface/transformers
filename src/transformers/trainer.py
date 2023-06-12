@@ -69,7 +69,7 @@ from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
 from .modelcard import TrainingSummary
-from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
+from .modeling_utils import PreTrainedModel, get_parameter_dtype, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
 from .pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_10
@@ -2746,6 +2746,26 @@ class Trainer:
         ):
             if self.is_fsdp_enabled:
                 os.makedirs(output_dir, exist_ok=True)
+                # Save the config, tokenizer, and the training arguments together with the trained model
+                if self.args.should_save:
+                    model_to_save = unwrap_model(self.model)
+                    # Save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
+                    dtype = get_parameter_dtype(model_to_save)
+                    model_to_save.config.torch_dtype = str(dtype).split(".")[1]
+                    # Attach architecture to the config
+                    model_to_save.config.architectures = [model_to_save.__class__.__name__]
+                    # Save the config
+                    model_to_save.config.save_pretrained(output_dir)
+                    if model_to_save.can_generate():
+                        model_to_save.generation_config.save_pretrained(output_dir)
+
+                    # Save the tokenizer
+                    if self.tokenizer is not None:
+                        self.tokenizer.save_pretrained(output_dir)
+
+                    # Save your training arguments
+                    torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
+
                 save_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir)
             else:
                 state_dict = self.model.state_dict()
