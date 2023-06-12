@@ -1,13 +1,18 @@
-from transformers import VitDetConfig, VitMatteConfig, VitMatteForImageMatting
+import requests
+from PIL import Image
+
+from transformers import VitMatteImageProcessor
 
 
-backbone_config = VitDetConfig(
-    use_absolute_position_embeddings=False, use_relative_position_embeddings=True, out_features=["stage4"]
-)
+url = "https://github.com/hustvl/ViTMatte/blob/main/demo/bulb_rgb.png?raw=true"
+image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-config = VitMatteConfig(backbone_config=backbone_config)
+url = "https://github.com/hustvl/ViTMatte/blob/main/demo/bulb_trimap.png?raw=true"
+trimap = Image.open(requests.get(url, stream=True).raw).convert("L")
 
-model = VitMatteForImageMatting(config)
+processor = VitMatteImageProcessor()
 
-for name, param in model.named_parameters():
-    print(name, param.shape)
+inputs = processor(images=image, trimaps=trimap, return_tensors="pt")
+
+for k, v in inputs.items():
+    print(k, v.shape)

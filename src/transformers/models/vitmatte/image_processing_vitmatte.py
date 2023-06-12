@@ -14,18 +14,17 @@
 # limitations under the License.
 """Image processor class for ViTMatte."""
 
-from typing import Dict, List, Optional, Union
+from typing import List, Optional, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_transforms import normalize, rescale, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
-    PILImageResampling,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -41,15 +40,6 @@ class VitMatteImageProcessor(BaseImageProcessor):
     Constructs a ViTMatte image processor.
 
     Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `(size["height"],
-            size["width"])`. Can be overridden by the `do_resize` parameter in the `preprocess` method.
-        size (`dict`, *optional*, defaults to `{"height": 224, "width": 224}`):
-            Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
-            method.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-            Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
-            `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
             parameter in the `preprocess` method.
@@ -65,67 +55,34 @@ class VitMatteImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to pad the image to make the width and height divisible by `size_divisibility`. Can be overridden
+            by the `do_pad` parameter in the `preprocess` method.
+        size_divisibility (`int`, *optional*, defaults to 32):
+            The width and height of the image will be padded to be divisible by this number.
     """
 
     model_input_names = ["pixel_values"]
 
     def __init__(
         self,
-        do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        do_pad: bool = True,
+        size_divisibility: int = 32,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        size = size if size is not None else {"height": 224, "width": 224}
-        size = get_size_dict(size)
-        self.do_resize = do_resize
         self.do_rescale = do_rescale
         self.do_normalize = do_normalize
-        self.size = size
-        self.resample = resample
+        self.do_pad = do_pad
         self.rescale_factor = rescale_factor
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-
-    def resize(
-        self,
-        image: np.ndarray,
-        size: Dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Resize an image to `(size["height"], size["width"])`.
-
-        Args:
-            image (`np.ndarray`):
-                Image to resize.
-            size (`Dict[str, int]`):
-                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample:
-                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
-            data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-
-        Returns:
-            `np.ndarray`: The resized image.
-        """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        return resize(
-            image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
-        )
+        self.size_divisibility = size_divisibility
 
     def rescale(
         self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
@@ -178,17 +135,30 @@ class VitMatteImageProcessor(BaseImageProcessor):
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
+    def pad(self, images: np.ndarray, size_divisibility: int = 32):
+        batch_size, height, width, num_channels = images.shape
+
+        if height % size_divisibility != 0 or width % size_divisibility != 0:
+            new_height = (size_divisibility - height % size_divisibility) + height
+            new_width = (size_divisibility - width % size_divisibility) + width
+            new_images = np.zeros((batch_size, new_height, new_width, num_channels))
+            new_images[:, :, :height, :width] = images[:, :, :, :]
+            del images
+            images = new_images
+
+        return images
+
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
+        trimaps: ImageInput,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        do_pad: Optional[bool] = None,
+        size_divisibility: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         **kwargs,
@@ -199,14 +169,8 @@ class VitMatteImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Image to preprocess.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Dictionary in the format `{"height": h, "width": w}` specifying the size of the output image after
-                resizing.
-            resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
-                `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
-                an effect if `do_resize` is set to `True`.
+            trimaps (`ImageInput`):
+                Trimap to preprocess.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
@@ -217,6 +181,10 @@ class VitMatteImageProcessor(BaseImageProcessor):
                 Image mean to use if `do_normalize` is set to `True`.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use if `do_normalize` is set to `True`.
+            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
+                Whether to pad the image.
+            size_divisibility (`int`, *optional*, defaults to `self.size_divisibility`):
+                The size divisibility to pad the image to if `do_pad` is set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
@@ -230,42 +198,49 @@ class VitMatteImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - Unset: Use the channel dimension format of the input image.
         """
-        do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        resample = resample if resample is not None else self.resample
+        do_pad = do_pad if do_pad is not None else self.do_pad
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-
-        size = size if size is not None else self.size
-        size_dict = get_size_dict(size)
+        size_divisibility = size_divisibility if size_divisibility is not None else self.size_divisibility
 
         images = make_list_of_images(images)
+        trimaps = make_list_of_images(trimaps)
 
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
-        if do_resize and size is None:
-            raise ValueError("Size must be specified if do_resize is True.")
+        if not valid_images(trimaps):
+            raise ValueError(
+                "Invalid trimap type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
 
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
-
-        if do_resize:
-            images = [self.resize(image=image, size=size_dict, resample=resample) for image in images]
+        trimaps = [to_numpy_array(trimap) for trimap in trimaps]
 
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor) for image in images]
+            trimaps = [self.rescale(image=trimap, scale=rescale_factor) for trimap in trimaps]
 
         if do_normalize:
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
+
+        # concatenate images and trimaps
+        images = [
+            np.concatenate([image, np.expand_dims(trimap, axis=-1)], axis=-1) for image, trimap in zip(images, trimaps)
+        ]
+
+        if do_pad:
+            images = self.pad(np.array(images), size_divisibility=size_divisibility)
 
         images = [to_channel_dimension_format(image, data_format) for image in images]
 
