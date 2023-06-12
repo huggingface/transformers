@@ -131,6 +131,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
     cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
     sin = sin.squeeze(1).squeeze(0)  # [seq_len, dim]
+    print("cos shape", cos.shape)
+    print("position_ids", position_ids)
     cos = cos[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
     sin = sin[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
     q_embed = (q * cos) + (rotate_half(q) * sin)
@@ -188,7 +190,11 @@ class LlamaAttention(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        valid_past_index: Optional[int] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if output_attentions is True:
+            raise ValueError("output_attentions=True can not be supported with BetterTransformer.")
+
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
@@ -196,45 +202,52 @@ class LlamaAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
+        if valid_past_index is None and past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
         # [bsz, nh, t, hd]
 
-        if past_key_value is not None:
-            # reuse k, v, self_attention
+        print("valid_past_index", valid_past_index)
+        print("past_key_value[0] shape", past_key_value[0].shape)
+        if valid_past_index is None and past_key_value is not None:
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        elif valid_past_index > 0:
+            upper = valid_past_index + 1
+            past_key_value[0][:, :, valid_past_index:upper] = key_states  # Slice to keep dimension info
+            past_key_value[1][:, :, valid_past_index:upper] = value_states
 
-        past_key_value = (key_states, value_states) if use_cache else None
+            # TODO (felix) Would removing these two lines help?
+            key_states = past_key_value[0][:, :, :upper]
+            value_states = past_key_value[1][:, :, :upper]
+        elif valid_past_index == 0:
+            past_key_value[0][:, :, :kv_seq_len] = key_states
+            past_key_value[1][:, :, :kv_seq_len] = value_states
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
-
-        if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
+        print("attention_mask bef sdpa", attention_mask.shape)
+        print("query_states bef sdpa", query_states.shape)
+        print("value_states bef sdpa", value_states.shape)
+        print("key_states bef sdpa", key_states.shape)
+        value_states = value_states.contiguous()
+        key_states = key_states.contiguous()
+        print("contiguous?", attention_mask.is_contiguous(), query_states.is_contiguous(), value_states.is_contiguous(), key_states.is_contiguous())
+        if bsz == 1 or self.training:
+            # BEWARE: at this stage, attention_mask is not the same as in transformers llama
+            if query_states.shape[2] > 1:
+                attn_output = torch.nn.functional.scaled_dot_product_attention(
+                    query_states, key_states, value_states, attn_mask=None, dropout_p=0.0, is_causal=True
                 )
-            attn_weights = attn_weights + attention_mask
-            attn_weights = torch.max(
-                attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
-            )
+            else:
+                attn_output = torch.nn.functional.scaled_dot_product_attention(
+                    query_states, key_states, value_states, attn_mask=None, dropout_p=0.0, is_causal=False
+                )
+        else:
+            # This line is necessary for numerical equivalence, although I'm not sure it is useful in any way.
+            attention_mask = torch.max(attention_mask, torch.tensor(torch.finfo(attention_mask.dtype).min))
 
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
+            attn_output = torch.nn.functional.scaled_dot_product_attention(
+                query_states, key_states, value_states, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
             )
 
         attn_output = attn_output.transpose(1, 2)
@@ -242,10 +255,7 @@ class LlamaAttention(nn.Module):
 
         attn_output = self.o_proj(attn_output)
 
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights, past_key_value
+        return attn_output, None, None
 
 
 class LlamaDecoderLayer(nn.Module):
@@ -269,6 +279,7 @@ class LlamaDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
+        valid_past_index: Optional[int] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -296,6 +307,7 @@ class LlamaDecoderLayer(nn.Module):
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
+            valid_past_index=valid_past_index,
         )
         hidden_states = residual + hidden_states
 
@@ -469,6 +481,7 @@ class LlamaModel(LlamaPreTrainedModel):
                 past_key_values_length=past_key_values_length,
             )
 
+        print("attention_mask is not None here", attention_mask is not None)
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
@@ -477,6 +490,7 @@ class LlamaModel(LlamaPreTrainedModel):
             combined_attention_mask = (
                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
             )
+            print("combined_attention_mask shape", combined_attention_mask.shape)
 
         return combined_attention_mask
 
@@ -492,6 +506,7 @@ class LlamaModel(LlamaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        valid_past_index: Optional[int] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -514,9 +529,13 @@ class LlamaModel(LlamaPreTrainedModel):
         seq_length_with_past = seq_length
         past_key_values_length = 0
 
-        if past_key_values is not None:
+        if valid_past_index is None and past_key_values is not None:
             past_key_values_length = past_key_values[0][0].shape[2]
             seq_length_with_past = seq_length_with_past + past_key_values_length
+        elif valid_past_index > 0:
+            past_key_values_length = valid_past_index + 1
+        elif valid_past_index == 0:
+            past_key_values_length = 0
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -582,6 +601,7 @@ class LlamaModel(LlamaPreTrainedModel):
                     past_key_value=past_key_value,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
+                    valid_past_index=valid_past_index,
                 )
 
             hidden_states = layer_outputs[0]
@@ -610,6 +630,8 @@ class LlamaModel(LlamaPreTrainedModel):
 
 
 class LlamaForCausalLM(LlamaPreTrainedModel):
+    supports_static_kv_cache = True
+
     def __init__(self, config):
         super().__init__(config)
         self.model = LlamaModel(config)
@@ -651,6 +673,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        valid_past_index: Optional[int] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -695,6 +718,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            valid_past_index=valid_past_index,
         )
 
         hidden_states = outputs[0]
@@ -728,7 +752,10 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
-        if past_key_values:
+        valid_past_index = kwargs.get("valid_past_index", None)
+        step_uses_cache = (valid_past_index is None and past_key_values is not None) or (valid_past_index is not None and valid_past_index > 0)
+
+        if step_uses_cache:
             input_ids = input_ids[:, -1:]
 
         position_ids = kwargs.get("position_ids", None)
@@ -736,7 +763,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
+            if step_uses_cache:
                 position_ids = position_ids[:, -1].unsqueeze(-1)
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
@@ -745,12 +772,16 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids}
 
+        if valid_past_index is not None and past_key_values is None:
+            raise ValueError("This shound not happen.")
+
         model_inputs.update(
             {
                 "position_ids": position_ids,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
+                "valid_past_index": valid_past_index,
             }
         )
         return model_inputs
