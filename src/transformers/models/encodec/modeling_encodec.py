@@ -55,7 +55,7 @@ class EncodecOutput(ModelOutput):
         audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
             Discret code embeddings computed using `model.encode`.
         audio_values (`torch.FlaotTensor` of shape `(batch_size, sequence_length)`, *optional*)
-
+            Decoded audio values, obtained using the decoder part of Encodec. 
 
     """
 
@@ -82,7 +82,7 @@ class EncodecDecoderOutput(ModelOutput):
     """
     Args:
         audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
-            Decoded audio output.
+            Decoded audio values, obtained using the decoder part of Encodec. 
     """
 
     audio_values: Optional[torch.FloatTensor] = None
@@ -237,12 +237,6 @@ class EncodecLSTM(nn.Module):
 class EncodecResnetBlock(nn.Module):
     """
     Residual block from SEANet model as used by EnCodec.
-
-    Args:
-        config:
-        dim (int): Dimension of the input/output
-        kernel_sizes (list): List of kernel sizes for the convolutions.
-        dilations (list): List of dilations for the convolutions.
     """
 
     def __init__(self, config: EncodecConfig, dim: int, dilations: List[int]):
@@ -517,7 +511,6 @@ ENCODEC_BASE_START_DOCSTRING = r"""
 """
 
 
-# TODO
 ENCODEC_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -535,7 +528,6 @@ ENCODEC_START_DOCSTRING = r"""
 """
 
 
-# TODO
 ENCODEC_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):

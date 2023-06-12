@@ -296,10 +296,10 @@ def convert_checkpoint(
         config.target_bandwidths = [3.0, 6.0, 12.0, 24.0]
         config.sampling_rate = 48_000
         config.audio_channels = 2
-        config.causal = False
-        config.norm = "time_group_norm"
+        config.use_causal_conv = False
+        config.norm_type = "time_group_norm"
         config.normalize = True
-        config.segment = 1.0
+        config.chunk_length_s = 1.0
     else:
         raise ValueError(f"Unknown model name: {model_name}")
 
