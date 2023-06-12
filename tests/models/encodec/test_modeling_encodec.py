@@ -444,8 +444,10 @@ class EncodecIntegrationTest(unittest.TestCase):
             "3.0": 0.001,
             "24.0": 0.0005,
         }
-        audio_code_sums = []
-        expected_codesums = {}
+        expected_codesums = {
+            "3.0": [144259, 146765, 156205, 176871, 102780],
+            "24.0": [1567904, 1297170, 1310040, 1464657, 813925],
+        }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "Matthijs/encodec_48khz"
 
@@ -482,7 +484,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                     input_values, padding_mask, bandwidth=float(bandwidth), return_dict=False
                 )
                 audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
-
+                
                 # make sure audio encoded codes are correct
                 self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
 

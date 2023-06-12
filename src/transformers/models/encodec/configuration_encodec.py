@@ -81,9 +81,9 @@ class EncodecConfig(PretrainedConfig):
             Ratio for trimming at the right of the transposed convolution under the `use_causal_conv = True` setup. If
             equal to 1.0, it means that all the trimming is done at the right.
         codebook_size (`int`, *optional*, defaults to 1024):
-            Codebook size.
+            Number of discret codes that make up VQVAE.
         codebook_dim (`int`, *optional*):
-            Codebook dimension. If not defined, uses the specified dimension in dim.
+            Dimension of the codebook vectors. If not defined, uses `hidden_size`.
 
     Example:
 
@@ -146,7 +146,7 @@ class EncodecConfig(PretrainedConfig):
         self.num_lstm_layers = num_lstm_layers
         self.trim_right_ratio = trim_right_ratio
         self.codebook_size = codebook_size
-        self.codebook_dim = codebook_dim
+        self.codebook_dim = codebook_dim if codebook_dim is not None else hidden_size
 
         super().__init__(
             **kwargs,
