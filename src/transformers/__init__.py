@@ -311,7 +311,6 @@ _import_structure = {
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_bigcode": ["GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTBigCodeConfig"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
-    "models.musicgen": ["MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "MusicgenConfig"],
     "models.gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig"],
     "models.gpt_neox_japanese": ["GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXJapaneseConfig"],
     "models.gpt_sw3": [],
@@ -396,6 +395,7 @@ _import_structure = {
     "models.mobilevitv2": ["MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTV2Config"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
+    "models.musicgen": ["MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "MusicgenConfig"],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
     "models.nat": ["NAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NatConfig"],
     "models.nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NezhaConfig"],
@@ -1744,14 +1744,6 @@ else:
             "load_tf_weights_in_gpt_neo",
         ]
     )
-    _import_structure["models.musicgen"].extend(
-        [
-            "MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MusicgenForConditionalGeneration",
-            "MusicgenModel",
-            "MusicgenPreTrainedModel",
-        ]
-    )
     _import_structure["models.gpt_neox"].extend(
         [
             "GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2126,6 +2118,14 @@ else:
     )
     _import_structure["models.mt5"].extend(
         ["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model", "MT5PreTrainedModel"]
+    )
+    _import_structure["models.musicgen"].extend(
+        [
+            "MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MusicgenForConditionalGeneration",
+            "MusicgenModel",
+            "MusicgenPreTrainedModel",
+        ]
     )
     _import_structure["models.mvp"].extend(
         [
@@ -4157,7 +4157,6 @@ if TYPE_CHECKING:
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_bigcode import GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTBigCodeConfig
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
-    from .models.musicgen import MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, MusicgenConfig
     from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
     from .models.gpt_neox_japanese import GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXJapaneseConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
@@ -4235,6 +4234,7 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTV2Config
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
+    from .models.musicgen import MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, MusicgenConfig
     from .models.mvp import MvpConfig, MvpTokenizer
     from .models.nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NatConfig
     from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
@@ -5388,12 +5388,6 @@ if TYPE_CHECKING:
             GPTNeoPreTrainedModel,
             load_tf_weights_in_gpt_neo,
         )
-        from .models.musicgen import (
-            MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MusicgenForConditionalGeneration,
-            MusicgenModel,
-            MusicgenPreTrainedModel,
-        )
         from .models.gpt_neox import (
             GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoXForCausalLM,
@@ -5688,6 +5682,12 @@ if TYPE_CHECKING:
             MPNetPreTrainedModel,
         )
         from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model, MT5PreTrainedModel
+        from .models.musicgen import (
+            MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MusicgenForConditionalGeneration,
+            MusicgenModel,
+            MusicgenPreTrainedModel,
+        )
         from .models.mvp import (
             MVP_PRETRAINED_MODEL_ARCHIVE_LIST,
             MvpForCausalLM,
