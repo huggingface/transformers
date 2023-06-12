@@ -112,6 +112,7 @@ def get_aligned_output_features_output_indices(
     )
     # Verify that the aligned out_features and out_indices are valid
     verify_out_features_out_indices(out_features=output_features, out_indices=output_indices, stage_names=stage_names)
+
     return output_features, output_indices
 
 

@@ -143,12 +143,15 @@ class VitDetEmbeddings(nn.Module):
 
 def get_rel_pos(q_size, k_size, rel_pos):
     """
-    Get relative positional embeddings according to the relative positions of
-        query and key sizes.
+    Get relative positional embeddings according to the relative positions of query and key sizes.
+
     Args:
-        q_size (int): size of query q.
-        k_size (int): size of key k.
-        rel_pos (Tensor): relative position embeddings (L, C).
+        q_size (`int`):
+            Size of query q.
+        k_size (`int`):
+            Size of key k.
+        rel_pos (`torch.Tensor`):
+            Relative position embeddings (num_embeddings, num_channels).
 
     Returns:
         Extracted positional embeddings according to relative positions.
@@ -265,6 +268,7 @@ class VitDetAttention(nn.Module):
             )
 
         attention_probs = attention_scores.softmax(dim=-1)
+
         hidden_state = (
             (attention_probs @ values)
             .view(batch_size, self.num_heads, height, width, -1)
@@ -273,7 +277,16 @@ class VitDetAttention(nn.Module):
         )
         hidden_state = self.proj(hidden_state)
 
-        outputs = (hidden_state, attention_probs) if output_attentions else (hidden_state,)
+        outputs = (
+            (
+                hidden_state,
+                attention_probs.reshape(
+                    batch_size, self.num_heads, attention_probs.shape[-2], attention_probs.shape[-1]
+                ),
+            )
+            if output_attentions
+            else (hidden_state,)
+        )
 
         return outputs
 
@@ -789,11 +802,15 @@ class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
         # initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self) -> VitDetEmbeddings:
+        return self.embeddings.projection
+
     @add_start_docstrings_to_model_forward(VITDET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.Tensor,
+        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
@@ -821,12 +838,14 @@ class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         embedding_output = self.embeddings(pixel_values)
 
         outputs = self.encoder(
             embedding_output,
             output_hidden_states=True,
+            output_attentions=output_attentions,
             return_dict=True,
         )
 
@@ -842,10 +861,12 @@ class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
             output = (feature_maps,)
             if output_hidden_states:
                 output += (outputs.hidden_states,)
+            if output_attentions:
+                output += (outputs.attentions,)
             return output
 
         return BackboneOutput(
             feature_maps=feature_maps,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=None,
+            attentions=outputs.attentions if output_attentions else None,
         )

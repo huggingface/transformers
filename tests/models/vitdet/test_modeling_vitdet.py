@@ -81,9 +81,7 @@ class VitDetModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
 
-        # in VitDet, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        self.seq_length = (self.image_size // self.patch_size) ** 2
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -117,15 +115,44 @@ class VitDetModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        num_patches_one_direction = self.image_size // self.patch_size
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, num_patches_one_direction, num_patches_one_direction, self.hidden_size),
+        )
+
+    def create_and_check_backbone(self, config, pixel_values, labels):
+        model = VitDetBackbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify hidden states
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 4, 4])
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), len(config.out_features))
+        self.parent.assertListEqual(model.channels, config.hidden_sizes[1:])
+
+        # verify backbone works with out_features=None
+        config.out_features = None
+        model = VitDetBackbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify feature maps
+        self.parent.assertEqual(len(result.feature_maps), 1)
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[-1], 1, 1])
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), 1)
+        self.parent.assertListEqual(model.channels, [config.hidden_sizes[-1]])
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        config, pixel_values, labels = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -180,6 +207,10 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_backbone(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_backbone(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

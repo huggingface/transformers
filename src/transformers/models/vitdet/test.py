@@ -1,12 +1,13 @@
 import torch
 
-from transformers import VitDetConfig, VitDetModel
+from transformers import VitDetBackbone, VitDetConfig
 
 
-config = VitDetConfig()
+config = VitDetConfig(out_features=["stage1", "stage2", "stage3", "stage4"])
 
-model = VitDetModel(config)
+model = VitDetBackbone(config)
 
 outputs = model(torch.randn(1, 3, 224, 224))
 
-print(outputs.last_hidden_state.shape)
+for i in outputs.feature_maps:
+    print(i.shape)
