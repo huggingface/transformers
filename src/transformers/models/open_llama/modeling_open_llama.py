@@ -736,12 +736,16 @@ class OpenLlamaForCausalLM(OpenLlamaPreTrainedModel):
 
         hidden_states = outputs[0]
         if self.config.shared_input_output_embedding:
-            logits = torch.einsum("blh,vh->blv", hidden_states, self.model.embed_tokens.weight)
+            logits = torch.einsum(
+                "blh,vh->blv", hidden_states.to(self.model.embed_tokens.weight.device), self.model.embed_tokens.weight
+            )
         else:
             logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
