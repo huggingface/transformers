@@ -937,7 +937,7 @@ class TFDebertaV2LMPredictionHead(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.config = config
-        self.hidden_size = config.hidden_size
+        self.embedding_size = config.embedding_size
 
         self.transform = TFDebertaV2PredictionHeadTransform(config, name="transform")
 
