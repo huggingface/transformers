@@ -3026,7 +3026,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
 
         if find_tied_parameters is not None:
-            model.tie_weights()
             tied_params = find_tied_parameters(model)
         else:
             tied_params = []
