@@ -2485,13 +2485,13 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
 # Copied from transformers.models.bart.modeling_bart.BartForConditionalGeneration with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
 class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
     base_model_prefix = "model"
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
     _keys_to_ignore_on_load_missing = [
-        r"final_logits_bias",
-        r"lm_head.weight",
+        "final_logits_bias",
+        "lm_head.weight",
         "encoder.embed_tokens.weight",
         "decoder.embed_tokens.weight",
     ]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: BigBirdPegasusConfig):
         super().__init__(config)

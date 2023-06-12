@@ -1769,7 +1769,7 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
 # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetModel with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, PROPHETNET->XLM_PROPHETNET
 class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["decoder.word_embeddings.weight", "encoder.word_embeddings.weight"]
-    _tied_weights_keys = ["decoder.word_embeddings.weight", "encoder.word_embeddings.weight"]
+    _tied_weights_keys = ["encoder.word_embeddings.weight", "decoder.word_embeddings.weight"]
 
     def __init__(self, config: XLMProphetNetConfig):
         super().__init__(config)
@@ -1904,7 +1904,7 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
         "encoder.word_embeddings.weight",
         "lm_head.weight",
     ]
-    _tied_weights_keys = ["decoder.word_embeddings.weight", "encoder.word_embeddings.weight", "lm_head.weight"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: XLMProphetNetConfig):
         super().__init__(config)
