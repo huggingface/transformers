@@ -17,7 +17,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import get_aligned_output_features_output_indices
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -27,7 +27,7 @@ VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class VitDetConfig(PretrainedConfig):
+class VitDetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VitDetModel`]. It is used to instantiate an
     VitDet model according to the specified arguments, defining the model architecture. Instantiating a configuration
