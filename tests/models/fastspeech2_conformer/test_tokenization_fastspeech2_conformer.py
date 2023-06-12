@@ -17,13 +17,12 @@
 import unittest
 
 from transformers.models.fastspeech2_conformer import FastSpeech2ConformerTokenizer
-from transformers.testing_utils import require_g2p_en, require_tokenizers, slow
+from transformers.testing_utils import require_g2p_en, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_g2p_en
-@require_tokenizers
 class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = FastSpeech2ConformerTokenizer
     test_rust_tokenizer = False

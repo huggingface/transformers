@@ -31,7 +31,9 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`FastSpeech2ConformerModel`]. It is used to
     instantiate an FastSpeech2Conformer model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    FastSpeech2Conformer [fastspeech2_conformer](https://huggingface.co/put a link here) architecture.
+    FastSpeech2Conformer
+    [connor-henderson/fastspeech2_conformer](https://huggingface.co/connor-henderson/fastspeech2_conformer)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -43,10 +45,10 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
     ```python
     >>> from transformers import FastSpeech2ConformerModel, FastSpeech2ConformerConfig
 
-    >>> # Initializing a FastSpeech2Conformer fastspeech2 style configuration
+    >>> # Initializing a FastSpeech2Conformer style configuration
     >>> configuration = FastSpeech2ConformerConfig()
 
-    >>> # Initializing a model from the fastspeech2 style configuration
+    >>> # Initializing a model from the FastSpeech2Conformer style configuration
     >>> model = FastSpeech2ConformerModel(configuration)
 
     >>> # Accessing the model configuration
@@ -205,13 +207,14 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         return 256
 
 
-# Copied from transformers.models.speecht5.configuration_speecht5.SpeechT5HifiGanConfig with SpeechT5->FastSpeech2Conformer
 class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FastSpeech2ConformerHifiGanModel`]. It is used to
     instantiate a FastSpeech2Conformer HiFi-GAN vocoder model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    FastSpeech2Conformer [microsoft/speecht5_hifigan](https://huggingface.co/microsoft/speecht5_hifigan) architecture.
+    FastSpeech2Conformer
+    [connor-henderson/fastspeech2_conformer_hifigan](https://huggingface.co/connor-henderson/fastspeech2_conformer_hifigan)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -249,10 +252,10 @@ class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):
     ```python
     >>> from transformers import FastSpeech2ConformerHifiGan, FastSpeech2ConformerHifiGanConfig
 
-    >>> # Initializing a "microsoft/speecht5_hifigan" style configuration
+    >>> # Initializing a FastSpeech2ConformerHifiGan configuration
     >>> configuration = FastSpeech2ConformerHifiGanConfig()
 
-    >>> # Initializing a model (with random weights) from the "microsoft/speecht5_hifigan" style configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = FastSpeech2ConformerHifiGan(configuration)
 
     >>> # Accessing the model configuration
@@ -263,10 +266,10 @@ class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):
     def __init__(
         self,
         model_in_dim=80,
-        sampling_rate=16000,
+        sampling_rate=22050,
         upsample_initial_channel=512,
-        upsample_rates=[4, 4, 4, 4],
-        upsample_kernel_sizes=[8, 8, 8, 8],
+        upsample_rates=[8, 8, 2, 2],
+        upsample_kernel_sizes=[16, 16, 4, 4],
         resblock_kernel_sizes=[3, 7, 11],
         resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
         initializer_range=0.01,

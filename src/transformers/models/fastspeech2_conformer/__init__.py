@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_g2p_en_available,
     is_torch_available,
 )
 
@@ -28,15 +27,8 @@ _import_structure = {
         "FastSpeech2ConformerConfig",
         "FastSpeech2ConformerHifiGanConfig",
     ],
+    "tokenization_fastspeech2_conformer": ["FastSpeech2ConformerTokenizer"],
 }
-
-try:
-    if not is_g2p_en_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_fastspeech2_conformer"] = ["FastSpeech2ConformerTokenizer"]
 
 try:
     if not is_torch_available():
@@ -58,14 +50,7 @@ if TYPE_CHECKING:
         FastSpeech2ConformerConfig,
         FastSpeech2ConformerHifiGanConfig,
     )
-
-    try:
-        if not is_g2p_en_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_fastspeech2_conformer import FastSpeech2ConformerTokenizer
+    from .tokenization_fastspeech2_conformer import FastSpeech2ConformerTokenizer
 
     try:
         if not is_torch_available():

@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple, Union
 
 import numpy
 import torch
@@ -24,12 +24,9 @@ from torch import nn
 
 from ...modeling_outputs import BaseModelOutput, Seq2SeqSpectrogramOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_fastspeech2_conformer import FastSpeech2ConformerConfig, FastSpeech2ConformerHifiGanConfig
 
-
-# General docstring
-_CONFIG_FOR_DOC = "FastSpeech2ConformerConfig"
 
 logger = logging.get_logger(__name__)
 
@@ -41,14 +38,26 @@ FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 @dataclass
 class FastSpeech2ConformerModelOutput(Seq2SeqSpectrogramOutput):
-    """Output type of [`FastSpeech2ConformerModel`]."""
+    """
+    Output type of [`FastSpeech2ConformerModel`].
+
+    Args:
+        duration_outputs (`torch.LongTensor`, *optional*):
+            Outputs of the duration predictor. Shape of `(batch_size, max_text_length + 1)`.
+        pitch_outputs (`torch.FloatTensor`, *optional*):
+            Outputs of the pitch predictor. Shape of `(batch_size, max_text_length + 1, 1)`.
+        energy_outputs (`torch.FloatTensor`, *optional*):
+            Outputs of the energy predictor. Shape of `(batch_size, max_text_length + 1, 1)`.
+    """
 
     duration_outputs: torch.LongTensor = None
     pitch_outputs: torch.FloatTensor = None
     energy_outputs: torch.FloatTensor = None
 
 
-HIFIGAN_START_DOCSTRING = r"""
+_CONFIG_FOR_DOC = "FastSpeech2ConformerConfig"
+
+FASTSPEECH2_CONFORMER_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -64,7 +73,8 @@ HIFIGAN_START_DOCSTRING = r"""
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-FASTSPEECH2_CONFORMER_START_DOCSTRING = r"""
+
+HIFIGAN_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -703,6 +713,10 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
+@add_start_docstrings(
+    """FastSpeech2Conformer Model.""",
+    FASTSPEECH2_CONFORMER_START_DOCSTRING,
+)
 class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
     """
     FastSpeech 2 module.
@@ -821,6 +835,8 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
 
         self.post_init()
 
+    @add_start_docstrings_to_model_forward(FASTSPEECH2_CONFORMER_START_DOCSTRING)
+    @replace_return_docstrings(output_type=FastSpeech2ConformerModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -836,39 +852,36 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple, FastSpeech2ConformerModelOutput]:
         """
-        Forward pass of the model.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Input sequence of text vectors.
-            input_lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Batch of lengths of each input sequence.
-            target_spectrograms (`torch.FloatTensor` of shape `(batch_size, max_spectrogram_length, num_mel_bins)`, *optional*):
-                Batch of padded target features.
-            spectrogram_lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Batch of the lengths of each target spectrogram.
-            target_durations (`torch.LongTensor` of shape `(batch_size, sequence_length + 1)`, *optional*):
-                Batch of padded durations.
-            target_pitch (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*):
-                Batch of padded token-averaged pitch.
-            target_energy (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*):
-                Batch of padded token-averaged energy.
-            utterance_embedding (`torch.FloatTensor` of shape `(batch_size, embedding_dim)`, *optional*):
-                Tensor containing the utterance embeddings.
-            alpha (`float`, *optional*):
-                Alpha to control the speed of the spectrogram generation. Default is `1.0`.
-            lang_id (`torch.LongTensor`, *optional*):
-                Language id to condition the model.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`ModelOutput`] instead of a plain tuple.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Input sequence of text vectors.
+        input_lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Batch of lengths of each input sequence.
+        target_spectrograms (`torch.FloatTensor` of shape `(batch_size, max_spectrogram_length, num_mel_bins)`, *optional*):
+            Batch of padded target features.
+        spectrogram_lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Batch of the lengths of each target spectrogram.
+        target_durations (`torch.LongTensor` of shape `(batch_size, sequence_length + 1)`, *optional*):
+            Batch of padded durations.
+        target_pitch (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*):
+            Batch of padded token-averaged pitch.
+        target_energy (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*):
+            Batch of padded token-averaged energy.
+        utterance_embedding (`torch.FloatTensor` of shape `(batch_size, embedding_dim)`, *optional*):
+            Tensor containing the utterance embeddings.
+        alpha (`float`, *optional*):
+            Alpha to control the speed of the spectrogram generation. Default is `1.0`.
+        lang_id (`torch.LongTensor`, *optional*):
+            Language id to condition the model.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`FastSpeech2ConformerModelOutput`] instead of a plain tuple.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
 
         Returns:
 
@@ -1809,6 +1822,10 @@ class HifiGanResidualBlock(nn.Module):
         return hidden_states
 
 
+@add_start_docstrings(
+    """HiFi-GAN vocoder.""",
+    HIFIGAN_START_DOCSTRING,
+)
 # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan with SpeechT5->FastSpeech2Conformer
 class FastSpeech2ConformerHifiGan(PreTrainedModel):
     config_class = FastSpeech2ConformerHifiGanConfig

@@ -30,6 +30,7 @@ from .utils import (
     is_bitsandbytes_available,
     is_essentia_available,
     is_flax_available,
+    is_g2p_en_available,
     is_keras_nlp_available,
     is_librosa_available,
     is_pretty_midi_available,
