@@ -42,7 +42,7 @@ def get_config(model_name):
         # 2, 5, 8, 11 for global attention
         window_block_indices=[0, 1, 3, 4, 6, 7, 9, 10],
         residual_block_indices=[2, 5, 8, 11],
-        out_features=["stage4"],
+        out_features=["stage12"],
     )
 
     return VitMatteConfig(backbone_config=backbone_config, hidden_size=hidden_size)

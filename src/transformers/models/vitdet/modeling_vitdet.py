@@ -798,7 +798,7 @@ class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
 
         self.embeddings = VitDetEmbeddings(config)
         self.encoder = VitDetEncoder(config)
-        # self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
+        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
 
         # initialize weights and apply final processing
         self.post_init()
