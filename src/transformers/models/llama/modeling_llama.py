@@ -131,8 +131,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
     cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
     sin = sin.squeeze(1).squeeze(0)  # [seq_len, dim]
-    print("cos shape", cos.shape)
-    print("position_ids", position_ids)
     cos = cos[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
     sin = sin[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
     q_embed = (q * cos) + (rotate_half(q) * sin)
@@ -202,17 +200,19 @@ class LlamaAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
-        if valid_past_index is None and past_key_value is not None:
+        if (valid_past_index is None and past_key_value is not None):
             kv_seq_len += past_key_value[0].shape[-2]
+        elif valid_past_index is not None:
+            kv_seq_len += valid_past_index
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
         # [bsz, nh, t, hd]
 
-        print("valid_past_index", valid_past_index)
-        print("past_key_value[0] shape", past_key_value[0].shape)
-        if valid_past_index is None and past_key_value is not None:
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        if valid_past_index is None:
+            if past_key_value is not None:
+                key_states = torch.cat([past_key_value[0], key_states], dim=2)
+                value_states = torch.cat([past_key_value[1], value_states], dim=2)
+            past_key_value = (key_states, value_states) if use_cache else None
         elif valid_past_index > 0:
             upper = valid_past_index + 1
             past_key_value[0][:, :, valid_past_index:upper] = key_states  # Slice to keep dimension info
@@ -225,13 +225,6 @@ class LlamaAttention(nn.Module):
             past_key_value[0][:, :, :kv_seq_len] = key_states
             past_key_value[1][:, :, :kv_seq_len] = value_states
 
-        print("attention_mask bef sdpa", attention_mask.shape)
-        print("query_states bef sdpa", query_states.shape)
-        print("value_states bef sdpa", value_states.shape)
-        print("key_states bef sdpa", key_states.shape)
-        value_states = value_states.contiguous()
-        key_states = key_states.contiguous()
-        print("contiguous?", attention_mask.is_contiguous(), query_states.is_contiguous(), value_states.is_contiguous(), key_states.is_contiguous())
         if bsz == 1 or self.training:
             # BEWARE: at this stage, attention_mask is not the same as in transformers llama
             if query_states.shape[2] > 1:
@@ -255,7 +248,8 @@ class LlamaAttention(nn.Module):
 
         attn_output = self.o_proj(attn_output)
 
-        return attn_output, None, None
+        # TODO (felix) returning past_key_value with static cache is probably useless?
+        return attn_output, None, past_key_value
 
 
 class LlamaDecoderLayer(nn.Module):
@@ -481,7 +475,6 @@ class LlamaModel(LlamaPreTrainedModel):
                 past_key_values_length=past_key_values_length,
             )
 
-        print("attention_mask is not None here", attention_mask is not None)
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
@@ -490,7 +483,6 @@ class LlamaModel(LlamaPreTrainedModel):
             combined_attention_mask = (
                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
             )
-            print("combined_attention_mask shape", combined_attention_mask.shape)
 
         return combined_attention_mask
 
@@ -529,9 +521,10 @@ class LlamaModel(LlamaPreTrainedModel):
         seq_length_with_past = seq_length
         past_key_values_length = 0
 
-        if valid_past_index is None and past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
-            seq_length_with_past = seq_length_with_past + past_key_values_length
+        if valid_past_index is None:
+            if past_key_values is not None:
+                past_key_values_length = past_key_values[0][0].shape[2]
+                seq_length_with_past = seq_length_with_past + past_key_values_length
         elif valid_past_index > 0:
             past_key_values_length = valid_past_index + 1
         elif valid_past_index == 0:

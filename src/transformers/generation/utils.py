@@ -2345,6 +2345,7 @@ class GenerationMixin:
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
+            """
             for key, inp in model_inputs.items():
                 if isinstance(inp, torch.Tensor):
                     print(key, inp.shape)
@@ -2357,6 +2358,7 @@ class GenerationMixin:
                                 print("    ", key, inp__.shape)
                 else:
                     print(key, type(inp))
+            """
 
             # forward pass to get next token
             outputs = self(
