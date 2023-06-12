@@ -56,7 +56,7 @@ class ImageMattingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    alpha: torch.FloatTensor = None
+    alphas: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -171,10 +171,10 @@ class VitMatteHead(nn.Module):
             nn.Conv2d(mid_channels, 1, 1, 1, 0),
         )
 
-    def forward(self, x):
-        x = self.matting_convs(x)
+    def forward(self, hidden_state):
+        hidden_state = self.matting_convs(hidden_state)
 
-        return x
+        return hidden_state
 
 
 class VitMatteDetailCaptureModule(nn.Module):
