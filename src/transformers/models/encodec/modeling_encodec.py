@@ -627,7 +627,7 @@ class EncodecModel(EncodecPreTrainedModel):
             factors for each chunk when `normalize` is True. Each frames is a tuple `(codebook, scale)`, with
             `codebook` of shape `[B, K, T]`, with `K` the number of codebooks, `T` frames.
         """
-        return_dict = return_dict or self.config.return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if bandwidth is None:
             bandwidth = self.config.target_bandwidths[0]
