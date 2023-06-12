@@ -1020,17 +1020,12 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
     @torch.no_grad()
     def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
         bsz, codebooks, seq_len = input_ids.size()
-        # Create the position ids from the input token ids. Any padded tokens remain padded.
-        position_ids = self.create_position_ids_from_input_ids(input_ids, past_key_values_length).to(input_ids.device)
+        # Create the position ids from the input token ids.
+        position_ids = (torch.arange(seq_len) + past_key_values_length).to(input_ids.device)
         # expand embeddings if needed
         if seq_len > self.weights.size(0):
             self.make_weights(seq_len + self.offset, self.embedding_dim)
         return self.weights.index_select(0, position_ids.view(-1)).detach()
-
-    def create_position_ids_from_input_ids(self, input_ids: torch.Tensor, past_key_values_length: Optional[int] = 0):
-        seq_len = input_ids.shape[-1]
-        position_ids = torch.arange(seq_len)
-        return position_ids + past_key_values_length
 
 
 class MusicgenAttention(nn.Module):
