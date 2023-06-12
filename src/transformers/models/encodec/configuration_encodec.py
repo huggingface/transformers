@@ -24,8 +24,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Matthijs/encodec_24khz": "https://huggingface.co/Matthijs/encodec_24khz/resolve/main/config.json",
-    "Matthijs/encodec_48khz": "https://huggingface.co/Matthijs/encodec_48khz/resolve/main/config.json",
+    "facebook/encodec_24khz": "https://huggingface.co/facebook/encodec_24khz/resolve/main/config.json",
+    "facebook/encodec_48khz": "https://huggingface.co/facebook/encodec_48khz/resolve/main/config.json",
 }
 
 
@@ -34,7 +34,7 @@ class EncodecConfig(PretrainedConfig):
     This is the configuration class to store the configuration of an [`EncodecModel`]. It is used to instantiate a
     Encodec model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
-    [Matthijs/encodec_24khz](https://huggingface.co/Matthijs/encodec_24khz) architecture.
+    [facebook/encodec_24khz](https://huggingface.co/facebook/encodec_24khz) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -53,7 +53,7 @@ class EncodecConfig(PretrainedConfig):
         hidden_size (`int`, *optional*, defaults to 128):
             Intermediate representation dimension.
         num_filters (`int`, *optional*, defaults to 32):
-            Base width for the model. ??? Width??
+            Number of convolution kernels of first `EncodecConv1d` down sampling layer.
         num_residual_layers (`int`,  *optional*, defaults to 1):
             Number of residual layers.
         upsampling_ratios (`Sequence[int]` , *optional*, defaults to `[8, 5, 4, 2]`):
@@ -148,9 +148,7 @@ class EncodecConfig(PretrainedConfig):
         self.codebook_size = codebook_size
         self.codebook_dim = codebook_dim if codebook_dim is not None else hidden_size
 
-        super().__init__(
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     # This is a property because you might want to change the chunk_length_s on the fly
     @property

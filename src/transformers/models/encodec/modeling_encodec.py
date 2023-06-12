@@ -42,8 +42,8 @@ _CONFIG_FOR_DOC = "EncodecConfig"
 
 
 ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Matthijs/encodec_24khz",
-    "Matthijs/encodec_48khz",
+    "facebook/encodec_24khz",
+    "facebook/encodec_48khz",
     # See all EnCodec models at https://huggingface.co/models?filter=encodec
 ]
 
@@ -56,7 +56,6 @@ class EncodecOutput(ModelOutput):
             Discret code embeddings computed using `model.encode`.
         audio_values (`torch.FlaotTensor` of shape `(batch_size, sequence_length)`, *optional*)
             Decoded audio values, obtained using the decoder part of Encodec.
-
     """
 
     audio_codes: torch.FloatTensor = None
@@ -461,8 +460,6 @@ class EncodecPreTrainedModel(PreTrainedModel):
     base_model_prefix = "encodec"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
-
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
