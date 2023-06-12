@@ -1077,21 +1077,39 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
 class AudiocraftDelayPatternLogitsProcessor(LogitsProcessor):
     r"""This processor applies a delayed pattern mask to the codebook scores. For the logit scores at the current
     generated step, the pattern mask determines whether the logits scores are valid or whether they should be masked.
-    Each codebook is offset by the previous codebook by one, giving a delayed pattern mask (or an upper triangular mask
-    matrix). The logit scores for masked tokens are modified such that the padding token is forced for that codebook.
-    Otherwise, the scores are unchanged.
+    Each codebook is offset by the previous codebook by one, giving a delayed pattern mask. The logit scores for masked
+    tokens are modified such that the padding token is forced for that codebook. Otherwise, the scores are unchanged.
+    Example:
+        Taking max_length=6 and num_codebooks=4, the delay pattern mask is shape `(num_codebooks, max_length)`, with
+        zeros at the un-masked positions, and ones otherwise:
+        [[0, 0, 0, 1, 1, 1],
+        [1, 0, 0, 0, 1, 1],
+        [1, 1, 0, 0, 0, 1],
+        [1, 1, 1, 0, 0, 0]]
+        For the first position (seq_len=0), we slice the delay pattern to give the mask:
+        [0, 1, 1, 1]
+        Meaning the first codebook is not modified, but the second to fourth codebooks are forced to predict the
+        padding token.
     """
 
-    def __init__(self, pad_token_id):
+    def __init__(self, pad_token_id: int, max_length: int):
         self.pad_token_id = pad_token_id
+        self.max_length = max_length
 
     def __call__(self, input_ids, scores):
         bsz, codebooks, seq_len = input_ids.shape
         vocab_size = scores.shape[-1]
-        # construct a pattern mask that takes value 1 for codebook with valid scores, and -inf for all masked scores
-        delay_pattern = torch.triu(torch.ones((codebooks, seq_len)))
-        mask = delay_pattern[:, -1:].repeat(1, vocab_size)
-        scores = torch.where(mask.bool(), scores, -float("inf"))
+        # construct a pattern mask that indicates the positions of padding tokens for each codebook
+        # first fill the upper triangular part (the EOS padding)
+        delay_pattern = torch.triu(
+            torch.ones((codebooks, self.max_length)), diagonal=self.max_length - codebooks + 1
+        )
+        # then fill the lower triangular part (the BOS padding)
+        delay_pattern = delay_pattern + torch.tril(torch.ones((codebooks, self.max_length)), diagonal=-1)
+        # slice the pattern to get the mask for the current position
+        # and expand the mask to match the dimensionality of the vocabulary
+        mask = delay_pattern[:, seq_len - 1 : seq_len].repeat(1, vocab_size)
+        scores = torch.where(mask.bool(), -float("inf"), scores)
         # ensure padding token id takes non-inf score so that it is always sampled
         scores[:, :, self.pad_token_id] = torch.where(torch.isinf(scores[:, :, self.pad_token_id]), 0, 1)
         return scores
