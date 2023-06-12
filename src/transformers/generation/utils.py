@@ -4232,7 +4232,12 @@ class GenerationMixin:
 
         # other auxiliary variables
         max_len = stopping_criteria[0].max_length
-        assistant_kv_indexing = 1 if "bloom" in assistant_model.__class__.__name__.lower() or "bloom" in assistant_model.config.architectures[0].lower() else 0
+        assistant_kv_indexing = (
+            1
+            if "bloom" in assistant_model.__class__.__name__.lower()
+            or "bloom" in assistant_model.config.architectures[0].lower()
+            else 0
+        )
 
         this_peer_finished = False  # used by synced_gpus only
         while True:
