@@ -74,7 +74,7 @@ class EncodecEncoderOutput(ModelOutput):
     """
 
     audio_codes: torch.FloatTensor = None
-    audio_scales: Optional[torch.Tensor] = None
+    audio_scales: torch.FloatTensor = None
 
 
 @dataclass
@@ -85,7 +85,7 @@ class EncodecDecoderOutput(ModelOutput):
             Decoded audio values, obtained using the decoder part of Encodec.
     """
 
-    audio_values: Optional[torch.FloatTensor] = None
+    audio_values: torch.FloatTensor = None
 
 
 class EncodecConv1d(nn.Module):
@@ -660,6 +660,7 @@ class EncodecModel(EncodecPreTrainedModel):
             encoded_frames.append(encoded_frame)
             scales.append(scale)
 
+        torch.cat([encoded[0] for encoded in encoded_frames], dim=-1)
         encoded_frames = torch.stack(encoded_frames)
 
         if return_dict:
