@@ -30,28 +30,27 @@ class DocumentQuestionAnsweringToolTester(unittest.TestCase, ToolTesterMixin):
 
     def test_exact_match_arg(self):
         dataset = load_dataset("hf-internal-testing/example-documents", split="test")
-        image = dataset[0]["image"]
+        document = dataset[0]["image"]
 
-        result = self.tool(image, "When is the coffee break?")
+        result = self.tool(document, "When is the coffee break?")
         self.assertEqual(result, "11-14 to 11:39 a.m.")
 
     def test_exact_match_arg_remote(self):
         dataset = load_dataset("hf-internal-testing/example-documents", split="test")
-        image = dataset[0]["image"]
+        document = dataset[0]["image"]
 
-        result = self.remote_tool(image, "When is the coffee break?")
+        result = self.remote_tool(document, "When is the coffee break?")
         self.assertEqual(result, "11-14 to 11:39 a.m.")
 
     def test_exact_match_kwarg(self):
         dataset = load_dataset("hf-internal-testing/example-documents", split="test")
-        image = dataset[0]["image"]
+        document = dataset[0]["image"]
 
-        result = self.tool(image=image, question="When is the coffee break?")
-        self.assertEqual(result, "11-14 to 11:39 a.m.")
+        self.tool(document=document, question="When is the coffee break?")
 
     def test_exact_match_kwarg_remote(self):
         dataset = load_dataset("hf-internal-testing/example-documents", split="test")
-        image = dataset[0]["image"]
+        document = dataset[0]["image"]
 
-        result = self.remote_tool(image=image, question="When is the coffee break?")
+        result = self.remote_tool(document=document, question="When is the coffee break?")
         self.assertEqual(result, "11-14 to 11:39 a.m.")

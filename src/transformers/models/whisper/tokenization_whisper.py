@@ -491,7 +491,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
         return normalizer(text)
 
-    def _decode_with_timestamps(self, token_ids, time_precision=0.02) -> str:
+    def _decode_with_timestamps(self, token_ids, skip_special_tokens=False, time_precision=0.02) -> str:
         """
         Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
         given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
@@ -505,7 +505,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 outputs.append([])
             else:
                 outputs[-1].append(token)
-        outputs = [s if isinstance(s, str) else self.decode(s) for s in outputs]
+        outputs = [
+            s if isinstance(s, str) else self.decode(s, skip_special_tokens=skip_special_tokens) for s in outputs
+        ]
         return "".join(outputs)
 
     def _compute_offsets(self, token_ids, time_precision=0.02):
@@ -593,7 +595,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
         if decode_with_timestamps:
-            text = self._decode_with_timestamps(token_ids, time_precision=time_precision)
+            text = self._decode_with_timestamps(
+                token_ids, time_precision=time_precision, skip_special_tokens=skip_special_tokens
+            )
         # retrieve offsets
         if output_offsets:
             offsets = None

@@ -54,7 +54,9 @@ _CONFIG_FOR_DOC = "OPTConfig"
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 
 # Causal LM output
-_CAUSAL_LM_EXPECTED_OUTPUT = "Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you."
+_CAUSAL_LM_EXPECTED_OUTPUT = (
+    "Hey, are you conscious? Can you talk to me?\nI'm not conscious. I'm just a little bit of a weirdo."
+)
 
 LARGE_NEGATIVE = -1e8
 

@@ -191,7 +191,7 @@ tokenized_data = dict(tokenized_data)
 labels = np.array(dataset["label"])  # Label is already an array of 0 and 1
 ```
 
-Finally, load, [`compile`](https://keras.io/api/models/model_training_apis/#compile-method), and [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) the model:
+Finally, load, [`compile`](https://keras.io/api/models/model_training_apis/#compile-method), and [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) the model. Note that Transformers models all have a default task-relevant loss function, so you don't need to specify one unless you want to:
 
 ```py
 from transformers import TFAutoModelForSequenceClassification
@@ -200,7 +200,7 @@ from tensorflow.keras.optimizers import Adam
 # Load and compile our model
 model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased")
 # Lower learning rates are often better for fine-tuning transformers
-model.compile(optimizer=Adam(3e-5))
+model.compile(optimizer=Adam(3e-5))  # No loss argument!
 
 model.fit(tokenized_data, labels)
 ```
@@ -261,7 +261,7 @@ list of samples into a batch and apply any preprocessing you want. See our
 Once you've created a `tf.data.Dataset`, you can compile and fit the model as before:
 
 ```py
-model.compile(optimizer=Adam(3e-5))
+model.compile(optimizer=Adam(3e-5))  # No loss argument!
 
 model.fit(tf_dataset)
 ```

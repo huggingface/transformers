@@ -20,7 +20,7 @@ from collections import OrderedDict
 
 # Build the list of all feature extractors
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module
+from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
@@ -194,7 +194,7 @@ class AutoProcessor:
         >>> # processor = AutoProcessor.from_pretrained("./test/saved_model/")
         ```"""
         config = kwargs.pop("config", None)
-        trust_remote_code = kwargs.pop("trust_remote_code", False)
+        trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
         processor_class = None
@@ -248,28 +248,28 @@ class AutoProcessor:
                 processor_auto_map = config.auto_map["AutoProcessor"]
 
         if processor_class is not None:
-            # If we have custom code for a feature extractor, we get the proper class.
-            if processor_auto_map is not None:
-                if not trust_remote_code:
-                    raise ValueError(
-                        f"Loading {pretrained_model_name_or_path} requires you to execute the feature extractor file "
-                        "in that repo on your local machine. Make sure you have read the code there to avoid "
-                        "malicious use, then set the option `trust_remote_code=True` to remove this error."
-                    )
+            processor_class = processor_class_from_name(processor_class)
 
-                processor_class = get_class_from_dynamic_module(
-                    processor_auto_map, pretrained_model_name_or_path, **kwargs
-                )
-                _ = kwargs.pop("code_revision", None)
-            else:
-                processor_class = processor_class_from_name(processor_class)
+        has_remote_code = processor_auto_map is not None
+        has_local_code = processor_class is not None or type(config) in PROCESSOR_MAPPING
+        trust_remote_code = resolve_trust_remote_code(
+            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
+        )
 
+        if has_remote_code and trust_remote_code:
+            processor_class = get_class_from_dynamic_module(
+                processor_auto_map, pretrained_model_name_or_path, **kwargs
+            )
+            _ = kwargs.pop("code_revision", None)
             return processor_class.from_pretrained(
                 pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
             )
-
+        elif processor_class is not None:
+            return processor_class.from_pretrained(
+                pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+            )
         # Last try: we use the PROCESSOR_MAPPING.
-        if type(config) in PROCESSOR_MAPPING:
+        elif type(config) in PROCESSOR_MAPPING:
             return PROCESSOR_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         # At this stage, there doesn't seem to be a `Processor` class available for this model, so let's try a

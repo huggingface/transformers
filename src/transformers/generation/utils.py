@@ -616,6 +616,10 @@ class GenerationMixin:
     ) -> Dict[str, Any]:
         # 1. get encoder
         encoder = self.get_encoder()
+        # Compatibility with Accelerate big model inference: we need the encoder to outputs stuff on the same device
+        # as the inputs.
+        if hasattr(encoder, "_hf_hook"):
+            encoder._hf_hook.io_same_device = True
 
         # 2. Prepare encoder args and encoder kwargs from model kwargs.
         irrelevant_prefix = ["decoder_", "cross_attn", "use_cache"]
@@ -4318,6 +4322,7 @@ class GenerationMixin:
                         encoder_outputs=model_kwargs["encoder_outputs"],
                         output_attentions=output_attentions,
                         output_hidden_states=output_hidden_states,
+                        use_cache=True,
                     )
                 else:
                     outputs = self(
@@ -4326,6 +4331,7 @@ class GenerationMixin:
                         past_key_values=model_kwargs["past_key_values"],
                         output_attentions=output_attentions,
                         output_hidden_states=output_hidden_states,
+                        use_cache=True,
                     )
             else:
                 if self.config.is_encoder_decoder:
@@ -4334,12 +4340,14 @@ class GenerationMixin:
                         encoder_outputs=model_kwargs["encoder_outputs"],
                         output_attentions=output_attentions,
                         output_hidden_states=output_hidden_states,
+                        use_cache=True,
                     )
                 else:
                     outputs = self(
                         candidate_input_ids,
                         output_attentions=output_attentions,
                         output_hidden_states=output_hidden_states,
+                        use_cache=True,
                     )
 
             # 2.2. Process the new logits

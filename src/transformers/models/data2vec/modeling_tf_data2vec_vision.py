@@ -464,7 +464,7 @@ class TFData2VecVisionLayer(tf.keras.layers.Layer):
         )
         self.init_values = config.layer_scale_init_value
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape: tf.TensorShape = None):
         if self.init_values > 0:
             self.lambda_1 = self.add_weight(
                 shape=(self.config.hidden_size),

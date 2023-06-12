@@ -134,6 +134,8 @@ from .trainer_utils import (
 )
 from .training_args import OptimizerNames, ParallelMode, TrainingArguments
 from .utils import (
+    ADAPTER_SAFE_WEIGHTS_NAME,
+    ADAPTER_WEIGHTS_NAME,
     CONFIG_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
@@ -147,6 +149,7 @@ from .utils import (
     is_datasets_available,
     is_in_notebook,
     is_ipex_available,
+    is_peft_available,
     is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
@@ -203,6 +206,10 @@ else:
 
 if is_safetensors_available():
     import safetensors.torch
+
+
+if is_peft_available():
+    from peft import PeftModel
 
 
 skip_first_batches = None
@@ -339,31 +346,7 @@ class Trainer:
         self.hp_name = None
         self.is_in_train = False
 
-        # create accelerator object
-        self.accelerator = Accelerator(
-            deepspeed_plugin=self.args.deepspeed_plugin,
-            gradient_accumulation_steps=self.args.gradient_accumulation_steps,
-        )
-
-        # deepspeed and accelerate flags covering both trainer args and accelerate launcher
-        self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
-        self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
-
-        # post accelerator creation setup
-        if self.is_fsdp_enabled:
-            fsdp_plugin = self.accelerator.state.fsdp_plugin
-            fsdp_plugin.limit_all_gathers = self.args.fsdp_config.get("limit_all_gathers", False)
-            fsdp_plugin.use_orig_params = self.args.fsdp_config.get("use_orig_params", False)
-
-        if self.is_deepspeed_enabled:
-            if getattr(self.args, "hf_deepspeed_config", None) is None:
-                from transformers.deepspeed import HfTrainerDeepSpeedConfig
-
-                ds_plugin = self.accelerator.state.deepspeed_plugin
-
-                ds_plugin.hf_ds_config = HfTrainerDeepSpeedConfig(ds_plugin.hf_ds_config.config)
-                ds_plugin.deepspeed_config = ds_plugin.hf_ds_config.config
-                ds_plugin.hf_ds_config.trainer_config_process(self.args)
+        self.create_accelerator_and_postprocess()
 
         # memory metrics - must set up as early as possible
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
@@ -1343,7 +1326,8 @@ class Trainer:
 
             self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
             self.args.hf_deepspeed_config.trainer_config_process(self.args)
-            self.accelerator.state.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.hf_deepspeed_config)
+            self.args.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.args.hf_deepspeed_config)
+        self.create_accelerator_and_postprocess()
 
     def _report_to_hp_search(self, trial: Union["optuna.Trial", Dict[str, Any]], step: int, metrics: Dict[str, float]):
         if self.hp_search_backend is None or trial is None:
@@ -1668,6 +1652,7 @@ class Trainer:
     def _inner_training_loop(
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
     ):
+        self.accelerator.free_memory()
         self._train_batch_size = batch_size
         logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
         # Data loader and number of training steps
@@ -1764,9 +1749,16 @@ class Trainer:
 
         # prepare using `accelerator` prepare
         if use_accelerator_prepare:
-            model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
-                self.model, self.optimizer, self.lr_scheduler
-            )
+            if hasattr(self.lr_scheduler, "step"):
+                if self.use_apex:
+                    model = self.accelerator.prepare(self.model)
+                else:
+                    model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
+            else:
+                # to handle cases wherein we pass "DummyScheduler" such as when it is specified in DeepSpeed config.
+                model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
+                    self.model, self.optimizer, self.lr_scheduler
+                )
 
         if self.is_fsdp_enabled:
             self.model = model
@@ -2013,6 +2005,7 @@ class Trainer:
                         optimizer_was_run = scale_before <= scale_after
                     else:
                         self.optimizer.step()
+                        optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
 
                     if optimizer_was_run:
                         # Delay optimizer scheduling until metrics are generated
@@ -2195,11 +2188,20 @@ class Trainer:
         logger.info(f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric}).")
         best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
         best_safe_model_path = os.path.join(self.state.best_model_checkpoint, SAFE_WEIGHTS_NAME)
+        best_adapter_model_path = os.path.join(self.state.best_model_checkpoint, ADAPTER_WEIGHTS_NAME)
+        best_safe_adapter_model_path = os.path.join(self.state.best_model_checkpoint, ADAPTER_SAFE_WEIGHTS_NAME)
+
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
-        if os.path.exists(best_model_path) or os.path.exists(best_safe_model_path):
+        if (
+            os.path.exists(best_model_path)
+            or os.path.exists(best_safe_model_path)
+            or os.path.exists(best_adapter_model_path)
+            or os.path.exists(best_safe_adapter_model_path)
+        ):
             if self.is_deepspeed_enabled:
                 deepspeed_load_checkpoint(self.model_wrapped, self.state.best_model_checkpoint)
             else:
+                has_been_loaded = True
                 if is_sagemaker_mp_enabled():
                     if os.path.isfile(os.path.join(self.state.best_model_checkpoint, "user_content.pt")):
                         # If the 'user_content.pt' file exists, load with the new smp api.
@@ -2225,10 +2227,10 @@ class Trainer:
                         self.accelerator, model, self.state.best_model_checkpoint
                     )
                 else:
-                    if hasattr(model, "base_model") and getattr(model.base_model, "is_8bit_serializable", False):
-                        # If train base_8_bit_models using PEFT & LoRA, assume that adapter have been saved properly.
+                    if is_peft_available() and isinstance(model, PeftModel):
+                        # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
                         if hasattr(model, "active_adapter") and hasattr(model, "load_adapter"):
-                            if os.path.exists(os.path.join(self.state.best_model_checkpoint, "adapter_model.bin")):
+                            if os.path.exists(best_adapter_model_path) or os.path.exists(best_safe_adapter_model_path):
                                 model.load_adapter(self.state.best_model_checkpoint, model.active_adapter)
                                 # Load_adapter has no return value present, modify it when appropriate.
                                 from torch.nn.modules.module import _IncompatibleKeys
@@ -2237,12 +2239,13 @@ class Trainer:
                             else:
                                 logger.warning(
                                     "The intermediate checkpoints of PEFT may not be saved correctly, "
-                                    "using `TrainerCallback` to save adapter_model.bin in corresponding folders, "
+                                    f"using `TrainerCallback` to save {ADAPTER_WEIGHTS_NAME} in corresponding folders, "
                                     "here are some examples https://github.com/huggingface/peft/issues/96"
                                 )
+                                has_been_loaded = False
                         else:
-                            # We can't do pure 8bit training using transformers.
-                            logger.warning("Could not loading a quantized checkpoint.")
+                            logger.warning("Could not load adapter model, make sure to have `peft>=0.3.0` installed")
+                            has_been_loaded = False
                     else:
                         # We load the model state dict on the CPU to avoid an OOM error.
                         if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
@@ -2254,7 +2257,7 @@ class Trainer:
                         # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
                         # which takes *args instead of **kwargs
                         load_result = model.load_state_dict(state_dict, False)
-                if not is_sagemaker_mp_enabled():
+                if not is_sagemaker_mp_enabled() and has_been_loaded:
                     self._issue_warnings_after_load(load_result)
         elif os.path.exists(os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
             load_result = load_sharded_checkpoint(
@@ -2320,7 +2323,10 @@ class Trainer:
 
             # Run delayed LR scheduler now that metrics are populated
             if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                self.lr_scheduler.step(metrics[self.args.metric_for_best_model])
+                metric_to_check = self.args.metric_for_best_model
+                if not metric_to_check.startswith("eval_"):
+                    metric_to_check = f"eval_{metric_to_check}"
+                self.lr_scheduler.step(metrics[metric_to_check])
 
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
@@ -2844,6 +2850,7 @@ class Trainer:
             or self.is_fsdp_enabled
         ):
             if self.is_fsdp_enabled:
+                os.makedirs(output_dir, exist_ok=True)
                 self.accelerator.state.fsdp_plugin.save_model(self.accelerator, self.model, output_dir)
             else:
                 state_dict = self.model.state_dict()
@@ -2917,13 +2924,15 @@ class Trainer:
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving model checkpoint to {output_dir}")
+
+        supported_classes = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
-        if not isinstance(self.model, PreTrainedModel):
+        if not isinstance(self.model, supported_classes):
             if state_dict is None:
                 state_dict = self.model.state_dict()
 
-            if isinstance(unwrap_model(self.model), PreTrainedModel):
+            if isinstance(unwrap_model(self.model), supported_classes):
                 unwrap_model(self.model).save_pretrained(
                     output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
                 )
@@ -3154,13 +3163,29 @@ class Trainer:
 
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
-        # if eval is called w/o train init deepspeed here
+        # if eval is called w/o train, handle model prep here
         if self.is_deepspeed_enabled and self.model_wrapped is self.model:
             _, _ = deepspeed_init(self, num_training_steps=0, inference=True)
-            model = self.accelerator.prepare(self.model)
-            self.model_wrapped = self.deepspeed = model
 
         model = self._wrap_model(self.model, training=False, dataloader=dataloader)
+
+        if len(self.accelerator._models) == 0 and model is self.model:
+            model = (
+                self.accelerator.prepare(model)
+                if self.is_deepspeed_enabled
+                else self.accelerator.prepare_model(model, evaluation_mode=True)
+            )
+
+            if self.is_fsdp_enabled:
+                self.model = model
+
+            # for the rest of this function `model` is the outside model, whether it was wrapped or not
+            if model is not self.model:
+                self.model_wrapped = model
+
+            # backward compatibility
+            if self.is_deepspeed_enabled:
+                self.deepspeed = self.model_wrapped
 
         # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
         # while ``train`` is running, cast it to the right dtype first and then put on device
@@ -3749,13 +3774,29 @@ class Trainer:
 
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
-        # if eval is called w/o train init deepspeed here
+        # if eval is called w/o train, handle model prep here
         if self.is_deepspeed_enabled and self.model_wrapped is self.model:
             _, _ = deepspeed_init(self, num_training_steps=0, inference=True)
-            model = self.accelerator.prepare(self.model)
-            self.model_wrapped = self.deepspeed = model
 
         model = self._wrap_model(self.model, training=False, dataloader=dataloader)
+
+        if len(self.accelerator._models) == 0 and model is self.model:
+            model = (
+                self.accelerator.prepare(model)
+                if self.is_deepspeed_enabled
+                else self.accelerator.prepare_model(model, evaluation_mode=True)
+            )
+
+            if self.is_fsdp_enabled:
+                self.model = model
+
+            # for the rest of this function `model` is the outside model, whether it was wrapped or not
+            if model is not self.model:
+                self.model_wrapped = model
+
+            # backward compatibility
+            if self.is_deepspeed_enabled:
+                self.deepspeed = self.model_wrapped
 
         # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
         # while ``train`` is running, cast it to the right dtype first and then put on device
@@ -3921,3 +3962,30 @@ class Trainer:
         if not self.repo.is_repo_clean():
             self.repo.git_commit("Add *.sagemaker patterns to .gitignore.")
             self.repo.git_push()
+
+    def create_accelerator_and_postprocess(self):
+        # create accelerator object
+        self.accelerator = Accelerator(
+            deepspeed_plugin=self.args.deepspeed_plugin,
+            gradient_accumulation_steps=self.args.gradient_accumulation_steps,
+        )
+
+        # deepspeed and accelerate flags covering both trainer args and accelerate launcher
+        self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
+        self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
+
+        # post accelerator creation setup
+        if self.is_fsdp_enabled:
+            fsdp_plugin = self.accelerator.state.fsdp_plugin
+            fsdp_plugin.limit_all_gathers = self.args.fsdp_config.get("limit_all_gathers", False)
+            fsdp_plugin.use_orig_params = self.args.fsdp_config.get("use_orig_params", False)
+
+        if self.is_deepspeed_enabled:
+            if getattr(self.args, "hf_deepspeed_config", None) is None:
+                from transformers.deepspeed import HfTrainerDeepSpeedConfig
+
+                ds_plugin = self.accelerator.state.deepspeed_plugin
+
+                ds_plugin.hf_ds_config = HfTrainerDeepSpeedConfig(ds_plugin.hf_ds_config.config)
+                ds_plugin.deepspeed_config = ds_plugin.hf_ds_config.config
+                ds_plugin.hf_ds_config.trainer_config_process(self.args)
