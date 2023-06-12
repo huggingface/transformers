@@ -453,7 +453,7 @@ class EncodecIntegrationTest(unittest.TestCase):
 
                 audio_codes, scales = encoder_outputs.to_tuple()
                 input_values_dec = model.decode(audio_codes, scales, padding_mask)[0]
-                input_values_enc_dec = model(input_values, bandwidth=float(bandwidth))[-1]
+                input_values_enc_dec = model(input_values, padding_mask, bandwidth=float(bandwidth))[-1]
 
             # make sure forward and decode gives same result
             self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))

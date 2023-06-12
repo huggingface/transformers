@@ -690,10 +690,10 @@ class EncodecModel(EncodecPreTrainedModel):
 
         scale = None
         if self.config.normalize:
-            # breakpoint()
-            unpadded_inputs = input_values[:, :, padding_mask[0]]
-            mono = unpadded_inputs.mean(dim=1, keepdim=True)
-            scale = mono.pow(2).mean(dim=2, keepdim=True).sqrt() + 1e-8
+            # if the padding is non zero
+            input_values = input_values * padding_mask
+            mono = torch.sum(input_values, 1, keepdim = True) / input_values.shape[1]
+            scale = mono.pow(2).mean(dim=-1, keepdim=True).sqrt() + 1e-8
             input_values = input_values / scale
 
         embeddings = self.encoder(input_values)
