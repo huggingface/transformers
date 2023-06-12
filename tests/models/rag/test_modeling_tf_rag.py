@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import gc
 import json
 import os
 import shutil
@@ -548,6 +551,11 @@ class TFRagDPRBartTest(TFRagTestMixin, unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 class TFRagModelIntegrationTests(unittest.TestCase):
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+
     @cached_property
     def token_model(self):
         return TFRagTokenForGeneration.from_pretrained_question_encoder_generator(

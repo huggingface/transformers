@@ -760,7 +760,7 @@ time. "reuse distance" is a metric we are using to figure out when will a parame
 use the `stage3_max_reuse_distance` to decide whether to throw away the parameter or to keep it. If a parameter is
 going to be used again in near future (less than `stage3_max_reuse_distance`) then we keep it to reduce communication
 overhead. This is super helpful when you have activation checkpointing enabled, where we do a forward recompute and
-backward passes a a single layer granularity and want to keep the parameter in the forward recompute till the backward
+backward passes a single layer granularity and want to keep the parameter in the forward recompute till the backward
 
 The following configuration values depend on the model's hidden size:
 

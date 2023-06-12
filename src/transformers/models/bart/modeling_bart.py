@@ -509,6 +509,7 @@ class BartPretrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_unexpected = [r"encoder.version", r"decoder.version"]
     _no_split_modules = [r"BartEncoderLayer", r"BartDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
         std = self.config.init_std

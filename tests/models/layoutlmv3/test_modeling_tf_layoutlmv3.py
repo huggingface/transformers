@@ -14,6 +14,8 @@
 # limitations under the License.
 """ Testing suite for the TensorFlow LayoutLMv3 model. """
 
+from __future__ import annotations
+
 import copy
 import inspect
 import unittest

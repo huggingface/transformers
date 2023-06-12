@@ -141,6 +141,8 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         if self.framework == "pt":
             probs = logits.softmax(dim=-1).squeeze(-1)
             scores = probs.tolist()
+            if not isinstance(scores, list):
+                scores = [scores]
         elif self.framework == "tf":
             probs = stable_softmax(logits, axis=-1)
             scores = probs.numpy().tolist()

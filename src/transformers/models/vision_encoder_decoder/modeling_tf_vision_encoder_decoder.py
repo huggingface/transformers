@@ -15,6 +15,8 @@
 """ Classes to support TF Vision-Encoder-Text-Decoder architectures"""
 
 
+from __future__ import annotations
+
 import re
 import warnings
 from typing import Optional, Tuple, Union
@@ -27,7 +29,6 @@ from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
 from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, get_initializer, unpack_inputs
 from ...tf_utils import shape_list
 from ...utils import (
-    DUMMY_INPUTS,
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -252,29 +253,26 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             )
 
     @property
-    def dummy_inputs(self):
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        decoder_input_ids = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
-        batch_size, seq_len = decoder_input_ids.shape
-
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(
-                batch_size,
-                self.config.encoder.num_channels,
-                self.config.encoder.image_size,
-                self.config.encoder.image_size,
+    def input_signature(self):
+        vision_config = self.config.encoder
+        if hasattr(vision_config, "vision_config"):
+            vision_config = vision_config.vision_config
+        if hasattr(vision_config, "image_size"):
+            image_size = vision_config.image_size
+        else:
+            image_size = vision_config.input_size
+        return {
+            "pixel_values": tf.TensorSpec(
+                shape=(
+                    None,
+                    vision_config.num_channels,
+                    image_size,
+                    image_size,
+                ),
+                dtype=tf.float32,
             ),
-            dtype=tf.float32,
-        )
-        pixel_values = tf.constant(VISION_DUMMY_INPUTS)
-        # Add `decoder_input_ids` because `self.decoder` requires it.
-        dummy = {"pixel_values": pixel_values, "decoder_input_ids": decoder_input_ids}
-        return dummy
+            "decoder_input_ids": tf.TensorSpec(shape=(None, None), dtype=tf.int32, name="decoder_input_ids"),
+        }
 
     def get_encoder(self):
         return self.encoder
@@ -492,13 +490,13 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        pixel_values: np.ndarray | tf.Tensor | None = None,
+        decoder_input_ids: np.ndarray | tf.Tensor | None = None,
+        decoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
