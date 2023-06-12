@@ -132,7 +132,7 @@ def convert_audiocraft_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_
     with torch.no_grad():
         logits = model(decoder_input_ids=decoder_input_ids, encoder_outputs=encoder_outputs).logits
 
-    if logits.shape != (2, 4, 1, 2048):
+    if logits.shape != (2, 1, 4, 2048):
         raise ValueError("Incorrect shape for logits")
 
     EXPECTED_SLICE = [-3.3508, -1.5245, -2.4789, -1.2670, -1.1452, -2.5689, -0.3024, -5.5820, -0.0186, -1.1492]
