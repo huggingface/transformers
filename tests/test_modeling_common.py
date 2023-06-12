@@ -1668,7 +1668,6 @@ class ModelTesterMixin:
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         config.tie_word_embeddings = True
         for model_class in self.all_model_classes:
-            print(model_class)
             model_tied = model_class(config)
 
             ptrs = collections.defaultdict(list)
@@ -1678,10 +1677,8 @@ class ModelTesterMixin:
 
             # These are all the pointers of shared tensors.
             tied_params = [names for _, names in ptrs.items() if len(names) > 1]
-            print(tied_params)
 
             tied_weight_keys = model_tied._tied_weights_keys if model_tied._tied_weights_keys is not None else []
-            print(tied_weight_keys)
             # Detect we get a hit for each key
             for key in tied_weight_keys:
                 if not any(re.search(key, p) for group in tied_params for p in group):
@@ -1692,7 +1689,6 @@ class ModelTesterMixin:
                 for i in range(len(tied_params)):
                     tied_params[i] = [p for p in tied_params[i] if re.search(key, p) is None]
 
-            print(tied_params)
             tied_params = [group for group in tied_params if len(group) > 1]
             self.assertListEqual(tied_params, [])
 
