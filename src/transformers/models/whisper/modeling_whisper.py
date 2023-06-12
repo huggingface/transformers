@@ -1778,7 +1778,7 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
         >>> predicted_class_ids = torch.argmax(logits).item()
         >>> predicted_label = model.config.id2label[predicted_class_ids]
         >>> predicted_label
-        'af_za'
+        'Afrikaans'
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

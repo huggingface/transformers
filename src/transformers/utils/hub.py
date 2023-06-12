@@ -712,7 +712,6 @@ class PushToHubMixin:
         operations = []
         # upload standalone files
         for file in modified_files:
-            operations.append(CommitOperationAdd(path_or_fileobj=os.path.join(working_dir, file), path_in_repo=file))
             if os.path.isdir(os.path.join(working_dir, file)):
                 # go over individual files of folder
                 for f in os.listdir(os.path.join(working_dir, file)):
