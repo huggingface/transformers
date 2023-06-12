@@ -1069,7 +1069,7 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
 
     def __call__(self, input_ids, scores):
         unguided_bsz = scores.shape[0] / 2
-        cond_logits, uncond_logits = scores.split(unguided_bsz, dim=0)
+        cond_logits, uncond_logits = scores.split(int(unguided_bsz), dim=0)
         scores = uncond_logits + (cond_logits - uncond_logits) * self.guidance_scale
         return scores
 
