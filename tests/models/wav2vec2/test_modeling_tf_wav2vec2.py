@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import copy
+import gc
 import glob
 import inspect
 import math
@@ -709,6 +710,11 @@ class TFWav2Vec2UtilsTest(unittest.TestCase):
 @require_tf
 @slow
 class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
