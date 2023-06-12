@@ -110,8 +110,16 @@ def convert_vitmatte_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     print(alphas.shape)
     print(alphas[0, 0, :3, :3])
 
-    # assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)
-    # print("Looks ok!")
+    expected_slice = torch.tensor(
+        [
+            [4.4248e-04, 8.3591e-06, 2.3893e-06],
+            [8.2327e-06, 6.1929e-07, 2.4754e-07],
+            [1.3892e-06, 1.1131e-07, 2.8105e-08],
+        ]
+    )
+
+    assert torch.allclose(alphas[0, 0, :3, :3], expected_slice, atol=1e-4)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")

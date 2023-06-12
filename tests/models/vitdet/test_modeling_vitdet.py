@@ -32,6 +32,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
+    import torch
     from torch import nn
 
     from transformers import VitDetBackbone, VitDetModel
@@ -211,6 +212,41 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_backbone(*config_and_inputs)
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+
+            expected_num_stages = self.model_tester.num_hidden_layers
+            self.assertEqual(len(hidden_states), expected_num_stages + 1)
+
+            # ConvNext's feature maps are of shape (batch_size, num_channels, height, width)
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [
+                    self.model_tester.image_size // self.model_tester.patch_size,
+                    self.model_tester.image_size // self.model_tester.patch_size,
+                ],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
 
     @slow
     def test_model_from_pretrained(self):
