@@ -103,6 +103,7 @@ class VitDetConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-6,
         image_size=224,
+        pretrain_image_size=224,
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
@@ -127,6 +128,7 @@ class VitDetConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.image_size = image_size
+        self.pretrain_image_size = pretrain_image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias

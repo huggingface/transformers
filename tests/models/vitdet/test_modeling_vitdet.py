@@ -62,7 +62,6 @@ class VitDetModelTester:
         type_sequence_label_size=10,
         initializer_range=0.02,
         scope=None,
-        encoder_stride=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -81,7 +80,6 @@ class VitDetModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
-        self.encoder_stride = encoder_stride
 
         # in VitDet, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -112,7 +110,6 @@ class VitDetModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            encoder_stride=self.encoder_stride,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -140,16 +137,10 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (
-            VitDetModel,
-            VitDetBackbone,
-        )
-        if is_torch_available()
-        else ()
-    )
-    fx_compatible = False
+    all_model_classes = (VitDetModel, VitDetBackbone) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": VitDetModel} if is_torch_available() else {}
 
+    fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
