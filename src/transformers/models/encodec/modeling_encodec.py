@@ -95,8 +95,9 @@ class EncodecConv1d(nn.Module):
         self, config, in_channels: int, out_channels: int, kernel_size: int, stride: int = 1, dilation: int = 1
     ):
         super().__init__()
-        self.causal = config.causal
+        self.causal = config.use_causal_conv
         self.pad_mode = config.pad_mode
+        self.norm_type = config.norm_type
 
         # warn user on unusual setup between dilation and stride
         if stride > 1 and dilation > 1:
@@ -105,7 +106,6 @@ class EncodecConv1d(nn.Module):
                 f" (kernel_size={kernel_size} stride={stride}, dilation={dilation})."
             )
 
-        self.norm_type = config.norm
         self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, stride, dilation=dilation)
         if self.norm_type == "weight_norm":
             self.conv = nn.utils.weight_norm(self.conv)
@@ -175,18 +175,15 @@ class EncodecConvTranspose1d(nn.Module):
 
     def __init__(self, config, in_channels: int, out_channels: int, kernel_size: int, stride: int = 1):
         super().__init__()
-        causal = config.causal
-        trim_right_ratio = config.trim_right_ratio
+        self.causal = config.use_causal_conv
+        self.trim_right_ratio = config.trim_right_ratio
+        self.norm_type = config.norm_type
 
-        self.norm_type = config.norm
         self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride)
-        if config.norm == "weight_norm":
+        if config.norm_type == "weight_norm":
             self.conv = nn.utils.weight_norm(self.conv)
-        elif config.norm == "time_group_norm":
+        elif config.norm_type == "time_group_norm":
             self.norm = nn.GroupNorm(1, out_channels)
-
-        self.causal = causal
-        self.trim_right_ratio = trim_right_ratio
 
         if not (self.causal or self.trim_right_ratio == 1.0):
             raise ValueError("`trim_right_ratio` != 1.0 only makes sense for causal convolutions")
@@ -282,11 +279,11 @@ class EncodecEncoder(nn.Module):
         scaling = 1
 
         # Downsample to raw audio scale
-        for ratio in reversed(config.ratios):
+        for ratio in reversed(config.upsampling_ratios):
             current_scale = scaling * config.num_filters
             # Add residual layers
             for j in range(config.num_residual_layers):
-                model += [EncodecResnetBlock(config, current_scale, [config.dilation_base**j, 1])]
+                model += [EncodecResnetBlock(config, current_scale, [config.dilation_growth_rate**j, 1])]
             # Add downsampling layers
             model += [nn.ELU()]
             model += [EncodecConv1d(config, current_scale, current_scale * 2, kernel_size=ratio * 2, stride=ratio)]
@@ -294,7 +291,7 @@ class EncodecEncoder(nn.Module):
 
         model += [EncodecLSTM(scaling * config.num_filters, config.num_lstm_layers)]
         model += [nn.ELU()]
-        model += [EncodecConv1d(config, scaling * config.num_filters, config.dimension, config.last_kernel_size)]
+        model += [EncodecConv1d(config, scaling * config.num_filters, config.hidden_size, config.last_kernel_size)]
 
         self.layers = nn.ModuleList(model)
 
@@ -309,13 +306,13 @@ class EncodecDecoder(nn.Module):
 
     def __init__(self, config: EncodecConfig):
         super().__init__()
-        scaling = int(2 ** len(config.ratios))
-        model = [EncodecConv1d(config, config.dimension, scaling * config.num_filters, config.kernel_size)]
+        scaling = int(2 ** len(config.upsampling_ratios))
+        model = [EncodecConv1d(config, config.hidden_size, scaling * config.num_filters, config.kernel_size)]
 
         model += [EncodecLSTM(scaling * config.num_filters, config.num_lstm_layers)]
 
         # Upsample to raw audio scale
-        for ratio in config.ratios:
+        for ratio in config.upsampling_ratios:
             current_scale = scaling * config.num_filters
             # Add upsampling layers
             model += [nn.ELU()]
@@ -324,7 +321,7 @@ class EncodecDecoder(nn.Module):
             ]
             # Add residual layers
             for j in range(config.num_residual_layers):
-                model += [EncodecResnetBlock(config, current_scale // 2, (config.dilation_base**j, 1))]
+                model += [EncodecResnetBlock(config, current_scale // 2, (config.dilation_growth_rate**j, 1))]
             scaling //= 2
 
         # Add final layers
@@ -343,12 +340,12 @@ class EncodecEuclideanCodebook(nn.Module):
 
     def __init__(self, config: EncodecConfig, dim: int):
         super().__init__()
-        embed = torch.zeros(config.bins, dim)
+        embed = torch.zeros(config.codebook_size, dim)
 
-        self.codebook_size = config.bins
+        self.codebook_size = config.codebook_size
 
         self.register_buffer("inited", torch.Tensor([True]))
-        self.register_buffer("cluster_size", torch.zeros(config.bins))
+        self.register_buffer("cluster_size", torch.zeros(config.codebook_size))
         self.register_buffer("embed", embed)
         self.register_buffer("embed_avg", embed.clone())
 
@@ -382,9 +379,9 @@ class EncodecVectorQuantization(nn.Module):
     def __init__(self, config: EncodecConfig):
         super().__init__()
 
-        codebook_dim = config.codebook_dim if config.codebook_dim is not None else config.dimension
+        codebook_dim = config.codebook_dim if config.codebook_dim is not None else config.hidden_size
 
-        self.requires_projection = codebook_dim != config.dimension
+        self.requires_projection = codebook_dim != config.hidden_size
         self.codebook = EncodecEuclideanCodebook(config, codebook_dim)
 
     def encode(self, hidden_states):
@@ -440,7 +437,7 @@ class EncodecResidualVectorQuantizer(nn.Module):
 
     def get_num_quantizers_for_bandwidth(self, frame_rate: int, bandwidth: Optional[float] = None) -> int:
         """Return num_quantizers based on specified target bandwidth."""
-        bw_per_q = math.log2(self.config.bins) * frame_rate
+        bw_per_q = math.log2(self.config.codebook_size) * frame_rate
         num_quantizers = self.num_quantizers
         if bandwidth is not None and bandwidth > 0.0:
             num_quantizers = int(max(1, math.floor(bandwidth * 1000 / bw_per_q)))
@@ -586,15 +583,15 @@ class EncodecModel(EncodecPreTrainedModel):
         self.encoder = EncodecEncoder(config)
         self.decoder = EncodecDecoder(config)
 
-        hop_length = np.prod(config.ratios)
+        hop_length = np.prod(config.upsampling_ratios)
         self.frame_rate = math.ceil(config.sampling_rate / hop_length)
 
         num_quantizers = int(1000 * config.target_bandwidths[-1] // (self.frame_rate * 10))
         self.quantizer = EncodecResidualVectorQuantizer(config, num_quantizers)
 
-        self.bits_per_codebook = int(math.log2(self.config.bins))
-        if 2**self.bits_per_codebook != self.config.bins:
-            raise ValueError("Number of quantizer bins must be a power of 2.")
+        self.bits_per_codebook = int(math.log2(self.config.codebook_size))
+        if 2**self.bits_per_codebook != self.config.codebook_size:
+            raise ValueError("The codebook_size must be a power of 2.")
 
         # Initialize weights and apply final processing
         self.post_init()

@@ -48,40 +48,42 @@ class EncodecConfig(PretrainedConfig):
             Number of channels in the audio data. Either 1 for mono or 2 for stereo.
         normalize (`bool`, *optional*, defaults to `"False"`):
             Whether the audio shall be normalized when passed.
-        chunk_in_sec (`float`, *optional*):
-            If defined the audio is pre-processed into chunks of lengths `chunk_in_sec` and then encoded.
+        chunk_length_s (`float`, *optional*):
+            If defined the audio is pre-processed into chunks of lengths `chunk_length_s` and then encoded.
         dimension (`int`, defaults to 128):
             Intermediate representation dimension.
-        num_filters (int):
+        num_filters (`int`):
             Base width for the model.
-        num_residual_layers (int):
+        num_residual_layers (`int`):
             Number of residual layers.
-        ratios (Sequence[int]):
+        upsampling_ratios (`Sequence[int]`):
             Kernel size and stride ratios. The encoder uses downsampling ratios instead of upsampling ratios, hence it
             will use the ratios in the reverse order to the ones specified here that must match the decoder order.
-        norm (`str`, *optional*, defaults to `"weight_norm"`):
-            Normalization method.
-        kernel_size (int):
+        norm_type (`str`, *optional*, defaults to `"weight_norm"`):
+            Normalization method. Should be in `["weight_norm", "time_group_norm"]`
+        kernel_size (`int`):
             Kernel size for the initial convolution.
         last_kernel_size (int):
-            Kernel size for the initial convolution.
-        residual_kernel_size (int):
+            Kernel size for the last convolution layer.
+        residual_kernel_size (`int`):
             Kernel size for the residual layers.
-        dilation_base (int):
+        dilation_growth_rate (`int`):
             How much to increase the dilation with each layer.
-        causal (`bool`, *optional*, defaults to True):
+        use_causal_conv (`bool`, *optional*, defaults to True):
             Whether to use fully causal convolution.
         pad_mode (`str`, defaults to `"reflect"`):
             Padding mode for the convolutions.
         compress (`int`, defaults to 2):
             Reduced dimensionality in residual branches (from Demucs v3).
-        num_lstm_layers (int):
+        num_lstm_layers (`int`, *optional*, defaults to ):
             Number of LSTM layers at the end of the encoder.
-        trim_right_ratio (float):
-            Ratio for trimming at the right of the transposed convolution under the causal setup. If equal to 1.0, it
-            means that all the trimming is done at the right.
-        bins (int): Codebook size.
-        codebook_dim (int): Codebook dimension. If not defined, uses the specified dimension in dim.
+        trim_right_ratio (`float`, *optional*, defaults to ):
+            Ratio for trimming at the right of the transposed convolution under the `use_causal_conv = True` setup. If
+            equal to 1.0, it means that all the trimming is done at the right.
+        bins (int):
+            Codebook size.
+        codebook_dim (int):
+            Codebook dimension. If not defined, uses the specified dimension in dim.
 
     Example:
 
@@ -105,22 +107,22 @@ class EncodecConfig(PretrainedConfig):
         sampling_rate=24_000,
         audio_channels=1,
         normalize=False,
-        chunk_in_sec=None,  # TODO: chunk length in seconds
-        dimension=128,  # TODO: hidden_size?
+        chunk_length_s=None,  # TODO: chunk length in seconds
+        hidden_size=128,  # TODO: hidden_size?
         num_filters=32,
         num_residual_layers=1,
-        ratios=[8, 5, 4, 2],  # TODO: better names
-        norm="weight_norm",
+        upsampling_ratios=[8, 5, 4, 2],  # TODO: better names
+        norm_type="weight_norm",
         kernel_size=7,
         last_kernel_size=7,
         residual_kernel_size=3,
-        dilation_base=2,
-        causal=True,
+        dilation_growth_rate=2,
+        use_causal_conv=True,
         pad_mode="reflect",
         compress=2,
         num_lstm_layers=2,
         trim_right_ratio=1.0,
-        bins=1024,  # TODO: rename to codebook_size
+        codebook_size=1024,  # TODO: rename to codebook_size
         codebook_dim=None,
         **kwargs,
     ):
@@ -128,40 +130,40 @@ class EncodecConfig(PretrainedConfig):
         self.sampling_rate = sampling_rate
         self.audio_channels = audio_channels
         self.normalize = normalize
-        self.chunk_in_sec = chunk_in_sec
-        self.dimension = dimension
+        self.chunk_length_s = chunk_length_s
+        self.hidden_size = hidden_size
         self.num_filters = num_filters
         self.num_residual_layers = num_residual_layers
-        self.ratios = ratios
-        self.norm = norm
+        self.upsampling_ratios = upsampling_ratios
+        self.norm_type = norm_type
         self.kernel_size = kernel_size
         self.last_kernel_size = last_kernel_size
         self.residual_kernel_size = residual_kernel_size
-        self.dilation_base = dilation_base
-        self.causal = causal
+        self.dilation_growth_rate = dilation_growth_rate
+        self.use_causal_conv = use_causal_conv
         self.pad_mode = pad_mode
         self.compress = compress
         self.num_lstm_layers = num_lstm_layers
         self.trim_right_ratio = trim_right_ratio
-        self.bins = bins
+        self.codebook_size = codebook_size
         self.codebook_dim = codebook_dim
 
         super().__init__(
             **kwargs,
         )
 
-    # This is a property because you might want to change the chunk_in_sec on the fly
+    # This is a property because you might want to change the chunk_length_s on the fly
     @property
     def chunk_length(self) -> Optional[int]:
-        if self.chunk_in_sec is None:
+        if self.chunk_length_s is None:
             return None
         else:
-            return int(self.chunk_in_sec * self.sampling_rate)
+            return int(self.chunk_length_s * self.sampling_rate)
 
-    # This is a property because you might want to change the chunk_in_sec on the fly
+    # This is a property because you might want to change the chunk_length_s on the fly
     @property
     def chunk_stride(self) -> Optional[int]:
-        if self.chunk_in_sec is None:
+        if self.chunk_length_s is None:
             return None
         else:
             return max(1, int((1.0 - self.overlap) * self.chunk_length))
