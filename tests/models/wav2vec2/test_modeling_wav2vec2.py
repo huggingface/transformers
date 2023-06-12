@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Wav2Vec2 model. """
 
+import gc
 import math
 import multiprocessing
 import os
@@ -1374,6 +1375,12 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
 @require_soundfile
 @slow
 class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        torch.cuda.empty_cache()
+
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
