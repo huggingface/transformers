@@ -34,6 +34,9 @@ if is_torch_available():
         RwkvForCausalLM,
         RwkvModel,
     )
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
+else:
+    is_torch_greater_or_equal_than_2_0 = False
 
 
 class RwkvModelTester:
@@ -258,6 +261,7 @@ class RwkvModelTester:
         return config, inputs_dict
 
 
+@unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="See ")
 @require_torch
 class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (RwkvModel, RwkvForCausalLM) if is_torch_available() else ()
@@ -418,6 +422,7 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             self.assertIsNotNone(model)
 
 
+@unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="See ")
 @slow
 class RWKVIntegrationTests(unittest.TestCase):
     def setUp(self):
