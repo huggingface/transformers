@@ -685,8 +685,8 @@ class EncodecModel(EncodecPreTrainedModel):
         length = input_values.shape[-1]
         duration = length / self.config.sampling_rate
 
-        if self.config.chunk_in_sec is not None and duration > 1e-5 + self.config.chunk_in_sec:
-            raise RuntimeError(f"Duration of frame ({duration}) is longer than chunk {self.config.chunk_in_sec}")
+        if self.config.chunk_length_s is not None and duration > 1e-5 + self.config.chunk_length_s:
+            raise RuntimeError(f"Duration of frame ({duration}) is longer than chunk {self.config.chunk_length_s}")
 
         scale = None
         if self.config.normalize:
