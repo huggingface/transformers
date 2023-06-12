@@ -284,7 +284,7 @@ useful to avoid duplicated work, and to differentiate it from PRs ready to be me
      `RUN_SLOW=1 python -m pytest tests/models/my_new_model/test_my_new_model.py`.
    - If you are adding a new tokenizer, write tests and make sure
      `RUN_SLOW=1 python -m pytest tests/models/{your_model_name}/test_tokenization_{your_model_name}.py` passes.
-      CircleCI does not run the slow tests, but GitHub Actions does every night!<br>
+   - CircleCI does not run the slow tests, but GitHub Actions does every night!<br>
 
 ☐ All public methods must have informative docstrings (see
 [`modeling_bert.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py)
