@@ -167,14 +167,20 @@ class LiltOnnxConfig(OnnxConfig):
         tokenizer: PreTrainedTokenizer = None,
     ) -> Mapping[str, Any]:
         """
-        Args:
         Generate inputs to provide to the ONNX exporter for the specific framework
-            preprocessor: ([`PreTrainedTokenizerBase`], [`FeatureExtractionMixin`], or [`ImageProcessingMixin`]):
-                The preprocessor associated with this model configuration.
-            batch_size: The batch size (int) to export the model for (-1 means dynamic axis)
-            seq_length: The sequence length (int) to export the model for (-1 means dynamic axis)
-            is_pair: Indicate if the input is a pair (sentence 1, sentence 2)
-            framework: The framework (optional) the tokenizer will generate tensor for
+
+        Args:
+            preprocessor ([`ProcessorMixin`]):
+                The processor associated with this model configuration.
+            batch_size (`int`, *optional*, defaults to -1):
+                The batch size to export the model for (-1 means dynamic axis).
+            seq_length (`int`, *optional*, defaults to -1):
+                The sequence length to export the model for (-1 means dynamic axis).
+            is_pair (`bool`, *optional*, defaults to `False`):
+                Indicate if the input is a pair (sentence 1, sentence 2).
+            framework (`TensorType`, *optional*, defaults to `None`):
+                The framework (PyTorch or TensorFlow) that the processor will generate tensors for.
+
         Returns:
             Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
         """
