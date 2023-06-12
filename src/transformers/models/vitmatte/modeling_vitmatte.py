@@ -273,9 +273,6 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         )
 
         features = outputs.feature_maps[-1]
-
-        # TODO: already permute in backbone?
-        features = features.permute(0, 3, 1, 2)
         alphas = self.decoder(features, pixel_values)
 
         loss = None
