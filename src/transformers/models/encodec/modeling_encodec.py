@@ -510,13 +510,12 @@ ENCODEC_BASE_START_DOCSTRING = r"""
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        encoder ([`EncodecEncoderWithSpeechPrenet`] or [`EncodecEncoderWithTextPrenet`] or `None`):
+        encoder ([`EncodecEncoder`] or `None`):
             The Transformer encoder module that applies the appropiate speech or text encoder prenet. If `None`,
-            [`EncodecEncoderWithoutPrenet`] will be used and the `input_values` are assumed to be hidden states.
-        decoder ([`EncodecDecoderWithSpeechPrenet`] or [`EncodecDecoderWithTextPrenet`] or `None`):
+            [`EncodecEncoder`] will be used and the `input_values` are assumed to be hidden states.
+        decoder ([`EncodecDecoder`] or `None`):
             The Transformer decoder module that applies the appropiate speech or text decoder prenet. If `None`,
-            [`EncodecDecoderWithoutPrenet`] will be used and the `decoder_input_values` are assumed to be hidden
-            states.
+            [`EncodecDecoder`] will be used and the `decoder_input_values` are assumed to be hidden states.
 """
 
 
@@ -541,7 +540,10 @@ ENCODEC_START_DOCSTRING = r"""
 # TODO
 ENCODEC_INPUTS_DOCSTRING = r"""
     Args:
-        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        input_values (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Raw audio input padded to the approriate length in order to be encoded using chunks of length
+            self.chunk_length
+        padding_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
 
@@ -560,65 +562,10 @@ ENCODEC_INPUTS_DOCSTRING = r"""
 
             </Tip>
 
-        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_values`. Causal mask will
-            also be used by default.
-
-            If you want to change padding behavior, you should read [`EncodecDecoder._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-
-        head_mask (`torch.FloatTensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        decoder_head_mask (`torch.FloatTensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
             Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_values` (those
-            that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_values` of shape `(batch_size, sequence_length)`. decoder_inputs_embeds (`torch.FloatTensor`
-            of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-            `decoder_input_values` you can choose to directly pass an embedded representation. If `past_key_values` is
-            used, optionally only the last `decoder_inputs_embeds` have to be input (see `past_key_values`). This is
-            useful if you want more control over how to convert `decoder_input_values` indices into associated vectors
-            than the model's internal embedding lookup matrix.
-
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
 
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
