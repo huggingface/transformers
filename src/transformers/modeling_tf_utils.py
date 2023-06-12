@@ -1171,12 +1171,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         self.config = config
         self.name_or_path = config.name_or_path
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
-        if not hasattr(self, "serving"):  # Don't overwrite existing serving signatures
-            self.serving = tf.function(
-                self._get_eager_serving_fn(), input_signature=[self._prune_signature(self.input_signature)]
-            )
         # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
-        self._set_save_spec(self.serving.input_signature[0])
+        self._set_save_spec(self.input_signature)
 
     def get_config(self):
         return self.config.to_dict()
@@ -1226,21 +1222,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         head_mask = tf.cast(head_mask, tf.float32)  # switch to float if need + fp16 compatibility
         return head_mask
 
-    def _get_eager_serving_fn(self):
-        """
-        Returns a function used for serving the model. Note that we do not make this function a method of the class
-        with a tf.function decorator because we won't know what its signature should be until we have the model config.
+    @tf.function
+    def serving(self, inputs):
+        output = self.call(inputs)
 
-        We also don't directly make this an eager method because compiling a method bound to a class greatly
-        complicates cleanup of that class.
-        """
-
-        def eager_serving(self, inputs):
-            output = self.call(inputs)
-
-            return self.serving_output(output)
-
-        return eager_serving
+        return self.serving_output(output)
 
     @property
     def input_signature(self) -> Dict[str, tf.TensorSpec]:
@@ -2412,17 +2398,18 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             if getattr(self.config, "torch_dtype", None) is not None and not isinstance(self.config.torch_dtype, str):
                 self.config.torch_dtype = str(self.config.torch_dtype).split(".")[1]
             if signatures is None:
-                if any(spec.dtype == tf.int32 for spec in self.serving.input_signature[0].values()):
+                serving_default = self.serving.get_concrete_function(self.input_signature)
+                if any(spec.dtype == tf.int32 for spec in self.input_signature.values()):
                     int64_spec = {
                         key: tf.TensorSpec(
                             shape=spec.shape, dtype=tf.int64 if spec.dtype == tf.int32 else spec.dtype, name=spec.name
                         )
-                        for key, spec in self.serving.input_signature[0].items()
+                        for key, spec in self.input_signature.items()
                     }
-                    int64_serving = tf.function(self._get_eager_serving_fn(), input_signature=[int64_spec])
-                    signatures = {"serving_default": self.serving, "int64_serving": int64_serving}
+                    int64_serving = self.serving.get_concrete_function(int64_spec)
+                    signatures = {"serving_default": serving_default, "int64_serving": int64_serving}
                 else:
-                    signatures = self.serving
+                    signatures = serving_default
             saved_model_dir = os.path.join(save_directory, "saved_model", str(version))
             self.save(saved_model_dir, include_optimizer=False, signatures=signatures)
             logger.info(f"Saved model created in {saved_model_dir}")
