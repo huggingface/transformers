@@ -4322,6 +4322,7 @@ class GenerationMixin:
                         encoder_outputs=model_kwargs["encoder_outputs"],
                         output_attentions=output_attentions,
                         output_hidden_states=output_hidden_states,
+                        use_cache=True,
                     )
                 else:
                     outputs = self(
@@ -4330,6 +4331,7 @@ class GenerationMixin:
                         past_key_values=model_kwargs["past_key_values"],
                         output_attentions=output_attentions,
                         output_hidden_states=output_hidden_states,
+                        use_cache=True,
                     )
             else:
                 if self.config.is_encoder_decoder:
@@ -4338,12 +4340,14 @@ class GenerationMixin:
                         encoder_outputs=model_kwargs["encoder_outputs"],
                         output_attentions=output_attentions,
                         output_hidden_states=output_hidden_states,
+                        use_cache=True,
                     )
                 else:
                     outputs = self(
                         candidate_input_ids,
                         output_attentions=output_attentions,
                         output_hidden_states=output_hidden_states,
+                        use_cache=True,
                     )
 
             # 2.2. Process the new logits
