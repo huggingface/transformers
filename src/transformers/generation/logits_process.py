@@ -1063,17 +1063,6 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         return scores
 
 
-class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
-    def __init__(self, guidance_scale):
-        self.guidance_scale = guidance_scale
-
-    def __call__(self, input_ids, scores):
-        unguided_bsz = scores.shape[0] / 2
-        cond_logits, uncond_logits = scores.split(int(unguided_bsz), dim=0)
-        scores = uncond_logits + (cond_logits - uncond_logits) * self.guidance_scale
-        return scores
-
-
 class MusicgenDelayPatternLogitsProcessor(LogitsProcessor):
     r"""This processor applies a delayed pattern mask to the codebook scores. For the logit scores at the current
     generated step, the pattern mask determines whether the logits scores are valid or whether they should be masked.
