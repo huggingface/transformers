@@ -63,7 +63,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        audios: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
         truncation: bool = False,
@@ -77,7 +77,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            audio (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, *optional*):
+            audios (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, *optional*):
                 The sequence or batch of sequences to be processed. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. The numpy array must be of shape
                 `(num_samples,)` for mono audio (`feature_size = 1`), or `(2, num_samples)` for stereo audio
@@ -131,26 +131,26 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             )
 
         is_batched = bool(
-            isinstance(audio, (list, tuple))
-            and (isinstance(audio[0], np.ndarray) or isinstance(audio[0], (tuple, list)))
+            isinstance(audios, (list, tuple))
+            and (isinstance(audios[0], np.ndarray) or isinstance(audios[0], (tuple, list)))
         )
 
         if is_batched:
-            audio = [np.asarray(audio, dtype=np.float32).T for audio in audio]
-        elif not is_batched and not isinstance(audio, np.ndarray):
-            audio = np.asarray(audio, dtype=np.float32)
-        elif isinstance(audio, np.ndarray) and audio.dtype is np.dtype(np.float64):
-            audio = audio.astype(np.float32)
+            audios = [np.asarray(audio, dtype=np.float32).T for audio in audios]
+        elif not is_batched and not isinstance(audios, np.ndarray):
+            audios = np.asarray(audios, dtype=np.float32)
+        elif isinstance(audios, np.ndarray) and audios.dtype is np.dtype(np.float64):
+            audios = audios.astype(np.float32)
 
         # always return batch
         if not is_batched:
-            audio = [np.asarray(audio).T]
+            audios = [np.asarray(audios).T]
 
         # verify inputs are valid
-        for idx, example in enumerate(audio):
+        for idx, example in enumerate(audios):
             if example.ndim == 1:
                 example = example[..., None]
-                audio[idx] = example
+                audios[idx] = example
             if example.ndim > 2:
                 raise ValueError(f"Expected input shape (channels, length) but got shape {example.T.shape}")
             if self.feature_size == 1 and example.shape[-1] != 1:
@@ -158,23 +158,25 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             if self.feature_size == 2 and example.shape[-1] != 2:
                 raise ValueError(f"Expected stereo audio but example has {example.shape[-1]} channels")
 
-        # Get nax length:
-        max_length = max([array.shape[0] for array in audio])
-        nb_step = int(np.ceil(max_length / self.segment_stride))
-        max_length = (nb_step - 1) * self.segment_stride + self.segment_length
+        if self.segment_stride is not None and self.segment_length is not None:
+            # Get nax length:
+            max_length = max([array.shape[0] for array in audios])
+            nb_step = int(np.ceil(max_length / self.segment_stride))
+            max_length = (nb_step - 1) * self.segment_stride + self.segment_length
 
-        audios = []
-        padding_masks = []
-        for sample in audio:
-            padding_length = max_length - sample.shape[0]
-            sample = np.pad(sample, pad_width=((0, padding_length), (0, 0)), mode="constant", constant_values=0)
-            audios.append(sample)
-            if return_attention_mask:
-                padding_mask = np.ones(max_length)
-                padding_mask[..., -padding_length:] = 0
-                padding_masks.append(padding_mask)
-
-        padded_inputs = BatchFeature({"input_values": audios})
+            padded_audios = []
+            padding_masks = []
+            for sample in audios:
+                padding_length = max_length - sample.shape[0]
+                sample = np.pad(sample, pad_width=((0, padding_length), (0, 0)), mode="constant", constant_values=0)
+                padded_audios.append(sample)
+                if return_attention_mask:
+                    padding_mask = np.ones(max_length)
+                    padding_mask[..., -padding_length:] = 0
+                    padding_masks.append(padding_mask)
+            padded_inputs = BatchFeature({"input_values": padded_audios})
+        else:
+            padded_inputs = BatchFeature({"input_values": audios})
 
         # output shape is (batch, channels, num_samples)
         input_values = []
