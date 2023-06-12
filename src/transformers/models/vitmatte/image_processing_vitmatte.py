@@ -36,7 +36,7 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class ViTMatteImageProcessor(BaseImageProcessor):
+class VitMatteImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ViTMatte image processor.
 

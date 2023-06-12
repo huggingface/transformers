@@ -29,7 +29,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_vitmatte"] = ["ViTMatteImageProcessor"]
+    _import_structure["image_processing_vitmatte"] = ["VitMatteImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -52,7 +52,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_vitmatte import ViTMatteImageProcessor
+        from .image_processing_vitmatte import VitMatteImageProcessor
 
     try:
         if not is_torch_available():

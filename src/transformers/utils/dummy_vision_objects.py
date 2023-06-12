@@ -508,6 +508,7 @@ class ViTHybridImageProcessor(metaclass=DummyObject):
 
 class VivitImageProcessor(metaclass=DummyObject):
 class ViTMatteImageProcessor(metaclass=DummyObject):
+class VitMatteImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
