@@ -1122,8 +1122,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         dummies = {}
-        sig = self._prune_signature(self.input_signature)
-        for key, spec in sig.items():
+        for key, spec in self.input_signature.items():
             # 2 is the most correct arbitrary size. I will not be taking questions
             dummy_shape = [dim if dim is not None else 2 for dim in spec.shape]
             if spec.shape[0] is None:
@@ -1275,11 +1274,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if "input_features" in model_inputs:
             raise NotImplementedError("Audio models need a manually defined input_signature")
         return sig
-
-    def _prune_signature(self, signature):
-        """Keeps only the keys of a given input signature that are valid for this model."""
-        model_inputs = list(inspect.signature(self.call).parameters)
-        return {key: val for key, val in signature.items() if key in model_inputs}
 
     def serving_output(self, output):
         """
