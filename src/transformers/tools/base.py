@@ -37,6 +37,7 @@ from ..utils import (
     is_vision_available,
     logging,
 )
+from .agent_types import handle_agent_inputs, handle_agent_outputs
 
 
 logger = logging.get_logger(__name__)
@@ -260,6 +261,24 @@ class Tool:
         tool_class = custom_tool["tool_class"]
         tool_class = get_class_from_dynamic_module(tool_class, repo_id, use_auth_token=token, **hub_kwargs)
 
+        if len(tool_class.name) == 0:
+            tool_class.name = custom_tool["name"]
+        if tool_class.name != custom_tool["name"]:
+            logger.warn(
+                f"{tool_class.__name__} implements a different name in its configuration and class. Using the tool "
+                "configuration name."
+            )
+            tool_class.name = custom_tool["name"]
+
+        if len(tool_class.description) == 0:
+            tool_class.description = custom_tool["description"]
+        if tool_class.description != custom_tool["description"]:
+            logger.warn(
+                f"{tool_class.__name__} implements a different description in its configuration and class. Using the "
+                "tool configuration description."
+            )
+            tool_class.description = custom_tool["description"]
+
         if remote:
             return RemoteTool(model_repo_id, token=token, tool_class=tool_class)
         return tool_class(model_repo_id, token=token, **kwargs)
@@ -395,6 +414,8 @@ class RemoteTool(Tool):
         return outputs
 
     def __call__(self, *args, **kwargs):
+        args, kwargs = handle_agent_inputs(*args, **kwargs)
+
         output_image = self.tool_class is not None and self.tool_class.outputs == ["image"]
         inputs = self.prepare_inputs(*args, **kwargs)
         if isinstance(inputs, dict):
@@ -403,6 +424,9 @@ class RemoteTool(Tool):
             outputs = self.client(inputs, output_image=output_image)
         if isinstance(outputs, list) and len(outputs) == 1 and isinstance(outputs[0], list):
             outputs = outputs[0]
+
+        outputs = handle_agent_outputs(outputs, self.tool_class.outputs if self.tool_class is not None else None)
+
         return self.extract_outputs(outputs)
 
 
@@ -532,6 +556,8 @@ class PipelineTool(Tool):
         return self.post_processor(outputs)
 
     def __call__(self, *args, **kwargs):
+        args, kwargs = handle_agent_inputs(*args, **kwargs)
+
         if not self.is_initialized:
             self.setup()
 
@@ -539,7 +565,9 @@ class PipelineTool(Tool):
         encoded_inputs = send_to_device(encoded_inputs, self.device)
         outputs = self.forward(encoded_inputs)
         outputs = send_to_device(outputs, "cpu")
-        return self.decode(outputs)
+        decoded_outputs = self.decode(outputs)
+
+        return handle_agent_outputs(decoded_outputs, self.outputs)
 
 
 def launch_gradio_demo(tool_class: Tool):

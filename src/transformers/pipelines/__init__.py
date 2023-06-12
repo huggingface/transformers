@@ -505,7 +505,7 @@ def clean_custom_task(task_info):
 
 def pipeline(
     task: str = None,
-    model: Optional = None,
+    model: Optional[Union[str, "PreTrainedModel", "TFPreTrainedModel"]] = None,
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer, "PreTrainedTokenizerFast"]] = None,
     feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None,

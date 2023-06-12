@@ -255,6 +255,8 @@ class TopPLogitsWarper(LogitsWarper):
         top_p = float(top_p)
         if top_p < 0 or top_p > 1.0:
             raise ValueError(f"`top_p` has to be a float > 0 and < 1, but is {top_p}")
+        if not isinstance(min_tokens_to_keep, int) or (min_tokens_to_keep < 0):
+            raise ValueError(f"`min_tokens_to_keep` has to be a non-negative integer, but is {min_tokens_to_keep}")
 
         self.top_p = top_p
         self.filter_value = filter_value
@@ -266,9 +268,8 @@ class TopPLogitsWarper(LogitsWarper):
 
         # Remove tokens with cumulative top_p above the threshold (token with 0 are kept)
         sorted_indices_to_remove = cumulative_probs <= (1 - self.top_p)
-        if self.min_tokens_to_keep > 1:
-            # Keep at least min_tokens_to_keep
-            sorted_indices_to_remove[..., -self.min_tokens_to_keep :] = 0
+        # Keep at least min_tokens_to_keep
+        sorted_indices_to_remove[..., -self.min_tokens_to_keep :] = 0
 
         # scatter sorted tensors to original indexing
         indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
@@ -649,8 +650,8 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
 
         else:
             if banned_mask_list:
-                banned_mask = torch.LongTensor(banned_mask_list)
-                indices = torch.ones(len(banned_mask))
+                indices = torch.ones(len(banned_mask_list))
+                banned_mask = torch.LongTensor(banned_mask_list, device=indices.device)
                 # A sparse tensor is generated from a list of coordinates: [[0, 1], [0, 2], [2, 0]]. A conversion to dense tensor generates:
                 # [ 0  1  1 ]
                 # [ 0  0  0 ]
@@ -678,7 +679,7 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     generation. See [Autoregressive Entity Retrieval](https://arxiv.org/abs/2010.00904) for more information.
 
     Args:
-        prefix_allowed_tokens_fn: (`Callable[[int, torch.Tensor], List[int]]`):
+        prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`):
             This function constraints the beam search to allowed tokens only at each step. This function takes 2
             arguments `inputs_ids` and the batch ID `batch_id`. It has to return a list with the allowed tokens for the
             next generation step conditioned on the previously generated tokens `inputs_ids` and the batch ID

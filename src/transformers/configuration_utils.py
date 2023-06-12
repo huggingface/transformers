@@ -119,7 +119,7 @@ class PretrainedConfig(PushToHubMixin):
 
         max_length (`int`, *optional*, defaults to 20):
             Maximum length that will be used by default in the `generate` method of the model.
-        min_length (`int`, *optional*, defaults to 10):
+        min_length (`int`, *optional*, defaults to 0):
             Minimum length that will be used by default in the `generate` method of the model.
         do_sample (`bool`, *optional*, defaults to `False`):
             Flag that will be used by default in the `generate` method of the model. Whether or not to use sampling ;
@@ -136,7 +136,7 @@ class PretrainedConfig(PushToHubMixin):
         diversity_penalty (`float`, *optional*, defaults to 0.0):
             Value to control diversity for group beam search. that will be used by default in the `generate` method of
             the model. 0 means no diversity penalty. The higher the penalty, the more diverse are the outputs.
-        temperature (`float`, *optional*, defaults to 1):
+        temperature (`float`, *optional*, defaults to 1.0):
             The value used to module the next token probabilities that will be used by default in the `generate` method
             of the model. Must be strictly positive.
         top_k (`int`, *optional*, defaults to 50):
@@ -783,6 +783,13 @@ class PretrainedConfig(PushToHubMixin):
                 or (key in class_config_dict and value != class_config_dict[key])
             ):
                 serializable_config_dict[key] = value
+
+        if hasattr(self, "quantization_config"):
+            serializable_config_dict["quantization_config"] = (
+                self.quantization_config.to_dict()
+                if not isinstance(self.quantization_config, dict)
+                else self.quantization_config
+            )
 
         self.dict_torch_dtype_to_str(serializable_config_dict)
 

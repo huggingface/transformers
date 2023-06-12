@@ -139,7 +139,6 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     """
 
     all_model_classes = (SwiftFormerModel, SwiftFormerForImageClassification) if is_torch_available() else ()
-
     pipeline_model_mapping = (
         {"feature-extraction": SwiftFormerModel, "image-classification": SwiftFormerForImageClassification}
         if is_torch_available()
@@ -303,5 +302,5 @@ class SwiftFormerModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([[-2.1703e00, 2.1107e00, -2.0811e00]])
+        expected_slice = torch.tensor([[-2.1703e00, 2.1107e00, -2.0811e00]]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

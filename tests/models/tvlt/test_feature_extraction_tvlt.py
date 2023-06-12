@@ -189,6 +189,15 @@ class TvltFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         self.assertTrue(encoded_audios.shape[-2] <= feature_extractor.spectrogram_length)
         self.assertTrue(encoded_audios.shape[-3] == feature_extractor.num_channels)
 
+        # Test 2-D numpy arrays are batched.
+        speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
+        np_speech_inputs = np.asarray(speech_inputs)
+        encoded_audios = feature_extractor(np_speech_inputs, return_tensors="np", sampling_rate=44100).audio_values
+        self.assertTrue(encoded_audios.ndim == 4)
+        self.assertTrue(encoded_audios.shape[-1] == feature_extractor.feature_size)
+        self.assertTrue(encoded_audios.shape[-2] <= feature_extractor.spectrogram_length)
+        self.assertTrue(encoded_audios.shape[-3] == feature_extractor.num_channels)
+
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech

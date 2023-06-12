@@ -212,7 +212,7 @@ class GPTJAttention(nn.Module):
         key = self._split_heads(key, self.num_attention_heads, self.head_dim, True)
         value = self._split_heads(value, self.num_attention_heads, self.head_dim, False)
 
-        if is_torch_fx_proxy(position_ids):
+        if is_torch_fx_proxy(position_ids) or torch.jit.is_tracing():
             # The logic to conditionally copy to GPU could not be traced, so we do this
             # every time in the torch.fx case
             embed_positions = get_embed_positions(self.embed_positions, position_ids)
@@ -340,6 +340,7 @@ class GPTJPreTrainedModel(PreTrainedModel):
     is_parallelizable = True
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTJBlock"]
+    _skip_keys_device_placement = "past_key_values"
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)

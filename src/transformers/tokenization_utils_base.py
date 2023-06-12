@@ -233,15 +233,20 @@ class BatchEncoding(UserDict):
         etc.).
 
         If the key is an integer, get the `tokenizers.Encoding` for batch item with index `key`.
+
+        If the key is a slice, returns the value of the dict associated to `key` ('input_ids', 'attention_mask', etc.)
+        with the constraint of slice.
         """
         if isinstance(item, str):
             return self.data[item]
         elif self._encodings is not None:
             return self._encodings[item]
+        elif isinstance(item, slice):
+            return {key: self.data[key][slice] for key in self.data.keys()}
         else:
             raise KeyError(
-                "Indexing with integers (to access backend Encoding for a given batch index) "
-                "is not available when using Python based tokenizers"
+                "Invalid key. Only three types of key are available: "
+                "(1) string, (2) integers for backend Encoding, and (3) slices for data subsetting."
             )
 
     def __getattr__(self, item: str):
@@ -705,7 +710,15 @@ class BatchEncoding(UserDict):
             as_tensor = jnp.array
             is_tensor = is_jax_tensor
         else:
-            as_tensor = np.asarray
+
+            def as_tensor(value, dtype=None):
+                if isinstance(value, (list, tuple)) and isinstance(value[0], (list, tuple, np.ndarray)):
+                    value_lens = [len(val) for val in value]
+                    if len(set(value_lens)) > 1 and dtype is None:
+                        # we have a ragged list so handle explicitly
+                        value = as_tensor([np.asarray(val) for val in value], dtype=object)
+                return np.asarray(value, dtype=dtype)
+
             is_tensor = is_numpy_array
 
         # Do the tensor conversion in batch
@@ -2093,7 +2106,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
                 If `True`, will save the tokenizer in legacy format. If the "slow" tokenizer doesn't exits, a value
                 error is raised.
-            filename_prefix: (`str`, *optional*):
+            filename_prefix (`str`, *optional*):
                 A prefix to add to the names of the files saved by the tokenizer.
             push_to_hub (`bool`, *optional*, defaults to `False`):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the

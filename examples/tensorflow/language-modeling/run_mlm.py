@@ -559,8 +559,9 @@ def main():
             adam_global_clipnorm=training_args.max_grad_norm,
         )
 
-        # no user-specified loss = will use the model internal loss
-        model.compile(optimizer=optimizer, jit_compile=training_args.xla, run_eagerly=True)
+        # Transformers models compute the right loss for their task by default when labels are passed, and will
+        # use this for training unless you specify your own loss function in compile().
+        model.compile(optimizer=optimizer, jit_compile=training_args.xla)
         # endregion
 
         # region Preparing push_to_hub and model card

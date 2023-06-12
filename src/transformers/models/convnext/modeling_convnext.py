@@ -37,7 +37,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.backbone_utils import BackboneMixin, get_aligned_output_features_output_indices
+from ...utils.backbone_utils import BackboneMixin
 from .configuration_convnext import ConvNextConfig
 
 
@@ -481,15 +481,11 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
 class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
+        super()._init_backbone(config)
 
-        self.stage_names = config.stage_names
         self.embeddings = ConvNextEmbeddings(config)
         self.encoder = ConvNextEncoder(config)
-
         self.num_features = [config.hidden_sizes[0]] + config.hidden_sizes
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            config.out_features, config.out_indices, self.stage_names
-        )
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}
