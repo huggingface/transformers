@@ -912,7 +912,7 @@ class TFDebertaV2PredictionHeadTransform(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            units=config.hidden_size,
+            units=config.embedding_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
         )
