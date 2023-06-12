@@ -21,6 +21,10 @@ FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "connor-henderson/fastspeech2_conformer": "https://huggingface.co/connor-henderson/fastspeech2_conformer/raw/main/config.json",
 }
 
+FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "connor-henderson/fastspeech2_conformer_hifigan": "https://huggingface.co/connor-henderson/fastspeech2_conformer_hifigan/raw/main/config.json",
+}
+
 
 class FastSpeech2ConformerConfig(PretrainedConfig):
     r"""

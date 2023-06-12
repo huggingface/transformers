@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,8 +20,10 @@ from ...utils import (
     is_torch_available,
 )
 
+
 _import_structure = {
     "configuration_fastspeech2_conformer": [
+        "FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "FastSpeech2ConformerConfig",
         "FastSpeech2ConformerHifiGanConfig",
@@ -40,7 +38,12 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["tokenization_fastspeech2_conformer"] = ["FastSpeech2ConformerTokenizer"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_fastspeech2_conformer"] = [
         "FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FastSpeech2ConformerHifiGan",
@@ -48,9 +51,9 @@ if is_torch_available():
         "FastSpeech2ConformerPreTrainedModel",
     ]
 
-
 if TYPE_CHECKING:
     from .configuration_fastspeech2_conformer import (
+        FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FastSpeech2ConformerConfig,
         FastSpeech2ConformerHifiGanConfig,
@@ -64,14 +67,18 @@ if TYPE_CHECKING:
     else:
         from .tokenization_fastspeech2_conformer import FastSpeech2ConformerTokenizer
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_fastspeech2_conformer import (
             FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FastSpeech2ConformerHifiGan,
             FastSpeech2ConformerModel,
             FastSpeech2ConformerPreTrainedModel,
-            FastSpeech2ConformerHifiGan,
         )
-
 
 else:
     import sys
