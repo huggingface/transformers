@@ -1224,9 +1224,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     @tf.function
     def serving(self, inputs):
         """
-        Method used for serving the model. Does not have a specific signature, but will be specialized
-        as concrete functions when saving with `save_pretrained`.
         Args:
+        Method used for serving the model. Does not have a specific signature, but will be specialized as concrete
+        functions when saving with `save_pretrained`.
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
