@@ -27,7 +27,9 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
+    add_start_docstrings_to_model_forward,
     logging,
+    replace_return_docstrings,
 )
 from .configuration_encodec import EncodecConfig
 
@@ -50,7 +52,10 @@ ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
 class EncodecOutput(ModelOutput):
     """
     Args:
-        # TODO
+        audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+            Discret code embeddings computed using `model.encode`.
+        audio_values (`torch.FlaotTensor` of shape `(batch_size, sequence_length)`, *optional*)
+
 
     """
 
@@ -62,8 +67,10 @@ class EncodecOutput(ModelOutput):
 class EncodecEncoderOutput(ModelOutput):
     """
     Args:
-        # TODO
-
+        audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+            Discret code embeddings computed using `model.encode`.
+        audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
+            Scaling factor for each `audio_codes` input. This is used to unscale each chunk of audio when decoding.
     """
 
     audio_codes: torch.FloatTensor = None
@@ -74,7 +81,8 @@ class EncodecEncoderOutput(ModelOutput):
 class EncodecDecoderOutput(ModelOutput):
     """
     Args:
-        # TODO
+        audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
+            Decoded audio output.
     """
 
     audio_values: Optional[torch.FloatTensor] = None
@@ -495,7 +503,6 @@ class EncodecPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-# TODO
 ENCODEC_BASE_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -510,12 +517,6 @@ ENCODEC_BASE_START_DOCSTRING = r"""
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        encoder ([`EncodecEncoder`] or `None`):
-            The Transformer encoder module that applies the appropiate speech or text encoder prenet. If `None`,
-            [`EncodecEncoder`] will be used and the `input_values` are assumed to be hidden states.
-        decoder ([`EncodecDecoder`] or `None`):
-            The Transformer decoder module that applies the appropiate speech or text decoder prenet. If `None`,
-            [`EncodecDecoder`] will be used and the `decoder_input_values` are assumed to be hidden states.
 """
 
 
@@ -540,33 +541,34 @@ ENCODEC_START_DOCSTRING = r"""
 # TODO
 ENCODEC_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Raw audio input padded to the approriate length in order to be encoded using chunks of length
-            self.chunk_length
-        padding_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-            1]`:
+        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
+            Raw audio input converted to Float and padded to the approriate length in order to be encoded using chunks
+            of length self.chunk_length and a stride of `config.strid_length`.
+        padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid computing scaling factors on padding token indices (can we avoid computing conv on these+).
+            Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            [What are attention masks?](../glossary#attention-mask)
-
             <Tip warning={true}>
 
-            `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
+            `padding_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
             True`. For all models whose processor has `config.return_attention_mask == False`, `attention_mask` should
             **not** be passed to avoid degraded performance when doing batched inference. For such models
-            `input_values` should simply be padded with 0 and passed without `attention_mask`. Be aware that these
-            models also yield slightly different results depending on whether `input_values` is padded or not.
+            `input_values` should simply be padded with 0 and passed without `padding_mask`. Be aware that these models
+            also yield slightly different results depending on whether `input_values` is padded or not.
 
             </Tip>
 
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-
+        bandwidth (`float`, *optional*):
+            The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible
+            bandwidth. bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented as
+            bandwidth == 6.0
+        audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+            Discret code embeddings computed using `model.encode`.
+        audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
+            Scaling factor for each `audio_codes` input.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -798,34 +800,56 @@ class EncodecModel(EncodecPreTrainedModel):
             outputs = outputs * scale.view(-1, 1, 1)
         return outputs
 
-    # TODO @add_start_docstrings_to_model_forward(ENCODEC_INPUTS_DOCSTRING)
-    # TODO @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(ENCODEC_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=EncodecOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_values: torch.Tensor,
         padding_mask: torch.Tensor = None,
         bandwidth: Optional[float] = None,
+        audio_codes: Optional[torch.Tensor] = None,
+        audio_scales: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecOutput]:
         r"""
-        input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
-            Float values of the input audio waveform.
-
-        bandwidth (`float`, *optional*):
-            The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible
-            bandwidth. bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented as
-            bandwidth == 6.0
-
         Returns:
-        """
+
+        Examples:
+
+        ```python
+        >>> from datasets import load_dataset
+        >>> from transformers import AutoProcessor, ClapModel
+
+        >>> dataset = load_dataset("ashraq/esc50")
+        >>> audio_sample = dataset["train"]["audio"][0]["array"]
+
+        >>> model_id = "Matthijs/encodec_24khz"
+        >>> model = EncodecModel.from_pretrained(model_id)
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+
+        >>> inputs = processor(audios=audio_sample, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> audio_codes = outputs.audio_codes
+        >>> audio_values = outputs.audio_values
+        ```"""
         return_dict = return_dict or self.config.return_dict
 
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
 
-        audio_codes, audio_scales = self.encode(input_values, padding_mask, bandwidth, return_dict).to_tuple()
-        audio_values = self.decode(audio_codes, audio_scales, padding_mask, return_dict=return_dict)[0]
+        if audio_codes is not None:
+            if audio_scales is None:
+                raise ValueError("You specified `audio_codes` but did not specify the `audio_scales`")
 
+        if audio_scales is not None:
+            if audio_scales is None:
+                raise ValueError("You specified `audio_scales` but did not specify the `audio_code`")
+
+        if audio_scales is None and audio_codes is None:
+            audio_codes, audio_scales = self.encode(input_values, padding_mask, bandwidth, return_dict).to_tuple()
+
+        audio_values = self.decode(audio_codes, audio_scales, padding_mask, return_dict=return_dict)[0]
         if return_dict:
             return EncodecOutput(audio_codes, audio_values)
 
