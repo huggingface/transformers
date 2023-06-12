@@ -65,7 +65,6 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
-        self.return_attention_mask = return_attention_mask
         self.chunk_stride = chunk_stride
         self.chunk_length = chunk_length
 
@@ -176,10 +175,9 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
                 padding_length = max_length - sample.shape[0]
                 sample = np.pad(sample, pad_width=((0, padding_length), (0, 0)), mode="constant", constant_values=0)
                 padded_audios.append(sample)
-                if return_attention_mask:
-                    padding_mask = np.ones(max_length)
-                    padding_mask[..., -padding_length:] = 0
-                    padding_masks.append(padding_mask)
+                padding_mask = np.ones(max_length)
+                padding_mask[..., -padding_length:] = 0
+                padding_masks.append(padding_mask)
             padded_inputs = BatchFeature({"input_values": padded_audios})
         else:
             padded_inputs = BatchFeature({"input_values": raw_audio})
@@ -206,8 +204,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["input_values"] = input_values
 
         # convert attention_mask to correct format
-        if return_attention_mask and padding_masks is not None:
-            padded_inputs["padding_mask"] = [np.asarray(array, dtype=np.int32) for array in padding_masks]
+        padded_inputs["padding_mask"] = [np.asarray(array, dtype=np.int32) for array in padding_masks]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
