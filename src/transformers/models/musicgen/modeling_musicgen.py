@@ -2027,7 +2027,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         if generation_config is None:
             generation_config = self.generation_config
 
-        # TODO(SG): update this when we're using audio prompt as input
+        # TODO(SG): update this when we're using audio prompt as input since we'll have to offset new tokens
         specified_max_length = kwargs.pop("max_new_tokens", None) or kwargs.pop("max_length", None)
         default_max_length = generation_config.max_new_tokens or generation_config.max_length
         max_length = specified_max_length or default_max_length
@@ -2051,18 +2051,27 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
             **kwargs,
         )
 
-        # TODO(SG): revert the pattern delay mask here:
-        # [P, a, b, c, d, P, P, P]
-        # [P, P, e, f, g, h, P, P]
-        # [P, P, P, i, j, k, l, P]
-        # [P, P, P, P, m, n, o, q]
+        return_dict_in_generate = (
+            kwargs.get("return_dict_in_generate", None) or self.generation_config.return_dict_in_generate
+        )
+
+        if return_dict_in_generate:
+            input_ids = outputs.sequences
+        else:
+            input_ids = outputs
+
+        # revert the pattern delay mask by shifting pred ids by offset 1
+        # [P, a, b, c, d, P, P, P]      [a, b, c, d]
+        # [P, P, e, f, g, h, P, P]      [e, f, g, h]
+        # [P, P, P, i, j, k, l, P]  ->  [i, j, k, l]
+        # [P, P, P, P, m, n, o, q]      [m, n, o, q]
         # where P is the special padding token id
-        # ->
-        # [a, b, c, d]
-        # [e, f, g, h]
-        # [i, j, k, l]
-        # [m, n, o, q]
+        bsz, codebooks, seq_len = input_ids.shape
+        input_ids = input_ids[input_ids != self.generation_config.pad_token_id].reshape(bsz, codebooks, -1)
 
         # TODO(SG): put the outputs through encodec to get the audio output, defining a new output class (audio + gen scores)
-
-        return outputs
+        if return_dict_in_generate:
+            outputs.sequences = input_ids
+            return outputs
+        else:
+            return input_ids
