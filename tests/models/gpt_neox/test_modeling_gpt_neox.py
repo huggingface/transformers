@@ -314,8 +314,11 @@ class GPTNeoXLanguageGenerationTest(unittest.TestCase):
             model.to(torch_device)
 
             inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
+            # On April 4th 2023, files on `EleutherAI/pythia-410m-deduped` are updated (and the previous versions
+            # completely disappear in the commit history). Unfortunately, the output of this `inputs` doesn't make a lot
+            # of sense.
             expected_output = (
-                "My favorite food is the chicken and rice.\n\nI love to cook and bake. I love to cook and bake"
+                "My favorite food is a good old-fashioned, old-fashioned, old-fashioned.\n\nI'm not sure"
             )
 
             output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
