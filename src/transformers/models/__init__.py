@@ -88,6 +88,7 @@ from . import (
     gpt2,
     gpt_bigcode,
     gpt_neo,
+    musicgen,
     gpt_neox,
     gpt_neox_japanese,
     gpt_sw3,

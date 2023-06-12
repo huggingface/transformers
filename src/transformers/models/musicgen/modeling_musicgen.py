@@ -44,7 +44,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MusicgenConfig"
 
-AUDIOCRAFT_PRETRAINED_CONFIG_ARCHIVE_LIST = [
+MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/musicgen-600m",
     # See all Musicgen models at https://huggingface.co/models?filter=musicgen
 ]
@@ -1333,7 +1333,7 @@ class MusicgenPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-AUDIOCRAFT_START_DOCSTRING = r"""
+MUSICGEN_START_DOCSTRING = r"""
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1349,7 +1349,7 @@ AUDIOCRAFT_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-AUDIOCRAFT_INPUTS_DOCSTRING = r"""
+MUSICGEN_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide

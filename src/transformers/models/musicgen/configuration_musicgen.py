@@ -21,7 +21,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-AUDIOCRAFT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/musicgen-600m": "https://huggingface.co/facebook/musicgen-600m/resolve/main/config.json",
     # See all Musicgen models at https://huggingface.co/models?filter=musicgen
 }
