@@ -156,8 +156,8 @@
     title: (번역중) Philosophy
   - local: in_translation
     title: (번역중) Glossary
-  - local: in_translation
-    title: (번역중) 🤗 What 🤗 Transformers can do
+  - local: task_summary
+    title: 🤗 Transformers로 할 수 있는 작업
   - local: tasks_explained
     title: 🤗 Transformers로 작업을 해결하는 방법
   - local: in_translation
