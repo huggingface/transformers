@@ -183,4 +183,4 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-6))
         self.assertTrue(torch.allclose(input_values[0, 1, :30], EXPECTED_INPUT_VALUES * 0.5, atol=1e-6))
 
-    # TODO make sure to test when chunk_length is set to None it sdoes not pad
+    # TODO make sure to test when chunk_length is set to None it does not pad

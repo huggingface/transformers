@@ -341,7 +341,6 @@ class EncodecIntegrationTest(unittest.TestCase):
             raw_audio=audio_sample,
             sampling_rate=processor.sampling_rate,
             return_tensors="pt",
-            return_attention_mask=True,
         ).to(torch_device)
 
         for bandwidth, expected_rmse in expected_rmse.items():
@@ -390,6 +389,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             model_id,
             chunk_length_s=1,
             use_causal_conv=False,
+            normalize=True,
             codebook_size=1024,
             upsampling_ratios=[8, 5, 4, 2],
             norm_type="time_group_norm",
@@ -402,12 +402,9 @@ class EncodecIntegrationTest(unittest.TestCase):
         # transform mono to stereo
         audio_sample = np.array([audio_sample, audio_sample])
 
-        inputs = processor(
-            raw_audio=audio_sample,
-            sampling_rate=processor.sampling_rate,
-            return_tensors="pt",
-            return_attention_mask=True,
-        ).to(torch_device)
+        inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt").to(
+            torch_device
+        )
 
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
@@ -444,9 +441,16 @@ class EncodecIntegrationTest(unittest.TestCase):
             "3.0": 0.001,
             "24.0": 0.0005,
         }
+        # [298290, 308806, 305543, 320363, 315116, 320181, 308885, 303291, 4212]
         expected_codesums = {
-            "3.0": [144259, 146765, 156205, 176871, 102780],
-            "24.0": [1567904, 1297170, 1310040, 1464657, 813925],
+            "3.0": [
+                [156116, 160905, 151453, 141398, 153237, 170181, 158885, 153291, 2106],
+                [[142174, 147901, 154090, 178965, 161879, 150000, 150000, 150000, 2106]],
+            ],
+            "24.0": [
+                [1475742, 1305929, 1303042, 1543297, 1308489, 1360387, 1431622, 1776617, 16470],
+                [1561048, 1284593, 1278330, 1487220, 1659404, 1924131, 1924131, 1924131, 16470],
+            ],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "Matthijs/encodec_48khz"
@@ -455,6 +459,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             model_id,
             chunk_length_s=1,
             use_causal_conv=False,
+            normalize=True,
             codebook_size=1024,
             upsampling_ratios=[8, 5, 4, 2],
             norm_type="time_group_norm",
@@ -468,12 +473,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             for audio_sample in librispeech_dummy[-2:]["audio"]
         ]
 
-        inputs = processor(
-            raw_audio=audio_samples,
-            sampling_rate=processor.sampling_rate,
-            return_tensors="pt",
-            return_attention_mask=True,
-        )
+        inputs = processor(raw_audio=audio_samples, sampling_rate=processor.sampling_rate, return_tensors="pt")
         input_values = inputs["input_values"].to(torch_device)
         padding_mask = inputs["padding_mask"].to(torch_device)
         # breakpoint()
@@ -505,3 +505,6 @@ class EncodecIntegrationTest(unittest.TestCase):
             # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
             rmse = compute_rmse(arr, arr_enc_dec)
             self.assertTrue(rmse < expected_rmse)
+
+
+# TODO Add test where audio is truncated to a multiple + feature in the feature extractor
