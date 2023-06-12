@@ -1904,7 +1904,7 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
         "encoder.word_embeddings.weight",
         "lm_head.weight",
     ]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = ["encoder.word_embeddings.weight", "decoder.word_embeddings.weight", "lm_head.weight"]
 
     def __init__(self, config: XLMProphetNetConfig):
         super().__init__(config)
