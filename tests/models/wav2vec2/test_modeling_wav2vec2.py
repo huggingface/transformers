@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Wav2Vec2 model. """
 
+import gc
 import math
 import multiprocessing
 import os
@@ -297,7 +298,7 @@ class Wav2Vec2ModelTester:
         config.adapter_attn_dim = 16
         model = Wav2Vec2ForCTC(config=config)
 
-        self.parent.assertIsNotNone(model._adapters)
+        self.parent.assertIsNotNone(model._get_adapters())
 
         model.to(torch_device)
         model.eval()
@@ -1146,7 +1147,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
             model = Wav2Vec2ForCTC.from_pretrained(tempdir)
 
             logits = get_logits(model, input_features)
-            adapter_weights = model._adapters
+            adapter_weights = model._get_adapters()
 
             # save safe weights
             safe_filepath = os.path.join(tempdir, WAV2VEC2_ADAPTER_SAFE_FILE.format("eng"))
@@ -1168,7 +1169,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
             model = Wav2Vec2ForCTC.from_pretrained(tempdir)
 
             logits = get_logits(model, input_features)
-            adapter_weights = model._adapters
+            adapter_weights = model._get_adapters()
 
             # save pt weights
             pt_filepath = os.path.join(tempdir, WAV2VEC2_ADAPTER_PT_FILE.format("eng"))
@@ -1374,6 +1375,12 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
 @require_soundfile
 @slow
 class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        torch.cuda.empty_cache()
+
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech

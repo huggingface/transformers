@@ -712,7 +712,6 @@ class PushToHubMixin:
         operations = []
         # upload standalone files
         for file in modified_files:
-            operations.append(CommitOperationAdd(path_or_fileobj=os.path.join(working_dir, file), path_in_repo=file))
             if os.path.isdir(os.path.join(working_dir, file)):
                 # go over individual files of folder
                 for f in os.listdir(os.path.join(working_dir, file)):
@@ -740,6 +739,7 @@ class PushToHubMixin:
         use_auth_token: Optional[Union[bool, str]] = None,
         max_shard_size: Optional[Union[int, str]] = "10GB",
         create_pr: bool = False,
+        safe_serialization: bool = False,
         **deprecated_kwargs,
     ) -> str:
         """
@@ -767,6 +767,8 @@ class PushToHubMixin:
                 by a unit (like `"5MB"`).
             create_pr (`bool`, *optional*, defaults to `False`):
                 Whether or not to create a PR with the uploaded files or directly commit.
+            safe_serialization (`bool`, *optional*, defaults to `False`):
+                Whether or not to convert the model weights in safetensors format for safer serialization.
 
         Examples:
 
@@ -809,7 +811,7 @@ class PushToHubMixin:
             files_timestamps = self._get_files_timestamps(work_dir)
 
             # Save all files.
-            self.save_pretrained(work_dir, max_shard_size=max_shard_size)
+            self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
 
             return self._upload_modified_files(
                 work_dir,

@@ -1134,9 +1134,9 @@ class LlamaConverter(SpmConverter):
             )
             tokenizer.add_special_tokens(
                 [
-                    AddedToken("<unk>", normalized=True),
-                    AddedToken("<s>", normalized=True),
-                    AddedToken("</s>", normalized=True),
+                    AddedToken("<unk>", normalized=False),
+                    AddedToken("<s>", normalized=False),
+                    AddedToken("</s>", normalized=False),
                 ]
             )
         else:

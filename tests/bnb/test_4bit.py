@@ -111,6 +111,19 @@ class Bnb4BitTest(Base4bitTest):
         gc.collect()
         torch.cuda.empty_cache()
 
+    def test_quantization_config_json_serialization(self):
+        r"""
+        A simple test to check if the quantization config is correctly serialized and deserialized
+        """
+        config = self.model_4bit.config
+
+        self.assertTrue(hasattr(config, "quantization_config"))
+
+        _ = config.to_dict()
+        _ = config.to_diff_dict()
+
+        _ = config.to_json_string()
+
     def test_memory_footprint(self):
         r"""
         A simple test to check if the model conversion has been done correctly by checking on the

@@ -30,8 +30,8 @@
         title: 토큰 분류
       - local: tasks/question_answering
         title: 질의 응답(Question Answering)
-      - local: in_translation
-        title: (번역중) Causal language modeling
+      - local: tasks/language_modeling
+        title: 인과적 언어 모델링(Causal language modeling)
       - local: tasks/masked_language_modeling
         title: 마스킹된 언어 모델링(Masked language modeling)
       - local: tasks/translation
@@ -156,20 +156,20 @@
     title: (번역중) Philosophy
   - local: in_translation
     title: (번역중) Glossary
-  - local: in_translation
-    title: (번역중) 🤗 What 🤗 Transformers can do
+  - local: task_summary
+    title: 🤗 Transformers로 할 수 있는 작업
   - local: tasks_explained
     title: 🤗 Transformers로 작업을 해결하는 방법
   - local: in_translation
     title: (번역중) The Transformer model family
   - local: in_translation
     title: (번역중) Summary of the tokenizers
-  - local: in_translation
-    title: (번역중) Attention mechanisms
+  - local: attention
+    title: 어텐션 매커니즘
   - local: pad_truncation
     title: 패딩과 잘라내기
-  - local: in_translation
-    title: (번역중) BERTology
+  - local: bertology
+    title: BERTology
   - local: in_translation
     title: (번역중) Perplexity of fixed-length models
   - local: in_translation

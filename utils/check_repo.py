@@ -408,6 +408,7 @@ def get_model_modules():
         "modeling_speech_encoder_decoder",
         "modeling_flax_speech_encoder_decoder",
         "modeling_flax_vision_encoder_decoder",
+        "modeling_timm_backbone",
         "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
         "modeling_tf_encoder_decoder",
@@ -846,6 +847,8 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "NatBackbone",
     "ResNetBackbone",
     "SwinBackbone",
+    "TimmBackbone",
+    "TimmBackboneConfig",
 ]
 
 

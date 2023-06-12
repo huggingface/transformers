@@ -118,6 +118,19 @@ class MixedInt8Test(BaseMixedInt8Test):
         gc.collect()
         torch.cuda.empty_cache()
 
+    def test_quantization_config_json_serialization(self):
+        r"""
+        A simple test to check if the quantization config is correctly serialized and deserialized
+        """
+        config = self.model_8bit.config
+
+        self.assertTrue(hasattr(config, "quantization_config"))
+
+        _ = config.to_dict()
+        _ = config.to_diff_dict()
+
+        _ = config.to_json_string()
+
     def test_memory_footprint(self):
         r"""
         A simple test to check if the model conversion has been done correctly by checking on the
@@ -145,6 +158,26 @@ class MixedInt8Test(BaseMixedInt8Test):
             if isinstance(module, torch.nn.Linear):
                 if name not in ["lm_head"] + T5PreTrainedModel._keep_in_fp32_modules:
                     self.assertTrue(module.weight.dtype == torch.int8)
+
+    def test_llm_skip(self):
+        r"""
+        A simple test to check if `llm_int8_skip_modules` works as expected
+        """
+        import bitsandbytes as bnb
+
+        quantization_config = BitsAndBytesConfig(load_in_8bit=True, llm_int8_skip_modules=["classifier"])
+        seq_classification_model = AutoModelForSequenceClassification.from_pretrained(
+            "roberta-large-mnli", quantization_config=quantization_config
+        )
+        self.assertTrue(seq_classification_model.roberta.encoder.layer[0].output.dense.weight.dtype == torch.int8)
+        self.assertTrue(
+            isinstance(seq_classification_model.roberta.encoder.layer[0].output.dense, bnb.nn.Linear8bitLt)
+        )
+
+        self.assertTrue(isinstance(seq_classification_model.classifier.dense, nn.Linear))
+        self.assertTrue(seq_classification_model.classifier.dense.weight.dtype != torch.int8)
+        self.assertTrue(isinstance(seq_classification_model.classifier.out_proj, nn.Linear))
+        self.assertTrue(seq_classification_model.classifier.out_proj != torch.int8)
 
     def test_generate_quality(self):
         r"""
