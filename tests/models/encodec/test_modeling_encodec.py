@@ -324,7 +324,14 @@ class EncodecIntegrationTest(unittest.TestCase):
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "Matthijs/encodec_24khz"
 
-        model = EncodecModel.from_pretrained(model_id, chunk_length_s = None, use_causal_conv = True, codebook_size = 1024, upsampling_ratios = [8,5,4,2], norm_type = "weight_norm").to(torch_device)
+        model = EncodecModel.from_pretrained(
+            model_id,
+            chunk_length_s=None,
+            use_causal_conv=True,
+            codebook_size=1024,
+            upsampling_ratios=[8, 5, 4, 2],
+            norm_type="weight_norm",
+        ).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
@@ -346,7 +353,9 @@ class EncodecIntegrationTest(unittest.TestCase):
 
                 audio_codes, scales = encoder_outputs.to_tuple()
                 input_values_dec = model.decode(audio_codes, scales, inputs["padding_mask"])[0]
-                input_values_enc_dec = model(inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth))[-1]
+                input_values_enc_dec = model(
+                    inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth)
+                )[-1]
 
             # make sure forward and decode gives same result
             self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
@@ -374,7 +383,14 @@ class EncodecIntegrationTest(unittest.TestCase):
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "Matthijs/encodec_48khz"
 
-        model = EncodecModel.from_pretrained(model_id, chunk_length_s = 1, use_causal_conv = False, codebook_size = 1024, upsampling_ratios = [8,5,4,2], norm_type = "time_group_norm").to(torch_device)
+        model = EncodecModel.from_pretrained(
+            model_id,
+            chunk_length_s=1,
+            use_causal_conv=False,
+            codebook_size=1024,
+            upsampling_ratios=[8, 5, 4, 2],
+            norm_type="time_group_norm",
+        ).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
@@ -384,7 +400,10 @@ class EncodecIntegrationTest(unittest.TestCase):
         audio_sample = np.array([audio_sample, audio_sample])
 
         inputs = processor(
-            raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt", return_attention_mask=True
+            raw_audio=audio_sample,
+            sampling_rate=processor.sampling_rate,
+            return_tensors="pt",
+            return_attention_mask=True,
         ).to(torch_device)
 
         for bandwidth, expected_rmse in expected_rmse.items():
@@ -424,7 +443,14 @@ class EncodecIntegrationTest(unittest.TestCase):
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "Matthijs/encodec_48khz"
 
-        model = EncodecModel.from_pretrained(model_id, chunk_length_s = 1, use_causal_conv = False, codebook_size = 1024, upsampling_ratios = [8,5,4,2], norm_type = "time_group_norm").to(torch_device)
+        model = EncodecModel.from_pretrained(
+            model_id,
+            chunk_length_s=1,
+            use_causal_conv=False,
+            codebook_size=1024,
+            upsampling_ratios=[8, 5, 4, 2],
+            norm_type="time_group_norm",
+        ).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
@@ -435,7 +461,10 @@ class EncodecIntegrationTest(unittest.TestCase):
         ]
 
         inputs = processor(
-            raw_audio=audio_samples, sampling_rate=processor.sampling_rate, return_tensors="pt", return_attention_mask=True
+            raw_audio=audio_samples,
+            sampling_rate=processor.sampling_rate,
+            return_tensors="pt",
+            return_attention_mask=True,
         )
         input_values = inputs["input_values"].to(torch_device)
         padding_mask = inputs["padding_mask"].to(torch_device)
