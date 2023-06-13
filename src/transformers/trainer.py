@@ -2275,7 +2275,7 @@ class Trainer:
         if self.sharded_ddp == ShardedDDPOption.SIMPLE:
             self.optimizer.consolidate_state_dict()
 
-        if self.fsdp:
+        if self.fsdp or self.is_fsdp_enabled:
             if self.is_fsdp_enabled:
                 save_fsdp_optimizer(
                     self.accelerator.state.fsdp_plugin, self.accelerator, self.optimizer, self.model, output_dir
@@ -2424,7 +2424,7 @@ class Trainer:
                     # In distributed training however, we load directly on each GPU and risk the GPU OOM as it's more
                     # likely to get OOM on CPU (since we load num_gpu times the optimizer state
                     map_location = self.args.device if self.args.world_size > 1 else "cpu"
-                    if self.fsdp:
+                    if self.fsdp or self.is_fsdp_enabled:
                         if self.is_fsdp_enabled:
                             load_fsdp_optimizer(
                                 self.accelerator.state.fsdp_plugin,
