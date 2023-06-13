@@ -535,7 +535,7 @@ class GPTBigCodeMHAModelTest(GPTBigCodeModelTest):
 
 @unittest.skipIf(
     not is_torch_greater_or_equal_than_1_12,
-    reason="`GPTBigCode` checkpoints use `PytorchGELUTanh` which requires `torch>=1.12.0`."
+    reason="`GPTBigCode` checkpoints use `PytorchGELUTanh` which requires `torch>=1.12.0`.",
 )
 @slow
 @require_torch
