@@ -39,8 +39,8 @@ class MusicgenEncoderConfig(PretrainedConfig):
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 32128):
-            Vocabulary size of the T5 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`T5Model`] or [`TFT5Model`].
+            Vocabulary size of the encoder. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`MusicgenEncoder`].
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
