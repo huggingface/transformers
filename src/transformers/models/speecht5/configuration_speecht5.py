@@ -412,7 +412,6 @@ class SpeechT5HifiGanConfig(PretrainedConfig):
         **kwargs,
     ):
         self.model_in_dim = model_in_dim
-        self.sampling_rate = sampling_rate
         self.upsample_initial_channel = upsample_initial_channel
         self.upsample_rates = upsample_rates
         self.upsample_kernel_sizes = upsample_kernel_sizes
