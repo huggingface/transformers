@@ -1595,7 +1595,7 @@ class Trainer:
         if args.logging_steps and args.logging_steps < 1:
             args.logging_steps = math.ceil(max_steps * args.logging_steps)
         if (args.eval_steps and args.eval_steps < 1) or self._found_ratio:
-            # Store eval in case of auto-bs-finder
+            # Store eval in case of auto-bs-finder on the first pass
             if not self._found_ratio:
                 self._found_ratio = True
                 self._eval_ratio = float(args.eval_steps)
