@@ -1772,6 +1772,7 @@ class LongformerModel(LongformerPreTrainedModel):
 class LongformerForMaskedLM(LongformerPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["lm_head.decoder"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _tied_weights_keys = ["lm_head.decoder"]
 
     def __init__(self, config):
         super().__init__(config)

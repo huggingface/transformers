@@ -1265,6 +1265,12 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.text_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.text_model.set_input_embeddings(value)
+
     @add_start_docstrings_to_model_forward(BRIDGETOWER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BridgeTowerModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1548,6 +1554,8 @@ class BridgeTowerITMHead(nn.Module):
     BRIDGETOWER_START_DOCSTRING,
 )
 class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
+    _tied_weights_keys = ["mlm_score.decoder.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 

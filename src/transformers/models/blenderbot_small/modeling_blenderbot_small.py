@@ -1092,6 +1092,7 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
 )
 class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
 
     def __init__(self, config: BlenderbotSmallConfig):
         super().__init__(config)
@@ -1228,6 +1229,7 @@ class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel):
         "encoder.embed_tokens.weight",
         "decoder.embed_tokens.weight",
     ]
+    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: BlenderbotSmallConfig):
         super().__init__(config)
@@ -1402,6 +1404,7 @@ class BlenderbotSmallDecoderWrapper(BlenderbotSmallPreTrainedModel):
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->BlenderbotSmall, facebook/bart-base->facebook/blenderbot_small-90M
 class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         config = copy.deepcopy(config)

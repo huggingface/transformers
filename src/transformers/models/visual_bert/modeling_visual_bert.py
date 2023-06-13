@@ -872,6 +872,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
 )
 class VisualBertForPreTraining(VisualBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1462,6 +1463,7 @@ class VisualBertRegionToPhraseAttention(nn.Module):
 )
 class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.bias"]
+    _tied_weights_keys = ["cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)

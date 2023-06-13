@@ -862,6 +862,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         "cls.predictions.decoder.weight",
         "embeddings.position_ids",
     ]
+    _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     def __init__(self, config):
         super().__init__(config)

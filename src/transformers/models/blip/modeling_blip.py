@@ -930,6 +930,7 @@ class BlipModel(BlipPreTrainedModel):
 class BlipForConditionalGeneration(BlipPreTrainedModel):
     config_class = BlipConfig
     _keys_to_ignore_on_load_missing = [r"text_decoder.cls.predictions.decoder.bias"]
+    _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
     main_input_name = "pixel_values"
 
     def __init__(self, config: BlipConfig):
@@ -1102,6 +1103,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
 class BlipForQuestionAnswering(BlipPreTrainedModel):
     config_class = BlipConfig
     _keys_to_ignore_on_load_missing = [r"text_decoder.cls.predictions.decoder.bias"]
+    _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
 
     def __init__(self, config: BlipConfig):
         super().__init__(config)
