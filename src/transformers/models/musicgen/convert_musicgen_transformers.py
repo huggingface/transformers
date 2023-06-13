@@ -18,9 +18,9 @@ from pathlib import Path
 from typing import Dict, OrderedDict
 
 import torch
-from musicgen.models import MusicGen
+from audiocraft.models import MusicGen
 
-from transformers.models.musicgen.configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig, T5Config
+from transformers.models.musicgen.configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig, MusicgenEncoderConfig
 from transformers.models.musicgen.modeling_musicgen import MusicgenForConditionalGeneration
 from transformers.utils import logging
 
@@ -87,11 +87,11 @@ def config_from_checkpoint(checkpoint: str) -> MusicgenConfig:
         ffn_dim = d_model * 4
         num_layers = 24
         num_codebooks = 4
-    lm_config = MusicgenDecoderConfig(
+    decoder_config = MusicgenDecoderConfig(
         d_model=d_model, intermediate_size=ffn_dim, num_hidden_layers=num_layers, num_codebooks=num_codebooks
     )
-    t5_config = T5Config.from_pretrained(CHECKPOINT_TO_T5[checkpoint])
-    config = MusicgenConfig.from_t5_lm_config(t5_config=t5_config, lm_config=lm_config)
+    encoder_config = MusicgenEncoderConfig.from_pretrained(CHECKPOINT_TO_T5[checkpoint])
+    config = MusicgenConfig.from_encoder_decoder_configs(encoder_config=encoder_config, decoder_config=decoder_config)
     return config
 
 
@@ -101,19 +101,19 @@ def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hu
 
     # TODO(SG): remove debugging statement
     fairseq_model.lm.transformer.layers = fairseq_model.lm.transformer.layers[:2]
-    config.lm_config.num_hidden_layers = 2
+    config.decoder_config.num_hidden_layers = 2
 
     # the t5 encoder state dict is 'hidden', so we retrieve using this hack
-    t5_state_dict = fairseq_model.lm.condition_provider.conditioners.description.__dict__["t5"].state_dict()
-    lm_state_dict = fairseq_model.lm.state_dict()
+    encoder_state_dict = fairseq_model.lm.condition_provider.conditioners.description.__dict__["t5"].state_dict()
+    decoder_state_dict = fairseq_model.lm.state_dict()
 
-    lm_state_dict = rename_decoder_state_dict(lm_state_dict, d_model=config.lm_config.d_model)
+    decoder_state_dict = rename_decoder_state_dict(decoder_state_dict, d_model=config.decoder_config.d_model)
 
     model = MusicgenForConditionalGeneration(config).eval()
     # load the encoder model
-    model.model.encoder.load_state_dict(t5_state_dict)
+    model.model.encoder.load_state_dict(encoder_state_dict)
     # load all other weights (encoder proj + decoder + lm heads) - expect that we'll be missing all enc weights
-    missing_keys, unexpected_keys = model.load_state_dict(lm_state_dict, strict=False)
+    missing_keys, unexpected_keys = model.load_state_dict(decoder_state_dict, strict=False)
 
     for key in missing_keys.copy():
         if key.startswith("model.encoder") or key in EXPECTED_MISSING_KEYS:

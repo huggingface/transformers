@@ -28,16 +28,16 @@ from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
+    BaseModelOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torch_fx_proxy,
     logging,
     replace_return_docstrings,
 )
-from .configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig, T5Config
+from .configuration_musicgen import MusicgenEncoderConfig, MusicgenDecoderConfig, MusicgenConfig
 
 
 logger = logging.get_logger(__name__)
@@ -45,11 +45,11 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MusicgenConfig"
 
 MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/musicgen-600m",
+    "facebook/musicgen-small",
     # See all Musicgen models at https://huggingface.co/models?filter=musicgen
 ]
 
-_CHECKPOINT_FOR_DOC = "facebook/musicgen-600m"
+_CHECKPOINT_FOR_DOC = "facebook/musicgen-small"
 
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
@@ -86,7 +86,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm
-class T5LayerNorm(nn.Module):
+class MusicgenEncoderLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
         Construct a layernorm module in the T5 style. No bias and no subtraction of mean.
@@ -111,9 +111,9 @@ class T5LayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseActDense
-class T5DenseActDense(nn.Module):
-    def __init__(self, config: T5Config):
+# Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5Config -> MusicgenEncoderConfig
+class MusicgenEncoderDenseActDense(nn.Module):
+    def __init__(self, config: MusicgenEncoderConfig):
         super().__init__()
         self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
@@ -134,9 +134,9 @@ class T5DenseActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense
-class T5DenseGatedActDense(nn.Module):
-    def __init__(self, config: T5Config):
+# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5Config -> MusicgenEncoderConfig
+class MusicgenEncoderDenseGatedActDense(nn.Module):
+    def __init__(self, config: MusicgenEncoderConfig):
         super().__init__()
         self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
@@ -164,16 +164,16 @@ class T5DenseGatedActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5LayerFF
-class T5LayerFF(nn.Module):
-    def __init__(self, config: T5Config):
+# Copied from transformers.models.t5.modeling_t5.T5LayerFF with T5 -> MusicgenEncoder
+class MusicgenEncoderLayerFF(nn.Module):
+    def __init__(self, config: MusicgenEncoderConfig):
         super().__init__()
         if config.is_gated_act:
-            self.DenseReluDense = T5DenseGatedActDense(config)
+            self.DenseReluDense = MusicgenEncoderDenseGatedActDense(config)
         else:
-            self.DenseReluDense = T5DenseActDense(config)
+            self.DenseReluDense = MusicgenEncoderDenseActDense(config)
 
-        self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = MusicgenEncoderLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
@@ -183,9 +183,9 @@ class T5LayerFF(nn.Module):
         return hidden_states
 
 
-class T5Attention(nn.Module):
-    # Copied from transformers.models.t5.modeling_t5.T5Attention.__init__
-    def __init__(self, config: T5Config, has_relative_attention_bias=False):
+class MusicgenEncoderAttention(nn.Module):
+    # Copied from transformers.models.t5.modeling_t5.T5Attention.__init__ with T5Config -> MusicgenEncoderConfig
+    def __init__(self, config: MusicgenEncoderConfig, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
@@ -406,12 +406,12 @@ class T5Attention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention
-class T5LayerSelfAttention(nn.Module):
+# Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5 -> MusicgenEncoder
+class MusicgenEncoderLayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
-        self.SelfAttention = T5Attention(config, has_relative_attention_bias=has_relative_attention_bias)
-        self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.SelfAttention = MusicgenEncoderAttention(config, has_relative_attention_bias=has_relative_attention_bias)
+        self.layer_norm = MusicgenEncoderLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -439,31 +439,22 @@ class T5LayerSelfAttention(nn.Module):
         return outputs
 
 
-class T5Block(nn.Module):
-    """The T5Block with self-attention layers only. References to cross-attention are removed."""
-
+class MusicgenEncoderBlock(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
-        self.is_decoder = config.is_decoder
         self.layer = nn.ModuleList()
-        self.layer.append(T5LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
-        self.layer.append(T5LayerFF(config))
+        self.layer.append(MusicgenEncoderLayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
+        self.layer.append(MusicgenEncoderLayerFF(config))
 
-    # keep the forward signature the same as the original T5 block so that we can copy the remaining T5 modules
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         position_bias=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        encoder_decoder_position_bias=None,
         layer_head_mask=None,
-        cross_attn_layer_head_mask=None,
         past_key_value=None,
         use_cache=False,
         output_attentions=False,
-        return_dict=True,
     ):
         self_attention_outputs = self.layer[0](
             hidden_states,
@@ -508,31 +499,30 @@ class T5Block(nn.Module):
         return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights)
 
 
-class T5PreTrainedModel(PreTrainedModel):
+class MusicgenPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
-
-    config_class = T5Config
-    base_model_prefix = "transformer"
-    is_parallelizable = True
+    config_class = MusicgenConfig
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["T5Block"]
+    _no_split_modules = ["MusicgenEncoderBlock"]
+    _skip_keys_device_placement = "past_key_values"
     _keep_in_fp32_modules = ["wo"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, T5LayerNorm):
+        if isinstance(module, MusicgenEncoderLayerNorm):
             module.weight.data.fill_(factor * 1.0)
-        elif isinstance(module, T5EncoderModel):
+        elif isinstance(module, MusicgenEncoder):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
                 module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        elif isinstance(module, T5DenseActDense):
+        elif isinstance(module, MusicgenEncoderDenseActDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
             # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
@@ -542,7 +532,7 @@ class T5PreTrainedModel(PreTrainedModel):
             module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
-        elif isinstance(module, T5DenseGatedActDense):
+        elif isinstance(module, MusicgenEncoderDenseGatedActDense):
             module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
                 module.wi_0.bias.data.zero_()
@@ -552,7 +542,7 @@ class T5PreTrainedModel(PreTrainedModel):
             module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
-        elif isinstance(module, T5Attention):
+        elif isinstance(module, MusicgenEncoderAttention):
             # Mesh TensorFlow attention initialization to avoid scaling before softmax
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
@@ -564,53 +554,30 @@ class T5PreTrainedModel(PreTrainedModel):
             module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+        elif isinstance(module, (nn.Linear, nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=factor * 1)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=factor * 1)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
-    # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._set_gradient_checkpointing
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (T5Attention, T5Stack)):
+        if isinstance(module, (MusicgenEncoderAttention, MusicgenEncoderStack, MusicgenDecoder)):
             module.gradient_checkpointing = value
 
-    # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right
-    def _shift_right(self, input_ids):
-        decoder_start_token_id = self.config.decoder_start_token_id
-        pad_token_id = self.config.pad_token_id
 
-        if decoder_start_token_id is None:
-            raise ValueError(
-                "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id."
-                "See T5 docs for more information."
-            )
-
-        # shift inputs to the right
-        if is_torch_fx_proxy(input_ids):
-            # Item assignment is not supported natively for proxies.
-            shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
-            shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
-        else:
-            shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-            shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-            shifted_input_ids[..., 0] = decoder_start_token_id
-
-        if pad_token_id is None:
-            raise ValueError("self.model.config.pad_token_id has to be defined.")
-        # replace possible -100 values in labels by `pad_token_id`
-        shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
-
-        return shifted_input_ids
-
-
-class T5Stack(T5PreTrainedModel):
-    # Copied from transformers.models.t5.modeling_t5.T5Stack.__init__
+class MusicgenEncoderStack(MusicgenPreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
 
         self.embed_tokens = embed_tokens
-        self.is_decoder = config.is_decoder
 
         self.block = nn.ModuleList(
-            [T5Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
+            [MusicgenEncoderBlock(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
         )
-        self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.final_layer_norm = MusicgenEncoderLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
         # Initialize weights and apply final processing
@@ -628,18 +595,13 @@ class T5Stack(T5PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
-    # Copied from transformers.models.t5.modeling_t5.T5Stack.forward
     def forward(
         self,
         input_ids=None,
         attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         inputs_embeds=None,
         head_mask=None,
-        cross_attn_head_mask=None,
         past_key_values=None,
-        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -648,7 +610,6 @@ class T5Stack(T5PreTrainedModel):
         if self.model_parallel:
             torch.cuda.set_device(self.first_device)
             self.embed_tokens = self.embed_tokens.to(self.first_device)
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -656,9 +617,8 @@ class T5Stack(T5PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
             raise ValueError(
-                f"You cannot specify both {err_msg_prefix}input_ids and {err_msg_prefix}inputs_embeds at the same time"
+                f"You cannot specify both input_ids and inputs_embeds at the same time"
             )
         elif input_ids is not None:
             input_shape = input_ids.size()
@@ -666,8 +626,7 @@ class T5Stack(T5PreTrainedModel):
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(f"You have to specify either {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds")
+            raise ValueError(f"You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             if self.embed_tokens is None:
@@ -679,17 +638,8 @@ class T5Stack(T5PreTrainedModel):
         # required mask seq length can be calculated via length of past
         mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
 
-        if use_cache is True:
-            if not self.is_decoder:
-                raise ValueError(f"`use_cache` can only be set to `True` if {self} is used as a decoder")
-
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
-        if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
-            encoder_seq_length = encoder_hidden_states.shape[1]
-            encoder_attention_mask = torch.ones(
-                batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
-            )
 
         # initialize past_key_values with `None` if past does not exist
         if past_key_values is None:
@@ -699,39 +649,17 @@ class T5Stack(T5PreTrainedModel):
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
 
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=inputs_embeds.device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
-        cross_attn_head_mask = self.get_head_mask(cross_attn_head_mask, self.config.num_layers)
-        present_key_value_states = () if use_cache else None
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and self.is_decoder) else None
+        present_key_value_states = None
         position_bias = None
-        encoder_decoder_position_bias = None
 
         hidden_states = self.dropout(inputs_embeds)
 
         for i, (layer_module, past_key_value) in enumerate(zip(self.block, past_key_values)):
             layer_head_mask = head_mask[i]
-            cross_attn_layer_head_mask = cross_attn_head_mask[i]
             # Model parallel
             if self.model_parallel:
                 torch.cuda.set_device(hidden_states.device)
@@ -740,16 +668,8 @@ class T5Stack(T5PreTrainedModel):
                     attention_mask = attention_mask.to(hidden_states.device)
                 if position_bias is not None:
                     position_bias = position_bias.to(hidden_states.device)
-                if encoder_hidden_states is not None:
-                    encoder_hidden_states = encoder_hidden_states.to(hidden_states.device)
-                if encoder_extended_attention_mask is not None:
-                    encoder_extended_attention_mask = encoder_extended_attention_mask.to(hidden_states.device)
-                if encoder_decoder_position_bias is not None:
-                    encoder_decoder_position_bias = encoder_decoder_position_bias.to(hidden_states.device)
                 if layer_head_mask is not None:
                     layer_head_mask = layer_head_mask.to(hidden_states.device)
-                if cross_attn_layer_head_mask is not None:
-                    cross_attn_layer_head_mask = cross_attn_layer_head_mask.to(hidden_states.device)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -757,7 +677,7 @@ class T5Stack(T5PreTrainedModel):
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        return tuple(module(*inputs, use_cache, output_attentions))
+                        return tuple(module(*inputs, output_attentions))
 
                     return custom_forward
 
@@ -766,11 +686,7 @@ class T5Stack(T5PreTrainedModel):
                     hidden_states,
                     extended_attention_mask,
                     position_bias,
-                    encoder_hidden_states,
-                    encoder_extended_attention_mask,
-                    encoder_decoder_position_bias,
                     layer_head_mask,
-                    cross_attn_layer_head_mask,
                     None,  # past_key_value is always None with gradient checkpointing
                 )
             else:
@@ -778,20 +694,14 @@ class T5Stack(T5PreTrainedModel):
                     hidden_states,
                     attention_mask=extended_attention_mask,
                     position_bias=position_bias,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_extended_attention_mask,
-                    encoder_decoder_position_bias=encoder_decoder_position_bias,
                     layer_head_mask=layer_head_mask,
-                    cross_attn_layer_head_mask=cross_attn_layer_head_mask,
                     past_key_value=past_key_value,
-                    use_cache=use_cache,
                     output_attentions=output_attentions,
                 )
 
             # layer_outputs is a tuple with:
             # hidden-states, key-value-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
-            if use_cache is False:
-                layer_outputs = layer_outputs[:1] + (None,) + layer_outputs[1:]
+            layer_outputs = layer_outputs[:1] + (None,) + layer_outputs[1:]
 
             hidden_states, present_key_value_state = layer_outputs[:2]
 
@@ -799,16 +709,9 @@ class T5Stack(T5PreTrainedModel):
             # layer_outputs = hidden-states, key-value-states (self-attention position bias), (self-attention weights),
             # (cross-attention position bias), (cross-attention weights)
             position_bias = layer_outputs[2]
-            if self.is_decoder and encoder_hidden_states is not None:
-                encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
-            # append next layer key value states
-            if use_cache:
-                present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[3],)
-                if self.is_decoder:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
 
             # Model Parallel: If it's the last layer for that device, put things on the next device
             if self.model_parallel:
@@ -831,25 +734,21 @@ class T5Stack(T5PreTrainedModel):
                     present_key_value_states,
                     all_hidden_states,
                     all_attentions,
-                    all_cross_attentions,
                 ]
                 if v is not None
             )
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=present_key_value_states,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
-            cross_attentions=all_cross_attentions,
         )
 
+MUSICGEN_START_DOCSTRING = r"""
 
-T5_START_DOCSTRING = r"""
-
-    The T5 model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
-    Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan
-    Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a
-    text-to-text denoising generative setting.
+    The Musicgen model was proposed in [Simple and Controllable Music Generation](https://arxiv.org/abs/2306.05284) by 
+    Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi, Alexandre Défossez. It is an 
+    encoder decoder transformer trained on the task of conditional music generation
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -860,11 +759,97 @@ T5_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`T5Config`]): Model configuration class with all the parameters of the model.
+        config ([`MusicgenConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
-T5_ENCODER_INPUTS_DOCSTRING = r"""
+
+MUSICGEN_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        decoder_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
+            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
+            can choose to directly pass an embedded representation. This is useful if you want more control over how to
+            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
+            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
+            input (see `past_key_values`). This is useful if you want more control over how to convert
+            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+
+            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
+            of `inputs_embeds`.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+MUSICGEN_ENCODER_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
@@ -903,21 +888,21 @@ T5_ENCODER_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare T5 Model transformer outputting encoder's raw hidden-states without any specific head on top.",
-    T5_START_DOCSTRING,
+    "The bare MusicGen encoder transformer outputting encoder's raw hidden-states without any specific head on top.",
+    MUSICGEN_START_DOCSTRING,
 )
-class T5EncoderModel(T5PreTrainedModel):
+class MusicgenEncoder(MusicgenPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
 
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.__init__
-    def __init__(self, config: T5Config):
+    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.__init__ with T5 -> MusicgenEncoder
+    def __init__(self, config: MusicgenEncoderConfig):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = T5Stack(encoder_config, self.shared)
+        self.encoder = MusicgenEncoderStack(encoder_config, self.shared)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -939,9 +924,9 @@ class T5EncoderModel(T5PreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    @add_start_docstrings_to_model_forward(T5_ENCODER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MUSICGEN_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward
+    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with T5EncoderModel -> MusicgenEncoder
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1011,7 +996,7 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
         emb = math.log(10000) / (half_dim - 1)
         emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
         emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
-        emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
+        emb = torch.cat([torch.cos(emb), torch.sin(emb)], dim=1).view(num_embeddings, -1)
         if embedding_dim % 2 == 1:
             # zero pad
             emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
@@ -1028,7 +1013,7 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
         return self.weights.index_select(0, position_ids.view(-1)).detach()
 
 
-class MusicgenAttention(nn.Module):
+class MusicgenDecoderAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -1189,7 +1174,7 @@ class MusicgenDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = MusicgenAttention(
+        self.self_attn = MusicgenDecoderAttention(
             embed_dim=self.embed_dim,
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
@@ -1199,7 +1184,7 @@ class MusicgenDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = MusicgenAttention(
+        self.encoder_attn = MusicgenDecoderAttention(
             self.embed_dim,
             config.num_attention_heads,
             dropout=config.attention_dropout,
@@ -1298,136 +1283,6 @@ class MusicgenDecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
-
-
-class MusicgenPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = MusicgenConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["MusicgenBlock"]
-    _skip_keys_device_placement = "past_key_values"
-
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, MusicgenDecoder):
-            module.gradient_checkpointing = value
-
-
-MUSICGEN_START_DOCSTRING = r"""
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`MusicgenConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-MUSICGEN_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are decoder input IDs?](../glossary#decoder-input-ids)
-        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
-            be used by default.
-        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        decoder_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
-            1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
-            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
-            can choose to directly pass an embedded representation. This is useful if you want more control over how to
-            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
-            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
-            input (see `past_key_values`). This is useful if you want more control over how to convert
-            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
-
-            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
-            of `inputs_embeds`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
 
 
 class MusicgenDecoder(MusicgenPreTrainedModel):
@@ -1713,16 +1568,20 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    "The bare MusicGen Model outputting raw hidden-states without any specific head on top.",
+    MUSICGEN_START_DOCSTRING,
+)
 class MusicgenModel(MusicgenPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: MusicgenConfig):
         super().__init__(config)
 
-        self.encoder = T5EncoderModel(config.t5_config)
-        self.decoder = MusicgenDecoder(config.lm_config)
+        self.encoder = MusicgenEncoder(config.encoder_config)
+        self.decoder = MusicgenDecoder(config.decoder_config)
 
-        self.encoder_projection = nn.Linear(config.t5_config.d_model, config.lm_config.d_model)
+        self.encoder_projection = nn.Linear(config.encoder_config.d_model, config.decoder_config.d_model)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1736,6 +1595,8 @@ class MusicgenModel(MusicgenPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
+    @add_start_docstrings_to_model_forward(MUSICGEN_INPUTS_DOCSTRING)
+    #@replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1811,16 +1672,19 @@ class MusicgenModel(MusicgenPreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
-
+@add_start_docstrings(
+    "The bare MusicGen Model with an LM head on top for conditional music generation tasks.",
+    MUSICGEN_START_DOCSTRING,
+)
 class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
     def __init__(self, config: MusicgenConfig):
         super().__init__(config)
 
         self.model = MusicgenModel(config)
-        lm_config = config.lm_config
-        self.num_codebooks = config.lm_config.num_codebooks
+        decoder_config = config.decoder_config
+        self.num_codebooks = decoder_config.num_codebooks
         self.lm_heads = nn.ModuleList(
-            [nn.Linear(lm_config.d_model, lm_config.vocab_size, bias=False) for _ in range(lm_config.num_codebooks)]
+            [nn.Linear(decoder_config.d_model, decoder_config.vocab_size, bias=False) for _ in range(decoder_config.num_codebooks)]
         )
 
         # Initialize weights and apply final processing
@@ -1832,6 +1696,8 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
     def get_decoder(self):
         return self.model.get_decoder()
 
+    @add_start_docstrings_to_model_forward(MUSICGEN_INPUTS_DOCSTRING)
+    #@replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

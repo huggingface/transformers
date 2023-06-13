@@ -22,18 +22,17 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/musicgen-600m": "https://huggingface.co/facebook/musicgen-600m/resolve/main/config.json",
+    "facebook/musicgen-small": "https://huggingface.co/facebook/musicgen-small/resolve/main/config.json",
     # See all Musicgen models at https://huggingface.co/models?filter=musicgen
 }
 
 
-# Copied from transformers.models.t5.configuration_t5.T5Config
-class T5Config(PretrainedConfig):
+class MusicgenEncoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`T5Model`] or a [`TFT5Model`]. It is used to
-    instantiate a T5 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the T5
-    [t5-small](https://huggingface.co/t5-small) architecture.
+    This is the configuration class to store the configuration of a [`MusicgenEncoder`]. It is used to
+    instantiate a Musicgen encoder according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Musicgen
+    [facebook/musicgen-small](https://huggingface.co/facebook/musicgen-small) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -48,11 +47,9 @@ class T5Config(PretrainedConfig):
             Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
             be defined as `num_heads * d_kv`.
         d_ff (`int`, *optional*, defaults to 2048):
-            Size of the intermediate feed forward layer in each `T5Block`.
+            Size of the intermediate feed forward layer in each `MusicgenEncoderBlock`.
         num_layers (`int`, *optional*, defaults to 6):
             Number of hidden layers in the Transformer encoder.
-        num_decoder_layers (`int`, *optional*):
-            Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
         num_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -67,12 +64,9 @@ class T5Config(PretrainedConfig):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
         feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
-            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. T5v1.1 uses the
-            `"gated-gelu"` feed forward projection. Original T5 uses `"relu"`.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
+            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`.
     """
-    model_type = "t5"
+    model_type = "musicgen_encoder"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
@@ -83,7 +77,6 @@ class T5Config(PretrainedConfig):
         d_kv=64,
         d_ff=2048,
         num_layers=6,
-        num_decoder_layers=None,
         num_heads=8,
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
@@ -91,10 +84,7 @@ class T5Config(PretrainedConfig):
         layer_norm_epsilon=1e-6,
         initializer_factor=1.0,
         feed_forward_proj="relu",
-        is_encoder_decoder=True,
-        use_cache=True,
-        pad_token_id=0,
-        eos_token_id=1,
+        is_encoder_decoder=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -102,9 +92,6 @@ class T5Config(PretrainedConfig):
         self.d_kv = d_kv
         self.d_ff = d_ff
         self.num_layers = num_layers
-        self.num_decoder_layers = (
-            num_decoder_layers if num_decoder_layers is not None else self.num_layers
-        )  # default = symmetry
         self.num_heads = num_heads
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.relative_attention_max_distance = relative_attention_max_distance
@@ -112,7 +99,6 @@ class T5Config(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
-        self.use_cache = use_cache
 
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
@@ -130,8 +116,6 @@ class T5Config(PretrainedConfig):
             self.dense_act_fn = "gelu_new"
 
         super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
@@ -142,7 +126,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
     This is the configuration class to store the configuration of an [`MusicgenDecoder`]. It is used to instantiate an
     Musicgen language model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Musicgen
-    [facebook/musicgen-600m](https://huggingface.co/facebook/musicgen-600m) architecture.
+    [facebook/musicgen-small](https://huggingface.co/facebook/musicgen-small) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -174,7 +158,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically, set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        init_std (`float`, *optional*, defaults to 0.02):
+        initializer_factor (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
@@ -183,26 +167,9 @@ class MusicgenDecoderConfig(PretrainedConfig):
             Scale embeddings by diving by sqrt(d_model).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether the model should return the last key/values attentions (not used by all models)
-        forced_eos_token_id (`int`, *optional*, defaults to 2):
-            The id of the token to force as the last generated token when `max_length` is reached. Usually set to
-            `eos_token_id`.
-        num_codebooks (`int`, *optional*, defaults to 8):
+        num_codebooks (`int`, *optional*, defaults to 4):
             The number of parallel codebooks forwarded to the model.
-
-    Example:
-
-    ```python
-    >>> from transformers import MusicgenDecoderConfig, MusicgenDecoderModel
-
-    >>> # Initializing a Musicgen decoder facebook/musicgen-600m style configuration
-    >>> configuration = MusicgenConfig()
-
-    >>> # Initializing an Musicgen language model (with random weights) from the facebook/musicgen-600m style configuration
-    >>> model = MusicgenDecoderModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+    """
     model_type = "musicgen_decoder"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
@@ -221,7 +188,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
         dropout=0.1,
         attention_dropout=0.0,
         activation_dropout=0.0,
-        init_std=0.02,
+        initializer_factor=0.02,
         classifier_dropout=0.0,
         scale_embedding=False,
         num_codebooks=8,
@@ -240,7 +207,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.activation_function = activation_function
-        self.init_std = init_std
+        self.initializer_factor = initializer_factor
         self.layerdrop = layerdrop
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
@@ -259,17 +226,17 @@ class MusicgenConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`MusicgenModel`]. It is used to instantiate an
     Musicgen model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Musicgen
-    [facebook/musicgen-600m](https://huggingface.co/facebook/musicgen-600m) architecture.
+    [facebook/musicgen-small](https://huggingface.co/facebook/musicgen-small) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        t5_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`T5Config`].
-        lm_config (`dict`, *optional*):
+        encoder_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`MusicgenEncoderConfig`].
+        decoder_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`MusicgenDecoderConfig`].
-        init_std (`float`, *optional*, defaults to 0.02):
+        initializer_factor (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
         kwargs (*optional*):
@@ -280,66 +247,66 @@ class MusicgenConfig(PretrainedConfig):
     ```python
     >>> from transformers import (
     ...     MusicgenConfig,
+    ...     MusicgenEncoderConfig,
     ...     MusicgenDecoderConfig,
     ...     MusicgenForConditionalGeneration,
-    ...     T5Config,
     ... )
 
-    >>> # Initializing an Musicgen with facebook/musicgen-600m style configuration
+    >>> # Initializing a Musicgen config with facebook/musicgen-small style configuration
     >>> configuration = MusicgenConfig()
 
-    >>> # Initializing a MusicgenForConditionalGeneration (with random weights) from the facebook/musicgen-600m style configuration
+    >>> # Initializing a MusicgenForConditionalGeneration (with random weights) from the facebook/musicgen-small style configuration
     >>> model = MusicgenForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a MusicgenConfig from a T5Config and MusicgenDecoderConfig
+    >>> # We can also initialize a MusicgenConfig from a MusicgenEncoderConfig and MusicgenDecoderConfig
 
-    >>> # Initializing T5 and language model configurations
-    >>> t5_config = T5Config()
-    >>> lm_config = MusicgenDecoderConfig()
+    >>> # Initializing encoder and decoder model configurations
+    >>> encoder_config = MusicgenEncoderConfig()
+    >>> decoder_config = MusicgenDecoderConfig()
 
-    >>> config = MusicgenConfig.from_t5_lm_config(t5_config, lm_config)
+    >>> config = MusicgenConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
     ```"""
 
     model_type = "musicgen"
     is_composition = True
 
-    def __init__(self, t5_config=None, lm_config=None, init_std=0.02, use_cache=True, **kwargs):
+    def __init__(self, encoder_config=None, decoder_config=None, initializer_factor=0.02, use_cache=True, **kwargs):
         super().__init__(**kwargs)
-        if t5_config is None:
-            t5_config = {}
-            logger.info("t5_config is None. initializing the T5Config with default values.")
+        if encoder_config is None:
+            encoder_config = {}
+            logger.info("encoder_config is None. initializing the MusicgenEncoderConfig with default values.")
 
-        if lm_config is None:
-            lm_config = {}
-            logger.info("lm_config is None. Initializing the MusicgenDecoderConfig with default values.")
+        if decoder_config is None:
+            decoder_config = {}
+            logger.info("decoder_config is None. Initializing the MusicgenDecoderConfig with default values.")
 
-        self.t5_config = T5Config(**t5_config)
-        self.lm_config = MusicgenDecoderConfig(**lm_config)
+        self.encoder_config = MusicgenEncoderConfig(**encoder_config)
+        self.decoder_config = MusicgenDecoderConfig(**decoder_config)
 
-        self.init_std = init_std
+        self.initializer_factor = initializer_factor
         self.is_encoder_decoder = True
         self.use_cache = use_cache
 
     @classmethod
-    def from_t5_lm_config(
+    def from_encoder_decoder_configs(
         cls,
-        t5_config: T5Config,
-        lm_config: MusicgenDecoderConfig,
+        encoder_config: MusicgenEncoderConfig,
+        decoder_config: MusicgenDecoderConfig,
         **kwargs,
     ):
         r"""
-        Instantiate a [`MusicgenConfig`] (or a derived class) from T5 and Musicgen language model configurations.
+        Instantiate a [`MusicgenConfig`] (or a derived class) from Musicgen encoder and decoder configurations.
 
         Returns:
             [`MusicgenConfig`]: An instance of a configuration object
         """
 
         return cls(
-            t5_config=t5_config.to_dict(),
-            lm_config=lm_config.to_dict(),
+            encoder_config=encoder_config.to_dict(),
+            decoder_config=decoder_config.to_dict(),
             **kwargs,
         )
 
@@ -351,7 +318,7 @@ class MusicgenConfig(PretrainedConfig):
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
-        output["t5_config"] = self.t5_config.to_dict()
-        output["lm_config"] = self.lm_config.to_dict()
+        output["encoder_config"] = self.encoder_config.to_dict()
+        output["decoder_config"] = self.decoder_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
