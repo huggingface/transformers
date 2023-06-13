@@ -111,7 +111,7 @@ class MusicgenEncoderLayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5Config -> MusicgenEncoderConfig
+# Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5Config->MusicgenEncoderConfig
 class MusicgenEncoderDenseActDense(nn.Module):
     def __init__(self, config: MusicgenEncoderConfig):
         super().__init__()
@@ -134,7 +134,7 @@ class MusicgenEncoderDenseActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5Config -> MusicgenEncoderConfig
+# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5Config->MusicgenEncoderConfig
 class MusicgenEncoderDenseGatedActDense(nn.Module):
     def __init__(self, config: MusicgenEncoderConfig):
         super().__init__()
@@ -164,7 +164,7 @@ class MusicgenEncoderDenseGatedActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5LayerFF with T5 -> MusicgenEncoder
+# Copied from transformers.models.t5.modeling_t5.T5LayerFF with T5->MusicgenEncoder
 class MusicgenEncoderLayerFF(nn.Module):
     def __init__(self, config: MusicgenEncoderConfig):
         super().__init__()
@@ -184,7 +184,7 @@ class MusicgenEncoderLayerFF(nn.Module):
 
 
 class MusicgenEncoderAttention(nn.Module):
-    # Copied from transformers.models.t5.modeling_t5.T5Attention.__init__ with T5Config -> MusicgenEncoderConfig
+    # Copied from transformers.models.t5.modeling_t5.T5Attention.__init__ with T5Config->MusicgenEncoderConfig
     def __init__(self, config: MusicgenEncoderConfig, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -406,7 +406,7 @@ class MusicgenEncoderAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5 -> MusicgenEncoder
+# Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->MusicgenEncoder
 class MusicgenEncoderLayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
@@ -894,7 +894,7 @@ MUSICGEN_ENCODER_INPUTS_DOCSTRING = r"""
 class MusicgenEncoder(MusicgenPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
 
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.__init__ with T5 -> MusicgenEncoder
+    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.__init__ with T5->MusicgenEncoder
     def __init__(self, config: MusicgenEncoderConfig):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
@@ -926,7 +926,7 @@ class MusicgenEncoder(MusicgenPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MUSICGEN_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with T5EncoderModel -> MusicgenEncoder
+    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with T5EncoderModel->MusicgenEncoder
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -943,10 +943,10 @@ class MusicgenEncoder(MusicgenPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, T5EncoderModel
+        >>> from transformers import AutoTokenizer, MusicgenEncoder
 
         >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
-        >>> model = T5EncoderModel.from_pretrained("t5-small")
+        >>> model = MusicgenEncoder.from_pretrained("t5-small")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1
