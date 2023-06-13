@@ -126,16 +126,16 @@ def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hu
         raise ValueError(f"Unexpected key(s) in state_dict: {unexpected_keys}")
 
     # check we can do a forward pass
-    decoder_input_ids = torch.ones((2, 4, 1), dtype=torch.long)
-    encoder_outputs = torch.ones((1, 2, 1, 768))
+    input_ids = torch.arange(0, 8, dtype=torch.long).reshape(2, -1)
+    decoder_input_ids = input_ids.reshape(2, 4, -1)
 
     with torch.no_grad():
-        logits = model(decoder_input_ids=decoder_input_ids, encoder_outputs=encoder_outputs).logits
+        logits = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
 
     if logits.shape != (2, 1, 4, 2048):
         raise ValueError("Incorrect shape for logits")
 
-    EXPECTED_SLICE = [-3.3508, -1.5245, -2.4789, -1.2670, -1.1452, -2.5689, -0.3024, -5.5820, -0.0186, -1.1492]
+    EXPECTED_SLICE = [-3.3180, -1.5341, -3.2796, -2.0692, -2.1036, -2.3339, 0.6623, -6.3549, 0.8477, -2.0866]
 
     if torch.max(torch.abs(logits[0, 0, 0, :10] - torch.tensor(EXPECTED_SLICE))) > 1e-4:
         raise ValueError("Logits exceed tolerance threshold")
