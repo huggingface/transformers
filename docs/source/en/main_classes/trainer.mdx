@@ -693,12 +693,7 @@ file an issue with [PyTorch GitHub](https://github.com/pytorch/pytorch/issues).
 
 Accelerate now powers Trainer. In terms of what users should expect:
 - They can keep using the Trainer ingterations such as FSDP, DeepSpeed vis trainer arguments without any changes on their part.
-- They can now use Accelerate Launcher with Trainer giving them following benefits:
-  - Use the same `accelerate` config between scripts that either leverage Trainer or are using Accelerate with custom loops.
-  - We won't be adding new training arguments for the Trainer Integrations.
-    They must be aupported in Accelerate as it trickles down to Trainer. In such cases,
-    the new paramters or updates require usage of Accelerate Launcher.
-  - New features and integrations in Accelerate can be leveraged out-of-the-box in Trainer via Accelerate Launcher/Config
+- They can now use Accelerate Launcher with Trainer (recommended).
 
 Steps to use Accelerate Launcher with Trainer:
 1. Make sure 🤗 Accelerate is installed, you can't use the `Trainer` without it anyway. If not `pip install accelerate`. You may also need to update your version of Accelerate: `pip install accelerate --upgrade`
@@ -798,12 +793,11 @@ Steps to use Accelerate Launcher with Trainer:
 
 3. Run the Trainer script with args other than the ones handled above by accelerate config or launcher args.
 Below is an example to run `run_glue.py` using `accelerate launcher` with FSDP config from above. 
-Provide the appropriate `config_file`.
 
 ```bash
 cd transformers
 
-accelerate launch --config_file fsdp_config.yaml \
+accelerate launch \
 ./examples/pytorch/text-classification/run_glue.py \
 --model_name_or_path bert-base-cased \
 --task_name $TASK_NAME \
