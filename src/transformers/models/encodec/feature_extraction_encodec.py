@@ -46,8 +46,8 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         chunk_length_s (`float`, *optional*):
             If defined the audio is pre-processed into chunks of lengths `chunk_length_s` and then encoded.
         overlap (`float`, *optional*):
-            Defines the overlap between each chunk. It is used to compute the `chunk_stride` using the following formulae : 
-            `int((1.0 - self.overlap) * self.chunk_length)`.
+            Defines the overlap between each chunk. It is used to compute the `chunk_stride` using the following
+            formulae : `int((1.0 - self.overlap) * self.chunk_length)`.
         return_attention_mask (`bool`, *optional*, defaults to `True`):
             Whether or not [`~EncodecFeatureExtractor.__call__`] should return `attention_mask`.
     """
@@ -59,8 +59,8 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         feature_size: int = 1,
         sampling_rate: int = 24000,
         padding_value: float = 0.0,
-        chunk_length_s: float = 1,
-        overlap: float = 0.01,
+        chunk_length_s: float = None,
+        overlap: float = None,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -78,18 +78,45 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
     # This is a property because you might want to change the chunk_length_s on the fly
     @property
     def chunk_stride(self) -> Optional[int]:
-        if self.chunk_length_s is None:
+        if self.chunk_length_s is None or self.overlap is None:
             return None
         else:
             return max(1, int((1.0 - self.overlap) * self.chunk_length))
-        
+
+    def _truncate_for_chuncking(self, raw_audio):
+        # Truncate the input to use chunk encoding
+        min_length = min([array.shape[0] for array in raw_audio])
+        nb_step = int(np.ceil(min_length / self.chunk_stride))
+        min_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
+        padded_audios = []
+        for sample in raw_audio:
+            sample = sample[..., :min_length]
+            padded_audios.append(sample)
+        return padded_audios
+
+    def _pad_for_chuncking(self, raw_audio):
+        # Pad the input to use chunk encoding
+        max_length = max([array.shape[0] for array in raw_audio])
+        nb_step = int(np.ceil(max_length / self.chunk_stride))
+        max_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
+        padded_audios = []
+        padding_masks = []
+        for sample in raw_audio:
+            padding_length = max_length - sample.shape[0]
+            pad = ((0, padding_length), (0, 0)) if self.feature_size > 1 else (0, padding_length)
+            sample = np.pad(sample, pad_width=pad, mode="constant", constant_values=0)
+            padded_audios.append(sample)
+            padding_mask = np.ones(max_length)
+            padding_mask[..., -padding_length:] = 0
+            padding_masks.append(padding_mask)
+        return padded_audios, padding_masks
+
     def __call__(
         self,
         raw_audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        padding: Union[bool, str, PaddingStrategy] = False,
-        max_length: Optional[int] = None,
+        padding: Union[bool, str, PaddingStrategy] = True,
         truncation: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
+        max_length: int = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
     ) -> BatchFeature:
@@ -112,21 +139,10 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
                   acceptable input length for the model if that argument is not provided.
                 - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
                   lengths).
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
             truncation (`bool`):
                 Activates truncation to cut input sequences longer than *max_length* to *max_length*.
-            pad_to_multiple_of (`int`, *optional*):
-                If set will pad the sequence to a multiple of the provided value.
-
-                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-            return_attention_mask (`bool`, *optional*):
-                Whether to return the attention mask. If left to the default, will return the attention mask according
-                to the specific feature_extractor's default.
-
-                [What are attention masks?](../glossary#attention-mask)
-
+            max_length (`int`, *optional*):
+                Maximum length of the returned list and optionally padding length (see above).
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -151,8 +167,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             )
 
         is_batched = bool(
-            isinstance(raw_audio, (list, tuple))
-            and (isinstance(raw_audio[0], np.ndarray) or isinstance(raw_audio[0], (tuple, list)))
+            isinstance(raw_audio, (list, tuple)) and (isinstance(raw_audio[0], (np.ndarray, tuple, list)))
         )
 
         if is_batched:
@@ -168,58 +183,42 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
 
         # verify inputs are valid
         for idx, example in enumerate(raw_audio):
-            if example.ndim == 1:
-                example = example[..., None]
-                raw_audio[idx] = example
             if example.ndim > 2:
-                raise ValueError(f"Expected input shape (channels, length) but got shape {example.T.shape}")
-            if self.feature_size == 1 and example.shape[-1] != 1:
+                raise ValueError(f"Expected input shape (channels, length) but got shape {example.shape}")
+            if self.feature_size == 1 and example.ndim != 1:
                 raise ValueError(f"Expected mono audio but example has {example.shape[-1]} channels")
             if self.feature_size == 2 and example.shape[-1] != 2:
                 raise ValueError(f"Expected stereo audio but example has {example.shape[-1]} channels")
 
+        padding_masks = None
         if self.chunk_stride is not None and self.chunk_length is not None:
-            # Get nax length:
-            max_length = max([array.shape[0] for array in raw_audio])
-            nb_step = int(np.ceil(max_length / self.chunk_stride))
-            max_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
-
-            padded_audios = []
-            padding_masks = []
-            for sample in raw_audio:
-                padding_length = max_length - sample.shape[0]
-                sample = np.pad(sample, pad_width=((0, padding_length), (0, 0)), mode="constant", constant_values=0)
-                padded_audios.append(sample)
-                padding_mask = np.ones(max_length)
-                padding_mask[..., -padding_length:] = 0
-                padding_masks.append(padding_mask)
+            if truncation:
+                padded_audios = self._truncate_for_chuncking(raw_audio)
+            elif padding:
+                padded_audios, padding_masks = self._pad_for_chuncking(raw_audio)
+            else:
+                padded_audios = raw_audio
             padded_inputs = BatchFeature({"input_values": padded_audios})
         else:
-            padded_inputs = BatchFeature({"input_values": raw_audio})
+            padded_inputs = self.pad(
+                BatchFeature({"input_values": raw_audio}),
+                max_length=max_length,
+                truncation=truncation,
+                padding=padding,
+                return_attention_mask=True,
+            )
+            if padding:
+                padding_masks = padded_inputs.pop("attention_mask")
 
-        # output shape is (batch, channels, num_samples)
         input_values = []
-        for example in padded_inputs["input_values"]:
-            if example.ndim == 1:
-                example = example[..., None]  # add mono channel dimension
+        for example in padded_inputs.pop("input_values"):
+            if self.feature_size == 1:
+                example = example[..., None]
             input_values.append(example.T)
 
-        # convert input values to correct format
-        if not isinstance(input_values[0], np.ndarray):
-            padded_inputs["input_values"] = [np.asarray(array, dtype=np.float32) for array in input_values]
-        elif (
-            not isinstance(input_values, np.ndarray)
-            and isinstance(input_values[0], np.ndarray)
-            and input_values[0].dtype is np.dtype(np.float64)
-        ):
-            padded_inputs["input_values"] = [array.astype(np.float32) for array in input_values]
-        elif isinstance(input_values, np.ndarray) and input_values.dtype is np.dtype(np.float64):
-            padded_inputs["input_values"] = input_values.astype(np.float32)
-        else:
-            padded_inputs["input_values"] = input_values
-
-        # convert attention_mask to correct format
-        padded_inputs["padding_mask"] = [np.asarray(array, dtype=np.int32) for array in padding_masks]
+        padded_inputs["input_values"] = input_values
+        if padding_masks is not None:
+            padded_inputs["padding_mask"] = [np.asarray(array, dtype=np.int32) for array in padding_masks]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
