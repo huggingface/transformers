@@ -129,6 +129,7 @@ if is_torch_available():
         T5ForConditionalGeneration,
     )
     from transformers.modeling_utils import shard_checkpoint
+    from transformers.pytorch_utils import id_tensor_storage
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -1672,8 +1673,7 @@ class ModelTesterMixin:
 
             ptrs = collections.defaultdict(list)
             for name, tensor in model_tied.state_dict().items():
-                ident = (tensor.data_ptr(), tensor.device, tensor.shape, tensor.stride())
-                ptrs[ident].append(name)
+                ptrs[id_tensor_storage(tensor)].append(name)
 
             # These are all the pointers of shared tensors.
             tied_params = [names for _, names in ptrs.items() if len(names) > 1]
