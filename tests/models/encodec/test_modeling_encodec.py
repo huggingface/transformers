@@ -376,8 +376,8 @@ class EncodecIntegrationTest(unittest.TestCase):
             "24.0": 0.0005,
         }
         expected_codesums = {
-            "3.0": [144259, 146765, 156205, 176871, 102780],
-            "24.0": [1567904, 1297170, 1310040, 1464657, 813925],
+            "3.0": [142174, 147901, 154090, 178965, 161879],
+            "24.0":[1561048, 1284593, 1278330, 1487220, 1659404],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "Matthijs/encodec_48khz"
@@ -391,6 +391,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             upsampling_ratios=[8, 5, 4, 2],
             norm_type="time_group_norm",
         ).to(torch_device)
+        model = model.eval()
         processor = AutoProcessor.from_pretrained(model_id, chunk_length_s=1, overlap=0.01)
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
@@ -441,12 +442,12 @@ class EncodecIntegrationTest(unittest.TestCase):
         # [298290, 308806, 305543, 320363, 315116, 320181, 308885, 303291, 4212]
         expected_codesums = {
             "3.0": [
-                [156116, 160905, 151453, 141398, 153237, 170181, 158885, 153291, 2106],
-                [[142174, 147901, 154090, 178965, 161879, 150000, 150000, 150000, 2106]],
+                [71689, 78549, 75644, 88889, 73100, 82509, 71449, 82835],
+                [84427, 82356, 75809, 52509, 80137, 87672, 87436, 70456]
             ],
             "24.0": [
-                [1475742, 1305929, 1303042, 1543297, 1308489, 1360387, 1431622, 1776617, 16470],
-                [1561048, 1284593, 1278330, 1487220, 1659404, 1924131, 1924131, 1924131, 16470],
+                [71689, 78549, 75644, 88889, 73100, 82509, 71449, 82835],
+                [84427, 82356, 75809, 52509, 80137, 87672, 87436, 70456]
             ],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -472,22 +473,22 @@ class EncodecIntegrationTest(unittest.TestCase):
 
         inputs = processor(raw_audio=audio_samples, sampling_rate=processor.sampling_rate, return_tensors="pt")
         input_values = inputs["input_values"].to(torch_device)
-        padding_mask = inputs["padding_mask"].to(torch_device)
-        # breakpoint()
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
                 # use max bandwith for best possible reconstruction
                 encoder_outputs = model.encode(
-                    input_values, padding_mask, bandwidth=float(bandwidth), return_dict=False
+                    input_values, bandwidth=float(bandwidth), return_dict=False
                 )
-                audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
+                audio_code_sums_0 = [a[0][0].sum().cpu().item() for a in encoder_outputs[0]]
+                audio_code_sums_1 = [a[0][1].sum().cpu().item() for a in encoder_outputs[0]]
 
                 # make sure audio encoded codes are correct
-                self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
+                self.assertListEqual(audio_code_sums_0, expected_codesums[bandwidth][0])
+                self.assertListEqual(audio_code_sums_1, expected_codesums[bandwidth][1])
 
                 audio_codes, scales = encoder_outputs
-                input_values_dec = model.decode(audio_codes, scales, padding_mask)[0]
-                input_values_enc_dec = model(input_values, padding_mask, bandwidth=float(bandwidth))[-1]
+                input_values_dec = model.decode(audio_codes, scales)[0]
+                input_values_enc_dec = model(input_values, bandwidth=float(bandwidth))[-1]
 
             # make sure forward and decode gives same result
             self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))

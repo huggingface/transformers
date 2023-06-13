@@ -650,7 +650,7 @@ class EncodecModel(EncodecPreTrainedModel):
                 "The input length is not properly padded for batched chunched decoding. Make sure to pad the input correctly."
             )
 
-        for offset in range(0, input_length - stride + 1, stride):
+        for offset in range(0, input_length - step, stride):
             mask = padding_mask[..., offset : offset + chunk_length].bool()
             frame = input_values[:, :, offset : offset + chunk_length]
             encoded_frame, scale = self._encode_frame(frame, bandwidth, mask)

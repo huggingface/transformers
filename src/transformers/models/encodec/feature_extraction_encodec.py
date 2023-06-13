@@ -96,8 +96,12 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
 
     def _pad_for_chuncking(self, raw_audio):
         # Pad the input to use chunk encoding
-        max_length = max([array.shape[0] for array in raw_audio])
-        nb_step = int(np.ceil(max_length / self.chunk_stride))
+        step = self.chunk_length - self.chunk_stride
+        max_input_length = max([array.shape[0] for array in raw_audio])
+        if (max_input_length % self.chunk_stride) - step == 0:
+            return raw_audio, None
+
+        nb_step = int(np.ceil(max_input_length / self.chunk_stride))
         max_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
         padded_audios = []
         padding_masks = []
@@ -108,7 +112,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             padded_audios.append(sample)
             padding_mask = np.ones(max_length)
             padding_mask[..., -padding_length:] = 0
-            padding_masks.append(padding_mask)
+            padding_masks.append(padding_mask)            
         return padded_audios, padding_masks
 
     def __call__(
