@@ -1034,7 +1034,8 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
     def get_output_embeddings(self):
         # Remove after transformers v4.32. Fix this model's `test_model_common_attributes` test too.
         logger.warning(
-            "Sequence classification models do not have output embeddings. `.get_output_embeddings` will be removed in a future version of transformers."
+            "Sequence classification models do not have output embeddings. `.get_output_embeddings` will be removed "
+            "in a future version of transformers."
         )
         return self.transformer.word_emb
 
