@@ -86,7 +86,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
     def _truncate_for_chuncking(self, raw_audio):
         # Truncate the input to use chunk encoding
         min_length = min([array.shape[0] for array in raw_audio])
-        nb_step = int(np.ceil(min_length / self.chunk_stride))
+        nb_step = int(np.floor(min_length / self.chunk_stride))
         min_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
         padded_audios = []
         for sample in raw_audio:
@@ -191,7 +191,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
                 raise ValueError(f"Expected stereo audio but example has {example.shape[-1]} channels")
 
         padding_masks = None
-        if self.chunk_stride is not None and self.chunk_length is not None:
+        if self.chunk_stride is not None and self.chunk_length is not None and max_length is None:
             if truncation:
                 padded_audios = self._truncate_for_chuncking(raw_audio)
             elif padding:
