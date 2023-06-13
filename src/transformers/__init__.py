@@ -504,6 +504,12 @@ _import_structure = {
         "TvltConfig",
         "TvltProcessor",
     ],
+    "models.tvp": [
+        "TVP_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TVPConfig",
+        "TVPProcessor",
+        "TVPVisionConfig",
+    ],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechConfig",
@@ -909,6 +915,7 @@ else:
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
+    _import_structure["models.tvp"].append("TVPImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
@@ -2611,6 +2618,15 @@ else:
             "TvltPreTrainedModel",
         ]
     )
+    _import_structure["models.tvp"].extend(
+        [
+            "TVP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TVPModel",
+            "TVPPreTrainedModel",
+            "TVPTransformer",
+            "TVPVisionModel",
+        ]
+    )
     _import_structure["models.unispeech"].extend(
         [
             "UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4304,6 +4320,12 @@ if TYPE_CHECKING:
     )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
     from .models.tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig, TvltProcessor
+    from .models.tvp import (
+        TVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TVPConfig,
+        TVPProcessor,
+        TVPVisionConfig,
+    )
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.upernet import UperNetConfig
@@ -4663,6 +4685,7 @@ if TYPE_CHECKING:
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor
+        from .models.tvp import TVPImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
@@ -6051,6 +6074,13 @@ if TYPE_CHECKING:
             TvltForPreTraining,
             TvltModel,
             TvltPreTrainedModel,
+        )
+        from .models.tvp import (
+            TVP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TVPModel,
+            TVPPreTrainedModel,
+            TVPTransformer,
+            TVPVisionModel,
         )
         from .models.unispeech import (
             UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -191,6 +191,7 @@ from . import (
     transfo_xl,
     trocr,
     tvlt,
+    tvp,
     unispeech,
     unispeech_sat,
     upernet,

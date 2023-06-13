@@ -95,6 +95,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("table-transformer", "DetrImageProcessor"),
         ("timesformer", "VideoMAEImageProcessor"),
         ("tvlt", "TvltImageProcessor"),
+        ("tvp", "TVPImageProcessor"),
         ("upernet", "SegformerImageProcessor"),
         ("van", "ConvNextImageProcessor"),
         ("videomae", "VideoMAEImageProcessor"),
