@@ -2445,6 +2445,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         f" {pretrained_model_name_or_path} but there is a file for Flax weights. Use `from_flax=True`"
                         " to load this model from those weights."
                     )
+                elif use_safetensors:
+                    raise EnvironmentError(
+                        f"Error no file named {_add_variant(SAFE_WEIGHTS_NAME, variant)} found in directory"
+                        f" {pretrained_model_name_or_path}."
+                    )
                 else:
                     raise EnvironmentError(
                         f"Error no file named {_add_variant(WEIGHTS_NAME, variant)}, {TF2_WEIGHTS_NAME},"
