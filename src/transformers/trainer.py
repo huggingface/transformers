@@ -346,6 +346,9 @@ class Trainer:
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
         self._memory_tracker.start()
 
+        # Eval ratio for when eval_steps < 1, must be stored as None as early as possible
+        self._eval_ratio = None
+
         # set the correct log level depending on the node
         log_level = args.get_process_log_level()
         logging.set_verbosity(log_level)
@@ -1554,7 +1557,7 @@ class Trainer:
         # number of training epochs: num_train_epochs
         # number of training steps per epoch: num_update_steps_per_epoch
         # total number of training steps to execute: max_steps
-        total_train_batch_size = self._train_batch_size * args.gradient_accumulation_steps * args.world_size
+        total_train_batch_size = args.train_batch_size * args.gradient_accumulation_steps * args.world_size
 
         len_dataloader = None
         if has_length(train_dataloader):
@@ -1591,7 +1594,10 @@ class Trainer:
         if args.logging_steps and args.logging_steps < 1:
             args.logging_steps = math.ceil(max_steps * args.logging_steps)
         if args.eval_steps and args.eval_steps < 1:
-            args.eval_steps = math.ceil(max_steps * args.eval_steps)
+            # Store eval in case of auto-bs-finder
+            if self._eval_ratio is None:
+                self._eval_ratio = args.eval_steps
+            args.eval_steps = math.ceil(max_steps * self._eval_ratio)
         if args.save_steps and args.save_steps < 1:
             args.save_steps = math.ceil(max_steps * args.save_steps)
 
