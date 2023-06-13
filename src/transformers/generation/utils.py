@@ -1260,7 +1260,7 @@ class GenerationMixin:
                         "You have modified the pretrained model configuration to control generation. This is a"
                         " deprecated strategy to control generation and will be removed soon, in a future version."
                         " Please use a generation configuration file (see"
-                        " https://huggingface.co/docs/transformers/main_classes/text_generation)"
+                        " https://huggingface.co/docs/transformers/main_classes/text_generation )"
                     )
                     self.generation_config = new_generation_config
             generation_config = self.generation_config
