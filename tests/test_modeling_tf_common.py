@@ -1023,27 +1023,27 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            self.assertIsInstance(model.get_input_embeddings(), tf.keras.layers.Layer)
 
             legacy_text_in_text_out = model.get_lm_head() is not None
             if model_class in text_in_text_out_models or legacy_text_in_text_out:
                 out_embeddings = model.get_output_embeddings()
-                assert isinstance(out_embeddings, tf.keras.layers.Layer)
+                self.assertIsInstance(out_embeddings, tf.keras.layers.Layer)
                 bias = model.get_bias()
                 if bias is not None:
-                    assert isinstance(bias, dict)
+                    self.assertIsInstance(bias, dict)
                     for _, v in bias.items():
-                        assert isinstance(v, tf.Variable)
+                        self.assertIsInstance(v, tf.Variable)
             elif model_class in speech_in_text_out_models:
                 out_embeddings = model.get_output_embeddings()
-                assert isinstance(out_embeddings, tf.keras.layers.Layer)
+                self.assertIsInstance(out_embeddings, tf.keras.layers.Layer)
                 bias = model.get_bias()
-                assert bias is None
+                self.assertIsNone(bias)
             else:
                 out_embeddings = model.get_output_embeddings()
                 assert out_embeddings is None
                 bias = model.get_bias()
-                assert bias is None
+                self.assertIsNone(bias)
 
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
