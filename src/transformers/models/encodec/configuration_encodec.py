@@ -66,7 +66,7 @@ class EncodecConfig(PretrainedConfig):
             Normalization method. Should be in `["weight_norm", "time_group_norm"]`
         kernel_size (`int`, *optional*, defaults to 7):
             Kernel size for the initial convolution.
-        last_kernel_size (`int`, *optional*, defaults to) 7:
+        last_kernel_size (`int`, *optional*, defaults to 7):
             Kernel size for the last convolution layer.
         residual_kernel_size (`int`, *optional*, defaults to 3):
             Kernel size for the residual layers.

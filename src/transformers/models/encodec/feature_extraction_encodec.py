@@ -94,7 +94,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_audio (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, *optional*):
+            raw_audio (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be processed. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. The numpy array must be of shape
                 `(num_samples,)` for mono audio (`feature_size = 1`), or `(2, num_samples)` for stereo audio
@@ -164,11 +164,11 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         input_values = BatchFeature({"input_values": raw_audio})
         if self.chunk_stride is not None and self.chunk_length is not None and max_length is None:
             if truncation:
-                max_length = min([array.shape[0] for array in raw_audio])
+                max_length = min(array.shape[0] for array in raw_audio)
                 nb_step = int(np.floor(max_length / self.chunk_stride))
                 max_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
             elif padding:
-                max_length = max([array.shape[0] for array in raw_audio])
+                max_length = max(array.shape[0] for array in raw_audio)
                 nb_step = int(np.ceil(max_length / self.chunk_stride))
                 max_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
                 padding = "max_length"

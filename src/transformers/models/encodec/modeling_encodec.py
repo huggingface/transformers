@@ -110,6 +110,8 @@ class EncodecConv1d(nn.Module):
             self.conv = nn.utils.weight_norm(self.conv)
         elif self.norm_type == "time_group_norm":
             self.norm = nn.GroupNorm(1, out_channels)
+        else:
+            raise ValueError(f"self.norm_type must be one of (`"weight_norm"`, `"time_group_norm"`), got {self.norm_type}")
 
     @staticmethod
     def _get_extra_padding_for_conv1d(
@@ -124,21 +126,21 @@ class EncodecConv1d(nn.Module):
     @staticmethod
     def _pad1d(hidden_states: torch.Tensor, paddings: Tuple[int, int], mode: str = "zero", value: float = 0.0):
         """Tiny wrapper around torch.nn.functional.pad, just to allow for reflect padding on small input.
-        If this is the case, we insert extra 0 padding to the right before the reflection happen.
+        If this is the case, we insert extra 0 padding to the right before the reflection happens.
         """
         length = hidden_states.shape[-1]
         padding_left, padding_right = paddings
-        if mode == "reflect":
-            max_pad = max(padding_left, padding_right)
-            extra_pad = 0
-            if length <= max_pad:
-                extra_pad = max_pad - length + 1
-                hidden_states = nn.functional.pad(hidden_states, (0, extra_pad))
-            padded = nn.functional.pad(hidden_states, paddings, mode, value)
-            end = padded.shape[-1] - extra_pad
-            return padded[..., :end]
-        else:
-            return nn.functional.pad(hidden_states, paddings, mode, value)
+        if not mode == "reflect":
+            nn.functional.pad(hidden_states, paddings, mode, value)
+        
+        max_pad = max(padding_left, padding_right)
+        extra_pad = 0
+        if length <= max_pad:
+            extra_pad = max_pad - length + 1
+            hidden_states = nn.functional.pad(hidden_states, (0, extra_pad))
+        padded = nn.functional.pad(hidden_states, paddings, mode, value)
+        end = padded.shape[-1] - extra_pad
+        return padded[..., :end]
 
     def forward(self, hidden_states):
         kernel_size = self.conv.kernel_size[0]
@@ -645,23 +647,23 @@ class EncodecModel(EncodecPreTrainedModel):
         step = chunk_length - stride
         if (input_length % stride) - step != 0:
             raise ValueError(
-                "The input length is not properly padded for batched chunched decoding. Make sure to pad the input correctly."
+                "The input length is not properly padded for batched chunked decoding. Make sure to pad the input correctly."
             )
 
         for offset in range(0, input_length - step, stride):
             mask = padding_mask[..., offset : offset + chunk_length].bool()
             frame = input_values[:, :, offset : offset + chunk_length]
             encoded_frame, scale = self._encode_frame(frame, bandwidth, mask)
-            encoded_frames.append(encoded_frame)
+            encoded_frames.append(encoded_frame[0])
             scales.append(scale)
 
-        torch.cat([encoded[0] for encoded in encoded_frames], dim=-1)
+        torch.cat(encoded_frames, dim=-1)
         encoded_frames = torch.stack(encoded_frames)
 
-        if return_dict:
-            return EncodecEncoderOutput(encoded_frames, scales)
+        if not return_dict:
+            return (encoded_frames, scales)
 
-        return (encoded_frames, scales)
+        return EncodecEncoderOutput(encoded_frames, scales)
 
     def _encode_frame(
         self, input_values: torch.Tensor, bandwidth: float, padding_mask: int
@@ -780,9 +782,9 @@ class EncodecModel(EncodecPreTrainedModel):
         if padding_mask is not None and padding_mask.shape[-1] < audio_values.shape[-1]:
             audio_values = audio_values[..., : padding_mask.shape[-1]]
 
-        if return_dict:
-            return EncodecDecoderOutput(audio_values)
-        return (audio_values,)
+        if not return_dict:
+            return (audio_values,)
+        return EncodecDecoderOutput(audio_values)
 
     def _decode_frame(self, codes: torch.Tensor, scale: Optional[torch.Tensor] = None) -> torch.Tensor:
         codes = codes.transpose(0, 1)
@@ -810,7 +812,7 @@ class EncodecModel(EncodecPreTrainedModel):
 
         ```python
         >>> from datasets import load_dataset
-        >>> from transformers import AutoProcessor, ClapModel
+        >>> from transformers import AutoProcessor, EncodecModel
 
         >>> dataset = load_dataset("ashraq/esc50")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
@@ -830,19 +832,17 @@ class EncodecModel(EncodecPreTrainedModel):
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
 
-        if audio_codes is not None:
-            if audio_scales is None:
-                raise ValueError("You specified `audio_codes` but did not specify the `audio_scales`")
+        if audio_codes is not None and audio_scales is None:
+            raise ValueError("You specified `audio_codes` but did not specify the `audio_scales`")
 
-        if audio_scales is not None:
-            if audio_scales is None:
-                raise ValueError("You specified `audio_scales` but did not specify the `audio_code`")
+        if audio_scales is not None and audio_codes is None:
+                raise ValueError("You specified `audio_scales` but did not specify the `audio_codes`")
 
         if audio_scales is None and audio_codes is None:
             audio_codes, audio_scales = self.encode(input_values, padding_mask, bandwidth, return_dict).to_tuple()
 
         audio_values = self.decode(audio_codes, audio_scales, padding_mask, return_dict=return_dict)[0]
-        if return_dict:
-            return EncodecOutput(audio_codes, audio_values)
+        if not return_dict:
+            return (audio_codes, audio_values)
 
-        return (audio_codes, audio_values)
+        return EncodecOutput(audio_codes=audio_codes, audio_values=audio_values)
