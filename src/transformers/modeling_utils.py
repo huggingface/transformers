@@ -1778,10 +1778,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for names in shared_ptrs.values():
                 # Removing the keys which are declared as known duplicates on
                 # load. This allows to make sure the name which is kept is consistent.
-                if self._keys_to_ignore_on_load_missing is not None:
+                if self._tied_weights_keys is not None:
                     found = 0
                     for name in sorted(names):
-                        matches_pattern = any(re.search(pat, name) for pat in self._keys_to_ignore_on_load_missing)
+                        matches_pattern = any(re.search(pat, name) for pat in self._tied_weights_keys)
                         if matches_pattern and name in state_dict:
                             found += 1
                             if found < len(names):
