@@ -17,6 +17,7 @@ import inspect
 import os
 import re
 
+from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import direct_transformers_import
 
 
@@ -259,7 +260,7 @@ def check_config_attributes():
             for name, cls in inspect.getmembers(
                 inspect.getmodule(_config_class),
                 lambda x: inspect.isclass(x)
-                and x.__name__.endswith("Config") and not x.__name__.endswith("OnnxConfig")
+                and issubclass(x, PretrainedConfig)
                 and inspect.getmodule(x) == inspect.getmodule(_config_class),
             )
         ]
