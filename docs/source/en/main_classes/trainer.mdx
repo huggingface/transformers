@@ -656,7 +656,8 @@ Therefore, improving end-to-end performance.
 please follow this nice medium article [GPU-Acceleration Comes to PyTorch on M1 Macs](https://medium.com/towards-data-science/gpu-acceleration-comes-to-pytorch-on-m1-macs-195c399efcc1).
 
 **Usage**:
-User has to just pass `--use_mps_device` argument. 
+`mps` device will be used by default if available similar to the way `cuda` device is used.
+Therefore, no action from user is required. 
 For example, you can run the official Glue text classififcation task (from the root folder) using Apple Silicon GPU with below command:
 
 ```bash
@@ -672,7 +673,6 @@ python examples/pytorch/text-classification/run_glue.py \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
   --output_dir /tmp/$TASK_NAME/ \
-  --use_mps_device \
   --overwrite_output_dir
 ```
 
