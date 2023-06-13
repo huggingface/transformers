@@ -564,7 +564,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
         return outputs
 
 
-class BiasLayer(tf.keras.layers.Layer):
+class TFCTRLBiasLayer(tf.keras.layers.Layer):
     """
     Bias as a layer. It is used for serialization purposes: `tf.keras.Model.save_weights` stores on a per-layer basis,
     so all weights have to be registered in a layer.
@@ -597,7 +597,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFCTRLMainLayer(config, name="transformer")
-        self.bias_layer = BiasLayer(name="lm_head", shape=[1, config.vocab_size], initializer="zeros", trainable=True)
+        self.bias_layer = TFCTRLBiasLayer(name="lm_head", shape=[1, config.vocab_size], initializer="zeros", trainable=True)
 
     def get_output_embeddings(self):
         return self.get_input_embeddings()
@@ -611,7 +611,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
     def set_bias(self, value):
         # Replaces the existing layers containing bias for correct (de)serialization.
         vocab_size = value["lm_head.bias"].shape[-1]
-        self.bias_layer = BiasLayer(
+        self.bias_layer = TFCTRLBiasLayer(
             name="final_logits_bias", shape=[1, vocab_size], initializer="zeros", trainable=True
         )
         self.bias_layer.build(None)
