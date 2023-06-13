@@ -566,6 +566,7 @@ def prepare_tapas_batch_inputs_for_training():
     return table, queries, answer_coordinates, answer_text, float_answer
 
 
+@unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
 @require_torch
 class TapasModelIntegrationTest(unittest.TestCase):
     @cached_property
@@ -920,6 +921,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
 # Below: tests for Tapas utilities which are defined in modeling_tapas.py.
 # These are based on segmented_tensor_test.py of the original implementation.
 # URL: https://github.com/google-research/tapas/blob/master/tapas/models/segmented_tensor_test.py
+@unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
 @require_torch
 class TapasUtilitiesTest(unittest.TestCase):
     def _prepare_tables(self):
