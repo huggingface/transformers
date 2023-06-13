@@ -1122,7 +1122,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         dummies = {}
-        for key, spec in self.input_signature.items():
+        sig = self._prune_signature(self.input_signature)
+        for key, spec in sig.items():
             # 2 is the most correct arbitrary size. I will not be taking questions
             dummy_shape = [dim if dim is not None else 2 for dim in spec.shape]
             if spec.shape[0] is None:
@@ -1171,7 +1172,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         self.name_or_path = config.name_or_path
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
         # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
-        self._set_save_spec(self.input_signature)
+        self._set_save_spec(self._prune_signature(self.input_signature))
 
     def get_config(self):
         return self.config.to_dict()
@@ -1281,6 +1282,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if "input_features" in model_inputs:
             raise NotImplementedError("Audio models need a manually defined input_signature")
         return sig
+
+    def _prune_signature(self, signature):
+        """Keeps only the keys of a given input signature that are valid for this model."""
+        model_inputs = list(inspect.signature(self.call).parameters)
+        return {key: val for key, val in signature.items() if key in model_inputs}
 
     def serving_output(self, output):
         """
@@ -2399,13 +2405,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             if getattr(self.config, "torch_dtype", None) is not None and not isinstance(self.config.torch_dtype, str):
                 self.config.torch_dtype = str(self.config.torch_dtype).split(".")[1]
             if signatures is None:
-                serving_default = self.serving.get_concrete_function(self.input_signature)
-                if any(spec.dtype == tf.int32 for spec in self.input_signature.values()):
+                sig = self._prune_signature(self.input_signature)
+                serving_default = self.serving.get_concrete_function(sig)
+                if any(spec.dtype == tf.int32 for spec in sig.values()):
                     int64_spec = {
                         key: tf.TensorSpec(
                             shape=spec.shape, dtype=tf.int64 if spec.dtype == tf.int32 else spec.dtype, name=spec.name
                         )
-                        for key, spec in self.input_signature.items()
+                        for key, spec in sig.items()
                     }
                     int64_serving = self.serving.get_concrete_function(int64_spec)
                     signatures = {"serving_default": serving_default, "int64_serving": int64_serving}
