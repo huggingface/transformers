@@ -214,13 +214,15 @@ if is_accelerate_available():
         from accelerate import skip_first_batches
 
     from accelerate import Accelerator
-    from accelerate.utils import (
-        DistributedDataParallelKwargs,
-        load_fsdp_model,
-        load_fsdp_optimizer,
-        save_fsdp_model,
-        save_fsdp_optimizer,
-    )
+    from accelerate.utils import DistributedDataParallelKwargs
+
+    if version.parse(accelerate_version) > version.parse("0.20.3"):
+        from accelerate.utils import (
+            load_fsdp_model,
+            load_fsdp_optimizer,
+            save_fsdp_model,
+            save_fsdp_optimizer,
+        )
 
 
 if TYPE_CHECKING:
