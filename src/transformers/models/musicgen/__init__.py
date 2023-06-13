@@ -17,7 +17,12 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_musicgen": ["MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "MusicgenConfig"],
+    "configuration_musicgen": [
+        "MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MusicgenConfig",
+        "MusicgenDecoderConfig",
+        "MusicgenEncoderConfig",
+    ],
 }
 
 try:
@@ -34,7 +39,12 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_musicgen import MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, MusicgenConfig
+    from .configuration_musicgen import (
+        MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MusicgenConfig,
+        MusicgenDecoderConfig,
+        MusicgenEncoderConfig,
+    )
 
     try:
         if not is_torch_available():
