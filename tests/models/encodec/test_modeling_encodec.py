@@ -377,7 +377,7 @@ class EncodecIntegrationTest(unittest.TestCase):
         }
         expected_codesums = {
             "3.0": [142174, 147901, 154090, 178965, 161879],
-            "24.0":[1561048, 1284593, 1278330, 1487220, 1659404],
+            "24.0": [1561048, 1284593, 1278330, 1487220, 1659404],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "Matthijs/encodec_48khz"
@@ -443,11 +443,11 @@ class EncodecIntegrationTest(unittest.TestCase):
         expected_codesums = {
             "3.0": [
                 [71689, 78549, 75644, 88889, 73100, 82509, 71449, 82835],
-                [84427, 82356, 75809, 52509, 80137, 87672, 87436, 70456]
+                [84427, 82356, 75809, 52509, 80137, 87672, 87436, 70456],
             ],
             "24.0": [
                 [71689, 78549, 75644, 88889, 73100, 82509, 71449, 82835],
-                [84427, 82356, 75809, 52509, 80137, 87672, 87436, 70456]
+                [84427, 82356, 75809, 52509, 80137, 87672, 87436, 70456],
             ],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -476,9 +476,7 @@ class EncodecIntegrationTest(unittest.TestCase):
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
                 # use max bandwith for best possible reconstruction
-                encoder_outputs = model.encode(
-                    input_values, bandwidth=float(bandwidth), return_dict=False
-                )
+                encoder_outputs = model.encode(input_values, bandwidth=float(bandwidth), return_dict=False)
                 audio_code_sums_0 = [a[0][0].sum().cpu().item() for a in encoder_outputs[0]]
                 audio_code_sums_1 = [a[0][1].sum().cpu().item() for a in encoder_outputs[0]]
 

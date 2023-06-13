@@ -112,7 +112,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             padded_audios.append(sample)
             padding_mask = np.ones(max_length)
             padding_mask[..., -padding_length:] = 0
-            padding_masks.append(padding_mask)            
+            padding_masks.append(padding_mask)
         return padded_audios, padding_masks
 
     def __call__(
