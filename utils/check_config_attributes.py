@@ -80,6 +80,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "SamVisionConfig": ["mlp_ratio"],
     # For (head) training, but so far not implemented
     "ClapAudioConfig": ["num_classes"],
+    # Not used, but providing useful information to users
+    "SpeechT5HifiGanConfig": ["sampling_rate"],
 }
 
 
