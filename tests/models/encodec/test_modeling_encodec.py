@@ -114,7 +114,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_pruning = False
     test_headmasking = False
     test_resize_embeddings = False
-
+    pipeline_model_mapping = {}
     input_name = "input_values"
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
