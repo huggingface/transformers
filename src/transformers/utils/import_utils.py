@@ -40,6 +40,8 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 # TODO: This doesn't work for all packages (`bs4`, `faiss`, etc.) Talk to Sylvain to see how to do with it better.
 def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[Tuple[bool, str], bool]:
     # Check we're not importing a "pkg_name" directory somewhere but the actual library by trying to grab the version
+    # Note: _is_package_available("tensorflow") fails for tensorflow-cpu. Please test any changes to the line below
+    # with tensorflow-cpu to make sure it still works!
     package_exists = importlib.util.find_spec(pkg_name) is not None
     package_version = "N/A"
     if package_exists:
