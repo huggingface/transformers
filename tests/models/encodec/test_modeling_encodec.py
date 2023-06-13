@@ -329,7 +329,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             upsampling_ratios=[8, 5, 4, 2],
             norm_type="weight_norm",
         ).to(torch_device)
-        processor = AutoProcessor.from_pretrained(model_id, chunk_length_s=1, overlap=0.01)
+        processor = AutoProcessor.from_pretrained(model_id)
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
         audio_sample = librispeech_dummy[-1]["audio"]["array"]
