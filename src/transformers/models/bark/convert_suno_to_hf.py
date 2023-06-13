@@ -8,6 +8,9 @@ import warnings
 from transformers.utils import logging
 from packaging import version
 
+# TODO: remove
+from transformers import GenerationConfig
+
 import torch
 from torch import nn
 from tqdm import tqdm
@@ -20,7 +23,7 @@ from bark.generation import _load_model as _bark_load_model
 
 # TODO : how to import directly?
 from transformers.models.bark.configuration_bark import BarkModuleConfig
-from transformers.models.bark.modeling_bark import BarkFineAcousticsModel, BarkSemanticModel, BarkModule
+from transformers.models.bark.modeling_bark import BarkFineAcousticsModule, BarkCausalModule
 
 
 logging.set_verbosity_info()
@@ -86,12 +89,10 @@ def _download(from_hf_path, file_name):
 
 def _load_model(ckpt_path, device, use_small=False, model_type="text"):
     ConfigClass = BarkModuleConfig
-    if model_type == "text":
-        ModelClass = BarkSemanticModel
-    elif model_type == "coarse":
-        ModelClass = BarkModule
+    if model_type in ["text", "coarse"]:
+        ModelClass = BarkCausalModule
     elif model_type == "fine":
-        ModelClass = BarkFineAcousticsModel
+        ModelClass = BarkFineAcousticsModule
     else:
         raise NotImplementedError()
     model_key = f"{model_type}_small" if use_small else model_type
@@ -174,22 +175,21 @@ def load_model(pytorch_dump_folder_path, use_small=False, model_type="text"):
     
     
     if model_type in ["text", "coarse"]:
-        if model_type == "coarse":
-            vec = torch.randint(256,(batch_size, sequence_length), dtype=torch.int)
-            output_old_model = bark_model(vec)[0]
-        else:
-            vec = torch.randint(256,(batch_size, 513), dtype=torch.int)
-            output_old_model = bark_model(vec, merge_context=True)[0]
-        output_new_model = model(vec)
+
+        vec = torch.randint(256,(batch_size, sequence_length), dtype=torch.int)
+        output_old_model = bark_model(vec)[0]
+
+        output_new_model_total = model(vec)
+        
     else:
         prediction_codeboook_channel = 3
         n_codes_total = 8
         vec = torch.randint(256,(batch_size, sequence_length, n_codes_total), dtype=torch.int)
         
-        output_new_model = model(prediction_codeboook_channel, vec)
+        output_new_model_total = model(prediction_codeboook_channel, vec)
         output_old_model = bark_model(prediction_codeboook_channel, vec)   
         
-    output_new_model = output_new_model.logits
+    output_new_model = output_new_model_total.logits
     
     # output difference should come from the difference of self-attention implementation design
     assert output_new_model.shape == output_old_model.shape, "initial and new outputs don't have the same shape"
