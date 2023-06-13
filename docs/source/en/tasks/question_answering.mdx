@@ -370,7 +370,7 @@ Pass your inputs to the model and return the `logits`:
 
 ```py
 >>> from transformers import AutoModelForQuestionAnswering
-
+>>> import torch
 >>> model = AutoModelForQuestionAnswering.from_pretrained("my_awesome_qa_model")
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
