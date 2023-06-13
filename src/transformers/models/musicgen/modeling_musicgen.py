@@ -1824,7 +1824,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         )
         # then fill the lower triangular part (the BOS padding)
         delay_pattern = delay_pattern + torch.tril(torch.ones((codebooks, max_length), dtype=torch.bool))
-        mask = ~delay_pattern[:, :seq_len]
+        mask = ~delay_pattern[:, :seq_len].to(decoder_input_ids.device)
         # ablate input ids at masked indices and replace with pad token id
         decoder_input_ids = mask * decoder_input_ids + ~mask * self.generation_config.pad_token_id
         return decoder_input_ids
