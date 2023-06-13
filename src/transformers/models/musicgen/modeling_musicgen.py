@@ -52,14 +52,13 @@ MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 _CHECKPOINT_FOR_DOC = "facebook/musicgen-small"
 
 
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(
     input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
 ):
     """
     Make causal mask used for bi-directional self-attention.
     """
-    bsz, tgt_len = input_ids_shape
+    bsz, codebooks, tgt_len = input_ids_shape
     mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min, device=device), device=device)
     mask_cond = torch.arange(mask.size(-1), device=device)
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
@@ -1982,12 +1981,17 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         if generation_config is None:
             generation_config = self.generation_config
 
-        # TODO(SG): update this when we're using audio prompt as input since we'll have to offset new tokens
+        decoder_input_ids = kwargs.get("decoder_input_ids")
+        if decoder_input_ids is not None:
+            seq_len = decoder_input_ids.shape[-1] + 1
+        else:
+            seq_len = 1
+
         if kwargs.get("max_new_tokens") is not None:
             generation_config.max_new_tokens = kwargs.get("max_new_tokens")
-            generation_config.max_length = kwargs.get("max_new_tokens") + 1
+            generation_config.max_length = kwargs.get("max_new_tokens") + seq_len
         if kwargs.get("max_length") is not None:
-            generation_config.max_new_tokens = kwargs.get("max_length") - 1
+            generation_config.max_new_tokens = kwargs.get("max_length") - seq_len
             generation_config.max_length = kwargs.get("max_length")
 
         outputs = super().generate(
@@ -2012,10 +2016,12 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         bsz, codebooks, seq_len = input_ids.shape
         # we need the decoder input ids to recover our delay pattern mask - check if we had it in the inputs, or
         # initialise them otherwise
-        decoder_input_ids = kwargs.get("decoder_input_ids")
+        decoder_start_token_id = self._get_decoder_start_token_id(generation_config.decoder_start_token_id, generation_config.bos_token_id)
+        decoder_input_ids_start = torch.ones((bsz, self.num_codebooks, 1), dtype=torch.long, device=input_ids.device) * decoder_start_token_id
         if decoder_input_ids is None:
-            decoder_start_token_id = self._get_decoder_start_token_id(generation_config.decoder_start_token_id, generation_config.bos_token_id)
-            decoder_input_ids = torch.ones((bsz, codebooks, 1), dtype=torch.long, device=input_ids.device) * decoder_start_token_id
+            decoder_input_ids = decoder_input_ids_start
+        elif (decoder_input_ids[:, :, 0] != decoder_start_token_id).all().item():
+            decoder_input_ids = torch.cat([decoder_input_ids_start, decoder_input_ids], dim=-1)
 
         # build and apply the final delay pattern mask
         _, pattern_mask = self.build_delay_pattern_mask(decoder_input_ids, self.generation_config.pad_token_id)
