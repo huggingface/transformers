@@ -589,7 +589,6 @@ _import_structure = {
     "models.vits": [
         "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VitsConfig",
-        "VitsProcessor",
         "VitsMmsTokenizer",
     ],
     "models.vivit": [
@@ -897,7 +896,6 @@ else:
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
     _import_structure["models.speecht5"].append("SpeechT5FeatureExtractor")
     _import_structure["models.tvlt"].append("TvltFeatureExtractor")
-    _import_structure["models.vits"].append("VitsFeatureExtractor")
 
 # Tensorflow-text-specific objects
 try:
@@ -4622,7 +4620,6 @@ if TYPE_CHECKING:
     from .models.vits import (
         VITS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         VitsConfig,
-        VitsProcessor,
         VitsMmsTokenizer,
     )
     from .models.wav2vec2 import (
@@ -4905,7 +4902,6 @@ if TYPE_CHECKING:
         from .models.speech_to_text import Speech2TextFeatureExtractor
         from .models.speecht5 import SpeechT5FeatureExtractor
         from .models.tvlt import TvltFeatureExtractor
-        from .models.vits import VitsFeatureExtractor
 
     try:
         if not is_tensorflow_text_available():

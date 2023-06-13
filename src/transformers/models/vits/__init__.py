@@ -27,17 +27,8 @@ _import_structure = {
         "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VitsConfig",
     ],
-    "processing_vits": ["VitsProcessor"],
     "tokenization_vits": ["VitsMmsTokenizer"],
 }
-
-try:
-    if not is_speech_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["feature_extraction_vits"] = ["VitsFeatureExtractor"]
 
 try:
     if not is_torch_available():
@@ -56,16 +47,7 @@ if TYPE_CHECKING:
         VITS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         VitsConfig,
     )
-    from .processing_vits import VitsProcessor
     from .tokenization_vits import VitsMmsTokenizer
-
-    try:
-        if not is_speech_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .feature_extraction_vits import VitsFeatureExtractor
 
     try:
         if not is_torch_available():

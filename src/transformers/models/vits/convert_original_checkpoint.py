@@ -236,8 +236,7 @@ def convert_checkpoint(
     if vocab_path is None:
         vocab_path = os.path.join(checkpoint_path, "vocab.txt")
 
-    #TODO: save as temporary json file
-
+    # Save vocab as temporary json file
     symbols = [
         line.replace("\n", "") for line in open(vocab_path, encoding="utf-8").readlines()
     ]
@@ -259,10 +258,10 @@ def convert_checkpoint(
     model.save_pretrained(pytorch_dump_folder_path)
     tokenizer.save_pretrained(pytorch_dump_folder_path)
 
-    # if repo_id:
-    #     print("Pushing to the hub...")
-    #     tokenizer.push_to_hub(repo_id)
-    #     model.push_to_hub(repo_id)
+    if repo_id:
+        print("Pushing to the hub...")
+        tokenizer.push_to_hub(repo_id)
+        model.push_to_hub(repo_id)
 
 
 if __name__ == "__main__":

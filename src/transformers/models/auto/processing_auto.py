@@ -80,7 +80,6 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("unispeech-sat", "Wav2Vec2Processor"),
         ("vilt", "ViltProcessor"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
-        ("vits", "VitsProcessor"),
         ("wav2vec2", "Wav2Vec2Processor"),
         ("wav2vec2-conformer", "Wav2Vec2Processor"),
         ("wavlm", "Wav2Vec2Processor"),
