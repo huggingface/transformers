@@ -216,12 +216,7 @@ ffn_kernel_size
 # 'n_layers': 6,
 # 'kernel_size': 3,
 # 'p_dropout': 0.1,
-# 'resblock': '1',
-# 'resblock_kernel_sizes': [3, 7, 11],
-# 'resblock_dilation_sizes': [[1, 3, 5], [1, 3, 5], [1, 3, 5]],
-# 'upsample_rates': [8, 8, 2, 2],
-# 'upsample_initial_channel': 512,
-# 'upsample_kernel_sizes': [16, 16, 4, 4],
+
 # 'n_layers_q': 3,
 # 'use_spectral_norm': False
 
@@ -254,6 +249,18 @@ ffn_kernel_size
         ffn_kernel_size=3,
 
         inter_channels=192,  # TODO: better name?
+
+
+        # TODO: is this HifiGan?
+        resblock="1",
+        resblock_kernel_sizes=[3, 7, 11],
+        resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
+        upsample_rates=[8, 8, 2, 2],
+        upsample_initial_channel=512,
+        upsample_kernel_sizes=[16, 16, 4, 4],
+
+
+
 
             decoder_layers=6,
             decoder_ffn_dim=3072,
@@ -344,6 +351,15 @@ ffn_kernel_size
         self.use_stochastic_duration_prediction = use_stochastic_duration_prediction
         self.num_speakers = num_speakers
         self.gin_channels = gin_channels
+
+        self.resblock = resblock
+        self.resblock_kernel_sizes = resblock_kernel_sizes
+        self.resblock_dilation_sizes = resblock_dilation_sizes
+        self.upsample_rates = upsample_rates
+        self.upsample_initial_channel = upsample_initial_channel
+        self.upsample_kernel_sizes = upsample_kernel_sizes
+
+
 
         self.feat_extract_norm = feat_extract_norm
         self.feat_proj_dropout = feat_proj_dropout

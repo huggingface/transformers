@@ -60,6 +60,9 @@ DEFAULT_MIN_BIN_WIDTH = 1e-3
 DEFAULT_MIN_BIN_HEIGHT = 1e-3
 DEFAULT_MIN_DERIVATIVE = 1e-3
 
+LRELU_SLOPE = 0.1  #TODO: config?
+
+
 
 @dataclass
 class TextEncoderOutput(ModelOutput):
@@ -114,6 +117,144 @@ def fused_add_tanh_sigmoid_multiply(input_a, input_b, n_channels):
     s_act = torch.sigmoid(in_act[:, n_channels_int:, :])
     acts = t_act * s_act
     return acts
+
+
+# TODO: replace with PreTrainedModel stuff
+def init_weights(m, mean=0.0, std=0.01):
+  classname = m.__class__.__name__
+  if classname.find("Conv") != -1:
+    m.weight.data.normal_(mean, std)
+
+
+def get_padding(kernel_size, dilation=1):
+    return int((kernel_size*dilation - dilation)/2)
+
+
+class VitsResBlock1(torch.nn.Module):
+    def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5)):
+        super().__init__()
+        self.convs1 = nn.ModuleList([
+            nn.utils.weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, dilation=dilation[0],
+                               padding=get_padding(kernel_size, dilation[0]))),
+            nn.utils.weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, dilation=dilation[1],
+                               padding=get_padding(kernel_size, dilation[1]))),
+            nn.utils.weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, dilation=dilation[2],
+                               padding=get_padding(kernel_size, dilation[2])))
+        ])
+        self.convs1.apply(init_weights)
+
+        self.convs2 = nn.ModuleList([
+            nn.utils.weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, dilation=1,
+                               padding=get_padding(kernel_size, 1))),
+            nn.utils.weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, dilation=1,
+                               padding=get_padding(kernel_size, 1))),
+            nn.utils.weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, dilation=1,
+                               padding=get_padding(kernel_size, 1)))
+        ])
+        self.convs2.apply(init_weights)
+
+    def forward(self, x, x_mask=None):
+        for c1, c2 in zip(self.convs1, self.convs2):
+            xt = nn.functional.leaky_relu(x, LRELU_SLOPE)
+            if x_mask is not None:
+                xt = xt * x_mask
+            xt = c1(xt)
+            xt = nn.functional.leaky_relu(xt, LRELU_SLOPE)
+            if x_mask is not None:
+                xt = xt * x_mask
+            xt = c2(xt)
+            x = xt + x
+        if x_mask is not None:
+            x = x * x_mask
+        return x
+
+    def remove_weight_norm(self):
+        for l in self.convs1:
+            nn.utils.remove_weight_norm(l)
+        for l in self.convs2:
+            nn.utils.remove_weight_norm(l)
+
+
+class VitsResBlock2(torch.nn.Module):
+    def __init__(self, channels, kernel_size=3, dilation=(1, 3)):
+        super().__init__()
+        self.convs = nn.ModuleList([
+            nn.utils.weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, dilation=dilation[0],
+                               padding=get_padding(kernel_size, dilation[0]))),
+            nn.utils.weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, dilation=dilation[1],
+                               padding=get_padding(kernel_size, dilation[1])))
+        ])
+        self.convs.apply(init_weights)
+
+    def forward(self, x, x_mask=None):
+        for c in self.convs:
+            xt = nn.functional.leaky_relu(x, LRELU_SLOPE)
+            if x_mask is not None:
+                xt = xt * x_mask
+            xt = c(xt)
+            x = xt + x
+        if x_mask is not None:
+            x = x * x_mask
+        return x
+
+    def remove_weight_norm(self):
+        for l in self.convs:
+            nn.utils.remove_weight_norm(l)
+
+
+# TODO: is this just HifiGAN? then see SpeechT5
+class VitsGenerator(torch.nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.num_kernels = len(config.resblock_kernel_sizes)
+        self.num_upsamples = len(config.upsample_rates)
+        self.conv_pre = nn.Conv1d(config.inter_channels, config.upsample_initial_channel, 7, 1, padding=3)
+        resblock = VitsResBlock1 if config.resblock == '1' else VitsResBlock2   # TODO: which one in our checkpoints?
+
+        self.ups = nn.ModuleList()
+        for i, (u, k) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes)):
+            self.ups.append(nn.utils.weight_norm(
+                nn.ConvTranspose1d(config.upsample_initial_channel//(2**i), config.upsample_initial_channel//(2**(i+1)),
+                                k, u, padding=(k-u)//2)))
+
+        self.resblocks = nn.ModuleList()
+        for i in range(len(self.ups)):
+            ch = config.upsample_initial_channel//(2**(i+1))
+            for j, (k, d) in enumerate(zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes)):
+                self.resblocks.append(resblock(ch, k, d))
+
+        self.conv_post = nn.Conv1d(ch, 1, 7, 1, padding=3, bias=False)
+        self.ups.apply(init_weights)
+
+        if config.gin_channels != 0:
+            self.cond = nn.Conv1d(config.gin_channels, config.upsample_initial_channel, 1)
+
+    def forward(self, x, g=None):
+        x = self.conv_pre(x)
+        if g is not None:
+          x = x + self.cond(g)
+
+        for i in range(self.num_upsamples):
+            x = nn.functional.leaky_relu(x, LRELU_SLOPE)
+            x = self.ups[i](x)
+            xs = None
+            for j in range(self.num_kernels):
+                if xs is None:
+                    xs = self.resblocks[i*self.num_kernels+j](x)
+                else:
+                    xs += self.resblocks[i*self.num_kernels+j](x)
+            x = xs / self.num_kernels
+        x = nn.functional.leaky_relu(x)
+        x = self.conv_post(x)
+        x = torch.tanh(x)
+        return x
+
+    def remove_weight_norm(self):
+        print('Removing weight norm...')
+        for l in self.ups:
+            nn.utils.remove_weight_norm(l)
+        for l in self.resblocks:
+            l.remove_weight_norm()
 
 
 class VitsWaveNet(torch.nn.Module):
@@ -1302,7 +1443,7 @@ class VitsModel(VitsPreTrainedModel):
 
         self.flow = VitsResidualCouplingBlock(config.inter_channels, config.hidden_size, 5, 1, 4, gin_channels=config.gin_channels)
 
-        # self.dec = Generator(inter_channels, resblock, resblock_kernel_sizes, resblock_dilation_sizes, upsample_rates, upsample_initial_channel, upsample_kernel_sizes, gin_channels=gin_channels)
+        self.dec = VitsGenerator(config)
 
         # TODO: only used during training / voice conversion, not for TTS
         # self.enc_q = PosteriorEncoder(spec_channels, inter_channels, hidden_channels, 5, 1, 16, gin_channels=gin_channels)
@@ -1339,6 +1480,7 @@ class VitsModel(VitsPreTrainedModel):
         length_scale: int = 1,  # TODO!
         noise_scale: int = 1,  # TODO!
         noise_scale_w: float = 1.0,   # TODO!
+        max_len: Optional[int] = None,   # TODO!
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1348,6 +1490,8 @@ class VitsModel(VitsPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # Note: The current implementation of this model is inference only.
 
         # TODO: make padding_mask here?
 
@@ -1391,11 +1535,10 @@ class VitsModel(VitsPreTrainedModel):
         z_p = m_p + torch.randn_like(m_p) * torch.exp(logs_p) * noise_scale
 
         z = self.flow(z_p, y_mask, g=g, reverse=True)
-        return z
-        # o = self.dec((z * y_mask)[:,:,:max_len], g=g)
-        # return o, attn, y_mask, (z, z_p, m_p, logs_p)
+        o = self.dec((z * y_mask)[:,:,:max_len], g=g)
 
         # TODO: return outputs using Output object
+        return o
 
     def _generate_path(self, duration, mask):
         """

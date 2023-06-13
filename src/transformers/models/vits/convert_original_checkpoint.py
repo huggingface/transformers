@@ -95,10 +95,25 @@ MAPPING_FLOW = {
     "flow.flows.*.enc.res_skip_layers.3" : "flow.flows.*.enc.res_skip_layers.3",
     "flow.flows.*.post" : "flow.flows.*.post",
 }
+MAPPING_GENERATOR = {
+    "dec.conv_pre" : "dec.conv_pre",
+    "dec.ups.0" : "dec.ups.0",
+    "dec.ups.1" : "dec.ups.1",
+    "dec.ups.2" : "dec.ups.2",
+    "dec.ups.3" : "dec.ups.3",
+    "dec.resblocks.*.convs1.0" : "dec.resblocks.*.convs1.0",
+    "dec.resblocks.*.convs1.1" : "dec.resblocks.*.convs1.1",
+    "dec.resblocks.*.convs1.2" : "dec.resblocks.*.convs1.2",
+    "dec.resblocks.*.convs2.0" : "dec.resblocks.*.convs2.0",
+    "dec.resblocks.*.convs2.1" : "dec.resblocks.*.convs2.1",
+    "dec.resblocks.*.convs2.2" : "dec.resblocks.*.convs2.2",
+    "dec.conv_post" : "dec.conv_post",
+}
 MAPPING = {
     **MAPPING_TEXT_ENCODER,
     **MAPPING_STOCHASTIC_DURATION_PREDICTOR,
     **MAPPING_FLOW,
+    **MAPPING_GENERATOR,
 }
 TOP_LEVEL_KEYS = []
 IGNORE_KEYS = []
@@ -198,7 +213,7 @@ def recursively_load_weights(fairseq_dict, hf_model):
         if not is_used:
             unused_weights.append(name)
 
-    #MIH logger.warning(f"Unused weights: {unused_weights}")
+    logger.warning(f"Unused weights: {unused_weights}")
 
 
 def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
