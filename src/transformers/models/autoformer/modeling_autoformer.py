@@ -1632,10 +1632,6 @@ class AutoformerModel(AutoformerPreTrainedModel):
         log_abs_loc = loc.abs().log1p() if self.config.input_size == 1 else loc.squeeze(1).abs().log1p()
         log_scale = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
         static_feat = torch.cat((log_abs_loc, log_scale), dim=1)
-        if static_feat.isnan().any():
-            import pdb
-
-            pdb.set_trace()
 
         if static_real_features is not None:
             static_feat = torch.cat((static_real_features, static_feat), dim=1)
