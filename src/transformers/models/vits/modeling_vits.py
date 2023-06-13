@@ -1217,6 +1217,10 @@ class VitsTextEncoder(nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, TextEncoderOutput]:
+
+        # Workaround for tokenizer: filter out padding tokens.
+        input_ids[input_ids >= self.config.vocab_size] = 0
+
         hidden_states = self.embed_tokens(input_ids) * math.sqrt(self.config.hidden_size)
 
         # TODO: may not be needed for final model but is needed to get same outputs

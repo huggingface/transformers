@@ -15,21 +15,21 @@
 """Convert VITS checkpoint."""
 
 import argparse
+import json
 import os
+import tempfile
 import torch
 
 from transformers import (
     VitsConfig,
-    # VitsFeatureExtractor,
     VitsModel,
-    # VitsProcessor,
-    # VitsTokenizer,
+    VitsMmsTokenizer,
     logging,
 )
 
 
 logging.set_verbosity_info()
-logger = logging.get_logger("transformers.models.speecht5")
+logger = logging.get_logger("transformers.models.vits")
 
 MAPPING_TEXT_ENCODER = {
     "enc_p.emb": "text_encoder.embed_tokens",
@@ -216,56 +216,13 @@ def recursively_load_weights(fairseq_dict, hf_model):
     logger.warning(f"Unused weights: {unused_weights}")
 
 
-def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
-    name = full_name.split("conv_layers.")[-1]
-    items = name.split(".")
-    layer_id = int(items[0])
-    type_id = int(items[1])
-
-    if type_id == 0:
-        if "bias" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].conv.bias.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but"
-                    f" {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].conv.bias.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
-        elif "weight" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].conv.weight.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but"
-                    f" {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].conv.weight.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
-    elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
-        if "bias" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but"
-                    f" {feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
-        elif "weight" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but"
-                    f" {feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
-    else:
-        unused_weights.append(full_name)
-
-
 @torch.no_grad()
 def convert_checkpoint(
     checkpoint_path,
     pytorch_dump_folder_path,
     config_path=None,
     vocab_path=None,
+    language=None,
     repo_id=None,
 ):
     """
@@ -278,47 +235,33 @@ def convert_checkpoint(
 
     if vocab_path is None:
         vocab_path = os.path.join(checkpoint_path, "vocab.txt")
-    symbols = [line.replace("\n", "") for line in open(vocab_path, encoding="utf-8").readlines()]
-    config.vocab_size = len(symbols)
 
-    # if task == "s2t":
-    #     config.max_length = config.max_text_positions
-    #     model = SpeechT5ForSpeechToText(config)
-    # elif task == "t2s":
-    #     config.max_speech_positions = 1876
-    #     config.max_text_positions = 600
-    #     config.max_length = config.max_speech_positions
-    #     model = SpeechT5ForTextToSpeech(config)
-    # elif task == "s2s":
-    #     config.max_speech_positions = 1876
-    #     config.max_length = config.max_speech_positions
-    #     model = SpeechT5ForSpeechToSpeech(config)
-    # else:
-    #     raise ValueError(f"Unknown task name: {task}")
+    #TODO: save as temporary json file
 
+    symbols = [
+        line.replace("\n", "") for line in open(vocab_path, encoding="utf-8").readlines()
+    ]
+    symbol_to_id = {s: i for i, s in enumerate(symbols)}
+
+    with tempfile.NamedTemporaryFile() as tf:
+        with open(tf.name, "w", encoding="utf-8") as f:
+            f.write(json.dumps(symbol_to_id, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+
+        tokenizer = VitsMmsTokenizer(tf.name)
+
+    tokenizer.language = language
+    config.vocab_size = tokenizer.vocab_size - 2  # added <pad> and <unk>
     model = VitsModel(config)
-
-    # if vocab_path:
-    #     tokenizer = SpeechT5Tokenizer(vocab_path, model_max_length=config.max_text_positions)
-
-    #     # Mask token behaves like a normal word, i.e. include the space before it
-    #     mask_token = AddedToken("<mask>", lstrip=True, rstrip=False)
-    #     tokenizer.mask_token = mask_token
-    #     tokenizer.add_special_tokens({"mask_token": mask_token})
-    #     tokenizer.add_tokens(["<ctc_blank>"])
-
-    # feature_extractor = VitsFeatureExtractor()
-    # processor = VitsProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
-    # processor.save_pretrained(pytorch_dump_folder_path)
 
     orig_checkpoint = torch.load(os.path.join(checkpoint_path, "G_100000.pth"), map_location=torch.device("cpu"))
     recursively_load_weights(orig_checkpoint["model"], model)
 
     model.save_pretrained(pytorch_dump_folder_path)
+    tokenizer.save_pretrained(pytorch_dump_folder_path)
 
     # if repo_id:
     #     print("Pushing to the hub...")
-    #     processor.push_to_hub(repo_id)
+    #     tokenizer.push_to_hub(repo_id)
     #     model.push_to_hub(repo_id)
 
 
@@ -327,6 +270,7 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
     parser.add_argument("--vocab_path", default=None, type=str, help="Path to vocab.txt")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
+    parser.add_argument("--language", default=None, type=str, help="Tokenizer language")
     parser.add_argument(
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
     )
@@ -340,5 +284,6 @@ if __name__ == "__main__":
         args.pytorch_dump_folder_path,
         args.config_path,
         args.vocab_path,
+        args.language,
         args.push_to_hub,
     )

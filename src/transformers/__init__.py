@@ -590,7 +590,7 @@ _import_structure = {
         "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VitsConfig",
         "VitsProcessor",
-        "VitsTokenizer",
+        "VitsMmsTokenizer",
     ],
     "models.vivit": [
         "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -4623,7 +4623,7 @@ if TYPE_CHECKING:
         VITS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         VitsConfig,
         VitsProcessor,
-        VitsTokenizer,
+        VitsMmsTokenizer,
     )
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,

@@ -28,7 +28,7 @@ _import_structure = {
         "VitsConfig",
     ],
     "processing_vits": ["VitsProcessor"],
-    "tokenization_vits": ["VitsTokenizer"],
+    "tokenization_vits": ["VitsMmsTokenizer"],
 }
 
 try:
@@ -57,7 +57,7 @@ if TYPE_CHECKING:
         VitsConfig,
     )
     from .processing_vits import VitsProcessor
-    from .tokenization_vits import VitsTokenizer
+    from .tokenization_vits import VitsMmsTokenizer
 
     try:
         if not is_speech_available():
