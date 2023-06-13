@@ -260,7 +260,7 @@ def check_config_attributes():
                 inspect.getmodule(_config_class),
                 lambda x: inspect.isclass(x)
                 and x.__name__.endswith("Config")
-                and inspect.getmodule(x) == inspect.getmodule(config_class),
+                and inspect.getmodule(x) == inspect.getmodule(_config_class),
             )
         ]
         for config_class in config_classes_in_module:
