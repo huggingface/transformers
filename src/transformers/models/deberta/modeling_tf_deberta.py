@@ -825,8 +825,10 @@ class TFDebertaPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config: DebertaConfig, **kwargs):
         super().__init__(**kwargs)
 
+        self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
+
         self.dense = tf.keras.layers.Dense(
-            units=config.embedding_size,
+            units=self.embedding_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
         )
@@ -850,7 +852,7 @@ class TFDebertaLMPredictionHead(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.config = config
-        self.embedding_size = config.embedding_size
+        self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
 
         self.transform = TFDebertaPredictionHeadTransform(config, name="transform")
 
