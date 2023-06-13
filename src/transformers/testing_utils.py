@@ -36,18 +36,6 @@ from unittest import mock
 
 import huggingface_hub
 import requests
-from _pytest.doctest import (
-    Module,
-    _get_checker,
-    _get_continue_on_failure,
-    _get_runner,
-    _is_mocked,
-    _patch_unwrap_mock_aware,
-    get_optionflags,
-    import_path,
-)
-from _pytest.outcomes import skip
-from pytest import DoctestItem
 
 from transformers import logging as transformers_logging
 
@@ -83,6 +71,7 @@ from .utils import (
     is_phonemizer_available,
     is_pyctcdecode_available,
     is_pytesseract_available,
+    is_pytest_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
     is_safetensors_available,
@@ -114,6 +103,24 @@ from .utils import (
 
 if is_accelerate_available():
     from accelerate.state import AcceleratorState, PartialState
+
+
+if is_pytest_available():
+    from _pytest.doctest import (
+        Module,
+        _get_checker,
+        _get_continue_on_failure,
+        _get_runner,
+        _is_mocked,
+        _patch_unwrap_mock_aware,
+        get_optionflags,
+        import_path,
+    )
+    from _pytest.outcomes import skip
+    from pytest import DoctestItem
+else:
+    Module = object
+    DoctestItem = object
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
