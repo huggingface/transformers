@@ -191,7 +191,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
         initializer_factor=0.02,
         classifier_dropout=0.0,
         scale_embedding=False,
-        num_codebooks=8,
+        num_codebooks=4,
         pad_token_id=2048,
         bos_token_id=2048,
         eos_token_id=None,
@@ -289,6 +289,9 @@ class MusicgenConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.is_encoder_decoder = True
         self.use_cache = use_cache
+        self.bos_token_id = self.decoder_config.bos_token_id
+        self.pad_token_id = self.decoder_config.pad_token_id
+        self.eos_token_id = self.decoder_config.eos_token_id
 
     @classmethod
     def from_encoder_decoder_configs(
