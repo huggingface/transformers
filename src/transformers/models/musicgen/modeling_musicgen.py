@@ -1838,6 +1838,10 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         max_length = self.generation_config.max_length
         decoder_input_ids_shifted = torch.ones((bsz, num_codebooks, max_length), dtype=torch.long, device=decoder_input_ids.device) * -1
 
+        # we only apply the mask if we have a large enough seq len - otherwise we return as is
+        if max_length < 2 * num_codebooks - 1:
+            return decoder_input_ids, decoder_input_ids_shifted
+
         # fill the shifted ids with the prompt entries, offset by the codebook idx
         for codebook in range(num_codebooks):
             decoder_input_ids_shifted[:, codebook, codebook:seq_len + codebook] = decoder_input_ids[:, codebook]
