@@ -1102,8 +1102,8 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
 class DebertaPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
-
         self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
+
         self.dense = nn.Linear(config.hidden_size, self.embedding_size)
         if isinstance(config.hidden_act, str):
             self.transform_act_fn = ACT2FN[config.hidden_act]
