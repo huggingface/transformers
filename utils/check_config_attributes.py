@@ -78,6 +78,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
     # used internally to calculate `mlp_dim`
     "SamVisionConfig": ["mlp_ratio"],
+    # For (head) training, but so far not implemented
+    "ClapAudioConfig": ["num_classes"],
 }
 
 
@@ -114,6 +116,10 @@ SPECIAL_CASES_TO_ALLOW.update(
         "VanConfig": True,
         "WavLMConfig": True,
         "WhisperConfig": True,
+        # TODO: @Arthur (for `alignment_head` and `alignment_layer`)
+        "JukeboxPriorConfig": True,
+        # TODO: @Younes (for `is_decoder`)
+        "Pix2StructTextConfig": True,
     }
 )
 
