@@ -29,10 +29,10 @@ MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class MusicgenEncoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MusicgenEncoder`]. It is used to
-    instantiate a Musicgen encoder according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the Musicgen
-    [facebook/musicgen-small](https://huggingface.co/facebook/musicgen-small) architecture.
+    This is the configuration class to store the configuration of a [`MusicgenEncoder`], which is the same as that of
+    the [`T5EncoderModel`]. It is used to instantiate a MusicGen encoder according to the specified arguments, defining
+    the model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that
+    of the MusicGen [facebook/musicgen-small](https://huggingface.co/facebook/musicgen-small) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -123,9 +123,9 @@ class MusicgenEncoderConfig(PretrainedConfig):
 
 class MusicgenDecoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`MusicgenDecoder`]. It is used to instantiate an
-    Musicgen language model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Musicgen
+    This is the configuration class to store the configuration of an [`MusicgenDecoder`]. It is used to instantiate a
+    MusicGen decoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the MusicGen
     [facebook/musicgen-small](https://huggingface.co/facebook/musicgen-small) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -223,9 +223,9 @@ class MusicgenDecoderConfig(PretrainedConfig):
 
 class MusicgenConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MusicgenModel`]. It is used to instantiate an
-    Musicgen model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Musicgen
+    This is the configuration class to store the configuration of a [`MusicgenModel`]. It is used to instantiate a
+    MusicGen model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the MusicGen
     [facebook/musicgen-small](https://huggingface.co/facebook/musicgen-small) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
