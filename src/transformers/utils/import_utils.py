@@ -147,7 +147,7 @@ if FORCE_TF_AVAILABLE in ENV_VARS_TRUE_VALUES:
     _tf_available = True
 else:
     if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VALUES:
-        _tf_available = _is_package_available("tensorflow")
+        _tf_available = importlib.util.find_spec("tensorflow") is not None
         if _tf_available:
             candidates = (
                 "tensorflow",
