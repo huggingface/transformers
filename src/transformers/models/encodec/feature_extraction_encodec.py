@@ -81,38 +81,6 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         else:
             return max(1, int((1.0 - self.overlap) * self.chunk_length))
 
-    def _truncate_for_chuncking(self, raw_audio):
-        # Truncate the input to use chunk encoding
-        min_length = min([array.shape[0] for array in raw_audio])
-        nb_step = int(np.floor(min_length / self.chunk_stride))
-        min_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
-        padded_audios = []
-        for sample in raw_audio:
-            sample = sample[..., :min_length]
-            padded_audios.append(sample)
-        return padded_audios
-
-    def _pad_for_chuncking(self, raw_audio):
-        # Pad the input to use chunk encoding
-        step = self.chunk_length - self.chunk_stride
-        max_input_length = max([array.shape[0] for array in raw_audio])
-        if (max_input_length % self.chunk_stride) - step == 0:
-            return raw_audio, None
-
-        nb_step = int(np.ceil(max_input_length / self.chunk_stride))
-        max_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
-        padded_audios = []
-        padding_masks = []
-        for sample in raw_audio:
-            padding_length = max_length - sample.shape[0]
-            pad = ((0, padding_length), (0, 0)) if self.feature_size > 1 else (0, padding_length)
-            sample = np.pad(sample, pad_width=pad, mode="constant", constant_values=0)
-            padded_audios.append(sample)
-            padding_mask = np.ones(max_length)
-            padding_mask[..., -padding_length:] = 0
-            padding_masks.append(padding_mask)
-        return padded_audios, padding_masks
-
     def __call__(
         self,
         raw_audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
@@ -192,25 +160,31 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             if self.feature_size == 2 and example.shape[-1] != 2:
                 raise ValueError(f"Expected stereo audio but example has {example.shape[-1]} channels")
 
-        padding_masks = None
+        padded_inputs = None
+        input_values = BatchFeature({"input_values": raw_audio})
         if self.chunk_stride is not None and self.chunk_length is not None and max_length is None:
             if truncation:
-                padded_audios = self._truncate_for_chuncking(raw_audio)
+                max_length = min([array.shape[0] for array in raw_audio])
+                nb_step = int(np.floor(max_length / self.chunk_stride))
+                max_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
             elif padding:
-                padded_audios, padding_masks = self._pad_for_chuncking(raw_audio)
+                max_length = max([array.shape[0] for array in raw_audio])
+                nb_step = int(np.ceil(max_length / self.chunk_stride))
+                max_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
+                padding = "max_length"
             else:
-                padded_audios = raw_audio
-            padded_inputs = BatchFeature({"input_values": padded_audios})
-        else:
+                padded_inputs = input_values
+
+        if padded_inputs is None:
             padded_inputs = self.pad(
-                BatchFeature({"input_values": raw_audio}),
+                input_values,
                 max_length=max_length,
                 truncation=truncation,
                 padding=padding,
                 return_attention_mask=True,
             )
             if padding:
-                padding_masks = padded_inputs.pop("attention_mask")
+                padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
 
         input_values = []
         for example in padded_inputs.pop("input_values"):
@@ -219,9 +193,6 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             input_values.append(example.T)
 
         padded_inputs["input_values"] = input_values
-        if padding_masks is not None:
-            padded_inputs["padding_mask"] = [np.asarray(array, dtype=np.int32) for array in padding_masks]
-
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
