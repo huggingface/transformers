@@ -647,6 +647,7 @@ class BioGptModel(BioGptPreTrainedModel):
 )
 class BioGptForCausalLM(BioGptPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["output_projection.weight"]
+    _tied_weights_keys = ["output_projection.weight"]
 
     def __init__(self, config):
         super().__init__(config)
