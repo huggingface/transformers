@@ -32,7 +32,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 SPECIAL_CASES_TO_ALLOW = {
     # used to compute the property `self.chunk_length`
-    "EncodecConfig":["overlap"],
+    "EncodecConfig": ["overlap"],
     # used as `self.bert_model = BertModel(config, ...)`
     "DPRConfig": True,
     # not used in modeling files, but it's an important information

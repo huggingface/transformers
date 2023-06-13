@@ -306,7 +306,12 @@ def convert_checkpoint(
 
     model = EncodecModel(config)
 
-    feature_extractor = EncodecFeatureExtractor(feature_size=config.audio_channels, sampling_rate=config.sampling_rate, chunk_length_s = config.chunk_length_s, overlap = config.overlap)
+    feature_extractor = EncodecFeatureExtractor(
+        feature_size=config.audio_channels,
+        sampling_rate=config.sampling_rate,
+        chunk_length_s=config.chunk_length_s,
+        overlap=config.overlap,
+    )
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     original_checkpoint = torch.load(checkpoint_path)

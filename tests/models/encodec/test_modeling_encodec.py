@@ -494,5 +494,3 @@ class EncodecIntegrationTest(unittest.TestCase):
             # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
             rmse = compute_rmse(arr, arr_enc_dec)
             self.assertTrue(rmse < expected_rmse)
-
-

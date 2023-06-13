@@ -539,9 +539,9 @@ ENCODEC_INPUTS_DOCSTRING = r"""
 
             <Tip warning={true}>
 
-             `padding_mask` should always be passed, unless the input was truncated or not padded. This is because in order 
-             to process tensors effectively, the input audio should be padded so that `input_length % stride = step` with `step 
-             = chunk_length-stride`. This ensures that all chunks are of the same shape
+             `padding_mask` should always be passed, unless the input was truncated or not padded. This is because in
+             order to process tensors effectively, the input audio should be padded so that `input_length % stride =
+             step` with `step = chunk_length-stride`. This ensures that all chunks are of the same shape
 
             </Tip>
 
