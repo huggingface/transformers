@@ -26,7 +26,6 @@ from transformers import (
     # VitsTokenizer,
     logging,
 )
-from transformers.tokenization_utils import AddedToken
 
 
 logging.set_verbosity_info()
@@ -65,64 +64,44 @@ MAPPING_STOCHASTIC_DURATION_PREDICTOR = {
     "dp.flows.0.m" : "duration_predictor.flows.0.m",
     "dp.flows.*.pre" : "duration_predictor.flows.*.pre",
     "dp.flows.*.proj" : "duration_predictor.flows.*.proj",
-
-"dp.flows.*.convs.convs_1x1.0" : "duration_predictor.flows.*.convs.convs_1x1.0",
-"dp.flows.*.convs.convs_1x1.1" : "duration_predictor.flows.*.convs.convs_1x1.1",
-"dp.flows.*.convs.convs_1x1.2" : "duration_predictor.flows.*.convs.convs_1x1.2",
-"dp.flows.*.convs.convs_sep.0" : "duration_predictor.flows.*.convs.convs_sep.0",
-"dp.flows.*.convs.convs_sep.1" : "duration_predictor.flows.*.convs.convs_sep.1",
-"dp.flows.*.convs.convs_sep.2" : "duration_predictor.flows.*.convs.convs_sep.2",
-"dp.flows.*.convs.norms_1.0.gamma" : "duration_predictor.flows.*.convs.norms_1.0.weight",
-"dp.flows.*.convs.norms_1.0.beta" : "duration_predictor.flows.*.convs.norms_1.0.bias",
-"dp.flows.*.convs.norms_1.1.gamma" : "duration_predictor.flows.*.convs.norms_1.1.weight",
-"dp.flows.*.convs.norms_1.1.beta" : "duration_predictor.flows.*.convs.norms_1.1.bias",
-"dp.flows.*.convs.norms_1.2.gamma" : "duration_predictor.flows.*.convs.norms_1.2.weight",
-"dp.flows.*.convs.norms_1.2.beta" : "duration_predictor.flows.*.convs.norms_1.2.bias",
-"dp.flows.*.convs.norms_2.0.gamma" : "duration_predictor.flows.*.convs.norms_2.0.weight",
-"dp.flows.*.convs.norms_2.0.beta" : "duration_predictor.flows.*.convs.norms_2.0.bias",
-"dp.flows.*.convs.norms_2.1.gamma" : "duration_predictor.flows.*.convs.norms_2.1.weight",
-"dp.flows.*.convs.norms_2.1.beta" : "duration_predictor.flows.*.convs.norms_2.1.bias",
-"dp.flows.*.convs.norms_2.2.gamma" : "duration_predictor.flows.*.convs.norms_2.2.weight",
-"dp.flows.*.convs.norms_2.2.beta" : "duration_predictor.flows.*.convs.norms_2.2.bias",
-
-
-    # "xxx" : "xxx",
-    # "xxx" : "xxx",
-    # "xxx" : "xxx",
-    # "xxx" : "xxx",
-    # "xxx" : "xxx",
-    # "xxx" : "xxx",
-    # "xxx" : "xxx",
-    # "xxx" : "xxx",
-    # "xxx" : "xxx",
-    # "xxx" : "xxx",
-    # "xxx" : "xxx",
-    # "xxx" : "xxx",
-    # "xxx" : "xxx",
-    # "xxx" : "xxx",
-    # "xxx" : "xxx",
-    # "xxx" : "xxx",
-
-
- #TODO: flows
+    "dp.flows.*.convs.convs_1x1.0" : "duration_predictor.flows.*.convs.convs_1x1.0",
+    "dp.flows.*.convs.convs_1x1.1" : "duration_predictor.flows.*.convs.convs_1x1.1",
+    "dp.flows.*.convs.convs_1x1.2" : "duration_predictor.flows.*.convs.convs_1x1.2",
+    "dp.flows.*.convs.convs_sep.0" : "duration_predictor.flows.*.convs.convs_sep.0",
+    "dp.flows.*.convs.convs_sep.1" : "duration_predictor.flows.*.convs.convs_sep.1",
+    "dp.flows.*.convs.convs_sep.2" : "duration_predictor.flows.*.convs.convs_sep.2",
+    "dp.flows.*.convs.norms_1.0.gamma" : "duration_predictor.flows.*.convs.norms_1.0.weight",
+    "dp.flows.*.convs.norms_1.0.beta" : "duration_predictor.flows.*.convs.norms_1.0.bias",
+    "dp.flows.*.convs.norms_1.1.gamma" : "duration_predictor.flows.*.convs.norms_1.1.weight",
+    "dp.flows.*.convs.norms_1.1.beta" : "duration_predictor.flows.*.convs.norms_1.1.bias",
+    "dp.flows.*.convs.norms_1.2.gamma" : "duration_predictor.flows.*.convs.norms_1.2.weight",
+    "dp.flows.*.convs.norms_1.2.beta" : "duration_predictor.flows.*.convs.norms_1.2.bias",
+    "dp.flows.*.convs.norms_2.0.gamma" : "duration_predictor.flows.*.convs.norms_2.0.weight",
+    "dp.flows.*.convs.norms_2.0.beta" : "duration_predictor.flows.*.convs.norms_2.0.bias",
+    "dp.flows.*.convs.norms_2.1.gamma" : "duration_predictor.flows.*.convs.norms_2.1.weight",
+    "dp.flows.*.convs.norms_2.1.beta" : "duration_predictor.flows.*.convs.norms_2.1.bias",
+    "dp.flows.*.convs.norms_2.2.gamma" : "duration_predictor.flows.*.convs.norms_2.2.weight",
+    "dp.flows.*.convs.norms_2.2.beta" : "duration_predictor.flows.*.convs.norms_2.2.bias",
+}
+MAPPING_FLOW = {
+    "flow.flows.*.pre" : "flow.flows.*.pre",
+    "flow.flows.*.enc.in_layers.0" : "flow.flows.*.enc.in_layers.0",
+    "flow.flows.*.enc.in_layers.1" : "flow.flows.*.enc.in_layers.1",
+    "flow.flows.*.enc.in_layers.2" : "flow.flows.*.enc.in_layers.2",
+    "flow.flows.*.enc.in_layers.3" : "flow.flows.*.enc.in_layers.3",
+    "flow.flows.*.enc.res_skip_layers.0" : "flow.flows.*.enc.res_skip_layers.0",
+    "flow.flows.*.enc.res_skip_layers.1" : "flow.flows.*.enc.res_skip_layers.1",
+    "flow.flows.*.enc.res_skip_layers.2" : "flow.flows.*.enc.res_skip_layers.2",
+    "flow.flows.*.enc.res_skip_layers.3" : "flow.flows.*.enc.res_skip_layers.3",
+    "flow.flows.*.post" : "flow.flows.*.post",
 }
 MAPPING = {
     **MAPPING_TEXT_ENCODER,
     **MAPPING_STOCHASTIC_DURATION_PREDICTOR,
+    **MAPPING_FLOW,
 }
 TOP_LEVEL_KEYS = []
-IGNORE_KEYS = [
-    # "encoder.version",
-    # "encoder.layers.*.norm_k.weight",
-    # "encoder.layers.*.norm_k.bias",
-    # "decoder.version",
-    # "decoder.layers.*.norm_k.weight",
-    # "decoder.layers.*.norm_k.bias",
-    # "decoder.pos_emb.pe_k",
-    # "speech_encoder_prenet.embed_positions._float_tensor",
-    # "text_decoder_prenet.embed_positions._float_tensor",
-    # "encoder.proj",
-]
+IGNORE_KEYS = []
 
 
 def set_recursively(hf_pointer, key, value, full_name, weight_type):
@@ -181,80 +160,41 @@ def should_ignore(name, ignore_keys):
 def recursively_load_weights(fairseq_dict, hf_model):
     unused_weights = []
 
-    # if task == "s2t":
-    #     feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
-    #     MAPPING = MAPPING_S2T
-    #     IGNORE_KEYS = IGNORE_KEYS_S2T
-    # elif task == "t2s":
-    #     feature_encoder = None
-    #     MAPPING = MAPPING_T2S
-    #     IGNORE_KEYS = IGNORE_KEYS_T2S
-    # elif task == "s2s":
-    #     feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
-    #     MAPPING = MAPPING_S2S
-    #     IGNORE_KEYS = IGNORE_KEYS_S2S
-    # else:
-    #     raise ValueError(f"Unsupported task: {task}")
-
     for name, value in fairseq_dict.items():
         if should_ignore(name, IGNORE_KEYS):
             logger.info(f"{name} was ignored")
             continue
 
         is_used = False
-        if False and "conv_layers" in name:
-            load_conv_layer(
-                name,
-                value,
-                feature_encoder,
-                unused_weights,
-                hf_model.config.feat_extract_norm == "group",
-            )
-            is_used = True
-        else:
-            for key, mapped_key in MAPPING.items():
-                # mapped_key = "speecht5." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
+        for key, mapped_key in MAPPING.items():
+            if "*" in key:
+                prefix, suffix = key.split(".*.")
+                if prefix in name and suffix in name:
+                    key = suffix
 
-                # print(key, mapped_key)
-
-                if "*" in key:
-                    # if key.endswith(".*"):
-                    #     if key[:-2] in name:
-                    #         key = key#[:-1]
-                    # else:
-                    prefix, suffix = key.split(".*.")
-                    if prefix in name and suffix in name:
-                        key = suffix
-
-                # if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
-                if key in name:
-                    # print(key, name, mapped_key)
-                    is_used = True
-                    if "*" in mapped_key:
-                        # print(key, name, mapped_key)
-                        # print(name.split(key))
-                        # print(name.split(key)[0])
-                        # print(name.split(key)[0].split("."))
-                        layer_index = name.split(key)[0].split(".")[-2]
-                        mapped_key = mapped_key.replace("*", layer_index)
-                    if "weight_g" in name:
-                        weight_type = "weight_g"
-                    elif "weight_v" in name:
-                        weight_type = "weight_v"
-                    elif "bias" in name:
-                        weight_type = "bias"
-                    elif "weight" in name:
-                        weight_type = "weight"
-                    elif "running_mean" in name:
-                        weight_type = "running_mean"
-                    elif "running_var" in name:
-                        weight_type = "running_var"
-                    elif "num_batches_tracked" in name:
-                        weight_type = "num_batches_tracked"
-                    else:
-                        weight_type = None
-                    set_recursively(hf_model, mapped_key, value, name, weight_type)
-                continue
+            if key in name:
+                is_used = True
+                if "*" in mapped_key:
+                    layer_index = name.split(key)[0].split(".")[-2]
+                    mapped_key = mapped_key.replace("*", layer_index)
+                if "weight_g" in name:
+                    weight_type = "weight_g"
+                elif "weight_v" in name:
+                    weight_type = "weight_v"
+                elif "bias" in name:
+                    weight_type = "bias"
+                elif "weight" in name:
+                    weight_type = "weight"
+                elif "running_mean" in name:
+                    weight_type = "running_mean"
+                elif "running_var" in name:
+                    weight_type = "running_var"
+                elif "num_batches_tracked" in name:
+                    weight_type = "num_batches_tracked"
+                else:
+                    weight_type = None
+                set_recursively(hf_model, mapped_key, value, name, weight_type)
+            continue
         if not is_used:
             unused_weights.append(name)
 

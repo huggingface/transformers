@@ -85,7 +85,7 @@ class TextEncoderOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
     m: torch.FloatTensor = None    # TODO: name!
     logs: torch.FloatTensor = None    # TODO: name!
-    padding_mask: torch.LongTensor = None
+    padding_mask: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -103,6 +103,180 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     inverted_mask = 1.0 - expanded_mask
 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+
+
+#TODO: make betterer
+@torch.jit.script
+def fused_add_tanh_sigmoid_multiply(input_a, input_b, n_channels):
+    n_channels_int = n_channels[0]
+    in_act = input_a + input_b
+    t_act = torch.tanh(in_act[:, :n_channels_int, :])
+    s_act = torch.sigmoid(in_act[:, n_channels_int:, :])
+    acts = t_act * s_act
+    return acts
+
+
+class VitsWaveNet(torch.nn.Module):
+    def __init__(self, hidden_channels, kernel_size, dilation_rate, n_layers, gin_channels=0, p_dropout=0):
+        super().__init__()
+        assert(kernel_size % 2 == 1)
+        self.hidden_channels =hidden_channels
+        self.kernel_size = kernel_size,
+        self.dilation_rate = dilation_rate
+        self.n_layers = n_layers
+        self.gin_channels = gin_channels
+        self.p_dropout = p_dropout
+
+        self.in_layers = torch.nn.ModuleList()
+        self.res_skip_layers = torch.nn.ModuleList()
+        self.drop = nn.Dropout(p_dropout)
+
+        if gin_channels != 0:
+            cond_layer = torch.nn.Conv1d(gin_channels, 2*hidden_channels*n_layers, 1)
+            self.cond_layer = torch.nn.utils.weight_norm(cond_layer, name='weight')
+
+        for i in range(n_layers):
+            dilation = dilation_rate ** i
+            padding = int((kernel_size * dilation - dilation) / 2)
+            in_layer = torch.nn.Conv1d(hidden_channels, 2*hidden_channels, kernel_size,
+                                    dilation=dilation, padding=padding)
+            in_layer = torch.nn.utils.weight_norm(in_layer, name='weight')
+            self.in_layers.append(in_layer)
+
+            # last one is not necessary
+            if i < n_layers - 1:
+                res_skip_channels = 2 * hidden_channels
+            else:
+                res_skip_channels = hidden_channels
+
+            res_skip_layer = torch.nn.Conv1d(hidden_channels, res_skip_channels, 1)
+            res_skip_layer = torch.nn.utils.weight_norm(res_skip_layer, name='weight')
+            self.res_skip_layers.append(res_skip_layer)
+
+    def forward(self, x, x_mask, g=None, **kwargs):
+        output = torch.zeros_like(x)
+        n_channels_tensor = torch.IntTensor([self.hidden_channels])
+
+        if g is not None:
+            g = self.cond_layer(g)
+
+        for i in range(self.n_layers):
+            x_in = self.in_layers[i](x)
+            if g is not None:
+                cond_offset = i * 2 * self.hidden_channels
+                g_l = g[:,cond_offset:cond_offset+2*self.hidden_channels,:]
+            else:
+                g_l = torch.zeros_like(x_in)
+
+            acts = fused_add_tanh_sigmoid_multiply(
+                x_in,
+                g_l,
+                n_channels_tensor)
+            acts = self.drop(acts)
+
+            res_skip_acts = self.res_skip_layers[i](acts)
+            if i < self.n_layers - 1:
+                res_acts = res_skip_acts[:,:self.hidden_channels,:]
+                x = (x + res_acts) * x_mask
+                output = output + res_skip_acts[:,self.hidden_channels:,:]
+            else:
+                output = output + res_skip_acts
+
+        return output * x_mask
+
+    def remove_weight_norm(self):
+        if self.gin_channels != 0:
+            torch.nn.utils.remove_weight_norm(self.cond_layer)
+        for l in self.in_layers:
+            torch.nn.utils.remove_weight_norm(l)
+        for l in self.res_skip_layers:
+            torch.nn.utils.remove_weight_norm(l)
+
+
+class VitsResidualCouplingLayer(nn.Module):
+    def __init__(
+        self,
+        channels,
+        hidden_channels,
+        kernel_size,
+        dilation_rate,
+        n_layers,
+        p_dropout=0,
+        gin_channels=0,
+        mean_only=False
+    ):
+        assert channels % 2 == 0, "channels should be divisible by 2"
+        super().__init__()
+        self.channels = channels
+        self.hidden_channels = hidden_channels
+        self.kernel_size = kernel_size
+        self.dilation_rate = dilation_rate
+        self.n_layers = n_layers
+        self.half_channels = channels // 2
+        self.mean_only = mean_only
+
+        self.pre = nn.Conv1d(self.half_channels, hidden_channels, 1)
+        self.enc = VitsWaveNet(hidden_channels, kernel_size, dilation_rate, n_layers, p_dropout=p_dropout, gin_channels=gin_channels)
+        self.post = nn.Conv1d(hidden_channels, self.half_channels * (2 - mean_only), 1)
+        self.post.weight.data.zero_()
+        self.post.bias.data.zero_()
+
+    def forward(self, x, x_mask, g=None, reverse=False):
+        x0, x1 = torch.split(x, [self.half_channels]*2, 1)
+        h = self.pre(x0) * x_mask
+        h = self.enc(h, x_mask, g=g)
+        stats = self.post(h) * x_mask
+        if not self.mean_only:
+            m, logs = torch.split(stats, [self.half_channels]*2, 1)
+        else:
+            m = stats
+            logs = torch.zeros_like(m)
+
+        if not reverse:
+            x1 = m + x1 * torch.exp(logs) * x_mask
+            x = torch.cat([x0, x1], 1)
+            logdet = torch.sum(logs, [1,2])
+            return x, logdet
+        else:
+            x1 = (x1 - m) * torch.exp(-logs) * x_mask
+            x = torch.cat([x0, x1], 1)
+            return x
+
+
+class VitsResidualCouplingBlock(nn.Module):
+    def __init__(
+        self,
+        channels,
+        hidden_channels,
+        kernel_size,
+        dilation_rate,
+        n_layers,
+        n_flows=4,
+        gin_channels=0
+    ):
+        super().__init__()
+        self.channels = channels
+        self.hidden_channels = hidden_channels
+        self.kernel_size = kernel_size
+        self.dilation_rate = dilation_rate
+        self.n_layers = n_layers
+        self.n_flows = n_flows
+        self.gin_channels = gin_channels
+
+        self.flows = nn.ModuleList()
+        for i in range(n_flows):
+           self.flows.append(VitsResidualCouplingLayer(channels, hidden_channels, kernel_size, dilation_rate, n_layers, gin_channels=gin_channels, mean_only=True))
+           self.flows.append(VitsFlip())
+
+    def forward(self, x, x_mask, g=None, reverse=False):
+        #TODO: can probably remove the `reverse` code
+        if not reverse:
+            for flow in self.flows:
+                x, _ = flow(x, x_mask, g=g, reverse=reverse)
+        else:
+            for flow in reversed(self.flows):
+                x = flow(x, x_mask, g=g, reverse=reverse)
+        return x
 
 
 class VitsDilatedDepthSeparableConv(nn.Module):
@@ -455,6 +629,7 @@ class VitsStochasticDurationPredictor(nn.Module):
             flows = list(reversed(self.flows))
             flows = flows[:-2] + [flows[-1]] # remove a useless vflow
             z = torch.randn(x.size(0), 2, x.size(2)).to(device=x.device, dtype=x.dtype) * noise_scale
+            #print(z)
             for flow in flows:
                 z = flow(z, x_mask, g=x, reverse=reverse)
             z0, z1 = torch.split(z, [1, 1], 1)
@@ -766,7 +941,7 @@ class VitsEncoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        padding_mask: torch.LongTensor,
+        padding_mask: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
@@ -803,7 +978,7 @@ class VitsEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.FloatTensor,
-        padding_mask: torch.LongTensor,
+        padding_mask: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -905,9 +1080,9 @@ class VitsTextEncoder(nn.Module):
 
         # TODO: may not be needed for final model but is needed to get same outputs
         if attention_mask is not None:
-            padding_mask = attention_mask.unsqueeze(-1)
+            padding_mask = attention_mask.unsqueeze(-1).to(hidden_states.dtype)
         else:
-            padding_mask = torch.ones_like(input_ids).unsqueeze(-1)
+            padding_mask = torch.ones_like(input_ids).unsqueeze(-1).to(hidden_states.dtype)
 
         encoder_outputs = self.encoder(
             hidden_states=hidden_states,
@@ -1125,8 +1300,9 @@ class VitsModel(VitsPreTrainedModel):
         self.config = config
         self.text_encoder = VitsTextEncoder(config)
 
+        self.flow = VitsResidualCouplingBlock(config.inter_channels, config.hidden_size, 5, 1, 4, gin_channels=config.gin_channels)
+
         # self.dec = Generator(inter_channels, resblock, resblock_kernel_sizes, resblock_dilation_sizes, upsample_rates, upsample_initial_channel, upsample_kernel_sizes, gin_channels=gin_channels)
-        # self.flow = ResidualCouplingBlock(inter_channels, hidden_channels, 5, 1, 4, gin_channels=gin_channels)
 
         # TODO: only used during training / voice conversion, not for TTS
         # self.enc_q = PosteriorEncoder(spec_channels, inter_channels, hidden_channels, 5, 1, 16, gin_channels=gin_channels)
@@ -1160,6 +1336,8 @@ class VitsModel(VitsPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         speaker_id: Optional[int] = None, # TODO: maybe Tensor?
+        length_scale: int = 1,  # TODO!
+        noise_scale: int = 1,  # TODO!
         noise_scale_w: float = 1.0,   # TODO!
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1171,7 +1349,7 @@ class VitsModel(VitsPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # TODO: make padding_mask here
+        # TODO: make padding_mask here?
 
         text_encoder_outputs = self.text_encoder(input_ids, attention_mask)
 
@@ -1184,28 +1362,53 @@ class VitsModel(VitsPreTrainedModel):
 
         # TODO: make betterer!
         x = text_encoder_outputs.last_hidden_state.transpose(1, 2)
-        x_mask = text_encoder_outputs.padding_mask.transpose(1, 2)
+        x_mask = text_encoder_outputs.padding_mask.transpose(1, 2)  #TODO: input_padding_mask
 
         if self.config.use_stochastic_duration_prediction:
             logw = self.duration_predictor(x, x_mask, g=g, reverse=True, noise_scale=noise_scale_w)
         else:
             logw = self.duration_predictor(x, x_mask, g=g)
 
-        return logw
+        w = torch.exp(logw) * x_mask * length_scale
+        w_ceil = torch.ceil(w)   # TODO: duration
+        y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()  # TODO predicted_lengths
 
-        # w = torch.exp(logw) * x_mask * length_scale
-        # w_ceil = torch.ceil(w)
-        # y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
-        # y_mask = torch.unsqueeze(sequence_mask(y_lengths, None), 1).to(x_mask.dtype)
-        # attn_mask = torch.unsqueeze(x_mask, 2) * torch.unsqueeze(y_mask, -1)
-        # attn = generate_path(w_ceil, attn_mask)
+        # Create a padding mask for the output lengths of shape (batch, 1, max_output_length)
+        indices = torch.arange(y_lengths.max(), dtype=y_lengths.dtype, device=y_lengths.device)
+        y_mask = indices.unsqueeze(0) < y_lengths.unsqueeze(1)
+        y_mask = y_mask.unsqueeze(1).to(x_mask.dtype)   # TODO: output_padding_mask
 
-        # m_p = torch.matmul(attn.squeeze(1), m_p.transpose(1, 2)).transpose(1, 2) # [b, t', t], [b, t, d] -> [b, d, t']
-        # logs_p = torch.matmul(attn.squeeze(1), logs_p.transpose(1, 2)).transpose(1, 2) # [b, t', t], [b, t, d] -> [b, d, t']
+        # Reconstruct an attention mask of shape (batch, 1, out_length, in_length)
+        attn_mask = torch.unsqueeze(x_mask, 2) * torch.unsqueeze(y_mask, -1)
+        attn = self._generate_path(w_ceil, attn_mask)
 
-        # z_p = m_p + torch.randn_like(m_p) * torch.exp(logs_p) * noise_scale
-        # z = self.flow(z_p, y_mask, g=g, reverse=True)
+        # [b, t', t], [b, t, d] -> [b, d, t']
+        m_p = torch.matmul(attn.squeeze(1), text_encoder_outputs.m).transpose(1, 2)
+
+        # [b, t', t], [b, t, d] -> [b, d, t']
+        logs_p = torch.matmul(attn.squeeze(1), text_encoder_outputs.logs).transpose(1, 2)
+
+        z_p = m_p + torch.randn_like(m_p) * torch.exp(logs_p) * noise_scale
+
+        z = self.flow(z_p, y_mask, g=g, reverse=True)
+        return z
         # o = self.dec((z * y_mask)[:,:,:max_len], g=g)
         # return o, attn, y_mask, (z, z_p, m_p, logs_p)
 
         # TODO: return outputs using Output object
+
+    def _generate_path(self, duration, mask):
+        """
+        duration: [b, 1, t_x]
+        mask: [b, 1, t_y, t_x]
+        """
+        b, _, t_y, t_x = mask.shape
+        cum_duration = torch.cumsum(duration, -1)
+        cum_duration_flat = cum_duration.view(b * t_x)
+
+        indices = torch.arange(t_y, dtype=duration.dtype, device=duration.device)
+        path = indices.unsqueeze(0) < cum_duration_flat.unsqueeze(1)
+        path = path.to(mask.dtype).view(b, t_x, t_y)
+        path = path - nn.functional.pad(path, [0, 0, 1, 0, 0, 0])[:, :-1]
+        path = path.unsqueeze(1).transpose(2, 3) * mask
+        return path
