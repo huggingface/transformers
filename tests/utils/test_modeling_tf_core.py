@@ -216,8 +216,8 @@ class TFCoreModelTesterMixin:
 
         for model_class in self.all_model_classes:
             class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            class_sig = model._prune_signature(model.input_signature)
             model = model_class(config)
+            class_sig = model._prune_signature(model.input_signature)
             num_out = len(model(class_inputs_dict))
 
             for key in list(class_inputs_dict.keys()):
