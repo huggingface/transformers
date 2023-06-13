@@ -926,8 +926,6 @@ class MusicgenEncoder(MusicgenPreTrainedModel):
         return self.encoder
 
     @add_start_docstrings_to_model_forward(MUSICGEN_ENCODER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with T5EncoderModel->MusicgenEncoder
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -938,22 +936,6 @@ class MusicgenEncoder(MusicgenPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
-        r"""
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, MusicgenEncoder
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
-        >>> model = MusicgenEncoder.from_pretrained("t5-small")
-        >>> input_ids = tokenizer(
-        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
-        >>> outputs = model(input_ids=input_ids)
-        >>> last_hidden_states = outputs.last_hidden_state
-        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_outputs = self.encoder(
@@ -1597,7 +1579,7 @@ class MusicgenModel(MusicgenPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(MUSICGEN_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1616,6 +1598,25 @@ class MusicgenModel(MusicgenPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Seq2SeqModelOutput, Tuple[torch.FloatTensor]]:
+        r"""
+        Returns:
+
+        Example:
+         ```python
+         >>> import torch
+         >>> from transformers import AutoProcessor, MusicgenModel
+
+         >>> model = MusicgenModel.from_pretrained("facebook/musicgen-small")
+         >>> processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
+
+         >>> input_ids = processor(["happy rock"], return_tensors="pt").input_ids
+         >>> num_codebooks = model.config.decoder_config.num_codebooks
+         >>> decoder_input_ids = torch.ones((1, num_codebooks, 1), dtype=torch.long) * model.config.decoder_start_token_id
+
+         >>> last_hidden_state = model(input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state
+         >>> list(last_hidden_state.shape)
+         [1, 1, 1024]
+         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1702,7 +1703,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         return self.model.get_decoder()
 
     @add_start_docstrings_to_model_forward(MUSICGEN_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1726,7 +1727,24 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
-        """
+                Returns:
+
+        Example:
+         ```python
+         >>> import torch
+         >>> from transformers import AutoProcessor, MusicgenModel
+
+         >>> model = MusicgenModel.from_pretrained("facebook/musicgen-small")
+         >>> processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
+
+         >>> input_ids = processor(["happy rock"], return_tensors="pt").input_ids
+         >>> num_codebooks = model.config.decoder_config.num_codebooks
+         >>> decoder_input_ids = torch.ones((1, num_codebooks, 1), dtype=torch.long) * model.config.decoder_start_token_id
+
+         >>> logits = model(input_ids, decoder_input_ids=decoder_input_ids).logits
+         >>> list(logits.shape)
+         [1, 4, 1, 2048]
+         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
