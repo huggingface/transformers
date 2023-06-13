@@ -701,8 +701,8 @@ Accelerate now powers Trainer. In terms of what users should expect:
   - New features and integrations in Accelerate can be leveraged out-of-the-box in Trainer via Accelerate Launcher/Config
 
 Steps to use Accelerate Launcher with Trainer:
-1. Make sure 🤗 Accelerate is installed. If not `pip install accelerate`
-2. Run `accelerate config --config_file xyz.yaml` and fill the questionnaire. Below are example accelerate configs:
+1. Make sure 🤗 Accelerate is installed, you can't use the `Trainer` without it anyway. If not `pip install accelerate`. You may also need to update your version of Accelerate: `pip install accelerate --upgrade`
+2. Run `accelerate config` and fill the questionnaire. Below are example accelerate configs:
   a. DDP Multi-node Multi-GPU config:
     ```yaml
     compute_environment: LOCAL_MACHINE                                                                                             
