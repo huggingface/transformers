@@ -51,8 +51,8 @@ class EncodecConfig(PretrainedConfig):
         chunk_length_s (`float`, *optional*):
             If defined the audio is pre-processed into chunks of lengths `chunk_length_s` and then encoded.
         overlap (`float`, *optional*):
-            Defines the overlap between each chunk. It is used to compute the `chunk_stride` using the following formulae : 
-            `int((1.0 - self.overlap) * self.chunk_length)`.
+            Defines the overlap between each chunk. It is used to compute the `chunk_stride` using the following
+            formulae : `int((1.0 - self.overlap) * self.chunk_length)`.
         hidden_size (`int`, *optional*, defaults to 128):
             Intermediate representation dimension.
         num_filters (`int`, *optional*, defaults to 32):
@@ -166,7 +166,7 @@ class EncodecConfig(PretrainedConfig):
     # This is a property because you might want to change the chunk_length_s on the fly
     @property
     def chunk_stride(self) -> Optional[int]:
-        if self.chunk_length_s is None:
+        if self.chunk_length_s is None or self.overlap is None:
             return None
         else:
             return max(1, int((1.0 - self.overlap) * self.chunk_length))
