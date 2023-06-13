@@ -1687,14 +1687,10 @@ class TFModelTesterMixin:
                 if tensor.dtype.is_integer:
                     self.assertTrue(tensor.dtype == tf.int32, "Integer dummy inputs should be tf.int32!")
 
-            # Also confirm that the serving sig uses int32
-            if hasattr(model, "serving"):
-                serving_sig = model.serving.input_signature
-                for key, tensor_spec in serving_sig[0].items():
-                    if tensor_spec.dtype.is_integer:
-                        self.assertTrue(
-                            tensor_spec.dtype == tf.int32, "Serving signatures should use tf.int32 for ints!"
-                        )
+            # Also confirm that the input_signature uses int32
+            for key, tensor_spec in model.input_signature.items():
+                if tensor_spec.dtype.is_integer:
+                    self.assertTrue(tensor_spec.dtype == tf.int32, "Input signatures should use tf.int32 for ints!")
 
     def test_generate_with_headmasking(self):
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
