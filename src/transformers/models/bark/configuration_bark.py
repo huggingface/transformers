@@ -82,6 +82,24 @@ class BarkConfig(PretrainedConfig):
         self.coarse_acoustics_config = BarkModuleConfig(**coarse_acoustics_config)
         self.fine_acoustics_config = BarkModuleConfig(**fine_acoustics_config)
         
+        
+        # TODO: check if right place and that is necessary
+        self.text_encoding_offset = 10_048
+        self.semantic_pad_token = 10_000
+        self.text_pad_token = 129_595
+        self.semantic_infer_token = 129_599
+        self.coarse_semantic_pad_token = 12_048
+        self.coarse_infer_token = 12_050
+        self.context_window_size = 1024
+        self.semantic_rate_hz = 49.9
+        self.semantic_vocab_size = 10_000
+        self.codebook_size = 1024
+        self.n_coarse_codebooks = 2 # fixed for now
+        self.n_fine_codebooks = 8 # fixed for now
+        self.coarse_rate_hz = 75
+        self.sample_rate = 24_000
+     
+    
         super().__init__(**kwargs)
 
     @classmethod
@@ -96,7 +114,7 @@ class BarkConfig(PretrainedConfig):
         Returns:
             [`BarkConfig`]: An instance of a configuration object
         """
-        return cls(semantic_config=semantic_config, coarse_acoustics_config=coarse_acoustics_config, fine_acoustics_config=fine_acoustics_config, **kwargs)
+        return cls(semantic_config=semantic_config.to_dict(), coarse_acoustics_config=coarse_acoustics_config.to_dict(), fine_acoustics_config=fine_acoustics_config.to_dict(), **kwargs)
 
     def to_dict(self):
         """

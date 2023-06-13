@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, Dict
 
 import math
 
@@ -17,8 +17,33 @@ from ...modeling_outputs import (
 from .configuration_bark import BarkModuleConfig, BarkConfig
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 
+# TODO: remove
+from transformers import GenerationConfig, LogitsProcessor
+
+# TODO: ??
+import numpy as np
+
+
+# TODO: ??
+from encodec import EncodecModel
+
+
+
 
 logger = logging.get_logger(__name__)
+
+
+# TODO
+#GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = [
+#    "EleutherAI/gpt-neo-1.3B",
+#    # See all GPTNeo models at https://huggingface.co/models?filter=gpt_neo
+#]
+#
+#_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neo-1.3B"
+
+
+# TODO: don't forget the initial text tokenizer before the semantic model, and the final codec model (_load_codec_model in Bark code)
+# tokenizer = BertTokenizer.from_pretrained("bert-base-multilingual-cased")
 
 
 # DONE: ask about _init_weights from https://huggingface.co/docs/transformers/add_new_model#2-next-prepare-your-environment
@@ -270,7 +295,6 @@ class BarkBlock(nn.Module):
     
     
 
-# WIP
 class BarkPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -282,7 +306,7 @@ class BarkPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
 
     def _init_weights(self, module):
-        if isinstance(module, BarkModule):
+        if isinstance(module, BarkCausalModule) or isinstance(module, BarkFineAcousticsModule):
             module.apply(module._init_weights)
 
     def __init__(self, *inputs, **kwargs):
@@ -317,15 +341,17 @@ class BarkModulePreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BarkModule):
+        if isinstance(module, BarkCausalModule) or isinstance(module, BarkFineAcousticsModule):
             module.gradient_checkpointing = value    
     
 
 
 # GPT -> BarkModule
 
+# TODO: add a prepare_inputs_for_generation() ,inspired from modeling_gpt2.py
 
-class BarkModule(BarkModulePreTrainedModel):
+# GPT2-like autoregressive model
+class BarkCausalModule(BarkModulePreTrainedModel):
     # TODO: what do I do with that here?    
     #@add_start_docstrings_to_model_forward(BARK_INPUTS_DOCSTRING)
     #@add_code_sample_docstrings(
@@ -378,7 +404,63 @@ class BarkModule(BarkModulePreTrainedModel):
             n_params -= self.transformer.wpe.weight.numel()
         return n_params
     
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
+        input_embeds = kwargs.get("input_embeds", None)
+        
+        
+        # only last token for inputs_ids if past is defined in kwargs
+        if past_key_values:
+            input_ids = input_ids[:, [-1]]
+            if input_embeds is not None:
+                input_embeds = input_embeds[:, -1, :].unsqueeze(1)
+                
+
+        attention_mask = kwargs.get("attention_mask", None)
+        position_ids = kwargs.get("position_ids", None)
+
+        attention_mask = kwargs.get("attention_mask", None)
+        position_ids = kwargs.get("position_ids", None)
+        
+        # ensure that attention_mask and position_ids shapes are aligned with the weird Bark hack of reducing sequence length on the first forward pass
+        if input_embeds is not None:
+            seq_len = input_embeds.shape[1]
+        else:
+            seq_len = input_ids.shape[1]          
+        if attention_mask is not None:
+            attention_mask = attention_mask[:, :seq_len] 
+        if position_ids is not None:
+            position_ids = position_ids[:, :seq_len]
+
+        # TODO: is it possible to merge that with what I have done in the code of forward?
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -1].unsqueeze(-1)
+        else:
+            position_ids = None
+            
+        
+        if input_embeds is not None:
+            return {
+            "input_ids": None,
+            "input_embeds": input_embeds,
+            "past_key_values": past_key_values,
+            "use_cache": kwargs.get("use_cache"),
+            "position_ids": position_ids,
+            "attention_mask": attention_mask
+        }
+        return {
+            "input_ids": input_ids,
+            "past_key_values": past_key_values,
+            "use_cache": kwargs.get("use_cache"),
+            "position_ids": position_ids,
+            "attention_mask": attention_mask
+        }
     
+    
+    # TODO: verify if it is still necessary
     def _get_and_check_input_embeddings(self, input_ids, input_embeds, past_key_values):
         # Verify if input_embeds already exists, and check sequence_lengths are plausible
         # then compute embeddings.
@@ -386,6 +468,9 @@ class BarkModule(BarkModulePreTrainedModel):
 
         if input_ids is not None and input_embeds is not None:
             raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
+        elif input_embeds is not None:
+            # we want to return the input_embeds in priority so that it is in line with a weird hack of Bark which concatenate two bits of the input_embeds on the first forward pass of the semantic model
+            pass
         elif input_ids is not None:
             _, t = input_ids.size() # (batch_size, seq_len)
             if past_key_values is not None:
@@ -394,12 +479,11 @@ class BarkModule(BarkModulePreTrainedModel):
                 assert t == 1
             else:
                  assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
-                 
-                    
-        elif input_embeds is None:
+            input_embeds = self.transformer.wte(input_ids) # token embeddings of shape (b, t, n_embd)
+        else:
             raise ValueError("You have to specify either input_ids or input_embeds")
     
-        input_embeds = self.transformer.wte(input_ids) # token embeddings of shape (b, t, n_embd)
+        
         
         return input_embeds
     
@@ -557,50 +641,38 @@ class BarkModule(BarkModulePreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
             )
-
-
-class BarkSemanticModel(BarkModule):
-    def __init__(self, config):
-        # Same architecture than an autoregressive gpt-like model except for an hacky context merging at the very beginning of the generation
-        super().__init__(config)
-
-    def _get_and_check_input_embeddings(self, input_ids, input_embeds, past_key_values):    
-        # Hack From Bark original repository to sum text and history prompt embeddings
-        # It sums the text embeddings and the history prompt embeddings once at the very beginning of the generation
-        # (merge_context) 
         
-        if input_ids is not None and input_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
-        elif input_ids is not None:
-            _, t = input_ids.size() # (batch_size, seq_len)
-
-            if past_key_values is not None:
-                # in that case, embeddings for past tokens have already been computed, so only need to compute the most
-                # recent token embedding
-                assert t == 1
-                input_embeds = self.transformer.wte(input_ids) # token embeddings of shape (b, t, n_embd)
-            else:
-                assert(input_ids.shape[1] >= 256+256+1)
-                t = input_ids.shape[1] - 256
-
-                input_embeds = torch.cat([
-                    self.transformer.wte(input_ids[:,:256]) + self.transformer.wte(input_ids[:,256:256+256]),
-                    self.transformer.wte(input_ids[:,256+256:])
-                ], dim=1)
-
-        elif input_embeds is None:
-            raise ValueError("You have to specify either input_ids or input_embeds")
-    
-    
-        return input_embeds
-
+        
+    @staticmethod
+    def _reorder_cache(
+        past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> Tuple[Tuple[torch.Tensor]]:
+        """
+        This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
+        [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
+        beam_idx at every generation step.
+        """
+        # Necessary for beam_search
+        return tuple(
+            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            for layer_past in past_key_values
+        )
     
 
-class BarkFineAcousticsModel(BarkModule):
+class BarkFineAcousticsModule(BarkModulePreTrainedModel):
+    # TODO: add docstring
     def __init__(self, config):
         # non-causal gpt-like model with one embedding layer and one lm_head for each codebook of Encodec
         super().__init__(config)
+        self.config = config
+
+        self._initialize_modules(config)
+
+        self.gradient_checkpointing = False
         self.n_codes_total = config.n_codes_total
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
    
     def get_input_embeddings(self):
@@ -683,7 +755,7 @@ class BarkFineAcousticsModel(BarkModule):
         return input_embeds
 
             
-    # contrary to its base class (BarkModule), it is non-causal, so no need for past key values
+    # contrary to the other main module of Bark (BarkCausalModule), it is non-causal, so no need for past key values
     # And there is an additionnal idx corresponding to the id of the codebook that will be predicted      
     def forward(
             self,
@@ -783,4 +855,440 @@ class BarkFineAcousticsModel(BarkModule):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
             )
+
+class BarkModel(BarkPreTrainedModel):
+    # TODO: what do I do with that here?    
+    #@add_start_docstrings_to_model_forward(BARK_INPUTS_DOCSTRING)
+    #@add_code_sample_docstrings(
+    #    checkpoint=_CHECKPOINT_FOR_DOC,
+    #    output_type=BaseModelOutputWithPast,
+    #    config_class=_CONFIG_FOR_DOC,
+    #)
+    _no_split_modules = ["BarkBlock"]
+    
+    def __init__(self, config):
+        super().__init__(config)
+        
+        self.semantic_model = BarkCausalModule(config.semantic_config)
+        self.coarse_acoustics_model = BarkCausalModule(config.coarse_acoustics_config)
+        self.fine_acoustics_model = BarkFineAcousticsModule(config.fine_acoustics_config)
+        
+        # TODO: for now, it is not integrated into the code
+        # TODO: what about the device?
+        self.codec_model = EncodecModel.encodec_model_24khz()
+        self.codec_model.set_target_bandwidth(6.0)
+        
+        
+        self.config = config
+    
+    def preprocess_histories_before_coarse(self, history_prompt, max_coarse_history, semantic_to_coarse_ratio):
+        if history_prompt is not None:
             
+            x_semantic_history = history_prompt["semantic_prompt"] # TODO: already used before
+            x_coarse_history = history_prompt["coarse_prompt"]
+                        
+            max_semantic_history = int(np.floor(max_coarse_history / semantic_to_coarse_ratio))   
+            # trim histories correctly
+            n_semantic_hist_provided = np.min(
+                [
+                    max_semantic_history,
+                    len(x_semantic_history) - len(x_semantic_history) % 2,
+                    int(np.floor(len(x_coarse_history) / semantic_to_coarse_ratio)),
+                ]
+            )
+            
+            n_coarse_hist_provided = int(round(n_semantic_hist_provided * semantic_to_coarse_ratio))
+
+
+
+            
+            
+            x_coarse_history = _flatten_codebooks(x_coarse_history, self.config.codebook_size) + self.config.semantic_vocab_size
+            # e.g: after SEMANTIC_VOCAB_SIZE (10000), 1024 tokens dedicated to first codebook, 1024 next tokens dedicated to second codebook.
+                
+            
+
+            x_semantic_history = x_semantic_history[-n_semantic_hist_provided:].astype(np.int32)
+            x_coarse_history = x_coarse_history[-n_coarse_hist_provided:].astype(np.int32)
+            # TODO: bit of a hack for time alignment (sounds better)
+            x_coarse_history = x_coarse_history[:-2]
+            
+        else:
+            x_semantic_history = np.array([], dtype=np.int32)
+            x_coarse_history = np.array([], dtype=np.int32)            
+            
+        x_semantic_history = torch.from_numpy(x_semantic_history)[None]
+        x_coarse_history = torch.from_numpy(x_coarse_history)[None]
+            
+        return x_semantic_history, x_coarse_history
+    
+    
+    def generate_text_semantic(
+        self,
+        inputs: Optional[torch.Tensor] = None,
+        history_prompt: Optional[Dict[str,np.ndarray]] = None,
+        **kwargs,
+    ) -> torch.LongTensor:
+    
+        input_ids = inputs
+        
+        # SEMANTIC_RATE_HZ
+        # SEMANTIC_VOCAB_SIZE
+        # SEMANTIC_PAD_TOKEN
+        #
+    
+
+        # there are semantic_history and coarse_history and fine_hsitory
+        # not the same shape (1d) 2d but coarse history is flatten
+        # SEMANTIC_VOCAB_SIZE is then added to semantic history (probably because there are dedicated tokens)
+        
+        # TODO: remove 
+        temperature = 0.7
+
+        
+        # input_ids should be of shape (batch_size, seq_len) where seq_len = 513
+        # TODO: check if you should use history_prompt["semantic_history"] instead of 256:
+        # also 
+        input_embeds = torch.cat([
+                        self.semantic_model.transformer.wte(input_ids[:,:256]) + self.semantic_model.transformer.wte(input_ids[:,256:256+256]),
+                        self.semantic_model.transformer.wte(input_ids[:,256+256:])
+                    ], dim=1)     
+        
+        gen_config = GenerationConfig(do_sample = True, max_length = input_embeds.shape[1] + 768, temperature = temperature, )   
+        gen_config = GenerationConfig(do_sample = False, max_length = input_embeds.shape[1] + 768)
+        # TODO: remove
+           
+        
+        
+        # TODO: constraint the output to be less than SEMANTIC_VOCAB_SIZE, which is the EOS ?
+        # pass input_ids in order to stay consistent with the transformers generate method even though it is not used
+        semantic_output = self.semantic_model.generate(input_ids, 
+                                                   gen_config,
+                                                   input_embeds=input_embeds,
+                                                   **kwargs) # size: 10048
+        # TODO: look at how to pass min_eos_p parameters, in which, if the proba of the eos token is superior to min_eos_p, it stops early 
+        # https://github.com/suno-ai/bark/blob/f6f2db527b13c4a3e52ed6fbac587aadc3723eb6/bark/generation.py#L484-L490
+        # TODO: there is also a max_gen_duration_s early stop if the duration depass a certain duration
+        # there is also n_tot_steps = 768, max generation 
+        # also look at L466
+        
+        # TODO: remark that it takes the 10000 first tokens as relevant logits instead of the 10048
+        #  relevant_logits = logits[0, 0, :SEMANTIC_VOCAB_SIZE] 
+        
+        
+        
+        
+        # take the generated semantic tokens
+        semantic_output = semantic_output[:,513:]
+        
+        return semantic_output
+        
+        
+        
+    def generate_coarse(self,
+        semantic_output: torch.Tensor,
+        history_prompt: Optional[Dict[str,np.ndarray]] = None,
+        max_coarse_history: int = 630,
+        sliding_window_len: int = 60,
+        **kwargs,
+    ):
+        
+        # TODO: change
+        temperature = 0.7
+        
+        semantic_to_coarse_ratio = self.config.coarse_rate_hz / self.config.semantic_rate_hz * self.config.n_coarse_codebooks
+        max_semantic_history = int(np.floor(max_coarse_history / semantic_to_coarse_ratio))
+        
+
+        # len(x_semantic)
+        max_generated_len = int(
+        round(
+            np.floor(semantic_output.shape[1] * semantic_to_coarse_ratio / self.config.n_coarse_codebooks)
+            * self.config.n_coarse_codebooks
+        ) 
+        )       
+        
+        
+        x_semantic_history, x_coarse = self.preprocess_histories_before_coarse(history_prompt, max_coarse_history, semantic_to_coarse_ratio)
+        base_semantic_idx = x_semantic_history.shape[1]
+
+        semantic_output = torch.hstack([x_semantic_history, semantic_output])
+
+
+        
+        n_window_steps = int(np.ceil(max_generated_len / sliding_window_len))
+        
+        total_generated_len = 0
+        
+        len_coarse_history = x_coarse.shape[1]
+        
+        for _ in range(n_window_steps):
+            semantic_idx = base_semantic_idx + int(round(total_generated_len / semantic_to_coarse_ratio))
+            
+            # pad from right side
+            x_in = semantic_output[:, np.max([0, semantic_idx - max_semantic_history]) :]
+            x_in = x_in[:, :256]
+            x_in = F.pad(
+                x_in,
+                (0, 256 - x_in.shape[-1]),
+                "constant",
+                self.config.coarse_semantic_pad_token,
+            )
+            
+            x_in = torch.hstack(
+                [
+                    x_in,
+                    torch.tensor([self.config.coarse_infer_token])[None],
+                    x_coarse[:, -max_coarse_history:],
+                ]
+            )
+            
+            gen_config = GenerationConfig(do_sample = True, max_length = x_in.shape[1] + min(sliding_window_len, max_generated_len - total_generated_len), temperature = temperature, )
+            
+            alternatingLogitsProcessor = AlternatingCodebooksLogitsProcessor(x_in.shape[1],self.config.semantic_vocab_size, self.config.codebook_size)
+            
+            
+            # TODO: add logits processor
+            x_out = self.coarse_acoustics_model.generate(x_in, 
+                                                   gen_config,
+                                                   logits_processor=[alternatingLogitsProcessor],
+                                                   **kwargs) 
+            
+            
+            x_in_len = x_in.shape[1]
+            
+            x_coarse = torch.hstack([x_coarse, x_out[:, x_in_len:]])
+            total_generated_len = x_coarse.shape[1] - len_coarse_history
+            
+            del x_out
+            
+            
+        coarse_output = x_coarse[:, len_coarse_history:]
+        
+        return coarse_output
+    
+    
+    def generate_fine(self,
+                      coarse_output: torch.Tensor,
+                      history_prompt: Optional[Dict[str,np.ndarray]] = None,
+                      **kwargs
+                      ):
+        
+        # TODO: batch, seq_len, n_coarse_codebooks
+        
+        # shape: (batch, n_coarse_codebooks * seq_len)
+        # new_shape: (batch, seq_len, n_coarse_codebooks)
+        coarse_output = coarse_output.view(coarse_output.shape[0], -1, self.config.n_coarse_codebooks)
+        
+        
+        # brings ids into the range [0, codebook_size -1]
+        coarse_output = torch.remainder(coarse_output - self.config.semantic_vocab_size, self.config.codebook_size)
+        
+        
+        if history_prompt is not None:
+            x_fine_history = history_prompt["fine_prompt"]
+            x_fine_history = torch.from_numpy(x_fine_history).T
+            # transpose to get to shape (seq_len, n_fine_codebooks)
+        else:
+            x_fine_history = None
+            
+        n_coarse = self.config.n_coarse_codebooks
+        
+        # pad the last 6th codebooks
+        fine_input = F.pad(
+                coarse_output,
+                (0, self.config.n_fine_codebooks - n_coarse),
+                "constant",
+                self.config.codebook_size,
+            )
+        
+        # prepend history if available (max 512)
+        if x_fine_history is not None:
+            fine_input = torch.cat(
+                [
+                    x_fine_history[None, -512:, :],
+                    fine_input,
+                ],
+                dim = 1
+            )
+            
+            # len of the fine_history that has been added to fine_input
+            n_history = x_fine_history[-512:, :].shape[0]
+        else:
+            n_history = 0
+        
+        n_remove_from_end = 0
+        # need to pad if too short (since non-causal model)
+        if fine_input.shape[1] < 1024:
+            n_remove_from_end = 1024 - fine_input.shape[1]
+            fine_input = F.pad(
+                fine_input,
+                (0, 0, 0, n_remove_from_end),
+                mode = "constant",
+                value = self.config.codebook_size
+            )
+            
+        # we can be lazy about fractional loop and just keep overwriting codebooks
+        # TODO: check in which case it is more than 1
+        # seems that coarse_output.shape[1] - (1024 - n_history) is equal to minus n_remove_from_end
+        # So if we needed to pad because too short, n_loops is always 1 (because n_remove_from_end > 0)
+        # If not, we loop over at least twice.
+        n_loops = np.max([0, int(np.ceil((coarse_output.shape[1] - (1024 - n_history)) / 512))]) + 1
+        
+        # with _inference_mode() ?
+        
+        # TODO: other way to do that ?
+        temperature = kwargs.get("temperature", None)
+        
+        for n in range(n_loops):
+            # TODO
+            # if seq_len > 1024, ...
+            start_idx = np.min([n * 512, fine_input.shape[1] - 1024])
+            
+            start_fill_idx = np.min([n_history + n * 512, fine_input.shape[1] - 512])
+            rel_start_fill_idx = start_fill_idx - start_idx
+            input_buffer = fine_input[:,start_idx : start_idx + 1024, :]
+            for nn in range(n_coarse, self.config.n_fine_codebooks):
+                logits = self.fine_acoustics_model(nn, input_buffer).logits
+                if temperature is None:
+                    relevant_logits = logits[0, rel_start_fill_idx:, :self.config.codebook_size]
+                    codebook_preds = torch.argmax(relevant_logits, -1)
+                else:
+                    relevant_logits = logits[0, :, :self.config.codebook_size] / temperature
+                    probs = F.softmax(relevant_logits, dim=-1)
+                    codebook_preds = torch.multinomial(
+                        probs[rel_start_fill_idx:1024], num_samples=1
+                    ).reshape(-1)
+                codebook_preds = codebook_preds.to(torch.int32)
+                input_buffer[:, rel_start_fill_idx:, nn] = codebook_preds
+                del logits, codebook_preds
+                
+            # transfer over info into model_in and convert to numpy
+            for nn in range(n_coarse, self.config.n_fine_codebooks):
+                fine_input[
+                    :, start_fill_idx : start_fill_idx + (1024 - rel_start_fill_idx), nn
+                ] = input_buffer[:, rel_start_fill_idx:, nn] 
+            del input_buffer
+            
+        fine_input = fine_input.transpose(1,2)[:, :, n_history:]
+        if n_remove_from_end > 0:
+            fine_input = fine_input[:, :, :-n_remove_from_end]
+        
+        # assert same input and output seq_len
+        assert fine_input.shape[-1] == coarse_output.shape[-2]
+        
+        # TODO: _clear_cuda_cache() ??
+        return fine_input
+    
+    def codec_decode(self, fine_output):
+        """Turn quantized audio codes into audio array using encodec."""
+
+        fine_output = fine_output.transpose(1, 2)
+        emb = self.codec_model.quantizer.decode(fine_output)
+        out = self.codec_model.decoder(emb)
+        # TODO: for now, it works for batch_size = 1
+        audio_arr = out.detach().cpu().numpy().squeeze()
+        del fine_output, emb, out
+
+        return audio_arr
+        
+    #@torch.no_grad
+    # _inference_mode()
+    def generate_audio(
+        self,
+        inputs: Optional[torch.Tensor] = None,
+        history_prompt: Optional[Dict[str,np.ndarray]] = None,
+        max_coarse_history: int = 630,
+        sliding_window_len: int = 60,
+        **kwargs,
+    ) -> torch.LongTensor:
+
+
+
+        ##### 1. Generate from the semantic model
+
+        semantic_output = self.generate_text_semantic(
+            inputs,
+            history_prompt,
+            **kwargs
+        )
+        
+        ##### 2. Generate from the coarse model
+
+        
+        coarse_output = self.generate_coarse(semantic_output, 
+                                        history_prompt,
+                                        max_coarse_history,
+                                        sliding_window_len,
+                                        **kwargs)
+
+        
+        # TODO: _clear_cuda_cache() ??    
+
+        ##### 3. "generate" from the fine model
+        
+
+        output = self.generate_fine(coarse_output,
+                                    history_prompt
+                               )
+        
+        
+        #### 4. Decode the output and generate audio array
+        
+        audio = self.codec_decode(output)
+
+        
+        return audio
+
+
+
+
+
+    
+# TODO: (maybe do it in the preprocessor)
+def _flatten_codebooks(arr, offset_size):
+    assert len(arr.shape) == 2
+    arr = arr.copy()
+    if offset_size is not None:
+        for n in range(1, arr.shape[0]):
+            arr[n, :] += offset_size * n
+    flat_arr = arr.ravel("F")
+    return flat_arr
+
+class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] enforcing alternated generation between the two codebooks of [`Bark`]'s fine submodel.
+
+    Args:
+        input_start_len (`int`):
+            The length of the initial input sequence.
+        semantic_vocab_size (`int`):
+            Vocabulary size of the semantic part, i.e number of tokens associated to the semantic vocabulary.
+        codebook_size (`int`):
+            Number of tokens associated to the codebook.
+    """
+
+    def __init__(self, input_start_len: int, semantic_vocab_size: int, codebook_size: int):
+        if not isinstance(input_start_len, int) or input_start_len < 0:
+            raise ValueError(f"`input_starting_length` has to be a non-negative integer, but is {input_start_len}")
+
+
+        self.input_start_len = input_start_len
+        self.semantic_vocab_size = semantic_vocab_size
+        self.codebook_size = codebook_size
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        curr_len = input_ids.shape[-1]
+        
+        # even -> first codebook, odd -> second codebook
+        is_first_codebook = ((curr_len - self.input_start_len) % 2) == 0
+        
+        if is_first_codebook:
+            scores[:, :self.semantic_vocab_size] = -float("inf")
+            scores[:, self.semantic_vocab_size + self.codebook_size:] = -float("inf")
+        else:
+            scores[:, :self.semantic_vocab_size + self.codebook_size] = -float("inf")
+        
+        return scores
+    
+    
