@@ -32,7 +32,6 @@ from transformers import (
     Wav2Vec2Processor,
     logging,
 )
-from transformers.commands.lfs import read_msg
 from transformers.models.wav2vec2.modeling_wav2vec2 import Wav2Vec2ForSequenceClassification
 
 
@@ -69,13 +68,13 @@ TOP_LEVEL_KEYS = [
     "project_q",
     "project_hid",
     "projector",
-    "classifier"
+    "classifier",
 ]
 
 
 def read_txt_into_dict(filename):
     result = {}
-    with open(filename, 'r') as file:
+    with open(filename, "r") as file:
         for line_number, line in enumerate(file):
             line = line.strip()
             if line:
@@ -355,11 +354,18 @@ if __name__ == "__main__":
         "--not_finetuned", action="store_true", help="Whether the model to convert is a fine-tuned model or not"
     )
     parser.add_argument(
-        "--is_seq_class", action="store_true", help="Whether the model to convert is a fine-tuned sequence classification model or not"
+        "--is_seq_class",
+        action="store_true",
+        help="Whether the model to convert is a fine-tuned sequence classification model or not",
     )
     args = parser.parse_args()
 
     is_finetuned = not args.not_finetuned and not args.is_seq_class
     convert_wav2vec2_checkpoint(
-        args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.dict_path, is_finetuned, args.is_seq_class
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.config_path,
+        args.dict_path,
+        is_finetuned,
+        args.is_seq_class,
     )
