@@ -204,9 +204,9 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
             "target_pitch",
             "target_energy",
             "utterance_embedding",
-            "return_dict",
             "alpha",
             "lang_id",
+            "return_dict",
             "output_attentions",
             "output_hidden_states",
         ]
