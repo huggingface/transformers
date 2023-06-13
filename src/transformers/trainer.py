@@ -347,8 +347,7 @@ class Trainer:
         self._memory_tracker.start()
 
         # Fillers for storing the original eval_ratio for when we use the batch size finder
-        self._eval_ratio = 1
-        self._found_ratio = False
+        self._step_ratios = {}
 
         # set the correct log level depending on the node
         log_level = args.get_process_log_level()
@@ -1592,16 +1591,22 @@ class Trainer:
             )
 
         # Compute absolute values for logging, eval, and save if given as ratio
-        if args.logging_steps and args.logging_steps < 1:
-            args.logging_steps = math.ceil(max_steps * args.logging_steps)
-        if (args.eval_steps and args.eval_steps < 1) or self._found_ratio:
-            # Store eval in case of auto-bs-finder on the first pass
-            if not self._found_ratio:
-                self._found_ratio = True
-                self._eval_ratio = float(args.eval_steps)
-            args.eval_steps = math.ceil(max_steps * self._eval_ratio)
-        if args.save_steps and args.save_steps < 1:
-            args.save_steps = math.ceil(max_steps * args.save_steps)
+        # Also stores the ratios in `self._step_ratio` on the first pass
+        if args.logging_steps:
+            if args.logging_steps < 1:
+                self._step_ratios["logging_steps"] = float(args.logging_steps)
+            if "logging_steps" in self._step_ratios:
+                args.logging_steps = math.ceil(max_steps * self._step_ratios["logging_steps"])
+        if args.eval_steps:
+            if args.eval_steps < 1:
+                self._step_ratios["eval_steps"] = float(args.eval_steps)
+            if "eval_steps" in self._step_ratios:
+                args.eval_steps = math.ceil(max_steps * self._step_ratios["eval_steps"])
+        if args.save_steps:
+            if args.save_steps < 1:
+                self._step_ratios["save_steps"] = float(args.save_steps)
+            if "save_steps" in self._step_ratios:
+                args.save_steps = math.ceil(max_steps * self._step_ratios["save_steps"])
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
