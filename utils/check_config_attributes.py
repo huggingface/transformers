@@ -259,7 +259,7 @@ def check_config_attributes():
             for name, cls in inspect.getmembers(
                 inspect.getmodule(_config_class),
                 lambda x: inspect.isclass(x)
-                and x.__name__.endswith("Config")
+                and x.__name__.endswith("Config") and not x.__name__.endswith("OnnxConfig")
                 and inspect.getmodule(x) == inspect.getmodule(_config_class),
             )
         ]
