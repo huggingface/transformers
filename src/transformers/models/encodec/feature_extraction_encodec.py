@@ -43,12 +43,11 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
         padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding values.
-        chunk_length (`float`, *optional*):
-            The length of each chunk of audio that will be processed sequentially . If `chunk_length = None` then
-            chunking is disabled.
-        chunk_stride(`float`, *optional*):
-            The length of the right stride use to split the audio in smaller chunkgs. If `chunk_stride = None` then
-            chunking is disabled.
+        chunk_length_s (`float`, *optional*):
+            If defined the audio is pre-processed into chunks of lengths `chunk_length_s` and then encoded.
+        overlap (`float`, *optional*):
+            Defines the overlap between each chunk. It is used to compute the `chunk_stride` using the following formulae : 
+            `int((1.0 - self.overlap) * self.chunk_length)`.
         return_attention_mask (`bool`, *optional*, defaults to `True`):
             Whether or not [`~EncodecFeatureExtractor.__call__`] should return `attention_mask`.
     """
@@ -60,14 +59,30 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         feature_size: int = 1,
         sampling_rate: int = 24000,
         padding_value: float = 0.0,
-        chunk_length: int = 48000,
-        chunk_stride: int = 47520,
+        chunk_length_s: float = 1,
+        overlap: float = 0.01,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
-        self.chunk_stride = chunk_stride
-        self.chunk_length = chunk_length
+        self.chunk_length_s = chunk_length_s
+        self.overlap = overlap
 
+    # This is a property because you might want to change the chunk_length_s on the fly
+    @property
+    def chunk_length(self) -> Optional[int]:
+        if self.chunk_length_s is None:
+            return None
+        else:
+            return int(self.chunk_length_s * self.sampling_rate)
+
+    # This is a property because you might want to change the chunk_length_s on the fly
+    @property
+    def chunk_stride(self) -> Optional[int]:
+        if self.chunk_length_s is None:
+            return None
+        else:
+            return max(1, int((1.0 - self.overlap) * self.chunk_length))
+        
     def __call__(
         self,
         raw_audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],

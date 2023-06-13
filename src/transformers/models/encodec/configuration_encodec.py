@@ -50,6 +50,9 @@ class EncodecConfig(PretrainedConfig):
             Whether the audio shall be normalized when passed.
         chunk_length_s (`float`, *optional*):
             If defined the audio is pre-processed into chunks of lengths `chunk_length_s` and then encoded.
+        overlap (`float`, *optional*):
+            Defines the overlap between each chunk. It is used to compute the `chunk_stride` using the following formulae : 
+            `int((1.0 - self.overlap) * self.chunk_length)`.
         hidden_size (`int`, *optional*, defaults to 128):
             Intermediate representation dimension.
         num_filters (`int`, *optional*, defaults to 32):
@@ -108,6 +111,7 @@ class EncodecConfig(PretrainedConfig):
         audio_channels=1,
         normalize=False,
         chunk_length_s=None,
+        overlap=None,
         hidden_size=128,
         num_filters=32,
         num_residual_layers=1,
@@ -131,6 +135,7 @@ class EncodecConfig(PretrainedConfig):
         self.audio_channels = audio_channels
         self.normalize = normalize
         self.chunk_length_s = chunk_length_s
+        self.overlap = overlap
         self.hidden_size = hidden_size
         self.num_filters = num_filters
         self.num_residual_layers = num_residual_layers
