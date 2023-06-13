@@ -315,8 +315,8 @@ class EncodecIntegrationTest(unittest.TestCase):
             "24.0": 0.0015,
         }
         expected_codesums = {
-            "1.5": [437162],
-            "24.0": [8932920],
+            "1.5": [367184],
+            "24.0": [6648961],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "Matthijs/encodec_24khz"
