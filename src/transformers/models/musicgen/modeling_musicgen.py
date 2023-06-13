@@ -991,9 +991,8 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
         self.embedding_dim = embedding_dim
         self.make_weights(num_positions, embedding_dim)
 
-    # Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding.make_weights
-    def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
-        emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
+    def make_weights(self, num_embeddings: int, embedding_dim: int):
+        emb_weights = self.get_embedding(num_embeddings, embedding_dim)
         if hasattr(self, "weights"):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
@@ -1003,8 +1002,7 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
         self.weights.detach_()
 
     @staticmethod
-    # Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding.get_embedding
-    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
+    def get_embedding(num_embeddings: int, embedding_dim: int):
         """
         Build sinusoidal embeddings. This matches the implementation in tensor2tensor, but differs slightly from the
         description in Section 3.5 of "Attention Is All You Need".
@@ -1017,8 +1015,6 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
         if embedding_dim % 2 == 1:
             # zero pad
             emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
-        if padding_idx is not None:
-            emb[padding_idx, :] = 0
         return emb.to(torch.get_default_dtype())
 
     @torch.no_grad()
