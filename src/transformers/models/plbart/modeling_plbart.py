@@ -1128,6 +1128,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
 )
 class PLBartModel(PLBartPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: PLBartConfig):
         super().__init__(config)
@@ -1253,6 +1254,7 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
         "decoder.embed_tokens.weight",
         "encoder.embed_tokens.weight",
     ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: PLBartConfig):
         super().__init__(config)
@@ -1417,6 +1419,7 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
 )
 class PLBartForSequenceClassification(PLBartPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: PLBartConfig, **kwargs):
         super().__init__(config, **kwargs)
@@ -1555,6 +1558,7 @@ class PLBartDecoderWrapper(PLBartPreTrainedModel):
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->PLBart, facebook/bart-base->uclanlp/plbart-base
 class PLBartForCausalLM(PLBartPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         config = copy.deepcopy(config)

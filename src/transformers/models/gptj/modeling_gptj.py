@@ -735,6 +735,7 @@ class GPTJModel(GPTJPreTrainedModel):
 )
 class GPTJForCausalLM(GPTJPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)

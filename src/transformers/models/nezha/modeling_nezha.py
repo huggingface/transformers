@@ -1038,6 +1038,7 @@ class NezhaModel(NezhaPreTrainedModel):
 )
 class NezhaForPreTraining(NezhaPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["cls.predictions.decoder"]
+    _tied_weights_keys = ["cls.predictions.decoder"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1141,6 +1142,7 @@ class NezhaForPreTraining(NezhaPreTrainedModel):
 class NezhaForMaskedLM(NezhaPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"cls.predictions.decoder", r"positions_encoding"]
+    _tied_weights_keys = ["cls.predictions.decoder"]
 
     def __init__(self, config):
         super().__init__(config)

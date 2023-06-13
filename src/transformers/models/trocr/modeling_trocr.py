@@ -789,6 +789,7 @@ class TrOCRDecoderWrapper(TrOCRPreTrainedModel):
 )
 class TrOCRForCausalLM(TrOCRPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["output_projection.weight"]
+    _tied_weights_keys = ["output_projection.weight"]
 
     def __init__(self, config):
         config = copy.deepcopy(config)
