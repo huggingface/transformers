@@ -24,13 +24,12 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers.utils.doc import add_code_sample_docstrings
-
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -1694,8 +1693,10 @@ class FlavaGlobalContrastiveHead(nn.Module):
             world_size = torch.distributed.get_world_size()
 
             if self.global_backprop_contrastive:
-                image_embeddings_all = torch.distributed.nn.functional.all_gather_with_backprop(image_embeddings)
-                text_embeddings_all = torch.distributed.nn.functional.all_gather_with_backprop(text_embeddings)
+                # `torch.distributed.nn.functional.all_gather` does backprop on all active workers
+                # whereas `torch.distributed.all_gather` does only backpropagates on the current worker.
+                image_embeddings_all = torch.distributed.nn.functional.all_gather(image_embeddings)
+                text_embeddings_all = torch.distributed.nn.functional.all_gather(text_embeddings)
             else:
                 image_embeddings_all = [torch.zeros_like(text_embeddings) for _ in range(world_size)]
                 text_embeddings_all = [torch.zeros_like(image_embeddings) for _ in range(world_size)]

@@ -22,8 +22,10 @@ from transformers import ResNetConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -56,6 +58,7 @@ class ResNetModelTester:
         num_labels=3,
         scope=None,
         out_features=["stage2", "stage3", "stage4"],
+        out_indices=[2, 3, 4],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -71,6 +74,7 @@ class ResNetModelTester:
         self.scope = scope
         self.num_stages = len(hidden_sizes)
         self.out_features = out_features
+        self.out_indices = out_indices
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -92,6 +96,7 @@ class ResNetModelTester:
             hidden_act=self.hidden_act,
             num_labels=self.num_labels,
             out_features=self.out_features,
+            out_indices=self.out_indices,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -150,7 +155,7 @@ class ResNetModelTester:
 
 
 @require_torch
-class ResNetModelTest(ModelTesterMixin, unittest.TestCase):
+class ResNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ResNet does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -164,6 +169,11 @@ class ResNetModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": ResNetModel, "image-classification": ResNetForImageClassification}
+        if is_torch_available()
+        else {}
     )
 
     fx_compatible = True
@@ -317,3 +327,13 @@ class ResNetModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([-11.1069, -9.7877, -8.3777]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+
+@require_torch
+class ResNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
+    all_model_classes = (ResNetBackbone,) if is_torch_available() else ()
+    has_attentions = False
+    config_class = ResNetConfig
+
+    def setUp(self):
+        self.model_tester = ResNetModelTester(self)

@@ -30,7 +30,8 @@ class TimesformerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`TimesformerModel`]. It is used to instantiate a
     TimeSformer model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the TimeSformer
-    [facebook/timesformer](https://huggingface.co/facebook/timesformer-base-finetuned-k600) architecture.
+    [facebook/timesformer-base-finetuned-k600](https://huggingface.co/facebook/timesformer-base-finetuned-k600)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

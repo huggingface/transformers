@@ -192,7 +192,3 @@ For instance, you'll see this error in the following example because there is no
 ValueError: Unrecognized configuration class <class 'transformers.models.gpt2.configuration_gpt2.GPT2Config'> for this kind of AutoModel: AutoModelForQuestionAnswering.
 Model type should be one of AlbertConfig, BartConfig, BertConfig, BigBirdConfig, BigBirdPegasusConfig, BloomConfig, ...
 ```
-
-In rare cases, this can also happen when using some exotic models with architectures that don't map to any of the
-AutoModelForXXX classes due to the specifics of their API. For example, you can use [`AutoProcessor`] to load BLIP-2's processor,
-but to load a pretrained BLIP-2 model itself, you must explicitly use [`Blip2ForConditionalGeneration`] as even [`AutoModel`] won't work.

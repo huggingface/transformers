@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import DebertaConfig, is_tf_available
@@ -21,6 +23,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -207,7 +210,7 @@ class TFDebertaModelTester:
 
 
 @require_tf
-class TFDebertaModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFDebertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFDebertaModel,
@@ -218,6 +221,18 @@ class TFDebertaModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFDebertaModel,
+            "fill-mask": TFDebertaForMaskedLM,
+            "question-answering": TFDebertaForQuestionAnswering,
+            "text-classification": TFDebertaForSequenceClassification,
+            "token-classification": TFDebertaForTokenClassification,
+            "zero-shot": TFDebertaForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
     )
 
     test_head_masking = False

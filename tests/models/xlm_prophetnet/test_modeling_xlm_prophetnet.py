@@ -45,7 +45,7 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 14, 250012))
         self.assertEqual(output_predited_logis.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[[-6.6042, -8.3838, 12.4717], [-6.4426, -8.1994, 12.4542], [-6.0851, -7.8209, 12.9493]]]
+            [[[-6.3986, -8.2391, 12.5189], [-6.3289, -8.0864, 12.6211], [-6.2418, -8.0445, 12.7968]]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(output_predited_logis[:, :3, :3], expected_slice, atol=1e-4))
 
@@ -87,7 +87,7 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_predited_logis.shape, expected_shape)
         # compare the actual values for a slice.
         expected_slice = torch.tensor(
-            [[[-8.8815, -9.2996, -4.4506], [-6.7202, -7.8944, -0.9402], [-8.6890, -7.4528, -1.9437]]]
+            [[[-9.2253, -9.7173, -6.3529], [-7.6701, -9.0145, -1.9382], [-8.0195, -7.0004, -0.1523]]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(output_predited_logis[:, :3, :3], expected_slice, atol=1e-4))

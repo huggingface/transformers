@@ -56,6 +56,21 @@ class cached_property(property):
         return cached
 
 
+# vendored from distutils.util
+def strtobool(val):
+    """Convert a string representation of truth to true (1) or false (0).
+
+    True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values are 'n', 'no', 'f', 'false', 'off', and '0'.
+    Raises ValueError if 'val' is anything else.
+    """
+    val = val.lower()
+    if val in {"y", "yes", "t", "true", "on", "1"}:
+        return 1
+    if val in {"n", "no", "f", "false", "off", "0"}:
+        return 0
+    raise ValueError(f"invalid truth value {val!r}")
+
+
 def is_tensor(x):
     """
     Tests if `x` is a `torch.Tensor`, `tf.Tensor`, `jaxlib.xla_extension.DeviceArray` or `np.ndarray`.
@@ -149,6 +164,23 @@ def is_tf_tensor(x):
     Tests if `x` is a tensorflow tensor or not. Safe to call even if tensorflow is not installed.
     """
     return False if not is_tf_available() else _is_tensorflow(x)
+
+
+def _is_tf_symbolic_tensor(x):
+    import tensorflow as tf
+
+    # the `is_symbolic_tensor` predicate is only available starting with TF 2.14
+    if hasattr(tf, "is_symbolic_tensor"):
+        return tf.is_symbolic_tensor(x)
+    return type(x) == tf.Tensor
+
+
+def is_tf_symbolic_tensor(x):
+    """
+    Tests if `x` is a tensorflow symbolic tensor or not (ie. not eager). Safe to call even if tensorflow is not
+    installed.
+    """
+    return False if not is_tf_available() else _is_tf_symbolic_tensor(x)
 
 
 def _is_jax(x):
@@ -282,7 +314,7 @@ class ModelOutput(OrderedDict):
 
     def __getitem__(self, k):
         if isinstance(k, str):
-            inner_dict = {k: v for (k, v) in self.items()}
+            inner_dict = dict(self.items())
             return inner_dict[k]
         else:
             return self.to_tuple()[k]
@@ -366,13 +398,13 @@ def can_return_loss(model_class):
     Args:
         model_class (`type`): The class of the model.
     """
-    model_name = model_class.__name__
-    if model_name.startswith("TF"):
-        signature = inspect.signature(model_class.call)
-    elif model_name.startswith("Flax"):
-        signature = inspect.signature(model_class.__call__)
+    framework = infer_framework(model_class)
+    if framework == "tf":
+        signature = inspect.signature(model_class.call)  # TensorFlow models
+    elif framework == "pt":
+        signature = inspect.signature(model_class.forward)  # PyTorch models
     else:
-        signature = inspect.signature(model_class.forward)
+        signature = inspect.signature(model_class.__call__)  # Flax models
 
     for p in signature.parameters:
         if p == "return_loss" and signature.parameters[p].default is True:
@@ -389,12 +421,14 @@ def find_labels(model_class):
         model_class (`type`): The class of the model.
     """
     model_name = model_class.__name__
-    if model_name.startswith("TF"):
-        signature = inspect.signature(model_class.call)
-    elif model_name.startswith("Flax"):
-        signature = inspect.signature(model_class.__call__)
+    framework = infer_framework(model_class)
+    if framework == "tf":
+        signature = inspect.signature(model_class.call)  # TensorFlow models
+    elif framework == "pt":
+        signature = inspect.signature(model_class.forward)  # PyTorch models
     else:
-        signature = inspect.signature(model_class.forward)
+        signature = inspect.signature(model_class.__call__)  # Flax models
+
     if "QuestionAnswering" in model_name:
         return [p for p in signature.parameters if "label" in p or p in ("start_positions", "end_positions")]
     else:
@@ -516,3 +550,34 @@ def tensor_size(array):
         return array.size
     else:
         raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
+
+
+def add_model_info_to_auto_map(auto_map, repo_id):
+    """
+    Adds the information of the repo_id to a given auto map.
+    """
+    for key, value in auto_map.items():
+        if isinstance(value, (tuple, list)):
+            auto_map[key] = [f"{repo_id}--{v}" if (v is not None and "--" not in v) else v for v in value]
+        elif value is not None and "--" not in value:
+            auto_map[key] = f"{repo_id}--{value}"
+
+    return auto_map
+
+
+def infer_framework(model_class):
+    """
+    Infers the framework of a given model without using isinstance(), because we cannot guarantee that the relevant
+    classes are imported or available.
+    """
+    for base_class in inspect.getmro(model_class):
+        module = base_class.__module__
+        name = base_class.__name__
+        if module.startswith("tensorflow") or module.startswith("keras") or name == "TFPreTrainedModel":
+            return "tf"
+        elif module.startswith("torch") or name == "PreTrainedModel":
+            return "pt"
+        elif module.startswith("flax") or module.startswith("jax") or name == "FlaxPreTrainedModel":
+            return "flax"
+    else:
+        raise TypeError(f"Could not infer framework from class {model_class}.")

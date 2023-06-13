@@ -39,6 +39,7 @@ if is_vision_available():
         center_to_corners_format,
         convert_to_rgb,
         corners_to_center_format,
+        flip_channel_order,
         get_resize_output_image_size,
         id_to_rgb,
         normalize,
@@ -95,6 +96,32 @@ class ImageTransformsTester(unittest.TestCase):
 
         # make sure image is correctly rescaled
         self.assertTrue(np.abs(np.asarray(pil_image)).sum() > 0)
+
+        # Make sure that an exception is raised if image is not in [0, 1]
+        image = np.random.randn(*image_shape).astype(dtype)
+        with self.assertRaises(ValueError):
+            to_pil_image(image)
+
+    @require_vision
+    def test_to_pil_image_from_mask(self):
+        # Make sure binary mask remains a binary mask
+        image = np.random.randint(0, 2, (3, 4, 5)).astype(np.uint8)
+        pil_image = to_pil_image(image)
+        self.assertIsInstance(pil_image, PIL.Image.Image)
+        self.assertEqual(pil_image.size, (5, 4))
+
+        np_img = np.asarray(pil_image)
+        self.assertTrue(np_img.min() == 0)
+        self.assertTrue(np_img.max() == 1)
+
+        image = np.random.randint(0, 2, (3, 4, 5)).astype(np.float32)
+        pil_image = to_pil_image(image)
+        self.assertIsInstance(pil_image, PIL.Image.Image)
+        self.assertEqual(pil_image.size, (5, 4))
+
+        np_img = np.asarray(pil_image)
+        self.assertTrue(np_img.min() == 0)
+        self.assertTrue(np_img.max() == 1)
 
     @require_tf
     def test_to_pil_image_from_tensorflow(self):
@@ -217,11 +244,19 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertIsInstance(resized_image, np.ndarray)
         self.assertEqual(resized_image.shape, (30, 40, 3))
 
-        # Check PIL.Image.Image is return if return_numpy=False
+        # Check PIL.Image.Image is returned if return_numpy=False
         resized_image = resize(image, (30, 40), return_numpy=False)
         self.assertIsInstance(resized_image, PIL.Image.Image)
         # PIL size is in (width, height) order
         self.assertEqual(resized_image.size, (40, 30))
+
+        # Check an image with float values between 0-1 is returned with values in this range
+        image = np.random.rand(3, 224, 224)
+        resized_image = resize(image, (30, 40))
+        self.assertIsInstance(resized_image, np.ndarray)
+        self.assertEqual(resized_image.shape, (3, 30, 40))
+        self.assertTrue(np.all(resized_image >= 0))
+        self.assertTrue(np.all(resized_image <= 1))
 
     def test_normalize(self):
         image = np.random.randint(0, 256, (224, 224, 3)) / 255
@@ -486,3 +521,41 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertEqual(rgb_image.mode, "RGB")
         self.assertEqual(rgb_image.size, (2, 1))
         self.assertTrue(np.allclose(np.array(rgb_image), np.array([[[0, 0, 0], [255, 255, 255]]], dtype=np.uint8)))
+
+    def test_flip_channel_order(self):
+        # fmt: off
+        img_channels_first = np.array([
+            [[ 0,  1,  2,  3],
+             [ 4,  5,  6,  7]],
+
+            [[ 8,  9, 10, 11],
+             [12, 13, 14, 15]],
+
+            [[16, 17, 18, 19],
+             [20, 21, 22, 23]],
+        ])
+        # fmt: on
+        img_channels_last = np.moveaxis(img_channels_first, 0, -1)
+        # fmt: off
+        flipped_img_channels_first = np.array([
+            [[16, 17, 18, 19],
+             [20, 21, 22, 23]],
+
+            [[ 8,  9, 10, 11],
+             [12, 13, 14, 15]],
+
+            [[ 0,  1,  2,  3],
+             [ 4,  5,  6,  7]],
+        ])
+        # fmt: on
+        flipped_img_channels_last = np.moveaxis(flipped_img_channels_first, 0, -1)
+
+        self.assertTrue(np.allclose(flip_channel_order(img_channels_first), flipped_img_channels_first))
+        self.assertTrue(
+            np.allclose(flip_channel_order(img_channels_first, "channels_last"), flipped_img_channels_last)
+        )
+
+        self.assertTrue(np.allclose(flip_channel_order(img_channels_last), flipped_img_channels_last))
+        self.assertTrue(
+            np.allclose(flip_channel_order(img_channels_last, "channels_first"), flipped_img_channels_first)
+        )

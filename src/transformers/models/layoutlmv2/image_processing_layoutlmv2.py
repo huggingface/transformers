@@ -18,21 +18,17 @@ from typing import Dict, Optional, Union
 
 import numpy as np
 
-from transformers.utils import is_vision_available
-from transformers.utils.generic import TensorType
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import resize, to_channel_dimension_format, to_pil_image
+from ...image_transforms import flip_channel_order, resize, to_channel_dimension_format, to_pil_image
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    infer_channel_dimension_format,
     make_list_of_images,
     to_numpy_array,
     valid_images,
 )
-from ...utils import is_pytesseract_available, logging, requires_backends
+from ...utils import TensorType, is_pytesseract_available, is_vision_available, logging, requires_backends
 
 
 if is_vision_available():
@@ -86,20 +82,6 @@ def apply_tesseract(image: np.ndarray, lang: Optional[str], tesseract_config: Op
     assert len(words) == len(normalized_boxes), "Not as many words as there are bounding boxes"
 
     return words, normalized_boxes
-
-
-def flip_channel_order(image: np.ndarray, data_format: Optional[ChannelDimension] = None) -> np.ndarray:
-    input_data_format = infer_channel_dimension_format(image)
-    if input_data_format == ChannelDimension.LAST:
-        image = image[..., ::-1]
-    elif input_data_format == ChannelDimension.FIRST:
-        image = image[:, ::-1, ...]
-    else:
-        raise ValueError(f"Unsupported channel dimension: {input_data_format}")
-
-    if data_format is not None:
-        image = to_channel_dimension_format(image, data_format)
-    return image
 
 
 class LayoutLMv2ImageProcessor(BaseImageProcessor):

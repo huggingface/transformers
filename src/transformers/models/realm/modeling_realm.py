@@ -568,6 +568,13 @@ class RealmEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -577,11 +584,6 @@ class RealmEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -724,7 +726,7 @@ class RealmReaderOutput(ModelOutput):
             The index of the retrieved span candidates in which the predicted answer is most likely.
         start_pos (`torch.IntTensor` of shape `()`):
             Predicted answer starting position in *RealmReader*'s inputs.
-        end_pos: (`torch.IntTensor` of shape `()`):
+        end_pos (`torch.IntTensor` of shape `()`):
             Predicted answer ending position in *RealmReader*'s inputs.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of

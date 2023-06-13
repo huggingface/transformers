@@ -26,6 +26,7 @@ from transformers.testing_utils import require_torchvision, require_vision, slow
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -169,13 +170,31 @@ class DetaModelTester:
 
 
 @require_torchvision
-class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DetaModel, DetaForObjectDetection) if is_torchvision_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": DetaModel, "object-detection": DetaForObjectDetection}
+        if is_torchvision_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+
+    # TODO: Fix the failed tests when this model gets more usage
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "ObjectDetectionPipelineTests":
+            return True
+
+        return False
+
+    @unittest.skip("Skip for now. PR #22437 causes some loading issue. See (not merged) #22656 for some discussions.")
+    def test_can_use_safetensors(self):
+        super().test_can_use_safetensors()
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

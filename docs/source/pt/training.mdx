@@ -205,7 +205,7 @@ Especifique suas entradas em `columns` e seu rótulo em `label_cols`:
 ```py
 >>> tf_train_dataset = small_train_dataset.to_tf_dataset(
 ...     columns=["attention_mask", "input_ids", "token_type_ids"],
-...     label_cols=["labels"],
+...     label_cols="labels",
 ...     shuffle=True,
 ...     collate_fn=data_collator,
 ...     batch_size=8,
@@ -213,7 +213,7 @@ Especifique suas entradas em `columns` e seu rótulo em `label_cols`:
 
 >>> tf_validation_dataset = small_eval_dataset.to_tf_dataset(
 ...     columns=["attention_mask", "input_ids", "token_type_ids"],
-...     label_cols=["labels"],
+...     label_cols="labels",
 ...     shuffle=False,
 ...     collate_fn=data_collator,
 ...     batch_size=8,

@@ -175,5 +175,32 @@ socket.socket = offline_socket
         result = subprocess.run(cmd, env=env, check=False, capture_output=True)
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn(
-            "You cannot infer task automatically within `pipeline` when using offline mode", result.stderr.decode()
+            "You cannot infer task automatically within `pipeline` when using offline mode",
+            result.stderr.decode().replace("\n", ""),
         )
+
+    @require_torch
+    def test_offline_model_dynamic_model(self):
+        load = """
+from transformers import AutoModel
+        """
+        run = """
+mname = "hf-internal-testing/test_dynamic_model"
+AutoModel.from_pretrained(mname, trust_remote_code=True)
+print("success")
+        """
+
+        # baseline - just load from_pretrained with normal network
+        cmd = [sys.executable, "-c", "\n".join([load, run])]
+
+        # should succeed
+        env = self.get_env()
+        result = subprocess.run(cmd, env=env, check=False, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("success", result.stdout.decode())
+
+        # should succeed as TRANSFORMERS_OFFLINE=1 tells it to use local files
+        env["TRANSFORMERS_OFFLINE"] = "1"
+        result = subprocess.run(cmd, env=env, check=False, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("success", result.stdout.decode())

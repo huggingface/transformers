@@ -25,6 +25,7 @@ from transformers.testing_utils import require_torch, require_vision, slow, torc
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -163,13 +164,22 @@ class DPTModelTester:
 
 
 @require_torch
-class DPTModelTest(ModelTesterMixin, unittest.TestCase):
+class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as DPT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (DPTModel, DPTForDepthEstimation, DPTForSemanticSegmentation) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "depth-estimation": DPTForDepthEstimation,
+            "feature-extraction": DPTModel,
+            "image-segmentation": DPTForSemanticSegmentation,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     test_pruning = False
     test_resize_embeddings = False

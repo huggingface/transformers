@@ -119,6 +119,13 @@ source .env/bin/activate
 pip install -e ".[dev]"
 ```
 
+Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
+failure with this command. If that's the case make sure to install TensorFlow then do:
+
+```bash
+pip install -e ".[quality]"
+```
+
 **Note:** You don't need to have CUDA installed. Making the new model work on CPU is sufficient.
 
 4. Create a branch with a descriptive name from your main branch

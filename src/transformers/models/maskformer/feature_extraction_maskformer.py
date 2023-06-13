@@ -16,8 +16,7 @@
 
 import warnings
 
-from transformers.utils import logging
-
+from ...utils import logging
 from .image_processing_maskformer import MaskFormerImageProcessor
 
 

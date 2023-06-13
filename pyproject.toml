@@ -4,7 +4,7 @@ target-version = ['py37']
 
 [tool.ruff]
 # Never enforce `E501` (line length violations).
-ignore = ["C901", "E501", "E741", "W605"]
+ignore = ["C901", "E501", "E741"]
 select = ["C", "E", "F", "I", "W"]
 line-length = 119
 
@@ -17,3 +17,7 @@ line-length = 119
 [tool.ruff.isort]
 lines-after-imports = 2
 known-first-party = ["transformers"]
+
+# This is ignored, maybe because of the header? If someone finds a fix, we can uncomment and remove setup.cfg
+# [tool.pytest]
+# doctest_optionflags="NUMBER NORMALIZE_WHITESPACE ELLIPSIS"

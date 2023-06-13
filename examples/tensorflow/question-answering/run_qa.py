@@ -48,7 +48,7 @@ from transformers.utils import CONFIG_NAME, TF2_WEIGHTS_NAME, check_min_version,
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.27.0.dev0")
+check_min_version("4.31.0.dev0")
 
 logger = logging.getLogger(__name__)
 
@@ -656,7 +656,8 @@ def main():
                 adam_global_clipnorm=training_args.max_grad_norm,
             )
 
-            # no user-specified loss = will use the model internal loss
+            # Transformers models compute the right loss for their task by default when labels are passed, and will
+            # use this for training unless you specify your own loss function in compile().
             model.compile(optimizer=optimizer, jit_compile=training_args.xla, metrics=["accuracy"])
 
         else:
@@ -709,9 +710,8 @@ def main():
             callbacks = [
                 PushToHubCallback(
                     output_dir=training_args.output_dir,
-                    model_id=push_to_hub_model_id,
-                    organization=training_args.push_to_hub_organization,
-                    token=training_args.push_to_hub_token,
+                    hub_model_id=push_to_hub_model_id,
+                    hub_token=training_args.push_to_hub_token,
                     tokenizer=tokenizer,
                     **model_card_kwargs,
                 )

@@ -70,6 +70,14 @@ TASK_GUIDE_TO_MODELS = {
     "translation.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
     "video_classification.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
     "document_question_answering.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
+    "monocular_depth_estimation.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES,
+}
+
+# This list contains model types used in some task guides that are not in `CONFIG_MAPPING_NAMES` (therefore not in any
+# `MODEL_MAPPING_NAMES` or any `MODEL_FOR_XXX_MAPPING_NAMES`).
+SPECIAL_TASK_GUIDE_TO_MODEL_TYPES = {
+    "summarization.mdx": ("nllb",),
+    "translation.mdx": ("nllb",),
 }
 
 
@@ -77,9 +85,12 @@ def get_model_list_for_task(task_guide):
     """
     Return the list of models supporting given task.
     """
-    config_maping_names = TASK_GUIDE_TO_MODELS[task_guide]
+    model_maping_names = TASK_GUIDE_TO_MODELS[task_guide]
+    special_model_types = SPECIAL_TASK_GUIDE_TO_MODEL_TYPES.get(task_guide, set())
     model_names = {
-        code: name for code, name in transformers_module.MODEL_NAMES_MAPPING.items() if code in config_maping_names
+        code: name
+        for code, name in transformers_module.MODEL_NAMES_MAPPING.items()
+        if (code in model_maping_names or code in special_model_types)
     }
     return ", ".join([f"[{name}](../model_doc/{code})" for code, name in model_names.items()]) + "\n"
 

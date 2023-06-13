@@ -131,6 +131,11 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.tokenizer is not None and not self.tokenizer.__class__.__name__.endswith("Fast"):
+            raise ValueError(
+                "`DocumentQuestionAnsweringPipeline` requires a fast tokenizer, but a slow tokenizer "
+                f"(`{self.tokenizer.__class__.__name__}`) is provided."
+            )
 
         if self.model.config.__class__.__name__ == "VisionEncoderDecoderConfig":
             self.model_type = ModelType.VisionEncoderDecoder
@@ -418,7 +423,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         else:
             model_outputs = self.model(**model_inputs)
 
-        model_outputs = {k: v for (k, v) in model_outputs.items()}
+        model_outputs = dict(model_outputs.items())
         model_outputs["p_mask"] = p_mask
         model_outputs["word_ids"] = word_ids
         model_outputs["words"] = words

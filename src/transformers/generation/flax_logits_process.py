@@ -129,6 +129,8 @@ class FlaxTopPLogitsWarper(FlaxLogitsWarper):
     def __init__(self, top_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         if not isinstance(top_p, float) or (top_p < 0 or top_p > 1.0):
             raise ValueError(f"`top_p` has to be a float > 0 and < 1, but is {top_p}")
+        if not isinstance(min_tokens_to_keep, int) or (min_tokens_to_keep < 0):
+            raise ValueError(f"`min_tokens_to_keep` has to be a non-negative integer, but is {min_tokens_to_keep}")
 
         self.top_p = top_p
         self.filter_value = filter_value
@@ -328,7 +330,8 @@ class FlaxForceTokensLogitsProcessor(FlaxLogitsProcessor):
         # Indexes without forced tokens will have a negative value.
         force_token_array = jnp.ones((max(force_token_map.keys()) + 1), dtype=jnp.int32) * -1
         for index, token in force_token_map.items():
-            force_token_array = force_token_array.at[index].set(token)
+            if token is not None:
+                force_token_array = force_token_array.at[index].set(token)
         self.force_token_array = jnp.int32(force_token_array)
 
     def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:

@@ -366,7 +366,7 @@ class TestTrainerExt(TestCasePlus):
                 n_gpus_to_use = get_gpu_count()
             master_port = get_torch_dist_unique_port()
             distributed_args = f"""
-                -m torch.distributed.launch
+                -m torch.distributed.run
                 --nproc_per_node={n_gpus_to_use}
                 --master_port={master_port}
                 {self.examples_dir_str}/pytorch/translation/run_translation.py

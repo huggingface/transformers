@@ -319,15 +319,13 @@ class FlaxDataCollatorForBartDenoisingLM:
         sentence_ends = np.argwhere(end_sentence_mask)
         sentence_ends[:, 1] += 1
         example_has_multiple_sentences, num_sentences = np.unique(sentence_ends[:, 0], return_counts=True)
-        num_sentences_map = {sent_idx: count for sent_idx, count in zip(example_has_multiple_sentences, num_sentences)}
+        num_sentences_map = dict(zip(example_has_multiple_sentences, num_sentences))
 
         num_to_permute = np.ceil(num_sentences * self.permute_sentence_ratio).astype(int)
-        num_to_permute_map = {
-            sent_idx: count for sent_idx, count in zip(example_has_multiple_sentences, num_to_permute)
-        }
+        num_to_permute_map = dict(zip(example_has_multiple_sentences, num_to_permute))
 
         sentence_ends = np.split(sentence_ends[:, 1], np.unique(sentence_ends[:, 0], return_index=True)[1][1:])
-        sentence_ends_map = {sent_idx: count for sent_idx, count in zip(example_has_multiple_sentences, sentence_ends)}
+        sentence_ends_map = dict(zip(example_has_multiple_sentences, sentence_ends))
 
         for i in range(input_ids.shape[0]):
             if i not in example_has_multiple_sentences:

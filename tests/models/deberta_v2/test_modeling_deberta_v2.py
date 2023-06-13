@@ -19,6 +19,7 @@ from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -226,7 +227,7 @@ class DebertaV2ModelTester(object):
 
 
 @require_torch
-class DebertaV2ModelTest(ModelTesterMixin, unittest.TestCase):
+class DebertaV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DebertaV2Model,
@@ -238,6 +239,18 @@ class DebertaV2ModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": DebertaV2Model,
+            "fill-mask": DebertaV2ForMaskedLM,
+            "question-answering": DebertaV2ForQuestionAnswering,
+            "text-classification": DebertaV2ForSequenceClassification,
+            "token-classification": DebertaV2ForTokenClassification,
+            "zero-shot": DebertaV2ForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
 
     fx_compatible = True

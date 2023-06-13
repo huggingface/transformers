@@ -21,6 +21,7 @@ import tempfile
 import unittest
 
 import numpy as np
+from datasets import load_dataset
 
 from transformers import is_speech_available
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
@@ -172,6 +173,14 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+        # Test 2-D numpy arrays are batched.
+        speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
+        np_speech_inputs = np.asarray(speech_inputs)
+        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_features
+        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
         # Test truncation required
         speech_inputs = [floats_list((1, x))[0] for x in range(200, (feature_extractor.n_samples + 500), 200)]
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
@@ -198,8 +207,6 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
 
     def _load_datasamples(self, num_samples):
-        from datasets import load_dataset
-
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
@@ -219,6 +226,16 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         # fmt: on
 
         input_speech = self._load_datasamples(1)
-        feaure_extractor = WhisperFeatureExtractor()
-        input_features = feaure_extractor(input_speech, return_tensors="pt").input_features
+        feature_extractor = WhisperFeatureExtractor()
+        input_features = feature_extractor(input_speech, return_tensors="pt").input_features
+        self.assertEqual(input_features.shape, (1, 80, 3000))
         self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
+
+    def test_zero_mean_unit_variance_normalization_trunc_np_longest(self):
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        audio = self._load_datasamples(1)[0]
+        audio = ((audio - audio.min()) / (audio.max() - audio.min())) * 65535  # Rescale to [0, 65535] to show issue
+        audio = feat_extract.zero_mean_unit_var_norm([audio], attention_mask=None)[0]
+
+        self.assertTrue(np.all(np.mean(audio) < 1e-3))
+        self.assertTrue(np.all(np.abs(np.var(audio) - 1) < 1e-3))

@@ -49,6 +49,7 @@ else:
         "WhisperForConditionalGeneration",
         "WhisperModel",
         "WhisperPreTrainedModel",
+        "WhisperForAudioClassification",
     ]
 
 try:
@@ -74,6 +75,7 @@ else:
         "FlaxWhisperForConditionalGeneration",
         "FlaxWhisperModel",
         "FlaxWhisperPreTrainedModel",
+        "FlaxWhisperForAudioClassification",
     ]
 
 
@@ -99,6 +101,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_whisper import (
             WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            WhisperForAudioClassification,
             WhisperForConditionalGeneration,
             WhisperModel,
             WhisperPreTrainedModel,
@@ -124,6 +127,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_flax_whisper import (
+            FlaxWhisperForAudioClassification,
             FlaxWhisperForConditionalGeneration,
             FlaxWhisperModel,
             FlaxWhisperPreTrainedModel,

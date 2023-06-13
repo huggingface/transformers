@@ -18,21 +18,24 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.utils import is_torch_available, is_torch_tensor, is_vision_available
-from transformers.utils.generic import TensorType
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import center_crop, get_resize_output_image_size, rescale, resize, to_channel_dimension_format
+from ...image_transforms import (
+    center_crop,
+    flip_channel_order,
+    get_resize_output_image_size,
+    rescale,
+    resize,
+    to_channel_dimension_format,
+)
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    infer_channel_dimension_format,
     make_list_of_images,
     to_numpy_array,
     valid_images,
 )
-from ...utils import logging
+from ...utils import TensorType, is_torch_available, is_torch_tensor, is_vision_available, logging
 
 
 if is_vision_available():
@@ -43,34 +46,6 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-def flip_channel_order(image: np.ndarray, data_format: Optional[ChannelDimension]) -> np.ndarray:
-    """
-    Flip the color channels from RGB to BGR or vice versa.
-
-    Args:
-        image (`np.ndarray`):
-            The image, represented as a numpy array.
-        data_format (`ChannelDimension`, *`optional`*):
-            The channel dimension format of the image. If not provided, it will be the same as the input image.
-
-    Returns:
-        `np.ndarray`: The image with the flipped color channels.
-    """
-    input_data_format = infer_channel_dimension_format(image)
-
-    if input_data_format == ChannelDimension.LAST:
-        image = image[..., ::-1]
-    elif input_data_format == ChannelDimension.FIRST:
-        image = image[:, ::-1, ...]
-    else:
-        raise ValueError(f"Invalid input channel dimension format: {input_data_format}")
-
-    if data_format is not None:
-        image = to_channel_dimension_format(image, data_format)
-
-    return image
 
 
 class MobileViTImageProcessor(BaseImageProcessor):

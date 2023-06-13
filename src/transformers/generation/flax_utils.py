@@ -140,7 +140,7 @@ class FlaxGenerationMixin:
               `do_sample=False`
 
     You do not need to call any of the above methods directly. Pass custom parameter values to 'generate' instead. To
-    learn more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
+    learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
     """
 
     def prepare_inputs_for_generation(self, *args, **kwargs):
@@ -385,15 +385,14 @@ class FlaxGenerationMixin:
                 UserWarning,
             )
         elif generation_config.max_new_tokens is not None:
-            generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
             if not has_default_max_length:
-                logger.warn(
+                logger.warning(
                     f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
                     f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
                     "Please refer to the documentation for more information. "
-                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)",
-                    UserWarning,
+                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
+            generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
 
         if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
             raise ValueError(
@@ -448,10 +447,11 @@ class FlaxGenerationMixin:
                     model_kwargs["encoder_outputs"]["last_hidden_state"], num_beams=generation_config.num_beams
                 )
 
-            if "attention_mask" in model_kwargs:
-                model_kwargs["attention_mask"] = self._expand_to_num_beams(
-                    model_kwargs["attention_mask"], num_beams=generation_config.num_beams
-                )
+            for kwarg in ["attention_mask", "decoder_attention_mask"]:
+                if kwarg in model_kwargs:
+                    model_kwargs[kwarg] = self._expand_to_num_beams(
+                        model_kwargs[kwarg], num_beams=generation_config.num_beams
+                    )
 
             return self._beam_search(
                 input_ids,
@@ -463,6 +463,7 @@ class FlaxGenerationMixin:
                 logits_processor=logits_processor,
                 trace=trace,
                 params=params,
+                num_return_sequences=generation_config.num_return_sequences,
                 model_kwargs=model_kwargs,
             )
         else:
@@ -749,6 +750,7 @@ class FlaxGenerationMixin:
         logits_processor: Optional[FlaxLogitsProcessorList] = None,
         trace: bool = True,
         params: Optional[Dict[str, jnp.ndarray]] = None,
+        num_return_sequences: Optional[int] = None,
         model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
     ):
         """
@@ -793,6 +795,9 @@ class FlaxGenerationMixin:
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         length_penalty = length_penalty if length_penalty is not None else self.generation_config.length_penalty
         early_stopping = early_stopping if early_stopping is not None else self.generation_config.early_stopping
+        num_return_sequences = (
+            num_return_sequences if num_return_sequences is not None else self.generation_config.num_return_sequences
+        )
 
         batch_size, num_beams, cur_len = input_ids.shape
 
@@ -821,8 +826,9 @@ class FlaxGenerationMixin:
             model_kwargs["encoder_outputs"]["last_hidden_state"] = flatten_beam_dim(
                 model_kwargs["encoder_outputs"]["last_hidden_state"]
             )
-        if "attention_mask" in model_kwargs:
-            model_kwargs["attention_mask"] = flatten_beam_dim(model_kwargs["attention_mask"])
+        for kwarg in ["attention_mask", "decoder_attention_mask"]:
+            if kwarg in model_kwargs:
+                model_kwargs[kwarg] = flatten_beam_dim(model_kwargs[kwarg])
 
         # initialize model specific kwargs
         model_kwargs = self.prepare_inputs_for_generation(flatten_beam_dim(input_ids), max_length, **model_kwargs)
@@ -995,8 +1001,8 @@ class FlaxGenerationMixin:
         sequences = jnp.where(none_finished[:, None, None], state.sequences, state.running_sequences)
         scores = jnp.where(none_finished[:, None], state.scores, state.running_scores)
 
-        # take best beam for each batch
-        sequences = sequences[:, 0]
-        scores = scores[:, 0]
+        # Take best beams for each batch (the score is sorted in descending order)
+        sequences = flatten_beam_dim(sequences[:, :num_return_sequences, :])
+        scores = flatten_beam_dim(scores[:, :num_return_sequences])
 
         return FlaxBeamSearchOutput(sequences=sequences, scores=scores)

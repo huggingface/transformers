@@ -151,11 +151,12 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         src_lang=None,
         tgt_lang=None,
         additional_special_tokens=None,
+        legacy_behaviour=False,
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
+        self.legacy_behaviour = legacy_behaviour
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
@@ -169,6 +170,7 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
             src_lang=src_lang,
             tgt_lang=tgt_lang,
             additional_special_tokens=additional_special_tokens,
+            legacy_behaviour=legacy_behaviour,
             **kwargs,
         )
 
@@ -287,10 +289,18 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         return self.set_tgt_lang_special_tokens(self.tgt_lang)
 
     def set_src_lang_special_tokens(self, src_lang) -> None:
-        """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, src_lang_code]."""
+        """Reset the special tokens to the source lang setting.
+        - In legacy mode: No prefix and suffix=[eos, src_lang_code].
+        - In default mode: Prefix=[src_lang_code], suffix = [eos]
+        """
         self.cur_lang_code = self.convert_tokens_to_ids(src_lang)
-        self.prefix_tokens = []
-        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+
+        if self.legacy_behaviour:
+            self.prefix_tokens = []
+            self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+        else:
+            self.prefix_tokens = [self.cur_lang_code]
+            self.suffix_tokens = [self.eos_token_id]
 
         prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
         suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)
@@ -302,10 +312,17 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         )
 
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
-        """Reset the special tokens to the target language setting. No prefix and suffix=[eos, tgt_lang_code]."""
+        """Reset the special tokens to the target lang setting.
+        - In legacy mode: No prefix and suffix=[eos, tgt_lang_code].
+        - In default mode: Prefix=[tgt_lang_code], suffix = [eos]
+        """
         self.cur_lang_code = self.convert_tokens_to_ids(lang)
-        self.prefix_tokens = []
-        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+        if self.legacy_behaviour:
+            self.prefix_tokens = []
+            self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+        else:
+            self.prefix_tokens = [self.cur_lang_code]
+            self.suffix_tokens = [self.eos_token_id]
 
         prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
         suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)

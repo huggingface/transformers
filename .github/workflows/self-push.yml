@@ -195,6 +195,10 @@ jobs:
           git checkout ${{ env.CI_SHA }}
           echo "log = $(git log -n 1)"
 
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
         # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
@@ -283,6 +287,10 @@ jobs:
           echo "updated branch = $(git branch --show-current)"
           git checkout ${{ env.CI_SHA }}
           echo "log = $(git log -n 1)"
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
@@ -373,6 +381,10 @@ jobs:
           git checkout ${{ env.CI_SHA }}
           echo "log = $(git log -n 1)"
 
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /workspace/transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
       - name: Remove cached torch extensions
         run: rm -rf /github/home/.cache/torch_extensions/
 
@@ -381,7 +393,7 @@ jobs:
         working-directory: /workspace
         run: |
           python3 -m pip uninstall -y deepspeed
-          DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+          DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_UTILS=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 
       - name: NVIDIA-SMI
         run: |
@@ -459,6 +471,10 @@ jobs:
           git checkout ${{ env.CI_SHA }}
           echo "log = $(git log -n 1)"
 
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /workspace/transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
       - name: Remove cached torch extensions
         run: rm -rf /github/home/.cache/torch_extensions/
 
@@ -467,7 +483,7 @@ jobs:
         working-directory: /workspace
         run: |
           python3 -m pip uninstall -y deepspeed
-          DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+          DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_UTILS=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 
       - name: NVIDIA-SMI
         run: |
@@ -568,6 +584,7 @@ jobs:
           CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           CI_EVENT: push
           CI_TITLE_PUSH: ${{ github.event.head_commit.message }}
           CI_TITLE_WORKFLOW_RUN: ${{ github.event.workflow_run.head_commit.message }}

@@ -610,7 +610,7 @@ class Benchmark(ABC):
                 model_name: AutoConfig.from_pretrained(model_name) for model_name in self.args.model_names
             }
         else:
-            self.config_dict = {model_name: config for model_name, config in zip(self.args.model_names, configs)}
+            self.config_dict = dict(zip(self.args.model_names, configs))
 
         warnings.warn(
             f"The class {self.__class__} is deprecated. Hugging Face Benchmarking utils"

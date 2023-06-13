@@ -15,6 +15,7 @@
 import unittest
 
 from transformers.models.whisper import WhisperTokenizer, WhisperTokenizerFast
+from transformers.models.whisper.tokenization_whisper import _find_longest_common_sequence
 from transformers.testing_utils import slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -114,6 +115,145 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding, model_name="openai/whisper-tiny.en", padding=False
         )
+
+    def test_output_offsets(self):
+        tokenizer = self.get_tokenizer()
+        previous_sequence = [51492, 406, 3163, 1953, 466, 13, 51612, 51612]
+        self.assertEqual(
+            tokenizer.decode(previous_sequence, output_offsets=True),
+            {
+                "text": " not worth thinking about.",
+                "offsets": [{"text": " not worth thinking about.", "timestamp": (22.56, 24.96)}],
+            },
+        )
+
+        # Merge when the previous sequence is a suffix of the next sequence
+        # fmt: off
+        next_sequences_1 = [50364, 295, 6177, 3391, 11, 19817, 3337, 507, 307, 406, 3163, 1953, 466, 13, 50614, 50614, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50834, 50257]
+        # fmt: on
+        self.assertEqual(
+            tokenizer.decode(next_sequences_1, output_offsets=True),
+            {
+                "text": (
+                    " of spectators, retrievality is not worth thinking about. His instant panic was followed by a"
+                    " small, sharp blow high on his chest.<|endoftext|>"
+                ),
+                "offsets": [
+                    {"text": " of spectators, retrievality is not worth thinking about.", "timestamp": (0.0, 5.0)},
+                    {
+                        "text": " His instant panic was followed by a small, sharp blow high on his chest.",
+                        "timestamp": (5.0, 9.4),
+                    },
+                ],
+            },
+        )
+
+    def test_find_longest_common_subsequence(self):
+        previous_sequence = [1, 2, 3]
+        next_sequence = [2, 3, 4, 5]
+        merge = _find_longest_common_sequence([previous_sequence, next_sequence])
+        self.assertEqual(merge, [1, 2, 3, 4, 5])
+
+        # Now previous is larger than next.
+        # We merge what we can and remove the extra right side of the left sequence
+        previous_sequence = [1, 2, 3, 4, 5, 6, 7]
+        next_sequence = [2, 3, 4, 5]
+        merge = _find_longest_common_sequence([previous_sequence, next_sequence])
+        self.assertEqual(merge, [1, 2, 3, 4, 5])
+
+        # Nothing in common
+        previous_sequence = [1, 2, 3]
+        next_sequence = [4, 5, 6]
+        merge = _find_longest_common_sequence([previous_sequence, next_sequence])
+        self.assertEqual(merge, [1, 2, 3, 4, 5, 6])
+
+        # Some errors in the overlap.
+        # We take from previous on the left, from the next on the right of the overlap
+        previous_sequence = [1, 2, 3, 4, 99]
+        next_sequence = [2, 98, 4, 5, 6]
+        merge = _find_longest_common_sequence([previous_sequence, next_sequence])
+        self.assertEqual(merge, [1, 2, 3, 4, 5, 6])
+
+        # We take from previous on the left, from the next on the right of the overlap
+        previous_sequence = [1, 2, 99, 4, 5]
+        next_sequence = [2, 3, 4, 98, 6]
+        merge = _find_longest_common_sequence([previous_sequence, next_sequence])
+        self.assertEqual(merge, [1, 2, 99, 4, 98, 6])
+
+        # This works on 3 sequences
+        seq1 = [1, 2, 3]
+        seq2 = [2, 3, 4]
+        seq3 = [3, 4, 5]
+        merge = _find_longest_common_sequence([seq1, seq2, seq3])
+        self.assertEqual(merge, [1, 2, 3, 4, 5])
+
+        # This works on 3 sequences with errors
+        seq1 = [1, 2, 3, 98, 5]
+        seq2 = [2, 99, 4, 5, 6, 7]
+        seq3 = [4, 97, 6, 7, 8]
+        merge = _find_longest_common_sequence([seq1, seq2, seq3])
+        self.assertEqual(merge, [1, 2, 3, 4, 5, 6, 7, 8])
+
+    def test_skip_special_tokens_skips_prompt_ids(self):
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+        # fmt: off
+        encoded_input = [
+            50361, 2221, 13, 2326, 388, 391, 50258, 50259, 50359,
+            50363, 1282, 264, 2674, 9156, 295, 1523, 11, 2221, 13,
+            2326, 388, 391, 13657, 365, 2681, 21296, 17711, 13, 50257,
+        ]
+        # fmt: on
+        expected_with_special_tokens = "<|startofprev|> Mr. Quilter<|startoftranscript|><|en|><|transcribe|><|notimestamps|> On the general principles of art, Mr. Quilter writes with equal lucidity.<|endoftext|>"
+        expected_without_special_tokens = " On the general principles of art, Mr. Quilter writes with equal lucidity."
+        self.assertEqual(tokenizer.decode(encoded_input, skip_special_tokens=False), expected_with_special_tokens)
+        self.assertEqual(tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens)
+        self.assertEqual(rust_tokenizer.decode(encoded_input, skip_special_tokens=False), expected_with_special_tokens)
+        self.assertEqual(
+            rust_tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens
+        )
+
+    def test_skip_special_tokens_with_timestamps(self):
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        # fmt: off
+        encoded_input = [
+            50258, 50363, 50364, 634, 575, 12525, 22618, 1968, 6144,
+            35617, 20084, 1756, 311, 589, 307, 534, 10281, 934,
+            439, 293, 50676, 50676, 393, 4411, 294, 309, 457,
+            707, 295, 33301, 286, 392, 6628, 13, 50836, 50257,
+        ]
+        # fmt: on
+
+        expected_with_special_tokens = "<|startoftranscript|><|notimestamps|><|0.00|> He has grave doubts whether Sir Frederick Layton's work is really Greek after all and<|6.24|><|6.24|> can discover in it but little of rocky Ithaca.<|9.44|><|endoftext|>"
+        expected_without_special_tokens = "<|0.00|> He has grave doubts whether Sir Frederick Layton's work is really Greek after all and<|6.24|><|6.24|> can discover in it but little of rocky Ithaca.<|9.44|>"
+        self.assertEqual(
+            tokenizer.decode(encoded_input, decode_with_timestamps=True, skip_special_tokens=False),
+            expected_with_special_tokens,
+        )
+        self.assertEqual(
+            tokenizer.decode(encoded_input, decode_with_timestamps=True, skip_special_tokens=True),
+            expected_without_special_tokens,
+        )
+        self.assertEqual(
+            rust_tokenizer.decode(encoded_input, decode_with_timestamps=True, skip_special_tokens=False),
+            expected_with_special_tokens,
+        )
+        self.assertEqual(
+            rust_tokenizer.decode(encoded_input, decode_with_timestamps=True, skip_special_tokens=True),
+            expected_without_special_tokens,
+        )
+
+    def test_fast_tokenizer_get_prompt_ids(self):
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        prompt = "This is test prompt text."
+        tokenizer_prompt_ids = tokenizer.get_prompt_ids(prompt)
+        fast_tokenizer_prompt_ids = rust_tokenizer.get_prompt_ids(prompt)
+
+        self.assertListEqual(tokenizer_prompt_ids.tolist(), fast_tokenizer_prompt_ids.tolist())
 
 
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):

@@ -139,15 +139,15 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
 2. Clone your fork to your local disk, and add the base repository as a remote:
 
    ```bash
-   $ git clone git@github.com:<your Github handle>/transformers.git
-   $ cd transformers
-   $ git remote add upstream https://github.com/huggingface/transformers.git
+   git clone git@github.com:<your Github handle>/transformers.git
+   cd transformers
+   git remote add upstream https://github.com/huggingface/transformers.git
    ```
 
 3. Create a new branch to hold your development changes:
 
    ```bash
-   $ git checkout -b a-descriptive-name-for-my-changes
+   git checkout -b a-descriptive-name-for-my-changes
    ```
 
    🚨 **Do not** work on the `main` branch!
@@ -155,20 +155,22 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
 4. Set up a development environment by running the following command in a virtual environment:
 
    ```bash
-   $ pip install -e ".[dev]"
+   pip install -e ".[dev]"
    ```
 
    If 🤗 Transformers was already installed in the virtual environment, remove
    it with `pip uninstall transformers` before reinstalling it in editable
    mode with the `-e` flag.
    
-   Depending on your OS, you may need to install some external libraries as well if the `pip` installation fails.
-   
-   For macOS, you will likely need [MeCab](https://taku910.github.io/mecab/) which can be installed from Homebrew:
-   
+   Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
+   failure with this command. If that's the case make sure to install the Deep Learning framework you are working with
+   (PyTorch, TensorFlow and/or Flax) then do:
+
    ```bash
-   brew install mecab
+   pip install -e ".[quality]"
    ```
+
+   which should be enough for most use cases.
 
 5. Develop the features on your branch.
 
@@ -176,7 +178,7 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
    passes. Run the tests impacted by your changes like this:
 
    ```bash
-   $ pytest tests/<TEST_TO_RUN>.py
+   pytest tests/<TEST_TO_RUN>.py
    ```
 
    For more information about tests, check out the
@@ -187,7 +189,7 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
    that can't be automated in one go with:
 
    ```bash
-   $ make fixup
+   make fixup
    ```
 
    This target is also optimized to only work with files modified by the PR you're working on.
@@ -196,21 +198,21 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
    style corrections:
 
    ```bash
-   $ make style
+   make style
    ```
 
    🤗 Transformers also uses `ruff` and a few custom scripts to check for coding mistakes. Quality
    controls are run by the CI, but you can run the same checks with:
 
    ```bash
-   $ make quality
+   make quality
    ```
 
    Finally, we have a lot of scripts to make sure we didn't forget to update
    some files when adding a new model. You can run these scripts with:
 
    ```bash
-   $ make repo-consistency
+   make repo-consistency
    ```
 
    To learn more about those checks and how to fix any issues with them, check out the
@@ -220,13 +222,13 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
    make sure you install the documentation builder:
    
    ```bash
-   $ pip install ".[docs]"
+   pip install ".[docs]"
    ```
 
    Run the following command from the root of the repository:
 
    ```bash
-   $ doc-builder build transformers docs/source/en --build_dir ~/tmp/test-build
+   doc-builder build transformers docs/source/en --build_dir ~/tmp/test-build
    ```
 
    This will build the documentation in the `~/tmp/test-build` folder where you can inspect the generated
@@ -236,8 +238,8 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
    record your changes locally with `git commit`:
 
    ```bash
-   $ git add modified_file.py
-   $ git commit
+   git add modified_file.py
+   git commit
    ```
 
    Please remember to write [good commit
@@ -247,14 +249,14 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
    repository, rebase your branch on `upstream/branch` *before* you open a pull request or if requested by a maintainer:
 
    ```bash
-   $ git fetch upstream
-   $ git rebase upstream/main
+   git fetch upstream
+   git rebase upstream/main
    ```
 
    Push your changes to your branch:
 
    ```bash
-   $ git push -u origin a-descriptive-name-for-my-changes
+   git push -u origin a-descriptive-name-for-my-changes
    ```
 
    If you've already opened a pull request, you'll need to force push with the `--force` flag. Otherwise, if the pull request hasn't been opened yet, you can just push your changes normally.
@@ -273,7 +275,7 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
 request description to make sure they are linked (and people viewing the issue know you
 are working on it).<br>
 ☐ To indicate a work in progress please prefix the title with `[WIP]`. These are
-useful to avoid duplicated work, and to differentiate it from PRs ready to be merged.
+useful to avoid duplicated work, and to differentiate it from PRs ready to be merged.<br>
 ☐ Make sure existing tests pass.<br>
 ☐ If adding a new feature, also add tests for it.<br>
    - If you are adding a new model, make sure you use
@@ -282,7 +284,7 @@ useful to avoid duplicated work, and to differentiate it from PRs ready to be me
      `RUN_SLOW=1 python -m pytest tests/models/my_new_model/test_my_new_model.py`.
    - If you are adding a new tokenizer, write tests and make sure
      `RUN_SLOW=1 python -m pytest tests/models/{your_model_name}/test_tokenization_{your_model_name}.py` passes.
-   CircleCI does not run the slow tests, but GitHub Actions does every night!<br>
+   - CircleCI does not run the slow tests, but GitHub Actions does every night!<br>
 
 ☐ All public methods must have informative docstrings (see
 [`modeling_bert.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py)
@@ -307,14 +309,14 @@ We like `pytest` and `pytest-xdist` because it's faster. From the root of the
 repository, specify a *path to a subfolder or a test file* to run the test.
 
 ```bash
-$ python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
+python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
 ```
 
 Similarly, for the `examples` directory, specify a *path to a subfolder or test file* to run the test. For example, the following command tests the text classification subfolder in the PyTorch `examples` directory:
 
 ```bash
-$ pip install -r examples/xxx/requirements.txt  # only needed the first time
-$ python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
+pip install -r examples/xxx/requirements.txt  # only needed the first time
+python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
 ```
 
 In fact, this is actually how our `make test` and `make test-examples` commands are implemented (not including the `pip install`)!
@@ -333,8 +335,8 @@ Remember to specify a *path to a subfolder or a test file* to run the test. Othe
 </Tip>
 
 ```bash
-$ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
-$ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
+RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
+RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
 ```
 
 Like the slow tests, there are other environment variables available which not enabled by default during testing:
@@ -351,8 +353,8 @@ This means `unittest` is fully supported. Here's how to run tests with
 `unittest`:
 
 ```bash
-$ python -m unittest discover -s tests -t . -v
-$ python -m unittest discover -s examples -t examples -v
+python -m unittest discover -s tests -t . -v
+python -m unittest discover -s examples -t examples -v
 ```
 
 ### Style guide
@@ -363,7 +365,7 @@ for more information.
 
 ### Develop on Windows
 
-On Windows (unless you're working in [Windows Subsytem for Linux](https://learn.microsoft.com/en-us/windows/wsl/) or WSL), you need to configure git to transform Windows `CRLF` line endings to Linux `LF` line endings:
+On Windows (unless you're working in [Windows Subsystem for Linux](https://learn.microsoft.com/en-us/windows/wsl/) or WSL), you need to configure git to transform Windows `CRLF` line endings to Linux `LF` line endings:
 
 ```bash
 git config core.autocrlf input
@@ -386,8 +388,8 @@ When updating the main branch of a forked repository, please follow these steps 
 2. If a PR is absolutely necessary, use the following steps after checking out your branch:
 
 ```bash
-$ git checkout -b your-branch-for-syncing
-$ git pull --squash --no-commit upstream main
-$ git commit -m '<your message without GitHub references>'
-$ git push --set-upstream origin your-branch-for-syncing
+git checkout -b your-branch-for-syncing
+git pull --squash --no-commit upstream main
+git commit -m '<your message without GitHub references>'
+git push --set-upstream origin your-branch-for-syncing
 ```

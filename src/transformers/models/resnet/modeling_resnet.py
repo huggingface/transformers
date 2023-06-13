@@ -28,7 +28,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import BackboneMixin, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -36,6 +36,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.backbone_utils import BackboneMixin
 from .configuration_resnet import ResNetConfig
 
 
@@ -431,26 +432,14 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
 class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
+        super()._init_backbone(config)
 
-        self.stage_names = config.stage_names
+        self.num_features = [config.embedding_size] + config.hidden_sizes
         self.embedder = ResNetEmbeddings(config)
         self.encoder = ResNetEncoder(config)
 
-        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
-
-        out_feature_channels = {}
-        out_feature_channels["stem"] = config.embedding_size
-        for idx, stage in enumerate(self.stage_names[1:]):
-            out_feature_channels[stage] = config.hidden_sizes[idx]
-
-        self.out_feature_channels = out_feature_channels
-
         # initialize weights and apply final processing
         self.post_init()
-
-    @property
-    def channels(self):
-        return [self.out_feature_channels[name] for name in self.out_features]
 
     @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)

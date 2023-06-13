@@ -275,7 +275,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             xpath_subs_list.append(min(self.max_width, sub))
 
         xpath_tags_list = xpath_tags_list[: self.max_depth]
-        xpath_subs_list = xpath_tags_list[: self.max_depth]
+        xpath_subs_list = xpath_subs_list[: self.max_depth]
         xpath_tags_list += [self.pad_tag_id] * (self.max_depth - len(xpath_tags_list))
         xpath_subs_list += [self.pad_width] * (self.max_depth - len(xpath_subs_list))
 

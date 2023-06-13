@@ -31,8 +31,7 @@ class GPTSanJapaneseConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`GPTSanJapaneseModel`]. It is used to instantiate
     a GPTSANJapanese model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GPTSANJapanese
-    [tanreinama/GPTSAN-2.8B-spout_is_uniform](https://huggingface.co/tanreinama/GPTSAN-2.8B-spout_is_uniform)
-    architecture.
+    [Tanrei/GPTSAN-japanese](https://huggingface.co/Tanrei/GPTSAN-japanese) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

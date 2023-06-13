@@ -18,8 +18,6 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from transformers.utils.generic import TensorType
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     center_crop,
@@ -40,8 +38,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import logging
-from ...utils.import_utils import is_vision_available
+from ...utils import TensorType, is_vision_available, logging
 
 
 logger = logging.get_logger(__name__)

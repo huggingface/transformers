@@ -267,7 +267,7 @@ class FeaturesManager:
             onnx_config_cls="models.deberta_v2.DebertaV2OnnxConfig",
         ),
         "deit": supported_features_mapping(
-            "default", "image-classification", "masked-im", onnx_config_cls="models.deit.DeiTOnnxConfig"
+            "default", "image-classification", onnx_config_cls="models.deit.DeiTOnnxConfig"
         ),
         "detr": supported_features_mapping(
             "default",
@@ -502,7 +502,7 @@ class FeaturesManager:
             onnx_config_cls="models.squeezebert.SqueezeBertOnnxConfig",
         ),
         "swin": supported_features_mapping(
-            "default", "image-classification", "masked-im", onnx_config_cls="models.swin.SwinOnnxConfig"
+            "default", "image-classification", onnx_config_cls="models.swin.SwinOnnxConfig"
         ),
         "t5": supported_features_mapping(
             "default",
@@ -515,7 +515,7 @@ class FeaturesManager:
             "vision2seq-lm", onnx_config_cls="models.vision_encoder_decoder.VisionEncoderDecoderOnnxConfig"
         ),
         "vit": supported_features_mapping(
-            "default", "image-classification", "masked-im", onnx_config_cls="models.vit.ViTOnnxConfig"
+            "default", "image-classification", onnx_config_cls="models.vit.ViTOnnxConfig"
         ),
         "whisper": supported_features_mapping(
             "default",

@@ -825,16 +825,15 @@ class ClapAudioEncoder(nn.Module):
         self.config = config
         self.patch_embed = ClapAudioPatchEmbed(config)
         self.enable_fusion = config.enable_fusion
-        grid_size = self.patch_embed.grid_size
         self.patch_stride = self.patch_embed.patch_stride
         self.spec_size = config.spec_size
-        self.freq_ratio = self.spec_size // config.num_mel_bins
+        self.freq_ratio = config.spec_size // config.num_mel_bins
 
         self.num_features = int(config.patch_embeds_hidden_size * 2 ** (self.num_layers - 1))
-        self.freq_ratio = config.spec_size // config.num_mel_bins
 
         drop_path_rate = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
 
+        grid_size = self.patch_embed.grid_size
         self.input_resolutions = [(grid_size[0] // (2**i), grid_size[1] // (2**i)) for i in range(self.num_layers)]
 
         self.layers = nn.ModuleList(
@@ -1579,6 +1578,13 @@ class ClapTextEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -1588,11 +1594,6 @@ class ClapTextEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):

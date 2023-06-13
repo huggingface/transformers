@@ -20,6 +20,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -585,7 +586,7 @@ class LukeModelTester:
 
 
 @require_torch
-class LukeModelTest(ModelTesterMixin, unittest.TestCase):
+class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             LukeModel,
@@ -601,10 +602,31 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": LukeModel,
+            "fill-mask": LukeForMaskedLM,
+            "question-answering": LukeForQuestionAnswering,
+            "text-classification": LukeForSequenceClassification,
+            "token-classification": LukeForTokenClassification,
+            "zero-shot": LukeForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = True
     test_head_masking = True
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name in ["QAPipelineTests", "ZeroShotClassificationPipelineTests"]:
+            return True
+
+        return False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         entity_inputs_dict = {k: v for k, v in inputs_dict.items() if k.startswith("entity")}

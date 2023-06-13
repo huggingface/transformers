@@ -25,10 +25,10 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
-    require_torchaudio,
     slow,
     torch_device,
 )
+from transformers.trainer_utils import set_seed
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -39,6 +39,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -102,6 +103,7 @@ class SpeechT5ModelTester:
         batch_size=13,
         seq_length=7,
         is_training=False,
+        vocab_size=81,
         hidden_size=24,
         num_hidden_layers=4,
         num_attention_heads=2,
@@ -111,6 +113,7 @@ class SpeechT5ModelTester:
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
+        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -139,6 +142,7 @@ class SpeechT5ModelTester:
 
     def get_config(self):
         return SpeechT5Config(
+            vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
             decoder_layers=self.num_hidden_layers,
@@ -160,8 +164,13 @@ class SpeechT5ModelTester:
 
 
 @require_torch
-class SpeechT5ModelTest(ModelTesterMixin, unittest.TestCase):
+class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5Model,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"automatic-speech-recognition": SpeechT5ForSpeechToText, "feature-extraction": SpeechT5Model}
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
@@ -707,7 +716,6 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-@require_torchaudio
 @require_sentencepiece
 @require_tokenizers
 @slow
@@ -982,7 +990,6 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-@require_torchaudio
 @require_sentencepiece
 @require_tokenizers
 @slow
@@ -996,11 +1003,13 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         model.to(torch_device)
         processor = self.default_processor
 
+        set_seed(555)  # make deterministic
+
         input_text = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
         input_ids = processor(text=input_text, return_tensors="pt").input_ids.to(torch_device)
 
         generated_speech = model.generate_speech(input_ids)
-        self.assertEqual(generated_speech.shape, (1800, model.config.num_mel_bins))
+        self.assertEqual(generated_speech.shape, (1820, model.config.num_mel_bins))
 
 
 @require_torch
@@ -1397,7 +1406,6 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-@require_torchaudio
 @require_sentencepiece
 @require_tokenizers
 @slow

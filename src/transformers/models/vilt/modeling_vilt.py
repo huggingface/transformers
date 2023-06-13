@@ -1009,6 +1009,8 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
+            # move labels to correct device to enable PP
+            labels = labels.to(mlm_logits.device)
             masked_lm_loss = loss_fct(mlm_logits.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
@@ -1155,6 +1157,8 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
 
         loss = None
         if labels is not None:
+            # move labels to correct device to enable PP
+            labels = labels.to(logits.device)
             loss = nn.functional.binary_cross_entropy_with_logits(logits, labels) * labels.shape[1]
             # see https://github.com/jnhwkim/ban-vqa/blob/master/train.py#L19
 
@@ -1256,6 +1260,8 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
 
         loss = None
         if labels is not None:
+            # move labels to correct device to enable PP
+            labels = labels.to(logits.device)
             raise NotImplementedError("Training is not yet supported.")
 
         if not return_dict:
@@ -1395,6 +1401,8 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
+            # move labels to correct device to enable PP
+            labels = labels.to(logits.device)
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
@@ -1481,6 +1489,8 @@ class ViltForTokenClassification(ViltPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
+            # move labels to correct device to enable PP
+            labels = labels.to(logits.device)
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:

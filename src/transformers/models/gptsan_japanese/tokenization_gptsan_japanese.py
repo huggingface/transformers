@@ -55,7 +55,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-# Copied from transformers.models.gpt_neox_japanese.tokenization_gpt_neox_japanese.load_vocab_and_emoji
 def load_vocab_and_emoji(vocab_file, emoji_file):
     """Loads a vocabulary file and emoji file into a dictionary."""
     with open(emoji_file, "r", encoding="utf-8") as f:
@@ -66,7 +65,7 @@ def load_vocab_and_emoji(vocab_file, emoji_file):
     ids_to_tokens = collections.OrderedDict()
     with open(vocab_file, "r", encoding="utf-8") as f:
         token = f.readlines()
-    token = [[t.rstrip("\n")] if (t == "," or "," not in t) else t.rstrip("\n").split(",") for t in token]
+    token = [[t.rstrip("\n")] if (t == ",\n" or "," not in t) else t.rstrip("\n").split(",") for t in token]
     for idx, b in enumerate(token):
         ids_to_tokens[idx] = b
         raw_vocab[",".join(b)] = idx
@@ -96,7 +95,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
     >>> tokenizer = GPTSanJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
     >>> # You can confirm both 慶応 and 慶應 are encoded to 17750
     >>> tokenizer("吾輩は猫である🐯。実は慶応(慶應)大学出身")["input_ids"]
-    [34347, 31459, 30647, 31448, 25, 30659, 35729, 35676, 32417, 30647, 17750, 35589, 17750, 35590, 321, 1281]
+    [35993, 35998, 34347, 31459, 30647, 31448, 25, 30659, 35729, 35676, 32417, 30647, 17750, 35589, 17750, 35590, 321, 1281]
 
     >>> # Both 慶応 and 慶應 are decoded to 慶応
     >>> tokenizer.decode(tokenizer("吾輩は猫である🐯。実は慶応(慶應)大学出身")["input_ids"])
@@ -311,6 +310,9 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
 
         Example:
         ```python
+        >>> from transformers import GPTSanJapaneseTokenizer
+
+        >>> tokenizer = GPTSanJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
         >>> x_token = tokenizer("ｱｲｳｴ")
         >>> # input_ids:      | SOT | SEG | ｱ | ｲ | ｳ | ｴ |
         >>> # token_type_ids: | 1   | 0   | 0 | 0 | 0 | 0 |

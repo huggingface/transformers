@@ -71,7 +71,7 @@ def layer_name_mapping(key, file):
 def get_dtype_size(dtype):
     if dtype == torch.bool:
         return 1 / 8
-    bit_search = re.search("[^\d](\d+)$", str(dtype))
+    bit_search = re.search(r"[^\d](\d+)$", str(dtype))
     if bit_search is None:
         raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
     bit_size = int(bit_search.groups()[0])

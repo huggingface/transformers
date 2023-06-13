@@ -25,9 +25,9 @@ import warnings
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 import torch
-from packaging import version
 from torch import nn
 from torch.fx import Graph, GraphModule, Proxy, Tracer
+from torch.fx._compatibility import compatibility
 from torch.fx.proxy import ParameterProxy
 
 from .. import PretrainedConfig, PreTrainedModel, logging
@@ -50,10 +50,20 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
-from ..utils import ENV_VARS_TRUE_VALUES, TORCH_FX_REQUIRED_VERSION, is_torch_fx_available
-from ..utils.versions import importlib_metadata
+from ..utils import (
+    ENV_VARS_TRUE_VALUES,
+    TORCH_FX_REQUIRED_VERSION,
+    get_torch_version,
+    is_peft_available,
+    is_torch_fx_available,
+)
+
+
+if is_peft_available():
+    from peft import PeftModel
 
 
 logger = logging.get_logger(__name__)
@@ -79,6 +89,7 @@ def _generate_supported_model_class_names(
         "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
         "masked-image-modeling": MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
         "image-classification": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+        "zero-shot-image-classification": MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
         "ctc": MODEL_FOR_CTC_MAPPING_NAMES,
         "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
         "semantic-segmentation": MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
@@ -162,6 +173,8 @@ _SPECIAL_SUPPORTED_MODELS = [
     "GPT2DoubleHeadsModel",
     "Speech2Text2Decoder",
     "TrOCRDecoder",
+    "PeftModelForCausalLM",
+    "PeftModelForSeq2SeqLM"
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]
@@ -169,13 +182,13 @@ _SUPPORTED_MODELS = tuple(sorted(set(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPOR
 
 
 def torch_nn_embedding(self, input):
-    return torch.empty(*input.shape, self.weight.shape[-1], device="meta")
+    return torch.empty(*input.shape, self.weight.shape[-1], device="meta", dtype=self.weight.dtype)
 
 
 def torch_nn_functional_embedding(
     input, weight, padding_idx=None, max_norm=None, norm_type=2.0, scale_grad_by_freq=False, sparse=False
 ):
-    return torch.empty(*input.shape, weight.shape[-1], device="meta")
+    return torch.empty(*input.shape, weight.shape[-1], device="meta", dtype=weight.dtype)
 
 
 def torch_nn_layernorm(self, input):
@@ -361,6 +374,26 @@ def torch_tensor_repeat(self, *sizes):
     return torch.empty(shape, device="meta")
 
 
+def torch_repeat_interleave(*args, dim=None, output_size=None):
+    num_args = len(args)
+    if num_args == 1:
+        shape = [output_size if output_size is not None else args[0].sum()]
+    else:
+        shape = list(args[0].shape)
+        if dim is None:
+            if num_args > 2:
+                dim = args[2]
+            else:
+                shape = [sum(shape)]
+                dim = 0
+        repeats = args[1]
+        if isinstance(repeats, int) or torch.numel(repeats) == 1:
+            shape[dim] *= int(repeats)
+        else:
+            shape[dim] = output_size if output_size is not None else repeats.sum()
+    return torch.empty(*shape, device="meta")
+
+
 def torch_index_select(input, dim, index, *, out=None):
     shape = list(input.shape)
     shape[dim] = len(index)
@@ -369,6 +402,16 @@ def torch_index_select(input, dim, index, *, out=None):
 
 def torch_tensor_index_select(self, dim, index):
     return torch_index_select(self, dim, index)
+
+
+def torch_gather(input, dim, index, *, sparse_grad=False, out=None):
+    shape = list(input.shape)
+    shape[dim] = index.shape[dim]
+    return torch.empty(*shape, device="meta")
+
+
+def torch_tensor_gather(self, dim, index):
+    return torch_gather(self, dim, index)
 
 
 def torch_roll(input, shifts, dims=None):
@@ -537,11 +580,14 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.Tensor.baddbmm: torch_tensor_baddbmm,
     torch.einsum: torch_einsum,
     torch.Tensor.repeat: torch_tensor_repeat,
+    torch.repeat_interleave: torch_repeat_interleave,
     torch.roll: torch_roll,
     torch.flip: torch_flip,
     torch.Tensor.flip: torch_tensor_flip,
     torch.index_select: torch_index_select,
     torch.Tensor.index_select: torch_tensor_index_select,
+    torch.gather: torch_gather,
+    torch.Tensor.gather: torch_tensor_gather,
     torch.nn.Conv1d: torch_nn_conv1d,
     torch.nn.Conv2d: torch_nn_conv2d,
     torch.squeeze: torch_squeeze,
@@ -689,14 +735,14 @@ class HFTracer(Tracer):
         "clamp",
         "finfo",
     ]
+    supported_archs = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
         super().__init__(autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions)
 
         if not is_torch_fx_available():
-            torch_version = version.parse(importlib_metadata.version("torch"))
             raise ImportError(
-                f"Found an incompatible version of torch. Found version {torch_version}, but only version "
+                f"Found an incompatible version of torch. Found version {get_torch_version()}, but only version "
                 f"{TORCH_FX_REQUIRED_VERSION} is supported."
             )
 
@@ -759,6 +805,8 @@ class HFTracer(Tracer):
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES),
                 "GPT2DoubleHeadsModel",
+                "PeftModelForCausalLM",
+                "PeftModelForSeq2SeqLM",
             ]:
                 inputs_dict["labels"] = torch.zeros(shape, dtype=torch.long, device=device)
             elif model_class_name in [*get_values(MODEL_FOR_CTC_MAPPING_NAMES)]:
@@ -984,7 +1032,13 @@ class HFTracer(Tracer):
                     continue
                 if param.default is inspect.Parameter.empty:
                     raise ValueError(f"You need to specify a default value for the parameter {param.name}.")
-            concrete_args.update({p.name: p.default for p in sig.parameters.values() if p.name not in dummy_inputs})
+            concrete_args.update(
+                {
+                    p.name: p.default
+                    for p in sig.parameters.values()
+                    if (p.name not in dummy_inputs and p.name not in concrete_args)
+                }
+            )
 
         input_names = sig.parameters.keys() - concrete_args.keys()
 
@@ -1003,7 +1057,9 @@ class HFTracer(Tracer):
                 continue
             # We enforce that root must either be a PreTrainedModel or deserialized from a serialized traced model to
             # be able to use HFTracer._generate_dummy_input.
-            if isinstance(root, PreTrainedModel) or type(root).__qualname__.startswith("_deserialize_graph_module"):
+            if isinstance(root, self.supported_archs) or type(root).__qualname__.startswith(
+                "_deserialize_graph_module"
+            ):
                 inputs.update(self._generate_dummy_input(root, input_name, shape))
             else:
                 raise RuntimeError(
@@ -1116,6 +1172,17 @@ class HFTracer(Tracer):
             m, module_qualified_name
         )
 
+    @compatibility(is_backward_compatible=True)
+    def keys(self, obj: "Proxy") -> Any:
+        """Called when a proxy object is has the keys() method called.
+        This is what happens when ** is called on a proxy. This should return an iterator if ** is supposed to work in
+        your custom tracer.
+        """
+        attribute = HFAttribute(obj, "keys")()
+        if obj.node.target == "**kwargs":
+            return attribute._metadata
+        return attribute
+
 
 def get_concrete_args(model: nn.Module, input_names: List[str]):
     sig = inspect.signature(model.forward)
@@ -1143,6 +1210,7 @@ def symbolic_trace(
     model: PreTrainedModel,
     input_names: Optional[List[str]] = None,
     disable_check: bool = False,
+    tracer_cls: Type[HFTracer] = HFTracer,
 ) -> GraphModule:
     """
     Performs symbolic tracing on the model.
@@ -1154,6 +1222,8 @@ def symbolic_trace(
             The names of the inputs of the traced model. If unset, model.dummy_inputs.keys() are used instead.
         disable_check (`bool`, *optional*, defaults to `False`):
             If `True`, no check is done before trying to trace the model, this is mostly usesul for debugging purposes.
+        tracer_cls (`Type[HFTracer]`, *optional*, defaults to `HFTracer`):
+            The tracer class to use for instantiating the tracer. If unset, `HFTracer` is used instead.
 
     Returns:
         `torch.fx.GraphModule`: A GraphModule constructed by recording operations seen while tracing the model.
@@ -1176,7 +1246,7 @@ def symbolic_trace(
         check_if_model_is_supported(model)
 
     # Tracing.
-    tracer = HFTracer()
+    tracer = tracer_cls()
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
 

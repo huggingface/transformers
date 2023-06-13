@@ -69,7 +69,14 @@ SPECIAL_CASES_TO_ALLOW = {
     "RetriBertConfig": ["layer_norm_eps"],
     # having default values other than `1e-5` - we can't fix them without breaking
     "TrajectoryTransformerConfig": ["layer_norm_eps"],
+    # used internally to calculate the feature size
+    "InformerConfig": ["num_static_real_features", "num_time_features"],
+    # used internally to calculate the feature size
+    "TimeSeriesTransformerConfig": ["num_static_real_features", "num_time_features"],
+    # used internally to calculate the feature size
+    "AutoformerConfig": ["num_static_real_features", "num_time_features"],
 }
+
 
 # TODO (ydshieh): Check the failing cases, try to fix them or move some cases to the above block once we are sure
 SPECIAL_CASES_TO_ALLOW.update(
@@ -97,7 +104,6 @@ SPECIAL_CASES_TO_ALLOW.update(
         "SwitchTransformersConfig": True,
         "TableTransformerConfig": True,
         "TapasConfig": True,
-        "TimeSeriesTransformerConfig": True,
         "TrajectoryTransformerConfig": True,
         "TransfoXLConfig": True,
         "UniSpeechConfig": True,
@@ -167,6 +173,8 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "mask_index",
         "image_size",
         "use_cache",
+        "out_features",
+        "out_indices",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 

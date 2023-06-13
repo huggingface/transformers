@@ -44,6 +44,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -412,8 +413,9 @@ class CLIPSegModelTester:
 
 
 @require_torch
-class CLIPSegModelTest(ModelTesterMixin, unittest.TestCase):
+class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CLIPSegModel, CLIPSegForImageSegmentation) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": CLIPSegModel} if is_torch_available() else {}
     fx_compatible = False
     test_head_masking = False
     test_pruning = False

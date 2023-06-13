@@ -35,9 +35,9 @@ _re_import_struct_add_one = re.compile(r'^\s*_import_structure\["\S*"\]\.append\
 # Catches a line _import_struct["bla"].extend(["foo", "bar"]) or _import_struct["bla"] = ["foo", "bar"]
 _re_import_struct_add_many = re.compile(r"^\s*_import_structure\[\S*\](?:\.extend\(|\s*=\s+)\[([^\]]*)\]")
 # Catches a line with an object between quotes and a comma:     "MyModel",
-_re_quote_object = re.compile('^\s+"([^"]+)",')
+_re_quote_object = re.compile(r'^\s+"([^"]+)",')
 # Catches a line with objects between brackets only:    ["foo", "bar"],
-_re_between_brackets = re.compile("^\s+\[([^\]]+)\]")
+_re_between_brackets = re.compile(r"^\s+\[([^\]]+)\]")
 # Catches a line with from foo import bar, bla, boo
 _re_import = re.compile(r"\s+from\s+\S*\s+import\s+([^\(\s].*)\n")
 # Catches a line with try:
@@ -78,7 +78,7 @@ def parse_init(init_file):
         # If we have everything on a single line, let's deal with it.
         if _re_one_line_import_struct.search(line):
             content = _re_one_line_import_struct.search(line).groups()[0]
-            imports = re.findall("\[([^\]]+)\]", content)
+            imports = re.findall(r"\[([^\]]+)\]", content)
             for imp in imports:
                 objects.extend([obj[1:-1] for obj in imp.split(", ")])
             line_index += 1
@@ -277,11 +277,20 @@ def check_submodules():
 
     transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
+    import_structure_keys = set(transformers._import_structure.keys())
+    # This contains all the base keys of the _import_structure object defined in the init, but if the user is missing
+    # some optional dependencies, they may not have all of them. Thus we read the init to read all additions and
+    # (potentiall re-) add them.
+    with open(os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"), "r") as f:
+        init_content = f.read()
+    import_structure_keys.update(set(re.findall(r"import_structure\[\"([^\"]*)\"\]", init_content)))
+
     module_not_registered = [
         module
         for module in get_transformers_submodules()
-        if module not in IGNORE_SUBMODULES and module not in transformers._import_structure.keys()
+        if module not in IGNORE_SUBMODULES and module not in import_structure_keys
     ]
+
     if len(module_not_registered) > 0:
         list_of_modules = "\n".join(f"- {module}" for module in module_not_registered)
         raise ValueError(

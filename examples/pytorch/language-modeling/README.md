@@ -178,6 +178,10 @@ sure all your batches have the same length.
 
 To use the streaming dataset mode which can be very useful for large datasets, add `--streaming` to the command line. This is currently supported by `run_mlm.py` and `run_clm.py`.
 
+## Low Cpu Memory Usage
+
+To use low cpu memory mode which can be very useful for LLM, add `--low_cpu_mem_usage` to the command line. This is currently supported by `run_clm.py`,`run_mlm.py`, `run_plm.py`,`run_mlm_no_trainer.py` and `run_clm_no_trainer.py`.
+
 ## Creating a model on the fly
 
 When training a model from scratch, configuration values may be overridden with the help of `--config_overrides`:
