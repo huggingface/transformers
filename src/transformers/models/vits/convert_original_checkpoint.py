@@ -276,6 +276,11 @@ def convert_checkpoint(
     else:
         config = VitsConfig()
 
+    if vocab_path is None:
+        vocab_path = os.path.join(checkpoint_path, "vocab.txt")
+    symbols = [line.replace("\n", "") for line in open(vocab_path, encoding="utf-8").readlines()]
+    config.vocab_size = len(symbols)
+
     # if task == "s2t":
     #     config.max_length = config.max_text_positions
     #     model = SpeechT5ForSpeechToText(config)
@@ -320,7 +325,7 @@ def convert_checkpoint(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
-    parser.add_argument("--vocab_path", default=None, type=str, help="Path to TODO")
+    parser.add_argument("--vocab_path", default=None, type=str, help="Path to vocab.txt")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument(
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."

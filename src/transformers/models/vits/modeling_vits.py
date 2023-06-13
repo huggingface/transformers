@@ -1538,7 +1538,7 @@ class VitsModel(VitsPreTrainedModel):
         o = self.dec((z * y_mask)[:,:,:max_len], g=g)
 
         # TODO: return outputs using Output object
-        return o
+        return o, y_mask
 
     def _generate_path(self, duration, mask):
         """
