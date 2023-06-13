@@ -17,6 +17,8 @@
 
 from typing import Optional
 
+import numpy as np
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -153,6 +155,11 @@ class EncodecConfig(PretrainedConfig):
         self.codebook_size = codebook_size
         self.codebook_dim = codebook_dim if codebook_dim is not None else hidden_size
 
+        if self.norm_type not in ["weight_norm", "time_group_norm"]:
+            raise ValueError(
+                f'self.norm_type must be one of `"weight_norm"`, `"time_group_norm"`), got {self.norm_type}'
+            )
+
         super().__init__(**kwargs)
 
     # This is a property because you might want to change the chunk_length_s on the fly
@@ -170,3 +177,12 @@ class EncodecConfig(PretrainedConfig):
             return None
         else:
             return max(1, int((1.0 - self.overlap) * self.chunk_length))
+    
+    @property
+    def frame_rate(self) -> int:
+        hop_length = np.prod(self.upsampling_ratios)
+        return np.ceil(self.sampling_rate / hop_length)
+
+    @property
+    def num_quantizers(self) -> int:
+        return int(1000 * self.target_bandwidths[-1] // (self.frame_rate * 10))

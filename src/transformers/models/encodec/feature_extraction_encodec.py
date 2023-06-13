@@ -109,7 +109,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
                   acceptable input length for the model if that argument is not provided.
                 - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
                   lengths).
-            truncation (`bool`):
+            truncation (`bool`, *optional*, defaults to `False`):
                 Activates truncation to cut input sequences longer than *max_length* to *max_length*.
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
@@ -135,6 +135,9 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
                 "It is strongly recommended to pass the `sampling_rate` argument to this function. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
+
+        if padding and truncation:
+            raise ValueError("Both `padding` and `truncation` were set to `True`, make sure to only set one")
 
         is_batched = bool(
             isinstance(raw_audio, (list, tuple)) and (isinstance(raw_audio[0], (np.ndarray, tuple, list)))
@@ -183,8 +186,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
                 padding=padding,
                 return_attention_mask=True,
             )
-            if padding:
-                padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
+            padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask", None)
 
         input_values = []
         for example in padded_inputs.pop("input_values"):
