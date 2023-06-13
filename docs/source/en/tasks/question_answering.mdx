@@ -369,8 +369,9 @@ Tokenize the text and return PyTorch tensors:
 Pass your inputs to the model and return the `logits`:
 
 ```py
->>> from transformers import AutoModelForQuestionAnswering
 >>> import torch
+>>> from transformers import AutoModelForQuestionAnswering
+
 >>> model = AutoModelForQuestionAnswering.from_pretrained("my_awesome_qa_model")
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
