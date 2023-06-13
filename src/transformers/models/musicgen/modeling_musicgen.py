@@ -25,10 +25,10 @@ from torch.utils.checkpoint import checkpoint
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
+    BaseModelOutputWithPast,
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
-    BaseModelOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -37,7 +37,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_musicgen import MusicgenEncoderConfig, MusicgenDecoderConfig, MusicgenConfig
+from .configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig, MusicgenEncoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -443,7 +443,9 @@ class MusicgenEncoderBlock(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
         self.layer = nn.ModuleList()
-        self.layer.append(MusicgenEncoderLayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
+        self.layer.append(
+            MusicgenEncoderLayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias)
+        )
         self.layer.append(MusicgenEncoderLayerFF(config))
 
     def forward(
@@ -504,6 +506,7 @@ class MusicgenPreTrainedModel(PreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
+
     config_class = MusicgenConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -617,16 +620,14 @@ class MusicgenEncoderStack(MusicgenPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError(
-                f"You cannot specify both input_ids and inputs_embeds at the same time"
-            )
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
-            raise ValueError(f"You have to specify either input_ids or inputs_embeds")
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             if self.embed_tokens is None:
@@ -744,10 +745,11 @@ class MusicgenEncoderStack(MusicgenPreTrainedModel):
             attentions=all_attentions,
         )
 
+
 MUSICGEN_START_DOCSTRING = r"""
 
-    The Musicgen model was proposed in [Simple and Controllable Music Generation](https://arxiv.org/abs/2306.05284) by 
-    Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi, Alexandre Défossez. It is an 
+    The Musicgen model was proposed in [Simple and Controllable Music Generation](https://arxiv.org/abs/2306.05284) by
+    Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi, Alexandre Défossez. It is an
     encoder decoder transformer trained on the task of conditional music generation
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -1596,7 +1598,7 @@ class MusicgenModel(MusicgenPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(MUSICGEN_INPUTS_DOCSTRING)
-    #@replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    # @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1672,6 +1674,7 @@ class MusicgenModel(MusicgenPreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
+
 @add_start_docstrings(
     "The bare MusicGen Model with an LM head on top for conditional music generation tasks.",
     MUSICGEN_START_DOCSTRING,
@@ -1684,7 +1687,10 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         decoder_config = config.decoder_config
         self.num_codebooks = decoder_config.num_codebooks
         self.lm_heads = nn.ModuleList(
-            [nn.Linear(decoder_config.d_model, decoder_config.vocab_size, bias=False) for _ in range(decoder_config.num_codebooks)]
+            [
+                nn.Linear(decoder_config.d_model, decoder_config.vocab_size, bias=False)
+                for _ in range(decoder_config.num_codebooks)
+            ]
         )
 
         # Initialize weights and apply final processing
@@ -1697,7 +1703,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         return self.model.get_decoder()
 
     @add_start_docstrings_to_model_forward(MUSICGEN_INPUTS_DOCSTRING)
-    #@replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    # @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

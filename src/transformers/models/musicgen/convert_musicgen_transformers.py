@@ -20,7 +20,11 @@ from typing import Dict, OrderedDict
 import torch
 from audiocraft.models import MusicGen
 
-from transformers.models.musicgen.configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig, MusicgenEncoderConfig
+from transformers.models.musicgen.configuration_musicgen import (
+    MusicgenConfig,
+    MusicgenDecoderConfig,
+    MusicgenEncoderConfig,
+)
 from transformers.models.musicgen.modeling_musicgen import MusicgenForConditionalGeneration
 from transformers.utils import logging
 
