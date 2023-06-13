@@ -60,6 +60,9 @@ if is_torch_available():
         reduce_mean,
         reduce_sum,
     )
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_12
+else:
+    is_torch_greater_or_equal_than_1_12 = False
 
 
 class TapasModelTester:
@@ -408,6 +411,7 @@ class TapasModelTester:
         return config, inputs_dict
 
 
+@unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
 @require_torch
 class TapasModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
