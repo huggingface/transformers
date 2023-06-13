@@ -688,6 +688,22 @@ Finally, please, remember that, 🤗 `Trainer` only integrates MPS backend, ther
 have any problems or questions with regards to MPS backend usage, please, 
 file an issue with [PyTorch GitHub](https://github.com/pytorch/pytorch/issues).
 
+
+## Using Accelerate Launcher with Trainer
+
+Accelerate now powers Trainer. In terms of what users should expect:
+- They can keep using the Trainer ingterations such as FSDP, DeepSpeed vis trainer arguments without any changes on their part.
+- They can now use Accelerate Launcher with Trainer giving them following benefits:
+  - Use the same `accelerate` config between scripts that either leverage Trainer or are using Accelerate with custom loops.
+  - We won't be adding new training arguments for the Trainer Integrations.
+    They must be aupported in Accelerate as it trickles down to Trainer. In such cases,
+    the new paramters or updates require usage of Accelerate Launcher.
+  - New features and integrations in Accelerate can be leveraged out-of-the-box in Trainer via Accelerate Launcher/Config
+
+Steps to use Accelerate Launcher with Trainer:
+1. Make sure 🤗 Accelerate is installed. If not `pip install accelerate`
+2. Run `accelerate config --config_file xyz.yaml` and fill the questionnaire. Below are example accelerate configs:
+  a. DDP Multi-node Multi-GPU config:
     ```yaml
     compute_environment: LOCAL_MACHINE                                                                                             
     distributed_type: MULTI_GPU                                                                                                    
