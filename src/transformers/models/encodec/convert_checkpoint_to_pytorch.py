@@ -300,12 +300,13 @@ def convert_checkpoint(
         config.norm_type = "time_group_norm"
         config.normalize = True
         config.chunk_length_s = 1.0
+        config.overlap = 0.01
     else:
         raise ValueError(f"Unknown model name: {model_name}")
 
     model = EncodecModel(config)
 
-    feature_extractor = EncodecFeatureExtractor(feature_size=config.audio_channels, sampling_rate=config.sampling_rate)
+    feature_extractor = EncodecFeatureExtractor(feature_size=config.audio_channels, sampling_rate=config.sampling_rate, chunk_length_s = config.chunk_length_s, overlap = config.overlap)
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     original_checkpoint = torch.load(checkpoint_path)
@@ -314,7 +315,7 @@ def convert_checkpoint(
 
     if repo_id:
         print("Pushing to the hub...")
-        # feature_extractor.push_to_hub(repo_id)
+        feature_extractor.push_to_hub(repo_id)
         model.push_to_hub(repo_id)
 
 

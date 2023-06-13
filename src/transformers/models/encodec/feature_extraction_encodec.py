@@ -34,7 +34,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
     Instantiating a feature extractor with the defaults will yield a similar configuration to that of the
-    [Matthijs/encodec_24khz](https://huggingface.co/Matthijs/encodec_24khz) architecture.
+    [facebook/encodec_24khz](https://huggingface.co/facebook/encodec_24khz) architecture.
 
     Args:
         feature_size (`int`, *optional*, defaults to 1):
@@ -48,11 +48,9 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         overlap (`float`, *optional*):
             Defines the overlap between each chunk. It is used to compute the `chunk_stride` using the following
             formulae : `int((1.0 - self.overlap) * self.chunk_length)`.
-        return_attention_mask (`bool`, *optional*, defaults to `True`):
-            Whether or not [`~EncodecFeatureExtractor.__call__`] should return `attention_mask`.
     """
 
-    model_input_names = ["input_values", "attention_mask"]
+    model_input_names = ["input_values", "padding_mask"]
 
     def __init__(
         self,

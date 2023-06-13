@@ -529,7 +529,7 @@ ENCODEC_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Raw audio input converted to Float and padded to the approriate length in order to be encoded using chunks
-            of length self.chunk_length and a stride of `config.strid_length`.
+            of length self.chunk_length and a stride of `config.chunk_stride`.
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid computing scaling factors on padding token indices (can we avoid computing conv on these+).
             Mask values selected in `[0, 1]`:
@@ -539,18 +539,16 @@ ENCODEC_INPUTS_DOCSTRING = r"""
 
             <Tip warning={true}>
 
-            `padding_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
-            True`. For all models whose processor has `config.return_attention_mask == False`, `attention_mask` should
-            **not** be passed to avoid degraded performance when doing batched inference. For such models
-            `input_values` should simply be padded with 0 and passed without `padding_mask`. Be aware that these models
-            also yield slightly different results depending on whether `input_values` is padded or not.
+             `padding_mask` should always be passed, unless the input was truncated or not padded. This is because in order 
+             to process tensors effectively, the input audio should be padded so that `input_length % stride = step` with `step 
+             = chunk_length-stride`. This ensures that all chunks are of the same shape
 
             </Tip>
 
         bandwidth (`float`, *optional*):
             The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible
             bandwidth. bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented as
-            bandwidth == 6.0
+            `bandwidth == 6.0`
         audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
             Discret code embeddings computed using `model.encode`.
         audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
@@ -817,7 +815,7 @@ class EncodecModel(EncodecPreTrainedModel):
         >>> dataset = load_dataset("ashraq/esc50")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> model_id = "Matthijs/encodec_24khz"
+        >>> model_id = "facebook/encodec_24khz"
         >>> model = EncodecModel.from_pretrained(model_id)
         >>> processor = AutoProcessor.from_pretrained(model_id)
 

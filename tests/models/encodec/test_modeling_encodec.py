@@ -110,12 +110,6 @@ class EncodecModelTester:
 @require_torch
 class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (EncodecModel,) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {"automatic-speech-recognition": EncodecModel, "feature-extraction": EncodecModel}
-        if is_torch_available()
-        else {}
-    )
-    # use EnCodecForSpeechToText later on
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
@@ -439,7 +433,6 @@ class EncodecIntegrationTest(unittest.TestCase):
             "3.0": 0.001,
             "24.0": 0.0005,
         }
-        # [298290, 308806, 305543, 320363, 315116, 320181, 308885, 303291, 4212]
         expected_codesums = {
             "3.0": [
                 [71689, 78549, 75644, 88889, 73100, 82509, 71449, 82835],
@@ -503,4 +496,3 @@ class EncodecIntegrationTest(unittest.TestCase):
             self.assertTrue(rmse < expected_rmse)
 
 
-# TODO Add test where audio is truncated to a multiple + feature in the feature extractor

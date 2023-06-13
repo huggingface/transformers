@@ -93,10 +93,10 @@ class EncodecConfig(PretrainedConfig):
     ```python
     >>> from transformers import EncodecModel, EncodecConfig
 
-    >>> # Initializing a "Matthijs/encodec_24khz" style configuration
+    >>> # Initializing a "facebook/encodec_24khz" style configuration
     >>> configuration = EncodecConfig()
 
-    >>> # Initializing a model (with random weights) from the "Matthijs/encodec_24khz" style configuration
+    >>> # Initializing a model (with random weights) from the "facebook/encodec_24khz" style configuration
     >>> model = EncodecModel(configuration)
 
     >>> # Accessing the model configuration
