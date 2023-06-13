@@ -212,17 +212,23 @@ class TFTransfoXLModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_transfo_xl_for_sequence_classification(*config_and_inputs)
 
-    # TransfoXL has a different `get_output_embeddings` function
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        list_other_models_with_output_ebd = [TFTransfoXLForSequenceClassification]
 
         for model_class in self.all_model_classes:
             model = model_class(config)
             assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-            x = model.get_output_embeddings()
-            assert x is None
-            name = model.get_bias()
-            assert name is None
+            if model_class in list_other_models_with_output_ebd:
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_bias()
+                assert name is None
+            else:
+                x = model.get_output_embeddings()
+                assert x is None
+                name = model.get_bias()
+                assert name is None
 
     def test_xla_mode(self):
         # TODO JP: Make TransfoXL XLA compliant
