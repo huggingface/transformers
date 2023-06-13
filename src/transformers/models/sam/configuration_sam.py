@@ -172,6 +172,8 @@ class SamVisionConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to query, key, value projections.
+        mlp_ratio (`float`, *optional*, defaults to 4.0):
+            Ratio of mlp hidden dim to embedding dim.
         use_abs_pos (`bool`, *optional*, defaults to True):
             Whether to use absolute position embedding.
         use_rel_pos (`bool`, *optional*, defaults to True):
@@ -224,6 +226,7 @@ class SamVisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
         self.qkv_bias = qkv_bias
+        self.mlp_ratio = mlp_ratio
         self.use_abs_pos = use_abs_pos
         self.use_rel_pos = use_rel_pos
         self.window_size = window_size
