@@ -313,7 +313,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             "24.0": [6648961],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        model_id = "fabebook/encodec_24khz"
+        model_id = "facebook/encodec_24khz"
 
         model = EncodecModel.from_pretrained(
             model_id,
@@ -374,7 +374,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             "24.0": [1561048, 1284593, 1278330, 1487220, 1659404],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        model_id = "fabebook/encodec_48khz"
+        model_id = "facebook/encodec_48khz"
 
         model = EncodecModel.from_pretrained(
             model_id,
@@ -444,7 +444,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             ],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        model_id = "fabebook/encodec_48khz"
+        model_id = "facebook/encodec_48khz"
 
         model = EncodecModel.from_pretrained(
             model_id,
