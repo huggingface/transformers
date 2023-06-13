@@ -1235,6 +1235,22 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         return self.serving_output(output)
 
+    def eager_serving(self, inputs):
+        """
+        Method used for serving the model. This method is deprecated, and will be removed.
+
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        warnings.warn(
+            "The function `eager_serving` is deprecated and will be removed in version 4.32.0 of Transformers",
+            FutureWarning,
+        )
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
     @property
     def input_signature(self) -> Dict[str, tf.TensorSpec]:
         """
