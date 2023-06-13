@@ -195,7 +195,11 @@ class WordGraph:
                 self.wgraph_id_to_tokenizer_id_map,
             ) = _build_predefined_graph(rows, tokenizer, remove_stopwords)
         else:
-            (self.adjacency_matrix, self.vocab_indices, self.wgraph_id_to_tokenizer_id_map,) = _build_pmi_graph(
+            (
+                self.adjacency_matrix,
+                self.vocab_indices,
+                self.wgraph_id_to_tokenizer_id_map,
+            ) = _build_pmi_graph(
                 rows, tokenizer, window_size, algorithm, edge_threshold, remove_stopwords, min_freq_to_keep
             )
 
@@ -424,10 +428,5 @@ def _build_predefined_graph(
     )
 
 
-def _build_knowledge_graph(
-    rdf_list: List[str], tokenizer: PreTrainedTokenizerBase
-) -> Tuple[sp.csr_matrix, Dict[str, int], Dict[int, int]]:
-    """
-    Build word level adjacency matrix from a knowledge graph
-    """
-    pass
+# TODO: build knowledge graph from a list of RDF triples
+# def _build_knowledge_graph

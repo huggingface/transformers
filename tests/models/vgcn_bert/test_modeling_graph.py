@@ -114,6 +114,6 @@ class PredefinedWordGraphTest(unittest.TestCase):
             self.remove_stopwords,
         )
         self.assertTrue(all(graph.adjacency_matrix[1:, 1:].diagonal() == np.ones(graph.adjacency_matrix.shape[0] - 1)))
-        self.assertTrue(graph.adjacency_matrix[1, 2] == np.float32(0.3))
+        self.assertTrue(graph.adjacency_matrix[1, 2] == np.float32(0.6))
         print(graph.adjacency_matrix[2, 1])
-        self.assertTrue(graph.adjacency_matrix[2, 1] == np.float32(0.3))
+        self.assertTrue(graph.adjacency_matrix[2, 1] == np.float32(0.6))

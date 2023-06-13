@@ -15,6 +15,7 @@
 
 import copy
 import gc
+import glob
 import inspect
 import json
 import os
@@ -26,12 +27,14 @@ import tempfile
 import unittest
 import unittest.mock as mock
 import warnings
+from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
-from huggingface_hub import HfFolder, delete_repo, set_access_token
+from huggingface_hub import HfFolder, delete_repo
 from huggingface_hub.file_download import http_get
+from pytest import mark
 from requests.exceptions import HTTPError
 
 import transformers
@@ -118,6 +121,7 @@ if is_torch_available():
         AutoTokenizer,
         BertConfig,
         BertModel,
+        CLIPTextModel,
         PreTrainedModel,
         T5Config,
         T5ForConditionalGeneration,
