@@ -597,7 +597,9 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFCTRLMainLayer(config, name="transformer")
-        self.bias_layer = TFCTRLBiasLayer(name="lm_head", shape=[1, config.vocab_size], initializer="zeros", trainable=True)
+        self.bias_layer = TFCTRLBiasLayer(
+            name="lm_head", shape=[1, config.vocab_size], initializer="zeros", trainable=True
+        )
 
     def get_output_embeddings(self):
         return self.get_input_embeddings()
