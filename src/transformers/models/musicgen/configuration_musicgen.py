@@ -27,100 +27,6 @@ MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class MusicgenEncoderConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`MusicgenEncoder`], which is the same as that of
-    the [`T5EncoderModel`]. It is used to instantiate a MusicGen encoder according to the specified arguments, defining
-    the model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that
-    of the MusicGen [facebook/musicgen-small](https://huggingface.co/facebook/musicgen-small) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Arguments:
-        vocab_size (`int`, *optional*, defaults to 32128):
-            Vocabulary size of the encoder. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`MusicgenEncoder`].
-        d_model (`int`, *optional*, defaults to 512):
-            Size of the encoder layers and the pooler layer.
-        d_kv (`int`, *optional*, defaults to 64):
-            Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
-            be defined as `num_heads * d_kv`.
-        d_ff (`int`, *optional*, defaults to 2048):
-            Size of the intermediate feed forward layer in each `MusicgenEncoderBlock`.
-        num_layers (`int`, *optional*, defaults to 6):
-            Number of hidden layers in the Transformer encoder.
-        num_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
-            The number of buckets to use for each attention layer.
-        relative_attention_max_distance (`int`, *optional*, defaults to 128):
-            The maximum distance of the longer sequences for the bucket separation.
-        dropout_rate (`float`, *optional*, defaults to 0.1):
-            The ratio for all dropout layers.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
-            The epsilon used by the layer normalization layers.
-        initializer_factor (`float`, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-        feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
-            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`.
-    """
-    model_type = "musicgen_encoder"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"hidden_size": "d_model", "num_heads": "num_heads", "num_layers": "num_layers"}
-
-    def __init__(
-        self,
-        vocab_size=32128,
-        d_model=512,
-        d_kv=64,
-        d_ff=2048,
-        num_layers=6,
-        num_heads=8,
-        relative_attention_num_buckets=32,
-        relative_attention_max_distance=128,
-        dropout_rate=0.1,
-        layer_norm_epsilon=1e-6,
-        initializer_factor=1.0,
-        feed_forward_proj="relu",
-        is_encoder_decoder=False,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.d_model = d_model
-        self.d_kv = d_kv
-        self.d_ff = d_ff
-        self.num_layers = num_layers
-        self.num_heads = num_heads
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.relative_attention_max_distance = relative_attention_max_distance
-        self.dropout_rate = dropout_rate
-        self.layer_norm_epsilon = layer_norm_epsilon
-        self.initializer_factor = initializer_factor
-        self.feed_forward_proj = feed_forward_proj
-
-        act_info = self.feed_forward_proj.split("-")
-        self.dense_act_fn = act_info[-1]
-        self.is_gated_act = act_info[0] == "gated"
-
-        if len(act_info) > 1 and act_info[0] != "gated" or len(act_info) > 2:
-            raise ValueError(
-                f"`feed_forward_proj`: {feed_forward_proj} is not a valid activation function of the dense layer."
-                "Please make sure `feed_forward_proj` is of the format `gated-{ACT_FN}` or `{ACT_FN}`, e.g. "
-                "'gated-gelu' or 'relu'"
-            )
-
-        # for backwards compatibility
-        if feed_forward_proj == "gated-gelu":
-            self.dense_act_fn = "gelu_new"
-
-        super().__init__(
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
-
-
 class MusicgenDecoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`MusicgenDecoder`]. It is used to instantiate a
@@ -142,13 +48,13 @@ class MusicgenDecoderConfig(PretrainedConfig):
             Number of decoder layers.
         num_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer block.
-        d_ff (`int`, *optional*, defaults to 4096):
+        ffn_dim (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer block.
         activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the decoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, text_encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
@@ -178,7 +84,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
         vocab_size=2048,
         max_position_embeddings=1024,
         num_layers=12,
-        d_ff=4096,
+        ffn_dim=4096,
         num_heads=16,
         layerdrop=0.0,
         use_cache=True,
@@ -199,7 +105,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
-        self.d_ff = d_ff
+        self.ffn_dim = ffn_dim
         self.num_layers = num_layers
         self.num_heads = num_heads
         self.dropout = dropout
@@ -231,7 +137,7 @@ class MusicgenConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        encoder_config (`dict`, *optional*):
+        text_encoder_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`MusicgenEncoderConfig`].
         decoder_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`MusicgenDecoderConfig`].
@@ -246,68 +152,78 @@ class MusicgenConfig(PretrainedConfig):
     ```python
     >>> from transformers import (
     ...     MusicgenConfig,
-    ...     MusicgenEncoderConfig,
-    ...     MusicgenDecoderConfig,
+    ...     T5Config,
+    ...     EncodecConfig,
     ...     MusicgenForConditionalGeneration,
     ... )
 
-    >>> # Initializing a Musicgen config with facebook/musicgen-small style configuration
-    >>> configuration = MusicgenConfig()
+    >>> # Initializing text encoder, audio encoder, and decoder model configurations
+    >>> text_encoder_config = T5Config()
+    >>> audio_encoder_config = EncodecConfig()
+    >>> decoder_config = MusicgenDecoderConfig()
+
+    >>> config = MusicgenConfig.from_encoder_decoder_configs(text_encoder_config, audio_encoder_config, decoder_config)
 
     >>> # Initializing a MusicgenForConditionalGeneration (with random weights) from the facebook/musicgen-small style configuration
     >>> model = MusicgenForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
+    >>> config_text_encoder = model.config.text_encoder
+    >>> config_audio_encoder = model.config.audio_encoder
+    >>> config_decoder = model.config.decoder
 
-    >>> # We can also initialize a MusicgenConfig from a MusicgenEncoderConfig and MusicgenDecoderConfig
+    >>> # Saving the model, including its configuration
+    >>> model.save_pretrained("my-model")
 
-    >>> # Initializing encoder and decoder model configurations
-    >>> encoder_config = MusicgenEncoderConfig()
-    >>> decoder_config = MusicgenDecoderConfig()
-
-    >>> config = MusicgenConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
+    >>> # loading model and config from pretrained folder
+    >>> encoder_decoder_config = MusicgenConfig.from_pretrained("my-model")
+    >>> model = MusicgenForConditionalGeneration.from_pretrained("my-model", config=encoder_decoder_config)
     ```"""
 
     model_type = "musicgen"
     is_composition = True
 
-    def __init__(self, encoder_config=None, decoder_config=None, initializer_factor=0.02, use_cache=True, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        if encoder_config is None:
-            encoder_config = {}
-            logger.info("encoder_config is None. initializing the MusicgenEncoderConfig with default values.")
+        if "text_encoder" not in kwargs or "audio_encoder" not in kwargs or "decoder" not in kwargs:
+            raise ValueError("Config has to be initialized with text_encoder, audio_encoder and decoder config")
 
-        if decoder_config is None:
-            decoder_config = {}
-            logger.info("decoder_config is None. Initializing the MusicgenDecoderConfig with default values.")
+        text_encoder_config = kwargs.pop("text_encoder")
+        text_encoder_model_type = text_encoder_config.pop("model_type")
 
-        self.encoder_config = MusicgenEncoderConfig(**encoder_config)
-        self.decoder_config = MusicgenDecoderConfig(**decoder_config)
+        audio_encoder_config = kwargs.pop("audio_encoder")
+        audio_encoder_model_type = audio_encoder_config.pop("model_type")
 
-        self.initializer_factor = initializer_factor
+        decoder_config = kwargs.pop("decoder")
+        decoder_model_type = decoder_config.pop("model_type")
+
+        from ..auto.configuration_auto import AutoConfig
+
+        self.text_encoder = AutoConfig.for_model(text_encoder_model_type, **text_encoder_config)
+        self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder_config)
+        self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
         self.is_encoder_decoder = True
-        self.use_cache = use_cache
-        self.bos_token_id = self.decoder_config.bos_token_id
-        self.pad_token_id = self.decoder_config.pad_token_id
-        self.eos_token_id = self.decoder_config.eos_token_id
 
     @classmethod
     def from_encoder_decoder_configs(
         cls,
-        encoder_config: MusicgenEncoderConfig,
+        text_encoder_config: PretrainedConfig,
+        audio_encoder_config: PretrainedConfig,
         decoder_config: MusicgenDecoderConfig,
         **kwargs,
     ):
         r"""
-        Instantiate a [`MusicgenConfig`] (or a derived class) from Musicgen encoder and decoder configurations.
+        Instantiate a [`MusicgenConfig`] (or a derived class) from text encoder, audio encoder and decoder
+        configurations.
 
         Returns:
             [`MusicgenConfig`]: An instance of a configuration object
         """
 
         return cls(
-            encoder_config=encoder_config.to_dict(),
+            text_encoder_config=text_encoder_config.to_dict(),
+            audio_encoder_config=audio_encoder_config.to_dict(),
             decoder_config=decoder_config.to_dict(),
             **kwargs,
         )
@@ -320,7 +236,8 @@ class MusicgenConfig(PretrainedConfig):
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
-        output["encoder_config"] = self.encoder_config.to_dict()
+        output["text_encoder_config"] = self.text_encoder_config.to_dict()
+        output["audio_encoder_config"] = self.audio_encoder_config.to_dict()
         output["decoder_config"] = self.decoder_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output

@@ -13,43 +13,48 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Musicgen model."""
-import copy
+import inspect
 import math
 import random
 from typing import Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
+from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
-    BaseModelOutputWithPast,
     BaseModelOutputWithPastAndCrossAttentions,
+    CausalLMOutputWithCrossAttentions,
     Seq2SeqLMOutput,
-    Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
 )
-from .configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig, MusicgenEncoderConfig
+from ..auto.configuration_auto import AutoConfig
+from ..auto.modeling_auto import AutoModel, AutoModelForCausalLM
+from .configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig
 
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MusicgenConfig"
+_CHECKPOINT_FOR_DOC = "facebook/musicgen-small"
 
 MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/musicgen-small",
     # See all Musicgen models at https://huggingface.co/models?filter=musicgen
 ]
 
-_CHECKPOINT_FOR_DOC = "facebook/musicgen-small"
+# Base model docstring
+_EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 
 
 def _make_causal_mask(
@@ -84,871 +89,23 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.t5.modeling_t5.T5LayerNorm
-class MusicgenEncoderLayerNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        Construct a layernorm module in the T5 style. No bias and no subtraction of mean.
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        # T5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
-        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
-        # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
-        # half-precision inputs is done in fp32
-
-        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-
-        # convert into half-precision if necessary
-        if self.weight.dtype in [torch.float16, torch.bfloat16]:
-            hidden_states = hidden_states.to(self.weight.dtype)
-
-        return self.weight * hidden_states
-
-
-# Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5Config->MusicgenEncoderConfig
-class MusicgenEncoderDenseActDense(nn.Module):
-    def __init__(self, config: MusicgenEncoderConfig):
-        super().__init__()
-        self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
-        self.dropout = nn.Dropout(config.dropout_rate)
-        self.act = ACT2FN[config.dense_act_fn]
-
-    def forward(self, hidden_states):
-        hidden_states = self.wi(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        if (
-            isinstance(self.wo.weight, torch.Tensor)
-            and hidden_states.dtype != self.wo.weight.dtype
-            and self.wo.weight.dtype != torch.int8
-        ):
-            hidden_states = hidden_states.to(self.wo.weight.dtype)
-        hidden_states = self.wo(hidden_states)
-        return hidden_states
-
-
-# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5Config->MusicgenEncoderConfig
-class MusicgenEncoderDenseGatedActDense(nn.Module):
-    def __init__(self, config: MusicgenEncoderConfig):
-        super().__init__()
-        self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
-        self.dropout = nn.Dropout(config.dropout_rate)
-        self.act = ACT2FN[config.dense_act_fn]
-
-    def forward(self, hidden_states):
-        hidden_gelu = self.act(self.wi_0(hidden_states))
-        hidden_linear = self.wi_1(hidden_states)
-        hidden_states = hidden_gelu * hidden_linear
-        hidden_states = self.dropout(hidden_states)
-
-        # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
-        # See https://github.com/huggingface/transformers/issues/20287
-        # we also make sure the weights are not in `int8` in case users will force `_keep_in_fp32_modules` to be `None``
-        if (
-            isinstance(self.wo.weight, torch.Tensor)
-            and hidden_states.dtype != self.wo.weight.dtype
-            and self.wo.weight.dtype != torch.int8
-        ):
-            hidden_states = hidden_states.to(self.wo.weight.dtype)
-
-        hidden_states = self.wo(hidden_states)
-        return hidden_states
-
-
-# Copied from transformers.models.t5.modeling_t5.T5LayerFF with T5->MusicgenEncoder
-class MusicgenEncoderLayerFF(nn.Module):
-    def __init__(self, config: MusicgenEncoderConfig):
-        super().__init__()
-        if config.is_gated_act:
-            self.DenseReluDense = MusicgenEncoderDenseGatedActDense(config)
-        else:
-            self.DenseReluDense = MusicgenEncoderDenseActDense(config)
-
-        self.layer_norm = MusicgenEncoderLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        self.dropout = nn.Dropout(config.dropout_rate)
-
-    def forward(self, hidden_states):
-        forwarded_states = self.layer_norm(hidden_states)
-        forwarded_states = self.DenseReluDense(forwarded_states)
-        hidden_states = hidden_states + self.dropout(forwarded_states)
-        return hidden_states
-
-
-class MusicgenEncoderAttention(nn.Module):
-    # Copied from transformers.models.t5.modeling_t5.T5Attention.__init__ with T5Config->MusicgenEncoderConfig
-    def __init__(self, config: MusicgenEncoderConfig, has_relative_attention_bias=False):
-        super().__init__()
-        self.is_decoder = config.is_decoder
-        self.has_relative_attention_bias = has_relative_attention_bias
-        self.relative_attention_num_buckets = config.relative_attention_num_buckets
-        self.relative_attention_max_distance = config.relative_attention_max_distance
-        self.d_model = config.d_model
-        self.key_value_proj_dim = config.d_kv
-        self.n_heads = config.num_heads
-        self.dropout = config.dropout_rate
-        self.inner_dim = self.n_heads * self.key_value_proj_dim
-
-        # Mesh TensorFlow initialization to avoid scaling before softmax
-        self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
-
-        if self.has_relative_attention_bias:
-            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
-        self.pruned_heads = set()
-        self.gradient_checkpointing = False
-
-    @staticmethod
-    # Copied from transformers.models.t5.modeling_t5.T5Attention._relative_position_bucket
-    def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
-        """
-        Adapted from Mesh Tensorflow:
-        https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
-
-        Translate relative position to a bucket number for relative attention. The relative position is defined as
-        memory_position - query_position, i.e. the distance in tokens from the attending position to the attended-to
-        position. If bidirectional=False, then positive relative positions are invalid. We use smaller buckets for
-        small absolute relative_position and larger buckets for larger absolute relative_positions. All relative
-        positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.
-        This should allow for more graceful generalization to longer sequences than the model has been trained on
-
-        Args:
-            relative_position: an int32 Tensor
-            bidirectional: a boolean - whether the attention is bidirectional
-            num_buckets: an integer
-            max_distance: an integer
-
-        Returns:
-            a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)
-        """
-        relative_buckets = 0
-        if bidirectional:
-            num_buckets //= 2
-            relative_buckets += (relative_position > 0).to(torch.long) * num_buckets
-            relative_position = torch.abs(relative_position)
-        else:
-            relative_position = -torch.min(relative_position, torch.zeros_like(relative_position))
-        # now relative_position is in the range [0, inf)
-
-        # half of the buckets are for exact increments in positions
-        max_exact = num_buckets // 2
-        is_small = relative_position < max_exact
-
-        # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
-        relative_position_if_large = max_exact + (
-            torch.log(relative_position.float() / max_exact)
-            / math.log(max_distance / max_exact)
-            * (num_buckets - max_exact)
-        ).to(torch.long)
-        relative_position_if_large = torch.min(
-            relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
-        )
-
-        relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
-        return relative_buckets
-
-    # Copied from transformers.models.t5.modeling_t5.T5Attention.compute_bias
-    def compute_bias(self, query_length, key_length, device=None):
-        """Compute binned relative position bias"""
-        if device is None:
-            device = self.relative_attention_bias.weight.device
-        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
-        memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
-        relative_position = memory_position - context_position  # shape (query_length, key_length)
-        relative_position_bucket = self._relative_position_bucket(
-            relative_position,  # shape (query_length, key_length)
-            bidirectional=(not self.is_decoder),
-            num_buckets=self.relative_attention_num_buckets,
-            max_distance=self.relative_attention_max_distance,
-        )
-        values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
-        values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
-        return values
-
-    # Copied from transformers.models.t5.modeling_t5.T5Attention.forward
-    def forward(
-        self,
-        hidden_states,
-        mask=None,
-        key_value_states=None,
-        position_bias=None,
-        past_key_value=None,
-        layer_head_mask=None,
-        query_length=None,
-        use_cache=False,
-        output_attentions=False,
-    ):
-        """
-        Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
-        """
-        # Input is (batch_size, seq_length, dim)
-        # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
-        # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
-        batch_size, seq_length = hidden_states.shape[:2]
-
-        real_seq_length = seq_length
-
-        if past_key_value is not None:
-            if len(past_key_value) != 2:
-                raise ValueError(
-                    f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
-                )
-            real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
-
-        key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
-
-        def shape(states):
-            """projection"""
-            return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
-
-        def unshape(states):
-            """reshape"""
-            return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
-
-        def project(hidden_states, proj_layer, key_value_states, past_key_value):
-            """projects hidden states correctly to key/query states"""
-            if key_value_states is None:
-                # self-attn
-                # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(hidden_states))
-            elif past_key_value is None:
-                # cross-attn
-                # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(key_value_states))
-
-            if past_key_value is not None:
-                if key_value_states is None:
-                    # self-attn
-                    # (batch_size, n_heads, key_length, dim_per_head)
-                    hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
-                elif past_key_value.shape[2] != key_value_states.shape[1]:
-                    # checking that the `sequence_length` of the `past_key_value` is the same as
-                    # the provided `key_value_states` to support prefix tuning
-                    # cross-attn
-                    # (batch_size, n_heads, seq_length, dim_per_head)
-                    hidden_states = shape(proj_layer(key_value_states))
-                else:
-                    # cross-attn
-                    hidden_states = past_key_value
-            return hidden_states
-
-        # get query states
-        query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
-
-        # get key/value states
-        key_states = project(
-            hidden_states, self.k, key_value_states, past_key_value[0] if past_key_value is not None else None
-        )
-        value_states = project(
-            hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
-        )
-
-        # compute scores
-        scores = torch.matmul(
-            query_states, key_states.transpose(3, 2)
-        )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
-
-        if position_bias is None:
-            if not self.has_relative_attention_bias:
-                position_bias = torch.zeros(
-                    (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
-                )
-                if self.gradient_checkpointing and self.training:
-                    position_bias.requires_grad = True
-            else:
-                position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
-
-            # if key and values are already calculated
-            # we want only the last query position bias
-            if past_key_value is not None:
-                position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
-
-            if mask is not None:
-                position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
-
-        if self.pruned_heads:
-            mask = torch.ones(position_bias.shape[1])
-            mask[list(self.pruned_heads)] = 0
-            position_bias_masked = position_bias[:, mask.bool()]
-        else:
-            position_bias_masked = position_bias
-
-        scores += position_bias_masked
-        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
-            scores
-        )  # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = nn.functional.dropout(
-            attn_weights, p=self.dropout, training=self.training
-        )  # (batch_size, n_heads, seq_length, key_length)
-
-        # Mask heads if we want to
-        if layer_head_mask is not None:
-            attn_weights = attn_weights * layer_head_mask
-
-        attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
-        attn_output = self.o(attn_output)
-
-        present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
-        outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
-
-        if output_attentions:
-            outputs = outputs + (attn_weights,)
-        return outputs
-
-
-# Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->MusicgenEncoder
-class MusicgenEncoderLayerSelfAttention(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False):
-        super().__init__()
-        self.SelfAttention = MusicgenEncoderAttention(config, has_relative_attention_bias=has_relative_attention_bias)
-        self.layer_norm = MusicgenEncoderLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        self.dropout = nn.Dropout(config.dropout_rate)
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        position_bias=None,
-        layer_head_mask=None,
-        past_key_value=None,
-        use_cache=False,
-        output_attentions=False,
-    ):
-        normed_hidden_states = self.layer_norm(hidden_states)
-        attention_output = self.SelfAttention(
-            normed_hidden_states,
-            mask=attention_mask,
-            position_bias=position_bias,
-            layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-        )
-        hidden_states = hidden_states + self.dropout(attention_output[0])
-        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
-        return outputs
-
-
-class MusicgenEncoderBlock(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False):
-        super().__init__()
-        self.layer = nn.ModuleList()
-        self.layer.append(
-            MusicgenEncoderLayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias)
-        )
-        self.layer.append(MusicgenEncoderLayerFF(config))
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        position_bias=None,
-        layer_head_mask=None,
-        past_key_value=None,
-        use_cache=False,
-        output_attentions=False,
-    ):
-        self_attention_outputs = self.layer[0](
-            hidden_states,
-            attention_mask=attention_mask,
-            position_bias=position_bias,
-            layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-        )
-        hidden_states, present_key_value_state = self_attention_outputs[:2]
-        attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
-
-        # clamp inf values to enable fp16 training
-        if hidden_states.dtype == torch.float16:
-            clamp_value = torch.where(
-                torch.isinf(hidden_states).any(),
-                torch.finfo(hidden_states.dtype).max - 1000,
-                torch.finfo(hidden_states.dtype).max,
-            )
-            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-
-        # Apply Feed Forward layer
-        hidden_states = self.layer[-1](hidden_states)
-
-        # clamp inf values to enable fp16 training
-        if hidden_states.dtype == torch.float16:
-            clamp_value = torch.where(
-                torch.isinf(hidden_states).any(),
-                torch.finfo(hidden_states.dtype).max - 1000,
-                torch.finfo(hidden_states.dtype).max,
-            )
-            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-
-        outputs = (hidden_states,)
-
-        if use_cache:
-            outputs = outputs + (present_key_value_state,) + attention_outputs
-        else:
-            outputs = outputs + attention_outputs
-
-        return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights)
-
-
-class MusicgenPreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.encoder_decoder.modeling_encoder_decoder.shift_tokens_right
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
+    Shift input ids one token to the right.
     """
-
-    config_class = MusicgenConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["MusicgenEncoderBlock"]
-    _skip_keys_device_placement = "past_key_values"
-    _keep_in_fp32_modules = ["wo"]
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, MusicgenEncoderLayerNorm):
-            module.weight.data.fill_(factor * 1.0)
-        elif isinstance(module, MusicgenEncoder):
-            # Mesh TensorFlow embeddings initialization
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
-            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
-            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
-                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        elif isinstance(module, MusicgenEncoderDenseActDense):
-            # Mesh TensorFlow FF initialization
-            # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
-            # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
-            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                module.wi.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
-            if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
-        elif isinstance(module, MusicgenEncoderDenseGatedActDense):
-            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
-                module.wi_0.bias.data.zero_()
-            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
-                module.wi_1.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
-            if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
-        elif isinstance(module, MusicgenEncoderAttention):
-            # Mesh TensorFlow attention initialization to avoid scaling before softmax
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
-            d_model = self.config.d_model
-            key_value_proj_dim = self.config.d_kv
-            n_heads = self.config.num_heads
-            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
-            if module.has_relative_attention_bias:
-                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
-        elif isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=factor * 1)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=factor * 1)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (MusicgenEncoderAttention, MusicgenEncoderStack, MusicgenDecoder)):
-            module.gradient_checkpointing = value
-
-
-class MusicgenEncoderStack(MusicgenPreTrainedModel):
-    def __init__(self, config, embed_tokens=None):
-        super().__init__(config)
-
-        self.embed_tokens = embed_tokens
-
-        self.block = nn.ModuleList(
-            [MusicgenEncoderBlock(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
-        )
-        self.final_layer_norm = MusicgenEncoderLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        self.dropout = nn.Dropout(config.dropout_rate)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-        self.gradient_checkpointing = False
-
-    # Copied from transformers.models.t5.modeling_t5.T5Stack.get_input_embeddings
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    # Copied from transformers.models.t5.modeling_t5.T5Stack.set_input_embeddings
-    def set_input_embeddings(self, new_embeddings):
-        self.embed_tokens = new_embeddings
-
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        head_mask=None,
-        past_key_values=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        # Model parallel
-        if self.model_parallel:
-            torch.cuda.set_device(self.first_device)
-            self.embed_tokens = self.embed_tokens.to(self.first_device)
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            if self.embed_tokens is None:
-                raise ValueError("You have to initialize the model with valid token embeddings")
-            inputs_embeds = self.embed_tokens(input_ids)
-
-        batch_size, seq_length = input_shape
-
-        # required mask seq length can be calculated via length of past
-        mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
-
-        if attention_mask is None:
-            attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
-
-        # initialize past_key_values with `None` if past does not exist
-        if past_key_values is None:
-            past_key_values = [None] * len(self.block)
-
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
-
-        # Prepare head mask if needed
-        head_mask = self.get_head_mask(head_mask, self.config.num_layers)
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-        present_key_value_states = None
-        position_bias = None
-
-        hidden_states = self.dropout(inputs_embeds)
-
-        for i, (layer_module, past_key_value) in enumerate(zip(self.block, past_key_values)):
-            layer_head_mask = head_mask[i]
-            # Model parallel
-            if self.model_parallel:
-                torch.cuda.set_device(hidden_states.device)
-                # Ensure that attention_mask is always on the same device as hidden_states
-                if attention_mask is not None:
-                    attention_mask = attention_mask.to(hidden_states.device)
-                if position_bias is not None:
-                    position_bias = position_bias.to(hidden_states.device)
-                if layer_head_mask is not None:
-                    layer_head_mask = layer_head_mask.to(hidden_states.device)
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return tuple(module(*inputs, output_attentions))
-
-                    return custom_forward
-
-                layer_outputs = checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    extended_attention_mask,
-                    position_bias,
-                    layer_head_mask,
-                    None,  # past_key_value is always None with gradient checkpointing
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask=extended_attention_mask,
-                    position_bias=position_bias,
-                    layer_head_mask=layer_head_mask,
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                )
-
-            # layer_outputs is a tuple with:
-            # hidden-states, key-value-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
-            layer_outputs = layer_outputs[:1] + (None,) + layer_outputs[1:]
-
-            hidden_states, present_key_value_state = layer_outputs[:2]
-
-            # We share the position biases between the layers - the first layer store them
-            # layer_outputs = hidden-states, key-value-states (self-attention position bias), (self-attention weights),
-            # (cross-attention position bias), (cross-attention weights)
-            position_bias = layer_outputs[2]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[3],)
-
-            # Model Parallel: If it's the last layer for that device, put things on the next device
-            if self.model_parallel:
-                for k, v in self.device_map.items():
-                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
-                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
-
-        hidden_states = self.final_layer_norm(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        # Add last layer
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    present_key_value_states,
-                    all_hidden_states,
-                    all_attentions,
-                ]
-                if v is not None
-            )
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=present_key_value_states,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
-        )
-
-
-MUSICGEN_START_DOCSTRING = r"""
-
-    The Musicgen model was proposed in [Simple and Controllable Music Generation](https://arxiv.org/abs/2306.05284) by
-    Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi, Alexandre Défossez. It is an
-    encoder decoder transformer trained on the task of conditional music generation
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`MusicgenConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-MUSICGEN_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are decoder input IDs?](../glossary#decoder-input-ids)
-        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
-            be used by default.
-        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        decoder_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
-            1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
-            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
-            can choose to directly pass an embedded representation. This is useful if you want more control over how to
-            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
-            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
-            input (see `past_key_values`). This is useful if you want more control over how to convert
-            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
-
-            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
-            of `inputs_embeds`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-MUSICGEN_ENCODER_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
-            should be able to pad the inputs on both the right and the left.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for detail.
-
-            To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare MusicGen encoder transformer outputting encoder's raw hidden-states without any specific head on top.",
-    MUSICGEN_START_DOCSTRING,
-)
-class MusicgenEncoder(MusicgenPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
-
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.__init__ with T5->MusicgenEncoder
-    def __init__(self, config: MusicgenEncoderConfig):
-        super().__init__(config)
-        self.shared = nn.Embedding(config.vocab_size, config.d_model)
-
-        encoder_config = copy.deepcopy(config)
-        encoder_config.use_cache = False
-        encoder_config.is_encoder_decoder = False
-        self.encoder = MusicgenEncoderStack(encoder_config, self.shared)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.get_input_embeddings
-    def get_input_embeddings(self):
-        return self.shared
-
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.set_input_embeddings
-    def set_input_embeddings(self, new_embeddings):
-        self.shared = new_embeddings
-        self.encoder.set_input_embeddings(new_embeddings)
-
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.get_encoder
-    def get_encoder(self):
-        return self.encoder
-
-    @add_start_docstrings_to_model_forward(MUSICGEN_ENCODER_INPUTS_DOCSTRING)
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        encoder_outputs = self.encoder(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        return encoder_outputs
+    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+    if decoder_start_token_id is None:
+        raise ValueError("Make sure to set the decoder_start_token_id attribute of the model's configuration.")
+    shifted_input_ids[:, 0] = decoder_start_token_id
+
+    if pad_token_id is None:
+        raise ValueError("Make sure to set the pad_token_id attribute of the model's configuration.")
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+    return shifted_input_ids
 
 
 class MusicgenSinusoidalPositionalEmbedding(nn.Module):
@@ -996,7 +153,8 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
         return self.weights.index_select(0, position_ids.view(-1)).detach()
 
 
-class MusicgenDecoderAttention(nn.Module):
+# Copied from transformers.models.bart.modeling_bart.BartAttention
+class MusicgenAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -1026,11 +184,9 @@ class MusicgenDecoderAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    # Copied from transformers.models.bart.modeling_bart.BartAttention._shape
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    # Copied from transformers.models.bart.modeling_bart.BartAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1157,20 +313,24 @@ class MusicgenDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = MusicgenDecoderAttention(
+        self.self_attn = MusicgenAttention(
             embed_dim=self.embed_dim,
             num_heads=config.num_heads,
             dropout=config.attention_dropout,
+            is_decoder=True,
+            bias=False,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = MusicgenDecoderAttention(
+        self.encoder_attn = MusicgenAttention(
             self.embed_dim,
             config.num_heads,
             dropout=config.attention_dropout,
+            is_decoder=True,
+            bias=False,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.d_ff, bias=False)
@@ -1266,6 +426,139 @@ class MusicgenDecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
+
+
+class MusicgenPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = MusicgenDecoderConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["MusicgenDecoderLayer", "MusicgenAttention"]
+
+    def _init_weights(self, module):
+        std = self.config.init_std
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, MusicgenDecoder):
+            module.gradient_checkpointing = value
+
+
+MUSICGEN_START_DOCSTRING = r"""
+
+    The Musicgen model was proposed in [Simple and Controllable Music Generation](https://arxiv.org/abs/2306.05284) by
+    Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi, Alexandre Défossez. It is an
+    encoder decoder transformer trained on the task of conditional music generation
+
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`MusicgenConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+MUSICGEN_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        decoder_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
+            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
+            can choose to directly pass an embedded representation. This is useful if you want more control over how to
+            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
+            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
+            input (see `past_key_values`). This is useful if you want more control over how to convert
+            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+
+            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
+            of `inputs_embeds`.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
 
 
 class MusicgenDecoder(MusicgenPreTrainedModel):
@@ -1552,71 +845,47 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare MusicGen Model outputting raw hidden-states without any specific head on top.",
+    "The bare Musicgen decoder model outputting raw hidden-states without any specific head on top.",
     MUSICGEN_START_DOCSTRING,
 )
 class MusicgenModel(MusicgenPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
-
-    def __init__(self, config: MusicgenConfig):
+    def __init__(self, config: MusicgenDecoderConfig):
         super().__init__(config)
-
-        self.encoder = MusicgenEncoder(config.encoder_config)
-        self.decoder = MusicgenDecoder(config.decoder_config)
-
-        self.encoder_projection = nn.Linear(config.encoder_config.d_model, config.decoder_config.d_model)
-
+        self.decoder = MusicgenDecoder(config)
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.encoder.get_input_embeddings()
+        return self.decoder.embed_tokens
 
-    def get_encoder(self):
-        return self.encoder
+    def set_input_embeddings(self, value):
+        self.decoder.embed_tokens = value
 
     def get_decoder(self):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(MUSICGEN_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=BaseModelOutputWithPastAndCrossAttentions,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Seq2SeqModelOutput, Tuple[torch.FloatTensor]]:
-        r"""
-        Returns:
-
-        Example:
-         ```python
-         >>> import torch
-         >>> from transformers import AutoProcessor, MusicgenModel
-
-         >>> model = MusicgenModel.from_pretrained("facebook/musicgen-small")
-         >>> processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
-
-         >>> input_ids = processor(["happy rock"], return_tensors="pt").input_ids
-         >>> num_codebooks = model.config.decoder_config.num_codebooks
-         >>> decoder_input_ids = torch.ones((1, num_codebooks, 1), dtype=torch.long) * model.config.decoder_start_token_id
-
-         >>> last_hidden_state = model(input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state
-         >>> list(last_hidden_state.shape)
-         [1, 1, 1024]
-         ```"""
+    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1624,36 +893,16 @@ class MusicgenModel(MusicgenPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if encoder_outputs is None:
-            encoder_outputs = self.encoder(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                head_mask=head_mask,
-                inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
-
-        encoder_hidden_states = self.encoder_projection(encoder_outputs[0])
-
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=attention_mask,
-            head_mask=decoder_head_mask,
+            head_mask=head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
-            inputs_embeds=decoder_inputs_embeds,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1661,104 +910,92 @@ class MusicgenModel(MusicgenPreTrainedModel):
         )
 
         if not return_dict:
-            return decoder_outputs + encoder_outputs
+            return decoder_outputs
 
-        return Seq2SeqModelOutput(
+        return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
+            hidden_states=decoder_outputs.hidden_states,
+            attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
         )
 
 
 @add_start_docstrings(
-    "The bare MusicGen Model with an LM head on top for conditional music generation tasks.",
+    "The MusicGen decoder model with a language modelling head on top.",
     MUSICGEN_START_DOCSTRING,
 )
-class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
-    def __init__(self, config: MusicgenConfig):
+class MusicgenForCausalLM(MusicgenPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["model.decoder.embed_tokens.weight"]
+
+    def __init__(self, config: MusicgenDecoderConfig):
         super().__init__(config)
 
         self.model = MusicgenModel(config)
-        decoder_config = config.decoder_config
-        self.num_codebooks = decoder_config.num_codebooks
+
+        self.num_codebooks = config.num_codebooks
         self.lm_heads = nn.ModuleList(
-            [
-                nn.Linear(decoder_config.d_model, decoder_config.vocab_size, bias=False)
-                for _ in range(decoder_config.num_codebooks)
-            ]
+            [nn.Linear(config.d_model, config.vocab_size, bias=False) for _ in range(config.num_codebooks)]
         )
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
-        return self.model.get_encoder()
+    def get_input_embeddings(self):
+        return self.model.decoder.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.decoder.embed_tokens = value
+
+    def get_output_embeddings(self):
+        return self.lm_heads
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.model.decoder = decoder
 
     def get_decoder(self):
-        return self.model.get_decoder()
+        return self.model.decoder
 
     @add_start_docstrings_to_model_forward(MUSICGEN_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput]:
+    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
                 Returns:
-
-        Example:
-         ```python
-         >>> import torch
-         >>> from transformers import AutoProcessor, MusicgenModel
-
-         >>> model = MusicgenModel.from_pretrained("facebook/musicgen-small")
-         >>> processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
-
-         >>> input_ids = processor(["happy rock"], return_tensors="pt").input_ids
-         >>> num_codebooks = model.config.decoder_config.num_codebooks
-         >>> decoder_input_ids = torch.ones((1, num_codebooks, 1), dtype=torch.long) * model.config.decoder_start_token_id
-
-         >>> logits = model(input_ids, decoder_input_ids=decoder_input_ids).logits
-         >>> list(logits.shape)
-         [1, 4, 1, 2048]
-         ```"""
+        """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            encoder_outputs=encoder_outputs,
-            decoder_attention_mask=decoder_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_encoder_attention_mask=encoder_attention_mask,
             head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
-            decoder_inputs_embeds=decoder_inputs_embeds,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1778,21 +1015,18 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
             output = (lm_logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return Seq2SeqLMOutput(
+        return CausalLMOutputWithCrossAttentions(
             loss=loss,
             logits=lm_logits,
             past_key_values=outputs.past_key_values,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
         )
 
     def prepare_inputs_for_generation(
         self,
-        decoder_input_ids,
+        input_ids,
         past_key_values=None,
         attention_mask=None,
         head_mask=None,
@@ -1803,21 +1037,22 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         **kwargs,
     ):
         if kwargs.get("decoder_pad_token_mask") is None:
-            decoder_input_ids, decoder_pad_token_mask = self.build_delay_pattern_mask(decoder_input_ids, self.generation_config.pad_token_id)
+            input_ids, decoder_pad_token_mask = self.decoder.build_delay_pattern_mask(
+                input_ids, self.generation_config.pad_token_id
+            )
             kwargs["decoder_pad_token_mask"] = decoder_pad_token_mask
 
         # apply the delay pattern mask
-        decoder_input_ids = self.apply_delay_pattern_mask(decoder_input_ids, kwargs["decoder_pad_token_mask"])
+        input_ids = self.decoder.apply_delay_pattern_mask(input_ids, kwargs["decoder_pad_token_mask"])
 
-        # cut decoder_input_ids if past is used
+        # cut input_ids if past is used
         if past_key_values is not None:
-            decoder_input_ids = decoder_input_ids[..., -1:]
+            input_ids = input_ids[..., -1:]
 
         return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
+            "input_ids": input_ids,
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
-            "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
             "decoder_head_mask": decoder_head_mask,
@@ -1830,23 +1065,25 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         one, giving a delayed pattern mask at the start of sequence and end of sequence. Take the example where there
         are 4 codebooks and a max sequence length of 8, we have the delayed pattern mask of shape `(codebooks,
         seq_len)`:
-        - [P, -1, -1, -1, -1,  P,  P,  P]
-        - [P,  P, -1, -1, -1, -1,  P,  P]
-        - [P,  P,  P, -1, -1, -1, -1,  P]
-        - [P,  P,  P,  P, -1, -1, -1, -1]
+        - [P, -1, -1, -1, -1, P, P, P]
+        - [P, P, -1, -1, -1, -1, P, P]
+        - [P, P, P, -1, -1, -1, -1, P]
+        - [P, P, P, P, -1, -1, -1, -1]
         where P is the special padding token id and -1 indicates that the token is valid for prediction. If we include
         a prompt (decoder input ids), the -1 positions indicate where new tokens should be predicted. Otherwise, the
         mask is set to the value in the prompt:
-        - [P,  a,  b, -1, -1,  P,  P,  P]
-        - [P,  P,  c,  d, -1, -1,  P,  P]
-        - [P,  P,  P,  e,  f, -1, -1,  P]
-        - [P,  P,  P,  P,  g,  h, -1, -1]
+        - [P, a, b, -1, -1, P, P, P]
+        - [P, P, c, d, -1, -1, P, P]
+        - [P, P, P, e, f, -1, -1, P]
+        - [P, P, P, P, g, h, -1, -1]
         where a-h indicate the input prompt (decoder input ids) that are offset by 1. Now, we only override the -1
         tokens in our prediction.
         """
         bsz, num_codebooks, seq_len = decoder_input_ids.shape
         max_length = self.generation_config.max_length
-        decoder_input_ids_shifted = torch.ones((bsz, num_codebooks, max_length), dtype=torch.long, device=decoder_input_ids.device) * -1
+        decoder_input_ids_shifted = (
+            torch.ones((bsz, num_codebooks, max_length), dtype=torch.long, device=decoder_input_ids.device) * -1
+        )
 
         # we only apply the mask if we have a large enough seq len - otherwise we return as is
         if max_length < 2 * num_codebooks - 1:
@@ -1854,7 +1091,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
 
         # fill the shifted ids with the prompt entries, offset by the codebook idx
         for codebook in range(num_codebooks):
-            decoder_input_ids_shifted[:, codebook, codebook:seq_len + codebook] = decoder_input_ids[:, codebook]
+            decoder_input_ids_shifted[:, codebook, codebook : seq_len + codebook] = decoder_input_ids[:, codebook]
 
         # construct a pattern mask that indicates the positions of padding tokens for each codebook
         # first fill the upper triangular part (the EOS padding)
@@ -1882,6 +1119,517 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         decoder_input_ids = torch.where(decoder_pad_token_mask == -1, decoder_input_ids, decoder_pad_token_mask)
         return decoder_input_ids
 
+
+@add_start_docstrings(
+    "The composite MusicGen model with a text encoder, audio encoder and Musicgen decoder,"
+    "for music generation tasks with one or both of text and audio prompts.",
+    MUSICGEN_START_DOCSTRING,
+)
+class MusicgenForConditionalGeneration(PreTrainedModel):
+    config_class = MusicgenConfig
+    base_model_prefix = "encoder_decoder"
+    main_input_name = "input_ids"
+    supports_gradient_checkpointing = True
+
+    def __init__(
+        self,
+        config: Optional[MusicgenConfig] = None,
+        text_encoder: Optional[PreTrainedModel] = None,
+        audio_encoder: Optional[PreTrainedModel] = None,
+        decoder: Optional[MusicgenForCausalLM] = None,
+    ):
+        if config is None and (text_encoder is None or audio_encoder is None or decoder is None):
+            raise ValueError(
+                "Either a configuration has to be provided, or all three of text encoder, audio encoder and MusicGen decoder."
+            )
+        if config is None:
+            config = MusicgenConfig.from_encoder_decoder_configs(
+                text_encoder.config, audio_encoder.config, decoder.config
+            )
+        else:
+            if not isinstance(config, self.config_class):
+                raise ValueError(f"Config: {config} has to be of type {self.config_class}")
+
+        if config.decoder.cross_attention_hidden_size is not None:
+            if config.decoder.cross_attention_hidden_size != config.text_encoder.hidden_size:
+                raise ValueError(
+                    "If `cross_attention_hidden_size` is specified in the MusicGen decoder's configuration, it has to be equal"
+                    f" to the text encoder's `hidden_size`. Got {config.decoder.cross_attention_hidden_size} for"
+                    f" `config.decoder.cross_attention_hidden_size` and {config.text_encoder.hidden_size} for"
+                    " `config.text_encoder.hidden_size`."
+                )
+
+        # initialize with config
+        super().__init__(config)
+
+        if text_encoder is None:
+            from ..auto.modeling_auto import AutoModel
+
+            text_encoder = AutoModel.from_config(config.text_encoder)
+
+        if audio_encoder is None:
+            from ..auto.modeling_auto import AutoModel
+
+            audio_encoder = AutoModel.from_config(config.audio_encoder)
+
+        if decoder is None:
+            decoder = MusicgenForCausalLM(config.decoder)
+
+        self.text_encoder = text_encoder
+        self.audio_encoder = audio_encoder
+        self.decoder = decoder
+
+        if self.text_encoder.config.to_dict() != self.config.text_encoder.to_dict():
+            logger.warning(
+                f"Config of the text_encoder: {self.text_encoder.__class__} is overwritten by shared text_encoder config:"
+                f" {self.config.text_encoder}"
+            )
+        if self.audio_encoder.config.to_dict() != self.config.audio_encoder.to_dict():
+            logger.warning(
+                f"Config of the audio_encoder: {self.audio_encoder.__class__} is overwritten by shared audio_encoder config:"
+                f" {self.config.audio_encoder}"
+            )
+        if self.decoder.config.to_dict() != self.config.decoder.to_dict():
+            logger.warning(
+                f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config:"
+                f" {self.config.decoder}"
+            )
+
+        # make sure that the individual model's config refers to the shared config
+        # so that the updates to the config will be synced
+        self.text_encoder.config = self.config.text_encoder
+        self.audio_encoder.config = self.config.audio_encoder
+        self.decoder.config = self.config.decoder
+
+        # text encoder outputs might need to be projected to different dimension for decoder
+        if (
+            self.text_encoder.config.hidden_size != self.text_encoder.config.hidden_size
+            and self.decoder.config.cross_attention_hidden_size is None
+        ):
+            self.enc_to_dec_proj = nn.Linear(self.text_encoder.config.hidden_size, self.decoder.config.hidden_size)
+
+        if self.text_encoder.get_output_embeddings() is not None:
+            raise ValueError(
+                f"The encoder {self.text_encoder} should not have a LM Head. Please use a model without and LM Head"
+            )
+
+        decoder_signature = set(inspect.signature(self.decoder.forward).parameters.keys())
+        if "encoder_hidden_states" not in decoder_signature:
+            raise ValueError(
+                "The selected decoder is not prepared for the encoder hidden states to be passed. Please see the "
+                "following discussion on GitHub: https://github.com/huggingface/transformers/issues/23350"
+            )
+
+        # tie text encoder, decoder weights if config set accordingly
+        self.tie_weights()
+
+    def tie_weights(self):
+        # tie text encoder & decoder if needed
+        if self.config.tie_encoder_decoder:
+            # tie text encoder and decoder base model
+            decoder_base_model_prefix = self.decoder.base_model_prefix
+            self._tie_encoder_decoder_weights(
+                self.text_encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
+            )
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        # call both encoder and decoder function on gradient checkpointing
+        self.text_encoder._set_gradient_checkpointing(module, value=value)
+        self.decoder._set_gradient_checkpointing(module, value=value)
+
+    def get_text_encoder(self):
+        return self.text_encoder
+
+    def get_audio_encoder(self):
+        return self.audio_encoder
+
+    def get_decoder(self):
+        return self.decoder
+
+    def get_input_embeddings(self):
+        return self.text_encoder.get_input_embeddings()
+
+    def get_output_embeddings(self):
+        return self.decoder.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        return self.decoder.set_output_embeddings(new_embeddings)
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import MusicgenForConditionalGeneration
+
+        >>> model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+        ```"""
+
+        # At the moment fast initialization is not supported for composite models
+        if kwargs.get("_fast_init", False):
+            logger.warning(
+                "Fast initialization is currently not supported for MusicgenForConditionalGeneration. "
+                "Falling back to slow initialization..."
+            )
+        kwargs["_fast_init"] = False
+
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
+    @classmethod
+    def from_encoder_decoder_pretrained(
+        cls,
+        text_encoder_pretrained_model_name_or_path: str = None,
+        audio_encoder_pretrained_model_name_or_path: str = None,
+        decoder_pretrained_model_name_or_path: str = None,
+        *model_args,
+        **kwargs,
+    ) -> PreTrainedModel:
+        r"""
+        Instantiate a text encoder, an audio encoder, and a MusicGen decoder from one, two or three base classes of the
+        library from pretrained model checkpoints.
+
+
+        The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated). To train
+        the model, you need to first set it back in training mode with `model.train()`.
+
+        Params:
+            text_encoder_pretrained_model_name_or_path (`str`, *optional*):
+                Information necessary to initiate the text encoder. Can be either:
+
+                    - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like `t5-base`, or namespaced under a user or
+                      organization name, like `google/flan-t5-base.
+                    - A path to a *directory* containing model weights saved using
+                      [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
+
+            audio_encoder_pretrained_model_name_or_path (`str`, *optional*):
+                Information necessary to initiate the audio encoder. Can be either:
+
+                    - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
+                      user or organization name, like `facebook/encodec_24khz`.
+                    - A path to a *directory* containing model weights saved using
+                      [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
+
+            decoder_pretrained_model_name_or_path (`str`, *optional*, defaults to `None`):
+                Information necessary to initiate the decoder. Can be either:
+
+                    - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like `gpt2`, or namespaced under a user or
+                      organization name, like `facebook/musicgen-small`.
+                    - A path to a *directory* containing model weights saved using
+                      [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
+
+            model_args (remaining positional arguments, *optional*):
+                All remaining positional arguments will be passed to the underlying model's `__init__` method.
+
+            kwargs (remaining dictionary of keyword arguments, *optional*):
+                Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
+                `output_attentions=True`).
+
+                - To update the text encoder configuration, use the prefix *text_encoder_* for each configuration
+                  parameter.
+                - To update the audio encoder configuration, use the prefix *audio_encoder_* for each configuration
+                  parameter.
+                - To update the decoder configuration, use the prefix *decoder_* for each configuration parameter.
+                - To update the parent model configuration, do not use a prefix for each configuration parameter.
+
+                Behaves differently depending on whether a `config` is provided or automatically loaded.
+
+        Example:
+
+        ```python
+        >>> from transformers import MusicgenForConditionalGeneration
+
+        >>> # initialize a musicgen model from a t5 text encoder, encodec audio encoder, and musicgen decoder
+        >>> model = MusicgenForConditionalGeneration.from_encoder_decoder_pretrained(
+        ...     text_encoder_pretrained_model_name_or_path="t5-base",
+        ...     audio_encoder_pretrained_model_name_or_path="facebook/encodec_24khz",
+        ...     decoder_pretrained_model_name_or_path="facebook/musicgen-small",
+        ... )
+        >>> # saving model after fine-tuning
+        >>> model.save_pretrained("./musicgen-ft")
+        >>> # load fine-tuned model
+        >>> model = MusicgenForConditionalGeneration.from_pretrained("./musicgen-ft")
+        ```"""
+
+        kwargs_text_encoder = {
+            argument[len("text_encoder_") :]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("text_encoder_")
+        }
+
+        kwargs_audio_encoder = {
+            argument[len("audio_encoder_") :]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("audio_encoder_")
+        }
+
+        kwargs_decoder = {
+            argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
+        }
+
+        # remove text encoder, audio encoder and decoder kwargs from kwargs
+        for key in kwargs_text_encoder.keys():
+            del kwargs["text_encoder_" + key]
+        for key in kwargs_audio_encoder.keys():
+            del kwargs["audio_encoder_" + key]
+        for key in kwargs_decoder.keys():
+            del kwargs["decoder_" + key]
+
+        # Load and initialize the encoder and decoder
+        # The distinction between encoder and decoder at the model level is made
+        # by the value of the flag `is_decoder` that we need to set correctly.
+        text_encoder = kwargs_text_encoder.pop("model", None)
+        if text_encoder is None:
+            if text_encoder_pretrained_model_name_or_path is None:
+                raise ValueError(
+                    "If `text_encoder_model` is not defined as an argument, a `text_encoder_pretrained_model_name_or_path` has "
+                    "to be defined."
+                )
+
+            if "config" not in kwargs_text_encoder:
+                encoder_config, kwargs_text_encoder = AutoConfig.from_pretrained(
+                    text_encoder_pretrained_model_name_or_path, **kwargs_text_encoder, return_unused_kwargs=True
+                )
+
+                if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
+                    logger.info(
+                        f"Initializing {text_encoder_pretrained_model_name_or_path} as a text_encoder model "
+                        "from a decoder model. Cross-attention and casual mask are disabled."
+                    )
+                    encoder_config.is_decoder = False
+                    encoder_config.add_cross_attention = False
+
+                kwargs_text_encoder["config"] = encoder_config
+
+            text_encoder = AutoModel.from_pretrained(
+                text_encoder_pretrained_model_name_or_path, *model_args, **kwargs_text_encoder
+            )
+
+        audio_encoder = kwargs_audio_encoder.pop("model", None)
+        if audio_encoder is None:
+            if audio_encoder_pretrained_model_name_or_path is None:
+                raise ValueError(
+                    "If `audio_encoder_model` is not defined as an argument, an `audio_encoder_pretrained_model_name_or_path` has "
+                    "to be defined."
+                )
+
+            if "config" not in kwargs_audio_encoder:
+                encoder_config, kwargs_audio_encoder = AutoConfig.from_pretrained(
+                    audio_encoder_pretrained_model_name_or_path, **kwargs_audio_encoder, return_unused_kwargs=True
+                )
+
+                if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
+                    logger.info(
+                        f"Initializing {audio_encoder_pretrained_model_name_or_path} as an audio_encoder model "
+                        "from a decoder model. Cross-attention and casual mask are disabled."
+                    )
+                    encoder_config.is_decoder = False
+                    encoder_config.add_cross_attention = False
+
+                kwargs_audio_encoder["config"] = encoder_config
+
+            audio_encoder = AutoModel.from_pretrained(
+                audio_encoder_pretrained_model_name_or_path, *model_args, **kwargs_audio_encoder
+            )
+
+        decoder = kwargs_decoder.pop("model", None)
+        if decoder is None:
+            if decoder_pretrained_model_name_or_path is None:
+                raise ValueError(
+                    "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has "
+                    "to be defined."
+                )
+
+            if "config" not in kwargs_decoder:
+                decoder_config, kwargs_decoder = AutoConfig.from_pretrained(
+                    decoder_pretrained_model_name_or_path, **kwargs_decoder, return_unused_kwargs=True
+                )
+
+                if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
+                    logger.info(
+                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention"
+                        f" layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if"
+                        f" {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
+                    )
+                    decoder_config.is_decoder = True
+                    decoder_config.add_cross_attention = True
+
+                kwargs_decoder["config"] = decoder_config
+
+            if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
+                logger.warning(
+                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. "
+                    f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
+                    "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` "
+                    "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a "
+                    "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
+                )
+
+            decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+
+        # instantiate config with corresponding kwargs
+        config = MusicgenConfig.from_encoder_decoder_configs(
+            text_encoder.config, audio_encoder.config, decoder.config, **kwargs
+        )
+        return cls(text_encoder=text_encoder, audio_encoder=audio_encoder, decoder=decoder, config=config)
+
+    @add_start_docstrings_to_model_forward(MUSICGEN_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.BoolTensor] = None,
+        input_values: Optional[torch.FloatTensor] = None,
+        padding_mask: Optional[torch.BoolTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
+    ) -> Union[Tuple, Seq2SeqLMOutput]:
+        r"""
+        Returns:
+
+        Examples:
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        kwargs_text_encoder = {
+            argument[len("text_encoder_")]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("text_encoder_")
+        }
+
+        kwargs_audio_encoder = {
+            argument[len("audio_encoder_")]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("audio_encoder_")
+        }
+
+        kwargs_decoder = {
+            argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
+        }
+
+        if encoder_outputs is None:
+            encoder_outputs = self.text_encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                **kwargs_text_encoder,
+            )
+        elif isinstance(encoder_outputs, tuple):
+            encoder_outputs = BaseModelOutput(*encoder_outputs)
+
+        encoder_hidden_states = encoder_outputs[0]
+
+        # optionally project encoder_hidden_states
+        if (
+            self.text_encoder.config.hidden_size != self.decoder.config.hidden_size
+            and self.decoder.config.cross_attention_hidden_size is None
+        ):
+            encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
+
+        if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
+            decoder_input_ids = shift_tokens_right(
+                labels, self.config.pad_token_id, self.config.decoder_start_token_id
+            )
+
+        elif decoder_input_ids is None and decoder_inputs_embeds is None:
+            decoder_input_ids = self.audio_encoder(
+                input_values=input_values,
+                padding_mask=padding_mask,
+                **kwargs_audio_encoder,
+            )
+
+        # Decode
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=attention_mask,
+            inputs_embeds=decoder_inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            use_cache=use_cache,
+            past_key_values=past_key_values,
+            return_dict=return_dict,
+            **kwargs_decoder,
+        )
+
+        loss = None
+        if labels is not None:
+            logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
+
+        if not return_dict:
+            if loss is not None:
+                return (loss,) + decoder_outputs + encoder_outputs
+            else:
+                return decoder_outputs + encoder_outputs
+
+        return Seq2SeqLMOutput(
+            loss=loss,
+            logits=decoder_outputs.logits,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
+
+    def prepare_inputs_for_generation(
+        self,
+        decoder_input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        use_cache=None,
+        encoder_outputs=None,
+        **kwargs,
+    ):
+        if kwargs.get("decoder_pad_token_mask") is None:
+            decoder_input_ids, decoder_pad_token_mask = self.decoder.build_delay_pattern_mask(
+                decoder_input_ids, self.generation_config.pad_token_id
+            )
+            kwargs["decoder_pad_token_mask"] = decoder_pad_token_mask
+
+        # apply the delay pattern mask
+        decoder_input_ids = self.decoder.apply_delay_pattern_mask(decoder_input_ids, kwargs["decoder_pad_token_mask"])
+
+        # cut decoder_input_ids if past is used
+        if past_key_values is not None:
+            decoder_input_ids = decoder_input_ids[..., -1:]
+
+        return {
+            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
+            "encoder_outputs": encoder_outputs,
+            "past_key_values": past_key_values,
+            "decoder_input_ids": decoder_input_ids,
+            "attention_mask": attention_mask,
+            "head_mask": head_mask,
+            "decoder_head_mask": decoder_head_mask,
+            "cross_attn_head_mask": cross_attn_head_mask,
+            "use_cache": use_cache,  # change this to avoid caching
+        }
+
     def _prepare_decoder_input_ids_for_generation(
         self,
         batch_size: int,
@@ -1906,7 +1654,9 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
         if device is None:
             device = self.device
-        decoder_input_ids_start = torch.ones((batch_size, self.num_codebooks, 1), dtype=torch.long, device=device) * decoder_start_token_id
+        decoder_input_ids_start = (
+            torch.ones((batch_size, self.num_codebooks, 1), dtype=torch.long, device=device) * decoder_start_token_id
+        )
 
         # no user input -> use decoder_start_token_id as decoder_input_ids
         if decoder_input_ids is None:
@@ -1925,10 +1675,26 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
                 model_kwargs["decoder_attention_mask"] = decoder_attention_mask
 
         # build the delay pattern mask for offsetting each codebook prediction by 1 (this behaviour is specific to MusicGen)
-        decoder_input_ids, decoder_pad_token_mask = self.build_delay_pattern_mask(decoder_input_ids, decoder_start_token_id)
+        decoder_input_ids, decoder_pad_token_mask = self.build_delay_pattern_mask(
+            decoder_input_ids, decoder_start_token_id
+        )
         model_kwargs["decoder_pad_token_mask"] = decoder_pad_token_mask
 
         return decoder_input_ids, model_kwargs
+
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
+        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
+
+    def resize_token_embeddings(self, *args, **kwargs):
+        raise NotImplementedError(
+            "Resizing the embedding layers via the EncoderDecoderModel directly is not supported. Please use the"
+            " respective methods of the wrapped objects (model.encoder.resize_token_embeddings(...) or"
+            " model.decoder.resize_token_embeddings(...))"
+        )
+
+    def _reorder_cache(self, past_key_values, beam_idx):
+        # apply decoder cache reordering here
+        return self.decoder._reorder_cache(past_key_values, beam_idx)
 
     def generate(
         self,
@@ -2048,8 +1814,13 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         bsz, codebooks, seq_len = input_ids.shape
         # we need the decoder input ids to recover our delay pattern mask - check if we had it in the inputs, or
         # initialise them otherwise
-        decoder_start_token_id = self._get_decoder_start_token_id(generation_config.decoder_start_token_id, generation_config.bos_token_id)
-        decoder_input_ids_start = torch.ones((bsz, self.num_codebooks, 1), dtype=torch.long, device=input_ids.device) * decoder_start_token_id
+        decoder_start_token_id = self._get_decoder_start_token_id(
+            generation_config.decoder_start_token_id, generation_config.bos_token_id
+        )
+        decoder_input_ids_start = (
+            torch.ones((bsz, self.num_codebooks, 1), dtype=torch.long, device=input_ids.device)
+            * decoder_start_token_id
+        )
         if decoder_input_ids is None:
             decoder_input_ids = decoder_input_ids_start
         elif (decoder_input_ids[:, :, 0] != decoder_start_token_id).all().item():
