@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MRA model configuration"""
+""" Mra model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -20,16 +20,16 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MRA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+Mra_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "uw-madison/mra-base-512-4": "https://huggingface.co/uw-madison/mra-base-512-4/resolve/main/config.json",
 }
 
 
-class MRAConfig(PretrainedConfig):
+class MraConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MRAModel`]. It is used to instantiate an MRA
+    This is the configuration class to store the configuration of a [`MraModel`]. It is used to instantiate an Mra
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the MRA
+    defaults will yield a similar configuration to that of the Mra
     [uw-madison/mra-base-512-4](https://huggingface.co/uw-madison/mra-base-512-4) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -38,8 +38,8 @@ class MRAConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50265):
-            Vocabulary size of the MRA model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`MRAModel`].
+            Vocabulary size of the Mra model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`MraModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -59,7 +59,7 @@ class MRAConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 1):
-            The vocabulary size of the `token_type_ids` passed when calling [`MRAModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`MraModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
@@ -79,13 +79,13 @@ class MRAConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import MRAConfig, MRAModel
+    >>> from transformers import MraConfig, MraModel
 
-    >>> # Initializing a MRA uw-madison/mra-base-512-4 style configuration
-    >>> configuration = MRAConfig()
+    >>> # Initializing a Mra uw-madison/mra-base-512-4 style configuration
+    >>> configuration = MraConfig()
 
     >>> # Initializing a model (with random weights) from the uw-madison/mra-base-512-4 style configuration
-    >>> model = MRAModel(configuration)
+    >>> model = MraModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

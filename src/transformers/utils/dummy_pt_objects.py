@@ -4850,59 +4850,59 @@ class MPNetPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-MRA_PRETRAINED_MODEL_ARCHIVE_LIST = None
+Mra_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class MRAForMaskedLM(metaclass=DummyObject):
+class MraForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MRAForMultipleChoice(metaclass=DummyObject):
+class MraForMultipleChoice(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MRAForQuestionAnswering(metaclass=DummyObject):
+class MraForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MRAForSequenceClassification(metaclass=DummyObject):
+class MraForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MRAForTokenClassification(metaclass=DummyObject):
+class MraForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MRALayer(metaclass=DummyObject):
+class MraLayer(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MRAModel(metaclass=DummyObject):
+class MraModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MRAPreTrainedModel(metaclass=DummyObject):
+class MraPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

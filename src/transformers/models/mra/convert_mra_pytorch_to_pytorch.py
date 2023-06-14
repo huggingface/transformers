@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert MRA checkpoints from the original repository. URL: https://github.com/mlpen/MRA"""
+"""Convert Mra checkpoints from the original repository. URL: https://github.com/mlpen/Mra"""
 
 import argparse
 
 import torch
 
-from transformers import MRAConfig, MRAForMaskedLM
+from transformers import MraConfig, MraForMaskedLM
 
 
 def rename_key(orig_key):
@@ -78,8 +78,8 @@ def convert_checkpoint_helper(max_position_embeddings, orig_state_dict):
 
 def convert_mra_checkpoint(checkpoint_path, mra_config_file, pytorch_dump_path):
     orig_state_dict = torch.load(checkpoint_path, map_location="cpu")["model_state_dict"]
-    config = MRAConfig.from_json_file(mra_config_file)
-    model = MRAForMaskedLM(config)
+    config = MraConfig.from_json_file(mra_config_file)
+    model = MraForMaskedLM(config)
 
     new_state_dict = convert_checkpoint_helper(config.max_position_embeddings, orig_state_dict)
 
@@ -94,14 +94,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--pytorch_model_path", default=None, type=str, required=True, help="Path to MRA pytorch checkpoint."
+        "--pytorch_model_path", default=None, type=str, required=True, help="Path to Mra pytorch checkpoint."
     )
     parser.add_argument(
         "--config_file",
         default=None,
         type=str,
         required=True,
-        help="The json file for MRA model config.",
+        help="The json file for Mra model config.",
     )
     parser.add_argument(
         "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."

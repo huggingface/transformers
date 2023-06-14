@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch MRA model."""
+""" PyTorch Mra model."""
 
 
 import math
@@ -44,18 +44,18 @@ from ...utils import (
     is_torch_cuda_available,
     logging,
 )
-from .configuration_mra import MRAConfig
+from .configuration_mra import MraConfig
 
 
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "uw-madison/mra-base-512-4"
-_CONFIG_FOR_DOC = "MRAConfig"
+_CONFIG_FOR_DOC = "MraConfig"
 _TOKENIZER_FOR_DOC = "AutoTokenizer"
 
-MRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+Mra_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "uw-madison/mra-base-512-4",
-    # See all MRA models at https://huggingface.co/models?filter=mra
+    # See all Mra models at https://huggingface.co/models?filter=mra
 ]
 
 
@@ -76,7 +76,7 @@ if is_torch_cuda_available() and is_ninja_available():
         load_cuda_kernels()
     except Exception as e:
         logger.warning(
-            "Failed to load CUDA kernels. MRA requires custom CUDA kernels. Please verify that compatible versions of"
+            "Failed to load CUDA kernels. Mra requires custom CUDA kernels. Please verify that compatible versions of"
             f" PyTorch and CUDA Toolkit are installed: {e}"
         )
         cuda_kernel = None
@@ -353,7 +353,7 @@ def mra2_attention(
     initial_prior_diagonal_n_blocks=0,
 ):
     """
-    Use MRA to approximate self-attention.
+    Use Mra to approximate self-attention.
     """
     if cuda_kernel is None:
         return torch.zeros_like(query).requires_grad_()
@@ -456,7 +456,7 @@ def mra2_attention(
     return attn
 
 
-class MRAEmbeddings(nn.Module):
+class MraEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
@@ -514,7 +514,7 @@ class MRAEmbeddings(nn.Module):
         return embeddings
 
 
-class MRASelfAttention(nn.Module):
+class MraSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -600,7 +600,7 @@ class MRASelfAttention(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput
-class MRASelfOutput(nn.Module):
+class MraSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -614,12 +614,12 @@ class MRASelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.yoso.modeling_yoso.YosoAttention with Yoso->MRA
-class MRAAttention(nn.Module):
+# Copied from transformers.models.yoso.modeling_yoso.YosoAttention with Yoso->Mra
+class MraAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = MRASelfAttention(config, position_embedding_type=position_embedding_type)
-        self.output = MRASelfOutput(config)
+        self.self = MraSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.output = MraSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -648,7 +648,7 @@ class MRAAttention(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate
-class MRAIntermediate(nn.Module):
+class MraIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -664,7 +664,7 @@ class MRAIntermediate(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput
-class MRAOutput(nn.Module):
+class MraOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -678,16 +678,16 @@ class MRAOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.yoso.modeling_yoso.YosoLayer with Yoso->MRA
-class MRALayer(nn.Module):
+# Copied from transformers.models.yoso.modeling_yoso.YosoLayer with Yoso->Mra
+class MraLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = MRAAttention(config)
+        self.attention = MraAttention(config)
         self.add_cross_attention = config.add_cross_attention
-        self.intermediate = MRAIntermediate(config)
-        self.output = MRAOutput(config)
+        self.intermediate = MraIntermediate(config)
+        self.output = MraOutput(config)
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         self_attention_outputs = self.attention(hidden_states, attention_mask, output_attentions=output_attentions)
@@ -708,12 +708,12 @@ class MRALayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.yoso.modeling_yoso.YosoEncoder with Yoso->MRA
-class MRAEncoder(nn.Module):
+# Copied from transformers.models.yoso.modeling_yoso.YosoEncoder with Yoso->Mra
+class MraEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([MRALayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([MraLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -765,7 +765,7 @@ class MRAEncoder(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform
-class MRAPredictionHeadTransform(nn.Module):
+class MraPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -782,11 +782,11 @@ class MRAPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->MRA
-class MRALMPredictionHead(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->Mra
+class MraLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.transform = MRAPredictionHeadTransform(config)
+        self.transform = MraPredictionHeadTransform(config)
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
@@ -803,25 +803,25 @@ class MRALMPredictionHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->MRA
-class MRAOnlyMLMHead(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->Mra
+class MraOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.predictions = MRALMPredictionHead(config)
+        self.predictions = MraLMPredictionHead(config)
 
     def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
 
-# Copied from transformers.models.yoso.modeling_yoso.YosoPreTrainedModel with Yoso->MRA,yoso->mra
-class MRAPreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.yoso.modeling_yoso.YosoPreTrainedModel with Yoso->Mra,yoso->mra
+class MraPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = MRAConfig
+    config_class = MraConfig
     base_model_prefix = "mra"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -843,22 +843,22 @@ class MRAPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, MRAEncoder):
+        if isinstance(module, MraEncoder):
             module.gradient_checkpointing = value
 
 
-MRA_START_DOCSTRING = r"""
+Mra_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config ([`MRAConfig`]): Model configuration class with all the parameters of the model.
+        config ([`MraConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-MRA_INPUTS_DOCSTRING = r"""
+Mra_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
@@ -909,17 +909,17 @@ MRA_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare MRA Model transformer outputting raw hidden-states without any specific head on top.",
-    MRA_START_DOCSTRING,
+    "The bare Mra Model transformer outputting raw hidden-states without any specific head on top.",
+    Mra_START_DOCSTRING,
 )
-# Copied from transformers.models.yoso.modeling_yoso.YosoModel with YOSO->MRA,Yoso->MRA
-class MRAModel(MRAPreTrainedModel):
+# Copied from transformers.models.yoso.modeling_yoso.YosoModel with YOSO->Mra,Yoso->Mra
+class MraModel(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = MRAEmbeddings(config)
-        self.encoder = MRAEncoder(config)
+        self.embeddings = MraEmbeddings(config)
+        self.encoder = MraEncoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -938,7 +938,7 @@ class MRAModel(MRAPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(Mra_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithCrossAttentions,
@@ -1023,9 +1023,9 @@ class MRAModel(MRAPreTrainedModel):
         )
 
 
-@add_start_docstrings("""MRA Model with a `language modeling` head on top.""", MRA_START_DOCSTRING)
-# Copied from transformers.models.yoso.modeling_yoso.YosoForMaskedLM with YOSO->MRA,Yoso->MRA,yoso->mra
-class MRAForMaskedLM(MRAPreTrainedModel):
+@add_start_docstrings("""Mra Model with a `language modeling` head on top.""", Mra_START_DOCSTRING)
+# Copied from transformers.models.yoso.modeling_yoso.YosoForMaskedLM with YOSO->Mra,Yoso->Mra,yoso->mra
+class MraForMaskedLM(MraPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         "cls.predictions.decoder.bias",
         "cls.predictions.decoder.weight",
@@ -1035,8 +1035,8 @@ class MRAForMaskedLM(MRAPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.mra = MRAModel(config)
-        self.cls = MRAOnlyMLMHead(config)
+        self.mra = MraModel(config)
+        self.cls = MraOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1047,7 +1047,7 @@ class MRAForMaskedLM(MRAPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(Mra_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
@@ -1106,8 +1106,8 @@ class MRAForMaskedLM(MRAPreTrainedModel):
         )
 
 
-# Copied from transformers.models.yoso.modeling_yoso.YosoClassificationHead with Yoso->MRA
-class MRAClassificationHead(nn.Module):
+# Copied from transformers.models.yoso.modeling_yoso.YosoClassificationHead with Yoso->Mra
+class MraClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config):
@@ -1129,22 +1129,22 @@ class MRAClassificationHead(nn.Module):
 
 
 @add_start_docstrings(
-    """MRA Model transformer with a sequence classification/regression head on top (a linear layer on top of
+    """Mra Model transformer with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks.""",
-    MRA_START_DOCSTRING,
+    Mra_START_DOCSTRING,
 )
-# Copied from transformers.models.yoso.modeling_yoso.YosoForSequenceClassification with YOSO->MRA,Yoso->MRA,yoso->mra
-class MRAForSequenceClassification(MRAPreTrainedModel):
+# Copied from transformers.models.yoso.modeling_yoso.YosoForSequenceClassification with YOSO->Mra,Yoso->Mra,yoso->mra
+class MraForSequenceClassification(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.mra = MRAModel(config)
-        self.classifier = MRAClassificationHead(config)
+        self.mra = MraModel(config)
+        self.classifier = MraClassificationHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(Mra_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
@@ -1221,23 +1221,23 @@ class MRAForSequenceClassification(MRAPreTrainedModel):
 
 
 @add_start_docstrings(
-    """MRA Model with a multiple choice classification head on top (a linear layer on top of
+    """Mra Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks.""",
-    MRA_START_DOCSTRING,
+    Mra_START_DOCSTRING,
 )
-# Copied from transformers.models.yoso.modeling_yoso.YosoForMultipleChoice with YOSO->MRA,Yoso->MRA,yoso->mra
-class MRAForMultipleChoice(MRAPreTrainedModel):
+# Copied from transformers.models.yoso.modeling_yoso.YosoForMultipleChoice with YOSO->Mra,Yoso->Mra,yoso->mra
+class MraForMultipleChoice(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.mra = MRAModel(config)
+        self.mra = MraModel(config)
         self.pre_classifier = nn.Linear(config.hidden_size, config.hidden_size)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(Mra_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
@@ -1313,24 +1313,24 @@ class MRAForMultipleChoice(MRAPreTrainedModel):
 
 
 @add_start_docstrings(
-    """MRA Model with a token classification head on top (a linear layer on top of
+    """Mra Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks.""",
-    MRA_START_DOCSTRING,
+    Mra_START_DOCSTRING,
 )
-# Copied from transformers.models.yoso.modeling_yoso.YosoForTokenClassification with YOSO->MRA,Yoso->MRA,yoso->mra
-class MRAForTokenClassification(MRAPreTrainedModel):
+# Copied from transformers.models.yoso.modeling_yoso.YosoForTokenClassification with YOSO->Mra,Yoso->Mra,yoso->mra
+class MraForTokenClassification(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.mra = MRAModel(config)
+        self.mra = MraModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(Mra_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
@@ -1399,25 +1399,25 @@ class MRAForTokenClassification(MRAPreTrainedModel):
 
 
 @add_start_docstrings(
-    """MRA Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    """Mra Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).""",
-    MRA_START_DOCSTRING,
+    Mra_START_DOCSTRING,
 )
-# Copied from transformers.models.yoso.modeling_yoso.YosoForQuestionAnswering with YOSO->MRA,Yoso->MRA,yoso->mra
-class MRAForQuestionAnswering(MRAPreTrainedModel):
+# Copied from transformers.models.yoso.modeling_yoso.YosoForQuestionAnswering with YOSO->Mra,Yoso->Mra,yoso->mra
+class MraForQuestionAnswering(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         config.num_labels = 2
         self.num_labels = config.num_labels
 
-        self.mra = MRAModel(config)
+        self.mra = MraModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(Mra_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,

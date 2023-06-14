@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
-_import_structure = {"configuration_mra": ["MRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MRAConfig"]}
+_import_structure = {"configuration_mra": ["Mra_PRETRAINED_CONFIG_ARCHIVE_MAP", "MraConfig"]}
 
 try:
     if not is_torch_available():
@@ -30,20 +30,20 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_mra"] = [
-        "MRA_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "MRAForMaskedLM",
-        "MRAForMultipleChoice",
-        "MRAForQuestionAnswering",
-        "MRAForSequenceClassification",
-        "MRAForTokenClassification",
-        "MRALayer",
-        "MRAModel",
-        "MRAPreTrainedModel",
+        "Mra_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "MraForMaskedLM",
+        "MraForMultipleChoice",
+        "MraForQuestionAnswering",
+        "MraForSequenceClassification",
+        "MraForTokenClassification",
+        "MraLayer",
+        "MraModel",
+        "MraPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_mra import MRA_PRETRAINED_CONFIG_ARCHIVE_MAP, MRAConfig
+    from .configuration_mra import Mra_PRETRAINED_CONFIG_ARCHIVE_MAP, MraConfig
 
     try:
         if not is_torch_available():
@@ -52,15 +52,15 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_mra import (
-            MRA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MRAForMaskedLM,
-            MRAForMultipleChoice,
-            MRAForQuestionAnswering,
-            MRAForSequenceClassification,
-            MRAForTokenClassification,
-            MRALayer,
-            MRAModel,
-            MRAPreTrainedModel,
+            Mra_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MraForMaskedLM,
+            MraForMultipleChoice,
+            MraForQuestionAnswering,
+            MraForSequenceClassification,
+            MraForTokenClassification,
+            MraLayer,
+            MraModel,
+            MraPreTrainedModel,
         )
 
 
