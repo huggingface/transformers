@@ -121,7 +121,7 @@ class ModelArguments:
     adapter_attn_dim: int = field(
         default=16,
         metadata={
-            "help": "The hidden dimension of the adapter layers that will be randomely initialized and trained. The higher the dimension, the more capacity is given to the adapter weights. Note that only the adapter weights are fine-tuned."
+            "help": "The hidden dimension of the adapter layers that will be randomly initialized and trained. The higher the dimension, the more capacity is given to the adapter weights. Note that only the adapter weights are fine-tuned."
         },
     )
 
