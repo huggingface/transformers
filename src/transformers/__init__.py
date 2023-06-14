@@ -2081,7 +2081,6 @@ else:
             "MRAForQuestionAnswering",
             "MRAForSequenceClassification",
             "MRAForTokenClassification",
-            "MRALayer",
             "MRAModel",
             "MRAPreTrainedModel",
         ]
@@ -5575,7 +5574,6 @@ if TYPE_CHECKING:
             MRAForQuestionAnswering,
             MRAForSequenceClassification,
             MRAForTokenClassification,
-            MRALayer,
             MRAModel,
             MRAPreTrainedModel,
         )
