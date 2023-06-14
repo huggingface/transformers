@@ -270,7 +270,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model.to(torch_device)
             model.eval()
             inputs = self._prepare_for_class(inputs_dict, model_class)
-            inputs["input_values"] = inputs["input_values"]
+            inputs["input_values"] = inputs["input_values"].repeat(1,1,10)
 
             hidden_states_no_chunk = model(**inputs)[0]
 
@@ -284,7 +284,6 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model.eval()
 
             hidden_states_with_chunk = model(**inputs)[0]
-            breakpoint()
             self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
 
     @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic")
