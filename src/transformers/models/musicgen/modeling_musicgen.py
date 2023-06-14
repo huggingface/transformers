@@ -1823,7 +1823,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
 
     def build_delay_pattern_mask(self, decoder_input_ids, pad_token_id):
         """Build a delayed pattern mask to the decoder_input_ids. Each codebook is offset by the previous codebook by
-        one, giving a delayed pattern mask at the start of sequence and end of sequence. Taking the example where there
+        one, giving a delayed pattern mask at the start of sequence and end of sequence. Take the example where there
         are 4 codebooks and a max sequence length of 8, we have the delayed pattern mask of shape `(codebooks,
         seq_len)`:
         - [P, -1, -1, -1, -1,  P,  P,  P]
@@ -1832,7 +1832,13 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         - [P,  P,  P,  P, -1, -1, -1, -1]
         where P is the special padding token id and -1 indicates that the token is valid for prediction. If we include
         a prompt (decoder input ids), the -1 positions indicate where new tokens should be predicted. Otherwise, the
-        mask is set to the value in the prompt.
+        mask is set to the value in the prompt:
+        - [P,  a,  b, -1, -1,  P,  P,  P]
+        - [P,  P,  c,  d, -1, -1,  P,  P]
+        - [P,  P,  P,  e,  f, -1, -1,  P]
+        - [P,  P,  P,  P,  g,  h, -1, -1]
+        where a-h indicate the input prompt (decoder input ids) that are offset by 1. Now, we only override the -1
+        tokens in our prediction.
         """
         bsz, num_codebooks, seq_len = decoder_input_ids.shape
         max_length = self.generation_config.max_length
