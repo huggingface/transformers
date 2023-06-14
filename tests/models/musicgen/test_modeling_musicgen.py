@@ -15,13 +15,11 @@
 """ Testing suite for the PyTorch MBART model. """
 
 
-import copy
 import tempfile
 import unittest
 
-from transformers import MusicgenConfig, is_torch_available, MusicgenEncoderConfig, MusicgenDecoderConfig
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
-from transformers.utils import cached_property
+from transformers import MusicgenConfig, MusicgenDecoderConfig, is_torch_available
+from transformers.testing_utils import require_torch, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -53,9 +51,13 @@ def prepare_musicgen_inputs_dict(
     if head_mask is None:
         head_mask = torch.ones(config.encoder_config.num_layers, config.encoder_config.num_heads, device=torch_device)
     if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_config.num_layers, config.decoder_config.num_heads, device=torch_device)
+        decoder_head_mask = torch.ones(
+            config.decoder_config.num_layers, config.decoder_config.num_heads, device=torch_device
+        )
     if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_config.num_layers, config.decoder_config.num_heads, device=torch_device)
+        cross_attn_head_mask = torch.ones(
+            config.decoder_config.num_layers, config.decoder_config.num_heads, device=torch_device
+        )
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -177,18 +179,12 @@ class MusicgenModelTester:
 
 @require_torch
 class MusicgenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (MusicgenModel, MusicgenForConditionalGeneration)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (MusicgenModel, MusicgenForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (MusicgenForConditionalGeneration,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = MusicgenModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=MusicgenConfig, has_text_modality=False, hidden_size=16
-        )
+        self.config_tester = ConfigTester(self, config_class=MusicgenConfig, has_text_modality=False, hidden_size=16)
 
     def _get_input_ids_and_config(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -196,7 +192,7 @@ class MusicgenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         # cut to half length & take max batch_size 3
         _, codebooks, sequence_length = input_ids.shape
-        input_ids = input_ids[:batch_size, :codebooks, :sequence_length // 2]
+        input_ids = input_ids[:batch_size, :codebooks, : sequence_length // 2]
 
         # generate max 3 tokens
         max_length = input_ids.shape[-1] + 3
