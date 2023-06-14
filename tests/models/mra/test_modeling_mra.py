@@ -12,12 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MRA model. """
+""" Testing suite for the PyTorch Mra model. """
 
 
 import unittest
 
-from transformers import MRAConfig, is_torch_available
+from transformers import MraConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -28,17 +28,17 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MRAForMaskedLM,
-        MRAForMultipleChoice,
-        MRAForQuestionAnswering,
-        MRAForSequenceClassification,
-        MRAForTokenClassification,
-        MRAModel,
+        MraForMaskedLM,
+        MraForMultipleChoice,
+        MraForQuestionAnswering,
+        MraForSequenceClassification,
+        MraForTokenClassification,
+        MraModel,
     )
-    from transformers.models.mra.modeling_mra import MRA_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.mra.modeling_mra import Mra_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
-class MRAModelTester:
+class MraModelTester:
     def __init__(
         self,
         parent,
@@ -111,7 +111,7 @@ class MRAModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return MRAConfig(
+        return MraConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -161,7 +161,7 @@ class MRAModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = MRAModel(config=config)
+        model = MraModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
@@ -182,7 +182,7 @@ class MRAModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = MRAModel(config)
+        model = MraModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -204,7 +204,7 @@ class MRAModelTester:
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = MRAForMaskedLM(config=config)
+        model = MraForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -213,7 +213,7 @@ class MRAModelTester:
     def create_and_check_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = MRAForQuestionAnswering(config=config)
+        model = MraForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -230,7 +230,7 @@ class MRAModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
-        model = MRAForSequenceClassification(config)
+        model = MraForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
@@ -240,7 +240,7 @@ class MRAModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
-        model = MRAForTokenClassification(config=config)
+        model = MraForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -250,7 +250,7 @@ class MRAModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_choices = self.num_choices
-        model = MRAForMultipleChoice(config=config)
+        model = MraForMultipleChoice(config=config)
         model.to(torch_device)
         model.eval()
         multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
@@ -280,15 +280,15 @@ class MRAModelTester:
 
 
 @require_torch
-class MRAModelTest(ModelTesterMixin, unittest.TestCase):
+class MraModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            MRAModel,
-            MRAForMaskedLM,
-            MRAForMultipleChoice,
-            MRAForQuestionAnswering,
-            MRAForSequenceClassification,
-            MRAForTokenClassification,
+            MraModel,
+            MraForMaskedLM,
+            MraForMultipleChoice,
+            MraForQuestionAnswering,
+            MraForSequenceClassification,
+            MraForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -300,8 +300,8 @@ class MRAModelTest(ModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = ()
 
     def setUp(self):
-        self.model_tester = MRAModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MRAConfig, hidden_size=37)
+        self.model_tester = MraModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=MraConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -338,8 +338,8 @@ class MRAModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MRA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MRAModel.from_pretrained(model_name)
+        for model_name in Mra_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = MraModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
@@ -347,10 +347,10 @@ class MRAModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class MRAModelIntegrationTest(unittest.TestCase):
+class MraModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        model = MRAModel.from_pretrained("uw-madison/mra-base-512-4")
+        model = MraModel.from_pretrained("uw-madison/mra-base-512-4")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
 
         with torch.no_grad():
@@ -367,7 +367,7 @@ class MRAModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_masked_lm(self):
-        model = MRAForMaskedLM.from_pretrained("uw-madison/mra-base-512-4")
+        model = MraForMaskedLM.from_pretrained("uw-madison/mra-base-512-4")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
 
         with torch.no_grad():
@@ -386,7 +386,7 @@ class MRAModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_masked_lm_long_input(self):
-        model = MRAForMaskedLM.from_pretrained("uw-madison/mra-base-512-4")
+        model = MraForMaskedLM.from_pretrained("uw-madison/mra-base-512-4")
         input_ids = torch.arange(4096).unsqueeze(0)
 
         with torch.no_grad():
