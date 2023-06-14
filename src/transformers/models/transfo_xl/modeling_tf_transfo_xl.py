@@ -589,34 +589,20 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
 
         # Compute decoder attention mask
 
-        # ::: PyTorch masking code for reference :::
-        # if self.same_length:
-        #     all_ones = word_emb.new_ones((qlen, klen), dtype=torch.uint8)
-        #     mask_len = klen - self.mem_len
-        #     if mask_len > 0:
-        #         mask_shift_len = qlen - mask_len
-        #     else:
-        #         mask_shift_len = qlen
-        #     dec_attn_mask = (torch.triu(all_ones, 1+mlen)
-        #             + torch.tril(all_ones, -mask_shift_len))[:, :, None] # -1
-        # else:
-        #     dec_attn_mask = torch.triu(
-        #         word_emb.new_ones((qlen, klen), dtype=torch.uint8), diagonal=1+mlen)[:,:,None]
-
         # TensorFlow version
-        dec_attn_mask = 1 - tf.linalg.band_part(
-            tf.ones([qlen, klen], dtype=tf.int32), -1, mlen
-        )  # (q, q): diagonal with 1's
+        all_ones = tf.ones([qlen, klen], dtype=tf.int32)
+        upper_mask = tf.linalg.band_part(all_ones, 0, -1) - tf.linalg.band_part(all_ones, 0, mlen)
         if self.same_length:
             mask_len = klen - self.mem_len
-            if mask_len > 0:
-                mask_shift_len = qlen - mask_len
-            else:
-                mask_shift_len = qlen
-            if mask_shift_len >= 1:
-                dec_attn_mask += 1 - tf.linalg.band_part(tf.ones([qlen, klen], dtype=tf.int32), mask_shift_len - 1, -1)
-            else:
-                dec_attn_mask += tf.linalg.band_part(tf.ones([qlen, klen], dtype=tf.int32), -1, -mask_shift_len)
+            mask_shift_len = qlen - tf.nn.relu(mask_len)  # Lazy clamping of negatives to zero
+
+            # Use an indicator variable instead of a conditional to keep the compiler happy
+            lower_mask = tf.linalg.band_part(all_ones, -1, 0) - (
+                tf.linalg.band_part(all_ones, mask_shift_len - 1, 0) * tf.cast(mask_shift_len != 0, tf.int32)
+            )
+            dec_attn_mask = upper_mask + lower_mask
+        else:
+            dec_attn_mask = upper_mask
 
         hids = []
         attentions = [] if output_attentions else None
