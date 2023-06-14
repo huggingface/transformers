@@ -1194,6 +1194,19 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
         return adapter_weights
 
+    def init_adapter_layers(self):
+        """
+        (Re-)initialize attention adapter layers and lm head for adapter-only fine-tuning
+        """
+        # init attention adapters
+        for module in self.modules():
+            if isinstance(module, Wav2Vec2AttnAdapterLayer):
+                self._init_weights(module)
+
+        # init lm head
+        if isinstance(self, Wav2Vec2ForCTC):
+            self._init_weights(self.lm_head)
+
     def load_adapter(self, target_lang: str, **kwargs):
         r"""
         Load a language adapter model from a pre-trained adapter model.
@@ -1887,6 +1900,14 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
+
+    def freeze_base_model(self):
+        """
+        Calling this function will disable the gradient computation for the base model so that its parameters will not
+        be updated during training. Only the classification head will be updated.
+        """
+        for param in self.wav2vec2.parameters():
+            param.requires_grad = False
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
