@@ -202,7 +202,8 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
 
         # Matt: The PyTorch code does a lot of work to cache the embeddings, setting the cached values as a
         # model attribute in the forward pass. This is extremely forbidden in TF, which wants forward calls to be
-        # idempotent. However, TF
+        # idempotent. TF doesn't need that caching anyway, since it can just store constants during compilation,
+        # so we just remove all of that code.
         embeddings = self._get_embedding(
             self.padding_idx + 1 + seq_len + self.offset, self.embedding_dim, self.padding_idx
         )
