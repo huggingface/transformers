@@ -195,30 +195,18 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
             emb = tf.concat([emb[:padding_idx, :], tf.zeros((1, tf.shape(emb)[1])), emb[padding_idx + 1 :, :]], axis=0)
         return emb
 
-    def build(self, input_shape: tf.TensorShape):
-        """
-        Build shared token embedding layer Shared weights logic adapted from
-        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
-        """
-        self.embeddings = self.add_weight(
-            name="weights",  # name also used in PT
-            shape=tf.shape(self.embedding_weights),
-            trainable=False,
-        )
-        self.embeddings.assign(self.embedding_weights)
-        super().build(input_shape)
-
     def call(self, input_ids: tf.Tensor, past_key_values_length: int = 0) -> tf.Tensor:
         bsz, seq_len = shape_list(input_ids)
         # Create the position ids from the input token ids. Any padded tokens remain padded.
         position_ids = self.create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length)
 
-        # expand embeddings if needed
-        max_pos = self.padding_idx + 1 + seq_len
-        if max_pos > shape_list(self.embeddings)[0]:
-            self.embedding_weights = self._get_embedding(max_pos + self.offset, self.embedding_dim, self.padding_idx)
-            self.embeddings.assign(self.embedding_weights)
-        return tf.reshape(tf.gather(self.embeddings, tf.reshape(position_ids, (-1,)), axis=0), (bsz, seq_len, -1))
+        # Matt: The PyTorch code does a lot of work to cache the embeddings, setting the cached values as a
+        # model attribute in the forward pass. This is extremely forbidden in TF, which wants forward calls to be
+        # idempotent. However, TF
+        embeddings = self._get_embedding(
+            self.padding_idx + 1 + seq_len + self.offset, self.embedding_dim, self.padding_idx
+        )
+        return tf.reshape(tf.gather(embeddings, tf.reshape(position_ids, (-1,)), axis=0), (bsz, seq_len, -1))
 
     @staticmethod
     def create_position_ids_from_input_ids(
@@ -562,6 +550,7 @@ class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
     config_class = Speech2TextConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
+    _keys_to_ignore_on_load_unexpected = [r"encoder.embed_positions.weights"]
 
     def _get_feat_extract_output_lengths(self, input_lengths: tf.Tensor):
         """
