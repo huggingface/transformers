@@ -60,7 +60,7 @@ class SentencePieceExtractor:
                 piece_l, piece_r = merge[:index], merge[index:]
                 if piece_l in vocab and piece_r in vocab:
                     local.append((piece_l, piece_r, piece_score))
-            local = sorted(local, key=lambda x: vocab[x[0]])
+            local = sorted(local, key=lambda x: (vocab[x[0]], vocab[[x[1]]]))
             merges.extend(local)
 
         merges = sorted(merges, key=lambda val: val[2], reverse=reverse)
