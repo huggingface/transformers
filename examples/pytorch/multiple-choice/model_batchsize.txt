@@ -1,0 +1,8 @@
+google/mobilebert-uncased 64
+uw-madison/yoso-4096 64
+google/canine-s 24
+studio-ousia/luke-base 64
+google/fnet-base 64
+flaubert/flaubert_base_cased 56
+facebook/data2vec-text-base 28
+#### end list ####
