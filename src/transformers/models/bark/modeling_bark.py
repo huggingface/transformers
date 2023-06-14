@@ -19,7 +19,6 @@ from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start
 
 from transformers import LogitsProcessor, StoppingCriteria
 
-# TODO: ??
 import numpy as np
 
 
@@ -27,9 +26,144 @@ import numpy as np
 from encodec import EncodecModel
 
 
-
-
 logger = logging.get_logger(__name__)
+
+
+BARK_MODULE_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`BarkModuleConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+BARK_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`BarkConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+BARK_ACOUSTICS_FINE_INPUTS_DOCSTRING = r"""
+    Args:
+        pred_idx (`int`):
+            Indice of the codebook that will be predicted.
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, number_of_codebooks)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+            Initially, indices of the first two codebooks are obtained from the `coarse` sub-model. The rest is predicted recursively by attending the previously predicted channels.
+            The model predicts on windows of length 1024.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*): NOT IMPLEMENTED YET.
+        input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded
+            representation. If `past_key_values` is used, optionally only the last `input_embeds` have to be
+            input (see `past_key_values`). This is useful if you want more control over how to convert
+            `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""            
+
+# TODO: correct the part on indices once we decide how to do it
+BARK_CAUSAL_MODULE_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+            [What are input IDs?](../glossary#input-ids)
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `input_ids` of shape `(batch_size, sequence_length)`. input_embeds (`torch.FloatTensor` of shape
+            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
+            can choose to directly pass an embedded representation. This is useful if you want more control over how to
+            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded
+            representation. Here, due to `Bark` particularities, if `past_key_values` is used, `input_embeds` will be ignored and you have to use `input_ids`.
+            If `past_key_values` is not used, `input_embeds` is used in priority instead of `input_embeds`
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
 
 
 # TODO
@@ -291,11 +425,9 @@ class BarkModulePreTrainedModel(PreTrainedModel):
     """
 
     config_class = BarkModuleConfig
-    base_model_prefix = "transformer" # TODO: verify this is the right base_model
     # supports_gradient_checkpointing = True
     _no_split_modules = ["BarkBlock"] # TODO: what to do with this?
     
-    # TODO: ask about module.padding_idx
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear,)):
@@ -320,9 +452,13 @@ class BarkModulePreTrainedModel(PreTrainedModel):
 
 
 # GPT2-like autoregressive model
+@add_start_docstrings(
+    "Bark sub-module at the core of the semantic and the coarse acoustics sub-models. It is a GPT-2 like autoregressive model with a language modeling head on top.",
+    BARK_MODULE_START_DOCSTRING,
+)
 class BarkCausalModule(BarkModulePreTrainedModel):
     # TODO: what do I do with that here?    
-    #@add_start_docstrings_to_model_forward(BARK_INPUTS_DOCSTRING)
+    #
     #@add_code_sample_docstrings(
     #    checkpoint=_CHECKPOINT_FOR_DOC,
     #    output_type=BaseModelOutputWithPast,
@@ -459,6 +595,7 @@ class BarkCausalModule(BarkModulePreTrainedModel):
         
         return input_embeds
     
+    @add_start_docstrings_to_model_forward(BARK_CAUSAL_MODULE_INPUTS_DOCSTRING)
     def forward(
             self,
             input_ids: Optional[torch.Tensor] = None,
@@ -630,9 +767,11 @@ class BarkCausalModule(BarkModulePreTrainedModel):
             for layer_past in past_key_values
         )
     
-
+@add_start_docstrings(
+    "Bark sub-module at the core of the fine acoustics sub-model. It is a non-causal GPT-like model with 8 embedding layers and language modeling heads, one for each codebook.",
+    BARK_MODULE_START_DOCSTRING,
+)
 class BarkFineAcousticsModule(BarkModulePreTrainedModel):
-    # TODO: add docstring
     def __init__(self, config):
         # non-causal gpt-like model with one embedding layer and one lm_head for each codebook of Encodec
         super().__init__(config)
@@ -728,7 +867,8 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
 
             
     # contrary to the other main module of Bark (BarkCausalModule), it is non-causal, so no need for past key values
-    # And there is an additionnal idx corresponding to the id of the codebook that will be predicted      
+    # And there is an additionnal idx corresponding to the id of the codebook that will be predicted  
+    @add_start_docstrings_to_model_forward(BARK_ACOUSTICS_FINE_INPUTS_DOCSTRING)    
     def forward(
             self,
             pred_idx: int,
@@ -828,9 +968,17 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
             attentions=all_self_attentions,
             )
 
+@add_start_docstrings(
+    """
+    HugginFace implementation of `Bark`, a text-to-speech model composed of 3 sub-models:
+    1. A semantic model, that refines the input information.
+    2. A coarse acoustics model, that generates a raw version of the audio with the two first codebooks of `Encodec`.
+    3. A fine acoustics model, that refines the raw audio by generating the last 6 codebooks of `Encodec`, following `Bark` original implementation.
+    """,
+    BARK_START_DOCSTRING,
+)
 class BarkModel(BarkPreTrainedModel):
-    # TODO: what do I do with that here?    
-    #@add_start_docstrings_to_model_forward(BARK_INPUTS_DOCSTRING)
+    # TODO: Add code sample when preprocessing is clearer, and encodec is added.
     #@add_code_sample_docstrings(
     #    checkpoint=_CHECKPOINT_FOR_DOC,
     #    output_type=BaseModelOutputWithPast,
@@ -892,7 +1040,7 @@ class BarkModel(BarkPreTrainedModel):
     
     def generate_text_semantic(
         self,
-        inputs: Optional[torch.Tensor] = None,
+        inputs: torch.Tensor,
         history_prompt: Optional[Dict[str,np.ndarray]] = None,
         **kwargs,
     ) -> torch.LongTensor:
@@ -904,6 +1052,7 @@ class BarkModel(BarkPreTrainedModel):
         # min_eos_p = kwargs.get("min_eos_p", 0.2)
         
         
+        # TODO: input_ids[:,256:256+256] (to verify) corresponds to history_prompt["semantic_prompt"], maybe use that
         # input_ids should be of shape (batch_size, seq_len) where seq_len = 513
         input_embeds = torch.cat([
                         self.semantic_model.transformer.wte(input_ids[:,:256]) + self.semantic_model.transformer.wte(input_ids[:,256:256+256]),
@@ -924,6 +1073,10 @@ class BarkModel(BarkPreTrainedModel):
                                                    renormalize_logits=True,
                                                    eos_token_id=self.config.semantic_pad_token,
                                                    max_new_tokens = 768,
+                                                   output_scores=False, 
+                                                   return_dict_in_generate=False,
+                                                   output_hidden_states = False,
+                                                   output_attentions = False,
                                                    **kwargs) # size: 10048
         # TODO: there is also a max_gen_duration_s early stop if the duration depass a certain duration
 
@@ -1005,6 +1158,10 @@ class BarkModel(BarkPreTrainedModel):
                                                    logits_processor=[alternatingLogitsProcessor],
                                                    renormalize_logits=True, #renormalize after logits_processor
                                                    max_new_tokens = min(sliding_window_len, max_generated_len - total_generated_len),
+                                                   output_scores=False, 
+                                                   return_dict_in_generate=False,
+                                                   output_hidden_states = False,
+                                                   output_attentions = False,
                                                    **kwargs) 
             
             
@@ -1150,6 +1307,18 @@ class BarkModel(BarkPreTrainedModel):
         sliding_window_len: int = 60,
         **kwargs,
     ) -> torch.LongTensor:
+        """
+        Generates audio from an input prompt and an additional optional `Bark` speaker prompt.
+
+        Args:
+            inputs (Optional[torch.Tensor] of shape (1, 513), optional): Input ids. The first 256 tokens correspond to the tokenized input prompts. The next 256 tokens corresponds to a padded semantic prompt taken from history prompt. 
+            The last token is `semantic_infer_token`. Note that batch_size is set to 1 to generate one audio per audio. Defaults to None.
+            history_prompt (Optional[Dict[str,np.ndarray]], optional): Optional `Bark` speaker prompt. Defaults to None.
+            max_coarse_history (int, optional): Max length of the output of the coarse acoustics model used in the fine generation step. Defaults to 630.
+            sliding_window_len (int, optional): The coarse generation step uses a sliding window to generate raw audio. Defaults to 60.
+        Returns:
+            torch.LongTensor: Output generated audio.
+        """
 
 
 
