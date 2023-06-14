@@ -18,6 +18,7 @@
 from typing import Optional
 
 import numpy as np
+import math 
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -181,8 +182,15 @@ class EncodecConfig(PretrainedConfig):
     @property
     def frame_rate(self) -> int:
         hop_length = np.prod(self.upsampling_ratios)
-        return np.ceil(self.sampling_rate / hop_length)
+        return math.ceil(self.sampling_rate / hop_length)
 
     @property
     def num_quantizers(self) -> int:
         return int(1000 * self.target_bandwidths[-1] // (self.frame_rate * 10))
+
+
+        hop_length = np.prod(config.upsampling_ratios)
+        self.frame_rate = math.ceil(config.sampling_rate / hop_length)
+
+        num_quantizers = int(1000 * config.target_bandwidths[-1] // (self.frame_rate * 10))
+        

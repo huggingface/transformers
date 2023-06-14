@@ -293,6 +293,7 @@ def convert_checkpoint(
     if model_name == "encodec_24khz":
         pass  # config is already correct
     elif model_name == "encodec_48khz":
+        config.upsampling_ratios=[8, 5, 4, 2]
         config.target_bandwidths = [3.0, 6.0, 12.0, 24.0]
         config.sampling_rate = 48_000
         config.audio_channels = 2

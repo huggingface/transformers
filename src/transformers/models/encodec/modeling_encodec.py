@@ -128,7 +128,7 @@ class EncodecConv1d(nn.Module):
         length = hidden_states.shape[-1]
         padding_left, padding_right = paddings
         if not mode == "reflect":
-            nn.functional.pad(hidden_states, paddings, mode, value)
+            return nn.functional.pad(hidden_states, paddings, mode, value)
 
         max_pad = max(padding_left, padding_right)
         extra_pad = 0
@@ -405,18 +405,15 @@ class EncodecResidualVectorQuantizer(nn.Module):
         the appropriate number of quantizers to use and returns indices for each quantizer.
         """
         num_quantizers = self.get_num_quantizers_for_bandwidth(bandwidth)
-
         residual = embeddings
         all_indices = []
-        num_quantizers = num_quantizers or len(self.layers)
         for layer in self.layers[:num_quantizers]:
             indices = layer.encode(residual)
             quantized = layer.decode(indices)
             residual = residual - quantized
             all_indices.append(indices)
-
-        codes = torch.stack(all_indices)
-        return codes
+        out_indices = torch.stack(all_indices)
+        return out_indices
 
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
         """Decode the given codes to the quantized representation."""
@@ -425,7 +422,6 @@ class EncodecResidualVectorQuantizer(nn.Module):
             layer = self.layers[i]
             quantized = layer.decode(indices)
             quantized_out = quantized_out + quantized
-
         return quantized_out
 
 
@@ -636,10 +632,9 @@ class EncodecModel(EncodecPreTrainedModel):
             mask = padding_mask[..., offset : offset + chunk_length].bool()
             frame = input_values[:, :, offset : offset + chunk_length]
             encoded_frame, scale = self._encode_frame(frame, bandwidth, mask)
-            encoded_frames.append(encoded_frame[0])
+            encoded_frames.append(encoded_frame)
             scales.append(scale)
 
-        torch.cat(encoded_frames, dim=-1)
         encoded_frames = torch.stack(encoded_frames)
 
         if not return_dict:
@@ -676,8 +671,8 @@ class EncodecModel(EncodecPreTrainedModel):
         total_size = stride * (len(frames) - 1) + frames[-1].shape[-1]
 
         frame_length = frames[0].shape[-1]
-        t = torch.linspace(0, 1, frame_length + 2, device=device, dtype=dtype)[1:-1]
-        weight = 0.5 - (t - 0.5).abs()
+        time_vec = torch.linspace(0, 1, frame_length + 2, device=device, dtype=dtype)[1:-1]
+        weight = 0.5 - (time_vec - 0.5).abs()
 
         sum_weight = torch.zeros(total_size, device=device, dtype=dtype)
         out = torch.zeros(*shape, total_size, device=device, dtype=dtype)

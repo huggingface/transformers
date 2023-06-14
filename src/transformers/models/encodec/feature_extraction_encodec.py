@@ -84,7 +84,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
     def __call__(
         self,
         raw_audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        padding: Optional[Union[bool, str, PaddingStrategy]] = False,
+        padding: Optional[Union[bool, str, PaddingStrategy]] = True,
         truncation: Optional[bool] = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -137,7 +137,8 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             )
 
         if padding and truncation:
-            raise ValueError("Both `padding` and `truncation` were set to `True`, make sure to only set one")
+            padding = False
+
         is_batched = bool(
             isinstance(raw_audio, (list, tuple)) and (isinstance(raw_audio[0], (np.ndarray, tuple, list)))
         )
@@ -177,6 +178,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             else:
                 padded_inputs = input_values
 
+        # normal padding on batch -> create 
         if padded_inputs is None:
             padded_inputs = self.pad(
                 input_values,
