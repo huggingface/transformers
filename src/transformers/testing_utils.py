@@ -1882,13 +1882,6 @@ def preprocess_string(string, skip_cuda_tests):
     if not is_cuda_found:
         modified_string = "".join(codeblocks)
 
-        if ">>>" in modified_string:
-            lines = modified_string.split("\n")
-            indent = len(lines[-1]) - len(lines[-1].lstrip())
-
-            cleanup = ">>> import gc; gc.collect()  # doctest: +IGNORE_RESULT"
-            modified_string += "\n" + " " * indent + cleanup
-
     return modified_string
 
 

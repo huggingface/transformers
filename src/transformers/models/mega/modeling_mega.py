@@ -1659,6 +1659,7 @@ class MegaForCausalLM(MegaPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.weight", r"lm_head.bias"]
     _keys_to_ignore_on_load_missing = [r"lm_head.weight", r"lm_head.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: MegaConfig):
         super().__init__(config)
@@ -1823,6 +1824,7 @@ class MegaForMaskedLM(MegaPreTrainedModel):
     _keys_to_ignore_on_save = [r"mlm_head.weight", r"mlm_head.bias"]
     _keys_to_ignore_on_load_missing = [r"mlm_head.weight", r"mlm_head.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _tied_weights_keys = ["mlm_head.weight"]
 
     def __init__(self, config: MegaConfig):
         super().__init__(config)

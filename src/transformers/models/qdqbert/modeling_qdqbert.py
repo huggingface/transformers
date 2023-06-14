@@ -1014,6 +1014,7 @@ class QDQBertModel(QDQBertPreTrainedModel):
 class QDQBertLMHeadModel(QDQBertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
+    _tied_weights_keys = ["predictions.decoder.weight", "predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1167,6 +1168,7 @@ class QDQBertLMHeadModel(QDQBertPreTrainedModel):
 class QDQBertForMaskedLM(QDQBertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
+    _tied_weights_keys = ["predictions.decoder.weight", "predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)

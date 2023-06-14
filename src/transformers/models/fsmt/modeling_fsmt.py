@@ -1035,6 +1035,7 @@ def _get_shape(t):
 )
 class FSMTModel(PretrainedFSMTModel):
     _keys_to_ignore_on_load_missing = ["decoder.output_projection.weight"]
+    _tied_weights_keys = ["decoder.embed_tokens.weight"]
 
     def __init__(self, config: FSMTConfig):
         super().__init__(config)
@@ -1180,6 +1181,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         "model.encoder.embed_positions.weight",
         "model.decoder.embed_positions.weight",
     ]
+    _tied_weights_keys = ["model.decoder.embed_tokens.weight"]
 
     def __init__(self, config: FSMTConfig):
         super().__init__(config)

@@ -763,6 +763,7 @@ class AlbertModel(AlbertPreTrainedModel):
     ALBERT_START_DOCSTRING,
 )
 class AlbertForPreTraining(AlbertPreTrainedModel):
+    _tied_weights_keys = ["predictions.decoder.bias", "predictions.decoder.weight"]
     _keys_to_ignore_on_load_missing = [
         "predictions.decoder.weight",
         "predictions.decoder.bias",
@@ -916,6 +917,7 @@ class AlbertSOPHead(nn.Module):
 )
 class AlbertForMaskedLM(AlbertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _tied_weights_keys = ["predictions.decoder.bias", "predictions.decoder.weight"]
     _keys_to_ignore_on_load_missing = [
         "predictions.decoder.weight",
         "predictions.decoder.bias",
