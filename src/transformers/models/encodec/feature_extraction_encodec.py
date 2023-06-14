@@ -84,7 +84,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
     def __call__(
         self,
         raw_audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        padding: Optional[Union[bool, str, PaddingStrategy]] = True,
+        padding: Optional[Union[bool, str, PaddingStrategy]] = None,
         truncation: Optional[bool] = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -99,7 +99,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
                 values, a list of numpy arrays or a list of list of float values. The numpy array must be of shape
                 `(num_samples,)` for mono audio (`feature_size = 1`), or `(2, num_samples)` for stereo audio
                 (`feature_size = 2`).
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
 
@@ -110,7 +110,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
                 - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
                   lengths).
             truncation (`bool`, *optional*, defaults to `False`):
-                Activates truncation to cut input sequences longer than *max_length* to *max_length*.
+                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
@@ -137,7 +137,10 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             )
 
         if padding and truncation:
-            padding = False
+            raise ValueError("Both padding and truncation were set. Make sure you only set one.")
+        elif padding is None:
+            # by default let's pad the inputs
+            padding = True
 
         is_batched = bool(
             isinstance(raw_audio, (list, tuple)) and (isinstance(raw_audio[0], (np.ndarray, tuple, list)))
@@ -170,7 +173,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
                 max_length = min(array.shape[0] for array in raw_audio)
                 nb_step = int(np.floor(max_length / self.chunk_stride))
                 max_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
-            elif padding:
+            elif padding:  # by default, pad the inputs
                 max_length = max(array.shape[0] for array in raw_audio)
                 nb_step = int(np.ceil(max_length / self.chunk_stride))
                 max_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
@@ -178,14 +181,14 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             else:
                 padded_inputs = input_values
 
-        # normal padding on batch -> create
+        # normal padding on batch
         if padded_inputs is None:
             padded_inputs = self.pad(
                 input_values,
                 max_length=max_length,
                 truncation=truncation,
                 padding=padding,
-                return_attention_mask=True,
+                return_attention_mask=padding,
             )
             padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask", None)
 

@@ -219,9 +219,9 @@ class EncodecLSTM(nn.Module):
     LSTM without worrying about the hidden state, nor the layout of the data. Expects input as convolutional layout.
     """
 
-    def __init__(self, dimension: int, num_layers: int = 2):
+    def __init__(self, config, dimension):
         super().__init__()
-        self.lstm = nn.LSTM(dimension, dimension, num_layers)
+        self.lstm = nn.LSTM(dimension, dimension, config.num_lstm_layers)
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.permute(2, 0, 1)
@@ -488,7 +488,7 @@ ENCODEC_INPUTS_DOCSTRING = r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Raw audio input converted to Float and padded to the approriate length in order to be encoded using chunks
             of length self.chunk_length and a stride of `config.chunk_stride`.
-        padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        padding_mask (`torch.BoolTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Mask to avoid computing scaling factors on padding token indices (can we avoid computing conv on these+).
             Mask values selected in `[0, 1]`:
 

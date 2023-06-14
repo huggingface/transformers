@@ -244,3 +244,12 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
 
         truncated_outputs = feature_extractor(input_audio[0], padding=False, return_tensors="pt").input_values
         self.assertEquals(truncated_outputs.shape, (1, 1, 93680))
+
+        # pad and trunc raise an error ?
+        with self.assertRaisesRegex(
+            ValueError,
+            "^Both padding and truncation were set. Make sure you only set one.$",
+        ):
+            truncated_outputs = feature_extractor(
+                input_audio, padding="max_length", truncation=True, return_tensors="pt"
+            ).input_values
