@@ -188,14 +188,15 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         # would be easier if the stride was like
         feature_extractor = EncodecFeatureExtractor(feature_size=1, chunk_length_s=1, overlap=0.01)
 
-        
         # pad and trunc raise an error ?
         with self.assertRaisesRegex(
             ValueError,
             "^Both padding and truncation were set. Make sure you only set one.$",
         ):
-            truncated_outputs = feature_extractor(input_audio, padding="max_length", truncation=True, return_tensors="pt").input_values
-            
+            truncated_outputs = feature_extractor(
+                input_audio, padding="max_length", truncation=True, return_tensors="pt"
+            ).input_values
+
         # truncate to chunk
         truncated_outputs = feature_extractor(input_audio, truncation=True, return_tensors="pt").input_values
         self.assertEquals(truncated_outputs.shape, (2, 1, 71520))  # 2 chunks

@@ -96,12 +96,11 @@ class EncodecConv1d(nn.Module):
         self.causal = config.use_causal_conv
         self.pad_mode = config.pad_mode
         self.norm_type = config.norm_type
-        
+
         if self.norm_type not in ["weight_norm", "time_group_norm"]:
             raise ValueError(
                 f'self.norm_type must be one of `"weight_norm"`, `"time_group_norm"`), got {self.norm_type}'
             )
-            
 
         # warn user on unusual setup between dilation and stride
         if stride > 1 and dilation > 1:
@@ -184,7 +183,7 @@ class EncodecConvTranspose1d(nn.Module):
             raise ValueError(
                 f'self.norm_type must be one of `"weight_norm"`, `"time_group_norm"`), got {self.norm_type}'
             )
-            
+
         self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride)
         if config.norm_type == "weight_norm":
             self.conv = nn.utils.weight_norm(self.conv)
