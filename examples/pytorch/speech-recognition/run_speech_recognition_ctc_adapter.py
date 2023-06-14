@@ -255,11 +255,7 @@ class DataTrainingArguments:
     )
     overwrite_lang_vocab: bool = field(
         default=False,
-        metadata={
-            "help": (
-                "If :obj:`True`, will overwrite existing `target_language` vocabulary of tokenizer."
-            )
-        }
+        metadata={"help": ("If :obj:`True`, will overwrite existing `target_language` vocabulary of tokenizer.")},
     )
 
 
@@ -782,7 +778,7 @@ def main():
     kwargs = {
         "finetuned_from": model_args.model_name_or_path,
         "tasks": "automatic-speech-recognition",
-        "tags": ["automatic-speech-recognition", data_args.dataset_name],
+        "tags": ["automatic-speech-recognition", data_args.dataset_name, "mms"],
         "dataset_args": (
             f"Config: {config_name}, Training split: {data_args.train_split_name}, Eval split:"
             f" {data_args.eval_split_name}"
