@@ -632,9 +632,6 @@ def main():
     audio_column_name = data_args.audio_column_name
     num_workers = data_args.preprocessing_num_workers
 
-    # `phoneme_language` is only relevant if the model is fine-tuned on phoneme classification
-    phoneme_language = data_args.phoneme_language
-
     # Preprocessing the datasets.
     # We need to read the audio files as arrays and tokenize the targets.
     def prepare_dataset(batch):
@@ -646,11 +643,7 @@ def main():
         batch["input_length"] = len(batch["input_values"])
 
         # encode targets
-        additional_kwargs = {}
-        if phoneme_language is not None:
-            additional_kwargs["phonemizer_lang"] = phoneme_language
-
-        batch["labels"] = tokenizer(batch["target_text"], **additional_kwargs).input_ids
+        batch["labels"] = tokenizer(batch["target_text"]).input_ids
         return batch
 
     with training_args.main_process_first(desc="dataset map preprocessing"):

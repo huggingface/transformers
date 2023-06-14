@@ -31,7 +31,6 @@ import evaluate
 import numpy as np
 import torch
 from datasets import DatasetDict, load_dataset
-from safetensors.torch import save_file as safe_save_file
 
 import transformers
 from transformers import (
@@ -46,7 +45,6 @@ from transformers import (
     Wav2Vec2Processor,
     set_seed,
 )
-from transformers.models.wav2vec2.modeling_wav2vec2 import WAV2VEC2_ADAPTER_SAFE_FILE
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
@@ -133,12 +131,6 @@ class ModelArguments:
     layerdrop: float = field(default=0.0, metadata={"help": "The LayerDrop probability."})
     ctc_loss_reduction: Optional[str] = field(
         default="mean", metadata={"help": "The way the ctc loss should be reduced. Should be one of 'mean' or 'sum'."}
-    )
-    adapter_attn_dim: int = field(
-        default=None,
-        metadata={
-            "help": "If defined, adapter layers will be randomely initialized and the rest of the model will be frozen."
-        },
     )
 
 
@@ -266,18 +258,6 @@ class DataTrainingArguments:
                 " passed to the tokenizer for tokenization. Note that"
                 " this is only relevant if the model classifies the"
                 " input audio to a sequence of phoneme sequences."
-            )
-        },
-    )
-    adapter_language: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": (
-                "The target language on which the adapter attention layers"
-                " should be trained on in ISO 693-3 code, e.g. `tur` for Turkish"
-                " Wav2Vec2's MMS ISO codes can be looked up here: https://dl.fbaipublicfiles.com/mms/misc/language_coverage_mms.html"
-                " If you are not training the adapter layers on a language, simply choose"
-                " another accronym that fits your data."
             )
         },
     )
@@ -467,11 +447,6 @@ def main():
         if data_args.max_train_samples is not None:
             raw_datasets["train"] = raw_datasets["train"].select(range(data_args.max_train_samples))
 
-        if data_args.adapter_language is None and model_args.adapter_attn_dim is not None:
-            raise ValueError("Make sure to define `--adapter_language` when defining `--adapter_attn_dim`")
-        elif data_args.adapter_language is not None and model_args.adapter_attn_dim is None:
-            raise ValueError("Make sure to define `--adapter_attn_dim` when defining `--adapter_language`")
-
     if training_args.do_eval:
         raw_datasets["eval"] = load_dataset(
             data_args.dataset_name,
@@ -525,25 +500,6 @@ def main():
     # make sure all processes wait until vocab is created
     tokenizer_name_or_path = model_args.tokenizer_name_or_path
     tokenizer_kwargs = {}
-
-    prev_vocab = None
-    if data_args.adapter_language is not None and tokenizer_name_or_path is not None:
-        # load vocabulary of other adapter languages so that new language can be appended
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_auth_token=data_args.use_auth_token)
-        if tokenizer.target_lang is None:
-            raise ValueError("Make sure to load a multi-lingual tokenizer with a set target language.")
-
-        if data_args.adapter_language in tokenizer.vocab:
-            logger.info(
-                "Adapter language already exists."
-                " Skipping vocabulary creating. If you want to create a new vocabulary"
-                f" for {data_args.adapter_language} make sure to delete it from"
-                f" {os.path.join(tokenizer_name_or_path, 'vocab.json')}."
-            )
-        else:
-            tokenizer_name_or_path = None
-            prev_vocab = tokenizer.vocab.copy()
-
     if tokenizer_name_or_path is None:
         # save vocab in training output dir
         tokenizer_name_or_path = training_args.output_dir
@@ -569,13 +525,6 @@ def main():
                     pad_token=pad_token,
                 )
 
-                # if we doing adapter language training, save
-                # vocab with adpter language
-                if data_args.adapter_language is not None:
-                    new_vocab_dict = {} if prev_vocab is None else prev_vocab
-                    new_vocab_dict[data_args.adapter_language] = vocab_dict
-                    vocab_dict = new_vocab_dict
-
                 # save vocab dict to be loaded into tokenizer
                 with open(vocab_file, "w") as file:
                     json.dump(vocab_dict, file)
@@ -588,7 +537,6 @@ def main():
             "unk_token": unk_token,
             "pad_token": pad_token,
             "word_delimiter_token": word_delimiter_token,
-            "target_lang": data_args.adapter_language,
         }
 
     # 5. Now we can instantiate the feature extractor, tokenizer and model
@@ -622,7 +570,6 @@ def main():
             "pad_token_id": tokenizer.pad_token_id,
             "vocab_size": len(tokenizer),
             "activation_dropout": model_args.activation_dropout,
-            "adapter_attn_dim": model_args.adapter_attn_dim,
         }
     )
 
@@ -632,23 +579,11 @@ def main():
         cache_dir=model_args.cache_dir,
         config=config,
         use_auth_token=data_args.use_auth_token,
-        ignore_mismatched_sizes=True,
     )
 
     # freeze encoder
     if model_args.freeze_feature_encoder:
         model.freeze_feature_encoder()
-
-    # if attn adapter is defined, freeze all non-adapter weights
-    if model.config.adapter_attn_dim is not None:
-        model.init_adapter_layers()
-        # first we freeze the whole base model
-        model.freeze_base_model()
-
-        # next we unfreeze all adapter layers
-        adapter_weights = model._get_adapters()
-        for param in adapter_weights.values():
-            param.requires_grad = True
 
     # 6. Now we preprocess the datasets including loading the audio, resampling and normalization
     # Thankfully, `datasets` takes care of automatically loading and resampling the audio,
@@ -827,13 +762,6 @@ def main():
     }
     if "common_voice" in data_args.dataset_name:
         kwargs["language"] = config_name
-
-    if data_args.adapter_language is not None:
-        # make sure that adapter weights are saved seperately
-        adapter_file = WAV2VEC2_ADAPTER_SAFE_FILE.format(data_args.adapter_language)
-        adapter_file = os.path.join(training_args.output_dir, adapter_file)
-        logger.info(f"Saving adapter weights under {adapter_file}...")
-        safe_save_file(model._get_adapters(), adapter_file, metadata={"format": "pt"})
 
     if training_args.push_to_hub:
         trainer.push_to_hub(**kwargs)
