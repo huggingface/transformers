@@ -1,0 +1,8 @@
+facebook/bart-base 64
+bert-base-uncased 64
+bigscience/bloom-560m 32
+Splend1dchan/canine-c-squad 64
+t5-small 64
+xlnet-large-cased 32
+csarron/mobilebert-uncased-squad-v2 64
+deepset/roberta-base-squad2 32

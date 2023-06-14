@@ -167,3 +167,8 @@ tags
 
 # ruff
 .ruff_cache
+
+outputs/
+outputs-no-trainer/
+logs/
+logs-no-trainer/
