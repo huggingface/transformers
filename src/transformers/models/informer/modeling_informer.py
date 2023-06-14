@@ -30,6 +30,7 @@ from ...modeling_outputs import (
     Seq2SeqTSPredictionOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import torch_custom_checkpointing
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_informer import InformerConfig
@@ -1217,14 +1218,14 @@ class InformerEncoder(InformerPreTrainedModel):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                    layer_outputs = torch_custom_checkpointing(
                         create_custom_forward(encoder_layer),
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
                     )
                     if conv_layer is not None:
-                        output = torch.utils.checkpoint.checkpoint(conv_layer, layer_outputs[0])
+                        output = torch_custom_checkpointing(conv_layer, layer_outputs[0])
                         layer_outputs = (output,) + layer_outputs[1:]
                 else:
                     layer_outputs = encoder_layer(
@@ -1440,7 +1441,7 @@ class InformerDecoder(InformerPreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = torch_custom_checkpointing(
                     create_custom_forward(decoder_layer),
                     hidden_states,
                     attention_mask,

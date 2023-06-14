@@ -35,8 +35,12 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, SequenceSummary
-from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
+from ...modeling_utils import Conv1D, PreTrainedModel, SequenceSummary
+from ...pytorch_utils import (
+    find_pruneable_heads_and_indices,
+    prune_conv1d_layer,
+    torch_custom_checkpointing,
+)
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -890,7 +894,7 @@ class GPT2Model(GPT2PreTrainedModel):
 
                     return custom_forward
 
-                outputs = torch.utils.checkpoint.checkpoint(
+                outputs = torch_custom_checkpointing(
                     create_custom_forward(block),
                     hidden_states,
                     None,

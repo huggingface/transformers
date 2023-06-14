@@ -31,6 +31,7 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import torch_custom_checkpointing
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_speech_to_text import Speech2TextConfig
 
@@ -820,7 +821,7 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                    layer_outputs = torch_custom_checkpointing(
                         create_custom_forward(encoder_layer),
                         hidden_states,
                         attention_mask,
@@ -1068,7 +1069,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = torch_custom_checkpointing(
                     create_custom_forward(decoder_layer),
                     hidden_states,
                     attention_mask,

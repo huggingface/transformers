@@ -35,6 +35,7 @@ from ...modeling_outputs import (
     Seq2SeqSpectrogramOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import torch_custom_checkpointing
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_speecht5 import SpeechT5Config, SpeechT5HifiGanConfig
 
@@ -528,7 +529,7 @@ class SpeechT5FeatureEncoder(nn.Module):
 
                     return custom_forward
 
-                hidden_states = torch.utils.checkpoint.checkpoint(
+                hidden_states = torch_custom_checkpointing(
                     create_custom_forward(conv_layer),
                     hidden_states,
                 )
@@ -1394,7 +1395,7 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                    layer_outputs = torch_custom_checkpointing(
                         create_custom_forward(encoder_layer),
                         hidden_states,
                         attention_mask,
@@ -1723,7 +1724,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = torch_custom_checkpointing(
                     create_custom_forward(decoder_layer),
                     hidden_states,
                     attention_mask,

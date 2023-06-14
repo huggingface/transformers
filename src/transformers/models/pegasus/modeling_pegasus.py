@@ -34,6 +34,7 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import torch_custom_checkpointing
 from ...utils import (
     add_end_docstrings,
     add_start_docstrings,
@@ -805,7 +806,7 @@ class PegasusEncoder(PegasusPreTrainedModel):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                    layer_outputs = torch_custom_checkpointing(
                         create_custom_forward(encoder_layer),
                         hidden_states,
                         attention_mask,
@@ -1089,7 +1090,7 @@ class PegasusDecoder(PegasusPreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = torch_custom_checkpointing(
                     create_custom_forward(decoder_layer),
                     hidden_states,
                     attention_mask,

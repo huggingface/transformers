@@ -32,7 +32,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import softmax_backward_data
+from ...pytorch_utils import softmax_backward_data, torch_custom_checkpointing
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_deberta_v2 import DebertaV2Config
 
@@ -508,7 +508,7 @@ class DebertaV2Encoder(nn.Module):
 
                     return custom_forward
 
-                output_states = torch.utils.checkpoint.checkpoint(
+                output_states = torch_custom_checkpointing(
                     create_custom_forward(layer_module),
                     next_kv,
                     attention_mask,
