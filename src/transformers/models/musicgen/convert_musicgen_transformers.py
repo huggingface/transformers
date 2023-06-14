@@ -20,14 +20,16 @@ from typing import Dict, OrderedDict
 import torch
 from audiocraft.models import MusicGen
 
-from transformers.models.musicgen.configuration_musicgen import (
+from transformers import (
     MusicgenConfig,
     MusicgenDecoderConfig,
-    MusicgenEncoderConfig,
+    T5Config,
+    MusicgenForConditionalGeneration,
+    MusicgenProcessor,
 )
-from transformers.models.musicgen.modeling_musicgen import MusicgenForConditionalGeneration
 from transformers.utils import logging
 
+from transformers.models.musicgen.modeling_encodec import EncodecConfig, EncodecModel, EncodecFeatureExtractor
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -88,13 +90,13 @@ def rename_decoder_state_dict(state_dict: OrderedDict, d_model: int) -> Dict:
 def config_from_checkpoint(checkpoint: str) -> MusicgenConfig:
     if checkpoint == "small":
         d_model = 1024
-        d_ff = d_model * 4
+        ffn_dim = d_model * 4
         num_layers = 24
         num_codebooks = 4
     decoder_config = MusicgenDecoderConfig(
-        d_model=d_model, d_ff=d_ff, num_layers=num_layers, num_codebooks=num_codebooks
+        d_model=d_model, ffn_dim=ffn_dim, num_layers=num_layers, num_codebooks=num_codebooks
     )
-    encoder_config = MusicgenEncoderConfig.from_pretrained(CHECKPOINT_TO_T5[checkpoint])
+    encoder_config = T5Config.from_pretrained(CHECKPOINT_TO_T5[checkpoint])
     config = MusicgenConfig.from_encoder_decoder_configs(encoder_config=encoder_config, decoder_config=decoder_config)
     return config
 
