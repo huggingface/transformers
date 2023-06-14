@@ -183,7 +183,7 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-6))
         self.assertTrue(torch.allclose(input_values[0, 1, :30], EXPECTED_INPUT_VALUES * 0.5, atol=1e-6))
 
-    def test_kwargs(self):
+    def test_truncation_and_padding(self):
         input_audio = self._load_datasamples(2)
         # would be easier if the stride was like
         feature_extractor = EncodecFeatureExtractor(feature_size=1, chunk_length_s=1, overlap=0.01)
@@ -213,16 +213,25 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         self.assertEquals(truncated_outputs.shape, (2, 1, 100000))
 
         # force no pad
-        truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
-        self.assertEquals(truncated_outputs.shape, (2, 1, 93680))
+        with self.assertRaisesRegex(ValueError, "^Unable to create tensor, you should probably activate padding with 'padding=True' to have batched tensors with the same length.$"):
+            truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
 
+        truncated_outputs = feature_extractor(input_audio[0], padding=False, return_tensors="pt").input_values
+        self.assertEquals(truncated_outputs.shape, (1, 1, 93680))
+        
         # no pad if no chunk_length_s
         feature_extractor.chunk_length_s = None
-        truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
-        self.assertEquals(truncated_outputs.shape, (2, 1, 93680))
+        with self.assertRaisesRegex(ValueError, "^Unable to create tensor, you should probably activate padding with 'padding=True' to have batched tensors with the same length.$"):
+            truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
+        
+        truncated_outputs = feature_extractor(input_audio[0], padding=False, return_tensors="pt").input_values
+        self.assertEquals(truncated_outputs.shape, (1, 1, 93680))
 
         # no pad if no overlap
         feature_extractor.chunk_length_s = 2
         feature_extractor.overlap = None
-        truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
-        self.assertEquals(truncated_outputs.shape, (2, 1, 93680))
+        with self.assertRaisesRegex(ValueError, "^Unable to create tensor, you should probably activate padding with 'padding=True' to have batched tensors with the same length.$"):
+            truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
+        
+        truncated_outputs = feature_extractor(input_audio[0], padding=False, return_tensors="pt").input_values
+        self.assertEquals(truncated_outputs.shape, (1, 1, 93680))
