@@ -632,6 +632,7 @@ def main():
         cache_dir=model_args.cache_dir,
         config=config,
         use_auth_token=data_args.use_auth_token,
+        ignore_mismatched_sizes=True,
     )
 
     # freeze encoder
@@ -640,6 +641,7 @@ def main():
 
     # if attn adapter is defined, freeze all non-adapter weights
     if model.config.adapter_attn_dim is not None:
+        model.init_adapter_layers()
         # first we freeze the whole base model
         model.freeze_base_model()
 

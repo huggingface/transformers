@@ -1194,6 +1194,19 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
         return adapter_weights
 
+    def init_adapter_layers(self):
+        """
+        (Re-)initialize attention adapter layers and lm head for adapter-only fine-tuning
+        """
+        # init attention adapters
+        for module in self.modules():
+            if isinstance(module, Wav2Vec2AttnAdapterLayer):
+                self._init_weights(module)
+
+        # init lm head
+        if isinstance(self, Wav2Vec2ForCTC):
+            self._init_weights(self.lm_head)
+
     def load_adapter(self, target_lang: str, **kwargs):
         r"""
         Load a language adapter model from a pre-trained adapter model.
