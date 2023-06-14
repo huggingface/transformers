@@ -255,11 +255,7 @@ class DataTrainingArguments:
     )
     overwrite_lang_vocab: bool = field(
         default=False,
-        metadata={
-            "help": (
-                "If :obj:`True`, will overwrite existing `target_language` vocabulary of tokenizer."
-            )
-        }
+        metadata={"help": ("If :obj:`True`, will overwrite existing `target_language` vocabulary of tokenizer.")},
     )
 
 
