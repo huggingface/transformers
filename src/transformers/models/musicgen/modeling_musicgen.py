@@ -1767,8 +1767,8 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
 
         hidden_states = outputs[0]
 
+        # (bsz, num_codebooks, seq_len, vocab_size)
         lm_logits = torch.stack([head(hidden_states) for head in self.lm_heads], dim=1)
-        lm_logits = lm_logits.permute(0, 2, 1, 3)  # (bsz, num_codebooks, seq_len, vocab_size)
 
         loss = None
         if labels is not None:
@@ -1802,6 +1802,10 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel):
         encoder_outputs=None,
         **kwargs,
     ):
+        if kwargs.get("decoder_pad_token_mask") is None:
+            decoder_input_ids, decoder_pad_token_mask = self.build_delay_pattern_mask(decoder_input_ids, self.generation_config.pad_token_id)
+            kwargs["decoder_pad_token_mask"] = decoder_pad_token_mask
+
         # apply the delay pattern mask
         decoder_input_ids = self.apply_delay_pattern_mask(decoder_input_ids, kwargs["decoder_pad_token_mask"])
 
