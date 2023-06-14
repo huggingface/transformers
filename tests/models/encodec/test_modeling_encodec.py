@@ -71,7 +71,7 @@ class EncodecModelTester:
         self,
         parent,
         batch_size=13,
-        num_channels=2,  # 2 channels actually
+        num_channels=2,
         is_training=False,
         num_hidden_layers=4,
         intermediate_size=40,
@@ -313,7 +313,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             "24.0": [6648961],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        model_id = "ArthurZ/encodec_24khz"
+        model_id = "facebook/encodec_24khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
@@ -326,7 +326,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             sampling_rate=processor.sampling_rate,
             return_tensors="pt",
         ).to(torch_device)
-
+        model = AutoProcessor.from_pretrained("ArthurZ/encodec_48khz").push_to_hub("facebook/encodec_48khz")
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
                 # use max bandwith for best possible reconstruction
@@ -367,7 +367,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             "24.0": [1561048, 1284593, 1278330, 1487220, 1659404],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        model_id = "ArthurZ/encodec_48khz"
+        model_id = "facebook/encodec_48khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
         model = model.eval()
@@ -429,7 +429,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             ],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        model_id = "ArthurZ/encodec_48khz"
+        model_id = "facebook/encodec_48khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id, chunk_length_s=1, overlap=0.01)
