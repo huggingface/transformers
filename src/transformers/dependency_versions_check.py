@@ -38,9 +38,6 @@ pkgs_to_check_at_runtime = [
     "pyyaml",
 ]
 
-if sys.version_info < (3, 8):
-    pkgs_to_check_at_runtime.append("importlib_metadata")
-
 for pkg in pkgs_to_check_at_runtime:
     if pkg in deps:
         if pkg == "tokenizers":
