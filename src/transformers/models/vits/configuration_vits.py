@@ -125,7 +125,7 @@ class VitsConfig(PretrainedConfig):
         use_stochastic_duration_prediction=True,
 
         num_speakers=1,
-        gin_channels=0,  # TODO name (speaker_embedding_channels?)
+        gin_channels=0,  # TODO name (speaker_embedding_channels?)  maybe set to 256 already?
 
 
         # pad_token_id=1,

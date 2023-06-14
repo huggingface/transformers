@@ -1547,7 +1547,7 @@ class VitsModel(VitsPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        speaker_id: Optional[int] = None, # TODO: maybe Tensor?
+        speaker_id: Optional[torch.Tensor] = None,
         length_scale: int = 1,  # TODO!
         noise_scale: int = 1,  # TODO!
         noise_scale_w: float = 1.0,   # TODO!
@@ -1568,9 +1568,9 @@ class VitsModel(VitsPreTrainedModel):
 
         text_encoder_outputs = self.text_encoder(input_ids, attention_mask)
 
-        # TODO: haven't tested yet (use VCTK checkpoint)
         if self.config.num_speakers > 1:
-            # TODO: verify speaker_id is not None
+            if speaker_id is None:
+                raise ValueError("Expected speaker_id")
             g = self.emb_g(speaker_id).unsqueeze(-1)
         else:
             g = None

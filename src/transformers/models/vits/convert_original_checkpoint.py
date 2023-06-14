@@ -108,6 +108,7 @@ MAPPING_STOCHASTIC_DURATION_PREDICTOR = {
     "dp.post_flows.*.convs.norms_2.1.beta" : "duration_predictor.post_flows.*.convs.norms_2.1.bias",
     "dp.post_flows.*.convs.norms_2.2.gamma" : "duration_predictor.post_flows.*.convs.norms_2.2.weight",
     "dp.post_flows.*.convs.norms_2.2.beta" : "duration_predictor.post_flows.*.convs.norms_2.2.bias",
+    "dp.cond" : "duration_predictor.cond",  # num_speakers > 1
 }
 MAPPING_FLOW = {
     "flow.flows.*.pre" : "flow.flows.*.pre",
@@ -120,6 +121,7 @@ MAPPING_FLOW = {
     "flow.flows.*.enc.res_skip_layers.2" : "flow.flows.*.enc.res_skip_layers.2",
     "flow.flows.*.enc.res_skip_layers.3" : "flow.flows.*.enc.res_skip_layers.3",
     "flow.flows.*.post" : "flow.flows.*.post",
+    "flow.flows.*.enc.cond_layer" : "flow.flows.*.enc.cond_layer",  # num_speakers > 1
 }
 MAPPING_GENERATOR = {
     "dec.conv_pre" : "dec.conv_pre",
@@ -134,12 +136,14 @@ MAPPING_GENERATOR = {
     "dec.resblocks.*.convs2.1" : "dec.resblocks.*.convs2.1",
     "dec.resblocks.*.convs2.2" : "dec.resblocks.*.convs2.2",
     "dec.conv_post" : "dec.conv_post",
+    "dec.cond" : "dec.cond",  # num_speakers > 1
 }
 MAPPING_POSTERIOR_ENCODER = {
     "enc_q.pre" : "enc_q.pre",
     "enc_q.enc.in_layers.*" : "enc_q.enc.in_layers.*",
     "enc_q.enc.res_skip_layers.*" : "enc_q.enc.res_skip_layers.*",
     "enc_q.proj" : "enc_q.proj",
+    "enc_q.enc.cond_layer" : "enc_q.enc.cond_layer",  # num_speakers > 1
 }
 MAPPING = {
     **MAPPING_TEXT_ENCODER,
@@ -147,6 +151,7 @@ MAPPING = {
     **MAPPING_FLOW,
     **MAPPING_GENERATOR,
     **MAPPING_POSTERIOR_ENCODER,
+    "emb_g": "emb_g",  # num_speakers > 1
 }
 TOP_LEVEL_KEYS = []
 IGNORE_KEYS = []
@@ -261,6 +266,7 @@ def convert_checkpoint(
     config_path=None,
     vocab_path=None,
     language=None,
+    num_speakers=None,
     repo_id=None,
 ):
     """
@@ -271,8 +277,9 @@ def convert_checkpoint(
     else:
         config = VitsConfig()
 
-    if vocab_path is None:
-        vocab_path = os.path.join(checkpoint_path, "vocab.txt")
+    if num_speakers:
+        config.num_speakers = num_speakers
+        config.gin_channels = 256
 
     # Save vocab as temporary json file
     symbols = [
@@ -287,10 +294,10 @@ def convert_checkpoint(
         tokenizer = VitsMmsTokenizer(tf.name)
 
     tokenizer.language = language
-    config.vocab_size = tokenizer.vocab_size - 2  # added <pad> and <unk>
+    config.vocab_size = len(symbols)
     model = VitsModel(config)
 
-    orig_checkpoint = torch.load(os.path.join(checkpoint_path, "G_100000.pth"), map_location=torch.device("cpu"))
+    orig_checkpoint = torch.load(checkpoint_path, map_location=torch.device("cpu"))
     recursively_load_weights(orig_checkpoint["model"], model)
 
     model.save_pretrained(pytorch_dump_folder_path)
@@ -305,9 +312,10 @@ def convert_checkpoint(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
-    parser.add_argument("--vocab_path", default=None, type=str, help="Path to vocab.txt")
+    parser.add_argument("--vocab_path", required=True, default=None, type=str, help="Path to vocab.txt")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument("--language", default=None, type=str, help="Tokenizer language")
+    parser.add_argument("--num_speakers", default=None, type=int, help="Number of speakers")
     parser.add_argument(
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
     )
@@ -322,5 +330,6 @@ if __name__ == "__main__":
         args.config_path,
         args.vocab_path,
         args.language,
+        args.num_speakers,
         args.push_to_hub,
     )
