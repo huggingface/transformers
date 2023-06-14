@@ -1091,8 +1091,6 @@ class BarkModel(BarkPreTrainedModel):
         
         
         for n in range(n_loops):
-            # TODO
-            # if seq_len > 1024, ...
             start_idx = np.min([n * 512, fine_input.shape[1] - 1024])
             
             start_fill_idx = np.min([n_history + n * 512, fine_input.shape[1] - 512])
