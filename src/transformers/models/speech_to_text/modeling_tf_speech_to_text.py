@@ -205,7 +205,7 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
         # idempotent. TF doesn't need that caching anyway, since it can just store constants during compilation,
         # so we just remove all of that code.
         embeddings = self._get_embedding(
-            self.padding_idx + 1 + seq_len + self.offset, self.embedding_dim, self.padding_idx
+            self.padding_idx + 1 + seq_len + self.offset + past_key_values_length, self.embedding_dim, self.padding_idx
         )
         return tf.reshape(tf.gather(embeddings, tf.reshape(position_ids, (-1,)), axis=0), (bsz, seq_len, -1))
 
