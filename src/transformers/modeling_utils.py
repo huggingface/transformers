@@ -82,26 +82,16 @@ XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 
 if is_accelerate_available():
-    from accelerate import __version__ as accelerate_version
     from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
     from accelerate.utils import (
+        check_tied_parameters_on_same_device,
         find_tied_parameters,
+        get_balanced_memory,
         load_offloaded_weights,
         offload_weight,
         save_offload_index,
         set_module_tensor_to_device,
     )
-
-    if version.parse(accelerate_version) > version.parse("0.11.0"):
-        from accelerate.utils import get_balanced_memory
-    else:
-        get_balanced_memory = None
-    if version.parse(accelerate_version) > version.parse("0.19.0"):
-        from accelerate.utils import check_tied_parameters_on_same_device
-    else:
-        check_tied_parameters_on_same_device = None
-else:
-    find_tied_parameters = None
 
 if is_safetensors_available():
     from safetensors import safe_open
@@ -2792,8 +2782,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "If passing a string for `device_map`, please choose 'auto', 'balanced', 'balanced_low_0' or "
                     "'sequential'."
                 )
-            elif device_map in ["balanced", "balanced_low_0"] and get_balanced_memory is None:
-                raise ValueError(f"`device_map={device_map}` requires a source install of Accelerate.")
 
             kwargs = {"no_split_module_classes": no_split_modules}
             if "special_dtypes" in inspect.signature(infer_auto_device_map).parameters:
@@ -2803,7 +2791,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "This model has some weights that should be kept in higher precision, you need to upgrade "
                     "`accelerate` to properly deal with them (`pip install --upgrade accelerate`)."
                 )
-            if device_map != "sequential" and get_balanced_memory is not None:
+            if device_map != "sequential":
                 max_memory = get_balanced_memory(
                     model,
                     dtype=target_dtype,
@@ -2838,8 +2826,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model.tie_weights()
             tied_params = find_tied_parameters(model)
             # check if we don't have tied param in different devices
-            if check_tied_parameters_on_same_device is not None:
-                check_tied_parameters_on_same_device(tied_params, device_map)
+            check_tied_parameters_on_same_device(tied_params, device_map)
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
@@ -3031,7 +3018,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         missing_keys = list(set(expected_keys) - set(loaded_keys))
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
 
-        if find_tied_parameters is not None:
+        if is_accelerate_available():
             tied_params = find_tied_parameters(model)
         else:
             tied_params = []
