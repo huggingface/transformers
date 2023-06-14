@@ -1159,7 +1159,7 @@ class MusicgenDecoderLayer(nn.Module):
 
         self.self_attn = MusicgenDecoderAttention(
             embed_dim=self.embed_dim,
-            num_heads=config.num_attention_heads,
+            num_heads=config.num_heads,
             dropout=config.attention_dropout,
         )
         self.dropout = config.dropout
@@ -1169,12 +1169,12 @@ class MusicgenDecoderLayer(nn.Module):
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.encoder_attn = MusicgenDecoderAttention(
             self.embed_dim,
-            config.num_attention_heads,
+            config.num_heads,
             dropout=config.attention_dropout,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.fc1 = nn.Linear(self.embed_dim, config.ffn_dim, bias=False)
-        self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim, bias=False)
+        self.fc1 = nn.Linear(self.embed_dim, config.d_ff, bias=False)
+        self.fc2 = nn.Linear(config.d_ff, self.embed_dim, bias=False)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     # Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer.forward
@@ -1270,7 +1270,7 @@ class MusicgenDecoderLayer(nn.Module):
 
 class MusicgenDecoder(MusicgenPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MusicgenDecoderLayer`]
+    Transformer decoder consisting of *config.num_layers* layers. Each layer is a [`MusicgenDecoderLayer`]
     """
 
     def __init__(self, config: MusicgenDecoderConfig):
@@ -1292,7 +1292,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
             config.d_model,
         )
 
-        self.layers = nn.ModuleList([MusicgenDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([MusicgenDecoderLayer(config) for _ in range(config.num_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False

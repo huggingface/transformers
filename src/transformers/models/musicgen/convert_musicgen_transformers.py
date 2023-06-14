@@ -88,11 +88,11 @@ def rename_decoder_state_dict(state_dict: OrderedDict, d_model: int) -> Dict:
 def config_from_checkpoint(checkpoint: str) -> MusicgenConfig:
     if checkpoint == "small":
         d_model = 1024
-        ffn_dim = d_model * 4
+        d_ff = d_model * 4
         num_layers = 24
         num_codebooks = 4
     decoder_config = MusicgenDecoderConfig(
-        d_model=d_model, intermediate_size=ffn_dim, num_hidden_layers=num_layers, num_codebooks=num_codebooks
+        d_model=d_model, d_ff=d_ff, num_layers=num_layers, num_codebooks=num_codebooks
     )
     encoder_config = MusicgenEncoderConfig.from_pretrained(CHECKPOINT_TO_T5[checkpoint])
     config = MusicgenConfig.from_encoder_decoder_configs(encoder_config=encoder_config, decoder_config=decoder_config)
@@ -105,7 +105,7 @@ def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hu
 
     # TODO(SG): remove debugging statement
     fairseq_model.lm.transformer.layers = fairseq_model.lm.transformer.layers[:2]
-    config.decoder_config.num_hidden_layers = 2
+    config.decoder_config.num_layers = 2
 
     # the t5 encoder state dict is 'hidden', so we retrieve using this hack
     encoder_state_dict = fairseq_model.lm.condition_provider.conditioners.description.__dict__["t5"].state_dict()

@@ -68,7 +68,7 @@ class MusicgenEncoderConfig(PretrainedConfig):
     """
     model_type = "musicgen_encoder"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
+    attribute_map = {"hidden_size": "d_model", "num_heads": "num_heads", "num_layers": "num_layers"}
 
     def __init__(
         self,
@@ -138,11 +138,11 @@ class MusicgenDecoderConfig(PretrainedConfig):
             represented by the `inputs_ids` passed when calling [`MusicgenDecoder`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        num_layers (`int`, *optional*, defaults to 12):
             Number of decoder layers.
-        num_attention_heads (`int`, *optional*, defaults to 16):
+        num_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer block.
-        ffn_dim (`int`, *optional*, defaults to 4096):
+        d_ff (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer block.
         activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the decoder and pooler. If string, `"gelu"`,
@@ -172,15 +172,14 @@ class MusicgenDecoderConfig(PretrainedConfig):
     """
     model_type = "musicgen_decoder"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
     def __init__(
         self,
         vocab_size=2048,
         max_position_embeddings=1024,
-        num_hidden_layers=12,
-        ffn_dim=4096,
-        num_attention_heads=16,
+        num_layers=12,
+        d_ff=4096,
+        num_heads=16,
         layerdrop=0.0,
         use_cache=True,
         activation_function="gelu",
@@ -200,9 +199,9 @@ class MusicgenDecoderConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
-        self.ffn_dim = ffn_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+        self.d_ff = d_ff
+        self.num_layers = num_layers
+        self.num_heads = num_heads
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
