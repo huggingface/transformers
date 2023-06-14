@@ -178,7 +178,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
             else:
                 padded_inputs = input_values
 
-        # normal padding on batch -> create 
+        # normal padding on batch -> create
         if padded_inputs is None:
             padded_inputs = self.pad(
                 input_values,

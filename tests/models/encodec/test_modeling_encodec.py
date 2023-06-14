@@ -313,16 +313,9 @@ class EncodecIntegrationTest(unittest.TestCase):
             "24.0": [6648961],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        model_id = "facebook/encodec_24khz"
+        model_id = "ArthurZ/encodec_24khz"
 
-        model = EncodecModel.from_pretrained(
-            model_id,
-            chunk_length_s=None,
-            use_causal_conv=True,
-            codebook_size=1024,
-            upsampling_ratios=[8, 5, 4, 2],
-            norm_type="weight_norm",
-        ).to(torch_device)
+        model = EncodecModel.from_pretrained(model_id).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
@@ -374,19 +367,11 @@ class EncodecIntegrationTest(unittest.TestCase):
             "24.0": [1561048, 1284593, 1278330, 1487220, 1659404],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        model_id = "facebook/encodec_48khz"
+        model_id = "ArthurZ/encodec_48khz"
 
-        model = EncodecModel.from_pretrained(
-            model_id,
-            chunk_length_s=1,
-            use_causal_conv=False,
-            normalize=True,
-            codebook_size=1024,
-            upsampling_ratios=[8, 5, 4, 2],
-            norm_type="time_group_norm",
-        ).to(torch_device)
+        model = EncodecModel.from_pretrained(model_id).to(torch_device)
         model = model.eval()
-        processor = AutoProcessor.from_pretrained(model_id, chunk_length_s=1, overlap=0.01)
+        processor = AutoProcessor.from_pretrained(model_id)
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
         audio_sample = librispeech_dummy[-1]["audio"]["array"]
@@ -444,17 +429,9 @@ class EncodecIntegrationTest(unittest.TestCase):
             ],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        model_id = "facebook/encodec_48khz"
+        model_id = "ArthurZ/encodec_48khz"
 
-        model = EncodecModel.from_pretrained(
-            model_id,
-            chunk_length_s=1,
-            use_causal_conv=False,
-            normalize=True,
-            codebook_size=1024,
-            upsampling_ratios=[8, 5, 4, 2],
-            norm_type="time_group_norm",
-        ).to(torch_device)
+        model = EncodecModel.from_pretrained(model_id).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id, chunk_length_s=1, overlap=0.01)
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
