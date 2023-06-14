@@ -191,7 +191,9 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         mel_chunk_back = mel[idx_back : idx_back + chunk_frames, :]
 
         mel = torch.tensor(mel[None, None, :])
-        mel_shrink = torch.nn.functional.interpolate(mel, size=[chunk_frames, 64], mode="bilinear", align_corners=False)
+        mel_shrink = torch.nn.functional.interpolate(
+            mel, size=[chunk_frames, 64], mode="bilinear", align_corners=False
+        )
         mel_shrink = mel_shrink[0][0].numpy()
         mel_fusion = np.stack([mel_shrink, mel_chunk_front, mel_chunk_middle, mel_chunk_back], axis=0)
         return mel_fusion
