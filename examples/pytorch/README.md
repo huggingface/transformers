@@ -1,3 +1,91 @@
+
+# Train individual models
+
+## Script
+
+Inside each task's folder, there's a bash script for training:
+
+This script takes into 4 arguments
+
+- `model`: name of the model to be downloaded from huggingface hub
+- `batch_size`
+- `output_dir`: where to save checkpoints and results
+- `gpu_model`: which gpu model to run
+
+And then it runs the Python training command.
+
+Modify this script if you want to change other arguments to the Python training file.
+These scripts take more than 4 agruments:
+- `text-classifiaction/train_glue.sh`: take an arguments `task_name` in one of this list: cola, sst2, mrpc, stsb, qqp, mnli, qnli, rte, wnli.
+- - Examples: `bash train_glue.sh bert-base-uncased 64 /output mrpc`
+
+## Run
+
+Usage:
+
+    cd ${task}
+    bash ${train_script} ${model} ${batch_size} ${output_dir}
+
+Example:
+
+    cd multiple-choice
+    bash train.sh google/mobilebert-uncased 64 outputs
+
+## Multiple training scripts
+
+- Some task only have 1 training script with the default name `train.sh`
+
+    Example: `multiple-choice/train.sh`
+
+
+- Some tasks may have multiple training scripts for different training strategies or different types of models.
+
+    Example: `speech-recognition/train_ctc.sh` and `speech-recognition/train_seq2seq.sh`
+
+
+# Train mulitple models for a task
+
+
+## Script
+
+Each task can use different model architectures to train with.
+
+What this script does:
+
+- train multiple models at once for the same task for easy comparison.
+
+- records the memory and terminal outputs of each model
+
+This script takes into 3 arguments:
+
+- `task`: name of the task
+
+- `train_script`: the .sh script to train individual model inside the task's folder
+
+- `model_batchsize_file`: a .txt file inside the task's folder containing a list of all models you want to train and their corresponding batch size
+
+    Example file: `multiple-choice/model_batchsize.txt`
+
+
+## Run
+
+Usage:
+
+    bash run_task.sh $task $train_script $model_batchsize_file
+
+Example:
+
+    bash run_task.sh speech-recognition train_ctc.sh ctc_models.txt
+
+    bash run_task.sh speech-recognition train_seq2seq.sh seq2seq_models.txt
+
+If you use the default files `train.sh` and `model_batchsize.txt`, you dont need to specify them again.
+
+Example:
+
+    bash run_task.sh multiple-choice
+
+
 <!---
 Copyright 2020 The HuggingFace Team. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License");
