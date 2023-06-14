@@ -39,7 +39,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from ...utils.backbone_utils import BackboneMixin, get_aligned_output_features_output_indices
+from ...utils.backbone_utils import BackboneMixin
 from .configuration_nat import NatConfig
 
 
@@ -861,17 +861,12 @@ class NatForImageClassification(NatPreTrainedModel):
 class NatBackbone(NatPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
+        super()._init_backbone(config)
 
         requires_backends(self, ["natten"])
 
-        self.stage_names = config.stage_names
-
         self.embeddings = NatEmbeddings(config)
         self.encoder = NatEncoder(config)
-
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            config.out_features, config.out_indices, self.stage_names
-        )
         self.num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
 
         # Add layer norms to hidden states of out_features

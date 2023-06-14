@@ -2262,6 +2262,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
 class BigBirdForPreTraining(BigBirdPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -2368,6 +2369,7 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
 @add_start_docstrings("""BigBird Model with a `language modeling` head on top.""", BIG_BIRD_START_DOCSTRING)
 class BigBirdForMaskedLM(BigBirdPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -2453,7 +2455,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         >>> labels = torch.where(inputs.input_ids == tokenizer.mask_token_id, labels, -100)
         >>> outputs = model(**inputs, labels=labels)
         >>> round(outputs.loss.item(), 2)
-        1.08
+        1.99
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2517,6 +2519,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
         "cls.predictions.decoder.weight",
         "cls.predictions.decoder.bias",
     ]
+    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)

@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Testing suite for the TensorFlow Blip model. """
+from __future__ import annotations
+
 import unittest
 
 import numpy as np

@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import CTRLConfig, is_tf_available
@@ -223,6 +225,7 @@ class TFCTRLModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
         for model_class in self.all_model_classes:
             model = model_class(config)
+            model.build()  # may be needed for the get_bias() call below
             assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
 
             if model_class in list_lm_models:

@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import copy
 import inspect
 import json
@@ -22,10 +24,9 @@ import random
 import tempfile
 import unittest
 import unittest.mock as mock
-from dataclasses import fields
 from importlib import import_module
 from math import isnan
-from typing import List, Tuple, get_type_hints
+from typing import List, Tuple
 
 from datasets import Dataset
 from huggingface_hub import HfFolder, Repository, delete_repo
@@ -138,26 +139,6 @@ def _config_zero_init(config):
         if "_range" in key or "_std" in key:
             setattr(configs_no_init, key, 0.0)
     return configs_no_init
-
-
-def _return_type_has_loss(model):
-    return_type = get_type_hints(model.call)
-    if "return" not in return_type:
-        return False
-    return_type = return_type["return"]
-    if hasattr(return_type, "__args__"):  # Awkward check for union because UnionType only turns up in 3.10
-        for type_annotation in return_type.__args__:
-            if inspect.isclass(type_annotation) and issubclass(type_annotation, ModelOutput):
-                field_names = [field.name for field in fields(type_annotation)]
-                if "loss" in field_names:
-                    return True
-        return False
-    elif isinstance(return_type, tuple):
-        return False
-    elif isinstance(return_type, ModelOutput):
-        class_fields = fields(return_type)
-        return "loss" in class_fields
-    return False
 
 
 @require_tf
@@ -367,7 +348,7 @@ class TFModelTesterMixin:
 
             with tf.Graph().as_default() as g:
                 model = model_class(config)
-                model(model.dummy_inputs)
+                model.build()
 
                 for op in g.get_operations():
                     model_op_names.add(op.node_def.op)
@@ -394,7 +375,7 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            model(model.dummy_inputs)
+            model.build()
 
             onnx_model_proto, _ = tf2onnx.convert.from_keras(model, opset=self.onnx_min_opset)
 
@@ -1032,7 +1013,7 @@ class TFModelTesterMixin:
             check_hidden_states_output(config, inputs_dict, model_class)
 
     def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         text_in_text_out_models = (
             get_values(TF_MODEL_FOR_CAUSAL_LM_MAPPING)
             + get_values(TF_MODEL_FOR_MASKED_LM_MAPPING)
@@ -1042,24 +1023,27 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-            if model_class in text_in_text_out_models:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert isinstance(name, dict)
-                for k, v in name.items():
-                    assert isinstance(v, tf.Variable)
+            self.assertIsInstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+
+            legacy_text_in_text_out = model.get_lm_head() is not None
+            if model_class in text_in_text_out_models or legacy_text_in_text_out:
+                out_embeddings = model.get_output_embeddings()
+                self.assertIsInstance(out_embeddings, tf.keras.layers.Layer)
+                bias = model.get_bias()
+                if bias is not None:
+                    self.assertIsInstance(bias, dict)
+                    for _, v in bias.items():
+                        self.assertIsInstance(v, tf.Variable)
             elif model_class in speech_in_text_out_models:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert name is None
+                out_embeddings = model.get_output_embeddings()
+                self.assertIsInstance(out_embeddings, tf.keras.layers.Layer)
+                bias = model.get_bias()
+                self.assertIsNone(bias)
             else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
+                out_embeddings = model.get_output_embeddings()
+                assert out_embeddings is None
+                bias = model.get_bias()
+                self.assertIsNone(bias)
 
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1199,7 +1183,7 @@ class TFModelTesterMixin:
         def _get_word_embedding_weight(model, embedding_layer):
             if isinstance(embedding_layer, tf.keras.layers.Embedding):
                 # builds the embeddings layer
-                model(model.dummy_inputs)
+                model.build()
                 return embedding_layer.embeddings
             else:
                 return model._get_word_embedding_weight(embedding_layer)
@@ -1262,7 +1246,7 @@ class TFModelTesterMixin:
             old_total_size = config.vocab_size
             new_total_size = old_total_size + new_tokens_size
             model = model_class(config=copy.deepcopy(config))  # `resize_token_embeddings` mutates `config`
-            model(model.dummy_inputs)  # builds the embeddings layer
+            model.build()
             model.resize_token_embeddings(new_total_size)
 
             # fetch the output for an input exclusively made of new members of the vocabulary
@@ -1464,8 +1448,6 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config)
-            if not getattr(model, "hf_compute_loss", None) and not _return_type_has_loss(model):
-                continue
             # The number of elements in the loss should be the same as the number of elements in the label
             prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
             added_label_names = sorted(prepared_for_class.keys() - inputs_dict.keys(), reverse=True)
@@ -1480,7 +1462,11 @@ class TFModelTesterMixin:
             input_name = possible_input_names.intersection(set(prepared_for_class)).pop()
             model_input = prepared_for_class.pop(input_name)
 
-            loss = model(model_input, **prepared_for_class)[0]
+            outputs = model(model_input, **prepared_for_class)
+            if not isinstance(outputs, ModelOutput) or not hasattr(outputs, "loss"):
+                continue
+
+            loss = outputs.loss
             self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
 
             # Test that model correctly compute the loss when we mask some positions
@@ -1540,18 +1526,16 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config)
-            if not getattr(model, "hf_compute_loss", False) and not _return_type_has_loss(model):
-                continue
             # Test that model correctly compute the loss with kwargs
             prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
-            # Is there a better way to remove these decoder inputs?
             # We also remove "return_loss" as this is covered by the train_step when using fit()
             prepared_for_class = {
                 key: val
                 for key, val in prepared_for_class.items()
-                if key
-                not in ("head_mask", "decoder_head_mask", "cross_attn_head_mask", "decoder_input_ids", "return_loss")
+                if key not in ("head_mask", "decoder_head_mask", "cross_attn_head_mask", "return_loss")
             }
+            if "labels" in prepared_for_class and "decoder_input_ids" in prepared_for_class:
+                del prepared_for_class["decoder_input_ids"]
 
             accuracy_classes = [
                 "ForPreTraining",
@@ -1575,8 +1559,10 @@ class TFModelTesterMixin:
                 sample_weight = tf.convert_to_tensor([0.5] * self.model_tester.batch_size, dtype=tf.float32)
             else:
                 sample_weight = None
-
-            model(model.dummy_inputs)  # Build the model so we can get some constant weights
+            # Build the model so we can get some constant weights and check outputs
+            outputs = model(prepared_for_class)
+            if getattr(outputs, "loss", None) is None:
+                continue
             model_weights = model.get_weights()
 
             # Run eagerly to save some expensive compilation times
@@ -1648,7 +1634,6 @@ class TFModelTesterMixin:
             # Pass in all samples as a batch to match other `fit` calls
             weighted_dataset = weighted_dataset.batch(len(dataset))
             dataset = dataset.batch(len(dataset))
-
             # Reinitialize to fix batchnorm again
             model.set_weights(model_weights)
 
@@ -1695,18 +1680,17 @@ class TFModelTesterMixin:
 
             # After testing that the model accepts all int inputs, confirm that its dummies are int32
             for key, tensor in model.dummy_inputs.items():
-                self.assertTrue(isinstance(tensor, tf.Tensor), "Dummy inputs should be tf.Tensor!")
+                self.assertTrue(
+                    isinstance(tensor, tf.Tensor) or tf.keras.backend.is_keras_tensor(tensor),
+                    "Dummy inputs should be tf.Tensor!",
+                )
                 if tensor.dtype.is_integer:
                     self.assertTrue(tensor.dtype == tf.int32, "Integer dummy inputs should be tf.int32!")
 
-            # Also confirm that the serving sig uses int32
-            if hasattr(model, "serving"):
-                serving_sig = model.serving.input_signature
-                for key, tensor_spec in serving_sig[0].items():
-                    if tensor_spec.dtype.is_integer:
-                        self.assertTrue(
-                            tensor_spec.dtype == tf.int32, "Serving signatures should use tf.int32 for ints!"
-                        )
+            # Also confirm that the input_signature uses int32
+            for key, tensor_spec in model.input_signature.items():
+                if tensor_spec.dtype.is_integer:
+                    self.assertTrue(tensor_spec.dtype == tf.int32, "Input signatures should use tf.int32 for ints!")
 
     def test_generate_with_headmasking(self):
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
@@ -2328,8 +2312,8 @@ class UtilsFunctionsTest(unittest.TestCase):
                 # Finally, check the model can be reloaded
                 new_model = TFBertModel.from_pretrained(tmp_dir)
 
-                model(model.dummy_inputs)
-                new_model(model.dummy_inputs)
+                model.build()
+                new_model.build()
 
                 for p1, p2 in zip(model.weights, new_model.weights):
                     self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
@@ -2455,7 +2439,7 @@ class TFModelPushToHubTester(unittest.TestCase):
         )
         model = TFBertModel(config)
         # Make sure model is properly initialized
-        _ = model(model.dummy_inputs)
+        model.build()
 
         logging.set_verbosity_info()
         logger = logging.get_logger("transformers.utils.hub")
@@ -2524,7 +2508,7 @@ class TFModelPushToHubTester(unittest.TestCase):
         )
         model = TFBertModel(config)
         # Make sure model is properly initialized
-        _ = model(model.dummy_inputs)
+        model.build()
 
         model.push_to_hub("valid_org/test-model-tf-org", use_auth_token=self._token)
 

@@ -515,9 +515,10 @@ class SwitchTransformersAttention(nn.Module):
         real_seq_length = seq_length
 
         if past_key_value is not None:
-            assert (
-                len(past_key_value) == 2
-            ), f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
+            if len(past_key_value) != 2:
+                raise ValueError(
+                    f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
+                )
             real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
 
         key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
@@ -1337,6 +1338,7 @@ num_heads)`.
 )
 class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight", r"decoder.embed_tokens.weight"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
@@ -1509,6 +1511,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         r"decoder.embed_tokens.weight",
         r"lm_head.weight",
     ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
@@ -1822,6 +1825,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 )
 class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight"]
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)

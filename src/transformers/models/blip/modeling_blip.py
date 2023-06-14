@@ -930,6 +930,7 @@ class BlipModel(BlipPreTrainedModel):
 class BlipForConditionalGeneration(BlipPreTrainedModel):
     config_class = BlipConfig
     _keys_to_ignore_on_load_missing = [r"text_decoder.cls.predictions.decoder.bias"]
+    _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
     main_input_name = "pixel_values"
 
     def __init__(self, config: BlipConfig):
@@ -1102,6 +1103,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
 class BlipForQuestionAnswering(BlipPreTrainedModel):
     config_class = BlipConfig
     _keys_to_ignore_on_load_missing = [r"text_decoder.cls.predictions.decoder.bias"]
+    _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
 
     def __init__(self, config: BlipConfig):
         super().__init__(config)
@@ -1120,19 +1122,6 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
 
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
-
-    # Adapted from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right
-    def _shift_right(self, input_ids):
-        pad_token_id = self.decoder_pad_token_id
-
-        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-        shifted_input_ids[..., 0] = self.decoder_start_token_id
-
-        # replace possible -100 values in labels by `pad_token_id`
-        shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
-
-        return shifted_input_ids
 
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BlipTextVisionModelOutput, config_class=BlipVisionConfig)
@@ -1213,11 +1202,11 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
             return_dict=return_dict,
         )
 
-        question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
-
         if labels is not None and decoder_input_ids is None:
-            # get decoder inputs from shifting lm labels to the right - this is used in training mode
-            decoder_input_ids = self._shift_right(labels)
+            # labels are already shifted right, see: https://github.com/huggingface/transformers/pull/23153
+            decoder_input_ids = labels
+
+        question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
 
         answer_output = self.text_decoder(
             input_ids=decoder_input_ids,

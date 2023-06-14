@@ -47,6 +47,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("deit", "TFDeiTModel"),
         ("distilbert", "TFDistilBertModel"),
         ("dpr", "TFDPRQuestionEncoder"),
+        ("efficientformer", "TFEfficientFormerModel"),
         ("electra", "TFElectraModel"),
         ("esm", "TFEsmModel"),
         ("flaubert", "TFFlaubertModel"),
@@ -76,6 +77,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("roberta", "TFRobertaModel"),
         ("roberta-prelayernorm", "TFRobertaPreLayerNormModel"),
         ("roformer", "TFRoFormerModel"),
+        ("sam", "TFSamModel"),
         ("segformer", "TFSegformerModel"),
         ("speech_to_text", "TFSpeech2TextModel"),
         ("swin", "TFSwinModel"),
@@ -201,6 +203,10 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("cvt", "TFCvtForImageClassification"),
         ("data2vec-vision", "TFData2VecVisionForImageClassification"),
         ("deit", ("TFDeiTForImageClassification", "TFDeiTForImageClassificationWithTeacher")),
+        (
+            "efficientformer",
+            ("TFEfficientFormerForImageClassification", "TFEfficientFormerForImageClassificationWithTeacher"),
+        ),
         ("mobilevit", "TFMobileViTForImageClassification"),
         ("regnet", "TFRegNetForImageClassification"),
         ("resnet", "TFResNetForImageClassification"),
@@ -426,6 +432,11 @@ TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict(
         ("mobilebert", "TFMobileBertForNextSentencePrediction"),
     ]
 )
+TF_MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
+    [
+        ("sam", "TFSamModel"),
+    ]
+)
 
 TF_MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_MAPPING_NAMES)
 TF_MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES)
@@ -475,6 +486,14 @@ TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = _LazyAutoMapping(
 TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES
 )
+
+TF_MODEL_FOR_MASK_GENERATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_MASK_GENERATION_MAPPING_NAMES
+)
+
+
+class TFAutoModelForMaskGeneration(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_MASK_GENERATION_MAPPING
 
 
 class TFAutoModel(_BaseAutoModelClass):

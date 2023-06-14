@@ -1730,6 +1730,12 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         "mlm_head.decoder.bias",
         "mim_head.decoder.bias",
     ]
+    _tied_weights_keys = [
+        "mmm_text_head.decoder.bias",
+        "mmm_image_head.decoder.bias",
+        "mlm_head.decoder.bias",
+        "mim_head.decoder.bias",
+    ]
 
     def __init__(self, config: FlavaConfig, image_codebook: Optional[nn.Module] = None):
         super().__init__(config)

@@ -550,7 +550,7 @@ def multi_scale_deformable_attention(
 ) -> Tensor:
     batch_size, _, num_heads, hidden_dim = value.shape
     _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
-    value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
+    value_list = value.split([height.item() * width.item() for height, width in value_spatial_shapes], dim=1)
     sampling_grids = 2 * sampling_locations - 1
     sampling_value_list = []
     for level_id, (height, width) in enumerate(value_spatial_shapes):
@@ -1824,6 +1824,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
 class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     _keys_to_ignore_on_load_missing = [r"bbox_embed\.[1-9]\d*", r"class_embed\.[1-9]\d*"]
+    _tied_weights_keys = [r"bbox_embed\.[1-9]\d*", r"class_embed\.[1-9]\d*"]
 
     def __init__(self, config: DeformableDetrConfig):
         super().__init__(config)

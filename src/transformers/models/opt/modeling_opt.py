@@ -222,7 +222,9 @@ class OPTAttention(nn.Module):
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = torch.max(attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min))
+            attn_weights = torch.max(
+                attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         # upcast to fp32 if the weights are in fp16. Please see https://github.com/huggingface/transformers/pull/17437
@@ -299,9 +301,9 @@ class OPTDecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -642,6 +644,11 @@ class OPTDecoder(OPTPreTrainedModel):
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
+        elif attention_mask.shape[1] != mask_seq_length:
+            raise ValueError(
+                f"The provided attention mask has length {attention_mask.shape[1]}, but its length should be "
+                f"{mask_seq_length} (sum of the lengths of current and past inputs)"
+            )
         causal_attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
@@ -811,6 +818,7 @@ class OPTModel(OPTPreTrainedModel):
 
 class OPTForCausalLM(OPTPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -919,13 +927,13 @@ class OPTForCausalLM(OPTPreTrainedModel):
         >>> model = OPTForCausalLM.from_pretrained("facebook/opt-350m")
         >>> tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
 
-        >>> prompt = "Hey, are you consciours? Can you talk to me?"
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you."
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious. I'm just a little bit of a weirdo."
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

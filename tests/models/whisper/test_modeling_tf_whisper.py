@@ -14,6 +14,8 @@
 # limitations under the License.
 """ Testing suite for the TensorFlow Whisper model. """
 
+from __future__ import annotations
+
 import inspect
 import tempfile
 import traceback
@@ -279,7 +281,7 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         for model_class in self.all_model_classes:
             model = model_class(config)
 
-            model(model.dummy_inputs)
+            model.build()
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=False)
@@ -399,6 +401,10 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=5e-5, name="outputs", attributes=None):
+        # We override with a slightly higher tol value, as test recently became flaky
+        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

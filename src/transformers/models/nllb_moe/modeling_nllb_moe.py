@@ -856,7 +856,7 @@ class NllbMoePreTrainedModel(PreTrainedModel):
     config_class = NllbMoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["NllbMoeAttention"]
+    _no_split_modules = ["NllbMoeEncoderLayer", "NllbMoeDecoderLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1509,6 +1509,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         "decoder.embed_positions.weights",
         "decoder.embed_positions.bias",
     ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: NllbMoeConfig):
         super().__init__(config)
@@ -1652,6 +1653,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
         r"decoder.embed_positions.weights",
         r"decoder.embed_positions.bias",
     ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: NllbMoeConfig):
         super().__init__(config)

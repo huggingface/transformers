@@ -546,6 +546,12 @@ class BioGptModel(BioGptPreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones(inputs_embeds.shape[:2], dtype=torch.bool, device=inputs_embeds.device)
+        elif attention_mask.shape[1] != past_key_values_length + input_shape[1]:
+            raise ValueError(
+                f"The provided attention mask has length {attention_mask.shape[1]}, but its length should be "
+                f"{past_key_values_length + input_shape[1]} (sum of the lengths of current and past inputs)"
+            )
+
         # embed positions
         positions = self.embed_positions(attention_mask, past_key_values_length)
 
@@ -641,6 +647,7 @@ class BioGptModel(BioGptPreTrainedModel):
 )
 class BioGptForCausalLM(BioGptPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["output_projection.weight"]
+    _tied_weights_keys = ["output_projection.weight"]
 
     def __init__(self, config):
         super().__init__(config)

@@ -130,7 +130,7 @@ class XSoftmax(torch.autograd.Function):
         r_mask = g.op(
             "Cast",
             g.op("Sub", g.op("Constant", value_t=torch.tensor(1, dtype=torch.int64)), mask_cast_value),
-            to_i=sym_help.cast_pytorch_to_onnx["Byte"],
+            to_i=sym_help.cast_pytorch_to_onnx["Bool"],
         )
         output = masked_fill(
             g, self, r_mask, g.op("Constant", value_t=torch.tensor(torch.finfo(self.type().dtype()).min))
@@ -453,7 +453,6 @@ class DebertaV2Encoder(nn.Module):
         if attention_mask.dim() <= 2:
             extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
             attention_mask = extended_attention_mask * extended_attention_mask.squeeze(-2).unsqueeze(-1)
-            attention_mask = attention_mask.byte()
         elif attention_mask.dim() == 3:
             attention_mask = attention_mask.unsqueeze(1)
 
@@ -484,7 +483,7 @@ class DebertaV2Encoder(nn.Module):
         if attention_mask.dim() <= 2:
             input_mask = attention_mask
         else:
-            input_mask = (attention_mask.sum(-2) > 0).byte()
+            input_mask = attention_mask.sum(-2) > 0
         attention_mask = self.get_attention_mask(attention_mask)
         relative_pos = self.get_rel_pos(hidden_states, query_states, relative_pos)
 
@@ -687,7 +686,7 @@ class DisentangledSelfAttention(nn.Module):
                 Input states to the module usually the output from previous layer, it will be the Q,K and V in
                 *Attention(Q,K,V)*
 
-            attention_mask (`torch.ByteTensor`):
+            attention_mask (`torch.BoolTensor`):
                 An attention mask matrix of shape [*B*, *N*, *N*] where *B* is the batch size, *N* is the maximum
                 sequence length in which element [i,j] = *1* means the *i* th token in the input can attend to the *j*
                 th token.
@@ -722,7 +721,7 @@ class DisentangledSelfAttention(nn.Module):
         if "p2c" in self.pos_att_type:
             scale_factor += 1
         scale = torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
-        attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2)) / scale.to(dtype=query_layer.dtype)
+        attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2) / scale.to(dtype=query_layer.dtype))
         if self.relative_attention:
             rel_embeddings = self.pos_dropout(rel_embeddings)
             rel_att = self.disentangled_attention_bias(
@@ -1123,6 +1122,7 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
 class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", "cls.predictions.decoder.weight"]
+    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1199,16 +1199,18 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
         )
 
 
-# copied from transformers.models.bert.BertPredictionHeadTransform with bert -> deberta
+# Copied from transformers.models.deberta.modeling_deberta.DebertaPredictionHeadTransform with Deberta->DebertaV2
 class DebertaV2PredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
+
+        self.dense = nn.Linear(config.hidden_size, self.embedding_size)
         if isinstance(config.hidden_act, str):
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(self.embedding_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -1217,15 +1219,16 @@ class DebertaV2PredictionHeadTransform(nn.Module):
         return hidden_states
 
 
-# copied from transformers.models.bert.BertLMPredictionHead with bert -> deberta
+# Copied from transformers.models.deberta.modeling_deberta.DebertaLMPredictionHead with Deberta->DebertaV2
 class DebertaV2LMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.transform = DebertaV2PredictionHeadTransform(config)
 
+        self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(self.embedding_size, config.vocab_size, bias=False)
 
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 

@@ -31,6 +31,8 @@ transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 SPECIAL_CASES_TO_ALLOW = {
+    # used to compute the property `self.chunk_length`
+    "EncodecConfig": ["overlap"],
     # used as `self.bert_model = BertModel(config, ...)`
     "DPRConfig": True,
     # not used in modeling files, but it's an important information
@@ -73,7 +75,10 @@ SPECIAL_CASES_TO_ALLOW = {
     "InformerConfig": ["num_static_real_features", "num_time_features"],
     # used internally to calculate the feature size
     "TimeSeriesTransformerConfig": ["num_static_real_features", "num_time_features"],
+    # used internally to calculate the feature size
+    "AutoformerConfig": ["num_static_real_features", "num_time_features"],
 }
+
 
 # TODO (ydshieh): Check the failing cases, try to fix them or move some cases to the above block once we are sure
 SPECIAL_CASES_TO_ALLOW.update(
@@ -170,6 +175,8 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "mask_index",
         "image_size",
         "use_cache",
+        "out_features",
+        "out_indices",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 

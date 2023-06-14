@@ -140,7 +140,9 @@ class TimeSeriesMeanScaler(nn.Module):
         self.default_scale = default_scale
 
     @torch.no_grad()
-    def forward(self, data: torch.Tensor, observed_indicator: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, data: torch.Tensor, observed_indicator: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # shape: (N, [C], T=1)
         ts_sum = (data * observed_indicator).abs().sum(self.dim, keepdim=True)
         num_observed = observed_indicator.sum(self.dim, keepdim=True)
@@ -1227,7 +1229,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
     def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__(config)
 
-        if config.scaling == "mean" or config.scaling:
+        if config.scaling == "mean" or config.scaling is True:
             self.scaler = TimeSeriesMeanScaler(dim=1, keepdim=True)
         elif config.scaling == "std":
             self.scaler = TimeSeriesStdScaler(dim=1, keepdim=True)
@@ -1394,7 +1396,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         >>> from transformers import TimeSeriesTransformerModel
 
         >>> file = hf_hub_download(
-        ...     repo_id="kashif/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
+        ...     repo_id="hf-internal-testing/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
         ... )
         >>> batch = torch.load(file)
 
@@ -1558,7 +1560,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         >>> from transformers import TimeSeriesTransformerForPrediction
 
         >>> file = hf_hub_download(
-        ...     repo_id="kashif/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
+        ...     repo_id="hf-internal-testing/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
         ... )
         >>> batch = torch.load(file)
 

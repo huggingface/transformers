@@ -39,6 +39,7 @@ from .generic import (
     expand_dims,
     find_labels,
     flatten_dict,
+    infer_framework,
     is_jax_tensor,
     is_numpy_array,
     is_tensor,
@@ -99,6 +100,7 @@ from .import_utils import (
     _LazyModule,
     ccl_version,
     direct_transformers_import,
+    get_torch_version,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
@@ -131,6 +133,7 @@ from .import_utils import (
     is_py3nvml_available,
     is_pyctcdecode_available,
     is_pytesseract_available,
+    is_pytest_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
     is_sacremoses_available,
@@ -170,12 +173,13 @@ from .import_utils import (
     is_vision_available,
     requires_backends,
     torch_only_method,
-    torch_version,
 )
 
 
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
+ADAPTER_WEIGHTS_NAME = "adapter_model.bin"
+ADAPTER_SAFE_WEIGHTS_NAME = "adapter_model.safetensors"
 TF2_WEIGHTS_NAME = "tf_model.h5"
 TF2_WEIGHTS_INDEX_NAME = "tf_model.h5.index.json"
 TF_WEIGHTS_NAME = "model.ckpt"

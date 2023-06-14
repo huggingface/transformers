@@ -40,7 +40,7 @@ try:
 except ImportError:
     xops = None
     logger.warn(
-        "Xformers is not installed correctly. If you want to use memorry_efficient_attention to accelerate training use the following command to install Xformers\npip install xformers."
+        "Xformers is not installed correctly. If you want to use memory_efficient_attention to accelerate training use the following command to install Xformers\npip install xformers."
     )
 
 
@@ -91,14 +91,11 @@ class OpenLlamaRMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
         variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
 
-        # convert into half-precision if necessary
-        if self.weight.dtype in [torch.float16, torch.bfloat16]:
-            hidden_states = hidden_states.to(self.weight.dtype)
-
-        return self.weight * hidden_states
+        return (self.weight * hidden_states).to(input_dtype)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->OpenLlama
@@ -114,8 +111,9 @@ class OpenLlamaRotaryEmbedding(torch.nn.Module):
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos()[None, None, :, :], persistent=False)
-        self.register_buffer("sin_cached", emb.sin()[None, None, :, :], persistent=False)
+        dtype = torch.get_default_dtype()
+        self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
+        self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
 
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
@@ -126,8 +124,8 @@ class OpenLlamaRotaryEmbedding(torch.nn.Module):
             freqs = torch.einsum("i,j->ij", t, self.inv_freq)
             # Different from paper, but it uses a different permutation in order to obtain the same calculation
             emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
-            self.register_buffer("cos_cached", emb.cos()[None, None, :, :], persistent=False)
-            self.register_buffer("sin_cached", emb.sin()[None, None, :, :], persistent=False)
+            self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(x.dtype), persistent=False)
+            self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(x.dtype), persistent=False)
         return (
             self.cos_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
             self.sin_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
@@ -226,7 +224,7 @@ class OpenLlamaAttention(nn.Module):
 
         past_key_value = (key_states, value_states) if use_cache else None
 
-        if self.config.use_memorry_efficient_attention and xops is not None and self.training:
+        if self.config.use_memory_efficient_attention and xops is not None and self.training:
             attn_weights = None
             query_states = query_states.transpose(1, 2)
             key_states = key_states.transpose(1, 2)
@@ -249,7 +247,9 @@ class OpenLlamaAttention(nn.Module):
                         f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                     )
                 attn_weights = attn_weights + attention_mask
-                attn_weights = torch.max(attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min))
+                attn_weights = torch.max(
+                    attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
+                )
 
             # upcast attention to fp32
             attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
@@ -564,7 +564,7 @@ class OpenLlamaModel(OpenLlamaPreTrainedModel):
             if self.embed_layer_norm:
                 inputs_embeds = self.embed_layer_norm(inputs_embeds)
         # embed positions
-        if self.config.use_memorry_efficient_attention and self.training:
+        if self.config.use_memory_efficient_attention and self.training:
             attention_mask = None
         elif attention_mask is None:
             attention_mask = torch.ones(
@@ -707,13 +707,13 @@ class OpenLlamaForCausalLM(OpenLlamaPreTrainedModel):
         >>> model = OpenLlamaForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
-        >>> prompt = "Hey, are you consciours? Can you talk to me?"
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you."
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -737,12 +737,16 @@ class OpenLlamaForCausalLM(OpenLlamaPreTrainedModel):
 
         hidden_states = outputs[0]
         if self.config.shared_input_output_embedding:
-            logits = torch.einsum("blh,vh->blv", hidden_states, self.model.embed_tokens.weight)
+            logits = torch.einsum(
+                "blh,vh->blv", hidden_states.to(self.model.embed_tokens.weight.device), self.model.embed_tokens.weight
+            )
         else:
             logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
