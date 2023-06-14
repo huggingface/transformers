@@ -121,7 +121,7 @@ class ModelArguments:
     adapter_attn_dim: int = field(
         default=16,
         metadata={
-            "help": "The hidden dimension of the adapter layers that will be randomely initialized and trained. The higher the dimension, the more capacity is given to the adapter weights. Note that only the adapter weights are fine-tuned."
+            "help": "The hidden dimension of the adapter layers that will be randomly initialized and trained. The higher the dimension, the more capacity is given to the adapter weights. Note that only the adapter weights are fine-tuned."
         },
     )
 
@@ -628,9 +628,6 @@ def main():
     audio_column_name = data_args.audio_column_name
     num_workers = data_args.preprocessing_num_workers
 
-    # `phoneme_language` is only relevant if the model is fine-tuned on phoneme classification
-    phoneme_language = data_args.phoneme_language
-
     # Preprocessing the datasets.
     # We need to read the audio files as arrays and tokenize the targets.
     def prepare_dataset(batch):
@@ -642,11 +639,7 @@ def main():
         batch["input_length"] = len(batch["input_values"])
 
         # encode targets
-        additional_kwargs = {}
-        if phoneme_language is not None:
-            additional_kwargs["phonemizer_lang"] = phoneme_language
-
-        batch["labels"] = tokenizer(batch["target_text"], **additional_kwargs).input_ids
+        batch["labels"] = tokenizer(batch["target_text"]).input_ids
         return batch
 
     with training_args.main_process_first(desc="dataset map preprocessing"):
