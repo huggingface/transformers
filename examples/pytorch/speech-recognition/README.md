@@ -26,6 +26,10 @@ limitations under the License.
 		- [Librispeech](#librispeech-ctc)
 		- [Common Voice](#common-voice-ctc)
 		- [Multilingual Librispeech](#multilingual-librispeech-ctc)
+- [Automatic Speech Recognition with CTC and Adapter Layers](#connectionist-temporal-classification-with-adapters)
+	- [Massive Multilingual Speech (MMS)](#mms-model)
+	- [Examples](#examples-ctc-adapter)
+		- [Common Voice](#common-voice-ctc-adapter)
 - [Automatic Speech Recognition with Sequence-to-Sequence](#sequence-to-sequence)
 	- [Whisper Model](#whisper-model)
 	- [Speech-Encoder-Decoder Model](#warm-started-speech-encoder-decoder-model)
@@ -242,6 +246,22 @@ they can serve as a baseline to improve upon.
 |-------|------------------------------|-------------|---------------|---------------|----------------------|-------------| -------------| ------- |
 | [Multilingual Librispeech](https://huggingface.co/datasets/multilingual_librispeech)| `"german"`  | [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53)  | 0.13  | -     | 1 GPU Titan 24 GB RAM  |  15h04                 | [here](https://huggingface.co/patrickvonplaten/wav2vec2-xlsr-53-300m-mls-german-ft)      |  [run.sh](https://huggingface.co/patrickvonplaten/wav2vec2-xlsr-53-300m-mls-german-ft/blob/main/run.sh) |
 | [Multilingual Librispeech](https://huggingface.co/datasets/multilingual_librispeech)| `"german"`  | [facebook/wav2vec2-xls-r-300m](https://huggingface.co/facebook/wav2vec2-xls-r-300m)  | 0.15 | -     | 1 GPU Titan 24 GB RAM  |  15h04                 | [here](https://huggingface.co/patrickvonplaten/wav2vec2-300m-mls-german-ft)      |  [run.sh](https://huggingface.co/patrickvonplaten/wav2vec2-300m-mls-german-ft/blob/main/run.sh) |
+
+## Connectionist Temporal Classification With Adapters
+
+TODO(PVP)
+
+### MMS Model
+
+TODO(PVP)
+
+### Examples CTC Adapter
+
+TODO(PVP)
+
+#### Common Voice CTC Adapter
+
+TODO(PVP)
 
 ## Sequence to Sequence
 
