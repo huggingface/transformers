@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,24 +13,46 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-{%- if cookiecutter.generate_tensorflow_and_pytorch == "PyTorch & TensorFlow" %}
-from ...file_utils import _BaseLazyModule, is_tf_available, is_torch_available, is_tokenizers_available
-{%- elif cookiecutter.generate_tensorflow_and_pytorch == "PyTorch" %}
-from ...file_utils import _BaseLazyModule, is_torch_available, is_tokenizers_available
-{%- elif cookiecutter.generate_tensorflow_and_pytorch == "TensorFlow" %}
-from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available
+from ...utils import  _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
+
+
+{%- if "TensorFlow" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
+from ...utils import is_tf_available
+
+
 {% endif %}
+{%- if "PyTorch" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
+from ...utils import is_torch_available
+
+
+{% endif %}
+{%- if "Flax" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
+from ...utils import is_flax_available
+
+
+{% endif %}
+
 _import_structure = {
     "configuration_{{cookiecutter.lowercase_modelname}}": ["{{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP", "{{cookiecutter.camelcase_modelname}}Config"],
     "tokenization_{{cookiecutter.lowercase_modelname}}": ["{{cookiecutter.camelcase_modelname}}Tokenizer"],
 }
 
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_{{cookiecutter.lowercase_modelname}}_fast"] = ["{{cookiecutter.camelcase_modelname}}TokenizerFast"]
 
-{%- if (cookiecutter.generate_tensorflow_and_pytorch == "PyTorch & TensorFlow" or cookiecutter.generate_tensorflow_and_pytorch == "PyTorch") %}
+{%- if "PyTorch" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_{{cookiecutter.lowercase_modelname}}"] = [
         "{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST",
         "{{cookiecutter.camelcase_modelname}}ForMaskedLM",
@@ -49,7 +67,12 @@ if is_torch_available():
         "load_tf_weights_in_{{cookiecutter.lowercase_modelname}}",
     ]
 {% else %}
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_{{cookiecutter.lowercase_modelname}}"] = [
         "{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST",
         "{{cookiecutter.camelcase_modelname}}ForConditionalGeneration",
@@ -61,9 +84,16 @@ if is_torch_available():
     ]
 {% endif %}
 {% endif %}
-{%- if (cookiecutter.generate_tensorflow_and_pytorch == "PyTorch & TensorFlow" or cookiecutter.generate_tensorflow_and_pytorch == "TensorFlow") %}
+
+
+{%- if "TensorFlow" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_{{cookiecutter.lowercase_modelname}}"] = [
         "TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TF{{cookiecutter.camelcase_modelname}}ForMaskedLM",
@@ -77,7 +107,12 @@ if is_tf_available():
         "TF{{cookiecutter.camelcase_modelname}}PreTrainedModel",
     ]
 {% else %}
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_{{cookiecutter.lowercase_modelname}}"] = [
         "TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration",
         "TF{{cookiecutter.camelcase_modelname}}Model",
@@ -87,16 +122,63 @@ if is_tf_available():
 {% endif %}
 
 
+{%- if "Flax" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
+{% if cookiecutter.is_encoder_decoder_model == "False" %}
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_flax_{{cookiecutter.lowercase_modelname}}"] = [
+        "Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM",
+        "Flax{{cookiecutter.camelcase_modelname}}ForCausalLM",
+        "Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice",
+        "Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering",
+        "Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification",
+        "Flax{{cookiecutter.camelcase_modelname}}ForTokenClassification",
+        "Flax{{cookiecutter.camelcase_modelname}}Layer",
+        "Flax{{cookiecutter.camelcase_modelname}}Model",
+        "Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel",
+    ]
+{% else %}
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_flax_{{cookiecutter.lowercase_modelname}}"] = [
+        "Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration",
+        "Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering",
+        "Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification",
+        "Flax{{cookiecutter.camelcase_modelname}}Model",
+        "Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel",
+    ]
+{% endif %}
+{% endif %}
+
+
 if TYPE_CHECKING:
     from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP, {{cookiecutter.camelcase_modelname}}Config
     from .tokenization_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Tokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_{{cookiecutter.lowercase_modelname}}_fast import {{cookiecutter.camelcase_modelname}}TokenizerFast
 
-{%- if (cookiecutter.generate_tensorflow_and_pytorch == "PyTorch & TensorFlow" or cookiecutter.generate_tensorflow_and_pytorch == "PyTorch") %}
+{%- if "PyTorch" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_{{cookiecutter.lowercase_modelname}} import (
             {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
             {{cookiecutter.camelcase_modelname}}ForMaskedLM,
@@ -111,7 +193,12 @@ if TYPE_CHECKING:
             load_tf_weights_in_{{cookiecutter.lowercase_modelname}},
         )
 {% else %}
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_{{cookiecutter.lowercase_modelname}} import (
             {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
             {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
@@ -123,9 +210,14 @@ if TYPE_CHECKING:
         )
 {% endif %}
 {% endif %}
-{%- if (cookiecutter.generate_tensorflow_and_pytorch == "PyTorch & TensorFlow" or cookiecutter.generate_tensorflow_and_pytorch == "TensorFlow") %}
+{%- if "TensorFlow" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (
             TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
             TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
@@ -139,7 +231,12 @@ if TYPE_CHECKING:
             TF{{cookiecutter.camelcase_modelname}}PreTrainedModel,
         )
 {% else %}
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (
             TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
             TF{{cookiecutter.camelcase_modelname}}Model,
@@ -147,20 +244,43 @@ if TYPE_CHECKING:
         )
 {% endif %}
 {% endif %}
+{%- if "Flax" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
+{% if cookiecutter.is_encoder_decoder_model == "False" %}
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_{{cookiecutter.lowercase_modelname}} import (
+            Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM,
+            Flax{{cookiecutter.camelcase_modelname}}ForCausalLM,
+            Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
+            Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
+            Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
+            Flax{{cookiecutter.camelcase_modelname}}ForTokenClassification,
+            Flax{{cookiecutter.camelcase_modelname}}Layer,
+            Flax{{cookiecutter.camelcase_modelname}}Model,
+            Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel,
+        )
+{% else %}
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_{{cookiecutter.lowercase_modelname}} import (
+            Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+            Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
+            Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
+            Flax{{cookiecutter.camelcase_modelname}}Model,
+            Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel,
+        )
+{% endif %}
+{% endif %}
+
 else:
-    import importlib
-    import os
     import sys
 
-    class _LazyModule(_BaseLazyModule):
-        """
-        Module class that surfaces all objects but only performs associated imports when the objects are requested.
-        """
-
-        __file__ = globals()["__file__"]
-        __path__ = [os.path.dirname(__file__)]
-
-        def _get_module(self, module_name: str):
-            return importlib.import_module("." + module_name, self.__name__)
-
-    sys.modules[__name__] = _LazyModule(__name__, _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

@@ -63,7 +63,7 @@ def generate_summaries_or_translations(
     fout.close()
     runtime = int(time.time() - start_time)  # seconds
     n_obs = len(examples)
-    return dict(n_obs=n_obs, runtime=runtime, seconds_per_sample=round(runtime / n_obs, 4))
+    return {"n_obs": n_obs, "runtime": runtime, "seconds_per_sample": round(runtime / n_obs, 4)}
 
 
 def datetime_now():
@@ -108,7 +108,10 @@ def run_generate(verbose=True):
         nargs="?",
         type=str,
         const=datetime_now(),
-        help="use in conjunction w/ --dump-args to print with the results whatever other info you'd like, e.g. lang=en-ru. If no value is passed, the current datetime string will be used.",
+        help=(
+            "use in conjunction w/ --dump-args to print with the results whatever other info you'd like, e.g."
+            " lang=en-ru. If no value is passed, the current datetime string will be used."
+        ),
     )
     # Unspecified args like --num_beams=2 --decoder_start_token_id=4 are passed to model.generate
     args, rest = parser.parse_known_args()

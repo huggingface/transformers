@@ -1,0 +1,27 @@
+name: Update Transformers metadata
+
+on:
+  push:
+    branches:
+      - main
+      - update_transformers_metadata*
+
+jobs:
+  build_and_package:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup environment
+        run: |
+          pip install --upgrade pip
+          pip install datasets pandas
+          pip install .[torch,tf,flax]
+
+      - name: Update metadata
+        run: |
+          python utils/update_metadata.py --token ${{ secrets.SYLVAIN_HF_TOKEN }} --commit_sha ${{ github.sha }}

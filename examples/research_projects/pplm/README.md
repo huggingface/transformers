@@ -10,6 +10,9 @@ Blog link: https://eng.uber.com/pplm
 
 Please check out the repo under uber-research for more information: https://github.com/uber-research/PPLM
 
+# Note
+
+⚠️ This project should be run with pytorch-lightning==1.0.4 which has a potential security vulnerability
 
 ## Setup
 
@@ -17,10 +20,10 @@ Please check out the repo under uber-research for more information: https://gith
 git clone https://github.com/huggingface/transformers && cd transformers
 pip install .
 pip install nltk torchtext # additional requirements.
-cd examples/text-generation/pplm
+cd examples/research_projects/pplm
 ```
 
-## PPLM-BoW 
+## PPLM-BoW
 
 ### Example command for bag-of-words control
 
@@ -30,7 +33,7 @@ python run_pplm.py -B military --cond_text "The potato" --length 50 --gamma 1.5 
 
 ### Tuning hyperparameters for bag-of-words control
 
-1. Increase `--stepsize` to intensify topic control, and decrease its value to soften the control. `--stepsize 0` recovers the original uncontrolled GPT-2 model. 
+1. Increase `--stepsize` to intensify topic control, and decrease its value to soften the control. `--stepsize 0` recovers the original uncontrolled GPT-2 model.
 
 2. If the language being generated is repetitive (For e.g. "science science experiment experiment"), there are several options to consider: </br>
 	a) Reduce the `--stepsize` </br>
@@ -48,7 +51,6 @@ python run_pplm.py -D sentiment --class_label 2 --cond_text "My dog died" --leng
 
 ### Tuning hyperparameters for discriminator control
 
-1. Increase `--stepsize` to intensify topic control, and decrease its value to soften the control. `--stepsize 0` recovers the original uncontrolled GPT-2 model. 
+1. Increase `--stepsize` to intensify topic control, and decrease its value to soften the control. `--stepsize 0` recovers the original uncontrolled GPT-2 model.
 
 2. Use `--class_label 3` for negative, and `--class_label 2` for positive
-

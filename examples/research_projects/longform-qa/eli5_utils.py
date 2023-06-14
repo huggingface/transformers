@@ -5,16 +5,17 @@ from random import choice, randint
 from time import time
 
 import datasets  # noqa: F401
+import faiss  # noqa: F401
 import numpy as np
 import pandas as pd
 import torch
 import torch.utils.checkpoint as checkpoint
 from elasticsearch import Elasticsearch  # noqa: F401
 from elasticsearch.helpers import bulk, streaming_bulk  # noqa: F401
+from torch import nn
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 from tqdm import tqdm
 
-import faiss  # noqa: F401
 from transformers import AdamW, AutoModel, AutoModelForSeq2SeqLM, AutoTokenizer, get_linear_schedule_with_warmup
 
 
@@ -77,7 +78,7 @@ def query_es_index(question, es_client, index_name="english_wiki_kilt_snippets_1
     )
     hits = response["hits"]["hits"]
     support_doc = "<P> " + " <P> ".join([hit["_source"]["passage_text"] for hit in hits])
-    res_list = [dict([(k, hit["_source"][k]) for k in hit["_source"] if k != "passage_text"]) for hit in hits]
+    res_list = [{k: hit["_source"][k] for k in hit["_source"] if k != "passage_text"} for hit in hits]
     for r, hit in zip(res_list, hits):
         r["passage_id"] = hit["_id"]
         r["score"] = hit["_score"]
@@ -116,14 +117,14 @@ class ELI5DatasetQARetriver(Dataset):
         return self.make_example(idx % self.data.num_rows)
 
 
-class RetrievalQAEmbedder(torch.nn.Module):
+class RetrievalQAEmbedder(nn.Module):
     def __init__(self, sent_encoder, dim):
         super(RetrievalQAEmbedder, self).__init__()
         self.sent_encoder = sent_encoder
         self.output_dim = 128
-        self.project_q = torch.nn.Linear(dim, self.output_dim, bias=False)
-        self.project_a = torch.nn.Linear(dim, self.output_dim, bias=False)
-        self.ce_loss = torch.nn.CrossEntropyLoss(reduction="mean")
+        self.project_q = nn.Linear(dim, self.output_dim, bias=False)
+        self.project_a = nn.Linear(dim, self.output_dim, bias=False)
+        self.ce_loss = nn.CrossEntropyLoss(reduction="mean")
 
     def embed_sentences_checkpointed(self, input_ids, attention_mask, checkpoint_batch_size=-1):
         # reproduces BERT forward pass with checkpointing
@@ -136,7 +137,7 @@ class RetrievalQAEmbedder(torch.nn.Module):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
             head_mask = [None] * self.sent_encoder.config.num_hidden_layers
             extended_attention_mask: torch.Tensor = self.sent_encoder.get_extended_attention_mask(
-                attention_mask, input_shape, device
+                attention_mask, input_shape
             )
 
             # define function for checkpointing
@@ -600,7 +601,7 @@ def make_qa_dense_index(
     fp = np.memmap(index_name, dtype=dtype, mode="w+", shape=(passages_dset.num_rows, 128))
     n_batches = math.ceil(passages_dset.num_rows / batch_size)
     for i in range(n_batches):
-        passages = [p for p in passages_dset[i * batch_size : (i + 1) * batch_size]["passage_text"]]
+        passages = list(passages_dset[i * batch_size : (i + 1) * batch_size]["passage_text"])
         reps = embed_passages_for_retrieval(passages, tokenizer, qa_embedder, max_length, device)
         fp[i * batch_size : (i + 1) * batch_size] = reps
         if i % 50 == 0:
@@ -633,7 +634,7 @@ def query_qa_dense_index(
     D, I = wiki_index.search(q_rep, 2 * n_results)
     res_passages = [wiki_passages[int(i)] for i in I[0]]
     support_doc = "<P> " + " <P> ".join([p["passage_text"] for p in res_passages])
-    res_list = [dict([(k, p[k]) for k in wiki_passages.column_names]) for p in res_passages]
+    res_list = [{k: p[k] for k in wiki_passages.column_names} for p in res_passages]
     res_list = [res for res in res_list if len(res["passage_text"].split()) > min_length][:n_results]
     for r, sc in zip(res_list, D[0]):
         r["score"] = float(sc)
@@ -648,8 +649,8 @@ def batch_query_qa_dense_index(questions, qa_embedder, tokenizer, wiki_passages,
         "<P> " + " <P> ".join([p["passage_text"] for p in res_passages]) for res_passages in res_passages_lst
     ]
     all_res_lists = []
-    for (res_passages, dl) in zip(res_passages_lst, D):
-        res_list = [dict([(k, p[k]) for k in wiki_passages.column_names]) for p in res_passages]
+    for res_passages, dl in zip(res_passages_lst, D):
+        res_list = [{k: p[k] for k in wiki_passages.column_names} for p in res_passages]
         for r, sc in zip(res_list, dl):
             r["score"] = float(sc)
         all_res_lists += [res_list[:]]
@@ -662,7 +663,7 @@ def query_qa_dense_index_nn(passage, qa_embedder, tokenizer, wiki_passages, wiki
     D, I = wiki_index.search(a_rep, 2 * n_results)
     res_passages = [wiki_passages[int(i)] for i in I[0]]
     support_doc = "<P> " + " <P> ".join([p["passage_text"] for p in res_passages])
-    res_list = [dict([(k, p[k]) for k in wiki_passages.column_names]) for p in res_passages]
+    res_list = [{k: p[k] for k in wiki_passages.column_names} for p in res_passages]
     res_list = [res for res in res_list if len(res["passage_text"].split()) > min_length][:n_results]
     for r, sc, i in zip(res_list, D[0], I[0]):
         r["passage_id"] = int(i)
@@ -678,8 +679,8 @@ def batch_query_qa_dense_index_nn(passages, qa_embedder, tokenizer, wiki_passage
         "<P> " + " <P> ".join([p["passage_text"] for p in res_passages]) for res_passages in res_passages_lst
     ]
     all_res_lists = []
-    for (res_passages, dl, il) in zip(res_passages_lst, D, I):
-        res_list = [dict([(k, p[k]) for k in wiki_passages.column_names]) for p in res_passages]
+    for res_passages, dl, il in zip(res_passages_lst, D, I):
+        res_list = [{k: p[k] for k in wiki_passages.column_names} for p in res_passages]
         for r, sc, i in zip(res_list, dl, il):
             r["passage_id"] = int(i)
             r["score"] = float(sc)

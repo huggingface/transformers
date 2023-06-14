@@ -41,7 +41,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/merges.txt"
     },
     "tokenizer_config_file": {
-        "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/tokenizer_config.json"
+        "facebook/blenderbot_small-90M": (
+            "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/tokenizer_config.json"
+        )
     },
 }
 
@@ -68,25 +70,25 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     """
     Constructs a Blenderbot-90M tokenizer based on BPE (Byte-Pair-Encoding)
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    the superclass for more information regarding methods.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             File containing the vocabulary.
-        merges_file (:obj:`str`):
+        merges_file (`str`):
             Path to the merges file.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"__start__"`):
+        bos_token (`str`, *optional*, defaults to `"__start__"`):
             The beginning of sentence token.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"__end__"`):
+        eos_token (`str`, *optional*, defaults to `"__end__"`):
             The end of sentence token.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"__unk__"`):
+        unk_token (`str`, *optional*, defaults to `"__unk__"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"__pad__"`):
+        pad_token (`str`, *optional*, defaults to `"__pad__"`):
             The token used for padding, for example when batching sequences of different lengths.
         **kwargs
-            Additional keyword arguments passed along to :class:`~transformers.PreTrainedTokenizer`
+            Additional keyword arguments passed along to [`PreTrainedTokenizer`]
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -102,7 +104,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         eos_token="__end__",
         unk_token="__unk__",
         pad_token="__null__",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(unk_token=unk_token, bos_token=bos_token, eos_token=eos_token, pad_token=pad_token, **kwargs)
 
@@ -183,17 +185,17 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         return " ".join(words)
 
     def _tokenize(self, text: str) -> List[str]:
-        """ Split a string into tokens using BPE."""
+        """Split a string into tokens using BPE."""
         split_tokens = []
 
         words = re.findall(r"\S+\n?", text)
 
         for token in words:
-            split_tokens.extend([t for t in self.bpe(token).split(" ")])
+            split_tokens.extend(list(self.bpe(token).split(" ")))
         return split_tokens
 
     def _convert_token_to_id(self, token: str) -> int:
-        """ Converts a token to an id using the vocab. """
+        """Converts a token to an id using the vocab."""
         token = token.lower()
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
@@ -202,7 +204,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         return self.decoder.get(index, self.unk_token)
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """ Converts a sequence of tokens  in a single string. """
+        """Converts a sequence of tokens in a single string."""
         out_string = " ".join(tokens).replace("@@ ", "").strip()
         return out_string
 
@@ -218,7 +220,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         index = 0
         with open(merge_file, "w", encoding="utf-8") as writer:

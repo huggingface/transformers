@@ -13,8 +13,8 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.distributed as dist
-from pytorch_lightning.accelerators.ddp_accelerator import DDPAccelerator
-from pytorch_lightning.cluster_environments import TorchElasticEnvironment
+import torch.distributed as torch_distrib
+from pytorch_lightning.plugins.training_type import DDPPlugin
 from torch.utils.data import DataLoader
 
 from transformers import (
@@ -35,7 +35,6 @@ from transformers.integrations import is_ray_available
 if is_ray_available():
     import ray
     from distributed_ray_retriever import RagRayDistributedRetriever, RayRetriever
-
 
 from callbacks_rag import (  # noqa: E402 # isort:skipq
     get_checkpoint_callback,
@@ -74,27 +73,19 @@ class AttrDict(dict):
         self.__dict__ = self
 
 
-# In PTL >v1.0, `init_ddp_connection` method in the `LightningModule`
-# is no longer used, and is moved into DDPAccelerator instead.
-# We override DDPAccelerator to add our custom logic for initializing the
-# retriever.
-# https://github.com/PyTorchLightning/pytorch-lightning/blob/master/tests/backends/test_accelerator_connector.py
+class CustomDDP(DDPPlugin):
+    def init_ddp_connection(self, global_rank=None, world_size=None) -> None:
+        module = self.model
+        global_rank = global_rank if global_rank is not None else self.cluster_environment.global_rank()
+        world_size = world_size if world_size is not None else self.cluster_environment.world_size()
+        os.environ["MASTER_ADDR"] = self.cluster_environment.master_address()
+        os.environ["MASTER_PORT"] = str(self.cluster_environment.master_port())
+        if not torch.distributed.is_initialized():
+            logger.info(f"initializing ddp: GLOBAL_RANK: {global_rank}, MEMBER: {global_rank + 1}/{world_size}")
+            torch_distrib.init_process_group(self.torch_distributed_backend, rank=global_rank, world_size=world_size)
 
-
-class CustomAccel(DDPAccelerator):
-    def __init__(self, trainer=None, **kwargs):
-        # Trainer is set later.
-        super().__init__(trainer, **kwargs)
-
-    def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
-        logger.info("Custom init_ddp_connection.")
-        module = self.trainer.model
-        if self.cluster_environment is None:
-            self.cluster_environment = TorchElasticEnvironment()
-        self.distributed_port = module.hparams.distributed_port
-        os.environ["MASTER_PORT"] = str(self.distributed_port)
-        super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
         if module.is_rag_model:
+            self.distributed_port = module.hparams.distributed_port
             if module.distributed_retriever == "pytorch":
                 module.model.rag.retriever.init_retrieval(self.distributed_port)
             elif module.distributed_retriever == "ray" and global_rank == 0:
@@ -171,11 +162,11 @@ class GenerativeQAModule(BaseTransformer):
         self.step_count = 0
         self.metrics = defaultdict(list)
 
-        self.dataset_kwargs: dict = dict(
-            data_dir=self.hparams.data_dir,
-            max_source_length=self.hparams.max_source_length,
-            prefix=prefix or "",
-        )
+        self.dataset_kwargs: dict = {
+            "data_dir": self.hparams.data_dir,
+            "max_source_length": self.hparams.max_source_length,
+            "prefix": prefix or "",
+        }
         n_observations_per_split = {
             "train": self.hparams.n_train,
             "val": self.hparams.n_val,
@@ -231,7 +222,7 @@ class GenerativeQAModule(BaseTransformer):
                 decoder_start_token_id = generator.config.decoder_start_token_id
                 decoder_input_ids = (
                     torch.cat(
-                        [torch.Tensor([[decoder_start_token_id]] * target_ids.shape[0]).to(target_ids), target_ids],
+                        [torch.tensor([[decoder_start_token_id]] * target_ids.shape[0]).to(target_ids), target_ids],
                         dim=1,
                     )
                     if target_ids.shape[0] < self.target_lens["train"]
@@ -263,7 +254,7 @@ class GenerativeQAModule(BaseTransformer):
     def training_step(self, batch, batch_idx) -> Dict:
         loss_tensors = self._step(batch)
 
-        logs = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
+        logs = {name: loss.detach() for name, loss in zip(self.loss_names, loss_tensors)}
         # tokens per batch
         tgt_pad_token_id = (
             self.tokenizer.generator.pad_token_id
@@ -330,7 +321,7 @@ class GenerativeQAModule(BaseTransformer):
         preds: List[str] = self.ids_to_clean_text(generated_ids)
         target: List[str] = self.ids_to_clean_text(batch["decoder_input_ids"])
         loss_tensors = self._step(batch)
-        base_metrics = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
+        base_metrics = dict(zip(self.loss_names, loss_tensors))
         gen_metrics: Dict = self.calc_generative_metrics(preds, target)
 
         summ_len = np.mean(lmap(len, generated_ids))
@@ -392,29 +383,37 @@ class GenerativeQAModule(BaseTransformer):
             "--max_source_length",
             default=128,
             type=int,
-            help="The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded.",
+            help=(
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            ),
         )
         parser.add_argument(
             "--max_target_length",
             default=25,
             type=int,
-            help="The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded.",
+            help=(
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            ),
         )
         parser.add_argument(
             "--val_max_target_length",
             default=25,
             type=int,
-            help="The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded.",
+            help=(
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            ),
         )
         parser.add_argument(
             "--test_max_target_length",
             default=25,
             type=int,
-            help="The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded.",
+            help=(
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            ),
         )
         parser.add_argument("--logger_name", type=str, choices=["default", "wandb", "wandb_shared"], default="default")
         parser.add_argument("--n_train", type=int, default=-1, required=False, help="# examples. -1 means use all.")
@@ -432,7 +431,10 @@ class GenerativeQAModule(BaseTransformer):
             type=int,
             default=-1,
             required=False,
-            help="-1 means never early stop. early_stopping_patience is measured in validation checks, not epochs. So val_check_interval will effect it.",
+            help=(
+                "-1 means never early stop. early_stopping_patience is measured in validation checks, not epochs. So"
+                " val_check_interval will effect it."
+            ),
         )
         parser.add_argument(
             "--distributed-port", type=int, default=-1, required=False, help="Port number for distributed training."
@@ -441,7 +443,10 @@ class GenerativeQAModule(BaseTransformer):
             "--model_type",
             choices=["rag_sequence", "rag_token", "bart", "t5"],
             type=str,
-            help="RAG model type: sequence or token, if none specified, the type is inferred from the model_name_or_path",
+            help=(
+                "RAG model type: sequence or token, if none specified, the type is inferred from the"
+                " model_name_or_path"
+            ),
         )
         return parser
 
@@ -451,39 +456,53 @@ class GenerativeQAModule(BaseTransformer):
             "--index_name",
             type=str,
             default=None,
-            help="Name of the index to use: 'hf' for a canonical dataset from the datasets library (default), 'custom' for a local index, or 'legacy' for the orignal one)",
+            help=(
+                "Name of the index to use: 'hf' for a canonical dataset from the datasets library (default), 'custom'"
+                " for a local index, or 'legacy' for the orignal one)"
+            ),
         )
         parser.add_argument(
             "--passages_path",
             type=str,
             default=None,
-            help="Path to the dataset of passages for custom index. More info about custom indexes in the RagRetriever documentation as well as in `examples/rag/use_own_knowledge_dataset.py`",
+            help=(
+                "Path to the dataset of passages for custom index. More info about custom indexes in the RagRetriever"
+                " documentation as well as in `examples/rag/use_own_knowledge_dataset.py`"
+            ),
         )
         parser.add_argument(
             "--index_path",
             type=str,
             default=None,
-            help="Path to the faiss index for custom index. More info about custom indexes in the RagRetriever documentation as well as in `examples/rag/use_own_knowledge_dataset.py`",
+            help=(
+                "Path to the faiss index for custom index. More info about custom indexes in the RagRetriever"
+                " documentation as well as in `examples/rag/use_own_knowledge_dataset.py`"
+            ),
         )
         parser.add_argument(
             "--distributed_retriever",
             choices=["ray", "pytorch"],
             type=str,
             default="pytorch",
-            help="What implementation to use for distributed retriever? If "
-            "pytorch is selected, the index is loaded on training "
-            "worker 0, and torch.distributed is used to handle "
-            "communication between training worker 0, and the other "
-            "training workers. If ray is selected, the Ray library is "
-            "used to create load the index on separate processes, "
-            "and Ray handles the communication between the training "
-            "workers and the retrieval actors.",
+            help=(
+                "What implementation to use for distributed retriever? If "
+                "pytorch is selected, the index is loaded on training "
+                "worker 0, and torch.distributed is used to handle "
+                "communication between training worker 0, and the other "
+                "training workers. If ray is selected, the Ray library is "
+                "used to create load the index on separate processes, "
+                "and Ray handles the communication between the training "
+                "workers and the retrieval actors."
+            ),
         )
         parser.add_argument(
             "--use_dummy_dataset",
             type=bool,
             default=False,
-            help="Whether to use the dummy version of the dataset index. More info about custom indexes in the RagRetriever documentation as well as in `examples/rag/use_own_knowledge_dataset.py`",
+            help=(
+                "Whether to use the dummy version of the dataset index. More info about custom indexes in the"
+                " RagRetriever documentation as well as in `examples/rag/use_own_knowledge_dataset.py`"
+            ),
         )
         return parser
 
@@ -494,18 +513,22 @@ class GenerativeQAModule(BaseTransformer):
             "--ray-address",
             default="auto",
             type=str,
-            help="The address of the Ray cluster to connect to. If not "
-            "specified, Ray will attempt to automatically detect the "
-            "cluster. Has no effect if pytorch is used as the distributed "
-            "retriever.",
+            help=(
+                "The address of the Ray cluster to connect to. If not "
+                "specified, Ray will attempt to automatically detect the "
+                "cluster. Has no effect if pytorch is used as the distributed "
+                "retriever."
+            ),
         )
         parser.add_argument(
             "--num_retrieval_workers",
             type=int,
             default=1,
-            help="The number of retrieval actors to use when Ray is selected"
-            "for the distributed retriever. Has no effect when "
-            "distributed_retriever is set to pytorch.",
+            help=(
+                "The number of retrieval actors to use when Ray is selected"
+                "for the distributed retriever. Has no effect when "
+                "distributed_retriever is set to pytorch."
+            ),
         )
         return parser
 
@@ -523,10 +546,10 @@ def main(args=None, model=None) -> GenerativeQAModule:
     named_actors = []
     if args.distributed_retriever == "ray" and args.gpus > 1:
         if not is_ray_available():
-            raise RuntimeError("Please install Ray to use the Ray " "distributed retriever.")
+            raise RuntimeError("Please install Ray to use the Ray distributed retriever.")
         # Connect to an existing Ray cluster.
         try:
-            ray.init(address=args.ray_address)
+            ray.init(address=args.ray_address, namespace="rag")
         except (ConnectionError, ValueError):
             logger.warning(
                 "Connection to Ray cluster failed. Make sure a Ray"
@@ -541,8 +564,8 @@ def main(args=None, model=None) -> GenerativeQAModule:
             raise
 
         # Create Ray actors only for rank 0.
-        if ("LOCAL_RANK" not in os.environ or os.environ["LOCAL_RANK"] == 0) and (
-            "NODE_RANK" not in os.environ or os.environ["NODE_RANK"] == 0
+        if ("LOCAL_RANK" not in os.environ or int(os.environ["LOCAL_RANK"]) == 0) and (
+            "NODE_RANK" not in os.environ or int(os.environ["NODE_RANK"]) == 0
         ):
             remote_cls = ray.remote(RayRetriever)
             named_actors = [
@@ -594,7 +617,7 @@ def main(args=None, model=None) -> GenerativeQAModule:
         checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric),
         early_stopping_callback=es_callback,
         logger=training_logger,
-        accelerator=CustomAccel() if args.gpus > 1 else None,
+        custom_ddp_plugin=CustomDDP() if args.gpus > 1 else None,
         profiler=pl.profiler.AdvancedProfiler() if args.profile else None,
     )
     pickle_save(model.hparams, model.output_dir / "hparams.pkl")

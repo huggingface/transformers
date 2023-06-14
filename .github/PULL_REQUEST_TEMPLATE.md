@@ -17,13 +17,13 @@ Fixes # (issue)
 
 ## Before submitting
 - [ ] This PR fixes a typo or improves the docs (you can dismiss the other checks if that's the case).
-- [ ] Did you read the [contributor guideline](https://github.com/huggingface/transformers/blob/master/CONTRIBUTING.md#start-contributing-pull-requests),
+- [ ] Did you read the [contributor guideline](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#start-contributing-pull-requests),
       Pull Request section?
 - [ ] Was this discussed/approved via a Github issue or the [forum](https://discuss.huggingface.co/)? Please add a link
       to it if that's the case.
 - [ ] Did you make sure to update the documentation with your changes? Here are the
-      [documentation guidelines](https://github.com/huggingface/transformers/tree/master/docs), and
-      [here are tips on formatting docstrings](https://github.com/huggingface/transformers/tree/master/docs#writing-source-documentation).
+      [documentation guidelines](https://github.com/huggingface/transformers/tree/main/docs), and
+      [here are tips on formatting docstrings](https://github.com/huggingface/transformers/tree/main/docs#writing-source-documentation).
 - [ ] Did you write any new necessary tests?
 
 
@@ -39,36 +39,38 @@ members/contributors who may be interested in your PR.
 
 Models:
 
-- albert, bert, xlm: @LysandreJik
-- blenderbot, bart, marian, pegasus, encoderdecoder,  t5: @patrickvonplaten, @patil-suraj
-- longformer, reformer, transfoxl, xlnet: @patrickvonplaten
-- fsmt: @stas00
-- funnel: @sgugger
-- gpt2: @patrickvonplaten, @LysandreJik
-- rag: @patrickvonplaten, @lhoestq
-- tensorflow: @LysandreJik
+- text models: @ArthurZucker and @younesbelkada
+- vision models: @amyeroberts
+- speech models: @sanchit-gandhi
+- graph models: @clefourrier
 
 Library:
 
-- benchmarks: @patrickvonplaten
-- deepspeed: @stas00
-- ray/raytune: @richardliaw, @amogkam
-- text generation: @patrickvonplaten
-- tokenizers: @n1t0, @LysandreJik
+- flax: @sanchit-gandhi
+- generate: @gante
+- pipelines: @Narsil
+- tensorflow: @gante and @Rocketknight1
+- tokenizers: @ArthurZucker
 - trainer: @sgugger
-- pipelines: @LysandreJik
 
-Documentation: @sgugger
+Integrations:
+
+- deepspeed: HF Trainer/Accelerate: @pacman100
+- ray/raytune: @richardliaw, @amogkam
+
+Documentation: @sgugger, @stevhliu and @MKhalusova
 
 HF projects:
 
+- accelerate: [different repo](https://github.com/huggingface/accelerate)
 - datasets: [different repo](https://github.com/huggingface/datasets)
+- diffusers: [different repo](https://github.com/huggingface/diffusers)
 - rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
 
-Examples:
+Maintained examples (not research project or legacy):
 
-- maintained examples (not research project or legacy): @sgugger, @patil-suraj
-- research_projects/bert-loses-patience: @JetRunner
-- research_projects/distillation: @VictorSanh
+- Flax: @sanchit-gandhi
+- PyTorch: @sgugger
+- TensorFlow: @Rocketknight1
 
  -->

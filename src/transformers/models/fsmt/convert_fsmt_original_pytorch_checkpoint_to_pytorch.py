@@ -32,10 +32,9 @@ from fairseq import hub_utils
 from fairseq.data.dictionary import Dictionary
 
 from transformers import FSMTConfig, FSMTForConditionalGeneration
-from transformers.file_utils import WEIGHTS_NAME
 from transformers.models.fsmt.tokenization_fsmt import VOCAB_FILES_NAMES
 from transformers.tokenization_utils_base import TOKENIZER_CONFIG_FILE
-from transformers.utils import logging
+from transformers.utils import WEIGHTS_NAME, logging
 
 
 logging.set_verbosity_warning()
@@ -89,7 +88,6 @@ def rewrite_dict_keys(d):
 
 
 def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder_path):
-
     # prep
     assert os.path.exists(fsmt_checkpoint_path)
     os.makedirs(pytorch_dump_folder_path, exist_ok=True)
@@ -134,7 +132,7 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
         f.write(json.dumps(src_vocab, ensure_ascii=False, indent=json_indent))
 
     # detect whether this is a do_lower_case situation, which can be derived by checking whether we
-    # have at least one upcase letter in the source vocab
+    # have at least one uppercase letter in the source vocab
     do_lower_case = True
     for k in src_vocab.keys():
         if not k.islower():
@@ -270,7 +268,10 @@ if __name__ == "__main__":
         default=None,
         type=str,
         required=True,
-        help="Path to the official PyTorch checkpoint file which is expected to reside in the dump dir with dicts, bpecodes, etc.",
+        help=(
+            "Path to the official PyTorch checkpoint file which is expected to reside in the dump dir with dicts,"
+            " bpecodes, etc."
+        ),
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."

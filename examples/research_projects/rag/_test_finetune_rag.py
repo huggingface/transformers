@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import finetune_rag
+
 from transformers.file_utils import is_apex_available
 from transformers.testing_utils import (
     TestCasePlus,
@@ -17,6 +18,9 @@ from transformers.testing_utils import (
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
+
+stream_handler = logging.StreamHandler(sys.stdout)
+logger.addHandler(stream_handler)
 
 
 class RagFinetuneExampleTests(TestCasePlus):
@@ -31,9 +35,6 @@ class RagFinetuneExampleTests(TestCasePlus):
                     f.write(content)
 
     def _run_finetune(self, gpus: int, distributed_retriever: str = "pytorch"):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
         tmp_dir = self.get_auto_remove_tmp_dir()
         output_dir = os.path.join(tmp_dir, "output")
         data_dir = os.path.join(tmp_dir, "data")

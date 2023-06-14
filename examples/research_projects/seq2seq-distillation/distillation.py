@@ -5,16 +5,15 @@ import gc
 import os
 import sys
 from pathlib import Path
-from typing import List
+from typing import List  # noqa: F401
 
 import pytorch_lightning as pl
 import torch
-from torch import nn
-from torch.nn import functional as F
-
 from finetune import SummarizationModule, TranslationModule
 from finetune import main as ft_main
 from make_student import create_student_by_copying_alternating_layers, get_layers_to_supervise
+from torch import nn
+
 from transformers import AutoModelForSeq2SeqLM, MBartTokenizer, T5ForConditionalGeneration
 from transformers.models.bart.modeling_bart import shift_tokens_right
 from utils import calculate_bleu, check_output_dir, freeze_params, label_smoothed_nll_loss, use_task_specific_params
@@ -53,9 +52,10 @@ class SummarizationDistiller(SummarizationModule):
             student.config.length_penalty = hparams.length_penalty
         hparams.tokenizer_name = hparams.teacher  # Use teacher's tokenizer
         super().__init__(hparams, model=student, config=student.config)
-        assert (
-            student.config.model_type == teacher.config.model_type
-        ), f"teacher, student model types should be the same, got {student.config.model_type} != {teacher.config.model_type}"
+        assert student.config.model_type == teacher.config.model_type, (
+            f"teacher, student model types should be the same, got {student.config.model_type} !="
+            f" {teacher.config.model_type}"
+        )
 
         if student.config.model_type == "t5":
             student_encoder_layers = len(student.get_encoder().block)
@@ -123,8 +123,8 @@ class SummarizationDistiller(SummarizationModule):
         assert t_logits_slct.size() == s_logits_slct.size()
         loss_ce = (
             self.ce_loss_fct(
-                F.log_softmax(s_logits_slct / self.temperature, dim=-1),
-                F.softmax(t_logits_slct / self.temperature, dim=-1),
+                nn.functional.log_softmax(s_logits_slct / self.temperature, dim=-1),
+                nn.functional.softmax(t_logits_slct / self.temperature, dim=-1),
             )
             * (self.temperature) ** 2
         )
@@ -160,10 +160,10 @@ class SummarizationDistiller(SummarizationModule):
         assert lm_logits.shape[-1] == self.model.config.vocab_size
         if self.hparams.label_smoothing == 0:
             # Same behavior as modeling_bart.py, besides ignoring pad_token_id
-            loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
+            loss_fct = nn.CrossEntropyLoss(ignore_index=pad_token_id)
             student_lm_loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), labels.view(-1))
         else:
-            lprobs = F.log_softmax(lm_logits, dim=-1)
+            lprobs = nn.functional.log_softmax(lm_logits, dim=-1)
             student_lm_loss, _ = label_smoothed_nll_loss(
                 lprobs, labels, self.hparams.label_smoothing, ignore_index=pad_token_id
             )
@@ -230,9 +230,9 @@ class SummarizationDistiller(SummarizationModule):
         teacher_states = torch.stack([hidden_states_T[j] for j in matches])
         assert student_states.shape == teacher_states.shape, f"{student_states.shape} != {teacher_states.shape}"
         if normalize_hidden:
-            student_states = F.layer_norm(student_states, student_states.shape[1:])
-            teacher_states = F.layer_norm(teacher_states, teacher_states.shape[1:])
-        mse = F.mse_loss(student_states, teacher_states, reduction="none")
+            student_states = nn.functional.layer_norm(student_states, student_states.shape[1:])
+            teacher_states = nn.functional.layer_norm(teacher_states, teacher_states.shape[1:])
+        mse = nn.functional.mse_loss(student_states, teacher_states, reduction="none")
         masked_mse = (mse * mask.unsqueeze(0).unsqueeze(-1)).sum() / valid_count
         return masked_mse
 

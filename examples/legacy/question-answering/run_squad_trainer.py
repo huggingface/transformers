@@ -30,9 +30,10 @@ from transformers import (
     DataCollatorWithPadding,
     HfArgumentParser,
     SquadDataset,
+    Trainer,
+    TrainingArguments,
 )
 from transformers import SquadDataTrainingArguments as DataTrainingArguments
-from transformers import Trainer, TrainingArguments
 from transformers.trainer_utils import is_main_process
 
 
@@ -84,12 +85,13 @@ def main():
         and not training_args.overwrite_output_dir
     ):
         raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
+            f"Output directory ({training_args.output_dir}) already exists and is not empty. Use"
+            " --overwrite_output_dir to overcome."
         )
 
     # Setup logging
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO if training_args.local_rank in [-1, 0] else logging.WARN,
     )

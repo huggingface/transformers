@@ -21,9 +21,8 @@ import json
 import numpy
 import torch
 
-from transformers.file_utils import CONFIG_NAME, WEIGHTS_NAME
 from transformers.models.xlm.tokenization_xlm import VOCAB_FILES_NAMES
-from transformers.utils import logging
+from transformers.utils import CONFIG_NAME, WEIGHTS_NAME, logging
 
 
 logging.set_verbosity_info()
@@ -44,10 +43,10 @@ def convert_xlm_checkpoint_to_pytorch(xlm_checkpoint_path, pytorch_dump_folder_p
             two_levels_state_dict["transformer." + k] = v
 
     config = chkpt["params"]
-    config = dict((n, v) for n, v in config.items() if not isinstance(v, (torch.FloatTensor, numpy.ndarray)))
+    config = {n: v for n, v in config.items() if not isinstance(v, (torch.FloatTensor, numpy.ndarray))}
 
     vocab = chkpt["dico_word2id"]
-    vocab = dict((s + "</w>" if s.find("@@") == -1 and i > 13 else s.replace("@@", ""), i) for s, i in vocab.items())
+    vocab = {s + "</w>" if s.find("@@") == -1 and i > 13 else s.replace("@@", ""): i for s, i in vocab.items()}
 
     # Save pytorch-model
     pytorch_weights_dump_path = pytorch_dump_folder_path + "/" + WEIGHTS_NAME

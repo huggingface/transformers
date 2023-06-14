@@ -30,11 +30,10 @@ import abc
 import functools
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 
-import numpy as onp
-from absl import logging
-
 import jax
 import jax.numpy as jnp
+import numpy as onp
+from absl import logging
 from jax import lax, random
 
 
@@ -524,7 +523,6 @@ class FastAttentionviaLowRankDecomposition(FastAttention):
         deterministic=False,
         precision=None,
     ):
-
         assert key.shape[:-1] == value.shape[:-1]
         assert query.shape[0:1] == key.shape[0:1] and query.shape[-1] == key.shape[-1]
         if axis is None:
@@ -535,7 +533,7 @@ class FastAttentionviaLowRankDecomposition(FastAttention):
         assert key.ndim == value.ndim
         for ax in axis:
             if not (query.ndim >= 3 and 1 <= ax < query.ndim - 2):
-                raise ValueError("Attention axis must be between the batch " "axis and the last-two axes.")
+                raise ValueError("Attention axis must be between the batch axis and the last-two axes.")
         n = key.ndim
 
         # Constructing projection tensor.

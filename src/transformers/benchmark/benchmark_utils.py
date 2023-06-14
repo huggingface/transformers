@@ -23,6 +23,7 @@ import linecache
 import os
 import platform
 import sys
+import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict, namedtuple
 from datetime import datetime
@@ -32,8 +33,7 @@ from typing import Callable, Iterable, List, NamedTuple, Optional, Union
 
 from .. import AutoConfig, PretrainedConfig
 from .. import __version__ as version
-from ..file_utils import is_psutil_available, is_py3nvml_available, is_tf_available, is_torch_available
-from ..utils import logging
+from ..utils import is_psutil_available, is_py3nvml_available, is_tf_available, is_torch_available, logging
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -79,7 +79,6 @@ def separate_process_wrapper_fn(func: Callable[[], None], do_multi_processing: b
     measurements it is important that the function is executed in a separate process
 
     Args:
-
         - `func`: (`callable`): function() -> ... generic function which will be executed in its own separate process
         - `do_multi_processing`: (`bool`) Whether to run function on separate process or not
     """
@@ -210,7 +209,6 @@ def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_i
     https://github.com/pythonprofilers/memory_profiler/blob/895c4ac7a08020d66ae001e24067da6dcea42451/memory_profiler.py#L239
 
     Args:
-
         - `function`: (`callable`): function() -> ... function without any arguments to measure for which to measure
           the peak memory
 
@@ -228,7 +226,6 @@ def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_i
         measures current cpu memory usage of a given `process_id`
 
         Args:
-
             - `process_id`: (`int`) process_id for which to measure memory
 
         Returns
@@ -336,7 +333,6 @@ def start_memory_tracing(
     https://psutil.readthedocs.io/en/latest/#psutil.Process.memory_info
 
     Args:
-
         - `modules_to_trace`: (None, string, list/tuple of string) if None, all events are recorded if string or list
           of strings: only events from the listed module/sub-module will be recorded (e.g. 'fairseq' or
           'transformers.models.gpt2.modeling_gpt2')
@@ -379,7 +375,7 @@ def start_memory_tracing(
             devices = list(range(nvml.nvmlDeviceGetCount())) if gpus_to_trace is None else gpus_to_trace
             nvml.nvmlShutdown()
         except (OSError, nvml.NVMLError):
-            logger.warning("Error while initializing communication with GPU. " "We won't perform GPU memory tracing.")
+            logger.warning("Error while initializing communication with GPU. We won't perform GPU memory tracing.")
             log_gpu = False
         else:
             log_gpu = is_torch_available() or is_tf_available()
@@ -483,7 +479,6 @@ def stop_memory_tracing(
     Stop memory tracing cleanly and return a summary of the memory trace if a trace is given.
 
     Args:
-
         `memory_trace` (optional output of start_memory_tracing, default: None):
             memory trace to convert in summary
         `ignore_released_memory` (boolean, default: None):
@@ -562,9 +557,9 @@ def stop_memory_tracing(
             cumulative_memory_dict[frame][2] += cpu_gpu_mem_inc
 
         cumulative_memory = sorted(
-            list(cumulative_memory_dict.items()), key=lambda x: x[1][2], reverse=True
+            cumulative_memory_dict.items(), key=lambda x: x[1][2], reverse=True
         )  # order by the total CPU + GPU memory increase
-        cumulative_memory = list(
+        cumulative_memory = [
             MemoryState(
                 frame=frame,
                 cpu=Memory(cpu_mem_inc),
@@ -572,7 +567,7 @@ def stop_memory_tracing(
                 cpu_gpu=Memory(cpu_gpu_mem_inc),
             )
             for frame, (cpu_mem_inc, gpu_mem_inc, cpu_gpu_mem_inc) in cumulative_memory
-        )
+        ]
 
         memory_curr_trace = sorted(memory_curr_trace, key=lambda x: x.cpu_gpu.bytes, reverse=True)
 
@@ -615,11 +610,19 @@ class Benchmark(ABC):
                 model_name: AutoConfig.from_pretrained(model_name) for model_name in self.args.model_names
             }
         else:
-            self.config_dict = {model_name: config for model_name, config in zip(self.args.model_names, configs)}
+            self.config_dict = dict(zip(self.args.model_names, configs))
+
+        warnings.warn(
+            f"The class {self.__class__} is deprecated. Hugging Face Benchmarking utils"
+            " are deprecated in general and it is advised to use external Benchmarking libraries "
+            " to benchmark Transformer models.",
+            FutureWarning,
+        )
 
         if self.args.memory and os.getenv("TRANSFORMERS_USE_MULTIPROCESSING") == 0:
             logger.warning(
-                "Memory consumption will not be measured accurately if `args.multi_process` is set to `False.` The flag 'TRANSFORMERS_USE_MULTIPROCESSING' should only be disabled for debugging / testing."
+                "Memory consumption will not be measured accurately if `args.multi_process` is set to `False.` The"
+                " flag 'TRANSFORMERS_USE_MULTIPROCESSING' should only be disabled for debugging / testing."
             )
 
         self._print_fn = None
@@ -725,7 +728,8 @@ class Benchmark(ABC):
                 self.save_to_csv(inference_result_time, self.args.inference_time_csv_file)
                 if self.args.is_tpu:
                     self.print_fn(
-                        "TPU was used for inference. Note that the time after compilation stabilized (after ~10 inferences model.forward(..) calls) was measured."
+                        "TPU was used for inference. Note that the time after compilation stabilized (after ~10"
+                        " inferences model.forward(..) calls) was measured."
                     )
 
             if self.args.memory:
@@ -744,7 +748,8 @@ class Benchmark(ABC):
                 self.save_to_csv(train_result_time, self.args.train_time_csv_file)
                 if self.args.is_tpu:
                     self.print_fn(
-                        "TPU was used for training. Note that the time after compilation stabilized (after ~10 train loss=model.forward(...) + loss.backward() calls) was measured."
+                        "TPU was used for training. Note that the time after compilation stabilized (after ~10 train"
+                        " loss=model.forward(...) + loss.backward() calls) was measured."
                     )
 
             if self.args.memory:
@@ -801,7 +806,7 @@ class Benchmark(ABC):
                 info["cpu_ram_mb"] = bytes_to_mega_bytes(psutil.virtual_memory().total)
             else:
                 logger.warning(
-                    "Psutil not installed, we won't log available CPU memory."
+                    "Psutil not installed, we won't log available CPU memory. "
                     "Install psutil (pip install psutil) to log available CPU memory."
                 )
                 info["cpu_ram_mb"] = "N/A"
@@ -885,7 +890,6 @@ class Benchmark(ABC):
             return
         self.print_fn("Saving results to csv.")
         with open(filename, mode="w") as csv_file:
-
             assert len(self.args.model_names) > 0, f"At least 1 model should be defined, but got {self.model_names}"
 
             fieldnames = ["model", "batch_size", "sequence_length"]

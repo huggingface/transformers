@@ -23,15 +23,15 @@ import time
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data as data
 from nltk.tokenize.treebank import TreebankWordDetokenizer
+from pplm_classification_head import ClassificationHead
+from torch import nn
 from torchtext import data as torchtext_data
 from torchtext import datasets
 from tqdm import tqdm, trange
 
-from pplm_classification_head import ClassificationHead
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
 
 
@@ -42,7 +42,7 @@ example_sentence = "This is incredible! I love it, this is the best chicken I ha
 max_length_seq = 100
 
 
-class Discriminator(torch.nn.Module):
+class Discriminator(nn.Module):
     """Transformer encoder followed by a Classification Head"""
 
     def __init__(self, class_size, pretrained_model="gpt2-medium", cached_mode=False, device="cpu"):
@@ -76,7 +76,7 @@ class Discriminator(torch.nn.Module):
             avg_hidden = self.avg_representation(x.to(self.device))
 
         logits = self.classifier_head(avg_hidden)
-        probs = F.log_softmax(logits, dim=-1)
+        probs = nn.functional.log_softmax(logits, dim=-1)
 
         return probs
 
@@ -140,7 +140,7 @@ def train_epoch(data_loader, discriminator, optimizer, epoch=0, log_interval=10,
         optimizer.zero_grad()
 
         output_t = discriminator(input_t)
-        loss = F.nll_loss(output_t, target_t)
+        loss = nn.functional.nll_loss(output_t, target_t)
         loss.backward(retain_graph=True)
         optimizer.step()
 
@@ -167,7 +167,7 @@ def evaluate_performance(data_loader, discriminator, device="cpu"):
             input_t, target_t = input_t.to(device), target_t.to(device)
             output_t = discriminator(input_t)
             # sum up batch loss
-            test_loss += F.nll_loss(output_t, target_t, reduction="sum").item()
+            test_loss += nn.functional.nll_loss(output_t, target_t, reduction="sum").item()
             # get the index of the max log-probability
             pred_t = output_t.argmax(dim=1, keepdim=True)
             correct += pred_t.eq(target_t.view_as(pred_t)).sum().item()
@@ -175,8 +175,7 @@ def evaluate_performance(data_loader, discriminator, device="cpu"):
     test_loss /= len(data_loader.dataset)
 
     print(
-        "Performance on test set: "
-        "Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)".format(
+        "Performance on test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)".format(
             test_loss, correct, len(data_loader.dataset), 100.0 * correct / len(data_loader.dataset)
         )
     )
@@ -309,7 +308,7 @@ def train_discriminator(
                     x.append(seq)
                     y.append(d["label"])
                 except Exception:
-                    print("Error evaluating / tokenizing" " line {}, skipping it".format(i))
+                    print("Error evaluating / tokenizing line {}, skipping it".format(i))
                     pass
 
         full_dataset = Dataset(x, y)
@@ -349,7 +348,7 @@ def train_discriminator(
                     x.append(seq)
                     y.append(int(np.sum(d["label"]) > 0))
                 except Exception:
-                    print("Error evaluating / tokenizing" " line {}, skipping it".format(i))
+                    print("Error evaluating / tokenizing line {}, skipping it".format(i))
                     pass
 
         full_dataset = Dataset(x, y)
@@ -370,7 +369,7 @@ def train_discriminator(
         # class \t text
 
         if dataset_fp is None:
-            raise ValueError("When generic dataset is selected, " "dataset_fp needs to be specified aswell.")
+            raise ValueError("When generic dataset is selected, dataset_fp needs to be specified aswell.")
 
         classes = set()
         with open(dataset_fp) as f:
@@ -490,15 +489,17 @@ if __name__ == "__main__":
         type=str,
         default="SST",
         choices=("SST", "clickbait", "toxic", "generic"),
-        help="dataset to train the discriminator on."
-        "In case of generic, the dataset is expected"
-        "to be a TSBV file with structure: class \\t text",
+        help=(
+            "dataset to train the discriminator on."
+            "In case of generic, the dataset is expected"
+            "to be a TSBV file with structure: class \\t text"
+        ),
     )
     parser.add_argument(
         "--dataset_fp",
         type=str,
         default="",
-        help="File path of the dataset to use. " "Needed only in case of generic datadset",
+        help="File path of the dataset to use. Needed only in case of generic datadset",
     )
     parser.add_argument(
         "--pretrained_model", type=str, default="gpt2-medium", help="Pretrained model to use as encoder"

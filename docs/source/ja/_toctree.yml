@@ -1,0 +1,14 @@
+- sections:
+  - local: index
+    title: 🤗 Transformers
+  - local: installation
+    title: インストール
+  title: はじめに
+- sections:
+  - local: accelerate
+    title: 🤗 Accelerate を用いた分散学習
+  title: チュートリアル
+- sections:
+  - sections:
+    - local: multilingual
+      title: 推論のための多言語モデル

@@ -6,10 +6,10 @@ import sys
 from collections import namedtuple
 
 import torch
+from modeling_bertabs import BertAbs, build_predictor
 from torch.utils.data import DataLoader, SequentialSampler
 from tqdm import tqdm
 
-from modeling_bertabs import BertAbs, build_predictor
 from transformers import BertTokenizer
 
 from .utils_summarization import (
@@ -45,7 +45,6 @@ def evaluate(args):
         generated_summaries = []
 
         import nltk
-
         import rouge
 
         nltk.download("punkt")
@@ -325,7 +324,8 @@ def main():
 
     if not documents_dir_is_valid(args.documents_dir):
         raise FileNotFoundError(
-            "We could not find the directory you specified for the documents to summarize, or it was empty. Please specify a valid path."
+            "We could not find the directory you specified for the documents to summarize, or it was empty. Please"
+            " specify a valid path."
         )
     os.makedirs(args.summaries_output_dir, exist_ok=True)
 

@@ -25,13 +25,12 @@ import timeit
 
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from emmental import MaskedBertConfig, MaskedBertForQuestionAnswering
+from torch import nn
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
-from emmental import MaskedBertConfig, MaskedBertForQuestionAnswering
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
@@ -89,7 +88,7 @@ def schedule_threshold(
         spars_warmup_steps = initial_warmup * warmup_steps
         spars_schedu_steps = (final_warmup + initial_warmup) * warmup_steps
         mul_coeff = 1 - (step - spars_warmup_steps) / (total_step - spars_schedu_steps)
-        threshold = final_threshold + (initial_threshold - final_threshold) * (mul_coeff ** 3)
+        threshold = final_threshold + (initial_threshold - final_threshold) * (mul_coeff**3)
     regu_lambda = final_lambda * threshold / final_threshold
     return threshold, regu_lambda
 
@@ -113,7 +112,7 @@ def to_list(tensor):
 
 
 def train(args, train_dataset, model, tokenizer, teacher=None):
-    """ Train the model """
+    """Train the model"""
     if args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter(log_dir=args.output_dir)
 
@@ -176,11 +175,11 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
 
     # multi-gpu training (should be after apex fp16 initialization)
     if args.n_gpu > 1:
-        model = torch.nn.DataParallel(model)
+        model = nn.DataParallel(model)
 
     # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
-        model = torch.nn.parallel.DistributedDataParallel(
+        model = nn.parallel.DistributedDataParallel(
             model,
             device_ids=[args.local_rank],
             output_device=args.local_rank,
@@ -237,7 +236,6 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
-
             # Skip past any already trained steps if resuming training
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
@@ -307,22 +305,16 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
                         attention_mask=inputs["attention_mask"],
                     )
 
-                loss_start = (
-                    F.kl_div(
-                        input=F.log_softmax(start_logits_stu / args.temperature, dim=-1),
-                        target=F.softmax(start_logits_tea / args.temperature, dim=-1),
-                        reduction="batchmean",
-                    )
-                    * (args.temperature ** 2)
-                )
-                loss_end = (
-                    F.kl_div(
-                        input=F.log_softmax(end_logits_stu / args.temperature, dim=-1),
-                        target=F.softmax(end_logits_tea / args.temperature, dim=-1),
-                        reduction="batchmean",
-                    )
-                    * (args.temperature ** 2)
-                )
+                loss_start = nn.functional.kl_div(
+                    input=nn.functional.log_softmax(start_logits_stu / args.temperature, dim=-1),
+                    target=nn.functional.softmax(start_logits_tea / args.temperature, dim=-1),
+                    reduction="batchmean",
+                ) * (args.temperature**2)
+                loss_end = nn.functional.kl_div(
+                    input=nn.functional.log_softmax(end_logits_stu / args.temperature, dim=-1),
+                    target=nn.functional.softmax(end_logits_tea / args.temperature, dim=-1),
+                    reduction="batchmean",
+                ) * (args.temperature**2)
                 loss_logits = (loss_start + loss_end) / 2.0
 
                 loss = args.alpha_distil * loss_logits + args.alpha_ce * loss
@@ -346,9 +338,9 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
                 if args.fp16:
-                    torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
+                    nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
                 else:
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                    nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
                     tb_writer.add_scalar("threshold", threshold, global_step)
@@ -454,8 +446,8 @@ def evaluate(args, model, tokenizer, prefix=""):
     eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
     # multi-gpu eval
-    if args.n_gpu > 1 and not isinstance(model, torch.nn.DataParallel):
-        model = torch.nn.DataParallel(model)
+    if args.n_gpu > 1 and not isinstance(model, nn.DataParallel):
+        model = nn.DataParallel(model)
 
     # Eval!
     logger.info("***** Running evaluation {} *****".format(prefix))
@@ -744,8 +736,10 @@ def main():
         "--max_seq_length",
         default=384,
         type=int,
-        help="The maximum total input sequence length after WordPiece tokenization. Sequences "
-        "longer than this will be truncated, and sequences shorter than this will be padded.",
+        help=(
+            "The maximum total input sequence length after WordPiece tokenization. Sequences "
+            "longer than this will be truncated, and sequences shorter than this will be padded."
+        ),
     )
     parser.add_argument(
         "--doc_stride",
@@ -757,8 +751,10 @@ def main():
         "--max_query_length",
         default=64,
         type=int,
-        help="The maximum number of tokens for the question. Questions longer than this will "
-        "be truncated to this length.",
+        help=(
+            "The maximum number of tokens for the question. Questions longer than this will "
+            "be truncated to this length."
+        ),
     )
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
@@ -792,22 +788,29 @@ def main():
         "--initial_warmup",
         default=1,
         type=int,
-        help="Run `initial_warmup` * `warmup_steps` steps of threshold warmup during which threshold stays"
-        "at its `initial_threshold` value (sparsity schedule).",
+        help=(
+            "Run `initial_warmup` * `warmup_steps` steps of threshold warmup during which threshold stays"
+            "at its `initial_threshold` value (sparsity schedule)."
+        ),
     )
     parser.add_argument(
         "--final_warmup",
         default=2,
         type=int,
-        help="Run `final_warmup` * `warmup_steps` steps of threshold cool-down during which threshold stays"
-        "at its final_threshold value (sparsity schedule).",
+        help=(
+            "Run `final_warmup` * `warmup_steps` steps of threshold cool-down during which threshold stays"
+            "at its final_threshold value (sparsity schedule)."
+        ),
     )
 
     parser.add_argument(
         "--pruning_method",
         default="topK",
         type=str,
-        help="Pruning Method (l0 = L0 regularization, magnitude = Magnitude pruning, topK = Movement pruning, sigmoied_threshold = Soft movement pruning).",
+        help=(
+            "Pruning Method (l0 = L0 regularization, magnitude = Magnitude pruning, topK = Movement pruning,"
+            " sigmoied_threshold = Soft movement pruning)."
+        ),
     )
     parser.add_argument(
         "--mask_init",
@@ -840,7 +843,10 @@ def main():
         "--teacher_type",
         default=None,
         type=str,
-        help="Teacher type. Teacher tokenizer and student (model) tokenizer must output the same tokenization. Only for distillation.",
+        help=(
+            "Teacher type. Teacher tokenizer and student (model) tokenizer must output the same tokenization. Only for"
+            " distillation."
+        ),
     )
     parser.add_argument(
         "--teacher_name_or_path",
@@ -890,20 +896,27 @@ def main():
         "--max_answer_length",
         default=30,
         type=int,
-        help="The maximum length of an answer that can be generated. This is needed because the start "
-        "and end predictions are not conditioned on one another.",
+        help=(
+            "The maximum length of an answer that can be generated. This is needed because the start "
+            "and end predictions are not conditioned on one another."
+        ),
     )
     parser.add_argument(
         "--verbose_logging",
         action="store_true",
-        help="If true, all of the warnings related to data processing will be printed. "
-        "A number of warnings are expected for a normal SQuAD evaluation.",
+        help=(
+            "If true, all of the warnings related to data processing will be printed. "
+            "A number of warnings are expected for a normal SQuAD evaluation."
+        ),
     )
     parser.add_argument(
         "--lang_id",
         default=0,
         type=int,
-        help="language id of input for language-specific xlm models (see tokenization_xlm.PRETRAINED_INIT_CONFIGURATION)",
+        help=(
+            "language id of input for language-specific xlm models (see"
+            " tokenization_xlm.PRETRAINED_INIT_CONFIGURATION)"
+        ),
     )
 
     parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
@@ -932,8 +945,10 @@ def main():
         "--fp16_opt_level",
         type=str,
         default="O1",
-        help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
-        "See details at https://nvidia.github.io/apex/amp.html",
+        help=(
+            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+            "See details at https://nvidia.github.io/apex/amp.html"
+        ),
     )
     parser.add_argument("--server_ip", type=str, default="", help="Can be used for distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="Can be used for distant debugging.")
@@ -986,7 +1001,7 @@ def main():
 
     # Setup logging
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN,
     )
@@ -1094,10 +1109,10 @@ def main():
             logger.info("Loading checkpoints saved during training for evaluation")
             checkpoints = [args.output_dir]
             if args.eval_all_checkpoints:
-                checkpoints = list(
+                checkpoints = [
                     os.path.dirname(c)
                     for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
-                )
+                ]
 
         else:
             logger.info("Loading checkpoint %s for evaluation", args.model_name_or_path)
@@ -1114,7 +1129,7 @@ def main():
             # Evaluate
             result = evaluate(args, model, tokenizer, prefix=global_step)
 
-            result = dict((k + ("_{}".format(global_step) if global_step else ""), v) for k, v in result.items())
+            result = {k + ("_{}".format(global_step) if global_step else ""): v for k, v in result.items()}
             results.update(result)
 
     logger.info("Results: {}".format(results))

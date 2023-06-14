@@ -43,7 +43,7 @@ open-source contribution to Transformers. Along the way, you will:
 -   understand the design principles of one of the most popular NLP
     libraries
 -   learn how to do efficiently test large NLP models
--   learn how to integrate Python utilities like `black`, `isort`,
+-   learn how to integrate Python utilities like `black`, `ruff`,
     `make fix-copies` into a library to always ensure clean and readable
     code
 
@@ -91,7 +91,7 @@ exemplary purposes, we will call the PyTorch model to be added to 🤗 Transform
 
 Let's take a look:
 
-![image](../../docs/source/imgs/transformers_overview.png)
+![image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers_overview.png)
 
 As you can see, we do make use of inheritance in 🤗 Transformers, but we
 keep the level of abstraction to an absolute minimum. There are never
@@ -387,10 +387,10 @@ execution which can be helpful to better split logical components from
 one another and to have faster debugging cycles as intermediate results
 can be stored. Also, notebooks are often easier to share with other
 contributors, which might be very helpful if you want to ask the Hugging
-Face team for help. If you are familiar with Jupiter notebooks, we
+Face team for help. If you are familiar with Jupyter notebooks, we
 strongly recommend you to work with them.
 
-The obvious disadvantage of Jupyther notebooks is that if you are not
+The obvious disadvantage of Jupyter notebooks is that if you are not
 used to working with them you will have to spend some time adjusting to
 the new programming environment and that you might not be able to use
 your known debugging tools anymore, like `ipdb`.
@@ -535,7 +535,7 @@ to make your debugging environment as efficient as possible.
     due to multiple dropout layers in the model. Make sure that the
     forward pass in your debugging environment is **deterministic** so
     that the dropout layers are not used. Or use
-    `transformers.file_utils.set_seed` if the old and new
+    `transformers.utils.set_seed` if the old and new
     implementations are in the same framework.
 
 #### More details on how to create a debugging environment for [camelcase name of model] 
@@ -562,12 +562,12 @@ Cookiecutter!
 **Use the Cookiecutter to automatically generate the model's code**
 
 To begin with head over to the [🤗 Transformers
-templates](https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model)
+templates](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model)
 to make use of our `cookiecutter` implementation to automatically
 generate all the relevant files for your model. Again, we recommend only
 adding the PyTorch version of the model at first. Make sure you follow
 the instructions of the `README.md` on the [🤗 Transformers
-templates](https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model)
+templates](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model)
 carefully.
 
 **Open a Pull Request on the main huggingface/transformers repo**
@@ -580,7 +580,7 @@ Transformers.
 
 You should do the following:
 
-1.  Create a branch with a descriptive name from your master branch
+1.  Create a branch with a descriptive name from your main branch
 
 ```
     git checkout -b add_[lowercase name of model]
@@ -593,11 +593,11 @@ You should do the following:
     git commit
 ```
 
-3.  Fetch and rebase to current master
+3.  Fetch and rebase to current main
 
 ```
     git fetch upstream
-    git rebase upstream/master
+    git rebase upstream/main
 ```
 
 4.  Push the changes to your account using:
@@ -617,10 +617,10 @@ You should do the following:
 In the following, whenever you have done some progress, don't forget to
 commit your work and push it to your account so that it shows in the
 pull request. Additionally, you should make sure to update your work
-with the current master from time to time by doing:
+with the current main from time to time by doing:
 
     git fetch upstream
-    git merge upstream/master
+    git merge upstream/main
 
 In general, all questions you might have regarding the model or your
 implementation should be asked in your PR and discussed/solved in the
@@ -703,7 +703,7 @@ similar already existing conversion script for your model.
     [here](https://github.com/huggingface/transformers/blob/7acfa95afb8194f8f9c1f4d2c6028224dbed35a2/src/transformers/models/bert/modeling_bert.py#L91)
 -   If you are porting a model from PyTorch to PyTorch, a good starting
     point might be BART's conversion script
-    [here](https://github.com/huggingface/transformers/blob/master/src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py)
+    [here](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py)
 
 In the following, we'll quickly explain how PyTorch models store layer
 weights and define layer names. In PyTorch, the name of a layer is
@@ -711,7 +711,7 @@ defined by the name of the class attribute you give the layer. Let's
 define a dummy model in PyTorch, called `SimpleModel` as follows:
 
 ```python
-import torch.nn as nn
+from torch import nn
 
 class SimpleModel(nn.Module):
     def __init__(self):
@@ -848,7 +848,7 @@ model.save_pretrained("/path/to/converted/checkpoint/folder")
 Having managed to correctly load the pretrained weights into the 🤗
 Transformers implementation, you should now make sure that the forward
 pass is correctly implemented. In [Get familiar with the original
-repository](#run-a-pretrained-checkpoint-using-the-original-repository),
+repository](#34-run-a-pretrained-checkpoint-using-the-original-repository),
 you have already created a script that runs a forward pass of the model
 using the original repository. Now you should write an analogous script
 using the 🤗 Transformers implementation instead of the original one. It
@@ -990,7 +990,7 @@ tokenizer.
 For [camelcase name of model], the tokenizer files can be found here:
 - [To be filled out by mentor]
 
-and having implemented the  🤗Transformers' version of the tokenizer can be loaded as follows:
+and having implemented the 🤗 Transformers' version of the tokenizer can be loaded as follows:
 
 [To be filled out by mentor]
 
@@ -1122,7 +1122,7 @@ for the community.
 **14. Submit your finished PR**
 
 You're done programming now and can move to the last step, which is
-getting your PR merged into master. Usually, [name of mentor]
+getting your PR merged into main. Usually, [name of mentor]
 should have helped you already at this point, but it is worth taking
 some time to give your finished PR a nice description and eventually add
 comments to your code, if you want to point out certain design choices

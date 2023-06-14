@@ -28,12 +28,12 @@ from transformers.optimization import (
     get_linear_schedule_with_warmup,
     get_polynomial_decay_schedule_with_warmup,
 )
-from transformers.utils.versions import require_version_examples
+from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)
 
-require_version_examples("pytorch_lightning>=1.0.4")
+require_version("pytorch_lightning>=1.0.4")
 
 MODEL_MODES = {
     "base": AutoModel,
@@ -69,7 +69,7 @@ class BaseTransformer(pl.LightningModule):
         config=None,
         tokenizer=None,
         model=None,
-        **config_kwargs
+        **config_kwargs,
     ):
         """Initialize a model, tokenizer and config."""
         super().__init__()
@@ -312,8 +312,10 @@ def add_generic_args(parser, root_dir) -> None:
         "--fp16_opt_level",
         type=str,
         default="O2",
-        help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
-        "See details at https://nvidia.github.io/apex/amp.html",
+        help=(
+            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+            "See details at https://nvidia.github.io/apex/amp.html"
+        ),
     )
     parser.add_argument("--n_tpu_cores", dest="tpu_cores", type=int)
     parser.add_argument("--max_grad_norm", dest="gradient_clip_val", default=1.0, type=float, help="Max gradient norm")
@@ -344,7 +346,7 @@ def generic_train(
     extra_callbacks=[],
     checkpoint_callback=None,
     logging_callback=None,
-    **extra_train_kwargs
+    **extra_train_kwargs,
 ):
     pl.seed_everything(args.seed)
 

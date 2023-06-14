@@ -20,10 +20,9 @@ from multiprocessing import Pool, cpu_count
 import numpy as np
 from tqdm import tqdm
 
-from ...file_utils import is_tf_available, is_torch_available
 from ...models.bert.tokenization_bert import whitespace_tokenize
 from ...tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase, TruncationStrategy
-from ...utils import logging
+from ...utils import is_tf_available, is_torch_available, logging
 from .utils import DataProcessor
 
 
@@ -58,7 +57,7 @@ def _check_is_max_context(doc_spans, cur_span_index, position):
     """Check if this is the 'max context' doc span for the token."""
     best_score = None
     best_span_index = None
-    for (span_index, doc_span) in enumerate(doc_spans):
+    for span_index, doc_span in enumerate(doc_spans):
         end = doc_span.start + doc_span.length - 1
         if position < doc_span.start:
             continue
@@ -80,7 +79,7 @@ def _new_check_is_max_context(doc_spans, cur_span_index, position):
     # return True
     best_score = None
     best_span_index = None
-    for (span_index, doc_span) in enumerate(doc_spans):
+    for span_index, doc_span in enumerate(doc_spans):
         end = doc_span["start"] + doc_span["length"] - 1
         if position < doc_span["start"]:
             continue
@@ -121,7 +120,7 @@ def squad_convert_example_to_features(
     tok_to_orig_index = []
     orig_to_tok_index = []
     all_doc_tokens = []
-    for (i, token) in enumerate(example.doc_tokens):
+    for i, token in enumerate(example.doc_tokens):
         orig_to_tok_index.append(len(all_doc_tokens))
         if tokenizer.__class__.__name__ in [
             "RobertaTokenizer",
@@ -167,7 +166,6 @@ def squad_convert_example_to_features(
 
     span_doc_tokens = all_doc_tokens
     while len(spans) * doc_stride < len(all_doc_tokens):
-
         # Define the side we want to truncate / pad and the text/pair sorting
         if tokenizer.padding_side == "right":
             texts = truncated_query
@@ -244,7 +242,7 @@ def squad_convert_example_to_features(
         cls_index = span["input_ids"].index(tokenizer.cls_token_id)
 
         # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
-        # Original TF implem also keep the classification token (set to 0)
+        # Original TF implementation also keep the classification token (set to 0)
         p_mask = np.ones_like(span["token_type_ids"])
         if tokenizer.padding_side == "right":
             p_mask[len(truncated_query) + sequence_added_tokens :] = 0
@@ -332,8 +330,8 @@ def squad_convert_examples_to_features(
     model-dependant and takes advantage of many of the tokenizer's features to create the model's inputs.
 
     Args:
-        examples: list of :class:`~transformers.data.processors.squad.SquadExample`
-        tokenizer: an instance of a child of :class:`~transformers.PreTrainedTokenizer`
+        examples: list of [`~data.processors.squad.SquadExample`]
+        tokenizer: an instance of a child of [`PreTrainedTokenizer`]
         max_seq_length: The maximum sequence length of the inputs.
         doc_stride: The stride used when the context is too large and is split across several features.
         max_query_length: The maximum length of the query.
@@ -345,22 +343,23 @@ def squad_convert_examples_to_features(
 
 
     Returns:
-        list of :class:`~transformers.data.processors.squad.SquadFeatures`
+        list of [`~data.processors.squad.SquadFeatures`]
 
-    Example::
+    Example:
 
-        processor = SquadV2Processor()
-        examples = processor.get_dev_examples(data_dir)
+    ```python
+    processor = SquadV2Processor()
+    examples = processor.get_dev_examples(data_dir)
 
-        features = squad_convert_examples_to_features(
-            examples=examples,
-            tokenizer=tokenizer,
-            max_seq_length=args.max_seq_length,
-            doc_stride=args.doc_stride,
-            max_query_length=args.max_query_length,
-            is_training=not evaluate,
-        )
-    """
+    features = squad_convert_examples_to_features(
+        examples=examples,
+        tokenizer=tokenizer,
+        max_seq_length=args.max_seq_length,
+        doc_stride=args.doc_stride,
+        max_query_length=args.max_query_length,
+        is_training=not evaluate,
+    )
+    ```"""
     # Defining helper methods
     features = []
 
@@ -574,23 +573,25 @@ class SquadProcessor(DataProcessor):
 
     def get_examples_from_dataset(self, dataset, evaluate=False):
         """
-        Creates a list of :class:`~transformers.data.processors.squad.SquadExample` using a TFDS dataset.
+        Creates a list of [`~data.processors.squad.SquadExample`] using a TFDS dataset.
 
         Args:
-            dataset: The tfds dataset loaded from `tensorflow_datasets.load("squad")`
+            dataset: The tfds dataset loaded from *tensorflow_datasets.load("squad")*
             evaluate: Boolean specifying if in evaluation mode or in training mode
 
         Returns:
             List of SquadExample
 
-        Examples::
+        Examples:
 
-            >>> import tensorflow_datasets as tfds
-            >>> dataset = tfds.load("squad")
+        ```python
+        >>> import tensorflow_datasets as tfds
 
-            >>> training_examples = get_examples_from_dataset(dataset, evaluate=False)
-            >>> evaluation_examples = get_examples_from_dataset(dataset, evaluate=True)
-        """
+        >>> dataset = tfds.load("squad")
+
+        >>> training_examples = get_examples_from_dataset(dataset, evaluate=False)
+        >>> evaluation_examples = get_examples_from_dataset(dataset, evaluate=True)
+        ```"""
 
         if evaluate:
             dataset = dataset["validation"]
@@ -759,8 +760,8 @@ class SquadExample:
 class SquadFeatures:
     """
     Single squad example features to be fed to a model. Those features are model-specific and can be crafted from
-    :class:`~transformers.data.processors.squad.SquadExample` using the
-    :method:`~transformers.data.processors.squad.squad_convert_examples_to_features` method.
+    [`~data.processors.squad.SquadExample`] using the
+    :method:*~transformers.data.processors.squad.squad_convert_examples_to_features* method.
 
     Args:
         input_ids: Indices of input sequence tokens in the vocabulary.
@@ -772,9 +773,10 @@ class SquadFeatures:
         example_index: the index of the example
         unique_id: The unique Feature identifier
         paragraph_len: The length of the context
-        token_is_max_context: List of booleans identifying which tokens have their maximum context in this feature object.
-            If a token does not have their maximum context in this feature object, it means that another feature object
-            has more information related to that token and should be prioritized over this feature for that token.
+        token_is_max_context:
+            List of booleans identifying which tokens have their maximum context in this feature object. If a token
+            does not have their maximum context in this feature object, it means that another feature object has more
+            information related to that token and should be prioritized over this feature for that token.
         tokens: list of tokens corresponding to the input ids
         token_to_orig_map: mapping between the tokens and the original text, needed in order to identify the answer.
         start_position: start of the answer token index

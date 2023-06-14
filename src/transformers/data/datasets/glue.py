@@ -20,9 +20,8 @@ from enum import Enum
 from typing import List, Optional, Union
 
 import torch
-from torch.utils.data.dataset import Dataset
-
 from filelock import FileLock
+from torch.utils.data import Dataset
 
 from ...tokenization_utils_base import PreTrainedTokenizerBase
 from ...utils import logging
@@ -49,8 +48,10 @@ class GlueDataTrainingArguments:
     max_seq_length: int = field(
         default=128,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -87,7 +88,7 @@ class GlueDataset(Dataset):
         warnings.warn(
             "This dataset will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets "
             "library. You can have a look at this example script for pointers: "
-            "https://github.com/huggingface/transformers/blob/master/examples/pytorch/text-classification/run_glue.py",
+            "https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_glue.py",
             FutureWarning,
         )
         self.args = args
@@ -119,7 +120,6 @@ class GlueDataset(Dataset):
         # and the others will use the cache.
         lock_path = cached_features_file + ".lock"
         with FileLock(lock_path):
-
             if os.path.exists(cached_features_file) and not args.overwrite_cache:
                 start = time.time()
                 self.features = torch.load(cached_features_file)

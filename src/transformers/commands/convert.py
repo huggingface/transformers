@@ -46,8 +46,7 @@ class ConvertCommand(BaseTransformersCLICommand):
         """
         train_parser = parser.add_parser(
             "convert",
-            help="CLI tool to run convert model from original "
-            "author checkpoints to Transformers PyTorch checkpoints.",
+            help="CLI tool to run convert model from original author checkpoints to Transformers PyTorch checkpoints.",
         )
         train_parser.add_argument("--model_type", type=str, required=True, help="Model's type.")
         train_parser.add_argument(
@@ -72,7 +71,7 @@ class ConvertCommand(BaseTransformersCLICommand):
         pytorch_dump_output: str,
         config: str,
         finetuning_task_name: str,
-        *args
+        *args,
     ):
         self._logger = logging.get_logger("transformers-cli/converting")
 
@@ -168,11 +167,17 @@ class ConvertCommand(BaseTransformersCLICommand):
 
             convert_xlm_checkpoint_to_pytorch(self._tf_checkpoint, self._pytorch_dump_output)
         elif self._model_type == "lxmert":
-            from ..models.lxmert.convert_lxmert_original_pytorch_checkpoint_to_pytorch import (
+            from ..models.lxmert.convert_lxmert_original_tf_checkpoint_to_pytorch import (
                 convert_lxmert_checkpoint_to_pytorch,
             )
 
             convert_lxmert_checkpoint_to_pytorch(self._tf_checkpoint, self._pytorch_dump_output)
+        elif self._model_type == "rembert":
+            from ..models.rembert.convert_rembert_tf_checkpoint_to_pytorch import (
+                convert_rembert_tf_checkpoint_to_pytorch,
+            )
+
+            convert_rembert_tf_checkpoint_to_pytorch(self._tf_checkpoint, self._config, self._pytorch_dump_output)
         else:
             raise ValueError(
                 "--model_type should be selected in the list [bert, gpt, gpt2, t5, transfo_xl, xlnet, xlm, lxmert]"

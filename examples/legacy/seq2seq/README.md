@@ -17,7 +17,7 @@ limitations under the License.
 # Sequence-to-Sequence Training and Evaluation
 
 This directory contains examples for finetuning and evaluating transformers on summarization and translation tasks.
-For deprecated `bertabs` instructions, see [`bertabs/README.md`](https://github.com/huggingface/transformers/blob/master/examples/research_projects/bertabs/README.md).
+For deprecated `bertabs` instructions, see [`bertabs/README.md`](https://github.com/huggingface/transformers/blob/main/examples/research_projects/bertabs/README.md).
 
 ### Supported Architectures
 
@@ -73,7 +73,7 @@ export DATA_DIR=${PWD}/wmt_en_de
 #### FSMT datasets (wmt)
 
 Refer to the scripts starting with `eval_` under:
-https://github.com/huggingface/transformers/tree/master/scripts/fsmt
+https://github.com/huggingface/transformers/tree/main/scripts/fsmt
 
 #### Pegasus (multiple datasets)
 

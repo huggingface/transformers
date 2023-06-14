@@ -28,7 +28,7 @@ from transformers import (
     Wav2Vec2CTCTokenizer,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2ForCTC,
-    Wav2Vec2Model,
+    Wav2Vec2ForPreTraining,
     Wav2Vec2Processor,
     logging,
 )
@@ -49,24 +49,52 @@ MAPPING = {
     "fc2": "encoder.layers.*.feed_forward.output_dense",
     "final_layer_norm": "encoder.layers.*.final_layer_norm",
     "encoder.layer_norm": "encoder.layer_norm",
+    "adapter_layer": "encoder.layers.*.adapter_layer",
     "w2v_model.layer_norm": "feature_projection.layer_norm",
+    "quantizer.weight_proj": "quantizer.weight_proj",
+    "quantizer.vars": "quantizer.codevectors",
+    "project_q": "project_q",
+    "final_proj": "project_hid",
     "w2v_encoder.proj": "lm_head",
     "mask_emb": "masked_spec_embed",
 }
+TOP_LEVEL_KEYS = [
+    "lm_head",
+    "quantizer.weight_proj",
+    "quantizer.codevectors",
+    "project_q",
+    "project_hid",
+]
 
 
-def set_recursively(hf_pointer, key, value, full_name, weight_type):
+def set_recursively(key, value, full_name, weight_type, hf_pointer):
     for attribute in key.split("."):
         hf_pointer = getattr(hf_pointer, attribute)
 
-    if weight_type is not None:
+    hf_param_name = None
+    for param_key in PARAM_MAPPING.keys():
+        if full_name.endswith(param_key):
+            hf_param_name = PARAM_MAPPING[full_name.split(".")[-1]]
+            weight_type = "param"
+
+    if weight_type is not None and weight_type != "param":
         hf_shape = getattr(hf_pointer, weight_type).shape
+    elif weight_type is not None and weight_type == "param":
+        shape_pointer = hf_pointer
+        for attribute in hf_param_name.split("."):
+            shape_pointer = getattr(shape_pointer, attribute)
+        hf_shape = shape_pointer.shape
+
+        # let's reduce dimension
+        value = value[0]
     else:
         hf_shape = hf_pointer.shape
 
-    assert (
-        hf_shape == value.shape
-    ), f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be {value.shape} for {full_name}"
+    if hf_shape != value.shape:
+        raise ValueError(
+            f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be"
+            f" {value.shape} for {full_name}"
+        )
 
     if weight_type == "weight":
         hf_pointer.weight.data = value
@@ -76,17 +104,76 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
         hf_pointer.weight_v.data = value
     elif weight_type == "bias":
         hf_pointer.bias.data = value
+    elif weight_type == "param":
+        for attribute in hf_param_name.split("."):
+            hf_pointer = getattr(hf_pointer, attribute)
+        hf_pointer.data = value
     else:
         hf_pointer.data = value
 
     logger.info(f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}.")
 
 
-def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
+def rename_dict(key, value, full_name, weight_type, hf_dict):
+    hf_param_name = None
+    for param_key in PARAM_MAPPING.keys():
+        if full_name.endswith(param_key):
+            hf_param_name = PARAM_MAPPING[full_name.split(".")[-1]]
+            weight_type = "param"
+
+    if weight_type is not None and weight_type != "param":
+        full_key = ".".join([key, weight_type])
+    elif weight_type is not None and weight_type == "param":
+        full_key = ".".join([key, hf_param_name])
+    else:
+        full_key = key
+
+    hf_dict[full_key] = value if "lm_head" in full_key else value[0]
+
+
+PARAM_MAPPING = {
+    "W_a": "linear_1.weight",
+    "W_b": "linear_2.weight",
+    "b_a": "linear_1.bias",
+    "b_b": "linear_2.bias",
+    "ln_W": "norm.weight",
+    "ln_b": "norm.bias",
+}
+
+
+def load_wav2vec2_layer(name, value, hf_model=None, hf_dict=None):
+    is_used = False
+    for key, mapped_key in MAPPING.items():
+        mapped_key = "wav2vec2." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
+        if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
+            is_used = True
+            if "*" in mapped_key:
+                layer_index = name.split(key)[0].split(".")[-2]
+                mapped_key = mapped_key.replace("*", layer_index)
+            if "weight_g" in name:
+                weight_type = "weight_g"
+            elif "weight_v" in name:
+                weight_type = "weight_v"
+            elif "bias" in name:
+                weight_type = "bias"
+            elif "weight" in name:
+                # TODO: don't match quantizer.weight_proj
+                weight_type = "weight"
+            else:
+                weight_type = None
+            if hf_dict is not None:
+                rename_dict(mapped_key, value, name, weight_type, hf_dict)
+            else:
+                set_recursively(mapped_key, value, name, weight_type, hf_model)
+            return is_used
+    return is_used
+
+
+def recursively_load_weights(fairseq_model, hf_model, is_headless):
     unused_weights = []
     fairseq_dict = fairseq_model.state_dict()
 
-    feature_extractor = hf_model.wav2vec2.feature_extractor if is_finetuned else hf_model.feature_extractor
+    feature_extractor = hf_model.wav2vec2.feature_extractor
 
     for name, value in fairseq_dict.items():
         is_used = False
@@ -100,26 +187,7 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
             )
             is_used = True
         else:
-            for key, mapped_key in MAPPING.items():
-                mapped_key = "wav2vec2." + mapped_key if (is_finetuned and mapped_key != "lm_head") else mapped_key
-
-                if key in name or (key.split("w2v_model.")[-1] == name.split(".")[0] and not is_finetuned):
-                    is_used = True
-                    if "*" in mapped_key:
-                        layer_index = name.split(key)[0].split(".")[-2]
-                        mapped_key = mapped_key.replace("*", layer_index)
-                    if "weight_g" in name:
-                        weight_type = "weight_g"
-                    elif "weight_v" in name:
-                        weight_type = "weight_v"
-                    elif "weight" in name:
-                        weight_type = "weight"
-                    elif "bias" in name:
-                        weight_type = "bias"
-                    else:
-                        weight_type = None
-                    set_recursively(hf_model, mapped_key, value, name, weight_type)
-                continue
+            is_used = load_wav2vec2_layer(name, value, hf_model)
         if not is_used:
             unused_weights.append(name)
 
@@ -134,28 +202,36 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
     if type_id == 0:
         if "bias" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].conv.bias.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
+            if value.shape != feature_extractor.conv_layers[layer_id].conv.bias.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but"
+                    f" {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
+                )
             feature_extractor.conv_layers[layer_id].conv.bias.data = value
             logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
         elif "weight" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].conv.weight.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
+            if value.shape != feature_extractor.conv_layers[layer_id].conv.weight.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but"
+                    f" {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
+                )
             feature_extractor.conv_layers[layer_id].conv.weight.data = value
             logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
     elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
         if "bias" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.bias.data.shape} was found."
+            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but"
+                    f" {feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape} was found."
+                )
             feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
             logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
         elif "weight" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.weight.data.shape} was found."
+            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but"
+                    f" {feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape} was found."
+                )
             feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
             logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
     else:
@@ -178,17 +254,24 @@ def convert_wav2vec2_checkpoint(
         if dict_path:
             target_dict = Dictionary.load(dict_path)
 
-            config.bos_token_id = target_dict.bos_index
+            # important change bos & pad token id since CTC symbol is <pad> and
+            # not <s> as in fairseq
+            config.bos_token_id = target_dict.pad_index
+            config.pad_token_id = target_dict.bos_index
             config.eos_token_id = target_dict.eos_index
-            config.pad_token_id = target_dict.pad_index
             config.vocab_size = len(target_dict.symbols)
             vocab_path = os.path.join(pytorch_dump_folder_path, "vocab.json")
             if not os.path.isdir(pytorch_dump_folder_path):
                 logger.error("--pytorch_dump_folder_path ({}) should be a directory".format(pytorch_dump_folder_path))
                 return
             os.makedirs(pytorch_dump_folder_path, exist_ok=True)
+            vocab_dict = target_dict.indices
+
+            # fairseq has the <pad> and <s> switched
+            vocab_dict["<pad>"] = 0
+            vocab_dict["<s>"] = 1
             with open(vocab_path, "w", encoding="utf-8") as vocab_handle:
-                json.dump(target_dict.indices, vocab_handle)
+                json.dump(vocab_dict, vocab_handle)
             tokenizer = Wav2Vec2CTCTokenizer(
                 vocab_path,
                 unk_token=target_dict.unk_word,
@@ -211,19 +294,21 @@ def convert_wav2vec2_checkpoint(
 
         hf_wav2vec = Wav2Vec2ForCTC(config)
     else:
-        hf_wav2vec = Wav2Vec2Model(config)
+        hf_wav2vec = Wav2Vec2ForPreTraining(config)
 
     if is_finetuned:
-
         model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
-            [checkpoint_path], arg_overrides={"data": dict_path}
+            [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1])}
         )
     else:
-        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path])
+        task_arg = argparse.Namespace(task="audio_pretraining")
+        task = fairseq.tasks.setup_task(task_arg)
+
+        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path], task=task)
 
     model = model[0].eval()
 
-    recursively_load_weights(model, hf_wav2vec, is_finetuned)
+    recursively_load_weights(model, hf_wav2vec, not is_finetuned)
 
     hf_wav2vec.save_pretrained(pytorch_dump_folder_path)
 

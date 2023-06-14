@@ -1,5 +1,7 @@
-.PHONY: deps_table_update modified_only_fixup extra_quality_checks quality style fixup fix-copies test test-examples docs
+.PHONY: deps_table_update modified_only_fixup extra_style_checks quality style fixup fix-copies test test-examples
 
+# make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
+export PYTHONPATH = src
 
 check_dirs := examples tests src utils
 
@@ -8,8 +10,7 @@ modified_only_fixup:
 	@if test -n "$(modified_py_files)"; then \
 		echo "Checking/fixing $(modified_py_files)"; \
 		black $(modified_py_files); \
-		isort $(modified_py_files); \
-		flake8 $(modified_py_files); \
+		ruff $(modified_py_files) --fix; \
 	else \
 		echo "No library .py files were modified"; \
 	fi
@@ -19,44 +20,59 @@ modified_only_fixup:
 deps_table_update:
 	@python setup.py deps_table_update
 
+deps_table_check_updated:
+	@md5sum src/transformers/dependency_versions_table.py > md5sum.saved
+	@python setup.py deps_table_update
+	@md5sum -c --quiet md5sum.saved || (printf "\nError: the version dependency table is outdated.\nPlease run 'make fixup' or 'make style' and commit the changes.\n\n" && exit 1)
+	@rm md5sum.saved
+
 # autogenerating code
 
 autogenerate_code: deps_table_update
-	python utils/class_mapping_update.py
 
-# Check that source code meets quality standards
+# Check that the repo is in a good state
 
-extra_quality_checks:
+repo-consistency:
 	python utils/check_copies.py
 	python utils/check_table.py
 	python utils/check_dummies.py
 	python utils/check_repo.py
 	python utils/check_inits.py
+	python utils/check_config_docstrings.py
+	python utils/check_config_attributes.py
+	python utils/check_doctest_list.py
+	python utils/update_metadata.py --check-only
+	python utils/check_task_guides.py
 
 # this target runs checks on all files
+
 quality:
-	black --check $(check_dirs)
-	isort --check-only $(check_dirs)
+	black --check $(check_dirs) setup.py conftest.py
 	python utils/custom_init_isort.py --check_only
-	flake8 $(check_dirs)
-	${MAKE} extra_quality_checks
+	python utils/sort_auto_mappings.py --check_only
+	ruff $(check_dirs) setup.py conftest.py
+	doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
+	python utils/check_doc_toc.py
 
 # Format source code automatically and check is there are any problems left that need manual fixing
 
 extra_style_checks:
 	python utils/custom_init_isort.py
-	python utils/style_doc.py src/transformers docs/source --max_len 119
+	python utils/sort_auto_mappings.py
+	doc-builder style src/transformers docs/source --max_len 119 --path_to_docs docs/source
+	python utils/check_doc_toc.py --fix_and_overwrite
 
 # this target runs checks on all files and potentially modifies some of them
+
 style:
-	black $(check_dirs)
-	isort $(check_dirs)
+	black $(check_dirs) setup.py conftest.py
+	ruff $(check_dirs) setup.py conftest.py --fix
 	${MAKE} autogenerate_code
 	${MAKE} extra_style_checks
 
 # Super fast fix and check target that only works on relevant modified files since the branch was made
 
-fixup: modified_only_fixup extra_style_checks autogenerate_code extra_quality_checks
+fixup: modified_only_fixup extra_style_checks autogenerate_code repo-consistency
 
 # Make marked copies of snippets of codes conform to the original
 
@@ -64,6 +80,7 @@ fix-copies:
 	python utils/check_copies.py --fix_and_overwrite
 	python utils/check_table.py --fix_and_overwrite
 	python utils/check_dummies.py --fix_and_overwrite
+	python utils/check_task_guides.py --fix_and_overwrite
 
 # Run tests for the library
 
@@ -81,11 +98,6 @@ test-sagemaker: # install sagemaker dependencies in advance with pip install .[s
 	TEST_SAGEMAKER=True python -m pytest -n auto  -s -v ./tests/sagemaker
 
 
-# Check that docs can build
-
-docs:
-	cd docs && make html SPHINXOPTS="-W -j 4"
-
 # Release stuff
 
 pre-release:
@@ -99,3 +111,10 @@ post-release:
 
 post-patch:
 	python utils/release.py --post_release --patch
+
+build-release:
+	rm -rf dist
+	rm -rf build
+	python setup.py bdist_wheel
+	python setup.py sdist
+	python utils/check_build.py

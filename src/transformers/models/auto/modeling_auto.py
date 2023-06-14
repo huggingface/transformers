@@ -12,762 +12,1338 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Auto Model class. """
-
+""" Auto Model class."""
 
 import warnings
 from collections import OrderedDict
 
 from ...utils import logging
-
-# Add modeling imports here
-from ..albert.modeling_albert import (
-    AlbertForMaskedLM,
-    AlbertForMultipleChoice,
-    AlbertForPreTraining,
-    AlbertForQuestionAnswering,
-    AlbertForSequenceClassification,
-    AlbertForTokenClassification,
-    AlbertModel,
-)
-from ..bart.modeling_bart import (
-    BartForCausalLM,
-    BartForConditionalGeneration,
-    BartForQuestionAnswering,
-    BartForSequenceClassification,
-    BartModel,
-)
-from ..bert.modeling_bert import (
-    BertForMaskedLM,
-    BertForMultipleChoice,
-    BertForNextSentencePrediction,
-    BertForPreTraining,
-    BertForQuestionAnswering,
-    BertForSequenceClassification,
-    BertForTokenClassification,
-    BertLMHeadModel,
-    BertModel,
-)
-from ..bert_generation.modeling_bert_generation import BertGenerationDecoder, BertGenerationEncoder
-from ..big_bird.modeling_big_bird import (
-    BigBirdForCausalLM,
-    BigBirdForMaskedLM,
-    BigBirdForMultipleChoice,
-    BigBirdForPreTraining,
-    BigBirdForQuestionAnswering,
-    BigBirdForSequenceClassification,
-    BigBirdForTokenClassification,
-    BigBirdModel,
-)
-from ..blenderbot.modeling_blenderbot import BlenderbotForCausalLM, BlenderbotForConditionalGeneration, BlenderbotModel
-from ..blenderbot_small.modeling_blenderbot_small import (
-    BlenderbotSmallForCausalLM,
-    BlenderbotSmallForConditionalGeneration,
-    BlenderbotSmallModel,
-)
-from ..camembert.modeling_camembert import (
-    CamembertForCausalLM,
-    CamembertForMaskedLM,
-    CamembertForMultipleChoice,
-    CamembertForQuestionAnswering,
-    CamembertForSequenceClassification,
-    CamembertForTokenClassification,
-    CamembertModel,
-)
-from ..convbert.modeling_convbert import (
-    ConvBertForMaskedLM,
-    ConvBertForMultipleChoice,
-    ConvBertForQuestionAnswering,
-    ConvBertForSequenceClassification,
-    ConvBertForTokenClassification,
-    ConvBertModel,
-)
-from ..ctrl.modeling_ctrl import CTRLForSequenceClassification, CTRLLMHeadModel, CTRLModel
-from ..deberta.modeling_deberta import (
-    DebertaForMaskedLM,
-    DebertaForQuestionAnswering,
-    DebertaForSequenceClassification,
-    DebertaForTokenClassification,
-    DebertaModel,
-)
-from ..deberta_v2.modeling_deberta_v2 import (
-    DebertaV2ForMaskedLM,
-    DebertaV2ForQuestionAnswering,
-    DebertaV2ForSequenceClassification,
-    DebertaV2ForTokenClassification,
-    DebertaV2Model,
-)
-from ..deit.modeling_deit import DeiTForImageClassification, DeiTForImageClassificationWithTeacher, DeiTModel
-from ..distilbert.modeling_distilbert import (
-    DistilBertForMaskedLM,
-    DistilBertForMultipleChoice,
-    DistilBertForQuestionAnswering,
-    DistilBertForSequenceClassification,
-    DistilBertForTokenClassification,
-    DistilBertModel,
-)
-from ..dpr.modeling_dpr import DPRQuestionEncoder
-from ..electra.modeling_electra import (
-    ElectraForMaskedLM,
-    ElectraForMultipleChoice,
-    ElectraForPreTraining,
-    ElectraForQuestionAnswering,
-    ElectraForSequenceClassification,
-    ElectraForTokenClassification,
-    ElectraModel,
-)
-from ..encoder_decoder.modeling_encoder_decoder import EncoderDecoderModel
-from ..flaubert.modeling_flaubert import (
-    FlaubertForMultipleChoice,
-    FlaubertForQuestionAnsweringSimple,
-    FlaubertForSequenceClassification,
-    FlaubertForTokenClassification,
-    FlaubertModel,
-    FlaubertWithLMHeadModel,
-)
-from ..fsmt.modeling_fsmt import FSMTForConditionalGeneration, FSMTModel
-from ..funnel.modeling_funnel import (
-    FunnelBaseModel,
-    FunnelForMaskedLM,
-    FunnelForMultipleChoice,
-    FunnelForPreTraining,
-    FunnelForQuestionAnswering,
-    FunnelForSequenceClassification,
-    FunnelForTokenClassification,
-    FunnelModel,
-)
-from ..gpt2.modeling_gpt2 import GPT2ForSequenceClassification, GPT2LMHeadModel, GPT2Model
-from ..gpt_neo.modeling_gpt_neo import GPTNeoForCausalLM, GPTNeoModel
-from ..ibert.modeling_ibert import (
-    IBertForMaskedLM,
-    IBertForMultipleChoice,
-    IBertForQuestionAnswering,
-    IBertForSequenceClassification,
-    IBertForTokenClassification,
-    IBertModel,
-)
-from ..layoutlm.modeling_layoutlm import (
-    LayoutLMForMaskedLM,
-    LayoutLMForSequenceClassification,
-    LayoutLMForTokenClassification,
-    LayoutLMModel,
-)
-from ..led.modeling_led import (
-    LEDForConditionalGeneration,
-    LEDForQuestionAnswering,
-    LEDForSequenceClassification,
-    LEDModel,
-)
-from ..longformer.modeling_longformer import (
-    LongformerForMaskedLM,
-    LongformerForMultipleChoice,
-    LongformerForQuestionAnswering,
-    LongformerForSequenceClassification,
-    LongformerForTokenClassification,
-    LongformerModel,
-)
-from ..lxmert.modeling_lxmert import LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
-from ..m2m_100.modeling_m2m_100 import M2M100ForConditionalGeneration, M2M100Model
-from ..marian.modeling_marian import MarianForCausalLM, MarianModel, MarianMTModel
-from ..mbart.modeling_mbart import (
-    MBartForCausalLM,
-    MBartForConditionalGeneration,
-    MBartForQuestionAnswering,
-    MBartForSequenceClassification,
-    MBartModel,
-)
-from ..megatron_bert.modeling_megatron_bert import (
-    MegatronBertForCausalLM,
-    MegatronBertForMaskedLM,
-    MegatronBertForMultipleChoice,
-    MegatronBertForNextSentencePrediction,
-    MegatronBertForPreTraining,
-    MegatronBertForQuestionAnswering,
-    MegatronBertForSequenceClassification,
-    MegatronBertForTokenClassification,
-    MegatronBertModel,
-)
-from ..mobilebert.modeling_mobilebert import (
-    MobileBertForMaskedLM,
-    MobileBertForMultipleChoice,
-    MobileBertForNextSentencePrediction,
-    MobileBertForPreTraining,
-    MobileBertForQuestionAnswering,
-    MobileBertForSequenceClassification,
-    MobileBertForTokenClassification,
-    MobileBertModel,
-)
-from ..mpnet.modeling_mpnet import (
-    MPNetForMaskedLM,
-    MPNetForMultipleChoice,
-    MPNetForQuestionAnswering,
-    MPNetForSequenceClassification,
-    MPNetForTokenClassification,
-    MPNetModel,
-)
-from ..mt5.modeling_mt5 import MT5ForConditionalGeneration, MT5Model
-from ..openai.modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
-from ..pegasus.modeling_pegasus import PegasusForCausalLM, PegasusForConditionalGeneration, PegasusModel
-from ..prophetnet.modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel
-from ..rag.modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
-    RagModel,
-    RagSequenceForGeneration,
-    RagTokenForGeneration,
-)
-from ..reformer.modeling_reformer import (
-    ReformerForMaskedLM,
-    ReformerForQuestionAnswering,
-    ReformerForSequenceClassification,
-    ReformerModel,
-    ReformerModelWithLMHead,
-)
-from ..retribert.modeling_retribert import RetriBertModel
-from ..roberta.modeling_roberta import (
-    RobertaForCausalLM,
-    RobertaForMaskedLM,
-    RobertaForMultipleChoice,
-    RobertaForQuestionAnswering,
-    RobertaForSequenceClassification,
-    RobertaForTokenClassification,
-    RobertaModel,
-)
-from ..speech_to_text.modeling_speech_to_text import Speech2TextForConditionalGeneration, Speech2TextModel
-from ..squeezebert.modeling_squeezebert import (
-    SqueezeBertForMaskedLM,
-    SqueezeBertForMultipleChoice,
-    SqueezeBertForQuestionAnswering,
-    SqueezeBertForSequenceClassification,
-    SqueezeBertForTokenClassification,
-    SqueezeBertModel,
-)
-from ..t5.modeling_t5 import T5ForConditionalGeneration, T5Model
-from ..tapas.modeling_tapas import (
-    TapasForMaskedLM,
-    TapasForQuestionAnswering,
-    TapasForSequenceClassification,
-    TapasModel,
-)
-from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
-from ..vit.modeling_vit import ViTForImageClassification, ViTModel
-from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2ForMaskedLM, Wav2Vec2Model
-from ..xlm.modeling_xlm import (
-    XLMForMultipleChoice,
-    XLMForQuestionAnsweringSimple,
-    XLMForSequenceClassification,
-    XLMForTokenClassification,
-    XLMModel,
-    XLMWithLMHeadModel,
-)
-from ..xlm_prophetnet.modeling_xlm_prophetnet import (
-    XLMProphetNetForCausalLM,
-    XLMProphetNetForConditionalGeneration,
-    XLMProphetNetModel,
-)
-from ..xlm_roberta.modeling_xlm_roberta import (
-    XLMRobertaForCausalLM,
-    XLMRobertaForMaskedLM,
-    XLMRobertaForMultipleChoice,
-    XLMRobertaForQuestionAnswering,
-    XLMRobertaForSequenceClassification,
-    XLMRobertaForTokenClassification,
-    XLMRobertaModel,
-)
-from ..xlnet.modeling_xlnet import (
-    XLNetForMultipleChoice,
-    XLNetForQuestionAnsweringSimple,
-    XLNetForSequenceClassification,
-    XLNetForTokenClassification,
-    XLNetLMHeadModel,
-    XLNetModel,
-)
-from .auto_factory import auto_class_factory
-from .configuration_auto import (
-    AlbertConfig,
-    BartConfig,
-    BertConfig,
-    BertGenerationConfig,
-    BigBirdConfig,
-    BlenderbotConfig,
-    BlenderbotSmallConfig,
-    CamembertConfig,
-    ConvBertConfig,
-    CTRLConfig,
-    DebertaConfig,
-    DebertaV2Config,
-    DeiTConfig,
-    DistilBertConfig,
-    DPRConfig,
-    ElectraConfig,
-    EncoderDecoderConfig,
-    FlaubertConfig,
-    FSMTConfig,
-    FunnelConfig,
-    GPT2Config,
-    GPTNeoConfig,
-    IBertConfig,
-    LayoutLMConfig,
-    LEDConfig,
-    LongformerConfig,
-    LxmertConfig,
-    M2M100Config,
-    MarianConfig,
-    MBartConfig,
-    MegatronBertConfig,
-    MobileBertConfig,
-    MPNetConfig,
-    MT5Config,
-    OpenAIGPTConfig,
-    PegasusConfig,
-    ProphetNetConfig,
-    ReformerConfig,
-    RetriBertConfig,
-    RobertaConfig,
-    Speech2TextConfig,
-    SqueezeBertConfig,
-    T5Config,
-    TapasConfig,
-    TransfoXLConfig,
-    ViTConfig,
-    Wav2Vec2Config,
-    XLMConfig,
-    XLMProphetNetConfig,
-    XLMRobertaConfig,
-    XLNetConfig,
-)
+from .auto_factory import _BaseAutoBackboneClass, _BaseAutoModelClass, _LazyAutoMapping, auto_class_update
+from .configuration_auto import CONFIG_MAPPING_NAMES
 
 
 logger = logging.get_logger(__name__)
 
 
-MODEL_MAPPING = OrderedDict(
+MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
-        (DeiTConfig, DeiTModel),
-        (GPTNeoConfig, GPTNeoModel),
-        (BigBirdConfig, BigBirdModel),
-        (Speech2TextConfig, Speech2TextModel),
-        (ViTConfig, ViTModel),
-        (Wav2Vec2Config, Wav2Vec2Model),
-        (M2M100Config, M2M100Model),
-        (ConvBertConfig, ConvBertModel),
-        (LEDConfig, LEDModel),
-        (BlenderbotSmallConfig, BlenderbotSmallModel),
-        (RetriBertConfig, RetriBertModel),
-        (MT5Config, MT5Model),
-        (T5Config, T5Model),
-        (PegasusConfig, PegasusModel),
-        (MarianConfig, MarianMTModel),
-        (MBartConfig, MBartModel),
-        (BlenderbotConfig, BlenderbotModel),
-        (DistilBertConfig, DistilBertModel),
-        (AlbertConfig, AlbertModel),
-        (CamembertConfig, CamembertModel),
-        (XLMRobertaConfig, XLMRobertaModel),
-        (BartConfig, BartModel),
-        (LongformerConfig, LongformerModel),
-        (RobertaConfig, RobertaModel),
-        (LayoutLMConfig, LayoutLMModel),
-        (SqueezeBertConfig, SqueezeBertModel),
-        (BertConfig, BertModel),
-        (OpenAIGPTConfig, OpenAIGPTModel),
-        (GPT2Config, GPT2Model),
-        (MegatronBertConfig, MegatronBertModel),
-        (MobileBertConfig, MobileBertModel),
-        (TransfoXLConfig, TransfoXLModel),
-        (XLNetConfig, XLNetModel),
-        (FlaubertConfig, FlaubertModel),
-        (FSMTConfig, FSMTModel),
-        (XLMConfig, XLMModel),
-        (CTRLConfig, CTRLModel),
-        (ElectraConfig, ElectraModel),
-        (ReformerConfig, ReformerModel),
-        (FunnelConfig, (FunnelModel, FunnelBaseModel)),
-        (LxmertConfig, LxmertModel),
-        (BertGenerationConfig, BertGenerationEncoder),
-        (DebertaConfig, DebertaModel),
-        (DebertaV2Config, DebertaV2Model),
-        (DPRConfig, DPRQuestionEncoder),
-        (XLMProphetNetConfig, XLMProphetNetModel),
-        (ProphetNetConfig, ProphetNetModel),
-        (MPNetConfig, MPNetModel),
-        (TapasConfig, TapasModel),
-        (MarianConfig, MarianModel),
-        (IBertConfig, IBertModel),
+        ("albert", "AlbertModel"),
+        ("align", "AlignModel"),
+        ("altclip", "AltCLIPModel"),
+        ("audio-spectrogram-transformer", "ASTModel"),
+        ("autoformer", "AutoformerModel"),
+        ("bart", "BartModel"),
+        ("beit", "BeitModel"),
+        ("bert", "BertModel"),
+        ("bert-generation", "BertGenerationEncoder"),
+        ("big_bird", "BigBirdModel"),
+        ("bigbird_pegasus", "BigBirdPegasusModel"),
+        ("biogpt", "BioGptModel"),
+        ("bit", "BitModel"),
+        ("blenderbot", "BlenderbotModel"),
+        ("blenderbot-small", "BlenderbotSmallModel"),
+        ("blip", "BlipModel"),
+        ("blip-2", "Blip2Model"),
+        ("bloom", "BloomModel"),
+        ("bridgetower", "BridgeTowerModel"),
+        ("camembert", "CamembertModel"),
+        ("canine", "CanineModel"),
+        ("chinese_clip", "ChineseCLIPModel"),
+        ("clap", "ClapModel"),
+        ("clip", "CLIPModel"),
+        ("clipseg", "CLIPSegModel"),
+        ("codegen", "CodeGenModel"),
+        ("conditional_detr", "ConditionalDetrModel"),
+        ("convbert", "ConvBertModel"),
+        ("convnext", "ConvNextModel"),
+        ("convnextv2", "ConvNextV2Model"),
+        ("cpmant", "CpmAntModel"),
+        ("ctrl", "CTRLModel"),
+        ("cvt", "CvtModel"),
+        ("data2vec-audio", "Data2VecAudioModel"),
+        ("data2vec-text", "Data2VecTextModel"),
+        ("data2vec-vision", "Data2VecVisionModel"),
+        ("deberta", "DebertaModel"),
+        ("deberta-v2", "DebertaV2Model"),
+        ("decision_transformer", "DecisionTransformerModel"),
+        ("deformable_detr", "DeformableDetrModel"),
+        ("deit", "DeiTModel"),
+        ("deta", "DetaModel"),
+        ("detr", "DetrModel"),
+        ("dinat", "DinatModel"),
+        ("distilbert", "DistilBertModel"),
+        ("donut-swin", "DonutSwinModel"),
+        ("dpr", "DPRQuestionEncoder"),
+        ("dpt", "DPTModel"),
+        ("efficientformer", "EfficientFormerModel"),
+        ("efficientnet", "EfficientNetModel"),
+        ("electra", "ElectraModel"),
+        ("ernie", "ErnieModel"),
+        ("ernie_m", "ErnieMModel"),
+        ("esm", "EsmModel"),
+        ("flaubert", "FlaubertModel"),
+        ("flava", "FlavaModel"),
+        ("fnet", "FNetModel"),
+        ("focalnet", "FocalNetModel"),
+        ("fsmt", "FSMTModel"),
+        ("funnel", ("FunnelModel", "FunnelBaseModel")),
+        ("git", "GitModel"),
+        ("glpn", "GLPNModel"),
+        ("gpt-sw3", "GPT2Model"),
+        ("gpt2", "GPT2Model"),
+        ("gpt_bigcode", "GPTBigCodeModel"),
+        ("gpt_neo", "GPTNeoModel"),
+        ("gpt_neox", "GPTNeoXModel"),
+        ("gpt_neox_japanese", "GPTNeoXJapaneseModel"),
+        ("gptj", "GPTJModel"),
+        ("gptsan-japanese", "GPTSanJapaneseForConditionalGeneration"),
+        ("graphormer", "GraphormerModel"),
+        ("groupvit", "GroupViTModel"),
+        ("hubert", "HubertModel"),
+        ("ibert", "IBertModel"),
+        ("imagegpt", "ImageGPTModel"),
+        ("informer", "InformerModel"),
+        ("jukebox", "JukeboxModel"),
+        ("layoutlm", "LayoutLMModel"),
+        ("layoutlmv2", "LayoutLMv2Model"),
+        ("layoutlmv3", "LayoutLMv3Model"),
+        ("led", "LEDModel"),
+        ("levit", "LevitModel"),
+        ("lilt", "LiltModel"),
+        ("llama", "LlamaModel"),
+        ("longformer", "LongformerModel"),
+        ("longt5", "LongT5Model"),
+        ("luke", "LukeModel"),
+        ("lxmert", "LxmertModel"),
+        ("m2m_100", "M2M100Model"),
+        ("marian", "MarianModel"),
+        ("markuplm", "MarkupLMModel"),
+        ("mask2former", "Mask2FormerModel"),
+        ("maskformer", "MaskFormerModel"),
+        ("maskformer-swin", "MaskFormerSwinModel"),
+        ("mbart", "MBartModel"),
+        ("mctct", "MCTCTModel"),
+        ("mega", "MegaModel"),
+        ("megatron-bert", "MegatronBertModel"),
+        ("mgp-str", "MgpstrForSceneTextRecognition"),
+        ("mobilebert", "MobileBertModel"),
+        ("mobilenet_v1", "MobileNetV1Model"),
+        ("mobilenet_v2", "MobileNetV2Model"),
+        ("mobilevit", "MobileViTModel"),
+        ("mobilevitv2", "MobileViTV2Model"),
+        ("mpnet", "MPNetModel"),
+        ("mt5", "MT5Model"),
+        ("mvp", "MvpModel"),
+        ("nat", "NatModel"),
+        ("nezha", "NezhaModel"),
+        ("nllb-moe", "NllbMoeModel"),
+        ("nystromformer", "NystromformerModel"),
+        ("oneformer", "OneFormerModel"),
+        ("open-llama", "OpenLlamaModel"),
+        ("openai-gpt", "OpenAIGPTModel"),
+        ("opt", "OPTModel"),
+        ("owlvit", "OwlViTModel"),
+        ("pegasus", "PegasusModel"),
+        ("pegasus_x", "PegasusXModel"),
+        ("perceiver", "PerceiverModel"),
+        ("plbart", "PLBartModel"),
+        ("poolformer", "PoolFormerModel"),
+        ("prophetnet", "ProphetNetModel"),
+        ("qdqbert", "QDQBertModel"),
+        ("reformer", "ReformerModel"),
+        ("regnet", "RegNetModel"),
+        ("rembert", "RemBertModel"),
+        ("resnet", "ResNetModel"),
+        ("retribert", "RetriBertModel"),
+        ("roberta", "RobertaModel"),
+        ("roberta-prelayernorm", "RobertaPreLayerNormModel"),
+        ("roc_bert", "RoCBertModel"),
+        ("roformer", "RoFormerModel"),
+        ("rwkv", "RwkvModel"),
+        ("sam", "SamModel"),
+        ("segformer", "SegformerModel"),
+        ("sew", "SEWModel"),
+        ("sew-d", "SEWDModel"),
+        ("speech_to_text", "Speech2TextModel"),
+        ("speecht5", "SpeechT5Model"),
+        ("splinter", "SplinterModel"),
+        ("squeezebert", "SqueezeBertModel"),
+        ("swiftformer", "SwiftFormerModel"),
+        ("swin", "SwinModel"),
+        ("swin2sr", "Swin2SRModel"),
+        ("swinv2", "Swinv2Model"),
+        ("switch_transformers", "SwitchTransformersModel"),
+        ("t5", "T5Model"),
+        ("table-transformer", "TableTransformerModel"),
+        ("tapas", "TapasModel"),
+        ("time_series_transformer", "TimeSeriesTransformerModel"),
+        ("timesformer", "TimesformerModel"),
+        ("timm_backbone", "TimmBackbone"),
+        ("trajectory_transformer", "TrajectoryTransformerModel"),
+        ("transfo-xl", "TransfoXLModel"),
+        ("tvlt", "TvltModel"),
+        ("unispeech", "UniSpeechModel"),
+        ("unispeech-sat", "UniSpeechSatModel"),
+        ("van", "VanModel"),
+        ("videomae", "VideoMAEModel"),
+        ("vilt", "ViltModel"),
+        ("vision-text-dual-encoder", "VisionTextDualEncoderModel"),
+        ("visual_bert", "VisualBertModel"),
+        ("vit", "ViTModel"),
+        ("vit_hybrid", "ViTHybridModel"),
+        ("vit_mae", "ViTMAEModel"),
+        ("vit_msn", "ViTMSNModel"),
+        ("wav2vec2", "Wav2Vec2Model"),
+        ("wav2vec2-conformer", "Wav2Vec2ConformerModel"),
+        ("wavlm", "WavLMModel"),
+        ("whisper", "WhisperModel"),
+        ("xclip", "XCLIPModel"),
+        ("xglm", "XGLMModel"),
+        ("xlm", "XLMModel"),
+        ("xlm-prophetnet", "XLMProphetNetModel"),
+        ("xlm-roberta", "XLMRobertaModel"),
+        ("xlm-roberta-xl", "XLMRobertaXLModel"),
+        ("xlnet", "XLNetModel"),
+        ("xmod", "XmodModel"),
+        ("yolos", "YolosModel"),
+        ("yoso", "YosoModel"),
     ]
 )
 
-MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
+MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
     [
         # Model for pre-training mapping
-        (LayoutLMConfig, LayoutLMForMaskedLM),
-        (RetriBertConfig, RetriBertModel),
-        (T5Config, T5ForConditionalGeneration),
-        (DistilBertConfig, DistilBertForMaskedLM),
-        (AlbertConfig, AlbertForPreTraining),
-        (CamembertConfig, CamembertForMaskedLM),
-        (XLMRobertaConfig, XLMRobertaForMaskedLM),
-        (BartConfig, BartForConditionalGeneration),
-        (FSMTConfig, FSMTForConditionalGeneration),
-        (LongformerConfig, LongformerForMaskedLM),
-        (RobertaConfig, RobertaForMaskedLM),
-        (SqueezeBertConfig, SqueezeBertForMaskedLM),
-        (BertConfig, BertForPreTraining),
-        (BigBirdConfig, BigBirdForPreTraining),
-        (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
-        (GPT2Config, GPT2LMHeadModel),
-        (MegatronBertConfig, MegatronBertForPreTraining),
-        (MobileBertConfig, MobileBertForPreTraining),
-        (TransfoXLConfig, TransfoXLLMHeadModel),
-        (XLNetConfig, XLNetLMHeadModel),
-        (FlaubertConfig, FlaubertWithLMHeadModel),
-        (XLMConfig, XLMWithLMHeadModel),
-        (CTRLConfig, CTRLLMHeadModel),
-        (ElectraConfig, ElectraForPreTraining),
-        (LxmertConfig, LxmertForPreTraining),
-        (FunnelConfig, FunnelForPreTraining),
-        (MPNetConfig, MPNetForMaskedLM),
-        (TapasConfig, TapasForMaskedLM),
-        (IBertConfig, IBertForMaskedLM),
-        (DebertaConfig, DebertaForMaskedLM),
-        (DebertaV2Config, DebertaV2ForMaskedLM),
+        ("albert", "AlbertForPreTraining"),
+        ("bart", "BartForConditionalGeneration"),
+        ("bert", "BertForPreTraining"),
+        ("big_bird", "BigBirdForPreTraining"),
+        ("bloom", "BloomForCausalLM"),
+        ("camembert", "CamembertForMaskedLM"),
+        ("ctrl", "CTRLLMHeadModel"),
+        ("data2vec-text", "Data2VecTextForMaskedLM"),
+        ("deberta", "DebertaForMaskedLM"),
+        ("deberta-v2", "DebertaV2ForMaskedLM"),
+        ("distilbert", "DistilBertForMaskedLM"),
+        ("electra", "ElectraForPreTraining"),
+        ("ernie", "ErnieForPreTraining"),
+        ("flaubert", "FlaubertWithLMHeadModel"),
+        ("flava", "FlavaForPreTraining"),
+        ("fnet", "FNetForPreTraining"),
+        ("fsmt", "FSMTForConditionalGeneration"),
+        ("funnel", "FunnelForPreTraining"),
+        ("gpt-sw3", "GPT2LMHeadModel"),
+        ("gpt2", "GPT2LMHeadModel"),
+        ("gpt_bigcode", "GPTBigCodeForCausalLM"),
+        ("gptsan-japanese", "GPTSanJapaneseForConditionalGeneration"),
+        ("ibert", "IBertForMaskedLM"),
+        ("layoutlm", "LayoutLMForMaskedLM"),
+        ("longformer", "LongformerForMaskedLM"),
+        ("luke", "LukeForMaskedLM"),
+        ("lxmert", "LxmertForPreTraining"),
+        ("mega", "MegaForMaskedLM"),
+        ("megatron-bert", "MegatronBertForPreTraining"),
+        ("mobilebert", "MobileBertForPreTraining"),
+        ("mpnet", "MPNetForMaskedLM"),
+        ("mvp", "MvpForConditionalGeneration"),
+        ("nezha", "NezhaForPreTraining"),
+        ("nllb-moe", "NllbMoeForConditionalGeneration"),
+        ("openai-gpt", "OpenAIGPTLMHeadModel"),
+        ("retribert", "RetriBertModel"),
+        ("roberta", "RobertaForMaskedLM"),
+        ("roberta-prelayernorm", "RobertaPreLayerNormForMaskedLM"),
+        ("roc_bert", "RoCBertForPreTraining"),
+        ("rwkv", "RwkvForCausalLM"),
+        ("splinter", "SplinterForPreTraining"),
+        ("squeezebert", "SqueezeBertForMaskedLM"),
+        ("switch_transformers", "SwitchTransformersForConditionalGeneration"),
+        ("t5", "T5ForConditionalGeneration"),
+        ("tapas", "TapasForMaskedLM"),
+        ("transfo-xl", "TransfoXLLMHeadModel"),
+        ("tvlt", "TvltForPreTraining"),
+        ("unispeech", "UniSpeechForPreTraining"),
+        ("unispeech-sat", "UniSpeechSatForPreTraining"),
+        ("videomae", "VideoMAEForPreTraining"),
+        ("visual_bert", "VisualBertForPreTraining"),
+        ("vit_mae", "ViTMAEForPreTraining"),
+        ("wav2vec2", "Wav2Vec2ForPreTraining"),
+        ("wav2vec2-conformer", "Wav2Vec2ConformerForPreTraining"),
+        ("xlm", "XLMWithLMHeadModel"),
+        ("xlm-roberta", "XLMRobertaForMaskedLM"),
+        ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
+        ("xlnet", "XLNetLMHeadModel"),
+        ("xmod", "XmodForMaskedLM"),
     ]
 )
 
-MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
+MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
-        (GPTNeoConfig, GPTNeoForCausalLM),
-        (BigBirdConfig, BigBirdForMaskedLM),
-        (Speech2TextConfig, Speech2TextForConditionalGeneration),
-        (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
-        (M2M100Config, M2M100ForConditionalGeneration),
-        (ConvBertConfig, ConvBertForMaskedLM),
-        (LEDConfig, LEDForConditionalGeneration),
-        (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
-        (LayoutLMConfig, LayoutLMForMaskedLM),
-        (T5Config, T5ForConditionalGeneration),
-        (DistilBertConfig, DistilBertForMaskedLM),
-        (AlbertConfig, AlbertForMaskedLM),
-        (CamembertConfig, CamembertForMaskedLM),
-        (XLMRobertaConfig, XLMRobertaForMaskedLM),
-        (MarianConfig, MarianMTModel),
-        (FSMTConfig, FSMTForConditionalGeneration),
-        (BartConfig, BartForConditionalGeneration),
-        (LongformerConfig, LongformerForMaskedLM),
-        (RobertaConfig, RobertaForMaskedLM),
-        (SqueezeBertConfig, SqueezeBertForMaskedLM),
-        (BertConfig, BertForMaskedLM),
-        (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
-        (GPT2Config, GPT2LMHeadModel),
-        (MegatronBertConfig, MegatronBertForMaskedLM),
-        (MobileBertConfig, MobileBertForMaskedLM),
-        (TransfoXLConfig, TransfoXLLMHeadModel),
-        (XLNetConfig, XLNetLMHeadModel),
-        (FlaubertConfig, FlaubertWithLMHeadModel),
-        (XLMConfig, XLMWithLMHeadModel),
-        (CTRLConfig, CTRLLMHeadModel),
-        (ElectraConfig, ElectraForMaskedLM),
-        (EncoderDecoderConfig, EncoderDecoderModel),
-        (ReformerConfig, ReformerModelWithLMHead),
-        (FunnelConfig, FunnelForMaskedLM),
-        (MPNetConfig, MPNetForMaskedLM),
-        (TapasConfig, TapasForMaskedLM),
-        (DebertaConfig, DebertaForMaskedLM),
-        (DebertaV2Config, DebertaV2ForMaskedLM),
-        (IBertConfig, IBertForMaskedLM),
-        (MegatronBertConfig, MegatronBertForCausalLM),
+        ("albert", "AlbertForMaskedLM"),
+        ("bart", "BartForConditionalGeneration"),
+        ("bert", "BertForMaskedLM"),
+        ("big_bird", "BigBirdForMaskedLM"),
+        ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
+        ("blenderbot-small", "BlenderbotSmallForConditionalGeneration"),
+        ("bloom", "BloomForCausalLM"),
+        ("camembert", "CamembertForMaskedLM"),
+        ("codegen", "CodeGenForCausalLM"),
+        ("convbert", "ConvBertForMaskedLM"),
+        ("cpmant", "CpmAntForCausalLM"),
+        ("ctrl", "CTRLLMHeadModel"),
+        ("data2vec-text", "Data2VecTextForMaskedLM"),
+        ("deberta", "DebertaForMaskedLM"),
+        ("deberta-v2", "DebertaV2ForMaskedLM"),
+        ("distilbert", "DistilBertForMaskedLM"),
+        ("electra", "ElectraForMaskedLM"),
+        ("encoder-decoder", "EncoderDecoderModel"),
+        ("ernie", "ErnieForMaskedLM"),
+        ("esm", "EsmForMaskedLM"),
+        ("flaubert", "FlaubertWithLMHeadModel"),
+        ("fnet", "FNetForMaskedLM"),
+        ("fsmt", "FSMTForConditionalGeneration"),
+        ("funnel", "FunnelForMaskedLM"),
+        ("git", "GitForCausalLM"),
+        ("gpt-sw3", "GPT2LMHeadModel"),
+        ("gpt2", "GPT2LMHeadModel"),
+        ("gpt_bigcode", "GPTBigCodeForCausalLM"),
+        ("gpt_neo", "GPTNeoForCausalLM"),
+        ("gpt_neox", "GPTNeoXForCausalLM"),
+        ("gpt_neox_japanese", "GPTNeoXJapaneseForCausalLM"),
+        ("gptj", "GPTJForCausalLM"),
+        ("gptsan-japanese", "GPTSanJapaneseForConditionalGeneration"),
+        ("ibert", "IBertForMaskedLM"),
+        ("layoutlm", "LayoutLMForMaskedLM"),
+        ("led", "LEDForConditionalGeneration"),
+        ("longformer", "LongformerForMaskedLM"),
+        ("longt5", "LongT5ForConditionalGeneration"),
+        ("luke", "LukeForMaskedLM"),
+        ("m2m_100", "M2M100ForConditionalGeneration"),
+        ("marian", "MarianMTModel"),
+        ("mega", "MegaForMaskedLM"),
+        ("megatron-bert", "MegatronBertForCausalLM"),
+        ("mobilebert", "MobileBertForMaskedLM"),
+        ("mpnet", "MPNetForMaskedLM"),
+        ("mvp", "MvpForConditionalGeneration"),
+        ("nezha", "NezhaForMaskedLM"),
+        ("nllb-moe", "NllbMoeForConditionalGeneration"),
+        ("nystromformer", "NystromformerForMaskedLM"),
+        ("openai-gpt", "OpenAIGPTLMHeadModel"),
+        ("pegasus_x", "PegasusXForConditionalGeneration"),
+        ("plbart", "PLBartForConditionalGeneration"),
+        ("qdqbert", "QDQBertForMaskedLM"),
+        ("reformer", "ReformerModelWithLMHead"),
+        ("rembert", "RemBertForMaskedLM"),
+        ("roberta", "RobertaForMaskedLM"),
+        ("roberta-prelayernorm", "RobertaPreLayerNormForMaskedLM"),
+        ("roc_bert", "RoCBertForMaskedLM"),
+        ("roformer", "RoFormerForMaskedLM"),
+        ("rwkv", "RwkvForCausalLM"),
+        ("speech_to_text", "Speech2TextForConditionalGeneration"),
+        ("squeezebert", "SqueezeBertForMaskedLM"),
+        ("switch_transformers", "SwitchTransformersForConditionalGeneration"),
+        ("t5", "T5ForConditionalGeneration"),
+        ("tapas", "TapasForMaskedLM"),
+        ("transfo-xl", "TransfoXLLMHeadModel"),
+        ("wav2vec2", "Wav2Vec2ForMaskedLM"),
+        ("whisper", "WhisperForConditionalGeneration"),
+        ("xlm", "XLMWithLMHeadModel"),
+        ("xlm-roberta", "XLMRobertaForMaskedLM"),
+        ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
+        ("xlnet", "XLNetLMHeadModel"),
+        ("xmod", "XmodForMaskedLM"),
+        ("yoso", "YosoForMaskedLM"),
     ]
 )
 
-MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
+MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
-        (GPTNeoConfig, GPTNeoForCausalLM),
-        (BigBirdConfig, BigBirdForCausalLM),
-        (CamembertConfig, CamembertForCausalLM),
-        (XLMRobertaConfig, XLMRobertaForCausalLM),
-        (RobertaConfig, RobertaForCausalLM),
-        (BertConfig, BertLMHeadModel),
-        (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
-        (GPT2Config, GPT2LMHeadModel),
-        (TransfoXLConfig, TransfoXLLMHeadModel),
-        (XLNetConfig, XLNetLMHeadModel),
-        (
-            XLMConfig,
-            XLMWithLMHeadModel,
-        ),  # XLM can be MLM and CLM => model should be split similar to BERT; leave here for now
-        (CTRLConfig, CTRLLMHeadModel),
-        (ReformerConfig, ReformerModelWithLMHead),
-        (BertGenerationConfig, BertGenerationDecoder),
-        (XLMProphetNetConfig, XLMProphetNetForCausalLM),
-        (ProphetNetConfig, ProphetNetForCausalLM),
-        (BartConfig, BartForCausalLM),
-        (MBartConfig, MBartForCausalLM),
-        (PegasusConfig, PegasusForCausalLM),
-        (MarianConfig, MarianForCausalLM),
-        (BlenderbotConfig, BlenderbotForCausalLM),
-        (BlenderbotSmallConfig, BlenderbotSmallForCausalLM),
-        (MegatronBertConfig, MegatronBertForCausalLM),
+        ("bart", "BartForCausalLM"),
+        ("bert", "BertLMHeadModel"),
+        ("bert-generation", "BertGenerationDecoder"),
+        ("big_bird", "BigBirdForCausalLM"),
+        ("bigbird_pegasus", "BigBirdPegasusForCausalLM"),
+        ("biogpt", "BioGptForCausalLM"),
+        ("blenderbot", "BlenderbotForCausalLM"),
+        ("blenderbot-small", "BlenderbotSmallForCausalLM"),
+        ("bloom", "BloomForCausalLM"),
+        ("camembert", "CamembertForCausalLM"),
+        ("codegen", "CodeGenForCausalLM"),
+        ("cpmant", "CpmAntForCausalLM"),
+        ("ctrl", "CTRLLMHeadModel"),
+        ("data2vec-text", "Data2VecTextForCausalLM"),
+        ("electra", "ElectraForCausalLM"),
+        ("ernie", "ErnieForCausalLM"),
+        ("git", "GitForCausalLM"),
+        ("gpt-sw3", "GPT2LMHeadModel"),
+        ("gpt2", "GPT2LMHeadModel"),
+        ("gpt_bigcode", "GPTBigCodeForCausalLM"),
+        ("gpt_neo", "GPTNeoForCausalLM"),
+        ("gpt_neox", "GPTNeoXForCausalLM"),
+        ("gpt_neox_japanese", "GPTNeoXJapaneseForCausalLM"),
+        ("gptj", "GPTJForCausalLM"),
+        ("llama", "LlamaForCausalLM"),
+        ("marian", "MarianForCausalLM"),
+        ("mbart", "MBartForCausalLM"),
+        ("mega", "MegaForCausalLM"),
+        ("megatron-bert", "MegatronBertForCausalLM"),
+        ("mvp", "MvpForCausalLM"),
+        ("open-llama", "OpenLlamaForCausalLM"),
+        ("openai-gpt", "OpenAIGPTLMHeadModel"),
+        ("opt", "OPTForCausalLM"),
+        ("pegasus", "PegasusForCausalLM"),
+        ("plbart", "PLBartForCausalLM"),
+        ("prophetnet", "ProphetNetForCausalLM"),
+        ("qdqbert", "QDQBertLMHeadModel"),
+        ("reformer", "ReformerModelWithLMHead"),
+        ("rembert", "RemBertForCausalLM"),
+        ("roberta", "RobertaForCausalLM"),
+        ("roberta-prelayernorm", "RobertaPreLayerNormForCausalLM"),
+        ("roc_bert", "RoCBertForCausalLM"),
+        ("roformer", "RoFormerForCausalLM"),
+        ("rwkv", "RwkvForCausalLM"),
+        ("speech_to_text_2", "Speech2Text2ForCausalLM"),
+        ("transfo-xl", "TransfoXLLMHeadModel"),
+        ("trocr", "TrOCRForCausalLM"),
+        ("xglm", "XGLMForCausalLM"),
+        ("xlm", "XLMWithLMHeadModel"),
+        ("xlm-prophetnet", "XLMProphetNetForCausalLM"),
+        ("xlm-roberta", "XLMRobertaForCausalLM"),
+        ("xlm-roberta-xl", "XLMRobertaXLForCausalLM"),
+        ("xlnet", "XLNetLMHeadModel"),
+        ("xmod", "XmodForCausalLM"),
     ]
 )
 
-MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
+MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
+    [
+        ("deit", "DeiTForMaskedImageModeling"),
+        ("focalnet", "FocalNetForMaskedImageModeling"),
+        ("swin", "SwinForMaskedImageModeling"),
+        ("swinv2", "Swinv2ForMaskedImageModeling"),
+        ("vit", "ViTForMaskedImageModeling"),
+    ]
+)
+
+
+MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
+    # Model for Causal Image Modeling mapping
+    [
+        ("imagegpt", "ImageGPTForCausalImageModeling"),
+    ]
+)
+
+MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image Classification mapping
-        (ViTConfig, ViTForImageClassification),
-        (DeiTConfig, (DeiTForImageClassification, DeiTForImageClassificationWithTeacher)),
+        ("beit", "BeitForImageClassification"),
+        ("bit", "BitForImageClassification"),
+        ("convnext", "ConvNextForImageClassification"),
+        ("convnextv2", "ConvNextV2ForImageClassification"),
+        ("cvt", "CvtForImageClassification"),
+        ("data2vec-vision", "Data2VecVisionForImageClassification"),
+        ("deit", ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher")),
+        ("dinat", "DinatForImageClassification"),
+        (
+            "efficientformer",
+            (
+                "EfficientFormerForImageClassification",
+                "EfficientFormerForImageClassificationWithTeacher",
+            ),
+        ),
+        ("efficientnet", "EfficientNetForImageClassification"),
+        ("focalnet", "FocalNetForImageClassification"),
+        ("imagegpt", "ImageGPTForImageClassification"),
+        ("levit", ("LevitForImageClassification", "LevitForImageClassificationWithTeacher")),
+        ("mobilenet_v1", "MobileNetV1ForImageClassification"),
+        ("mobilenet_v2", "MobileNetV2ForImageClassification"),
+        ("mobilevit", "MobileViTForImageClassification"),
+        ("mobilevitv2", "MobileViTV2ForImageClassification"),
+        ("nat", "NatForImageClassification"),
+        (
+            "perceiver",
+            (
+                "PerceiverForImageClassificationLearned",
+                "PerceiverForImageClassificationFourier",
+                "PerceiverForImageClassificationConvProcessing",
+            ),
+        ),
+        ("poolformer", "PoolFormerForImageClassification"),
+        ("regnet", "RegNetForImageClassification"),
+        ("resnet", "ResNetForImageClassification"),
+        ("segformer", "SegformerForImageClassification"),
+        ("swiftformer", "SwiftFormerForImageClassification"),
+        ("swin", "SwinForImageClassification"),
+        ("swinv2", "Swinv2ForImageClassification"),
+        ("van", "VanForImageClassification"),
+        ("vit", "ViTForImageClassification"),
+        ("vit_hybrid", "ViTHybridForImageClassification"),
+        ("vit_msn", "ViTMSNForImageClassification"),
     ]
 )
 
-MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
+MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Do not add new models here, this class will be deprecated in the future.
+        # Model for Image Segmentation mapping
+        ("detr", "DetrForSegmentation"),
+    ]
+)
+
+MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Semantic Segmentation mapping
+        ("beit", "BeitForSemanticSegmentation"),
+        ("data2vec-vision", "Data2VecVisionForSemanticSegmentation"),
+        ("dpt", "DPTForSemanticSegmentation"),
+        ("mobilenet_v2", "MobileNetV2ForSemanticSegmentation"),
+        ("mobilevit", "MobileViTForSemanticSegmentation"),
+        ("mobilevitv2", "MobileViTV2ForSemanticSegmentation"),
+        ("segformer", "SegformerForSemanticSegmentation"),
+        ("upernet", "UperNetForSemanticSegmentation"),
+    ]
+)
+
+MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Instance Segmentation mapping
+        # MaskFormerForInstanceSegmentation can be removed from this mapping in v5
+        ("maskformer", "MaskFormerForInstanceSegmentation"),
+    ]
+)
+
+MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Universal Segmentation mapping
+        ("detr", "DetrForSegmentation"),
+        ("mask2former", "Mask2FormerForUniversalSegmentation"),
+        ("maskformer", "MaskFormerForInstanceSegmentation"),
+        ("oneformer", "OneFormerForUniversalSegmentation"),
+    ]
+)
+
+MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    [
+        ("timesformer", "TimesformerForVideoClassification"),
+        ("videomae", "VideoMAEForVideoClassification"),
+    ]
+)
+
+MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
+    [
+        ("blip", "BlipForConditionalGeneration"),
+        ("blip-2", "Blip2ForConditionalGeneration"),
+        ("git", "GitForCausalLM"),
+        ("pix2struct", "Pix2StructForConditionalGeneration"),
+        ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
+    ]
+)
+
+MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
-        (BigBirdConfig, BigBirdForMaskedLM),
-        (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
-        (ConvBertConfig, ConvBertForMaskedLM),
-        (LayoutLMConfig, LayoutLMForMaskedLM),
-        (DistilBertConfig, DistilBertForMaskedLM),
-        (AlbertConfig, AlbertForMaskedLM),
-        (BartConfig, BartForConditionalGeneration),
-        (MBartConfig, MBartForConditionalGeneration),
-        (CamembertConfig, CamembertForMaskedLM),
-        (XLMRobertaConfig, XLMRobertaForMaskedLM),
-        (LongformerConfig, LongformerForMaskedLM),
-        (RobertaConfig, RobertaForMaskedLM),
-        (SqueezeBertConfig, SqueezeBertForMaskedLM),
-        (BertConfig, BertForMaskedLM),
-        (MegatronBertConfig, MegatronBertForMaskedLM),
-        (MobileBertConfig, MobileBertForMaskedLM),
-        (FlaubertConfig, FlaubertWithLMHeadModel),
-        (XLMConfig, XLMWithLMHeadModel),
-        (ElectraConfig, ElectraForMaskedLM),
-        (ReformerConfig, ReformerForMaskedLM),
-        (FunnelConfig, FunnelForMaskedLM),
-        (MPNetConfig, MPNetForMaskedLM),
-        (TapasConfig, TapasForMaskedLM),
-        (DebertaConfig, DebertaForMaskedLM),
-        (DebertaV2Config, DebertaV2ForMaskedLM),
-        (IBertConfig, IBertForMaskedLM),
+        ("albert", "AlbertForMaskedLM"),
+        ("bart", "BartForConditionalGeneration"),
+        ("bert", "BertForMaskedLM"),
+        ("big_bird", "BigBirdForMaskedLM"),
+        ("camembert", "CamembertForMaskedLM"),
+        ("convbert", "ConvBertForMaskedLM"),
+        ("data2vec-text", "Data2VecTextForMaskedLM"),
+        ("deberta", "DebertaForMaskedLM"),
+        ("deberta-v2", "DebertaV2ForMaskedLM"),
+        ("distilbert", "DistilBertForMaskedLM"),
+        ("electra", "ElectraForMaskedLM"),
+        ("ernie", "ErnieForMaskedLM"),
+        ("esm", "EsmForMaskedLM"),
+        ("flaubert", "FlaubertWithLMHeadModel"),
+        ("fnet", "FNetForMaskedLM"),
+        ("funnel", "FunnelForMaskedLM"),
+        ("ibert", "IBertForMaskedLM"),
+        ("layoutlm", "LayoutLMForMaskedLM"),
+        ("longformer", "LongformerForMaskedLM"),
+        ("luke", "LukeForMaskedLM"),
+        ("mbart", "MBartForConditionalGeneration"),
+        ("mega", "MegaForMaskedLM"),
+        ("megatron-bert", "MegatronBertForMaskedLM"),
+        ("mobilebert", "MobileBertForMaskedLM"),
+        ("mpnet", "MPNetForMaskedLM"),
+        ("mvp", "MvpForConditionalGeneration"),
+        ("nezha", "NezhaForMaskedLM"),
+        ("nystromformer", "NystromformerForMaskedLM"),
+        ("perceiver", "PerceiverForMaskedLM"),
+        ("qdqbert", "QDQBertForMaskedLM"),
+        ("reformer", "ReformerForMaskedLM"),
+        ("rembert", "RemBertForMaskedLM"),
+        ("roberta", "RobertaForMaskedLM"),
+        ("roberta-prelayernorm", "RobertaPreLayerNormForMaskedLM"),
+        ("roc_bert", "RoCBertForMaskedLM"),
+        ("roformer", "RoFormerForMaskedLM"),
+        ("squeezebert", "SqueezeBertForMaskedLM"),
+        ("tapas", "TapasForMaskedLM"),
+        ("wav2vec2", "Wav2Vec2ForMaskedLM"),
+        ("xlm", "XLMWithLMHeadModel"),
+        ("xlm-roberta", "XLMRobertaForMaskedLM"),
+        ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
+        ("xmod", "XmodForMaskedLM"),
+        ("yoso", "YosoForMaskedLM"),
     ]
 )
 
-MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
+MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Object Detection mapping
+        ("conditional_detr", "ConditionalDetrForObjectDetection"),
+        ("deformable_detr", "DeformableDetrForObjectDetection"),
+        ("deta", "DetaForObjectDetection"),
+        ("detr", "DetrForObjectDetection"),
+        ("table-transformer", "TableTransformerForObjectDetection"),
+        ("yolos", "YolosForObjectDetection"),
+    ]
+)
+
+MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Zero Shot Object Detection mapping
+        ("owlvit", "OwlViTForObjectDetection")
+    ]
+)
+
+MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for depth estimation mapping
+        ("dpt", "DPTForDepthEstimation"),
+        ("glpn", "GLPNForDepthEstimation"),
+    ]
+)
+MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
-        (M2M100Config, M2M100ForConditionalGeneration),
-        (LEDConfig, LEDForConditionalGeneration),
-        (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
-        (MT5Config, MT5ForConditionalGeneration),
-        (T5Config, T5ForConditionalGeneration),
-        (PegasusConfig, PegasusForConditionalGeneration),
-        (MarianConfig, MarianMTModel),
-        (MBartConfig, MBartForConditionalGeneration),
-        (BlenderbotConfig, BlenderbotForConditionalGeneration),
-        (BartConfig, BartForConditionalGeneration),
-        (FSMTConfig, FSMTForConditionalGeneration),
-        (EncoderDecoderConfig, EncoderDecoderModel),
-        (XLMProphetNetConfig, XLMProphetNetForConditionalGeneration),
-        (ProphetNetConfig, ProphetNetForConditionalGeneration),
+        ("bart", "BartForConditionalGeneration"),
+        ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
+        ("blenderbot", "BlenderbotForConditionalGeneration"),
+        ("blenderbot-small", "BlenderbotSmallForConditionalGeneration"),
+        ("encoder-decoder", "EncoderDecoderModel"),
+        ("fsmt", "FSMTForConditionalGeneration"),
+        ("gptsan-japanese", "GPTSanJapaneseForConditionalGeneration"),
+        ("led", "LEDForConditionalGeneration"),
+        ("longt5", "LongT5ForConditionalGeneration"),
+        ("m2m_100", "M2M100ForConditionalGeneration"),
+        ("marian", "MarianMTModel"),
+        ("mbart", "MBartForConditionalGeneration"),
+        ("mt5", "MT5ForConditionalGeneration"),
+        ("mvp", "MvpForConditionalGeneration"),
+        ("nllb-moe", "NllbMoeForConditionalGeneration"),
+        ("pegasus", "PegasusForConditionalGeneration"),
+        ("pegasus_x", "PegasusXForConditionalGeneration"),
+        ("plbart", "PLBartForConditionalGeneration"),
+        ("prophetnet", "ProphetNetForConditionalGeneration"),
+        ("switch_transformers", "SwitchTransformersForConditionalGeneration"),
+        ("t5", "T5ForConditionalGeneration"),
+        ("xlm-prophetnet", "XLMProphetNetForConditionalGeneration"),
     ]
 )
 
-MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
+MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
+    [
+        ("speech-encoder-decoder", "SpeechEncoderDecoderModel"),
+        ("speech_to_text", "Speech2TextForConditionalGeneration"),
+        ("speecht5", "SpeechT5ForSpeechToText"),
+        ("whisper", "WhisperForConditionalGeneration"),
+    ]
+)
+
+MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
-        (BigBirdConfig, BigBirdForSequenceClassification),
-        (ConvBertConfig, ConvBertForSequenceClassification),
-        (LEDConfig, LEDForSequenceClassification),
-        (DistilBertConfig, DistilBertForSequenceClassification),
-        (AlbertConfig, AlbertForSequenceClassification),
-        (CamembertConfig, CamembertForSequenceClassification),
-        (XLMRobertaConfig, XLMRobertaForSequenceClassification),
-        (MBartConfig, MBartForSequenceClassification),
-        (BartConfig, BartForSequenceClassification),
-        (LongformerConfig, LongformerForSequenceClassification),
-        (RobertaConfig, RobertaForSequenceClassification),
-        (SqueezeBertConfig, SqueezeBertForSequenceClassification),
-        (LayoutLMConfig, LayoutLMForSequenceClassification),
-        (BertConfig, BertForSequenceClassification),
-        (XLNetConfig, XLNetForSequenceClassification),
-        (MegatronBertConfig, MegatronBertForSequenceClassification),
-        (MobileBertConfig, MobileBertForSequenceClassification),
-        (FlaubertConfig, FlaubertForSequenceClassification),
-        (XLMConfig, XLMForSequenceClassification),
-        (ElectraConfig, ElectraForSequenceClassification),
-        (FunnelConfig, FunnelForSequenceClassification),
-        (DebertaConfig, DebertaForSequenceClassification),
-        (DebertaV2Config, DebertaV2ForSequenceClassification),
-        (GPT2Config, GPT2ForSequenceClassification),
-        (OpenAIGPTConfig, OpenAIGPTForSequenceClassification),
-        (ReformerConfig, ReformerForSequenceClassification),
-        (CTRLConfig, CTRLForSequenceClassification),
-        (TransfoXLConfig, TransfoXLForSequenceClassification),
-        (MPNetConfig, MPNetForSequenceClassification),
-        (TapasConfig, TapasForSequenceClassification),
-        (IBertConfig, IBertForSequenceClassification),
+        ("albert", "AlbertForSequenceClassification"),
+        ("bart", "BartForSequenceClassification"),
+        ("bert", "BertForSequenceClassification"),
+        ("big_bird", "BigBirdForSequenceClassification"),
+        ("bigbird_pegasus", "BigBirdPegasusForSequenceClassification"),
+        ("biogpt", "BioGptForSequenceClassification"),
+        ("bloom", "BloomForSequenceClassification"),
+        ("camembert", "CamembertForSequenceClassification"),
+        ("canine", "CanineForSequenceClassification"),
+        ("convbert", "ConvBertForSequenceClassification"),
+        ("ctrl", "CTRLForSequenceClassification"),
+        ("data2vec-text", "Data2VecTextForSequenceClassification"),
+        ("deberta", "DebertaForSequenceClassification"),
+        ("deberta-v2", "DebertaV2ForSequenceClassification"),
+        ("distilbert", "DistilBertForSequenceClassification"),
+        ("electra", "ElectraForSequenceClassification"),
+        ("ernie", "ErnieForSequenceClassification"),
+        ("ernie_m", "ErnieMForSequenceClassification"),
+        ("esm", "EsmForSequenceClassification"),
+        ("flaubert", "FlaubertForSequenceClassification"),
+        ("fnet", "FNetForSequenceClassification"),
+        ("funnel", "FunnelForSequenceClassification"),
+        ("gpt-sw3", "GPT2ForSequenceClassification"),
+        ("gpt2", "GPT2ForSequenceClassification"),
+        ("gpt_bigcode", "GPTBigCodeForSequenceClassification"),
+        ("gpt_neo", "GPTNeoForSequenceClassification"),
+        ("gpt_neox", "GPTNeoXForSequenceClassification"),
+        ("gptj", "GPTJForSequenceClassification"),
+        ("ibert", "IBertForSequenceClassification"),
+        ("layoutlm", "LayoutLMForSequenceClassification"),
+        ("layoutlmv2", "LayoutLMv2ForSequenceClassification"),
+        ("layoutlmv3", "LayoutLMv3ForSequenceClassification"),
+        ("led", "LEDForSequenceClassification"),
+        ("lilt", "LiltForSequenceClassification"),
+        ("llama", "LlamaForSequenceClassification"),
+        ("longformer", "LongformerForSequenceClassification"),
+        ("luke", "LukeForSequenceClassification"),
+        ("markuplm", "MarkupLMForSequenceClassification"),
+        ("mbart", "MBartForSequenceClassification"),
+        ("mega", "MegaForSequenceClassification"),
+        ("megatron-bert", "MegatronBertForSequenceClassification"),
+        ("mobilebert", "MobileBertForSequenceClassification"),
+        ("mpnet", "MPNetForSequenceClassification"),
+        ("mvp", "MvpForSequenceClassification"),
+        ("nezha", "NezhaForSequenceClassification"),
+        ("nystromformer", "NystromformerForSequenceClassification"),
+        ("open-llama", "OpenLlamaForSequenceClassification"),
+        ("openai-gpt", "OpenAIGPTForSequenceClassification"),
+        ("opt", "OPTForSequenceClassification"),
+        ("perceiver", "PerceiverForSequenceClassification"),
+        ("plbart", "PLBartForSequenceClassification"),
+        ("qdqbert", "QDQBertForSequenceClassification"),
+        ("reformer", "ReformerForSequenceClassification"),
+        ("rembert", "RemBertForSequenceClassification"),
+        ("roberta", "RobertaForSequenceClassification"),
+        ("roberta-prelayernorm", "RobertaPreLayerNormForSequenceClassification"),
+        ("roc_bert", "RoCBertForSequenceClassification"),
+        ("roformer", "RoFormerForSequenceClassification"),
+        ("squeezebert", "SqueezeBertForSequenceClassification"),
+        ("tapas", "TapasForSequenceClassification"),
+        ("transfo-xl", "TransfoXLForSequenceClassification"),
+        ("xlm", "XLMForSequenceClassification"),
+        ("xlm-roberta", "XLMRobertaForSequenceClassification"),
+        ("xlm-roberta-xl", "XLMRobertaXLForSequenceClassification"),
+        ("xlnet", "XLNetForSequenceClassification"),
+        ("xmod", "XmodForSequenceClassification"),
+        ("yoso", "YosoForSequenceClassification"),
     ]
 )
 
-MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
+MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
-        (BigBirdConfig, BigBirdForQuestionAnswering),
-        (ConvBertConfig, ConvBertForQuestionAnswering),
-        (LEDConfig, LEDForQuestionAnswering),
-        (DistilBertConfig, DistilBertForQuestionAnswering),
-        (AlbertConfig, AlbertForQuestionAnswering),
-        (CamembertConfig, CamembertForQuestionAnswering),
-        (BartConfig, BartForQuestionAnswering),
-        (MBartConfig, MBartForQuestionAnswering),
-        (LongformerConfig, LongformerForQuestionAnswering),
-        (XLMRobertaConfig, XLMRobertaForQuestionAnswering),
-        (RobertaConfig, RobertaForQuestionAnswering),
-        (SqueezeBertConfig, SqueezeBertForQuestionAnswering),
-        (BertConfig, BertForQuestionAnswering),
-        (XLNetConfig, XLNetForQuestionAnsweringSimple),
-        (FlaubertConfig, FlaubertForQuestionAnsweringSimple),
-        (MegatronBertConfig, MegatronBertForQuestionAnswering),
-        (MobileBertConfig, MobileBertForQuestionAnswering),
-        (XLMConfig, XLMForQuestionAnsweringSimple),
-        (ElectraConfig, ElectraForQuestionAnswering),
-        (ReformerConfig, ReformerForQuestionAnswering),
-        (FunnelConfig, FunnelForQuestionAnswering),
-        (LxmertConfig, LxmertForQuestionAnswering),
-        (MPNetConfig, MPNetForQuestionAnswering),
-        (DebertaConfig, DebertaForQuestionAnswering),
-        (DebertaV2Config, DebertaV2ForQuestionAnswering),
-        (IBertConfig, IBertForQuestionAnswering),
+        ("albert", "AlbertForQuestionAnswering"),
+        ("bart", "BartForQuestionAnswering"),
+        ("bert", "BertForQuestionAnswering"),
+        ("big_bird", "BigBirdForQuestionAnswering"),
+        ("bigbird_pegasus", "BigBirdPegasusForQuestionAnswering"),
+        ("bloom", "BloomForQuestionAnswering"),
+        ("camembert", "CamembertForQuestionAnswering"),
+        ("canine", "CanineForQuestionAnswering"),
+        ("convbert", "ConvBertForQuestionAnswering"),
+        ("data2vec-text", "Data2VecTextForQuestionAnswering"),
+        ("deberta", "DebertaForQuestionAnswering"),
+        ("deberta-v2", "DebertaV2ForQuestionAnswering"),
+        ("distilbert", "DistilBertForQuestionAnswering"),
+        ("electra", "ElectraForQuestionAnswering"),
+        ("ernie", "ErnieForQuestionAnswering"),
+        ("ernie_m", "ErnieMForQuestionAnswering"),
+        ("flaubert", "FlaubertForQuestionAnsweringSimple"),
+        ("fnet", "FNetForQuestionAnswering"),
+        ("funnel", "FunnelForQuestionAnswering"),
+        ("gpt2", "GPT2ForQuestionAnswering"),
+        ("gpt_neo", "GPTNeoForQuestionAnswering"),
+        ("gpt_neox", "GPTNeoXForQuestionAnswering"),
+        ("gptj", "GPTJForQuestionAnswering"),
+        ("ibert", "IBertForQuestionAnswering"),
+        ("layoutlmv2", "LayoutLMv2ForQuestionAnswering"),
+        ("layoutlmv3", "LayoutLMv3ForQuestionAnswering"),
+        ("led", "LEDForQuestionAnswering"),
+        ("lilt", "LiltForQuestionAnswering"),
+        ("longformer", "LongformerForQuestionAnswering"),
+        ("luke", "LukeForQuestionAnswering"),
+        ("lxmert", "LxmertForQuestionAnswering"),
+        ("markuplm", "MarkupLMForQuestionAnswering"),
+        ("mbart", "MBartForQuestionAnswering"),
+        ("mega", "MegaForQuestionAnswering"),
+        ("megatron-bert", "MegatronBertForQuestionAnswering"),
+        ("mobilebert", "MobileBertForQuestionAnswering"),
+        ("mpnet", "MPNetForQuestionAnswering"),
+        ("mvp", "MvpForQuestionAnswering"),
+        ("nezha", "NezhaForQuestionAnswering"),
+        ("nystromformer", "NystromformerForQuestionAnswering"),
+        ("opt", "OPTForQuestionAnswering"),
+        ("qdqbert", "QDQBertForQuestionAnswering"),
+        ("reformer", "ReformerForQuestionAnswering"),
+        ("rembert", "RemBertForQuestionAnswering"),
+        ("roberta", "RobertaForQuestionAnswering"),
+        ("roberta-prelayernorm", "RobertaPreLayerNormForQuestionAnswering"),
+        ("roc_bert", "RoCBertForQuestionAnswering"),
+        ("roformer", "RoFormerForQuestionAnswering"),
+        ("splinter", "SplinterForQuestionAnswering"),
+        ("squeezebert", "SqueezeBertForQuestionAnswering"),
+        ("xlm", "XLMForQuestionAnsweringSimple"),
+        ("xlm-roberta", "XLMRobertaForQuestionAnswering"),
+        ("xlm-roberta-xl", "XLMRobertaXLForQuestionAnswering"),
+        ("xlnet", "XLNetForQuestionAnsweringSimple"),
+        ("xmod", "XmodForQuestionAnswering"),
+        ("yoso", "YosoForQuestionAnswering"),
     ]
 )
 
-MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
+MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Table Question Answering mapping
-        (TapasConfig, TapasForQuestionAnswering),
+        ("tapas", "TapasForQuestionAnswering"),
     ]
 )
 
-MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
+MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
+    [
+        ("vilt", "ViltForQuestionAnswering"),
+    ]
+)
+
+MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
+    [
+        ("layoutlm", "LayoutLMForQuestionAnswering"),
+        ("layoutlmv2", "LayoutLMv2ForQuestionAnswering"),
+        ("layoutlmv3", "LayoutLMv3ForQuestionAnswering"),
+    ]
+)
+
+MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
-        (BigBirdConfig, BigBirdForTokenClassification),
-        (ConvBertConfig, ConvBertForTokenClassification),
-        (LayoutLMConfig, LayoutLMForTokenClassification),
-        (DistilBertConfig, DistilBertForTokenClassification),
-        (CamembertConfig, CamembertForTokenClassification),
-        (FlaubertConfig, FlaubertForTokenClassification),
-        (XLMConfig, XLMForTokenClassification),
-        (XLMRobertaConfig, XLMRobertaForTokenClassification),
-        (LongformerConfig, LongformerForTokenClassification),
-        (RobertaConfig, RobertaForTokenClassification),
-        (SqueezeBertConfig, SqueezeBertForTokenClassification),
-        (BertConfig, BertForTokenClassification),
-        (MegatronBertConfig, MegatronBertForTokenClassification),
-        (MobileBertConfig, MobileBertForTokenClassification),
-        (XLNetConfig, XLNetForTokenClassification),
-        (AlbertConfig, AlbertForTokenClassification),
-        (ElectraConfig, ElectraForTokenClassification),
-        (FlaubertConfig, FlaubertForTokenClassification),
-        (FunnelConfig, FunnelForTokenClassification),
-        (MPNetConfig, MPNetForTokenClassification),
-        (DebertaConfig, DebertaForTokenClassification),
-        (DebertaV2Config, DebertaV2ForTokenClassification),
-        (IBertConfig, IBertForTokenClassification),
+        ("albert", "AlbertForTokenClassification"),
+        ("bert", "BertForTokenClassification"),
+        ("big_bird", "BigBirdForTokenClassification"),
+        ("biogpt", "BioGptForTokenClassification"),
+        ("bloom", "BloomForTokenClassification"),
+        ("camembert", "CamembertForTokenClassification"),
+        ("canine", "CanineForTokenClassification"),
+        ("convbert", "ConvBertForTokenClassification"),
+        ("data2vec-text", "Data2VecTextForTokenClassification"),
+        ("deberta", "DebertaForTokenClassification"),
+        ("deberta-v2", "DebertaV2ForTokenClassification"),
+        ("distilbert", "DistilBertForTokenClassification"),
+        ("electra", "ElectraForTokenClassification"),
+        ("ernie", "ErnieForTokenClassification"),
+        ("ernie_m", "ErnieMForTokenClassification"),
+        ("esm", "EsmForTokenClassification"),
+        ("flaubert", "FlaubertForTokenClassification"),
+        ("fnet", "FNetForTokenClassification"),
+        ("funnel", "FunnelForTokenClassification"),
+        ("gpt-sw3", "GPT2ForTokenClassification"),
+        ("gpt2", "GPT2ForTokenClassification"),
+        ("gpt_bigcode", "GPTBigCodeForTokenClassification"),
+        ("gpt_neo", "GPTNeoForTokenClassification"),
+        ("gpt_neox", "GPTNeoXForTokenClassification"),
+        ("ibert", "IBertForTokenClassification"),
+        ("layoutlm", "LayoutLMForTokenClassification"),
+        ("layoutlmv2", "LayoutLMv2ForTokenClassification"),
+        ("layoutlmv3", "LayoutLMv3ForTokenClassification"),
+        ("lilt", "LiltForTokenClassification"),
+        ("longformer", "LongformerForTokenClassification"),
+        ("luke", "LukeForTokenClassification"),
+        ("markuplm", "MarkupLMForTokenClassification"),
+        ("mega", "MegaForTokenClassification"),
+        ("megatron-bert", "MegatronBertForTokenClassification"),
+        ("mobilebert", "MobileBertForTokenClassification"),
+        ("mpnet", "MPNetForTokenClassification"),
+        ("nezha", "NezhaForTokenClassification"),
+        ("nystromformer", "NystromformerForTokenClassification"),
+        ("qdqbert", "QDQBertForTokenClassification"),
+        ("rembert", "RemBertForTokenClassification"),
+        ("roberta", "RobertaForTokenClassification"),
+        ("roberta-prelayernorm", "RobertaPreLayerNormForTokenClassification"),
+        ("roc_bert", "RoCBertForTokenClassification"),
+        ("roformer", "RoFormerForTokenClassification"),
+        ("squeezebert", "SqueezeBertForTokenClassification"),
+        ("xlm", "XLMForTokenClassification"),
+        ("xlm-roberta", "XLMRobertaForTokenClassification"),
+        ("xlm-roberta-xl", "XLMRobertaXLForTokenClassification"),
+        ("xlnet", "XLNetForTokenClassification"),
+        ("xmod", "XmodForTokenClassification"),
+        ("yoso", "YosoForTokenClassification"),
     ]
 )
 
-MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
+MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Multiple Choice mapping
-        (BigBirdConfig, BigBirdForMultipleChoice),
-        (ConvBertConfig, ConvBertForMultipleChoice),
-        (CamembertConfig, CamembertForMultipleChoice),
-        (ElectraConfig, ElectraForMultipleChoice),
-        (XLMRobertaConfig, XLMRobertaForMultipleChoice),
-        (LongformerConfig, LongformerForMultipleChoice),
-        (RobertaConfig, RobertaForMultipleChoice),
-        (SqueezeBertConfig, SqueezeBertForMultipleChoice),
-        (BertConfig, BertForMultipleChoice),
-        (DistilBertConfig, DistilBertForMultipleChoice),
-        (MegatronBertConfig, MegatronBertForMultipleChoice),
-        (MobileBertConfig, MobileBertForMultipleChoice),
-        (XLNetConfig, XLNetForMultipleChoice),
-        (AlbertConfig, AlbertForMultipleChoice),
-        (XLMConfig, XLMForMultipleChoice),
-        (FlaubertConfig, FlaubertForMultipleChoice),
-        (FunnelConfig, FunnelForMultipleChoice),
-        (MPNetConfig, MPNetForMultipleChoice),
-        (IBertConfig, IBertForMultipleChoice),
+        ("albert", "AlbertForMultipleChoice"),
+        ("bert", "BertForMultipleChoice"),
+        ("big_bird", "BigBirdForMultipleChoice"),
+        ("camembert", "CamembertForMultipleChoice"),
+        ("canine", "CanineForMultipleChoice"),
+        ("convbert", "ConvBertForMultipleChoice"),
+        ("data2vec-text", "Data2VecTextForMultipleChoice"),
+        ("deberta-v2", "DebertaV2ForMultipleChoice"),
+        ("distilbert", "DistilBertForMultipleChoice"),
+        ("electra", "ElectraForMultipleChoice"),
+        ("ernie", "ErnieForMultipleChoice"),
+        ("ernie_m", "ErnieMForMultipleChoice"),
+        ("flaubert", "FlaubertForMultipleChoice"),
+        ("fnet", "FNetForMultipleChoice"),
+        ("funnel", "FunnelForMultipleChoice"),
+        ("ibert", "IBertForMultipleChoice"),
+        ("longformer", "LongformerForMultipleChoice"),
+        ("luke", "LukeForMultipleChoice"),
+        ("mega", "MegaForMultipleChoice"),
+        ("megatron-bert", "MegatronBertForMultipleChoice"),
+        ("mobilebert", "MobileBertForMultipleChoice"),
+        ("mpnet", "MPNetForMultipleChoice"),
+        ("nezha", "NezhaForMultipleChoice"),
+        ("nystromformer", "NystromformerForMultipleChoice"),
+        ("qdqbert", "QDQBertForMultipleChoice"),
+        ("rembert", "RemBertForMultipleChoice"),
+        ("roberta", "RobertaForMultipleChoice"),
+        ("roberta-prelayernorm", "RobertaPreLayerNormForMultipleChoice"),
+        ("roc_bert", "RoCBertForMultipleChoice"),
+        ("roformer", "RoFormerForMultipleChoice"),
+        ("squeezebert", "SqueezeBertForMultipleChoice"),
+        ("xlm", "XLMForMultipleChoice"),
+        ("xlm-roberta", "XLMRobertaForMultipleChoice"),
+        ("xlm-roberta-xl", "XLMRobertaXLForMultipleChoice"),
+        ("xlnet", "XLNetForMultipleChoice"),
+        ("xmod", "XmodForMultipleChoice"),
+        ("yoso", "YosoForMultipleChoice"),
     ]
 )
 
-MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
+MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict(
     [
-        (BertConfig, BertForNextSentencePrediction),
-        (MegatronBertConfig, MegatronBertForNextSentencePrediction),
-        (MobileBertConfig, MobileBertForNextSentencePrediction),
+        ("bert", "BertForNextSentencePrediction"),
+        ("ernie", "ErnieForNextSentencePrediction"),
+        ("fnet", "FNetForNextSentencePrediction"),
+        ("megatron-bert", "MegatronBertForNextSentencePrediction"),
+        ("mobilebert", "MobileBertForNextSentencePrediction"),
+        ("nezha", "NezhaForNextSentencePrediction"),
+        ("qdqbert", "QDQBertForNextSentencePrediction"),
     ]
 )
 
-
-AutoModel = auto_class_factory("AutoModel", MODEL_MAPPING)
-
-AutoModelForPreTraining = auto_class_factory(
-    "AutoModelForPreTraining", MODEL_FOR_PRETRAINING_MAPPING, head_doc="pretraining"
+MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Audio Classification mapping
+        ("audio-spectrogram-transformer", "ASTForAudioClassification"),
+        ("data2vec-audio", "Data2VecAudioForSequenceClassification"),
+        ("hubert", "HubertForSequenceClassification"),
+        ("sew", "SEWForSequenceClassification"),
+        ("sew-d", "SEWDForSequenceClassification"),
+        ("unispeech", "UniSpeechForSequenceClassification"),
+        ("unispeech-sat", "UniSpeechSatForSequenceClassification"),
+        ("wav2vec2", "Wav2Vec2ForSequenceClassification"),
+        ("wav2vec2-conformer", "Wav2Vec2ConformerForSequenceClassification"),
+        ("wavlm", "WavLMForSequenceClassification"),
+        ("whisper", "WhisperForAudioClassification"),
+    ]
 )
 
-# Private on puprose, the public class will add the deprecation warnings.
-_AutoModelWithLMHead = auto_class_factory(
-    "AutoModelWithLMHead", MODEL_WITH_LM_HEAD_MAPPING, head_doc="language modeling"
+MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Connectionist temporal classification (CTC) mapping
+        ("data2vec-audio", "Data2VecAudioForCTC"),
+        ("hubert", "HubertForCTC"),
+        ("mctct", "MCTCTForCTC"),
+        ("sew", "SEWForCTC"),
+        ("sew-d", "SEWDForCTC"),
+        ("unispeech", "UniSpeechForCTC"),
+        ("unispeech-sat", "UniSpeechSatForCTC"),
+        ("wav2vec2", "Wav2Vec2ForCTC"),
+        ("wav2vec2-conformer", "Wav2Vec2ConformerForCTC"),
+        ("wavlm", "WavLMForCTC"),
+    ]
 )
 
-AutoModelForCausalLM = auto_class_factory(
-    "AutoModelForCausalLM", MODEL_FOR_CAUSAL_LM_MAPPING, head_doc="causal language modeling"
+MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Audio Classification mapping
+        ("data2vec-audio", "Data2VecAudioForAudioFrameClassification"),
+        ("unispeech-sat", "UniSpeechSatForAudioFrameClassification"),
+        ("wav2vec2", "Wav2Vec2ForAudioFrameClassification"),
+        ("wav2vec2-conformer", "Wav2Vec2ConformerForAudioFrameClassification"),
+        ("wavlm", "WavLMForAudioFrameClassification"),
+    ]
 )
 
-AutoModelForMaskedLM = auto_class_factory(
-    "AutoModelForMaskedLM", MODEL_FOR_MASKED_LM_MAPPING, head_doc="masked language modeling"
+MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Audio Classification mapping
+        ("data2vec-audio", "Data2VecAudioForXVector"),
+        ("unispeech-sat", "UniSpeechSatForXVector"),
+        ("wav2vec2", "Wav2Vec2ForXVector"),
+        ("wav2vec2-conformer", "Wav2Vec2ConformerForXVector"),
+        ("wavlm", "WavLMForXVector"),
+    ]
 )
 
-AutoModelForSeq2SeqLM = auto_class_factory(
-    "AutoModelForSeq2SeqLM",
-    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    head_doc="sequence-to-sequence language modeling",
-    checkpoint_for_example="t5-base",
+MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Zero Shot Image Classification mapping
+        ("align", "AlignModel"),
+        ("altclip", "AltCLIPModel"),
+        ("blip", "BlipModel"),
+        ("chinese_clip", "ChineseCLIPModel"),
+        ("clip", "CLIPModel"),
+        ("clipseg", "CLIPSegModel"),
+    ]
 )
 
-AutoModelForSequenceClassification = auto_class_factory(
-    "AutoModelForSequenceClassification", MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING, head_doc="sequence classification"
+MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
+    [
+        # Backbone mapping
+        ("bit", "BitBackbone"),
+        ("convnext", "ConvNextBackbone"),
+        ("convnextv2", "ConvNextV2Backbone"),
+        ("dinat", "DinatBackbone"),
+        ("focalnet", "FocalNetBackbone"),
+        ("maskformer-swin", "MaskFormerSwinBackbone"),
+        ("nat", "NatBackbone"),
+        ("resnet", "ResNetBackbone"),
+        ("swin", "SwinBackbone"),
+        ("timm_backbone", "TimmBackbone"),
+    ]
 )
 
-AutoModelForQuestionAnswering = auto_class_factory(
-    "AutoModelForQuestionAnswering", MODEL_FOR_QUESTION_ANSWERING_MAPPING, head_doc="question answering"
+MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
+    [
+        ("sam", "SamModel"),
+    ]
 )
 
-AutoModelForTableQuestionAnswering = auto_class_factory(
-    "AutoModelForTableQuestionAnswering",
-    MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
+MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_MAPPING_NAMES)
+MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_PRETRAINING_MAPPING_NAMES)
+MODEL_WITH_LM_HEAD_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_WITH_LM_HEAD_MAPPING_NAMES)
+MODEL_FOR_CAUSAL_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
+MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES
+)
+MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
+)
+MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES
+)
+MODEL_FOR_IMAGE_SEGMENTATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES
+)
+MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES
+)
+MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES
+)
+MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING_NAMES
+)
+MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES
+)
+MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES)
+MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES
+)
+MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES
+)
+MODEL_FOR_MASKED_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_MASKED_LM_MAPPING_NAMES)
+MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES
+)
+MODEL_FOR_OBJECT_DETECTION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES)
+MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES
+)
+MODEL_FOR_DEPTH_ESTIMATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES)
+MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
+)
+MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
+)
+MODEL_FOR_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
+)
+MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES
+)
+MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
+)
+MODEL_FOR_MULTIPLE_CHOICE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES)
+MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES
+)
+MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES
+)
+MODEL_FOR_CTC_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_CTC_MAPPING_NAMES)
+MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES)
+MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES
+)
+MODEL_FOR_AUDIO_XVECTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES)
+
+MODEL_FOR_BACKBONE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_BACKBONE_MAPPING_NAMES)
+
+MODEL_FOR_MASK_GENERATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_MASK_GENERATION_MAPPING_NAMES)
+
+
+class AutoModelForMaskGeneration(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_MASK_GENERATION_MAPPING
+
+
+class AutoModel(_BaseAutoModelClass):
+    _model_mapping = MODEL_MAPPING
+
+
+AutoModel = auto_class_update(AutoModel)
+
+
+class AutoModelForPreTraining(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_PRETRAINING_MAPPING
+
+
+AutoModelForPreTraining = auto_class_update(AutoModelForPreTraining, head_doc="pretraining")
+
+
+# Private on purpose, the public class will add the deprecation warnings.
+class _AutoModelWithLMHead(_BaseAutoModelClass):
+    _model_mapping = MODEL_WITH_LM_HEAD_MAPPING
+
+
+_AutoModelWithLMHead = auto_class_update(_AutoModelWithLMHead, head_doc="language modeling")
+
+
+class AutoModelForCausalLM(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
+
+
+AutoModelForCausalLM = auto_class_update(AutoModelForCausalLM, head_doc="causal language modeling")
+
+
+class AutoModelForMaskedLM(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_MASKED_LM_MAPPING
+
+
+AutoModelForMaskedLM = auto_class_update(AutoModelForMaskedLM, head_doc="masked language modeling")
+
+
+class AutoModelForSeq2SeqLM(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+
+
+AutoModelForSeq2SeqLM = auto_class_update(
+    AutoModelForSeq2SeqLM, head_doc="sequence-to-sequence language modeling", checkpoint_for_example="t5-base"
+)
+
+
+class AutoModelForSequenceClassification(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+
+
+AutoModelForSequenceClassification = auto_class_update(
+    AutoModelForSequenceClassification, head_doc="sequence classification"
+)
+
+
+class AutoModelForQuestionAnswering(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_QUESTION_ANSWERING_MAPPING
+
+
+AutoModelForQuestionAnswering = auto_class_update(AutoModelForQuestionAnswering, head_doc="question answering")
+
+
+class AutoModelForTableQuestionAnswering(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
+
+
+AutoModelForTableQuestionAnswering = auto_class_update(
+    AutoModelForTableQuestionAnswering,
     head_doc="table question answering",
     checkpoint_for_example="google/tapas-base-finetuned-wtq",
 )
 
-AutoModelForTokenClassification = auto_class_factory(
-    "AutoModelForTokenClassification", MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING, head_doc="token classification"
+
+class AutoModelForVisualQuestionAnswering(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING
+
+
+AutoModelForVisualQuestionAnswering = auto_class_update(
+    AutoModelForVisualQuestionAnswering,
+    head_doc="visual question answering",
+    checkpoint_for_example="dandelin/vilt-b32-finetuned-vqa",
 )
 
-AutoModelForMultipleChoice = auto_class_factory(
-    "AutoModelForMultipleChoice", MODEL_FOR_MULTIPLE_CHOICE_MAPPING, head_doc="multiple choice"
+
+class AutoModelForDocumentQuestionAnswering(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING
+
+
+AutoModelForDocumentQuestionAnswering = auto_class_update(
+    AutoModelForDocumentQuestionAnswering,
+    head_doc="document question answering",
+    checkpoint_for_example='impira/layoutlm-document-qa", revision="52e01b3',
 )
 
-AutoModelForNextSentencePrediction = auto_class_factory(
-    "AutoModelForNextSentencePrediction",
-    MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
-    head_doc="next sentence prediction",
+
+class AutoModelForTokenClassification(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+
+
+AutoModelForTokenClassification = auto_class_update(AutoModelForTokenClassification, head_doc="token classification")
+
+
+class AutoModelForMultipleChoice(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_MULTIPLE_CHOICE_MAPPING
+
+
+AutoModelForMultipleChoice = auto_class_update(AutoModelForMultipleChoice, head_doc="multiple choice")
+
+
+class AutoModelForNextSentencePrediction(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING
+
+
+AutoModelForNextSentencePrediction = auto_class_update(
+    AutoModelForNextSentencePrediction, head_doc="next sentence prediction"
 )
 
-AutoModelForImageClassification = auto_class_factory(
-    "AutoModelForImageClassification", MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING, head_doc="image classification"
+
+class AutoModelForImageClassification(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+
+
+AutoModelForImageClassification = auto_class_update(AutoModelForImageClassification, head_doc="image classification")
+
+
+class AutoModelForZeroShotImageClassification(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING
+
+
+AutoModelForZeroShotImageClassification = auto_class_update(
+    AutoModelForZeroShotImageClassification, head_doc="zero-shot image classification"
 )
+
+
+class AutoModelForImageSegmentation(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_IMAGE_SEGMENTATION_MAPPING
+
+
+AutoModelForImageSegmentation = auto_class_update(AutoModelForImageSegmentation, head_doc="image segmentation")
+
+
+class AutoModelForSemanticSegmentation(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
+
+
+AutoModelForSemanticSegmentation = auto_class_update(
+    AutoModelForSemanticSegmentation, head_doc="semantic segmentation"
+)
+
+
+class AutoModelForUniversalSegmentation(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING
+
+
+AutoModelForUniversalSegmentation = auto_class_update(
+    AutoModelForUniversalSegmentation, head_doc="universal image segmentation"
+)
+
+
+class AutoModelForInstanceSegmentation(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING
+
+
+AutoModelForInstanceSegmentation = auto_class_update(
+    AutoModelForInstanceSegmentation, head_doc="instance segmentation"
+)
+
+
+class AutoModelForObjectDetection(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
+
+
+AutoModelForObjectDetection = auto_class_update(AutoModelForObjectDetection, head_doc="object detection")
+
+
+class AutoModelForZeroShotObjectDetection(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING
+
+
+AutoModelForZeroShotObjectDetection = auto_class_update(
+    AutoModelForZeroShotObjectDetection, head_doc="zero-shot object detection"
+)
+
+
+class AutoModelForDepthEstimation(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_DEPTH_ESTIMATION_MAPPING
+
+
+AutoModelForDepthEstimation = auto_class_update(AutoModelForDepthEstimation, head_doc="depth estimation")
+
+
+class AutoModelForVideoClassification(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING
+
+
+AutoModelForVideoClassification = auto_class_update(AutoModelForVideoClassification, head_doc="video classification")
+
+
+class AutoModelForVision2Seq(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_VISION_2_SEQ_MAPPING
+
+
+AutoModelForVision2Seq = auto_class_update(AutoModelForVision2Seq, head_doc="vision-to-text modeling")
+
+
+class AutoModelForAudioClassification(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
+
+
+AutoModelForAudioClassification = auto_class_update(AutoModelForAudioClassification, head_doc="audio classification")
+
+
+class AutoModelForCTC(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_CTC_MAPPING
+
+
+AutoModelForCTC = auto_class_update(AutoModelForCTC, head_doc="connectionist temporal classification")
+
+
+class AutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
+
+
+AutoModelForSpeechSeq2Seq = auto_class_update(
+    AutoModelForSpeechSeq2Seq, head_doc="sequence-to-sequence speech-to-text modeling"
+)
+
+
+class AutoModelForAudioFrameClassification(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING
+
+
+AutoModelForAudioFrameClassification = auto_class_update(
+    AutoModelForAudioFrameClassification, head_doc="audio frame (token) classification"
+)
+
+
+class AutoModelForAudioXVector(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_AUDIO_XVECTOR_MAPPING
+
+
+class AutoBackbone(_BaseAutoBackboneClass):
+    _model_mapping = MODEL_FOR_BACKBONE_MAPPING
+
+
+AutoModelForAudioXVector = auto_class_update(AutoModelForAudioXVector, head_doc="audio retrieval via x-vector")
+
+
+class AutoModelForMaskedImageModeling(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING
+
+
+AutoModelForMaskedImageModeling = auto_class_update(AutoModelForMaskedImageModeling, head_doc="masked image modeling")
 
 
 class AutoModelWithLMHead(_AutoModelWithLMHead):

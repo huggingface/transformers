@@ -1,0 +1,5 @@
+datasets>=1.14.0
+evaluate
+librosa
+torchaudio
+torch>=1.6

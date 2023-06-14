@@ -18,8 +18,8 @@ limitations under the License.
 
 This directory contains examples for finetuning and evaluating transformers on translation tasks.
 Please tag @patil-suraj with any issues/unexpected behaviors, or send a PR!
-For deprecated `bertabs` instructions, see [`bertabs/README.md`](https://github.com/huggingface/transformers/blob/master/examples/research_projects/bertabs/README.md).
-For the old `finetune_trainer.py` and related utils, see [`examples/legacy/seq2seq`](https://github.com/huggingface/transformers/blob/master/examples/legacy/seq2seq).
+For deprecated `bertabs` instructions, see [`bertabs/README.md`](https://github.com/huggingface/transformers/blob/main/examples/research_projects/bertabs/README.md).
+For the old `finetune_trainer.py` and related utils, see [`examples/legacy/seq2seq`](https://github.com/huggingface/transformers/blob/main/examples/legacy/seq2seq).
 
 ### Supported Architectures
 
@@ -29,6 +29,7 @@ For the old `finetune_trainer.py` and related utils, see [`examples/legacy/seq2s
 - `MarianMTModel`
 - `PegasusForConditionalGeneration`
 - `T5ForConditionalGeneration`
+- `MT5ForConditionalGeneration`
 
 `run_translation.py` is a lightweight examples of how to download and preprocess a dataset from the [🤗 Datasets](https://github.com/huggingface/datasets) library or use your own files (jsonlines or csv), then fine-tune one of the architectures above on it.
 
@@ -41,7 +42,7 @@ and you also will find examples of these below.
 Here is an example of a translation fine-tuning with a MarianMT model:
 
 ```bash
-python examples/pytorch/seq2seq/run_translation.py \
+python examples/pytorch/translation/run_translation.py \
     --model_name_or_path Helsinki-NLP/opus-mt-en-ro \
     --do_train \
     --do_eval \
@@ -61,7 +62,7 @@ MBart and some T5 models require special handling.
 T5 models `t5-small`, `t5-base`, `t5-large`, `t5-3b` and `t5-11b` must use an additional argument: `--source_prefix "translate {source_lang} to {target_lang}"`. For example:
 
 ```bash
-python examples/pytorch/seq2seq/run_translation.py \
+python examples/pytorch/translation/run_translation.py \
     --model_name_or_path t5-small \
     --do_train \
     --do_eval \
@@ -84,7 +85,7 @@ For the aforementioned group of T5 models it's important to remember that if you
 MBart models require a different format for `--source_lang` and `--target_lang` values, e.g. instead of `en` it expects `en_XX`, for `ro` it expects `ro_RO`. The full MBart specification for language codes can be found [here](https://huggingface.co/facebook/mbart-large-cc25). For example:
 
 ```bash
-python examples/pytorch/seq2seq/run_translation.py \
+python examples/pytorch/translation/run_translation.py \
     --model_name_or_path facebook/mbart-large-en-ro  \
     --do_train \
     --do_eval \
@@ -103,7 +104,7 @@ And here is how you would use the translation finetuning on your own files, afte
 values for the arguments `--train_file`, `--validation_file` to match your setup:
 
 ```bash
-python examples/pytorch/seq2seq/run_translation.py \
+python examples/pytorch/translation/run_translation.py \
     --model_name_or_path t5-small \
     --do_train \
     --do_eval \
@@ -132,7 +133,7 @@ Here the languages are Romanian (`ro`) and English (`en`).
 If you want to use a pre-processed dataset that leads to high BLEU scores, but for the `en-de` language pair, you can use `--dataset_name stas/wmt14-en-de-pre-processed`, as following:
 
 ```bash
-python examples/pytorch/seq2seq/run_translation.py \
+python examples/pytorch/translation/run_translation.py \
     --model_name_or_path t5-small \
     --do_train \
     --do_eval \
@@ -149,7 +150,7 @@ python examples/pytorch/seq2seq/run_translation.py \
 
 ## With Accelerate
 
-Based on the script [`run_translation_no_trainer.py`](https://github.com/huggingface/transformers/blob/master/examples/pytorch/translation/run_translationn_no_trainer.py).
+Based on the script [`run_translation_no_trainer.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/translation/run_translation_no_trainer.py).
 
 Like `run_translation.py`, this script allows you to fine-tune any of the models supported on a
 translation task, the main difference is that this
@@ -161,13 +162,13 @@ the mean of the [🤗 `Accelerate`](https://github.com/huggingface/accelerate) l
 after installing it:
 
 ```bash
-pip install accelerate
+pip install git+https://github.com/huggingface/accelerate
 ```
 
 then
 
 ```bash
-python run_tranlation_no_trainer.py \
+python run_translation_no_trainer.py \
     --model_name_or_path Helsinki-NLP/opus-mt-en-ro \
     --source_lang en \
     --target_lang ro \
@@ -191,8 +192,6 @@ accelerate test
 that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
-export TASK_NAME=mrpc
-
 accelerate launch run_translation_no_trainer.py \
     --model_name_or_path Helsinki-NLP/opus-mt-en-ro \
     --source_lang en \

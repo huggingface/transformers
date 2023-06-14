@@ -1,0 +1,21 @@
+name: Build documentation
+
+on:
+  push:
+    branches:
+      - main
+      - doc-builder*
+      - v*-release
+      - use_templates
+
+jobs:
+   build:
+    uses: huggingface/doc-builder/.github/workflows/build_main_documentation.yml@main
+    with:
+      commit_sha: ${{ github.sha }}
+      package: transformers
+      notebook_folder: transformers_doc
+      languages: de en es fr it ko pt zh
+    secrets:
+      token: ${{ secrets.HUGGINGFACE_PUSH }}
+      hf_token: ${{ secrets.HF_DOC_BUILD_PUSH }}

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 from argparse import ArgumentParser
 from os import listdir, makedirs
 from pathlib import Path
@@ -19,9 +20,9 @@ from typing import Dict, List, Optional, Tuple
 
 from packaging.version import Version, parse
 
-from transformers.file_utils import ModelOutput, is_tf_available, is_torch_available
 from transformers.pipelines import Pipeline, pipeline
 from transformers.tokenization_utils import BatchEncoding
+from transformers.utils import ModelOutput, is_tf_available, is_torch_available
 
 
 # This is the minimal required version to
@@ -119,7 +120,7 @@ def check_onnxruntime_requirements(minimum_version: Version):
             raise ImportError(
                 f"We found an older version of onnxruntime ({onnxruntime.__version__}) "
                 f"but we require onnxruntime to be >= {minimum_version} to enable all the conversions options.\n"
-                f"Please update onnxruntime by running `pip install --upgrade onnxruntime`"
+                "Please update onnxruntime by running `pip install --upgrade onnxruntime`"
             )
 
     except ImportError:
@@ -132,7 +133,7 @@ def check_onnxruntime_requirements(minimum_version: Version):
 
 def ensure_valid_input(model, tokens, input_names):
     """
-    Ensure input are presented in the correct order, without any Non
+    Ensure inputs are presented in the correct order, without any Non
 
     Args:
         model: The model used to forward the input data
@@ -272,29 +273,45 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
     import torch
     from torch.onnx import export
 
+    from transformers.pytorch_utils import is_torch_less_than_1_11
+
     print(f"Using framework PyTorch: {torch.__version__}")
 
     with torch.no_grad():
         input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "pt")
         ordered_input_names, model_args = ensure_valid_input(nlp.model, tokens, input_names)
 
-        export(
-            nlp.model,
-            model_args,
-            f=output.as_posix(),
-            input_names=ordered_input_names,
-            output_names=output_names,
-            dynamic_axes=dynamic_axes,
-            do_constant_folding=True,
-            use_external_data_format=use_external_format,
-            enable_onnx_checker=True,
-            opset_version=opset,
-        )
+        # PyTorch deprecated the `enable_onnx_checker` and `use_external_data_format` arguments in v1.11,
+        # so we check the torch version for backwards compatibility
+        if is_torch_less_than_1_11:
+            export(
+                nlp.model,
+                model_args,
+                f=output.as_posix(),
+                input_names=ordered_input_names,
+                output_names=output_names,
+                dynamic_axes=dynamic_axes,
+                do_constant_folding=True,
+                use_external_data_format=use_external_format,
+                enable_onnx_checker=True,
+                opset_version=opset,
+            )
+        else:
+            export(
+                nlp.model,
+                model_args,
+                f=output.as_posix(),
+                input_names=ordered_input_names,
+                output_names=output_names,
+                dynamic_axes=dynamic_axes,
+                do_constant_folding=True,
+                opset_version=opset,
+            )
 
 
 def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
     """
-    Export a TensorFlow backed pipeline to ONNX Intermediate Representation (IR
+    Export a TensorFlow backed pipeline to ONNX Intermediate Representation (IR)
 
     Args:
         nlp: The pipeline to be exported
@@ -311,22 +328,25 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
 
     try:
         import tensorflow as tf
+        import tf2onnx
+        from tf2onnx import __version__ as t2ov
 
-        from keras2onnx import __version__ as k2ov
-        from keras2onnx import convert_keras, save_model
-
-        print(f"Using framework TensorFlow: {tf.version.VERSION}, keras2onnx: {k2ov}")
+        print(f"Using framework TensorFlow: {tf.version.VERSION}, tf2onnx: {t2ov}")
 
         # Build
         input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "tf")
 
         # Forward
         nlp.model.predict(tokens.data)
-        onnx_model = convert_keras(nlp.model, nlp.model.name, target_opset=opset)
-        save_model(onnx_model, output.as_posix())
+        input_signature = [tf.TensorSpec.from_tensor(tensor, name=key) for key, tensor in tokens.items()]
+        model_proto, _ = tf2onnx.convert.from_keras(
+            nlp.model, input_signature, opset=opset, output_path=output.as_posix()
+        )
 
     except ImportError as e:
-        raise Exception(f"Cannot import {e.name} required to convert TF model to ONNX. Please install {e.name} first.")
+        raise Exception(
+            f"Cannot import {e.name} required to convert TF model to ONNX. Please install {e.name} first. {e}"
+        )
 
 
 def convert(
@@ -337,7 +357,7 @@ def convert(
     tokenizer: Optional[str] = None,
     use_external_format: bool = False,
     pipeline_name: str = "feature-extraction",
-    **model_kwargs
+    **model_kwargs,
 ):
     """
     Convert the pipeline object to the ONNX Intermediate Representation (IR) format
@@ -348,13 +368,19 @@ def convert(
         output: The path where the ONNX graph will be stored
         opset: The actual version of the ONNX operator set to use
         tokenizer: The name of the model to load for the pipeline, default to the model's name if not provided
-        use_external_format: Split the model definition from its parameters to allow model bigger than 2GB (PyTorch only)
+        use_external_format:
+            Split the model definition from its parameters to allow model bigger than 2GB (PyTorch only)
         pipeline_name: The kind of pipeline to instantiate (ner, question-answering, etc.)
         model_kwargs: Keyword arguments to be forwarded to the model constructor
 
     Returns:
 
     """
+    warnings.warn(
+        "The `transformers.convert_graph_to_onnx` package is deprecated and will be removed in version 5 of"
+        " Transformers",
+        FutureWarning,
+    )
     print(f"ONNX opset version set to: {opset}")
 
     # Load the pipeline
@@ -376,7 +402,7 @@ def convert(
 def optimize(onnx_model_path: Path) -> Path:
     """
     Load the model at the specified path and let onnxruntime look at transformations on the graph to enable all the
-    optimizations possibl
+    optimizations possible
 
     Args:
         onnx_model_path: filepath where the model binary description is stored
@@ -408,29 +434,67 @@ def quantize(onnx_model_path: Path) -> Path:
     Returns: The Path generated for the quantized
     """
     import onnx
-    from onnxruntime.quantization import QuantizationMode, quantize
+    import onnxruntime
+    from onnx.onnx_pb import ModelProto
+    from onnxruntime.quantization import QuantizationMode
+    from onnxruntime.quantization.onnx_quantizer import ONNXQuantizer
+    from onnxruntime.quantization.registry import IntegerOpsRegistry
 
+    # Load the ONNX model
     onnx_model = onnx.load(onnx_model_path.as_posix())
 
-    # Discussed with @yufenglee from ONNX runtime, this will be address in the next release of onnxruntime
-    print(
-        "As of onnxruntime 1.4.0, models larger than 2GB will fail to quantize due to protobuf constraint.\n"
-        "This limitation will be removed in the next release of onnxruntime."
-    )
+    if parse(onnx.__version__) < parse("1.5.0"):
+        print(
+            "Models larger than 2GB will fail to quantize due to protobuf constraint.\n"
+            "Please upgrade to onnxruntime >= 1.5.0."
+        )
 
-    quantized_model = quantize(
-        model=onnx_model,
-        quantization_mode=QuantizationMode.IntegerOps,
-        force_fusions=True,
-        symmetric_weight=True,
-    )
+    # Copy it
+    copy_model = ModelProto()
+    copy_model.CopyFrom(onnx_model)
+
+    # Construct quantizer
+    # onnxruntime renamed input_qType to activation_qType in v1.13.1, so we
+    # check the onnxruntime version to ensure backward compatibility.
+    # See also: https://github.com/microsoft/onnxruntime/pull/12873
+    if parse(onnxruntime.__version__) < parse("1.13.1"):
+        quantizer = ONNXQuantizer(
+            model=copy_model,
+            per_channel=False,
+            reduce_range=False,
+            mode=QuantizationMode.IntegerOps,
+            static=False,
+            weight_qType=True,
+            input_qType=False,
+            tensors_range=None,
+            nodes_to_quantize=None,
+            nodes_to_exclude=None,
+            op_types_to_quantize=list(IntegerOpsRegistry),
+        )
+    else:
+        quantizer = ONNXQuantizer(
+            model=copy_model,
+            per_channel=False,
+            reduce_range=False,
+            mode=QuantizationMode.IntegerOps,
+            static=False,
+            weight_qType=True,
+            activation_qType=False,
+            tensors_range=None,
+            nodes_to_quantize=None,
+            nodes_to_exclude=None,
+            op_types_to_quantize=list(IntegerOpsRegistry),
+        )
+
+    # Quantize and export
+    quantizer.quantize_model()
 
     # Append "-quantized" at the end of the model's name
     quantized_model_path = generate_identified_filename(onnx_model_path, "-quantized")
 
     # Save model
     print(f"Quantized model has been written at {quantized_model_path}: \N{heavy check mark}")
-    onnx.save_model(quantized_model, quantized_model_path.as_posix())
+    onnx.save_model(quantizer.model.model, quantized_model_path.as_posix())
 
     return quantized_model_path
 

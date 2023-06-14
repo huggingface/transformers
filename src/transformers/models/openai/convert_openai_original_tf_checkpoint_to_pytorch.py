@@ -20,8 +20,7 @@ import argparse
 import torch
 
 from transformers import OpenAIGPTConfig, OpenAIGPTModel, load_tf_weights_in_openai_gpt
-from transformers.file_utils import CONFIG_NAME, WEIGHTS_NAME
-from transformers.utils import logging
+from transformers.utils import CONFIG_NAME, WEIGHTS_NAME, logging
 
 
 logging.set_verbosity_info()
@@ -65,8 +64,10 @@ if __name__ == "__main__":
         "--openai_config_file",
         default="",
         type=str,
-        help="An optional config json file corresponding to the pre-trained OpenAI model. \n"
-        "This specifies the model architecture.",
+        help=(
+            "An optional config json file corresponding to the pre-trained OpenAI model. \n"
+            "This specifies the model architecture."
+        ),
     )
     args = parser.parse_args()
     convert_openai_checkpoint_to_pytorch(

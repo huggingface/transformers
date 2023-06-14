@@ -1,0 +1,156 @@
+- sections:
+  - local: index
+    title: 🤗 Transformers
+  - local: quicktour
+    title: Visite rapide
+  - local: in_translation
+    title: Installation
+  title: Démarrer
+- sections:
+  - local: in_translation
+    title: Pipelines pour l'inférence
+  - local: in_translation
+    title: Chargement d'instances pré-entraînées avec une AutoClass
+  - local: in_translation
+    title: Préparation des données
+  - local: in_translation
+    title: Fine-tune un modèle pré-entraîné
+  - local: in_translation
+    title: Entraînement distribué avec 🤗 Accelerate
+  - local: in_translation
+    title: Partager un modèle
+  title: Tutoriels
+- sections:
+  - sections:
+    - local: in_translation
+      title: Créer votre architecture
+    - local: in_translation
+      title: Partager vos modèles
+    - local: in_translation
+      title: Entraînement avec un script
+    - local: in_translation
+      title: Entraînement avec Amazon SageMaker
+    - local: in_translation
+      title: Convertir depuis des checkpoints Tensorflow
+    - local: in_translation
+      title: Exporter vers ONNX
+    - local: in_translation
+      title: Exporter vers TorchScript
+    - local: in_translation
+      title: Aide au dépannage
+    title: Usage général
+  - sections:
+    - local: in_translation
+      title: Utiliser les tokenizers de 🤗 Tokenizers
+    - local: in_translation
+      title: Inférence avec les modèles multilingues
+    - local: in_translation
+      title: Stratégies de génération de texte
+    - sections:
+      - isExpanded: false
+        local: in_translation
+        title: Classification de texte
+      - local: in_translation
+        title: Classification de token
+      - local: in_translation
+        title: Système de question-réponse
+      - local: in_translation
+        title: Modélisation causale du langage
+      - local: in_translation
+        title: Modélisation du langage avec masque
+      - local: in_translation
+        title: Traduction
+      - local: in_translation
+        title: Génération de résumé
+      - local: in_translation
+        title: Question à choix multiple
+      title: Guides des tâches
+    title: Traitement automatique des langues
+  - sections:
+    - local: in_translation
+      title: Classification audio
+    - local: in_translation
+      title: Reconnaissance automatique de la parole
+    title: Audio
+  - sections:
+    - local: in_translation
+      title: Classification d'images
+    - local: in_translation
+      title: Segmentation sémantique
+    - local: in_translation
+      title: Classification de vidéos
+    - local: in_translation
+      title: Détection d'objets
+    title: Vision par ordinateur
+  - sections:
+    - local: in_translation
+      title: Performance et extensibilité
+  - sections:
+    - local: in_translation
+      title: Comment contribuer à transformers?
+    - local: in_translation
+      title: Comment ajouter un modèle à 🤗 Transformers?
+    - local: in_translation
+      title: Comment convertir un modèle 🤗 Transformers vers TensorFlow?
+    - local: in_translation
+      title: Comment ajouter un pipeline à 🤗 Transformers?
+    - local: in_translation
+      title: Tester
+    - local: in_translation
+      title: Vérification pour une Pull Request
+    title: Contribuer
+  - local: in_translation
+    title: 🤗 Transformers Notebooks
+  - local: in_translation
+    title: Ressources communautaires
+  - local: in_translation
+    title: Benchmarks
+  - local: in_translation
+    title: Migration à partir de versions précédentes
+  title: Guides d'utilisation
+- sections:
+  - local: in_translation
+    title: Philosophie
+  - local: in_translation
+    title: Glossaire
+  - local: in_translation
+    title: Qu'est ce 🤗 Transformers peut faire ?
+  - local: in_translation
+    title: Quelles tâches 🤗 Transformers peut résoudre ?
+  - local: in_translation
+    title: Résumé des modèles
+  - local: in_translation
+    title: Résumé des tokenizers
+  - local: in_translation
+    title: Remplissage et troncature
+  - local: in_translation
+    title: BERTology
+  - local: in_translation
+    title: Perplexité des modèles à longueur fixe
+  - local: in_translation
+    title: Pipelines pour inférence avec des serveurs web
+  title: Guides conceptuels
+- sections:
+  - isExpanded: false
+    sections:
+    - local: in_translation
+      title: Classes principales
+    - local: in_translation
+      title: Modèles textuels
+    - local: in_translation
+      title: Modèles visuels
+    - local: in_translation
+      title: Modèles audio
+    - local: in_translation
+      title: Modèles multimodal
+    - local: in_translation
+      title: Modèles d'apprentissage par renforcement
+    - local: in_translation
+      title: Modèles de séries temporelles
+    - local: in_translation
+      title: Graph models
+    title: Modèles
+  - sections:
+    - local: in_translation
+      title: Utilitaires internes
+  title: API

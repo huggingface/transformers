@@ -18,16 +18,17 @@
 import argparse
 import os
 
-import numpy as np
-import torch
-from packaging import version
-
 import gluonnlp as nlp
 import mxnet as mx
+import numpy as np
+import torch
 from gluonnlp.base import get_home_dir
 from gluonnlp.model.bert import BERTEncoder
 from gluonnlp.model.utils import _load_vocab
 from gluonnlp.vocab import Vocab
+from packaging import version
+from torch import nn
+
 from transformers import BertConfig, BertForMaskedLM, BertModel, RobertaTokenizer
 from transformers.models.bert.modeling_bert import (
     BertIntermediate,
@@ -170,8 +171,8 @@ def convert_bort_checkpoint_to_pytorch(bort_checkpoint_path: str, pytorch_dump_f
     # | `encoder.transformer_cells.*.proj.weight`                      | `bert.encoder.layer.*.output.dense.weight`
 
     # Helper function to convert MXNET Arrays to PyTorch
-    def to_torch(mx_array) -> torch.nn.Parameter:
-        return torch.nn.Parameter(torch.FloatTensor(mx_array.data().asnumpy()))
+    def to_torch(mx_array) -> nn.Parameter:
+        return nn.Parameter(torch.FloatTensor(mx_array.data().asnumpy()))
 
     # Check param shapes and map new HF param back
     def check_and_map_params(hf_param, gluon_param):

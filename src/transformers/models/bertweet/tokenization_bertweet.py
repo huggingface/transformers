@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization classes for BERTweet """
+""" Tokenization classes for BERTweet"""
 
 
 import html
@@ -69,43 +69,49 @@ class BertweetTokenizer(PreTrainedTokenizer):
     """
     Constructs a BERTweet tokenizer, using Byte-Pair-Encoding.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             Path to the vocabulary file.
-        merges_file (:obj:`str`):
+        merges_file (`str`):
             Path to the merges file.
-        normalization (:obj:`bool`, `optional`, defaults to :obj:`False`)
+        normalization (`bool`, *optional*, defaults to `False`)
             Whether or not to apply a normalization preprocess.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
-            .. note::
+            <Tip>
 
-                When building a sequence using special tokens, this is not the token that is used for the beginning of
-                sequence. The token used is the :obj:`cls_token`.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            When building a sequence using special tokens, this is not the token that is used for the beginning of
+            sequence. The token used is the `cls_token`.
+
+            </Tip>
+
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
 
-            .. note::
+            <Tip>
 
-                When building a sequence using special tokens, this is not the token that is used for the end of
-                sequence. The token used is the :obj:`sep_token`.
-        sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            The token used is the `sep_token`.
+
+            </Tip>
+
+        sep_token (`str`, *optional*, defaults to `"</s>"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
-        cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+        cls_token (`str`, *optional*, defaults to `"<s>"`):
             The classifier token which is used when doing sequence classification (classification of the whole sequence
             instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
+        mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
     """
@@ -126,7 +132,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             normalization=normalization,
@@ -146,7 +152,8 @@ class BertweetTokenizer(PreTrainedTokenizer):
             self.demojizer = demojize
         except ImportError:
             logger.warning(
-                "emoji is not installed, thus not converting emoticons or emojis into text. Please install emoji: pip3 install emoji"
+                "emoji is not installed, thus not converting emoticons or emojis into text. Install emoji: pip3"
+                " install emoji==0.6.0"
             )
             self.demojizer = None
 
@@ -181,17 +188,17 @@ class BertweetTokenizer(PreTrainedTokenizer):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A BERTweet sequence has the following format:
 
-        - single sequence: ``<s> X </s>``
-        - pair of sequences: ``<s> A </s></s> B </s>``
+        - single sequence: `<s> X </s>`
+        - pair of sequences: `<s> A </s></s> B </s>`
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
 
         if token_ids_1 is None:
@@ -205,18 +212,18 @@ class BertweetTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
+        special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -236,13 +243,13 @@ class BertweetTokenizer(PreTrainedTokenizer):
         not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of zeros.
+            `List[int]`: List of zeros.
         """
 
         sep = [self.sep_token_id]
@@ -311,7 +318,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
         split_tokens = []
         words = re.findall(r"\S+\n?", text)
         for token in words:
-            split_tokens.extend([t for t in self.bpe(token).split(" ")])
+            split_tokens.extend(list(self.bpe(token).split(" ")))
         return split_tokens
 
     def normalizeTweet(self, tweet):
@@ -368,7 +375,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
             return token
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str) in an id using the vocab. """
+        """Converts a token (str) in an id using the vocab."""
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
     def _convert_id_to_token(self, index):
@@ -376,7 +383,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
         return self.decoder.get(index, self.unk_token)
 
     def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
+        """Converts a sequence of tokens (string) in a single string."""
         out_string = " ".join(tokens).replace("@@ ", "").strip()
         return out_string
 
@@ -435,7 +442,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
 # Author: Christopher Potts <cgpotts@stanford.edu>
 #         Ewan Klein <ewan@inf.ed.ac.uk> (modifications)
 #         Pierpaolo Pantone <> (modifications)
-# URL: <http://nltk.org/>
+# URL: http://nltk.org/
 # For license information, see LICENSE.TXT
 #
 
@@ -451,7 +458,7 @@ Twitter-aware tokenizer, designed to be flexible and easy to adapt to new domain
    the class Tokenizer.
 
 4. When instantiating Tokenizer objects, there is a single option: preserve_case. By default, it is set to True. If it
-   is set to False, then the tokenizer will downcase everything except for emoticons.
+   is set to False, then the tokenizer will lowercase everything except for emoticons.
 
 """
 
@@ -621,10 +628,10 @@ def _replace_html_entities(text, keep=(), remove_illegal=True, encoding="utf-8")
 
     Args:
         text:
-            A unicode string or a byte string encoded in the given `encoding` (which defaults to 'utf-8').
+            A unicode string or a byte string encoded in the given *encoding* (which defaults to 'utf-8').
         keep (list):
-            List of entity names which should not be replaced. This supports both numeric entities (``&#nnnn;`` and
-            ``&#hhhh;``) and named entities (such as ``&nbsp;`` or ``&gt;``).
+            List of entity names which should not be replaced. This supports both numeric entities (`&#nnnn;` and
+            `&#hhhh;`) and named entities (such as `&nbsp;` or `&gt;`).
         remove_illegal (bool):
             If `True`, entities that can't be converted are removed. Otherwise, entities that can't be converted are
             kept "as is".
@@ -633,9 +640,17 @@ def _replace_html_entities(text, keep=(), remove_illegal=True, encoding="utf-8")
 
     See https://github.com/scrapy/w3lib/blob/master/w3lib/html.py
 
-        >>> from nltk.tokenize.casual import _replace_html_entities >>> _replace_html_entities(b'Price: &pound;100')
-        'Price: \\xa3100' >>> print(_replace_html_entities(b'Price: &pound;100')) Price: £100 >>>
-    """
+    Examples:
+
+    ```python
+    >>> from nltk.tokenize.casual import _replace_html_entities
+
+    >>> _replace_html_entities(b"Price: &pound;100")
+    'Price: \\xa3100'
+
+    >>> print(_replace_html_entities(b"Price: &pound;100"))
+    Price: £100
+    ```"""
 
     def _convert_entity(match):
         entity_body = match.group(3)
@@ -674,21 +689,23 @@ def _replace_html_entities(text, keep=(), remove_illegal=True, encoding="utf-8")
 
 class TweetTokenizer:
     r"""
-    Examples::
+    Examples:
 
-        >>> # Tokenizer for tweets.
-        >>> from nltk.tokenize import TweetTokenizer
-        >>> tknzr = TweetTokenizer()
-        >>> s0 = "This is a cooool #dummysmiley: :-) :-P <3 and some arrows < > -> <--"
-        >>> tknzr.tokenize(s0)
-        ['This', 'is', 'a', 'cooool', '#dummysmiley', ':', ':-)', ':-P', '<3', 'and', 'some', 'arrows', '<', '>', '->', '<--']
+    ```python
+    >>> # Tokenizer for tweets.
+    >>> from nltk.tokenize import TweetTokenizer
 
-        >>> # Examples using `strip_handles` and `reduce_len parameters`:
-        >>> tknzr = TweetTokenizer(strip_handles=True, reduce_len=True)
-        >>> s1 = '@remy: This is waaaaayyyy too much for you!!!!!!'
-        >>> tknzr.tokenize(s1)
-        [':', 'This', 'is', 'waaayyy', 'too', 'much', 'for', 'you', '!', '!', '!']
-    """
+    >>> tknzr = TweetTokenizer()
+    >>> s0 = "This is a cooool #dummysmiley: :-) :-P <3 and some arrows < > -> <--"
+    >>> tknzr.tokenize(s0)
+    ['This', 'is', 'a', 'cooool', '#dummysmiley', ':', ':-)', ':-P', '<3', 'and', 'some', 'arrows', '<', '>', '->', '<--']
+
+    >>> # Examples using *strip_handles* and *reduce_len parameters*:
+    >>> tknzr = TweetTokenizer(strip_handles=True, reduce_len=True)
+    >>> s1 = "@remy: This is waaaaayyyy too much for you!!!!!!"
+    >>> tknzr.tokenize(s1)
+    [':', 'This', 'is', 'waaayyy', 'too', 'much', 'for', 'you', '!', '!', '!']
+    ```"""
 
     def __init__(self, preserve_case=True, reduce_len=False, strip_handles=False):
         self.preserve_case = preserve_case
@@ -717,7 +734,7 @@ class TweetTokenizer:
         words = WORD_RE.findall(safe_text)
         # Possibly alter the case, but avoid changing emoticons like :D into :d:
         if not self.preserve_case:
-            words = list(map((lambda x: x if EMOTICON_RE.search(x) else x.lower()), words))
+            words = [x if EMOTICON_RE.search(x) else x.lower() for x in words]
         return words
 
 

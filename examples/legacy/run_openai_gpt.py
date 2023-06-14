@@ -50,7 +50,7 @@ from transformers import (
 
 
 logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ def accuracy(out, labels):
 
 
 def load_rocstories_dataset(dataset_path):
-    """ Output a list of tuples(story, 1st continuation, 2nd continuation, label) """
+    """Output a list of tuples(story, 1st continuation, 2nd continuation, label)"""
     with open(dataset_path, encoding="utf_8") as f:
         f = csv.reader(f)
         output = []
@@ -126,15 +126,15 @@ def main():
         "--max_steps",
         default=-1,
         type=int,
-        help="If > 0: set total number of training \
-                        steps to perform. Override num_train_epochs.",
+        help=(
+            "If > 0: set total number of training                         steps to perform. Override num_train_epochs."
+        ),
     )
     parser.add_argument(
         "--gradient_accumulation_steps",
         type=int,
         default=1,
-        help="Number of updates steps to accumulate before\
-                        performing a backward/update pass.",
+        help="Number of updates steps to accumulate before                        performing a backward/update pass.",
     )
     parser.add_argument("--learning_rate", type=float, default=6.25e-5)
     parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
@@ -184,12 +184,12 @@ def main():
 
     # Load and encode the datasets
     def tokenize_and_encode(obj):
-        """ Tokenize and encode a nested object """
+        """Tokenize and encode a nested object"""
         if isinstance(obj, str):
             return tokenizer.convert_tokens_to_ids(tokenizer.tokenize(obj))
         elif isinstance(obj, int):
             return obj
-        return list(tokenize_and_encode(o) for o in obj)
+        return [tokenize_and_encode(o) for o in obj]
 
     logger.info("Encoding dataset...")
     train_dataset = load_rocstories_dataset(args.train_dataset)

@@ -1,0 +1,80 @@
+name: Add model like runner
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - ".github/**"
+    types: [opened, synchronize, reopened]
+
+jobs:
+  run_tests_templates_like:
+    name: "Add new model like template tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt -y update && sudo apt install -y libsndfile1-dev
+
+      - name: Load cached virtual environment
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: ~/venv/
+          key: v4-tests_model_like-${{ hashFiles('setup.py') }}
+
+      - name: Create virtual environment on cache miss
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          python -m venv ~/venv && . ~/venv/bin/activate
+          pip install --upgrade pip!=21.3
+          pip install -e .[dev]
+
+      - name: Check transformers location
+        # make `transformers` available as package (required since we use `-e` flag) and check it's indeed from the repo.
+        run: |
+          . ~/venv/bin/activate
+          python setup.py develop
+          transformers_install=$(pip list -e | grep transformers)
+          transformers_install_array=($transformers_install)
+          transformers_loc=${transformers_install_array[-1]}
+          transformers_repo_loc=$(pwd .)
+          if [ "$transformers_loc" != "$transformers_repo_loc" ]; then
+              echo "transformers is from $transformers_loc but it shoud be from $transformers_repo_loc/src."
+              echo "A fix is required. Stop testing."
+              exit 1
+          fi
+
+      - name: Create model files
+        run: |
+          . ~/venv/bin/activate
+          transformers-cli add-new-model-like --config_file tests/fixtures/add_distilbert_like_config.json --path_to_repo .
+          make style
+          make fix-copies
+
+      - name: Run all PyTorch modeling test
+        run: |
+          . ~/venv/bin/activate
+          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_new_models tests/bert_new/test_modeling_bert_new.py
+
+      - name: Run style changes
+        run: |
+          . ~/venv/bin/activate
+          make style && make quality && make repo-consistency
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_new_models/failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: run_all_tests_new_models_test_reports
+          path: reports/tests_new_models

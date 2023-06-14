@@ -22,9 +22,8 @@ import timeit
 from typing import Callable, Optional
 
 from ..configuration_utils import PretrainedConfig
-from ..file_utils import is_py3nvml_available, is_torch_available
 from ..models.auto.modeling_auto import MODEL_MAPPING, MODEL_WITH_LM_HEAD_MAPPING
-from ..utils import logging
+from ..utils import is_py3nvml_available, is_torch_available, logging
 from .benchmark_utils import (
     Benchmark,
     Memory,
@@ -49,7 +48,6 @@ logger = logging.get_logger(__name__)
 
 
 class PyTorchBenchmark(Benchmark):
-
     args: PyTorchBenchmarkArguments
     configs: PretrainedConfig
     framework: str = "PyTorch"
@@ -97,7 +95,8 @@ class PyTorchBenchmark(Benchmark):
                 model = model_cls(config)
             except ImportError:
                 raise ImportError(
-                    f"{model_class} does not exist. If you just want to test the pretrained model, you might want to set `--only_pretrain_model` or `args.only_pretrain_model=True`."
+                    f"{model_class} does not exist. If you just want to test the pretrained model, you might want to"
+                    " set `--only_pretrain_model` or `args.only_pretrain_model=True`."
                 )
         else:
             model = MODEL_MAPPING[config.__class__](config)
@@ -111,7 +110,8 @@ class PyTorchBenchmark(Benchmark):
 
         if self.args.fp16:
             logger.info("Running training in Mixed Precision...")
-            assert self.args.is_gpu, "Mixed precision is possible only for GPU."
+            if not self.args.is_gpu:
+                raise ValueError("Mixed precision is possible only for GPU.")
             # amp seems to have memory leaks so that memory usage
             # is measured using .half() for now https://github.com/NVIDIA/apex/issues/439
             model.half()
@@ -151,7 +151,8 @@ class PyTorchBenchmark(Benchmark):
                 model = model_cls(config)
             except ImportError:
                 raise ImportError(
-                    f"{model_class} does not exist. If you just want to test the pretrained model, you might want to set `--only_pretrain_model` or `args.only_pretrain_model=True`."
+                    f"{model_class} does not exist. If you just want to test the pretrained model, you might want to"
+                    " set `--only_pretrain_model` or `args.only_pretrain_model=True`."
                 )
         else:
             model = MODEL_WITH_LM_HEAD_MAPPING[config.__class__](config)
@@ -170,7 +171,8 @@ class PyTorchBenchmark(Benchmark):
 
         if self.args.fp16:
             logger.info("Running training in Mixed Precision...")
-            assert self.args.is_gpu, "Mixed precision is possible only for GPU."
+            if not self.args.is_gpu:
+                raise ValueError("Mixed precision is possible only for GPU.")
 
             # amp seems to have memory leaks so that memory usage
             # is measured using .half() for now https://github.com/NVIDIA/apex/issues/439
@@ -229,7 +231,8 @@ class PyTorchBenchmark(Benchmark):
             if self.args.is_tpu:
                 # tpu
                 raise NotImplementedError(
-                    "Memory Benchmarking is currently not implemented for TPU. Please disable memory benchmarking with `--no-memory` or `args.memory=False`"
+                    "Memory Benchmarking is currently not implemented for TPU. Please disable memory benchmarking with"
+                    " `--no-memory` or `args.memory=False`"
                 )
             elif self.args.is_gpu:
                 if not is_py3nvml_available():
@@ -240,7 +243,8 @@ class PyTorchBenchmark(Benchmark):
                     memory = "N/A"
                 else:
                     logger.info(
-                        "Measuring total GPU usage on GPU device. Make sure to not have additional processes running on the same GPU."
+                        "Measuring total GPU usage on GPU device. Make sure to not have additional processes running"
+                        " on the same GPU."
                     )
                     # init nvml
                     nvml.nvmlInit()

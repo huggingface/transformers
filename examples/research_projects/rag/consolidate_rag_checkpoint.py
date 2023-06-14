@@ -17,7 +17,6 @@ def consolidate(
     generator_tokenizer_name_or_path: str = None,
     question_encoder_tokenizer_name_or_path: str = None,
 ):
-
     if config_name_or_path is None:
         config_name_or_path = "facebook/rag-token-base" if model_type == "rag_token" else "facebook/rag-sequence-base"
 
@@ -80,7 +79,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_name_or_path",
         type=str,
-        help="Identifier of the model config to use, if not provided, resolves to a base config for a given ``model_type``",
+        help=(
+            "Identifier of the model config to use, if not provided, resolves to a base config for a given"
+            " ``model_type``"
+        ),
     )
 
     args = parser.parse_args()

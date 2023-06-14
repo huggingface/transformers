@@ -39,9 +39,7 @@ def parse_args():
     """
     parser = ArgumentParser(
         description=(
-            "PyTorch TPU distributed training launch "
-            "helper utility that will spawn up "
-            "multiple distributed processes"
+            "PyTorch TPU distributed training launch helper utility that will spawn up multiple distributed processes"
         )
     )
 

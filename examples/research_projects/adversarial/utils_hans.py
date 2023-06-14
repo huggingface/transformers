@@ -20,8 +20,8 @@ from dataclasses import dataclass
 from typing import List, Optional, Union
 
 import tqdm
-
 from filelock import FileLock
+
 from transformers import (
     BartTokenizer,
     BartTokenizerFast,
@@ -88,7 +88,7 @@ class InputFeatures:
 
 if is_torch_available():
     import torch
-    from torch.utils.data.dataset import Dataset
+    from torch.utils.data import Dataset
 
     class HansDataset(Dataset):
         """
@@ -134,7 +134,6 @@ if is_torch_available():
             # and the others will use the cache.
             lock_path = cached_features_file + ".lock"
             with FileLock(lock_path):
-
                 if os.path.exists(cached_features_file) and not overwrite_cache:
                     logger.info(f"Loading features from cached file {cached_features_file}")
                     self.features = torch.load(cached_features_file)
@@ -197,7 +196,7 @@ if is_tf_available():
             self.features = hans_convert_examples_to_features(examples, label_list, max_seq_length, tokenizer)
 
             def gen():
-                for (ex_index, ex) in tqdm.tqdm(enumerate(self.features), desc="convert examples to features"):
+                for ex_index, ex in tqdm.tqdm(enumerate(self.features), desc="convert examples to features"):
                     if ex_index % 10000 == 0:
                         logger.info("Writing example %d of %d" % (ex_index, len(examples)))
 
@@ -268,7 +267,7 @@ class HansProcessor(DataProcessor):
     def _create_examples(self, lines, set_type):
         """Creates examples for the training and dev sets."""
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = "%s-%s" % (set_type, line[0])
@@ -303,7 +302,7 @@ def hans_convert_examples_to_features(
     label_map = {label: i for i, label in enumerate(label_list)}
 
     features = []
-    for (ex_index, example) in tqdm.tqdm(enumerate(examples), desc="convert examples to features"):
+    for ex_index, example in tqdm.tqdm(enumerate(examples), desc="convert examples to features"):
         if ex_index % 10000 == 0:
             logger.info("Writing example %d" % (ex_index))
 

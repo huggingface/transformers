@@ -24,8 +24,7 @@ import timeit
 
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from torch import nn
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
@@ -92,7 +91,7 @@ def to_list(tensor):
 
 
 def train(args, train_dataset, model, tokenizer, teacher=None):
-    """ Train the model """
+    """Train the model"""
     if args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter()
 
@@ -138,11 +137,11 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
 
     # multi-gpu training (should be after apex fp16 initialization)
     if args.n_gpu > 1:
-        model = torch.nn.DataParallel(model)
+        model = nn.DataParallel(model)
 
     # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
-        model = torch.nn.parallel.DistributedDataParallel(
+        model = nn.parallel.DistributedDataParallel(
             model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True
         )
 
@@ -190,7 +189,6 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
-
             # Skip past any already trained steps if resuming training
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
@@ -230,20 +228,14 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
                 assert end_logits_tea.size() == end_logits_stu.size()
 
                 loss_fct = nn.KLDivLoss(reduction="batchmean")
-                loss_start = (
-                    loss_fct(
-                        F.log_softmax(start_logits_stu / args.temperature, dim=-1),
-                        F.softmax(start_logits_tea / args.temperature, dim=-1),
-                    )
-                    * (args.temperature ** 2)
-                )
-                loss_end = (
-                    loss_fct(
-                        F.log_softmax(end_logits_stu / args.temperature, dim=-1),
-                        F.softmax(end_logits_tea / args.temperature, dim=-1),
-                    )
-                    * (args.temperature ** 2)
-                )
+                loss_start = loss_fct(
+                    nn.functional.log_softmax(start_logits_stu / args.temperature, dim=-1),
+                    nn.functional.softmax(start_logits_tea / args.temperature, dim=-1),
+                ) * (args.temperature**2)
+                loss_end = loss_fct(
+                    nn.functional.log_softmax(end_logits_stu / args.temperature, dim=-1),
+                    nn.functional.softmax(end_logits_tea / args.temperature, dim=-1),
+                ) * (args.temperature**2)
                 loss_ce = (loss_start + loss_end) / 2.0
 
                 loss = args.alpha_ce * loss_ce + args.alpha_squad * loss
@@ -262,9 +254,9 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
                 if args.fp16:
-                    torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
+                    nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
                 else:
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                    nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
                 optimizer.step()
                 scheduler.step()  # Update learning rate schedule
@@ -326,8 +318,8 @@ def evaluate(args, model, tokenizer, prefix=""):
     eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
     # multi-gpu evaluate
-    if args.n_gpu > 1 and not isinstance(model, torch.nn.DataParallel):
-        model = torch.nn.DataParallel(model)
+    if args.n_gpu > 1 and not isinstance(model, nn.DataParallel):
+        model = nn.DataParallel(model)
 
     # Eval!
     logger.info("***** Running evaluation {} *****".format(prefix))
@@ -525,7 +517,10 @@ def main():
         "--teacher_type",
         default=None,
         type=str,
-        help="Teacher type. Teacher tokenizer and student (model) tokenizer must output the same tokenization. Only for distillation.",
+        help=(
+            "Teacher type. Teacher tokenizer and student (model) tokenizer must output the same tokenization. Only for"
+            " distillation."
+        ),
     )
     parser.add_argument(
         "--teacher_name_or_path",
@@ -597,8 +592,10 @@ def main():
         "--max_seq_length",
         default=384,
         type=int,
-        help="The maximum total input sequence length after WordPiece tokenization. Sequences "
-        "longer than this will be truncated, and sequences shorter than this will be padded.",
+        help=(
+            "The maximum total input sequence length after WordPiece tokenization. Sequences "
+            "longer than this will be truncated, and sequences shorter than this will be padded."
+        ),
     )
     parser.add_argument(
         "--doc_stride",
@@ -610,8 +607,10 @@ def main():
         "--max_query_length",
         default=64,
         type=int,
-        help="The maximum number of tokens for the question. Questions longer than this will "
-        "be truncated to this length.",
+        help=(
+            "The maximum number of tokens for the question. Questions longer than this will "
+            "be truncated to this length."
+        ),
     )
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
@@ -656,14 +655,18 @@ def main():
         "--max_answer_length",
         default=30,
         type=int,
-        help="The maximum length of an answer that can be generated. This is needed because the start "
-        "and end predictions are not conditioned on one another.",
+        help=(
+            "The maximum length of an answer that can be generated. This is needed because the start "
+            "and end predictions are not conditioned on one another."
+        ),
     )
     parser.add_argument(
         "--verbose_logging",
         action="store_true",
-        help="If true, all of the warnings related to data processing will be printed. "
-        "A number of warnings are expected for a normal SQuAD evaluation.",
+        help=(
+            "If true, all of the warnings related to data processing will be printed. "
+            "A number of warnings are expected for a normal SQuAD evaluation."
+        ),
     )
 
     parser.add_argument("--logging_steps", type=int, default=50, help="Log every X updates steps.")
@@ -692,8 +695,10 @@ def main():
         "--fp16_opt_level",
         type=str,
         default="O1",
-        help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
-        "See details at https://nvidia.github.io/apex/amp.html",
+        help=(
+            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+            "See details at https://nvidia.github.io/apex/amp.html"
+        ),
     )
     parser.add_argument("--server_ip", type=str, default="", help="Can be used for distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="Can be used for distant debugging.")
@@ -735,7 +740,7 @@ def main():
 
     # Setup logging
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN,
     )
@@ -845,9 +850,9 @@ def main():
             logger.info("Loading checkpoints saved during training for evaluation")
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
-            checkpoints = list(
+            checkpoints = [
                 os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
-            )
+            ]
 
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
 
@@ -860,7 +865,7 @@ def main():
             # Evaluate
             result = evaluate(args, model, tokenizer, prefix=global_step)
 
-            result = dict((k + ("_{}".format(global_step) if global_step else ""), v) for k, v in result.items())
+            result = {k + ("_{}".format(global_step) if global_step else ""): v for k, v in result.items()}
             results.update(result)
 
     logger.info("Results: {}".format(results))

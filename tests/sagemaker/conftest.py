@@ -4,7 +4,6 @@
 import os
 
 import pytest
-
 from attr import dataclass
 
 
@@ -17,8 +16,8 @@ class SageMakerTestEnvironment:
     role = "arn:aws:iam::558105141721:role/sagemaker_execution_role"
     hyperparameters = {
         "task_name": "mnli",
-        "per_device_train_batch_size": 32,
-        "per_device_eval_batch_size": 32,
+        "per_device_train_batch_size": 16,
+        "per_device_eval_batch_size": 16,
         "do_train": True,
         "do_eval": True,
         "do_predict": True,
@@ -33,15 +32,15 @@ class SageMakerTestEnvironment:
     def metric_definitions(self) -> str:
         if self.framework == "pytorch":
             return [
-                {"Name": "train_runtime", "Regex": "train_runtime.*=\D*(.*?)$"},
-                {"Name": "eval_accuracy", "Regex": "eval_accuracy.*=\D*(.*?)$"},
-                {"Name": "eval_loss", "Regex": "eval_loss.*=\D*(.*?)$"},
+                {"Name": "train_runtime", "Regex": r"train_runtime.*=\D*(.*?)$"},
+                {"Name": "eval_accuracy", "Regex": r"eval_accuracy.*=\D*(.*?)$"},
+                {"Name": "eval_loss", "Regex": r"eval_loss.*=\D*(.*?)$"},
             ]
         else:
             return [
-                {"Name": "train_runtime", "Regex": "train_runtime.*=\D*(.*?)$"},
-                {"Name": "eval_accuracy", "Regex": "loss.*=\D*(.*?)]?$"},
-                {"Name": "eval_loss", "Regex": "sparse_categorical_accuracy.*=\D*(.*?)]?$"},
+                {"Name": "train_runtime", "Regex": r"train_runtime.*=\D*(.*?)$"},
+                {"Name": "eval_accuracy", "Regex": r"loss.*=\D*(.*?)]?$"},
+                {"Name": "eval_loss", "Regex": r"sparse_categorical_accuracy.*=\D*(.*?)]?$"},
             ]
 
     @property
@@ -55,9 +54,9 @@ class SageMakerTestEnvironment:
     @property
     def image_uri(self) -> str:
         if self.framework == "pytorch":
-            return "763104351884.dkr.ecr.us-east-1.amazonaws.com/huggingface-pytorch-training:1.6.0-transformers4.4.2-gpu-py36-cu110-ubuntu18.04"
+            return "763104351884.dkr.ecr.us-east-1.amazonaws.com/huggingface-pytorch-training:1.7.1-transformers4.6.1-gpu-py36-cu110-ubuntu18.04"
         else:
-            return "763104351884.dkr.ecr.us-east-1.amazonaws.com/huggingface-tensorflow-training:2.4.1-transformers4.4.2-gpu-py37-cu110-ubuntu18.04"
+            return "763104351884.dkr.ecr.us-east-1.amazonaws.com/huggingface-tensorflow-training:2.4.1-transformers4.6.1-gpu-py37-cu110-ubuntu18.04"
 
 
 @pytest.fixture(scope="class")

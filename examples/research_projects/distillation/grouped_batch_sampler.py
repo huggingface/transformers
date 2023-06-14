@@ -19,7 +19,7 @@ import copy
 from collections import defaultdict
 
 import numpy as np
-from torch.utils.data.sampler import BatchSampler, Sampler
+from torch.utils.data import BatchSampler, Sampler
 
 from utils import logger
 
@@ -27,7 +27,7 @@ from utils import logger
 def _quantize(x, bins):
     bins = copy.deepcopy(bins)
     bins = sorted(bins)
-    quantized = list(map(lambda y: bisect.bisect_right(bins, y), x))
+    quantized = [bisect.bisect_right(bins, y) for y in x]
     return quantized
 
 
@@ -60,7 +60,7 @@ class GroupedBatchSampler(BatchSampler):
     def __init__(self, sampler, group_ids, batch_size):
         if not isinstance(sampler, Sampler):
             raise ValueError(
-                "sampler should be an instance of " "torch.utils.data.Sampler, but got sampler={}".format(sampler)
+                "sampler should be an instance of torch.utils.data.Sampler, but got sampler={}".format(sampler)
             )
         self.sampler = sampler
         self.group_ids = group_ids

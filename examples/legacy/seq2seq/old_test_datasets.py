@@ -17,11 +17,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from torch.utils.data import DataLoader
-
 from pack_dataset import pack_data_dir
 from parameterized import parameterized
 from save_len_file import save_len_file
+from torch.utils.data import DataLoader
+
 from transformers import AutoTokenizer
 from transformers.models.mbart.modeling_mbart import shift_tokens_right
 from transformers.testing_utils import TestCasePlus, slow

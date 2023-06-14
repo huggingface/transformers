@@ -27,11 +27,19 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-import sacremoses as sm
-
-from ...file_utils import cached_path, is_torch_available, torch_only_method
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
+from ...utils import (
+    cached_file,
+    is_sacremoses_available,
+    is_torch_available,
+    logging,
+    requires_backends,
+    torch_only_method,
+)
+
+
+if is_sacremoses_available():
+    import sacremoses as sm
 
 
 if is_torch_available():
@@ -76,10 +84,12 @@ def tokenize_numbers(text_array: List[str]) -> List[str]:
     Returns:
         A list of strings with tokenized numbers.
 
-    Example::
-        >>> tokenize_numbers(["$", "5,000", "1.73", "m"])
-        ["$", "5", "@,@", "000", "1", "@.@", "73", "m"]
-    """
+    Example:
+
+    ```python
+    >>> tokenize_numbers(["$", "5,000", "1.73", "m"])
+    ['$', '5', '@,@', '000', '1', '@.@', '73', 'm']
+    ```"""
     tokenized = []
     for i in range(len(text_array)):
         reg, sub = MATCH_NUMBERS
@@ -91,7 +101,7 @@ def tokenize_numbers(text_array: List[str]) -> List[str]:
 
 def detokenize_numbers(text: str) -> str:
     """
-    Inverts the operation of `tokenize_numbers`. This is replacing ' @,@ ' and ' @.@' by ',' and '.'.
+    Inverts the operation of *tokenize_numbers*. This is replacing ' @,@ ' and ' @.@' by ',' and '.'.
 
     Args:
         text: A string where the number should be detokenized.
@@ -99,10 +109,12 @@ def detokenize_numbers(text: str) -> str:
     Returns:
         A detokenized string.
 
-    Example::
-        >>> detokenize_numbers("$ 5 @,@ 000 1 @.@ 73 m")
-        "$ 5,000 1.73 m"
-    """
+    Example:
+
+    ```python
+    >>> detokenize_numbers("$ 5 @,@ 000 1 @.@ 73 m")
+    '$ 5,000 1.73 m'
+    ```"""
     for reg, sub in DETOKENIZE_NUMBERS:
         text = re.sub(reg, sub, text)
     return text
@@ -110,41 +122,41 @@ def detokenize_numbers(text: str) -> str:
 
 class TransfoXLTokenizer(PreTrainedTokenizer):
     """
-    Construct a Transformer-XL tokenizer adapted from Vocab class in `the original code
-    <https://github.com/kimiyoung/transformer-xl>`__. The Transformer-XL tokenizer is a word-level tokenizer (no
+    Construct a Transformer-XL tokenizer adapted from Vocab class in [the original
+    code](https://github.com/kimiyoung/transformer-xl). The Transformer-XL tokenizer is a word-level tokenizer (no
     sub-word tokenization).
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
-        special (:obj:`List[str]`, `optional`):
+        special (`List[str]`, *optional*):
             A list of special tokens (to be treated by the original implementation of this tokenizer).
-        min_freq (:obj:`int`, `optional`, defaults to 0):
+        min_freq (`int`, *optional*, defaults to 0):
             The minimum number of times a token has to be present in order to be kept in the vocabulary (otherwise it
-            will be mapped to :obj:`unk_token`).
-        max_size (:obj:`int`, `optional`):
+            will be mapped to `unk_token`).
+        max_size (`int`, *optional*):
             The maximum size of the vocabulary. If left unset, it will default to the size of the vocabulary found
-            after excluding the tokens according to the :obj:`min_freq` rule.
-        lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            after excluding the tokens according to the `min_freq` rule.
+        lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to lowercase the input when tokenizing.
-        delimiter (:obj:`str`, `optional`):
+        delimiter (`str`, *optional*):
             The delimiter used between tokens.
-        vocab_file (:obj:`str`, `optional`):
+        vocab_file (`str`, *optional*):
             File containing the vocabulary (from the original implementation).
-        pretrained_vocab_file (:obj:`str`, `optional`):
-            File containing the vocabulary as saved with the :obj:`save_pretrained()` method.
-        never_split (:obj:`List[str]`, `optional`):
+        pretrained_vocab_file (`str`, *optional*):
+            File containing the vocabulary as saved with the `save_pretrained()` method.
+        never_split (`List[str]`, *optional*):
             List of tokens that should never be split. If no list is specified, will simply use the existing special
             tokens.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"<eos>"`):
+        eos_token (`str`, *optional*, defaults to `"<eos>"`):
             The end of sequence token.
-        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<formula>"]`):
+        additional_special_tokens (`List[str]`, *optional*, defaults to `["<formula>"]`):
             A list of additional special tokens (for the HuggingFace functionality).
-        language (:obj:`str`, `optional`, defaults to :obj:`"en"`):
+        language (`str`, *optional*, defaults to `"en"`):
             The language of this tokenizer (used for mose preprocessing).
     """
 
@@ -167,7 +179,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         eos_token="<eos>",
         additional_special_tokens=["<formula>"],
         language="en",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             special=special,
@@ -184,6 +196,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             language=language,
             **kwargs,
         )
+        requires_backends(self, "sacremoses")
 
         if never_split is None:
             never_split = self.all_special_tokens
@@ -236,7 +249,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         except Exception as e:
             raise ValueError(
                 f"Unable to parse file {pretrained_vocab_file}. Unknown format. "
-                "If you tried to load a model saved through TransfoXLTokenizerFast,"
+                "If you tried to load a model saved through TransfoXLTokenizerFast, "
                 "please note they are not compatible."
             ) from e
 
@@ -292,7 +305,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         elif "<unk>" in self.sym2idx:
             self.unk_idx = self.sym2idx["<unk>"]
         else:
-            raise ValueError("No <unkown> token in vocabulary")
+            raise ValueError("No <unknown> token in vocabulary")
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if os.path.isdir(save_directory):
@@ -407,10 +420,10 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def moses_pipeline(self, text: str) -> List[str]:
         """
-        Does basic tokenization using :class:`sacremoses.MosesPunctNormalizer` and :class:`sacremoses.MosesTokenizer`
-        with `aggressive_dash_splits=True` (see :func:`sacremoses.tokenize.MosesTokenizer.tokenize`). Additionally,
-        large comma-separated numbers and floating point values are split. E.g. "23,000 people are 1.80m tall" -> "23
-        @,@ 000 people are 1 @.@ 80m tall"
+        Does basic tokenization using [`sacremoses.MosesPunctNormalizer`] and [`sacremoses.MosesTokenizer`] with
+        *aggressive_dash_splits=True* (see [`sacremoses.tokenize.MosesTokenizer.tokenize`]). Additionally, large
+        comma-separated numbers and floating point values are split. E.g. "23,000 people are 1.80m tall" -> "23 @,@ 000
+        people are 1 @.@ 80m tall"
 
         Args:
             text: Text to be tokenize
@@ -418,11 +431,13 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         Returns:
             A list of tokenized string
 
-        Example::
-            >>> tokenizer = TransfoXLTokenizer.from_pretrained("transfo-xl-wt103")
-            >>> tokenizer.moses_pipeline("23,000 people are 1.80 m tall")
-            ['23', '@,@', '000', 'people', 'are', '1', '@.@', '80', 'm', 'tall']
-        """
+        Example:
+
+        ```python
+        >>> tokenizer = TransfoXLTokenizer.from_pretrained("transfo-xl-wt103")
+        >>> tokenizer.moses_pipeline("23,000 people are 1.80 m tall")
+        ['23', '@,@', '000', 'people', 'are', '1', '@.@', '80', 'm', 'tall']
+        ```"""
         text = self.moses_punct_norm(text)
         text = self.moses_tokenize(text)
         text = tokenize_numbers(text)
@@ -434,7 +449,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         return self.idx2sym[idx]
 
     def _convert_token_to_id(self, sym):
-        """ Converts a token (str) in an id using the vocab. """
+        """Converts a token (str) in an id using the vocab."""
         if sym in self.sym2idx:
             return self.sym2idx[sym]
         else:
@@ -628,7 +643,6 @@ class LMShuffledIterator(object):
 
 class LMMultiFileIterator(LMShuffledIterator):
     def __init__(self, paths, vocab, bsz, bptt, device="cpu", ext_len=None, shuffle=False):
-
         self.paths = paths
         self.vocab = vocab
 
@@ -666,25 +680,21 @@ class TransfoXLCorpus(object):
         Instantiate a pre-processed corpus.
         """
         vocab = TransfoXLTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        if pretrained_model_name_or_path in PRETRAINED_CORPUS_ARCHIVE_MAP:
-            corpus_file = PRETRAINED_CORPUS_ARCHIVE_MAP[pretrained_model_name_or_path]
-        else:
-            corpus_file = os.path.join(pretrained_model_name_or_path, CORPUS_NAME)
+        is_local = os.path.isdir(pretrained_model_name_or_path)
         # redirect to the cache, if necessary
         try:
-            resolved_corpus_file = cached_path(corpus_file, cache_dir=cache_dir)
+            resolved_corpus_file = cached_file(pretrained_model_name_or_path, CORPUS_NAME, cache_dir=cache_dir)
         except EnvironmentError:
             logger.error(
-                f"Corpus '{pretrained_model_name_or_path}' was not found in corpus list "
-                f"({', '.join(PRETRAINED_CORPUS_ARCHIVE_MAP.keys())}. "
-                f"We assumed '{pretrained_model_name_or_path}' was a path or url but couldn't find files {corpus_file} "
-                "at this path or url."
+                f"Corpus '{pretrained_model_name_or_path}' was not found in corpus list"
+                f" ({', '.join(PRETRAINED_CORPUS_ARCHIVE_MAP.keys())}. We assumed '{pretrained_model_name_or_path}'"
+                f" was a path or url but couldn't find files {CORPUS_NAME} at this path or url."
             )
             return None
-        if resolved_corpus_file == corpus_file:
-            logger.info(f"loading corpus file {corpus_file}")
+        if is_local:
+            logger.info(f"loading corpus file {resolved_corpus_file}")
         else:
-            logger.info(f"loading corpus file {corpus_file} from cache at {resolved_corpus_file}")
+            logger.info(f"loading corpus file {CORPUS_NAME} from cache at {resolved_corpus_file}")
 
         # Instantiate tokenizer.
         corpus = cls(*inputs, **kwargs)

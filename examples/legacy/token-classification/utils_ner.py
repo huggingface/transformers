@@ -23,6 +23,7 @@ from enum import Enum
 from typing import List, Optional, Union
 
 from filelock import FileLock
+
 from transformers import PreTrainedTokenizer, is_tf_available, is_torch_available
 
 
@@ -103,7 +104,7 @@ class TokenClassificationTask:
         label_map = {label: i for i, label in enumerate(label_list)}
 
         features = []
-        for (ex_index, example) in enumerate(examples):
+        for ex_index, example in enumerate(examples):
             if ex_index % 10_000 == 0:
                 logger.info("Writing example %d of %d", ex_index, len(examples))
 
@@ -140,7 +141,7 @@ class TokenClassificationTask:
             # it easier for the model to learn the concept of sequences.
             #
             # For classification tasks, the first vector (corresponding to [CLS]) is
-            # used as as the "sentence vector". Note that this only makes sense because
+            # used as the "sentence vector". Note that this only makes sense because
             # the entire model is fine-tuned.
             tokens += [sep_token]
             label_ids += [pad_token_label_id]
@@ -206,7 +207,7 @@ class TokenClassificationTask:
 if is_torch_available():
     import torch
     from torch import nn
-    from torch.utils.data.dataset import Dataset
+    from torch.utils.data import Dataset
 
     class TokenClassificationDataset(Dataset):
         """
@@ -240,7 +241,6 @@ if is_torch_available():
             # and the others will use the cache.
             lock_path = cached_features_file + ".lock"
             with FileLock(lock_path):
-
                 if os.path.exists(cached_features_file) and not overwrite_cache:
                     logger.info(f"Loading features from cached file {cached_features_file}")
                     self.features = torch.load(cached_features_file)
