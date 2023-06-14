@@ -1157,6 +1157,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             self.built = True
         else:
             self.built = True
+            self._set_save_spec(self._prune_signature(self.input_signature))
             self(self.dummy_inputs, training=False)
 
     def __init__(self, config, *inputs, **kwargs):
@@ -1172,7 +1173,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         self.name_or_path = config.name_or_path
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
         # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
-        self._set_save_spec(self._prune_signature(self.input_signature))
 
     def get_config(self):
         return self.config.to_dict()
