@@ -279,7 +279,7 @@ class EncodecEncoder(nn.Module):
             model += [EncodecConv1d(config, current_scale, current_scale * 2, kernel_size=ratio * 2, stride=ratio)]
             scaling *= 2
 
-        model += [EncodecLSTM(scaling * config.num_filters, config.num_lstm_layers)]
+        model += [EncodecLSTM(config, scaling * config.num_filters)]
         model += [nn.ELU()]
         model += [EncodecConv1d(config, scaling * config.num_filters, config.hidden_size, config.last_kernel_size)]
 
@@ -299,7 +299,7 @@ class EncodecDecoder(nn.Module):
         scaling = int(2 ** len(config.upsampling_ratios))
         model = [EncodecConv1d(config, config.hidden_size, scaling * config.num_filters, config.kernel_size)]
 
-        model += [EncodecLSTM(scaling * config.num_filters, config.num_lstm_layers)]
+        model += [EncodecLSTM(config, scaling * config.num_filters)]
 
         # Upsample to raw audio scale
         for ratio in config.upsampling_ratios:
