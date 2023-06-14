@@ -17,6 +17,7 @@
 
 import math
 import os
+from pathlib import Path
 from typing import Optional, Tuple, Union
 
 import torch
@@ -61,9 +62,13 @@ Mra_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 def load_cuda_kernels():
     global cuda_kernel
-    curr_path = os.path.dirname(os.path.realpath(__file__))
-    src_files = ["cuda_kernel.cu", "cuda_launch.cu", "torch_extension.cpp"]
-    src_files = [os.path.join(curr_path, file) for file in src_files]
+    src_folder = Path(__file__).resolve().parent.parent.parent / "kernels" / "mra"
+
+    def append_root(files):
+        return [src_folder / file for file in files]
+
+    src_files = append_root(["cuda_kernel.cu", "cuda_launch.cu", "torch_extension.cpp"])
+
     cuda_kernel = load("cuda_kernel", src_files, verbose=True)
 
     import cuda_kernel
