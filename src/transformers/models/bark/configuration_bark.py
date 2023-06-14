@@ -29,9 +29,7 @@ class BarkModuleConfig(PretrainedConfig):
                 
                 
         initializer_range=0.02,
-        use_cache=True, # TODO
-        #bos_token_id=50256, # TODO
-        #eos_token_id=50256, # TODO
+        use_cache=True,
         **kwargs,
     ):
         self.block_size = block_size
@@ -84,6 +82,7 @@ class BarkConfig(PretrainedConfig):
         
         
         # TODO: check if right place and that is necessary
+        # some of these configs are linked to the config of the submodels
         self.text_encoding_offset = 10_048
         self.semantic_pad_token = 10_000
         self.text_pad_token = 129_595

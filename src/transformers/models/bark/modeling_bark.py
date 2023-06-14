@@ -45,37 +45,10 @@ logger = logging.get_logger(__name__)
 # tokenizer = BertTokenizer.from_pretrained("bert-base-multilingual-cased")
 
 
-# DONE: ask about _init_weights from https://huggingface.co/docs/transformers/add_new_model#2-next-prepare-your-environment
-
-# DONE: import modules
-# DONE: should I change the naming of the Bark modules? YES
-# DONE: should I comment my thoughts? YES
-# DONE: j'enlève toutes mentions du flash attention - YES
-# DONE: do I change parameters name ? YES
-# DONE: merge causal and total attention layers? YES
-# DONE: GPTNEO seems not to divide by sqrt(dim)
-
-# TODO: at the end of the day, we need to
-# 1. keep the handmade LayerNorm because the config used by Bark author uses no biases
-# 2. update the causal modules with this layer norm
-# 3. left the non-causal module with the classic layer norm
-
-
 class BarkSelfAttention(nn.Module):
     # adapted from GPTNeoSelfAttention and Bark code
     # BarkSelfAttention can have two attention type, i.e full attention or causal attention
             
-    # dic
-    # self.n_head -> self.num_heads
-    # config.n_head -> config.num_heads
-    # self.n_embd -> self.embed_dim
-    # config.n_embd -> config.hidden_size
-    # c_attn -> att_proj
-    # c_proj -> out_proj
-    # past_kv <- layer_past
-    # block_size <- max_position_embeddings
-    # n_layer -> num_layers
-    # c_fc -> in_proj 
     
     def __init__(self, config, is_causal=False):
         super().__init__()
@@ -208,7 +181,7 @@ class BarkSelfAttention(nn.Module):
 
 # Same as model.py
 class LayerNorm(nn.Module):
-    """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
+    """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False. Copied from Bark original implementation. """
 
     def __init__(self, ndim, bias):
         super().__init__()
@@ -345,9 +318,6 @@ class BarkModulePreTrainedModel(PreTrainedModel):
     
 
 
-# GPT -> BarkModule
-
-# TODO: add a prepare_inputs_for_generation() ,inspired from modeling_gpt2.py
 
 # GPT2-like autoregressive model
 class BarkCausalModule(BarkModulePreTrainedModel):
@@ -930,26 +900,11 @@ class BarkModel(BarkPreTrainedModel):
     
         input_ids = inputs
         
-        # TODO: where to set the default value ?
-        min_eos_p = kwargs.get("min_eos_p", 0.2)
+        # TODO: Not used for now. where to set the default value ?
+        # min_eos_p = kwargs.get("min_eos_p", 0.2)
         
-        # SEMANTIC_RATE_HZ
-        # SEMANTIC_VOCAB_SIZE
-        # SEMANTIC_PAD_TOKEN
-        #
-    
-
-        # there are semantic_history and coarse_history and fine_hsitory
-        # not the same shape (1d) 2d but coarse history is flatten
-        # SEMANTIC_VOCAB_SIZE is then added to semantic history (probably because there are dedicated tokens)
-        
-        # TODO: remove 
-        #temperature = 0.7
-
         
         # input_ids should be of shape (batch_size, seq_len) where seq_len = 513
-        # TODO: check if you should use history_prompt["semantic_history"] instead of 256:
-        # also 
         input_embeds = torch.cat([
                         self.semantic_model.transformer.wte(input_ids[:,:256]) + self.semantic_model.transformer.wte(input_ids[:,256:256+256]),
                         self.semantic_model.transformer.wte(input_ids[:,256+256:])
@@ -970,13 +925,7 @@ class BarkModel(BarkPreTrainedModel):
                                                    eos_token_id=self.config.semantic_pad_token,
                                                    max_new_tokens = 768,
                                                    **kwargs) # size: 10048
-        # TODO: look at how to pass min_eos_p parameters, in which, if the proba of the eos token (semantic_pad_token) is superior to min_eos_p, it stops early.
-        # Can't pass a logits processor because it has to be done after renormalizing logits and having sampled the next item.
-        # TODO: apply stopping_criteria = StoppingCriteriaList ??
-        # https://github.com/suno-ai/bark/blob/f6f2db527b13c4a3e52ed6fbac587aadc3723eb6/bark/generation.py#L484-L490
         # TODO: there is also a max_gen_duration_s early stop if the duration depass a certain duration
-        # there is also n_tot_steps = 768, max generation 
-        # also look at L466
 
         
         
@@ -1002,14 +951,10 @@ class BarkModel(BarkPreTrainedModel):
         **kwargs,
     ):
         
-        # TODO: change
-        #temperature = 0.7
-        
         semantic_to_coarse_ratio = self.config.coarse_rate_hz / self.config.semantic_rate_hz * self.config.n_coarse_codebooks
         max_semantic_history = int(np.floor(max_coarse_history / semantic_to_coarse_ratio))
         
 
-        # len(x_semantic)
         max_generated_len = int(
         round(
             np.floor(semantic_output.shape[1] * semantic_to_coarse_ratio / self.config.n_coarse_codebooks)
@@ -1056,7 +1001,6 @@ class BarkModel(BarkPreTrainedModel):
             alternatingLogitsProcessor = AlternatingCodebooksLogitsProcessor(x_in.shape[1],self.config.semantic_vocab_size, self.config.codebook_size)
             
             
-            # TODO: add logits processor
             x_out = self.coarse_acoustics_model.generate(x_in, 
                                                    logits_processor=[alternatingLogitsProcessor],
                                                    renormalize_logits=True, #renormalize after logits_processor
@@ -1080,10 +1024,10 @@ class BarkModel(BarkPreTrainedModel):
     def generate_fine(self,
                       coarse_output: torch.Tensor,
                       history_prompt: Optional[Dict[str,np.ndarray]] = None,
+                      temperature: Optional[float] = None,
                       **kwargs
                       ):
         
-        # TODO: batch, seq_len, n_coarse_codebooks
         
         # shape: (batch, n_coarse_codebooks * seq_len)
         # new_shape: (batch, seq_len, n_coarse_codebooks)
@@ -1137,8 +1081,7 @@ class BarkModel(BarkPreTrainedModel):
                 value = self.config.codebook_size
             )
             
-        # we can be lazy about fractional loop and just keep overwriting codebooks
-        # TODO: check in which case it is more than 1
+        # we can be lazy about fractional loop and just keep overwriting codebooks.
         # seems that coarse_output.shape[1] - (1024 - n_history) is equal to minus n_remove_from_end
         # So if we needed to pad because too short, n_loops is always 1 (because n_remove_from_end > 0)
         # If not, we loop over at least twice.
@@ -1146,8 +1089,6 @@ class BarkModel(BarkPreTrainedModel):
         
         # with _inference_mode() ?
         
-        # TODO: other way to do that ?
-        temperature = kwargs.get("temperature", None)
         
         for n in range(n_loops):
             # TODO
@@ -1238,7 +1179,8 @@ class BarkModel(BarkPreTrainedModel):
         
 
         output = self.generate_fine(coarse_output,
-                                    history_prompt
+                                    history_prompt,
+                                    temperature=kwargs.get("temperature", None)
                                )
         
         
