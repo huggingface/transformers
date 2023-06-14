@@ -43,9 +43,20 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_11
+else:
+    is_torch_greater_or_equal_than_1_11 = False
+
 
 logger = logging.get_logger(__name__)
 DEFAULT_FONT_PATH = "ybelkada/fonts"
+
+
+if is_torch_available() and not is_torch_greater_or_equal_than_1_11:
+    logger.warning(
+        f"You are using torch=={torch.__version__}, but torch>=1.11.0 is required to use "
+        "Pix2StructImageProcessor. Please upgrade torch."
+    )
 
 
 # adapted from: https://discuss.pytorch.org/t/tf-image-extract-patches-in-pytorch/171409/2
