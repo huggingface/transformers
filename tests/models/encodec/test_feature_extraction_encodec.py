@@ -184,45 +184,45 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         self.assertTrue(torch.allclose(input_values[0, 1, :30], EXPECTED_INPUT_VALUES * 0.5, atol=1e-6))
 
     def test_kwargs(self):
-        input_audio = self._load_datasamples(1)
+        input_audio = self._load_datasamples(2)
         # would be easier if the stride was like
         feature_extractor = EncodecFeatureExtractor(feature_size=1, chunk_length_s=1, overlap=0.01)
 
         # truncate to chunk
         truncated_outputs = feature_extractor(input_audio, truncation=True, return_tensors="pt").input_values
-        self.assertEquals(truncated_outputs.shape, (1, 1, 71520))  # 2 chunks
+        self.assertEquals(truncated_outputs.shape, (2, 1, 71520))  # 2 chunks
 
         # force truncate to max_length
         truncated_outputs = feature_extractor(
             input_audio, truncation=True, max_length=48000, return_tensors="pt"
         ).input_values
-        self.assertEquals(truncated_outputs.shape, (1, 1, 48000))
+        self.assertEquals(truncated_outputs.shape, (2, 1, 48000))
 
         # pad to chunk
         padded_outputs = feature_extractor(input_audio, padding=True, return_tensors="pt").input_values
-        self.assertEquals(padded_outputs.shape, (1, 1, 95280))
+        self.assertEquals(padded_outputs.shape, (2, 1, 95280))
 
         # pad to chunk
         truncated_outputs = feature_extractor(input_audio, return_tensors="pt").input_values
-        self.assertEquals(truncated_outputs.shape, (1, 1, 95280))
+        self.assertEquals(truncated_outputs.shape, (2, 1, 95280))
 
         # force pad to max length
         truncated_outputs = feature_extractor(
             input_audio, padding="max_length", max_length=100000, return_tensors="pt"
         ).input_values
-        self.assertEquals(truncated_outputs.shape, (1, 1, 100000))
+        self.assertEquals(truncated_outputs.shape, (2, 1, 100000))
 
         # force no pad
         truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
-        self.assertEquals(truncated_outputs.shape, (1, 1, 93680))
+        self.assertEquals(truncated_outputs.shape, (2, 1, 93680))
 
         # no pad if no chunk_length_s
         feature_extractor.chunk_length_s = None
         truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
-        self.assertEquals(truncated_outputs.shape, (1, 1, 93680))
+        self.assertEquals(truncated_outputs.shape, (2, 1, 93680))
 
         # no pad if no overlap
         feature_extractor.chunk_length_s = 2
         feature_extractor.overlap = None
         truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
-        self.assertEquals(truncated_outputs.shape, (1, 1, 93680))
+        self.assertEquals(truncated_outputs.shape, (2, 1, 93680))

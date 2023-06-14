@@ -17,7 +17,8 @@
 import inspect
 import unittest
 from typing import Dict, List, Tuple
-
+import tempfile
+import os
 import numpy as np
 from datasets import Audio, load_dataset
 
@@ -151,44 +152,115 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             expected_arg_names = ["input_values", "padding_mask", "bandwidth"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    # this model has no inputs_embeds
+    @unittest.skip("The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
     def test_inputs_embeds(self):
         pass
 
-    # this model has no input embeddings
+    @unittest.skip("The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
     def test_model_common_attributes(self):
         pass
 
+    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `attention` logic")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         pass
 
-    @slow
+    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `attention` logic")
     def test_torchscript_output_attentions(self):
-        # disabled because this model doesn't have decoder_input_ids
         pass
 
-    @slow
+    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic")
     def test_torchscript_output_hidden_state(self):
-        # disabled because this model doesn't have decoder_input_ids
         pass
 
-    @slow
-    def test_torchscript_simple(self):
-        # disabled because this model doesn't have decoder_input_ids
-        pass
+    def _create_and_check_torchscript(self, config, inputs_dict):
+        if not self.test_torchscript:
+            return
 
+        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+        configs_no_init.torchscript = True
+        configs_no_init.return_dict = False
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            model.to(torch_device)
+            model.eval()
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            main_input_name = model_class.main_input_name
+
+            try:
+                main_input = inputs[main_input_name]
+                model(main_input)
+                traced_model = torch.jit.trace(model, main_input)
+            except RuntimeError:
+                self.fail("Couldn't trace module.")
+
+            with tempfile.TemporaryDirectory() as tmp_dir_name:
+                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
+
+                try:
+                    torch.jit.save(traced_model, pt_file_name)
+                except Exception:
+                    self.fail("Couldn't save module.")
+
+                try:
+                    loaded_model = torch.jit.load(pt_file_name)
+                except Exception:
+                    self.fail("Couldn't load module.")
+
+            model.to(torch_device)
+            model.eval()
+
+            loaded_model.to(torch_device)
+            loaded_model.eval()
+
+            model_state_dict = model.state_dict()
+            loaded_model_state_dict = loaded_model.state_dict()
+
+            non_persistent_buffers = {}
+            for key in loaded_model_state_dict.keys():
+                if key not in model_state_dict.keys():
+                    non_persistent_buffers[key] = loaded_model_state_dict[key]
+
+            loaded_model_state_dict = {
+                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+            }
+
+            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+
+            model_buffers = list(model.buffers())
+            for non_persistent_buffer in non_persistent_buffers.values():
+                found_buffer = False
+                for i, model_buffer in enumerate(model_buffers):
+                    if torch.equal(non_persistent_buffer, model_buffer):
+                        found_buffer = True
+                        break
+
+                self.assertTrue(found_buffer)
+                model_buffers.pop(i)
+
+            models_equal = True
+            for layer_name, p1 in model_state_dict.items():
+                if layer_name in loaded_model_state_dict:
+                    p2 = loaded_model_state_dict[layer_name]
+                    if p1.data.ne(p2.data).sum() > 0:
+                        models_equal = False
+
+            self.assertTrue(models_equal)
+
+            # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
+            # (Even with this call, there are still memory leak by ~0.04MB)
+            self.clear_torch_jit_class_registry()
+    
+    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `attention` logic")
     def test_attention_outputs(self):
-        # disabled because this model doesn't use attention
         pass
 
+    @unittest.skip("The EncodecModel's `forward_chunking` implementation is not in the feed forward, and uses a stride")
     def test_feed_forward_chunking(self):
-        # model does not support chunking (yet?)
-        # TODO arthur use chunk_length in the decode and encode
         pass
-
+    
+    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic")
     def test_hidden_states_output(self):
-        # model does not output hidden states yet
         pass
 
     def test_determinism(self):
@@ -272,7 +344,6 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 uniform_init_parms = ["conv"]
-                # TODO find the correct init values for lstm (or let them be pytorch)
                 ignore_init = ["lstm"]
                 if param.requires_grad:
                     if any([x in name for x in uniform_init_parms]):
@@ -326,7 +397,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             sampling_rate=processor.sampling_rate,
             return_tensors="pt",
         ).to(torch_device)
-        model = AutoProcessor.from_pretrained("ArthurZ/encodec_48khz").push_to_hub("facebook/encodec_48khz")
+        
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
                 # use max bandwith for best possible reconstruction
