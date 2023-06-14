@@ -74,6 +74,9 @@ def load_cuda_kernels():
     import cuda_kernel
 
 
+cuda_kernel = None
+
+
 if is_torch_cuda_available() and is_ninja_available():
     logger.info("Loading custom CUDA kernels...")
 
@@ -84,9 +87,8 @@ if is_torch_cuda_available() and is_ninja_available():
             "Failed to load CUDA kernels. Mra requires custom CUDA kernels. Please verify that compatible versions of"
             f" PyTorch and CUDA Toolkit are installed: {e}"
         )
-        cuda_kernel = None
 else:
-    cuda_kernel = None
+    pass
 
 
 def sparse_max(sparse_qk_prod, indices, query_num_block, key_num_block):
