@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Encodec model. """
 
+import copy
 import inspect
 import os
 import tempfile
@@ -256,11 +257,35 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_attention_outputs(self):
         pass
 
-    @unittest.skip(
-        "The EncodecModel's `forward_chunking` implementation is not in the feed forward, and uses a stride"
-    )
     def test_feed_forward_chunking(self):
-        pass
+        (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            torch.manual_seed(0)
+            config = copy.deepcopy(original_config)
+            config.chunk_length_s = None
+            config.overlap = None
+            config.sampling_rate = 10
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            inputs["input_values"] = inputs["input_values"]
+
+            hidden_states_no_chunk = model(**inputs)[0]
+
+            torch.manual_seed(0)
+            config.chunk_length_s = 1
+            config.overlap = 0
+            config.sampling_rate = 10
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            hidden_states_with_chunk = model(**inputs)[0]
+            breakpoint()
+            self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
 
     @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic")
     def test_hidden_states_output(self):
