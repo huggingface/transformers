@@ -130,6 +130,40 @@ def get_padding(kernel_size, dilation=1):
     return int((kernel_size*dilation - dilation)/2)
 
 
+class VitsPosteriorEncoder(nn.Module):
+    def __init__(self,
+        in_channels,
+        out_channels,
+        hidden_channels,
+        kernel_size,
+        dilation_rate,
+        n_layers,
+        gin_channels=0
+    ):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.hidden_channels = hidden_channels
+        self.kernel_size = kernel_size
+        self.dilation_rate = dilation_rate
+        self.n_layers = n_layers
+        self.gin_channels = gin_channels
+
+        self.pre = nn.Conv1d(in_channels, hidden_channels, 1)
+        self.enc = VitsWaveNet(hidden_channels, kernel_size, dilation_rate, n_layers, gin_channels=gin_channels)
+        self.proj = nn.Conv1d(hidden_channels, out_channels * 2, 1)
+
+    def forward(self, x, x_mask, g=None):   #x_lengths, g=None):
+        #TODO: pass in the padding mask!
+        #x_mask = torch.unsqueeze(sequence_mask(x_lengths, x.size(2)), 1).to(x.dtype)
+        x = self.pre(x) * x_mask
+        x = self.enc(x, x_mask, g=g)
+        stats = self.proj(x) * x_mask
+        m, logs = torch.split(stats, self.out_channels, dim=1)
+        z = (m + torch.randn_like(m) * torch.exp(logs)) * x_mask
+        return z, m, logs
+
+
 class VitsResBlock1(torch.nn.Module):
     def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5)):
         super().__init__()
@@ -685,18 +719,28 @@ class VitsConvFlow(nn.Module):
         )
 
         x = torch.cat([x0, x1], 1) * x_mask
-        logdet = torch.sum(logabsdet * x_mask, [1,2])
-        # TODO: may not need to do `not reverse`
         if not reverse:
+            logdet = torch.sum(logabsdet * x_mask, [1, 2])
             return x, logdet
         else:
             return x
 
 
+#TODO: add this
+# class VitsLog(nn.Module):
+#     def forward(self, x, x_mask, reverse=False, **kwargs):
+#         if not reverse:
+#             y = torch.log(torch.clamp_min(x, 1e-5)) * x_mask
+#             logdet = torch.sum(-y, [1, 2])
+#             return y, logdet
+#         else:
+#             x = torch.exp(x) * x_mask
+#             return x
+
+
 class VitsFlip(nn.Module):
     def forward(self, x, *args, reverse=False, **kwargs):
         x = torch.flip(x, [1])
-        # TODO: may not need to do `not reverse`
         if not reverse:
             logdet = torch.zeros(x.size(0)).to(dtype=x.dtype, device=x.device)
             return x, logdet
@@ -712,7 +756,6 @@ class VitsElementwiseAffine(nn.Module):
         self.logs = nn.Parameter(torch.zeros(channels,1))
 
     def forward(self, x, x_mask, reverse=False, **kwargs):
-        # TODO: may not need to do `not reverse`
         if not reverse:
             y = self.m + torch.exp(self.logs) * x
             y = y * x_mask
@@ -800,11 +843,11 @@ class VitsDurationPredictor(nn.Module):
             x = x + self.cond(g)
         x = self.conv_1(x * x_mask)
         x = torch.relu(x)
-        x = self.norm_1(x)
+        x = self.norm_1(x.transpose(1, -1)).transpose(1, -1)
         x = self.drop(x)
         x = self.conv_2(x * x_mask)
         x = torch.relu(x)
-        x = self.norm_2(x)
+        x = self.norm_2(x.transpose(1, -1)).transpose(1, -1)
         x = self.drop(x)
         x = self.proj(x * x_mask)
         return x * x_mask
@@ -1449,8 +1492,8 @@ class VitsModel(VitsPreTrainedModel):
 
         self.dec = VitsGenerator(config)
 
-        # TODO: only used during training / voice conversion, not for TTS
-        # self.enc_q = PosteriorEncoder(spec_channels, inter_channels, hidden_channels, 5, 1, 16, gin_channels=gin_channels)
+        # This is used only for training.
+        self.enc_q = VitsPosteriorEncoder(config.spec_channels, config.inter_channels, config.hidden_size, 5, 1, 16, gin_channels=config.gin_channels)
 
         if config.use_stochastic_duration_prediction:
             self.duration_predictor = VitsStochasticDurationPredictor(config, config.hidden_size, 3, 0.5, 4)

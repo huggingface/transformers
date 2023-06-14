@@ -109,11 +109,18 @@ MAPPING_GENERATOR = {
     "dec.resblocks.*.convs2.2" : "dec.resblocks.*.convs2.2",
     "dec.conv_post" : "dec.conv_post",
 }
+MAPPING_POSTERIOR_ENCODER = {
+    "enc_q.pre" : "enc_q.pre",
+    "enc_q.enc.in_layers.*" : "enc_q.enc.in_layers.*",
+    "enc_q.enc.res_skip_layers.*" : "enc_q.enc.res_skip_layers.*",
+    "enc_q.proj" : "enc_q.proj",
+}
 MAPPING = {
     **MAPPING_TEXT_ENCODER,
     **MAPPING_STOCHASTIC_DURATION_PREDICTOR,
     **MAPPING_FLOW,
     **MAPPING_GENERATOR,
+    **MAPPING_POSTERIOR_ENCODER,
 }
 TOP_LEVEL_KEYS = []
 IGNORE_KEYS = []
@@ -182,14 +189,19 @@ def recursively_load_weights(fairseq_dict, hf_model):
 
         is_used = False
         for key, mapped_key in MAPPING.items():
-            if "*" in key:
+            if key.endswith(".*"):
+                key = key[:-1]
+            elif "*" in key:
                 prefix, suffix = key.split(".*.")
                 if prefix in name and suffix in name:
                     key = suffix
 
             if key in name:
                 is_used = True
-                if "*" in mapped_key:
+                if mapped_key.endswith(".*"):
+                    layer_index = name.split(key)[-1].split(".")[0]
+                    mapped_key = mapped_key.replace("*", layer_index)
+                elif "*" in mapped_key:
                     layer_index = name.split(key)[0].split(".")[-2]
                     mapped_key = mapped_key.replace("*", layer_index)
                 if "weight_g" in name:

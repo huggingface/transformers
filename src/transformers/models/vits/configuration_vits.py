@@ -102,6 +102,7 @@ class VitsConfig(PretrainedConfig):
 
         inter_channels=192,  # TODO: better name?
 
+        spec_channels=513,   # TODO: spectrogram_channels?
 
         # TODO: is this HifiGan?
         resblock="1",
@@ -143,6 +144,7 @@ class VitsConfig(PretrainedConfig):
         self.encoder_layerdrop = encoder_layerdrop
         self.ffn_kernel_size = ffn_kernel_size
         self.inter_channels = inter_channels
+        self.spec_channels = spec_channels
         self.hidden_act = hidden_act
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
