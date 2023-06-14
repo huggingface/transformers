@@ -1425,6 +1425,14 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
         """
         self.unispeech.feature_extractor._freeze_parameters()
 
+    def freeze_base_model(self):
+        """
+        Calling this function will disable the gradient computation for the base model so that its parameters will not
+        be updated during training. Only the classification head will be updated.
+        """
+        for param in self.unispeech.parameters():
+            param.requires_grad = False
+
     @add_start_docstrings_to_model_forward(UNISPEECH_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
