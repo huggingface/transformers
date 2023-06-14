@@ -15,6 +15,7 @@
 Import utilities: Utilities related to imports and our lazy inits.
 """
 
+import importlib.metadata
 import importlib.util
 import json
 import os
@@ -31,7 +32,6 @@ from typing import Any, Tuple, Union
 from packaging import version
 
 from . import logging
-import importlib.metadata
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name

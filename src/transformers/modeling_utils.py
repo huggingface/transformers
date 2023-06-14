@@ -15,6 +15,7 @@
 # limitations under the License.
 import collections
 import gc
+import importlib.metadata
 import inspect
 import json
 import os
@@ -76,7 +77,6 @@ from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 from .utils.import_utils import ENV_VARS_TRUE_VALUES, is_sagemaker_mp_enabled
 from .utils.quantization_config import BitsAndBytesConfig
 from .utils.versions import require_version_core
-import importlib.metadata
 
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()

@@ -15,6 +15,7 @@
 Integrations with other Python libraries.
 """
 import functools
+import importlib.metadata
 import importlib.util
 import json
 import numbers
@@ -31,7 +32,6 @@ import numpy as np
 
 from . import __version__ as version
 from .utils import flatten_dict, is_datasets_available, is_pandas_available, is_torch_available, logging
-import importlib.metadata
 
 
 logger = logging.get_logger(__name__)

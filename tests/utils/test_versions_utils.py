@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib.metadata
 import sys
 
 from transformers.testing_utils import TestCasePlus
 from transformers.utils.versions import require_version, require_version_core
-import importlib.metadata
 
 
 numpy_ver = importlib.metadata.version("numpy")
