@@ -270,7 +270,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model.to(torch_device)
             model.eval()
             inputs = self._prepare_for_class(inputs_dict, model_class)
-            inputs["input_values"] = inputs["input_values"].repeat(1,1,10)
+            inputs["input_values"] = inputs["input_values"].repeat(1, 1, 10)
 
             hidden_states_no_chunk = model(**inputs)[0]
 
