@@ -35,10 +35,10 @@ logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.encodec")
 
 MAPPING_QUANTIZER = {
-    "quantizer.vq.layers.*._codebook.inited": "quantizer.vector_quantization.layers.*.codebook.inited",
-    "quantizer.vq.layers.*._codebook.cluster_size": "quantizer.vector_quantization.layers.*.codebook.cluster_size",
-    "quantizer.vq.layers.*._codebook.embed": "quantizer.vector_quantization.layers.*.codebook.embed",
-    "quantizer.vq.layers.*._codebook.embed_avg": "quantizer.vector_quantization.layers.*.codebook.embed_avg",
+    "quantizer.vq.layers.*._codebook.inited": "quantizer.layers.*.codebook.inited",
+    "quantizer.vq.layers.*._codebook.cluster_size": "quantizer.layers.*.codebook.cluster_size",
+    "quantizer.vq.layers.*._codebook.embed": "quantizer.layers.*.codebook.embed",
+    "quantizer.vq.layers.*._codebook.embed_avg": "quantizer.layers.*.codebook.embed_avg",
 }
 MAPPING_ENCODER = {
     "encoder.model.0.conv.conv": "encoder.layers.0.conv",

@@ -18,7 +18,6 @@ import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -110,8 +109,6 @@ class EncodecConv1d(nn.Module):
             self.conv = nn.utils.weight_norm(self.conv)
         elif self.norm_type == "time_group_norm":
             self.norm = nn.GroupNorm(1, out_channels)
-        else:
-            raise ValueError(f"self.norm_type must be one of (`"weight_norm"`, `"time_group_norm"`), got {self.norm_type}")
 
     @staticmethod
     def _get_extra_padding_for_conv1d(
@@ -132,7 +129,7 @@ class EncodecConv1d(nn.Module):
         padding_left, padding_right = paddings
         if not mode == "reflect":
             nn.functional.pad(hidden_states, paddings, mode, value)
-        
+
         max_pad = max(padding_left, padding_right)
         extra_pad = 0
         if length <= max_pad:
@@ -148,19 +145,17 @@ class EncodecConv1d(nn.Module):
         dilation = self.conv.dilation[0]
         kernel_size = (kernel_size - 1) * dilation + 1  # effective kernel size with dilations
         padding_total = kernel_size - stride
+        extra_padding = self._get_extra_padding_for_conv1d(hidden_states, kernel_size, stride, padding_total)
 
-        ehidden_statestra_padding = self._get_extra_padding_for_conv1d(
-            hidden_states, kernel_size, stride, padding_total
-        )
         if self.causal:
             # Left padding for causal
-            hidden_states = self._pad1d(hidden_states, (padding_total, ehidden_statestra_padding), mode=self.pad_mode)
+            hidden_states = self._pad1d(hidden_states, (padding_total, extra_padding), mode=self.pad_mode)
         else:
             # Asymmetric padding required for odd strides
             padding_right = padding_total // 2
             padding_left = padding_total - padding_right
             hidden_states = self._pad1d(
-                hidden_states, (padding_left, padding_right + ehidden_statestra_padding), mode=self.pad_mode
+                hidden_states, (padding_left, padding_right + extra_padding), mode=self.pad_mode
             )
 
         hidden_states = self.conv(hidden_states)
@@ -333,9 +328,9 @@ class EncodecDecoder(nn.Module):
 class EncodecEuclideanCodebook(nn.Module):
     """Codebook with Euclidean distance."""
 
-    def __init__(self, config: EncodecConfig, dim: int):
+    def __init__(self, config: EncodecConfig):
         super().__init__()
-        embed = torch.zeros(config.codebook_size, dim)
+        embed = torch.zeros(config.codebook_size, config.codebook_dim)
 
         self.codebook_size = config.codebook_size
 
@@ -373,11 +368,7 @@ class EncodecVectorQuantization(nn.Module):
 
     def __init__(self, config: EncodecConfig):
         super().__init__()
-
-        codebook_dim = config.codebook_dim if config.codebook_dim is not None else config.hidden_size
-
-        self.requires_projection = codebook_dim != config.hidden_size
-        self.codebook = EncodecEuclideanCodebook(config, codebook_dim)
+        self.codebook = EncodecEuclideanCodebook(config)
 
     def encode(self, hidden_states):
         hidden_states = hidden_states.permute(0, 2, 1)
@@ -390,17 +381,32 @@ class EncodecVectorQuantization(nn.Module):
         return quantize
 
 
-class EncodecResidualVectorQuantization(nn.Module):
-    """
-    Residual vector quantization implementation. Follows Algorithm 1. in https://arxiv.org/pdf/2107.03312.pdf
-    """
+class EncodecResidualVectorQuantizer(nn.Module):
+    """Residual Vector Quantizer."""
 
-    def __init__(self, config: EncodecConfig, num_quantizers: int):
+    def __init__(self, config: EncodecConfig):
         super().__init__()
-        self.layers = nn.ModuleList([EncodecVectorQuantization(config) for _ in range(num_quantizers)])
+        self.codebook_size = config.codebook_size
+        self.frame_rate = config.frame_rate
+        self.num_quantizers = config.num_quantizers
+        self.layers = nn.ModuleList([EncodecVectorQuantization(config) for _ in range(config.num_quantizers)])
 
-    def encode(self, hidden_states: torch.Tensor, num_quantizers: Optional[int] = None) -> torch.Tensor:
-        residual = hidden_states
+    def get_num_quantizers_for_bandwidth(self, bandwidth: Optional[float] = None) -> int:
+        """Return num_quantizers based on specified target bandwidth."""
+        bw_per_q = math.log2(self.codebook_size) * self.frame_rate
+        num_quantizers = self.num_quantizers
+        if bandwidth is not None and bandwidth > 0.0:
+            num_quantizers = int(max(1, math.floor(bandwidth * 1000 / bw_per_q)))
+        return num_quantizers
+
+    def encode(self, embeddings: torch.Tensor, bandwidth: Optional[float] = None) -> torch.Tensor:
+        """
+        Encode a given input tensor with the specified frame rate at the given bandwidth. The RVQ encode method sets
+        the appropriate number of quantizers to use and returns indices for each quantizer.
+        """
+        num_quantizers = self.get_num_quantizers_for_bandwidth(bandwidth)
+
+        residual = embeddings
         all_indices = []
         num_quantizers = num_quantizers or len(self.layers)
         for layer in self.layers[:num_quantizers]:
@@ -409,47 +415,18 @@ class EncodecResidualVectorQuantization(nn.Module):
             residual = residual - quantized
             all_indices.append(indices)
 
-        out_indices = torch.stack(all_indices)
-        return out_indices
-
-    def decode(self, q_indices: torch.Tensor) -> torch.Tensor:
-        quantized_out = torch.tensor(0.0, device=q_indices.device)
-        for i, indices in enumerate(q_indices):
-            layer = self.layers[i]
-            quantized = layer.decode(indices)
-            quantized_out = quantized_out + quantized
-        return quantized_out
-
-
-class EncodecResidualVectorQuantizer(nn.Module):
-    """Residual Vector Quantizer."""
-
-    def __init__(self, config: EncodecConfig, num_quantizers: int):
-        super().__init__()
-        self.config = config
-        self.num_quantizers = num_quantizers
-        self.vector_quantization = EncodecResidualVectorQuantization(config, num_quantizers)
-
-    def get_num_quantizers_for_bandwidth(self, frame_rate: int, bandwidth: Optional[float] = None) -> int:
-        """Return num_quantizers based on specified target bandwidth."""
-        bw_per_q = math.log2(self.config.codebook_size) * frame_rate
-        num_quantizers = self.num_quantizers
-        if bandwidth is not None and bandwidth > 0.0:
-            num_quantizers = int(max(1, math.floor(bandwidth * 1000 / bw_per_q)))
-        return num_quantizers
-
-    def encode(self, embeddings: torch.Tensor, frame_rate: int, bandwidth: Optional[float] = None) -> torch.Tensor:
-        """
-        Encode a given input tensor with the specified frame rate at the given bandwidth. The RVQ encode method sets
-        the appropriate number of quantizers to use and returns indices for each quantizer.
-        """
-        num_quantizers = self.get_num_quantizers_for_bandwidth(frame_rate, bandwidth)
-        codes = self.vector_quantization.encode(embeddings, num_quantizers=num_quantizers)
+        codes = torch.stack(all_indices)
         return codes
 
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
         """Decode the given codes to the quantized representation."""
-        return self.vector_quantization.decode(codes)
+        quantized_out = torch.tensor(0.0, device=codes.device)
+        for i, indices in enumerate(codes):
+            layer = self.layers[i]
+            quantized = layer.decode(indices)
+            quantized_out = quantized_out + quantized
+
+        return quantized_out
 
 
 class EncodecPreTrainedModel(PreTrainedModel):
@@ -491,23 +468,6 @@ class EncodecPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (EncodecEncoder, EncodecDecoder)):
             module.gradient_checkpointing = value
-
-
-ENCODEC_BASE_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`EncodecConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
 
 
 ENCODEC_START_DOCSTRING = r"""
@@ -562,7 +522,7 @@ ENCODEC_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The EnCodec neural audio codec model.",
-    ENCODEC_BASE_START_DOCSTRING,
+    ENCODEC_START_DOCSTRING,
 )
 class EncodecModel(EncodecPreTrainedModel):
     def __init__(self, config: EncodecConfig):
@@ -572,11 +532,7 @@ class EncodecModel(EncodecPreTrainedModel):
         self.encoder = EncodecEncoder(config)
         self.decoder = EncodecDecoder(config)
 
-        hop_length = np.prod(config.upsampling_ratios)
-        self.frame_rate = math.ceil(config.sampling_rate / hop_length)
-
-        num_quantizers = int(1000 * config.target_bandwidths[-1] // (self.frame_rate * 10))
-        self.quantizer = EncodecResidualVectorQuantizer(config, num_quantizers)
+        self.quantizer = EncodecResidualVectorQuantizer(config)
 
         self.bits_per_codebook = int(math.log2(self.config.codebook_size))
         if 2**self.bits_per_codebook != self.config.codebook_size:
@@ -590,6 +546,32 @@ class EncodecModel(EncodecPreTrainedModel):
 
     def get_decoder(self):
         return self.decoder
+
+    def _encode_frame(
+        self, input_values: torch.Tensor, bandwidth: float, padding_mask: int
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """
+        Encodes the given input using the underlying VQVAE. If `config.normalize` is set to `True` the input is first
+        normalized. The padding mask is required to compute the correct scale.
+        """
+        length = input_values.shape[-1]
+        duration = length / self.config.sampling_rate
+
+        if self.config.chunk_length_s is not None and duration > 1e-5 + self.config.chunk_length_s:
+            raise RuntimeError(f"Duration of frame ({duration}) is longer than chunk {self.config.chunk_length_s}")
+
+        scale = None
+        if self.config.normalize:
+            # if the padding is non zero
+            input_values = input_values * padding_mask
+            mono = torch.sum(input_values, 1, keepdim=True) / input_values.shape[1]
+            scale = mono.pow(2).mean(dim=-1, keepdim=True).sqrt() + 1e-8
+            input_values = input_values / scale
+
+        embeddings = self.encoder(input_values)
+        codes = self.quantizer.encode(embeddings, bandwidth)
+        codes = codes.transpose(0, 1)
+        return codes, scale
 
     def encode(
         self,
@@ -665,32 +647,6 @@ class EncodecModel(EncodecPreTrainedModel):
 
         return EncodecEncoderOutput(encoded_frames, scales)
 
-    def _encode_frame(
-        self, input_values: torch.Tensor, bandwidth: float, padding_mask: int
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """
-        Encodes the given input using the underlying VQVAE. If `config.normalize` is set to `True` the input is first
-        normalized. The padding mask is required to compute the correct scale.
-        """
-        length = input_values.shape[-1]
-        duration = length / self.config.sampling_rate
-
-        if self.config.chunk_length_s is not None and duration > 1e-5 + self.config.chunk_length_s:
-            raise RuntimeError(f"Duration of frame ({duration}) is longer than chunk {self.config.chunk_length_s}")
-
-        scale = None
-        if self.config.normalize:
-            # if the padding is non zero
-            input_values = input_values * padding_mask
-            mono = torch.sum(input_values, 1, keepdim=True) / input_values.shape[1]
-            scale = mono.pow(2).mean(dim=-1, keepdim=True).sqrt() + 1e-8
-            input_values = input_values / scale
-
-        embeddings = self.encoder(input_values)
-        codes = self.quantizer.encode(embeddings, self.frame_rate, bandwidth)
-        codes = codes.transpose(0, 1)
-        return codes, scale
-
     @staticmethod
     def _linear_overlap_add(frames: List[torch.Tensor], stride: int):
         # Generic overlap add, with linear fade-in/fade-out, supporting complex scenario
@@ -737,6 +693,14 @@ class EncodecModel(EncodecPreTrainedModel):
             raise ValueError(f"`sum_weight` minimum element must be bigger than zero: {sum_weight}`")
 
         return out / sum_weight
+
+    def _decode_frame(self, codes: torch.Tensor, scale: Optional[torch.Tensor] = None) -> torch.Tensor:
+        codes = codes.transpose(0, 1)
+        embeddings = self.quantizer.decode(codes)
+        outputs = self.decoder(embeddings)
+        if scale is not None:
+            outputs = outputs * scale.view(-1, 1, 1)
+        return outputs
 
     def decode(
         self,
@@ -786,14 +750,6 @@ class EncodecModel(EncodecPreTrainedModel):
             return (audio_values,)
         return EncodecDecoderOutput(audio_values)
 
-    def _decode_frame(self, codes: torch.Tensor, scale: Optional[torch.Tensor] = None) -> torch.Tensor:
-        codes = codes.transpose(0, 1)
-        embeddings = self.quantizer.decode(codes)
-        outputs = self.decoder(embeddings)
-        if scale is not None:
-            outputs = outputs * scale.view(-1, 1, 1)
-        return outputs
-
     @add_start_docstrings_to_model_forward(ENCODEC_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=EncodecOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -836,7 +792,7 @@ class EncodecModel(EncodecPreTrainedModel):
             raise ValueError("You specified `audio_codes` but did not specify the `audio_scales`")
 
         if audio_scales is not None and audio_codes is None:
-                raise ValueError("You specified `audio_scales` but did not specify the `audio_codes`")
+            raise ValueError("You specified `audio_scales` but did not specify the `audio_codes`")
 
         if audio_scales is None and audio_codes is None:
             audio_codes, audio_scales = self.encode(input_values, padding_mask, bandwidth, return_dict).to_tuple()
