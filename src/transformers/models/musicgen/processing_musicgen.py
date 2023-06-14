@@ -22,8 +22,8 @@ from ...processing_utils import ProcessorMixin
 
 class MusicgenProcessor(ProcessorMixin):
     r"""
-    Constructs a MusicGen processor which wraps an EnCodec feature extractor and a T5 tokenizer into a single
-    processor class.
+    Constructs a MusicGen processor which wraps an EnCodec feature extractor and a T5 tokenizer into a single processor
+    class.
 
     [`MusicgenProcessor`] offers all the functionalities of [`EncodecFeatureExtractor`] and [`TTokenizer`]. See
     [`~MusicgenProcessor.__call__`] and [`~MusicgenProcessor.decode`] for more information.
@@ -70,8 +70,6 @@ class MusicgenProcessor(ProcessorMixin):
 
         if audio is not None:
             audio_inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
-            if "attention_mask" in audio_inputs:
-                audio_inputs["encodec_attention_mask"] = audio_inputs.pop("attention_mask")
 
         if audio is None:
             return inputs
@@ -81,5 +79,6 @@ class MusicgenProcessor(ProcessorMixin):
 
         else:
             inputs["input_values"] = audio_inputs["input_values"]
-            inputs["encodec_attention_mask"] = audio_inputs["encodec_attention_mask"]
+            if "padding_mask" in audio_inputs:
+                inputs["padding_mask"] = audio_inputs["padding_mask"]
             return inputs
