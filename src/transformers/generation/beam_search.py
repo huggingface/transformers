@@ -211,7 +211,7 @@ class BeamSearchScorer(BeamScorer):
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[Union[int, List[int]]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
-    ) -> Dict[str,torch.Tensor]:
+    ) -> Dict[str, torch.Tensor]:
         cur_len = input_ids.shape[-1] + 1  # add up to the length which the next_scores is calculated on
         batch_size = len(self._beam_hyps)
         if not (batch_size == (input_ids.shape[0] // self.group_size)):
