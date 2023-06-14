@@ -33,8 +33,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        AutoTokenizer,
-        BatchEncoding,
         MusicgenForConditionalGeneration,
         MusicgenModel,
     )
@@ -55,9 +53,9 @@ def prepare_musicgen_inputs_dict(
     if head_mask is None:
         head_mask = torch.ones(config.encoder_config.num_layers, config.encoder_config.num_heads, device=torch_device)
     if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_config.num_hidden_layers, config.decoder_config.num_attention_heads, device=torch_device)
+        decoder_head_mask = torch.ones(config.decoder_config.num_layers, config.decoder_config.num_heads, device=torch_device)
     if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_config.num_hidden_layers, config.decoder_config.num_attention_heads, device=torch_device)
+        cross_attn_head_mask = torch.ones(config.decoder_config.num_layers, config.decoder_config.num_heads, device=torch_device)
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -79,14 +77,14 @@ class MusicgenModelTester:
         use_labels=False,
         vocab_size=99,
         hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
+        num_layers=2,
+        num_heads=4,
         intermediate_size=4,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=100,
-        pad_token_id=1,
+        pad_token_id=0,
         bos_token_id=0,
         num_codebooks=4,
         relative_attention_num_buckets=8,
@@ -98,8 +96,8 @@ class MusicgenModelTester:
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+        self.num_layers = num_layers
+        self.num_heads = num_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -122,18 +120,18 @@ class MusicgenModelTester:
         encoder_config = MusicgenEncoderConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
-            num_layers=self.num_hidden_layers,
-            num_heads=self.num_attention_heads,
+            num_layers=self.num_layers,
+            num_heads=self.num_heads,
             d_ff=self.intermediate_size,
-            d_kv=self.hidden_size // self.num_attention_heads,
+            d_kv=self.hidden_size // self.num_heads,
             relative_attention_num_buckets=self.relative_attention_num_buckets,
         )
         decoder_config = MusicgenDecoderConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            ffn_dim=self.intermediate_size,
+            num_layers=self.num_layers,
+            num_heads=self.num_heads,
+            d_ff=self.intermediate_size,
             pad_token_id=self.pad_token_id,
             bos_token_id=self.bos_token_id,
             num_codebooks=self.num_codebooks,
@@ -191,3 +189,16 @@ class MusicgenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         self.config_tester = ConfigTester(
             self, config_class=MusicgenConfig, has_text_modality=False, hidden_size=16
         )
+
+    def _get_input_ids_and_config(self, batch_size=2):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict["decoder_input_ids"]
+
+        # cut to half length & take max batch_size 3
+        _, codebooks, sequence_length = input_ids.shape
+        input_ids = input_ids[:batch_size, :codebooks, :sequence_length // 2]
+
+        # generate max 3 tokens
+        max_length = input_ids.shape[-1] + 3
+        attention_mask = torch.ones_like(input_ids, dtype=torch.long)[:batch_size, :sequence_length]
+        return config, input_ids, attention_mask, max_length
