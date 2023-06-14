@@ -726,16 +726,15 @@ class VitsConvFlow(nn.Module):
             return x
 
 
-#TODO: add this
-# class VitsLog(nn.Module):
-#     def forward(self, x, x_mask, reverse=False, **kwargs):
-#         if not reverse:
-#             y = torch.log(torch.clamp_min(x, 1e-5)) * x_mask
-#             logdet = torch.sum(-y, [1, 2])
-#             return y, logdet
-#         else:
-#             x = torch.exp(x) * x_mask
-#             return x
+class VitsLog(nn.Module):
+    def forward(self, x, x_mask, reverse=False, **kwargs):
+        if not reverse:
+            y = torch.log(torch.clamp_min(x, 1e-5)) * x_mask
+            logdet = torch.sum(-y, [1, 2])
+            return y, logdet
+        else:
+            x = torch.exp(x) * x_mask
+            return x
 
 
 class VitsFlip(nn.Module):
@@ -784,16 +783,15 @@ class VitsStochasticDurationPredictor(nn.Module):
             self.flows.append(VitsConvFlow(2, filter_channels, kernel_size, n_layers=3))
             self.flows.append(VitsFlip())
 
-        # TODO: this stuff is used only by reverse=False, which I don't think we need to support
-        # self.log_flow = Log()
-        # self.post_pre = nn.Conv1d(1, filter_channels, 1)
-        # self.post_proj = nn.Conv1d(filter_channels, filter_channels, 1)
-        # self.post_convs = DDSConv(filter_channels, kernel_size, n_layers=3, p_dropout=p_dropout)
-        # self.post_flows = nn.ModuleList()
-        # self.post_flows.append(ElementwiseAffine(2))
-        # for i in range(4):
-        #     self.post_flows.append(ConvFlow(2, filter_channels, kernel_size, n_layers=3))
-        #     self.post_flows.append(Flip())
+        self.log_flow = VitsLog()
+        self.post_pre = nn.Conv1d(1, filter_channels, 1)
+        self.post_proj = nn.Conv1d(filter_channels, filter_channels, 1)
+        self.post_convs = VitsDilatedDepthSeparableConv(filter_channels, kernel_size, n_layers=3, p_dropout=p_dropout)
+        self.post_flows = nn.ModuleList()
+        self.post_flows.append(VitsElementwiseAffine(2))
+        for i in range(4):
+            self.post_flows.append(VitsConvFlow(2, filter_channels, kernel_size, n_layers=3))
+            self.post_flows.append(VitsFlip())
 
     def forward(self, x, x_mask, w=None, g=None, reverse=False, noise_scale=1.0):
         x = torch.detach(x)
@@ -806,9 +804,35 @@ class VitsStochasticDurationPredictor(nn.Module):
         x = self.convs(x, x_mask)
         x = self.proj(x) * x_mask
 
-        # TODO: is reverse mode ever used? if not, simplify the code!!!
         if not reverse:
-            raise RuntimeError("reverse=False not implemented yet!")
+            flows = self.flows
+            assert w is not None
+
+            logdet_tot_q = 0
+            h_w = self.post_pre(w)
+            h_w = self.post_convs(h_w, x_mask)
+            h_w = self.post_proj(h_w) * x_mask
+            e_q = torch.randn(w.size(0), 2, w.size(2)).to(device=x.device, dtype=x.dtype) * x_mask
+            z_q = e_q
+            for flow in self.post_flows:
+                z_q, logdet_q = flow(z_q, x_mask, g=(x + h_w))
+                logdet_tot_q += logdet_q
+            z_u, z1 = torch.split(z_q, [1, 1], 1)
+            u = torch.sigmoid(z_u) * x_mask
+            z0 = (w - u) * x_mask
+            logdet_tot_q += torch.sum((nn.functional.logsigmoid(z_u) + nn.functional.logsigmoid(-z_u)) * x_mask, [1,2])
+            logq = torch.sum(-0.5 * (math.log(2*math.pi) + (e_q**2)) * x_mask, [1,2]) - logdet_tot_q
+
+            logdet_tot = 0
+            z0, logdet = self.log_flow(z0, x_mask)
+            logdet_tot += logdet
+            z = torch.cat([z0, z1], 1)
+            for flow in flows:
+                z, logdet = flow(z, x_mask, g=x, reverse=reverse)
+                logdet_tot = logdet_tot + logdet
+            nll = torch.sum(0.5 * (math.log(2*math.pi) + (z**2)) * x_mask, [1,2]) - logdet_tot
+            return nll + logq # [b]
+
         else:
             flows = list(reversed(self.flows))
             flows = flows[:-2] + [flows[-1]] # remove a useless vflow
