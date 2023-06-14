@@ -22,6 +22,7 @@ _import_structure = {
         "MusicgenConfig",
         "MusicgenDecoderConfig",
     ],
+    "processing_musicgen": ["MusicgenProcessor"],
 }
 
 try:
@@ -43,6 +44,7 @@ if TYPE_CHECKING:
         MusicgenConfig,
         MusicgenDecoderConfig,
     )
+    from .processing_musicgen import MusicgenProcessor
 
     try:
         if not is_torch_available():
