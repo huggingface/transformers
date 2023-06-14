@@ -15,10 +15,11 @@
 """ Testing suite for the PyTorch Encodec model. """
 
 import inspect
+import os
+import tempfile
 import unittest
 from typing import Dict, List, Tuple
-import tempfile
-import os
+
 import numpy as np
 from datasets import Audio, load_dataset
 
@@ -250,15 +251,17 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
-    
+
     @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `attention` logic")
     def test_attention_outputs(self):
         pass
 
-    @unittest.skip("The EncodecModel's `forward_chunking` implementation is not in the feed forward, and uses a stride")
+    @unittest.skip(
+        "The EncodecModel's `forward_chunking` implementation is not in the feed forward, and uses a stride"
+    )
     def test_feed_forward_chunking(self):
         pass
-    
+
     @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic")
     def test_hidden_states_output(self):
         pass
@@ -397,7 +400,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             sampling_rate=processor.sampling_rate,
             return_tensors="pt",
         ).to(torch_device)
-        
+
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
                 # use max bandwith for best possible reconstruction
