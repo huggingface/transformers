@@ -29,7 +29,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import get_checkpointing_kwargs
+from ...pytorch_utils import torch_custom_checkpointing
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -701,15 +701,12 @@ class OPTDecoder(OPTPreTrainedModel):
 
                     return custom_forward
 
-                gradient_checkpointing_kwargs = get_checkpointing_kwargs()
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = torch_custom_checkpointing(
                     create_custom_forward(decoder_layer),
                     hidden_states,
                     causal_attention_mask,
                     head_mask[idx] if head_mask is not None else None,
                     None,
-                    **gradient_checkpointing_kwargs,
                 )
             else:
                 layer_outputs = decoder_layer(
