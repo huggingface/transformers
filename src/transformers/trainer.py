@@ -315,7 +315,8 @@ class Trainer:
 
     """
 
-    from .trainer_pt_utils import _get_learning_rate
+    # Those are used as methods of the Trainer in examples.
+    from .trainer_pt_utils import _get_learning_rate, log_metrics, metrics_format, save_metrics, save_state
 
     def __init__(
         self,
