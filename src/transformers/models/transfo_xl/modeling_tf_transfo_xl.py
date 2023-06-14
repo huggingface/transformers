@@ -588,8 +588,6 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         klen = mlen + qlen
 
         # Compute decoder attention mask
-
-        # TensorFlow version
         all_ones = tf.ones([qlen, klen], dtype=tf.int32)
         upper_mask = tf.linalg.band_part(all_ones, 0, -1) - tf.linalg.band_part(all_ones, 0, mlen)
         if self.same_length:
