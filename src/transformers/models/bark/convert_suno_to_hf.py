@@ -2,19 +2,17 @@
 import argparse
 import os
 from pathlib import Path
-from transformers.utils import logging
 
 import torch
-from transformers import set_seed
-
-
+from bark.generation import _load_model as _bark_load_model
 from huggingface_hub import hf_hub_download
 
-from bark.generation import _load_model as _bark_load_model
+from transformers import set_seed
 
 # TODO : how to import directly?
 from transformers.models.bark.configuration_bark import BarkModuleConfig
-from transformers.models.bark.modeling_bark import BarkFineAcousticsModule, BarkCausalModule
+from transformers.models.bark.modeling_bark import BarkCausalModule, BarkFineAcousticsModule
+from transformers.utils import logging
 
 
 logging.set_verbosity_info()
@@ -26,7 +24,7 @@ set_seed(770)
 new_layer_name_dict = {
     "c_attn": "att_proj",
     "c_proj": "out_proj",
-    "c_fc": "in_proj",     
+    "c_fc": "in_proj",
 }
 
 
@@ -74,9 +72,6 @@ def _download(from_hf_path, file_name):
     hf_hub_download(repo_id=from_hf_path, filename=file_name, local_dir=CACHE_DIR)
 
 
-
-
-
 def _load_model(ckpt_path, device, use_small=False, model_type="text"):
     ConfigClass = BarkModuleConfig
     if model_type in ["text", "coarse"]:
@@ -97,13 +92,12 @@ def _load_model(ckpt_path, device, use_small=False, model_type="text"):
         model_args["input_vocab_size"] = model_args["vocab_size"]
         model_args["output_vocab_size"] = model_args["vocab_size"]
         del model_args["vocab_size"]
-        
+
     # convert Bark model arguments to HF Bark model arguments
     model_args["num_heads"] = model_args.pop("n_head")
     model_args["hidden_size"] = model_args.pop("n_embd")
     model_args["num_layers"] = model_args.pop("n_layer")
 
-    
     model_config = ConfigClass(**checkpoint["model_args"])
     model = ModelClass(config=model_config)
     state_dict = checkpoint["model"]
@@ -115,14 +109,13 @@ def _load_model(ckpt_path, device, use_small=False, model_type="text"):
             new_k = k[len(unwanted_prefix) :]
             for old_layer_name in new_layer_name_dict:
                 new_k = new_k.replace(old_layer_name, new_layer_name_dict[old_layer_name])
-    
+
             state_dict[new_k] = state_dict.pop(k)
-            
 
     extra_keys = set(state_dict.keys()) - set(model.state_dict().keys())
-    extra_keys = set([k for k in extra_keys if not k.endswith(".attn.bias")])
+    extra_keys = {k for k in extra_keys if not k.endswith(".attn.bias")}
     missing_keys = set(model.state_dict().keys()) - set(state_dict.keys())
-    missing_keys = set([k for k in missing_keys if not k.endswith(".attn.bias")])
+    missing_keys = {k for k in missing_keys if not k.endswith(".attn.bias")}
     if len(extra_keys) != 0:
         raise ValueError(f"extra keys found: {extra_keys}")
     if len(missing_keys) != 0:
@@ -134,82 +127,64 @@ def _load_model(ckpt_path, device, use_small=False, model_type="text"):
     model.eval()
     model.to(device)
     del checkpoint, state_dict
-    
 
     return model
-
-
 
 
 def load_model(pytorch_dump_folder_path, use_small=False, model_type="text"):
     if model_type not in ("text", "coarse", "fine"):
         raise NotImplementedError()
 
-    device = "cpu" # do conversion on cpu
-    model_key = f"{model_type}"
-    
+    device = "cpu"  # do conversion on cpu
+
     ckpt_path = _get_ckpt_path(model_type, use_small=use_small)
     model = _load_model(ckpt_path, device, model_type=model_type, use_small=use_small)
-
 
     # load bark initial model
     bark_model = _bark_load_model(ckpt_path, "cpu", model_type=model_type, use_small=use_small)
 
     if model_type == "text":
         bark_model = bark_model["model"]
-    assert model.get_num_params() == bark_model.get_num_params(), "initial and new models don't have the same number of parameters"
+    assert (
+        model.get_num_params() == bark_model.get_num_params()
+    ), "initial and new models don't have the same number of parameters"
 
     # check if same output as the bark model
     batch_size = 5
     sequence_length = 10
-    
-    
-    if model_type in ["text", "coarse"]:
 
-        vec = torch.randint(256,(batch_size, sequence_length), dtype=torch.int)
+    if model_type in ["text", "coarse"]:
+        vec = torch.randint(256, (batch_size, sequence_length), dtype=torch.int)
         output_old_model = bark_model(vec)[0]
 
         output_new_model_total = model(vec)
-        
+
     else:
         prediction_codeboook_channel = 3
         n_codes_total = 8
-        vec = torch.randint(256,(batch_size, sequence_length, n_codes_total), dtype=torch.int)
-        
+        vec = torch.randint(256, (batch_size, sequence_length, n_codes_total), dtype=torch.int)
+
         output_new_model_total = model(prediction_codeboook_channel, vec)
-        output_old_model = bark_model(prediction_codeboook_channel, vec)   
-        
+        output_old_model = bark_model(prediction_codeboook_channel, vec)
+
     output_new_model = output_new_model_total.logits
-    
+
     # output difference should come from the difference of self-attention implementation design
     assert output_new_model.shape == output_old_model.shape, "initial and new outputs don't have the same shape"
-    assert ((output_new_model - output_old_model).abs()<1e-4).all().item(), "initial and new outputs are not equal"
-
+    assert ((output_new_model - output_old_model).abs() < 1e-4).all().item(), "initial and new outputs are not equal"
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    model.save_pretrained(pytorch_dump_folder_path)  
-        
-        
-       
+    model.save_pretrained(pytorch_dump_folder_path)
 
-    
 
-    
-    
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
-    
-    parser.add_argument(
-        "model_type", type=str, help="text, coarse or fine."
-    )
+
+    parser.add_argument("model_type", type=str, help="text, coarse or fine.")
     parser.add_argument("pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument(
-        "--is_small", action="store_true", help="convert the small version instead of the large."
-    )
-    
+    parser.add_argument("--is_small", action="store_true", help="convert the small version instead of the large.")
+
     args = parser.parse_args()
-    
 
     load_model(args.pytorch_dump_folder_path, model_type=args.model_type, use_small=args.is_small)
-
