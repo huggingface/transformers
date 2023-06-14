@@ -99,7 +99,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
                 values, a list of numpy arrays or a list of list of float values. The numpy array must be of shape
                 `(num_samples,)` for mono audio (`feature_size = 1`), or `(2, num_samples)` for stereo audio
                 (`feature_size = 2`).
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*):
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
 
