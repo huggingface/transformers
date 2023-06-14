@@ -1,0 +1,4 @@
+facebook/mbart-large-cc25 64
+facebook/bart-base 64
+bert-base-uncased 64
+bigscience/bloom-560m 32
