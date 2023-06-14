@@ -3028,7 +3028,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for group in tied_params:
                 if k in group:
                     found = True
-                    if len(group) > 2:
+                    if len(group) > 1:
                         group.remove(k)
                     else:
                         _missing.append(k)
