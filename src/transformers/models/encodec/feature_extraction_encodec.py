@@ -173,7 +173,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
                 max_length = min(array.shape[0] for array in raw_audio)
                 nb_step = int(np.floor(max_length / self.chunk_stride))
                 max_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
-            elif padding:  # by default, pad the inputs
+            elif padding:
                 max_length = max(array.shape[0] for array in raw_audio)
                 nb_step = int(np.ceil(max_length / self.chunk_stride))
                 max_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
@@ -190,7 +190,8 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
                 padding=padding,
                 return_attention_mask=padding,
             )
-            padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask", None)
+            if padding:
+                padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
 
         input_values = []
         for example in padded_inputs.pop("input_values"):
