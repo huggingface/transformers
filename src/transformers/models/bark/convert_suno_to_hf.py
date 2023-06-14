@@ -1,21 +1,12 @@
 """Convert Bark checkpoint."""
 import argparse
-import hashlib
 import os
 from pathlib import Path
-import urllib
-import warnings
 from transformers.utils import logging
-from packaging import version
-
-# TODO: remove
-from transformers import GenerationConfig
 
 import torch
-from torch import nn
-from tqdm import tqdm
+from transformers import set_seed
 
-import gc
 
 from huggingface_hub import hf_hub_download
 
@@ -29,8 +20,7 @@ from transformers.models.bark.modeling_bark import BarkFineAcousticsModule, Bark
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
-torch.manual_seed(770)
-
+set_seed(770)
 
 
 new_layer_name_dict = {

@@ -17,8 +17,7 @@ from ...modeling_outputs import (
 from .configuration_bark import BarkModuleConfig, BarkConfig
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 
-# TODO: remove
-from transformers import GenerationConfig, LogitsProcessor
+from transformers import LogitsProcessor, StoppingCriteria
 
 # TODO: ??
 import numpy as np
@@ -407,25 +406,26 @@ class BarkCausalModule(BarkModulePreTrainedModel):
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
         input_embeds = kwargs.get("input_embeds", None)
         
-        
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values:
+            seq_len = input_ids.shape[1]
             input_ids = input_ids[:, [-1]]
+            
             if input_embeds is not None:
-                input_embeds = input_embeds[:, -1, :].unsqueeze(1)
+                # input_embeds have already been used and is not required anymore
+                input_embeds = None
                 
-
-        attention_mask = kwargs.get("attention_mask", None)
-        position_ids = kwargs.get("position_ids", None)
 
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
         
         # ensure that attention_mask and position_ids shapes are aligned with the weird Bark hack of reducing sequence length on the first forward pass
-        if input_embeds is not None:
-            seq_len = input_embeds.shape[1]
-        else:
-            seq_len = input_ids.shape[1]          
+        if past_key_values is None:
+            if input_embeds is not None:
+                seq_len = input_embeds.shape[1]
+            else:
+                seq_len = input_ids.shape[1]
+                
         if attention_mask is not None:
             attention_mask = attention_mask[:, :seq_len] 
         if position_ids is not None:
@@ -468,7 +468,7 @@ class BarkCausalModule(BarkModulePreTrainedModel):
 
         if input_ids is not None and input_embeds is not None:
             raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
-        elif input_embeds is not None:
+        elif input_embeds is not None and past_key_values is None:
             # we want to return the input_embeds in priority so that it is in line with a weird hack of Bark which concatenate two bits of the input_embeds on the first forward pass of the semantic model
             pass
         elif input_ids is not None:
@@ -480,6 +480,8 @@ class BarkCausalModule(BarkModulePreTrainedModel):
             else:
                  assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
             input_embeds = self.transformer.wte(input_ids) # token embeddings of shape (b, t, n_embd)
+        elif input_embeds is not None:
+            pass
         else:
             raise ValueError("You have to specify either input_ids or input_embeds")
     
@@ -886,6 +888,10 @@ class BarkModel(BarkPreTrainedModel):
             
             x_semantic_history = history_prompt["semantic_prompt"] # TODO: already used before
             x_coarse_history = history_prompt["coarse_prompt"]
+            
+            x_coarse_history = _flatten_codebooks(x_coarse_history, self.config.codebook_size) + self.config.semantic_vocab_size
+            # e.g: after SEMANTIC_VOCAB_SIZE (10000), 1024 tokens dedicated to first codebook, 1024 next tokens dedicated to second codebook.
+                
                         
             max_semantic_history = int(np.floor(max_coarse_history / semantic_to_coarse_ratio))   
             # trim histories correctly
@@ -897,16 +903,7 @@ class BarkModel(BarkPreTrainedModel):
                 ]
             )
             
-            n_coarse_hist_provided = int(round(n_semantic_hist_provided * semantic_to_coarse_ratio))
-
-
-
-            
-            
-            x_coarse_history = _flatten_codebooks(x_coarse_history, self.config.codebook_size) + self.config.semantic_vocab_size
-            # e.g: after SEMANTIC_VOCAB_SIZE (10000), 1024 tokens dedicated to first codebook, 1024 next tokens dedicated to second codebook.
-                
-            
+            n_coarse_hist_provided = int(round(n_semantic_hist_provided * semantic_to_coarse_ratio))        
 
             x_semantic_history = x_semantic_history[-n_semantic_hist_provided:].astype(np.int32)
             x_coarse_history = x_coarse_history[-n_coarse_hist_provided:].astype(np.int32)
@@ -917,8 +914,8 @@ class BarkModel(BarkPreTrainedModel):
             x_semantic_history = np.array([], dtype=np.int32)
             x_coarse_history = np.array([], dtype=np.int32)            
             
-        x_semantic_history = torch.from_numpy(x_semantic_history)[None]
-        x_coarse_history = torch.from_numpy(x_coarse_history)[None]
+        x_semantic_history = torch.from_numpy(x_semantic_history)[None].to(self.device)
+        x_coarse_history = torch.from_numpy(x_coarse_history)[None].to(self.device)
             
         return x_semantic_history, x_coarse_history
     
@@ -929,8 +926,12 @@ class BarkModel(BarkPreTrainedModel):
         history_prompt: Optional[Dict[str,np.ndarray]] = None,
         **kwargs,
     ) -> torch.LongTensor:
+        # TODO: add a max_gen_duration_s early stop
     
         input_ids = inputs
+        
+        # TODO: where to set the default value ?
+        min_eos_p = kwargs.get("min_eos_p", 0.2)
         
         # SEMANTIC_RATE_HZ
         # SEMANTIC_VOCAB_SIZE
@@ -943,7 +944,7 @@ class BarkModel(BarkPreTrainedModel):
         # SEMANTIC_VOCAB_SIZE is then added to semantic history (probably because there are dedicated tokens)
         
         # TODO: remove 
-        temperature = 0.7
+        #temperature = 0.7
 
         
         # input_ids should be of shape (batch_size, seq_len) where seq_len = 513
@@ -954,32 +955,40 @@ class BarkModel(BarkPreTrainedModel):
                         self.semantic_model.transformer.wte(input_ids[:,256+256:])
                     ], dim=1)     
         
-        gen_config = GenerationConfig(do_sample = True, max_length = input_embeds.shape[1] + 768, temperature = temperature, )   
-        gen_config = GenerationConfig(do_sample = False, max_length = input_embeds.shape[1] + 768)
-        # TODO: remove
            
+        semantic_logits_processor = SemanticLogitsProcessor(self.config.semantic_vocab_size, self.config.semantic_pad_token)
         
+        # TODO: for now, it is not implemented yet as long as StoppingCriteria issue is not dealt with
+        #semantic_stopping_criteria = SemanticStoppingCriteria(min_eos_p , self.config.semantic_pad_token)
         
-        # TODO: constraint the output to be less than SEMANTIC_VOCAB_SIZE, which is the EOS ?
-        # pass input_ids in order to stay consistent with the transformers generate method even though it is not used
-        semantic_output = self.semantic_model.generate(input_ids, 
-                                                   gen_config,
+        # pass input_ids in order to stay consistent with the transformers generate method even though it is not used (except to get the input seq_len - that's why we keep the first 257 tokens)
+        semantic_output = self.semantic_model.generate(input_ids[:, :257], 
                                                    input_embeds=input_embeds,
+                                                   logits_processor=[semantic_logits_processor],
+                                                   #stopping_criteria=[semantic_stopping_criteria],
+                                                   renormalize_logits=True,
+                                                   eos_token_id=self.config.semantic_pad_token,
+                                                   max_new_tokens = 768,
                                                    **kwargs) # size: 10048
-        # TODO: look at how to pass min_eos_p parameters, in which, if the proba of the eos token is superior to min_eos_p, it stops early 
+        # TODO: look at how to pass min_eos_p parameters, in which, if the proba of the eos token (semantic_pad_token) is superior to min_eos_p, it stops early.
+        # Can't pass a logits processor because it has to be done after renormalizing logits and having sampled the next item.
+        # TODO: apply stopping_criteria = StoppingCriteriaList ??
         # https://github.com/suno-ai/bark/blob/f6f2db527b13c4a3e52ed6fbac587aadc3723eb6/bark/generation.py#L484-L490
         # TODO: there is also a max_gen_duration_s early stop if the duration depass a certain duration
         # there is also n_tot_steps = 768, max generation 
         # also look at L466
-        
-        # TODO: remark that it takes the 10000 first tokens as relevant logits instead of the 10048
-        #  relevant_logits = logits[0, 0, :SEMANTIC_VOCAB_SIZE] 
-        
+
         
         
         
         # take the generated semantic tokens
-        semantic_output = semantic_output[:,513:]
+        semantic_output = semantic_output[:,257:]
+        
+        # TODO: how to do if batch_size > 1 ?
+        # to stay consistent with Bark original library, if the last id is semantic_pad_token, remove it
+        if semantic_output.shape[1] > 1 and (semantic_output[:,-1] == self.config.semantic_pad_token).all():
+            # TODO: is that ok ?
+            semantic_output = semantic_output[:, :-1]
         
         return semantic_output
         
@@ -994,7 +1003,7 @@ class BarkModel(BarkPreTrainedModel):
     ):
         
         # TODO: change
-        temperature = 0.7
+        #temperature = 0.7
         
         semantic_to_coarse_ratio = self.config.coarse_rate_hz / self.config.semantic_rate_hz * self.config.n_coarse_codebooks
         max_semantic_history = int(np.floor(max_coarse_history / semantic_to_coarse_ratio))
@@ -1038,20 +1047,20 @@ class BarkModel(BarkPreTrainedModel):
             x_in = torch.hstack(
                 [
                     x_in,
-                    torch.tensor([self.config.coarse_infer_token])[None],
+                    torch.tensor([self.config.coarse_infer_token])[None].to(self.device),
                     x_coarse[:, -max_coarse_history:],
                 ]
             )
             
-            gen_config = GenerationConfig(do_sample = True, max_length = x_in.shape[1] + min(sliding_window_len, max_generated_len - total_generated_len), temperature = temperature, )
             
             alternatingLogitsProcessor = AlternatingCodebooksLogitsProcessor(x_in.shape[1],self.config.semantic_vocab_size, self.config.codebook_size)
             
             
             # TODO: add logits processor
             x_out = self.coarse_acoustics_model.generate(x_in, 
-                                                   gen_config,
                                                    logits_processor=[alternatingLogitsProcessor],
+                                                   renormalize_logits=True, #renormalize after logits_processor
+                                                   max_new_tokens = min(sliding_window_len, max_generated_len - total_generated_len),
                                                    **kwargs) 
             
             
@@ -1087,7 +1096,7 @@ class BarkModel(BarkPreTrainedModel):
         
         if history_prompt is not None:
             x_fine_history = history_prompt["fine_prompt"]
-            x_fine_history = torch.from_numpy(x_fine_history).T
+            x_fine_history = torch.from_numpy(x_fine_history).T.to(self.device)
             # transpose to get to shape (seq_len, n_fine_codebooks)
         else:
             x_fine_history = None
@@ -1181,12 +1190,12 @@ class BarkModel(BarkPreTrainedModel):
         return fine_input
     
     def codec_decode(self, fine_output):
+        # TODO: when encodec is added to transformers, change here.
         """Turn quantized audio codes into audio array using encodec."""
 
-        fine_output = fine_output.transpose(1, 2)
+        fine_output = fine_output.transpose(0,1)
         emb = self.codec_model.quantizer.decode(fine_output)
         out = self.codec_model.decoder(emb)
-        # TODO: for now, it works for batch_size = 1
         audio_arr = out.detach().cpu().numpy().squeeze()
         del fine_output, emb, out
 
@@ -1292,3 +1301,52 @@ class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
         return scores
     
     
+class SemanticLogitsProcessor(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] enforcing that logits from the semantic model observe Bark original logic.
+
+    Args:
+        semantic_vocab_size (`int`):
+            The size of the semantic vocabulary size. Has to be lower than the output vocabulary size of the semantic model.
+        semantic_pad_token (`int`):
+            Token id of the semantic pad token.
+    """
+    # TODO: add early_stop
+    def __init__(self,semantic_vocab_size: int, semantic_pad_token: int):
+        if semantic_vocab_size > semantic_pad_token:
+            raise ValueError(f"`semantic_vocab_size` has to be lower or equal than `semantic_pad_token`")
+
+
+        self.semantic_vocab_size = semantic_vocab_size
+        self.semantic_pad_token = semantic_pad_token
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        
+        
+        scores[:, self.semantic_vocab_size:self.semantic_pad_token] = -float("inf")
+        scores[:, self.semantic_pad_token+1:] = -float("inf")
+        
+        return scores
+    
+    
+class SemanticStoppingCriteria(StoppingCriteria):
+    r"""
+    [`StoppingCriteria`] enforcing early stop if the probability of the eos_token is higher than min_eos_p.
+    Beware, to stay consistent with transformers, it requires renormalize_logits=True in the generation parameters.
+
+    Args:
+        min_eos_p (`float`):
+            eos_token probability threshold beyond which generation is stopped.
+        semantic_pad_token (`int`):
+            Token id of the semantic pad token.
+    """
+    def __init__(self, min_eos_p: float, semantic_pad_token: int):
+        # since renormalize_logits applies a log_softmax instead of a softmax, needs to apply log to the proba.
+        self.min_eos_p = np.log(min_eos_p)
+        self.semantic_pad_token = semantic_pad_token
+     
+    # TODO: add docstrings?   
+    #@add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+        
+        return scores[:, self.semantic_pad_token] >= self.min_eos_p
