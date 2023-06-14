@@ -153,9 +153,7 @@ class VitsPosteriorEncoder(nn.Module):
         self.enc = VitsWaveNet(hidden_channels, kernel_size, dilation_rate, n_layers, gin_channels=gin_channels)
         self.proj = nn.Conv1d(hidden_channels, out_channels * 2, 1)
 
-    def forward(self, x, x_mask, g=None):   #x_lengths, g=None):
-        #TODO: pass in the padding mask!
-        #x_mask = torch.unsqueeze(sequence_mask(x_lengths, x.size(2)), 1).to(x.dtype)
+    def forward(self, x, x_mask, g=None):
         x = self.pre(x) * x_mask
         x = self.enc(x, x_mask, g=g)
         stats = self.proj(x) * x_mask
@@ -444,7 +442,6 @@ class VitsResidualCouplingBlock(nn.Module):
            self.flows.append(VitsFlip())
 
     def forward(self, x, x_mask, g=None, reverse=False):
-        #TODO: can probably remove the `reverse` code
         if not reverse:
             for flow in self.flows:
                 x, _ = flow(x, x_mask, g=g, reverse=reverse)
@@ -1525,7 +1522,6 @@ class VitsModel(VitsPreTrainedModel):
             self.duration_predictor = VitsDurationPredictor(config, config.hidden_size, 256, 3, 0.5)
         # TODO: try checkpoint with use_sdp=False
 
-        # TODO: are there any checkpoints that have more than one speaker? yes, VCTK
         if config.num_speakers > 1:
             self.emb_g = nn.Embedding(config.num_speakers, config.gin_channels)
 
@@ -1555,6 +1551,7 @@ class VitsModel(VitsPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        labels: Optional[torch.FloatTensor] = None,
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1562,9 +1559,7 @@ class VitsModel(VitsPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # Note: The current implementation of this model is inference only.
-
-        # TODO: make padding_mask here?
+        # TODO: make padding_mask here instead of in text_encoder?
 
         text_encoder_outputs = self.text_encoder(input_ids, attention_mask)
 
@@ -1578,6 +1573,51 @@ class VitsModel(VitsPreTrainedModel):
         # TODO: make betterer!
         x = text_encoder_outputs.last_hidden_state.transpose(1, 2)
         x_mask = text_encoder_outputs.padding_mask.transpose(1, 2)  #TODO: input_padding_mask
+
+        # TODO: note about naming:
+        #     m_p, logs_p = prior
+        #     m_q, logs_q = posterior
+
+        if labels is not None:
+            y_mask = labels[:, 0:1, :] != -100.0
+            z, m_q, logs_q = self.enc_q(labels, y_mask, g=g)
+            z_p = self.flow(z, y_mask, g=g)
+
+            # TODO: did not implement this yet because of dependency on monotonic-align
+            # negative cross-entropy
+            # s_p_sq_r = torch.exp(-2 * logs_p) # [b, d, t]
+            # neg_cent1 = torch.sum(-0.5 * math.log(2 * math.pi) - logs_p, [1], keepdim=True) # [b, 1, t_s]
+            # neg_cent2 = torch.matmul(-0.5 * (z_p ** 2).transpose(1, 2), s_p_sq_r) # [b, t_t, d] x [b, d, t_s] = [b, t_t, t_s]
+            # neg_cent3 = torch.matmul(z_p.transpose(1, 2), (m_p * s_p_sq_r)) # [b, t_t, d] x [b, d, t_s] = [b, t_t, t_s]
+            # neg_cent4 = torch.sum(-0.5 * (m_p ** 2) * s_p_sq_r, [1], keepdim=True) # [b, 1, t_s]
+            # neg_cent = neg_cent1 + neg_cent2 + neg_cent3 + neg_cent4
+
+            # attn_mask = torch.unsqueeze(x_mask, 2) * torch.unsqueeze(y_mask, -1)
+            # attn = monotonic_align.maximum_path(neg_cent, attn_mask.squeeze(1)).unsqueeze(1).detach()
+
+            # to test the logic, using a random placeholder
+            attn = torch.randn((input_ids.shape[0], 1, labels.shape[-1], input_ids.shape[-1]))
+
+            w = attn.sum(2)
+            if self.config.use_stochastic_duration_prediction:
+                l_length = self.duration_predictor(x, x_mask, w, g=g)
+                l_length = l_length / torch.sum(x_mask)
+            else:
+                logw_ = torch.log(w + 1e-6) * x_mask
+                logw = self.duration_predictor(x, x_mask, g=g)
+                l_length = torch.sum((logw - logw_)**2, [1,2]) / torch.sum(x_mask) # for averaging
+
+            # Expand prior
+            m_p = torch.matmul(attn.squeeze(1), text_encoder_outputs.m).transpose(1, 2)
+            logs_p = torch.matmul(attn.squeeze(1), text_encoder_outputs.logs).transpose(1, 2)
+
+            y_lengths = y_mask.cumsum(dim=-1)[..., -1].squeeze()
+            z_slice, ids_slice = self._rand_slice_segments(z, y_lengths, self.config.segment_size)
+
+            y_hat = self.dec(z_slice, g=g)
+
+            # TODO: return outputs using Output object; these outputs go into a GAN for training
+            return y_hat, l_length, attn, ids_slice, x_mask, y_mask, (z, z_p, m_p, logs_p, m_q, logs_q)
 
         if self.config.use_stochastic_duration_prediction:
             logw = self.duration_predictor(x, x_mask, g=g, reverse=True, noise_scale=noise_scale_w)
@@ -1597,19 +1637,17 @@ class VitsModel(VitsPreTrainedModel):
         attn_mask = torch.unsqueeze(x_mask, 2) * torch.unsqueeze(y_mask, -1)
         attn = self._generate_path(w_ceil, attn_mask)
 
-        # [b, t', t], [b, t, d] -> [b, d, t']
+        # Expand prior
         m_p = torch.matmul(attn.squeeze(1), text_encoder_outputs.m).transpose(1, 2)
-
-        # [b, t', t], [b, t, d] -> [b, d, t']
         logs_p = torch.matmul(attn.squeeze(1), text_encoder_outputs.logs).transpose(1, 2)
 
         z_p = m_p + torch.randn_like(m_p) * torch.exp(logs_p) * noise_scale
 
         z = self.flow(z_p, y_mask, g=g, reverse=True)
-        o = self.dec((z * y_mask)[:,:,:max_len], g=g)
+        y_hat = self.dec((z * y_mask)[:,:,:max_len], g=g)
 
         # TODO: return outputs using Output object
-        return o, y_mask
+        return y_hat, y_mask
 
     def _generate_path(self, duration, mask):
         """
@@ -1626,3 +1664,15 @@ class VitsModel(VitsPreTrainedModel):
         path = path - nn.functional.pad(path, [0, 0, 1, 0, 0, 0])[:, :-1]
         path = path.unsqueeze(1).transpose(2, 3) * mask
         return path
+
+    def _rand_slice_segments(self, x, x_lengths, segment_size=4):
+        ids_str_max = x_lengths - segment_size + 1
+        ids_str = (torch.rand([x.size(0)]).to(device=x.device) * ids_str_max).to(dtype=torch.long)
+
+        ret = torch.zeros_like(x[:, :, :segment_size])
+        for i in range(x.size(0)):
+            idx_str = ids_str[i]
+            idx_end = idx_str + segment_size
+            ret[i] = x[i, :, idx_str:idx_end]
+
+        return ret, ids_str
