@@ -22,7 +22,7 @@ from transformers import LogitsProcessor, StoppingCriteria
 import numpy as np
 
 
-# TODO: ??
+# TODO: ensure no dependency when Encodec is added to HF
 from encodec import EncodecModel
 
 
@@ -163,20 +163,6 @@ BARK_CAUSAL_MODULE_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-
-
-
-# TODO
-#GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-#    "EleutherAI/gpt-neo-1.3B",
-#    # See all GPTNeo models at https://huggingface.co/models?filter=gpt_neo
-#]
-#
-#_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neo-1.3B"
-
-
-# TODO: don't forget the initial text tokenizer before the semantic model, and the final codec model (_load_codec_model in Bark code)
-# tokenizer = BertTokenizer.from_pretrained("bert-base-multilingual-cased")
 
 
 class BarkSelfAttention(nn.Module):
@@ -457,7 +443,7 @@ class BarkModulePreTrainedModel(PreTrainedModel):
     BARK_MODULE_START_DOCSTRING,
 )
 class BarkCausalModule(BarkModulePreTrainedModel):
-    # TODO: what do I do with that here?    
+    # TODO: add code sample when checkpoint is added
     #
     #@add_code_sample_docstrings(
     #    checkpoint=_CHECKPOINT_FOR_DOC,
@@ -537,7 +523,6 @@ class BarkCausalModule(BarkModulePreTrainedModel):
         if position_ids is not None:
             position_ids = position_ids[:, :seq_len]
 
-        # TODO: is it possible to merge that with what I have done in the code of forward?
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
@@ -566,7 +551,6 @@ class BarkCausalModule(BarkModulePreTrainedModel):
         }
     
     
-    # TODO: verify if it is still necessary
     def _get_and_check_input_embeddings(self, input_ids, input_embeds, past_key_values):
         # Verify if input_embeds already exists, and check sequence_lengths are plausible
         # then compute embeddings.
@@ -636,11 +620,9 @@ class BarkCausalModule(BarkModulePreTrainedModel):
             past_length = past_key_values[0][0].size(-2)
             
 
-        # TODO: verify if it needs to be asserted (maybe use GPTNeo's way)
         if position_ids is None:
             position_ids = torch.arange(past_length, seq_length + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0) # shape (1, seq_length)
-            assert position_ids.shape == (1, seq_length)
 
         position_embeds = self.transformer.wpe(position_ids) # position embeddings of shape (1, t, n_embd)
                         
@@ -819,7 +801,6 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
         )
         for i in range(config.n_codes_total - config.n_codes_given):
             self.transformer.wtes[i + 1].weight = self.lm_heads[i].weight
-            # TODO: check what it does
             
     def get_num_params(self, non_embedding=True):
         """
@@ -994,7 +975,6 @@ class BarkModel(BarkPreTrainedModel):
         self.fine_acoustics_model = BarkFineAcousticsModule(config.fine_acoustics_config)
         
         # TODO: for now, it is not integrated into the code
-        # TODO: what about the device?
         self.codec_model = EncodecModel.encodec_model_24khz()
         self.codec_model.set_target_bandwidth(6.0)
         
@@ -1025,7 +1005,7 @@ class BarkModel(BarkPreTrainedModel):
 
             x_semantic_history = x_semantic_history[-n_semantic_hist_provided:].astype(np.int32)
             x_coarse_history = x_coarse_history[-n_coarse_hist_provided:].astype(np.int32)
-            # TODO: bit of a hack for time alignment (sounds better)
+            # bit of a hack for time alignment (sounds better) - from Bark original implementation
             x_coarse_history = x_coarse_history[:-2]
             
         else:
@@ -1063,7 +1043,8 @@ class BarkModel(BarkPreTrainedModel):
         semantic_logits_processor = SemanticLogitsProcessor(self.config.semantic_vocab_size, self.config.semantic_pad_token)
         
         # TODO: for now, it is not implemented yet as long as StoppingCriteria issue is not dealt with
-        #semantic_stopping_criteria = SemanticStoppingCriteria(min_eos_p , self.config.semantic_pad_token)
+        # https://github.com/huggingface/transformers/issues/23674
+        # semantic_stopping_criteria = SemanticStoppingCriteria(min_eos_p , self.config.semantic_pad_token)
         
         # pass input_ids in order to stay consistent with the transformers generate method even though it is not used (except to get the input seq_len - that's why we keep the first 257 tokens)
         semantic_output = self.semantic_model.generate(input_ids[:, :257], 
@@ -1086,10 +1067,8 @@ class BarkModel(BarkPreTrainedModel):
         # take the generated semantic tokens
         semantic_output = semantic_output[:,257:]
         
-        # TODO: how to do if batch_size > 1 ?
         # to stay consistent with Bark original library, if the last id is semantic_pad_token, remove it
         if semantic_output.shape[1] > 1 and (semantic_output[:,-1] == self.config.semantic_pad_token).all():
-            # TODO: is that ok ?
             semantic_output = semantic_output[:, :-1]
         
         return semantic_output
@@ -1420,7 +1399,6 @@ class SemanticLogitsProcessor(LogitsProcessor):
         semantic_pad_token (`int`):
             Token id of the semantic pad token.
     """
-    # TODO: add early_stop
     def __init__(self,semantic_vocab_size: int, semantic_pad_token: int):
         if semantic_vocab_size > semantic_pad_token:
             raise ValueError(f"`semantic_vocab_size` has to be lower or equal than `semantic_pad_token`")
@@ -1454,8 +1432,6 @@ class SemanticStoppingCriteria(StoppingCriteria):
         self.min_eos_p = np.log(min_eos_p)
         self.semantic_pad_token = semantic_pad_token
      
-    # TODO: add docstrings?   
-    #@add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
-        
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:        
         return scores[:, self.semantic_pad_token] >= self.min_eos_p
