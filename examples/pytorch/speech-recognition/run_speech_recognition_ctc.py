@@ -31,6 +31,7 @@ import evaluate
 import numpy as np
 import torch
 from datasets import DatasetDict, load_dataset
+from safetensors.torch import save_file as safe_save_file
 
 import transformers
 from transformers import (
@@ -45,11 +46,10 @@ from transformers import (
     Wav2Vec2Processor,
     set_seed,
 )
+from transformers.models.wav2vec2.modeling_wav2vec2 import WAV2VEC2_ADAPTER_SAFE_FILE
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-from transformers.models.wav2vec2.modeling_wav2vec2 import WAV2VEC2_ADAPTER_SAFE_FILE
-from safetensors.torch import save_file as safe_save_file
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -134,7 +134,12 @@ class ModelArguments:
     ctc_loss_reduction: Optional[str] = field(
         default="mean", metadata={"help": "The way the ctc loss should be reduced. Should be one of 'mean' or 'sum'."}
     )
-    adapter_attn_dim: int = field(default=None, metadata={"help": "If defined, adapter layers will be randomely initialized and the rest of the model will be frozen."})
+    adapter_attn_dim: int = field(
+        default=None,
+        metadata={
+            "help": "If defined, adapter layers will be randomely initialized and the rest of the model will be frozen."
+        },
+    )
 
 
 @dataclass
@@ -564,7 +569,7 @@ def main():
                     pad_token=pad_token,
                 )
 
-                # if we doing adapter language training, save 
+                # if we doing adapter language training, save
                 # vocab with adpter language
                 if data_args.adapter_language is not None:
                     new_vocab_dict = {} if prev_vocab is None else prev_vocab
