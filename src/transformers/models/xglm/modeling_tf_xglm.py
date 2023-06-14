@@ -463,19 +463,12 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
     ) -> tf.Tensor:
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask: tf.Tensor | None = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length)
-
-        if attention_mask is not None:
+        combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length)
+        if attention_mask is None:
+            return combined_attention_mask
+        else:
             expand_attention_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
-            combined_attention_mask = (
-                expand_attention_mask
-                if combined_attention_mask is None
-                else expand_attention_mask + combined_attention_mask
-            )
-
-        return combined_attention_mask
+            return expand_attention_mask + combined_attention_mask
 
     def embed_positions(self, position_ids: np.ndarray | tf.Tensor | None = None) -> tf.Tensor:
         position_ids += self.offset
