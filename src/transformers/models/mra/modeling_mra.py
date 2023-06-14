@@ -88,10 +88,17 @@ def sparse_max(sparse_qk_prod, indices, query_num_block, key_num_block):
     """
     Computes maximum values for softmax stability.
     """
-    assert len(sparse_qk_prod.size()) == 4
-    assert len(indices.size()) == 2
-    assert sparse_qk_prod.size(2) == 32
-    assert sparse_qk_prod.size(3) == 32
+    if len(sparse_qk_prod.size()) != 4:
+        raise ValueError("sparse_qk_prod must be a 4-dimensional tensor.")
+    
+    if len(indices.size()) != 2:
+        raise ValueError("indices must be a 2-dimensional tensor.")
+    
+    if sparse_qk_prod.size(2) != 32:
+        raise ValueError("The size of the second dimension of sparse_qk_prod must be 32.")
+    
+    if sparse_qk_prod.size(3) != 32:
+        raise ValueError("The size of the third dimension of sparse_qk_prod must be 32.")
 
     index_vals = sparse_qk_prod.max(dim=-2).values.transpose(-1, -2)
     index_vals = index_vals.contiguous()
@@ -109,9 +116,14 @@ def sparse_mask(mask, indices, block_size=32):
     """
     Converts attention mask to a sparse mask for high resolution logits.
     """
-    assert len(mask.size()) == 2
-    assert len(indices.size()) == 2
-    assert mask.shape[0] == indices.shape[0]
+    if len(mask.size()) != 2:
+        raise ValueError("mask must be a 2-dimensional tensor.")
+    
+    if len(indices.size()) != 2:
+        raise ValueError("indices must be a 2-dimensional tensor.")
+    
+    if mask.shape[0] != indices.shape[0]:
+        raise ValueError("mask and indices must have the same size in the zero-th dimension.")
 
     batch_size, seq_len = mask.shape
     num_block = seq_len // block_size
@@ -129,27 +141,36 @@ def mm_to_sparse(dense_query, dense_key, indices, block_size=32):
     """
     batch_size, query_size, dim = dense_query.size()
     _, key_size, dim = dense_key.size()
-    assert query_size % block_size == 0
-    assert key_size % block_size == 0
 
+    if query_size % block_size != 0:
+        raise ValueError("query_size (size of first dimension of dense_query) must be divisible by block_size.")
+    
+    if key_size % block_size != 0:
+        raise ValueError("key_size (size of first dimension of dense_key) must be divisible by block_size.")
+    
     dense_query = dense_query.reshape(batch_size, query_size // block_size, block_size, dim).transpose(-1, -2)
     dense_key = dense_key.reshape(batch_size, key_size // block_size, block_size, dim).transpose(-1, -2)
 
-    assert len(dense_query.size()) == 4
-    assert len(dense_key.size()) == 4
-    assert len(indices.size()) == 2
-    assert dense_query.size(3) == 32
-    assert dense_key.size(3) == 32
+    if len(dense_query.size()) != 4:
+        raise ValueError("dense_query must be a 4-dimensional tensor.")
+    
+    if len(dense_key.size()) != 4:
+        raise ValueError("dense_key must be a 4-dimensional tensor.")
+    
+    if len(indices.size()) != 2:
+        raise ValueError("indices must be a 2-dimensional tensor.")
+    
+    if dense_query.size(3) != 32:
+        raise ValueError("The third dimension of dense_query must be 32.")
+    
+    if dense_key.size(3) != 32:
+        raise ValueError("The third dimension of dense_key must be 32.")
 
     dense_query = dense_query.contiguous()
     dense_key = dense_key.contiguous()
 
     indices = indices.int()
     indices = indices.contiguous()
-
-    assert dense_query.is_contiguous()
-    assert dense_key.is_contiguous()
-    assert indices.is_contiguous()
 
     return cuda_kernel.mm_to_sparse(dense_query, dense_key, indices.int())
 
@@ -160,28 +181,34 @@ def sparse_dense_mm(sparse_query, indices, dense_key, query_num_block, block_siz
     """
     batch_size, key_size, dim = dense_key.size()
 
-    assert key_size % block_size == 0
-    assert sparse_query.size(2) == block_size
-    assert sparse_query.size(3) == block_size
+    if key_size % block_size != 0:
+        raise ValueError("key_size (size of first dimension of dense_key) must be divisible by block_size.")
+    
+    if sparse_query.size(2) != block_size:
+        raise ValueError("The size of the second dimension of sparse_query must be equal to the block_size.")
+    
+    if sparse_query.size(3) != block_size:
+        raise ValueError("The size of the third dimension of sparse_query must be equal to the block_size.")
 
     dense_key = dense_key.reshape(batch_size, key_size // block_size, block_size, dim).transpose(-1, -2)
 
-    assert len(sparse_query.size()) == 4
-    assert len(dense_key.size()) == 4
-    assert len(indices.size()) == 2
-    assert sparse_query.size(2) == 32
-    assert sparse_query.size(3) == 32
-    assert dense_key.size(3) == 32
+    if len(sparse_query.size()) != 4:
+        raise ValueError("sparse_query must be a 4-dimensional tensor.")
+    
+    if len(dense_key.size()) != 4:
+        raise ValueError("dense_key must be a 4-dimensional tensor.")
+    
+    if len(indices.size()) != 2:
+        raise ValueError("indices must be a 2-dimensional tensor.")
+    
+    if dense_key.size(3) != 32:
+        raise ValueError("The size of the third dimension of dense_key must be 32.")
 
     sparse_query = sparse_query.contiguous()
 
     indices = indices.int()
     indices = indices.contiguous()
     dense_key = dense_key.contiguous()
-
-    assert sparse_query.is_contiguous()
-    assert indices.is_contiguous()
-    assert dense_key.is_contiguous()
 
     dense_qk_prod = cuda_kernel.sparse_dense_mm(sparse_query, indices, dense_key, query_num_block)
     dense_qk_prod = dense_qk_prod.transpose(-1, -2).reshape(batch_size, query_num_block * block_size, dim)
@@ -192,7 +219,7 @@ def transpose_indices(indices, dim_1_block, dim_2_block):
     return ((indices % dim_2_block) * dim_1_block + torch.div(indices, dim_2_block, rounding_mode="floor")).long()
 
 
-class SampledDenseMM(torch.autograd.Function):
+class MraSampledDenseMatMul(torch.autograd.Function):
     @staticmethod
     def forward(ctx, dense_query, dense_key, indices, block_size):
         sparse_qk_prod = mm_to_sparse(dense_query, dense_key, indices, block_size)
@@ -213,10 +240,10 @@ class SampledDenseMM(torch.autograd.Function):
 
     @staticmethod
     def operator_call(dense_query, dense_key, indices, block_size=32):
-        return SampledDenseMM.apply(dense_query, dense_key, indices, block_size)
+        return MraSampledDenseMatMul.apply(dense_query, dense_key, indices, block_size)
 
 
-class SparseDenseMM(torch.autograd.Function):
+class MraSparseDenseMatMul(torch.autograd.Function):
     @staticmethod
     def forward(ctx, sparse_query, indices, dense_key, query_num_block):
         sparse_qk_prod = sparse_dense_mm(sparse_query, indices, dense_key, query_num_block)
@@ -236,16 +263,19 @@ class SparseDenseMM(torch.autograd.Function):
 
     @staticmethod
     def operator_call(sparse_query, indices, dense_key, query_num_block):
-        return SparseDenseMM.apply(sparse_query, indices, dense_key, query_num_block)
+        return MraSparseDenseMatMul.apply(sparse_query, indices, dense_key, query_num_block)
 
 
-class ReduceSum:
+class MraReduceSum:
     @staticmethod
     def operator_call(sparse_query, indices, query_num_block, key_num_block):
         batch_size, num_block, block_size, _ = sparse_query.size()
 
-        assert len(sparse_query.size()) == 4
-        assert len(indices.size()) == 2
+        if len(sparse_query.size()) != 4:
+            raise ValueError("sparse_query must be a 4-dimensional tensor.")
+        
+        if len(indices.size()) != 2:
+            raise ValueError("indices must be a 2-dimensional tensor.")
 
         _, _, block_size, _ = sparse_query.size()
         batch_size, num_block = indices.size()
@@ -361,7 +391,9 @@ def mra2_attention(
     batch_size, num_head, seq_len, head_dim = query.size()
     meta_batch = batch_size * num_head
 
-    assert seq_len % block_size == 0
+    if seq_len % block_size != 0:
+        raise ValueError("sequence length must be divisible by the block_size.")
+
     num_block_per_row = seq_len // block_size
 
     query = query.reshape(meta_batch, seq_len, head_dim)
@@ -401,14 +433,14 @@ def mra2_attention(
             initial_prior_diagonal_n_blocks,
         )
 
-    high_resolution_logit = SampledDenseMM.operator_call(query, key, indices, block_size=block_size) / math.sqrt(head_dim)
+    high_resolution_logit = MraSampledDenseMatMul.operator_call(query, key, indices, block_size=block_size) / math.sqrt(head_dim)
     max_vals, max_vals_scatter = sparse_max(high_resolution_logit, indices, num_block_per_row, num_block_per_row)
     high_resolution_logit = high_resolution_logit - max_vals_scatter
     if mask is not None:
         high_resolution_logit = high_resolution_logit - 1e4 * (1 - sparse_mask(mask, indices)[:, :, :, None])
     high_resolution_attn = torch.exp(high_resolution_logit)
-    high_resolution_attn_out = SparseDenseMM.operator_call(high_resolution_attn, indices, value, num_block_per_row)
-    high_resolution_normalizer = ReduceSum.operator_call(
+    high_resolution_attn_out = MraSparseDenseMatMul.operator_call(high_resolution_attn, indices, value, num_block_per_row)
+    high_resolution_normalizer = MraReduceSum.operator_call(
         high_resolution_attn, indices, num_block_per_row, num_block_per_row
     )
 
