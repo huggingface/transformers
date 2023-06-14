@@ -21,7 +21,6 @@ _import_structure = {
         "MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "MusicgenConfig",
         "MusicgenDecoderConfig",
-        "MusicgenEncoderConfig",
     ],
 }
 
@@ -43,7 +42,6 @@ if TYPE_CHECKING:
         MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MusicgenConfig,
         MusicgenDecoderConfig,
-        MusicgenEncoderConfig,
     )
 
     try:

@@ -129,23 +129,22 @@ class MusicgenDecoderConfig(PretrainedConfig):
 class MusicgenConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MusicgenModel`]. It is used to instantiate a
-    MusicGen model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the MusicGen
-    [facebook/musicgen-small](https://huggingface.co/facebook/musicgen-small) architecture.
+    MusicGen model according to the specified arguments, defining the text encoder, audio encoder and MusicGen decoder
+    configs.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_encoder_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`MusicgenEncoderConfig`].
-        decoder_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`MusicgenDecoderConfig`].
-        initializer_factor (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
         kwargs (*optional*):
-            Dictionary of keyword arguments.
+            Dictionary of keyword arguments. Notably:
+
+                - **text_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
+                  the text encoder config.
+                - **audio_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
+                  the audio encoder config.
+                - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
+                  the decoder config.
 
     Example:
 

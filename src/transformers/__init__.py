@@ -399,7 +399,6 @@ _import_structure = {
         "MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "MusicgenConfig",
         "MusicgenDecoderConfig",
-        "MusicgenEncoderConfig",
     ],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
     "models.nat": ["NAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NatConfig"],
@@ -4243,7 +4242,6 @@ if TYPE_CHECKING:
         MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MusicgenConfig,
         MusicgenDecoderConfig,
-        MusicgenEncoderConfig,
     )
     from .models.mvp import MvpConfig, MvpTokenizer
     from .models.nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NatConfig
