@@ -726,7 +726,12 @@ class TFDebertaEmbeddings(tf.keras.layers.Layer):
         self.position_biased_input = getattr(config, "position_biased_input", True)
         self.initializer_range = config.initializer_range
         if self.embedding_size != config.hidden_size:
-            self.embed_proj = tf.keras.layers.Dense(config.hidden_size, use_bias=False)
+            self.embed_proj = tf.keras.layers.Dense(
+                config.hidden_size,
+                kernel_initializer=get_initializer(config.initializer_range),
+                name="embed_proj",
+                use_bias=False,
+            )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = TFDebertaStableDropout(config.hidden_dropout_prob, name="dropout")
 
@@ -820,8 +825,10 @@ class TFDebertaPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config: DebertaConfig, **kwargs):
         super().__init__(**kwargs)
 
+        self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
+
         self.dense = tf.keras.layers.Dense(
-            units=config.hidden_size,
+            units=self.embedding_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
         )
@@ -845,7 +852,7 @@ class TFDebertaLMPredictionHead(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.config = config
-        self.hidden_size = config.hidden_size
+        self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
 
         self.transform = TFDebertaPredictionHeadTransform(config, name="transform")
 
@@ -875,7 +882,7 @@ class TFDebertaLMPredictionHead(tf.keras.layers.Layer):
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.transform(hidden_states=hidden_states)
         seq_length = shape_list(hidden_states)[1]
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.embedding_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
