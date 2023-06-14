@@ -88,6 +88,7 @@ else:
         lstrip: bool = False
         rstrip: bool = False
         normalized: bool = True
+        special: bool = False #TODO mght remove the confusion
 
         def __getstate__(self):
             return self.__dict__
@@ -863,14 +864,15 @@ class SpecialTokensMixin:
         special tokens are NOT in the vocabulary, they are added to it (indexed starting from the last index of the
         current vocabulary).
 
-        Note,None When adding new tokens to the vocabulary, you should make sure to also resize the token embedding
+        When adding new tokens to the vocabulary, you should make sure to also resize the token embedding
         matrix of the model so that its embedding matrix matches the tokenizer.
 
         In order to do that, please use the [`~PreTrainedModel.resize_token_embeddings`] method.
 
         Using `add_special_tokens` will ensure your special tokens can be used in several ways:
 
-        - Special tokens are carefully handled by the tokenizer (they are never split).
+        - Special tokens are carefully handled by the tokenizer (they are never split), similarly to `AddedTokens`.
+        - Special tokens can be skipped when decoding using `skip_special_tokens = True`.
         - You can easily refer to special tokens using tokenizer class attributes like `tokenizer.cls_token`. This
           makes it easy to develop model-agnostic training and fine-tuning scripts.
 
@@ -927,6 +929,7 @@ class SpecialTokensMixin:
 
                 if replace_additional_special_tokens:
                     setattr(self, key, value)
+                    # this does not work. The Trie is not updated and thus tokens that were previously here will no longer be there
                 else:
                     # This is a copy of `self._additional_special_tokens`
                     additional_special_tokens = getattr(self, key)
@@ -939,6 +942,7 @@ class SpecialTokensMixin:
                     additional_special_tokens.extend(to_add)
                     self.additional_special_tokens = additional_special_tokens
                 # this is slow, trie is re-created here
+                # let's store all the tokens to add and add everything at the end
                 added_tokens += self.add_tokens(value, special_tokens=True)
             else:
                 assert isinstance(
@@ -2058,16 +2062,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 tokenizer.add_tokens(non_special_tokens, special_tokens=False)
         
         # this overwrites the ones added non? 
-        tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
+        # tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
         # the tokenizer.all_special_tokens should automatically be in `self.unique_no_split` and the trie should be created
         # this would allow us to avoid having to `sanitize` which breaks.
+        # + adding a new token should recompute the trie
         # Check all our special tokens are registered as "no split" token (we don't cut them) and are in the vocab
-        # added_tokens = tokenizer.sanitize_special_tokens()
-        # if added_tokens:
-        #     logger.warning_advice(
-        #         "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
-        #         " fine-tuned or trained."
-        #     )
+        added_tokens = tokenizer.sanitize_special_tokens()
+        if added_tokens:
+            logger.warning_advice(
+                "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
+                " fine-tuned or trained."
+            )
 
         return tokenizer
 
