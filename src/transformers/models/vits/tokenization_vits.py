@@ -19,7 +19,7 @@ import json
 import os
 from typing import List, Optional, Tuple
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -29,8 +29,13 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        # "TODO": "https://huggingface.co/TODO/resolve/main/vocab.json",
+        "TODO": "https://huggingface.co/TODO/resolve/main/vocab.json",
     }
+}
+
+# TODO: We don't have this; still need to specify it?
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "TODO": 4096,
 }
 
 
@@ -52,6 +57,7 @@ class VitsMmsTokenizer(PreTrainedTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
