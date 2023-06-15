@@ -3024,19 +3024,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             tied_params = []
 
-        _missing = []
-        for k in missing_keys:
-            found = False
-            for group in tied_params:
-                if k in group:
-                    found = True
-                    if len(group) > 1:
-                        group.remove(k)
-                    else:
-                        _missing.append(k)
-            if not found:
-                _missing.append(k)
-        missing_keys = _missing
+        for group in tied_params:
+            missing_in_group = [k for k in missing_keys if k in group]
+            if len(missing_in_group) > 0 and len(missing_in_group) < len(group):
+                missing_keys = [k for k in missing_keys if k not in missing_in_group]
 
         # Some models may have keys that are not in the state by design, removing them before needlessly warning
         # the user.
@@ -3276,7 +3267,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             missing_keys = [elem for elem in missing_keys if "SCB" not in elem]
 
         if len(unexpected_keys) > 0:
-            logger.warning(
+            warner = logger.warn if model.__class__.__name__ in model.config.architectures else logger.info
+            warner(
                 f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
                 f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
                 f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
