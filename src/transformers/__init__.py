@@ -393,7 +393,7 @@ _import_structure = {
     "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mobilevitv2": ["MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTV2Config"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
-    "models.mra": ["MraConfig", "MRA_PRETRAINED_CONFIG_ARCHIVE_MAP"],
+    "models.mra": ["MRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MraConfig"],
     "models.mt5": ["MT5Config"],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
     "models.nat": ["NAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NatConfig"],
@@ -2113,6 +2113,7 @@ else:
     )
     _import_structure["models.mra"].extend(
         [
+            "MRA_PRETRAINED_MODEL_ARCHIVE_LIST",
             "MraForMaskedLM",
             "MraForMultipleChoice",
             "MraForQuestionAnswering",
@@ -2120,7 +2121,6 @@ else:
             "MraForTokenClassification",
             "MraModel",
             "MraPreTrainedModel",
-            "MRA_PRETRAINED_MODEL_ARCHIVE_LIST",
         ]
     )
     _import_structure["models.mt5"].extend(
