@@ -100,7 +100,7 @@ class VitsConfig(PretrainedConfig):
         encoder_layerdrop=0.1,
         ffn_kernel_size=3,
 
-        inter_channels=192,  # TODO: better name?
+        inter_channels=192,  # TODO: better name?  intermediate_size?
 
         spec_channels=513,   # TODO: spectrogram_channels?
         segment_size=32,     # TODO: hps.train.segment_size // hps.data.hop_length
