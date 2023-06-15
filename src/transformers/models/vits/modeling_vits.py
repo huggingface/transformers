@@ -15,8 +15,6 @@
 """ PyTorch VITS model."""
 
 import math
-import random
-import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -24,17 +22,12 @@ import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, L1Loss
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     ModelOutput,
     BaseModelOutput,
-    BaseModelOutputWithPastAndCrossAttentions,
-    Seq2SeqLMOutput,
-    Seq2SeqModelOutput,
-    Seq2SeqSpectrogramOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -49,9 +42,7 @@ _CONFIG_FOR_DOC = "VitsConfig"
 
 
 VITS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # "microsoft/speecht5_asr",
-    # "microsoft/speecht5_tts",
-    # "microsoft/speecht5_vc",
+    # "TODO",
     # See all VITS models at https://huggingface.co/models?filter=vits
 ]
 
@@ -63,9 +54,24 @@ DEFAULT_MIN_DERIVATIVE = 1e-3
 LRELU_SLOPE = 0.1  #TODO: config?
 
 
-
 @dataclass
-class TextEncoderOutput(ModelOutput):
+class VitsModelOutput(ModelOutput):
+    """
+    Describes the outputs for the VITS model.
+
+    Args:
+        audio (`torch.FloatTensor` of shape `(batch_size, 1, sequence_length)`):
+            Audio waveform predicted by the model.
+        sequence_lengths  (`torch.FloatTensor` of shape `(batch_size,)`):
+            The length in samples of each element in the `audio` batch.
+    """
+    audio: torch.FloatTensor = None
+    sequence_lengths: torch.FloatTensor = None
+
+
+# TODO: get rid of this one?
+@dataclass
+class VitsTextEncoderOutput(ModelOutput):
     """
     Base class for model's outputs, with potential hidden states and attentions.
 
@@ -1280,7 +1286,7 @@ class VitsTextEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, TextEncoderOutput]:
+    ) -> Union[Tuple, VitsTextEncoderOutput]:
 
         # Workaround for tokenizer: filter out padding tokens.
         input_ids[input_ids >= self.config.vocab_size] = 0
@@ -1310,7 +1316,7 @@ class VitsTextEncoder(nn.Module):
         # TODO: maybe just always return a tuple here, not a custom output object
 
         if return_dict:
-            return TextEncoderOutput(
+            return VitsTextEncoderOutput(
                 last_hidden_state=encoder_outputs.last_hidden_state,
                 m=m,
                 logs=logs,
@@ -1548,15 +1554,9 @@ class VitsModel(VitsPreTrainedModel):
         noise_scale: int = 1,  # TODO!
         noise_scale_w: float = 1.0,   # TODO!
         max_len: Optional[int] = None,   # TODO!
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.FloatTensor] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+    ) -> Union[Tuple[torch.FloatTensor], VitsModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # TODO: make padding_mask here instead of in text_encoder?
@@ -1616,8 +1616,13 @@ class VitsModel(VitsPreTrainedModel):
 
             y_hat = self.dec(z_slice, g=g)
 
-            # TODO: return outputs using Output object; these outputs go into a GAN for training
-            return y_hat, l_length, attn, ids_slice, x_mask, y_mask, (z, z_p, m_p, logs_p, m_q, logs_q)
+            # Note: the original model returns the following; these outputs go into a GAN for training
+            # y_hat, l_length, attn, ids_slice, x_mask, y_mask, (z, z_p, m_p, logs_p, m_q, logs_q)
+
+            if return_dict:
+                return VitsModelOutput(audio=y_hat, sequence_lengths=l_length * 256)
+
+            return (y_hat, y_mask)
 
         if self.config.use_stochastic_duration_prediction:
             logw = self.duration_predictor(x, x_mask, g=g, reverse=True, noise_scale=noise_scale_w)
@@ -1646,8 +1651,10 @@ class VitsModel(VitsPreTrainedModel):
         z = self.flow(z_p, y_mask, g=g, reverse=True)
         y_hat = self.dec((z * y_mask)[:,:,:max_len], g=g)
 
-        # TODO: return outputs using Output object
-        return y_hat, y_mask
+        if return_dict:
+            return VitsModelOutput(audio=y_hat, sequence_lengths=y_lengths * 256)
+
+        return (y_hat, y_mask)
 
     def _generate_path(self, duration, mask):
         """

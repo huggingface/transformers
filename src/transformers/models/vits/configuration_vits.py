@@ -128,7 +128,6 @@ class VitsConfig(PretrainedConfig):
         num_speakers=1,
         gin_channels=0,  # TODO name (speaker_embedding_channels?)  maybe set to 256 already?
 
-
         # pad_token_id=1,
         # bos_token_id=0,
         # eos_token_id=2,

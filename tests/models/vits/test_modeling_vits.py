@@ -36,6 +36,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
     random_attention_mask,
+    global_rng,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -101,10 +102,7 @@ class VitsModelTester:
         attention_mask = inputs_dict["attention_mask"]
 
         result = model(input_ids, attention_mask=attention_mask)
-        self.parent.assertEqual(
-            result.audio.shape,
-            (self.batch_size, self.seq_length * 256),
-        )
+        self.parent.assertEqual(result.audio.shape, (self.batch_size, 1, 27136))
 
 
 @require_torch
@@ -125,6 +123,8 @@ class VitsModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_model_forward(self):
+        set_seed(12345)
+        global_rng.seed(12345)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
