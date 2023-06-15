@@ -735,8 +735,8 @@ class TFModelTesterMixin:
             hidden_states = outputs_dict[0]
 
             # Compile extended model
-            extended_model = tf.keras.Model(inputs=functional_inputs, outputs=hidden_states)
-            model_out = extended_model(model.dummy_inputs)  # Check we can pass inputs through
+            functional_model = tf.keras.Model(inputs=functional_inputs, outputs=hidden_states)
+            model_out = functional_model.predict(model.dummy_inputs)  # Check we can pass inputs with the Keras API
             self.assertTrue(model_out is not None)
 
     def test_keyword_and_dict_args(self):
