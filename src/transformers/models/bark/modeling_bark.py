@@ -438,10 +438,6 @@ class BarkModulePreTrainedModel(PreTrainedModel):
 
 
 # GPT2-like autoregressive model
-@add_start_docstrings(
-    "Bark sub-module at the core of the semantic and the coarse acoustics sub-models. It is a GPT-2 like autoregressive model with a language modeling head on top.",
-    BARK_MODULE_START_DOCSTRING,
-)
 class BarkCausalModule(BarkModulePreTrainedModel):
     # TODO: add code sample when checkpoint is added
     #
@@ -739,10 +735,26 @@ class BarkCausalModule(BarkModulePreTrainedModel):
 
 
 @add_start_docstrings(
+    "Bark sub-module at the core of the semantic sub-model. It shares the same architecture than the coarse model. It is a GPT-2 like autoregressive model with a language modeling head on top.",
+    BARK_MODULE_START_DOCSTRING,
+)
+class BarkSemanticModule(BarkCausalModule):
+    base_model_prefix = "semantic_model"
+    
+@add_start_docstrings(
+    "Bark sub-module at the core of the coarse acoustics sub-model. It shares the same architecture than the semantic model. It is a GPT-2 like autoregressive model with a language modeling head on top.",
+    BARK_MODULE_START_DOCSTRING,
+)
+class BarkCoarseAcousticsModule(BarkCausalModule):
+    base_model_prefix = "coarse_acoustics_model"
+    
+@add_start_docstrings(
     "Bark sub-module at the core of the fine acoustics sub-model. It is a non-causal GPT-like model with 8 embedding layers and language modeling heads, one for each codebook.",
     BARK_MODULE_START_DOCSTRING,
 )
 class BarkFineAcousticsModule(BarkModulePreTrainedModel):
+    base_model_prefix = "fine_acoustics_model"
+
     def __init__(self, config):
         # non-causal gpt-like model with one embedding layer and one lm_head for each codebook of Encodec
         super().__init__(config)
@@ -946,8 +958,8 @@ class BarkModel(BarkPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.semantic_model = BarkCausalModule(config.semantic_config)
-        self.coarse_acoustics_model = BarkCausalModule(config.coarse_acoustics_config)
+        self.semantic_model = BarkSemanticModule(config.semantic_config)
+        self.coarse_acoustics_model = BarkCoarseAcousticsModule(config.coarse_acoustics_config)
         self.fine_acoustics_model = BarkFineAcousticsModule(config.fine_acoustics_config)
         
         self.codec_model = EncodecModel.from_pretrained(config.pretrained_encodec_name_or_path)
