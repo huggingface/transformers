@@ -24,9 +24,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VITS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    # "microsoft/speecht5_asr": "https://huggingface.co/microsoft/speecht5_asr/resolve/main/config.json",
-    # "microsoft/speecht5_tts": "https://huggingface.co/microsoft/speecht5_tts/resolve/main/config.json",
-    # "microsoft/speecht5_vc": "https://huggingface.co/microsoft/speecht5_vc/resolve/main/config.json",
+    # "TODO": "https://huggingface.co/TODO/resolve/main/config.json",
 }
 
 
@@ -41,25 +39,34 @@ class VitsConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 81):
-            Vocabulary size of the SpeechT5 model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed to the forward method of [`SpeechT5Model`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        encoder_layers (`int`, *optional*, defaults to 12):
+        vocab_size (`int`, *optional*, defaults to 38):
+            Vocabulary size of the VITS model. Defines the number of different tokens that can be represented by
+            the `inputs_ids` passed to the forward method of [`VitsModel`].
+        hidden_size (`int`, *optional*, defaults to 192):
+            Dimensionality of the text encoder layers.
+        encoder_layers (`int`, *optional*, defaults to 6):
             Number of hidden layers in the Transformer encoder.
-        encoder_attention_heads (`int`, *optional*, defaults to 12):
+        encoder_attention_heads (`int`, *optional*, defaults to 2):
             Number of attention heads for each attention layer in the Transformer encoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 3072):
+        encoder_ffn_dim (`int`, *optional*, defaults to 768):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         encoder_layerdrop (`float`, *optional*, defaults to 0.1):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+        ffn_kernel_size (`int`, *optional*, defaults to 3):
+            TODO
+        inter_channels (`int`, *optional*, defaults to 192):
+            TODO
+            Should be divisible by two.
+        spec_channels (`int`, *optional*, defaults to 513):
+            Number of channels in the target spectrograms.
+        segment_size (`int`, *optional*, defaults to 32):
+            TODO
+        hidden_act (`str` or `function`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings and encoder.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.1):
@@ -68,6 +75,31 @@ class VitsConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
+        use_stochastic_duration_prediction (`bool`, *optional*, defaults to `True`):
+            Whether to use the stochastic duration prediction module or the regular duration predictor.
+        num_speakers (`int`, *optional*, defaults to 1):
+            Number of speakers if this is a multi-speaker model.
+        speaker_embedding_channels (`int`, *optional*, defaults to 0):
+            Number of channels used by the speaker embeddings. Is zero for single-speaker models.
+        resblock="1",
+            TODO: is this HifiGan?
+        resblock_kernel_sizes=[3, 7, 11],
+            TODO: is this HifiGan?
+        resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
+            TODO: is this HifiGan?
+        upsample_rates=[8, 8, 2, 2],
+            TODO: is this HifiGan?
+        upsample_initial_channel=512,
+            TODO: is this HifiGan?
+        upsample_kernel_sizes=[16, 16, 4, 4],
+            TODO: is this HifiGan?
+
+        num_flows=4,
+        wavenet_kernel_size=5,
+            This must be an odd number.
+        wavenet_dilation_rate=1,
+        wavenet_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the WaveNet layers.
 
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
@@ -93,17 +125,23 @@ class VitsConfig(PretrainedConfig):
         self,
         vocab_size=38,
         hidden_size=192,
-
         encoder_layers=6,
         encoder_attention_heads=2,
         encoder_ffn_dim=768,
         encoder_layerdrop=0.1,
         ffn_kernel_size=3,
-
         inter_channels=192,  # TODO: better name?  intermediate_size?
-
         spec_channels=513,   # TODO: spectrogram_channels?
         segment_size=32,     # TODO: hps.train.segment_size // hps.data.hop_length
+        hidden_act="relu",  # or quick_gelu
+        hidden_dropout=0.1,
+        attention_dropout=0.1,
+        activation_dropout=0.1,
+        initializer_range=0.02,
+        layer_norm_eps=1e-5,
+        use_stochastic_duration_prediction=True,
+        num_speakers=1,
+        speaker_embedding_channels=0,
 
         # TODO: is this HifiGan?
         resblock="1",
@@ -113,24 +151,11 @@ class VitsConfig(PretrainedConfig):
         upsample_initial_channel=512,
         upsample_kernel_sizes=[16, 16, 4, 4],
 
-        hidden_act="relu",  # or quick_gelu
-        hidden_dropout=0.1,
+        num_flows=4,
+        wavenet_kernel_size=5,
+        wavenet_dilation_rate=1,
+        wavenet_dropout=0.0,
 
-        attention_dropout=0.1,
-        activation_dropout=0.1,
-
-        initializer_range=0.02,
-
-        layer_norm_eps=1e-5,
-
-        use_stochastic_duration_prediction=True,
-
-        num_speakers=1,
-        gin_channels=0,  # TODO name (speaker_embedding_channels?)  maybe set to 256 already?
-
-        # pad_token_id=1,
-        # bos_token_id=0,
-        # eos_token_id=2,
 
         use_cache=False,
         is_encoder_decoder=False,
@@ -152,25 +177,24 @@ class VitsConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-
         self.use_stochastic_duration_prediction = use_stochastic_duration_prediction
         self.num_speakers = num_speakers
-        self.gin_channels = gin_channels
-
+        self.speaker_embedding_channels = speaker_embedding_channels
         self.resblock = resblock
         self.resblock_kernel_sizes = resblock_kernel_sizes
         self.resblock_dilation_sizes = resblock_dilation_sizes
         self.upsample_rates = upsample_rates
         self.upsample_initial_channel = upsample_initial_channel
         self.upsample_kernel_sizes = upsample_kernel_sizes
+        self.num_flows = num_flows
+        self.wavenet_kernel_size = wavenet_kernel_size
+        self.wavenet_dilation_rate = wavenet_dilation_rate
+        self.wavenet_dropout = wavenet_dropout
 
         self.use_cache = use_cache
         self.is_encoder_decoder = is_encoder_decoder
 
         super().__init__(
-            # pad_token_id=pad_token_id,
-            # bos_token_id=bos_token_id,
-            # eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )

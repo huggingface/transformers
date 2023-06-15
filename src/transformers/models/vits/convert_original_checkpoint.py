@@ -124,26 +124,26 @@ MAPPING_FLOW = {
     "flow.flows.*.enc.cond_layer" : "flow.flows.*.enc.cond_layer",  # num_speakers > 1
 }
 MAPPING_GENERATOR = {
-    "dec.conv_pre" : "dec.conv_pre",
-    "dec.ups.0" : "dec.ups.0",
-    "dec.ups.1" : "dec.ups.1",
-    "dec.ups.2" : "dec.ups.2",
-    "dec.ups.3" : "dec.ups.3",
-    "dec.resblocks.*.convs1.0" : "dec.resblocks.*.convs1.0",
-    "dec.resblocks.*.convs1.1" : "dec.resblocks.*.convs1.1",
-    "dec.resblocks.*.convs1.2" : "dec.resblocks.*.convs1.2",
-    "dec.resblocks.*.convs2.0" : "dec.resblocks.*.convs2.0",
-    "dec.resblocks.*.convs2.1" : "dec.resblocks.*.convs2.1",
-    "dec.resblocks.*.convs2.2" : "dec.resblocks.*.convs2.2",
-    "dec.conv_post" : "dec.conv_post",
-    "dec.cond" : "dec.cond",  # num_speakers > 1
+    "dec.conv_pre" : "decoder.conv_pre",
+    "dec.ups.0" : "decoder.ups.0",
+    "dec.ups.1" : "decoder.ups.1",
+    "dec.ups.2" : "decoder.ups.2",
+    "dec.ups.3" : "decoder.ups.3",
+    "dec.resblocks.*.convs1.0" : "decoder.resblocks.*.convs1.0",
+    "dec.resblocks.*.convs1.1" : "decoder.resblocks.*.convs1.1",
+    "dec.resblocks.*.convs1.2" : "decoder.resblocks.*.convs1.2",
+    "dec.resblocks.*.convs2.0" : "decoder.resblocks.*.convs2.0",
+    "dec.resblocks.*.convs2.1" : "decoder.resblocks.*.convs2.1",
+    "dec.resblocks.*.convs2.2" : "decoder.resblocks.*.convs2.2",
+    "dec.conv_post" : "decoder.conv_post",
+    "dec.cond" : "decoder.cond",  # num_speakers > 1
 }
 MAPPING_POSTERIOR_ENCODER = {
-    "enc_q.pre" : "enc_q.pre",
-    "enc_q.enc.in_layers.*" : "enc_q.enc.in_layers.*",
-    "enc_q.enc.res_skip_layers.*" : "enc_q.enc.res_skip_layers.*",
-    "enc_q.proj" : "enc_q.proj",
-    "enc_q.enc.cond_layer" : "enc_q.enc.cond_layer",  # num_speakers > 1
+    "enc_q.pre" : "posterior_encoder.pre",
+    "enc_q.enc.in_layers.*" : "posterior_encoder.enc.in_layers.*",
+    "enc_q.enc.res_skip_layers.*" : "posterior_encoder.enc.res_skip_layers.*",
+    "enc_q.proj" : "posterior_encoder.proj",
+    "enc_q.enc.cond_layer" : "posterior_encoder.enc.cond_layer",  # num_speakers > 1
 }
 MAPPING = {
     **MAPPING_TEXT_ENCODER,
@@ -151,7 +151,7 @@ MAPPING = {
     **MAPPING_FLOW,
     **MAPPING_GENERATOR,
     **MAPPING_POSTERIOR_ENCODER,
-    "emb_g": "emb_g",  # num_speakers > 1
+    "emb_g": "embed_speaker",  # num_speakers > 1
 }
 TOP_LEVEL_KEYS = []
 IGNORE_KEYS = []
@@ -279,7 +279,7 @@ def convert_checkpoint(
 
     if num_speakers:
         config.num_speakers = num_speakers
-        config.gin_channels = 256
+        config.speaker_embedding_channels = 256
 
     # Save vocab as temporary json file
     symbols = [
