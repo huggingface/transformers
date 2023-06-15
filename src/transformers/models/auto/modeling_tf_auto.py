@@ -439,6 +439,7 @@ TF_MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
 )
 TF_MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
     [
+        ("mt5", "TFMT5EncoderModel"),
         ("t5", "TFT5EncoderModel"),
     ]
 )

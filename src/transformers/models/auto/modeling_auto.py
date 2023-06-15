@@ -1013,6 +1013,7 @@ MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
     [
+        ("mt5", "MT5EncoderModel"),
         ("t5", "T5EncoderModel"),
     ]
 )
