@@ -140,6 +140,8 @@ class BarkConfig(PretrainedConfig):
         Configuration of the underlying coarse acoustics sub-model. Defaults to None.
     fine_acoustics_config (BarkModuleConfig, optional):
         Configuration of the underlying fine acoustics sub-model. Defaults to None.
+    pretrained_encodec_name_or_path (str, optional):
+        Name or path to the underlying pretrained [`encodec`] model. Defaults to "facebook/encodec_24khz".
 
     Example:
 
@@ -171,6 +173,7 @@ class BarkConfig(PretrainedConfig):
         semantic_config: BarkModuleConfig = None,
         coarse_acoustics_config: BarkModuleConfig = None,
         fine_acoustics_config: BarkModuleConfig = None,
+        pretrained_encodec_name_or_path: str = "facebook/encodec_24khz",
         **kwargs,
     ):
         if semantic_config is None:
@@ -190,6 +193,7 @@ class BarkConfig(PretrainedConfig):
         self.semantic_config = BarkModuleConfig(**semantic_config)
         self.coarse_acoustics_config = BarkModuleConfig(**coarse_acoustics_config)
         self.fine_acoustics_config = BarkModuleConfig(**fine_acoustics_config)
+        self.pretrained_encodec_name_or_path = pretrained_encodec_name_or_path
 
         # TODO: check if right place
         # some of these configs are linked to the config of the submodels

@@ -20,11 +20,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-# TODO: ensure no dependency when Encodec is added to HF
-from encodec import EncodecModel
+
 from torch.nn import functional as F
 
-from transformers import LogitsProcessor, StoppingCriteria
+from transformers import LogitsProcessor, StoppingCriteria, EncodecModel
 
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
@@ -950,11 +949,9 @@ class BarkModel(BarkPreTrainedModel):
         self.semantic_model = BarkCausalModule(config.semantic_config)
         self.coarse_acoustics_model = BarkCausalModule(config.coarse_acoustics_config)
         self.fine_acoustics_model = BarkFineAcousticsModule(config.fine_acoustics_config)
-
-        # TODO: for now, it is not integrated into the code
-        self.codec_model = EncodecModel.encodec_model_24khz()
-        self.codec_model.set_target_bandwidth(6.0)
-
+        
+        self.codec_model = EncodecModel.from_pretrained(config.pretrained_encodec_name_or_path)
+        
         self.config = config
 
     def preprocess_histories_before_coarse(self, history_prompt, max_coarse_history, semantic_to_coarse_ratio, batch_size):
@@ -1237,7 +1234,6 @@ class BarkModel(BarkPreTrainedModel):
         return fine_input
 
     def codec_decode(self, fine_output):
-        # TODO: when encodec is added to transformers, change here.
         """Turn quantized audio codes into audio array using encodec."""
 
         fine_output = fine_output.transpose(0, 1)
