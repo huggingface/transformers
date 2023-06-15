@@ -1,13 +1,16 @@
+import types
 import warnings
-from typing import Dict
+from typing import Dict, Iterator, List, Optional, Union
 
 import numpy as np
 
 from ..utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
-from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline
+from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline, Dataset, GenericTensor
 
 
 if is_tf_available():
+    import tensorflow as tf
+
     from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
 if is_torch_available():
@@ -30,6 +33,32 @@ class ClassificationFunction(ExplicitEnum):
     NONE = "none"
 
 
+class TextClassificationArgumentHandler(ArgumentHandler):
+    """
+    Handles arguments for text classification.
+    """
+
+    def __call__(self, inputs: Union[str, List[str]], **kwargs):
+        if inputs is not None and isinstance(inputs, (list, tuple)) and len(inputs) > 0:
+            inputs = list(inputs)
+            batch_size = len(inputs)
+        elif isinstance(inputs, str):
+            inputs = [inputs]
+            batch_size = 1
+        elif Dataset is not None and isinstance(inputs, Dataset) or isinstance(inputs, types.GeneratorType):
+            return inputs, None
+        else:
+            raise ValueError("At least one input is required.")
+
+        offset_mapping = kwargs.get("offset_mapping")
+        if offset_mapping:
+            if isinstance(offset_mapping, list) and isinstance(offset_mapping[0], tuple):
+                offset_mapping = [offset_mapping]
+            if len(offset_mapping) != batch_size:
+                raise ValueError("offset_mapping should have the same batch size as the input")
+        return inputs, offset_mapping
+
+
 @add_end_docstrings(
     PIPELINE_INIT_ARGS,
     r"""
@@ -45,7 +74,7 @@ class ClassificationFunction(ExplicitEnum):
             - `"none"`: Does not apply any function on the output.
     """,
 )
-class TextClassificationPipeline(Pipeline):
+class TextClassificationPipeline(ChunkPipeline):
     """
     Text classification pipeline using any `ModelForSequenceClassification`. See the [sequence classification
     examples](../task_summary#sequence-classification) for more information.
@@ -79,7 +108,9 @@ class TextClassificationPipeline(Pipeline):
     return_all_scores = False
     function_to_apply = ClassificationFunction.NONE
 
-    def __init__(self, **kwargs):
+    def __init__(self, args_parser=TextClassificationArgumentHandler(), **kwargs):
+        self._postprocess_params = {}
+
         super().__init__(**kwargs)
 
         self.check_model_type(
@@ -87,11 +118,18 @@ class TextClassificationPipeline(Pipeline):
             if self.framework == "tf"
             else MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
         )
+        self._args_parser = args_parser
 
-    def _sanitize_parameters(self, return_all_scores=None, function_to_apply=None, top_k="", **tokenizer_kwargs):
+    def _sanitize_parameters(
+        self,
+        return_all_scores=None,
+        function_to_apply=None,
+        top_k="",
+        stride: Optional[int] = None,
+        **preprocess_params,
+    ):
         # Using "" as default argument because we're going to use `top_k=None` in user code to declare
         # "No top_k"
-        preprocess_params = tokenizer_kwargs
 
         postprocess_params = {}
         if hasattr(self.model.config, "return_all_scores") and return_all_scores is None:
@@ -99,8 +137,9 @@ class TextClassificationPipeline(Pipeline):
 
         if isinstance(top_k, int) or top_k is None:
             postprocess_params["top_k"] = top_k
-            postprocess_params["_legacy"] = False
+            postprocess_params["_legacy"] = self._postprocess_params.get("_legacy", False)
         elif return_all_scores is not None:
+            postprocess_params["_legacy"] = self._postprocess_params.get("_legacy", True)
             warnings.warn(
                 "`return_all_scores` is now deprecated,  if want a similar funcionality use `top_k=None` instead of"
                 " `return_all_scores=True` or `top_k=1` instead of `return_all_scores=False`.",
@@ -110,20 +149,40 @@ class TextClassificationPipeline(Pipeline):
                 postprocess_params["top_k"] = None
             else:
                 postprocess_params["top_k"] = 1
+        else:
+            postprocess_params["_legacy"] = self._postprocess_params.get("_legacy", True)
 
         if isinstance(function_to_apply, str):
             function_to_apply = ClassificationFunction[function_to_apply.upper()]
 
         if function_to_apply is not None:
             postprocess_params["function_to_apply"] = function_to_apply
+        if stride is not None:
+            if stride >= self.tokenizer.model_max_length:
+                raise ValueError(
+                    "`stride` must be less than `tokenizer.model_max_length` (or even lower if the tokenizer adds special tokens)"
+                )
+            if self.tokenizer.is_fast:
+                tokenizer_params = {
+                    "return_overflowing_tokens": True,
+                    "padding": True,
+                    "stride": stride,
+                    "truncation": True,
+                }
+                preprocess_params["tokenizer_params"] = tokenizer_params
+            else:
+                raise ValueError(
+                    "`stride` was provided to process all the text but you're using a slow tokenizer."
+                    " Please use a fast tokenizer."
+                )
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, inputs: Union[str, List[str]], **kwargs):
         """
         Classify the text(s) given as inputs.
 
         Args:
-            args (`str` or `List[str]` or `Dict[str]`, or `List[Dict[str]]`):
+            inputs (`str` or `List[str]`):
                 One or several texts to classify. In order to use text pairs for your classification, you can send a
                 dictionary containing `{"text", "text_pair"}` keys, or a list of those.
             top_k (`int`, *optional*, defaults to `1`):
@@ -152,36 +211,71 @@ class TextClassificationPipeline(Pipeline):
 
             If `top_k` is used, one such dictionary is returned per label.
         """
-        result = super().__call__(*args, **kwargs)
-        # TODO try and retrieve it in a nicer way from _sanitize_parameters.
-        _legacy = "top_k" not in kwargs
-        if isinstance(args[0], str) and _legacy:
-            # This pipeline is odd, and return a list when single item is run
-            return [result]
-        else:
-            return result
+        _inputs, offset_mapping = self._args_parser(inputs, **kwargs)
+        if offset_mapping:
+            kwargs["offset_mapping"] = offset_mapping
 
-    def preprocess(self, inputs, **tokenizer_kwargs) -> Dict[str, GenericTensor]:
-        return_tensors = self.framework
-        if isinstance(inputs, dict):
-            return self.tokenizer(**inputs, return_tensors=return_tensors, **tokenizer_kwargs)
-        elif isinstance(inputs, list) and len(inputs) == 1 and isinstance(inputs[0], list) and len(inputs[0]) == 2:
-            # It used to be valid to use a list of list of list for text pairs, keeping this path for BC
-            return self.tokenizer(
-                text=inputs[0][0], text_pair=inputs[0][1], return_tensors=return_tensors, **tokenizer_kwargs
+        result = super().__call__(inputs, **kwargs)
+        if isinstance(result, dict):
+            result = [result]
+        if kwargs.get("return_all_scores", False) and isinstance(result[0], dict):
+            result = [result]
+        return result
+
+    def preprocess(self, sentence, offset_mapping=None, **preprocess_params) -> Iterator[Dict[str, GenericTensor]]:
+        tokenizer_params = preprocess_params.pop("tokenizer_params", {})
+        if isinstance(sentence, dict):
+            inputs = self.tokenizer(
+                sentence,
+                return_tensors=self.framework,
+                **tokenizer_params,
             )
-        elif isinstance(inputs, list):
+        elif (
+            isinstance(sentence, list)
+            and len(sentence) == 1
+            and isinstance(sentence[0], list)
+            and len(sentence[0]) == 2
+        ):
+            # It used to be valid to use a list of list of list for text pairs, keeping this path for BC
+            inputs = self.tokenizer(
+                text=sentence[0][0], text_pair=sentence[0][1], return_tensors=self.framework, **tokenizer_params
+            )
+        elif isinstance(sentence, list):
             # This is likely an invalid usage of the pipeline attempting to pass text pairs.
             raise ValueError(
                 "The pipeline received invalid inputs, if you are trying to send text pairs, you can try to send a"
                 ' dictionary `{"text": "My text", "text_pair": "My pair"}` in order to send a text pair.'
             )
-        return self.tokenizer(inputs, return_tensors=return_tensors, **tokenizer_kwargs)
+        else:
+            inputs = self.tokenizer(
+                sentence,
+                return_tensors=self.framework,
+                **tokenizer_params,
+            )
+        inputs.pop("overflow_to_sample_mapping", None)
+        num_chunks = len(inputs["input_ids"])
+
+        for i in range(num_chunks):
+            if self.framework == "tf":
+                model_inputs = {k: tf.expand_dims(v[i], 0) for k, v in inputs.items()}
+            else:
+                model_inputs = {k: v[i].unsqueeze(0) for k, v in inputs.items()}
+            if offset_mapping is not None:
+                model_inputs["offset_mapping"] = offset_mapping
+            model_inputs["is_last"] = i == num_chunks - 1
+
+            yield model_inputs
 
     def _forward(self, model_inputs):
-        return self.model(**model_inputs)
+        is_last = model_inputs.pop("is_last")
+        if self.framework == "tf":
+            logits = self.model(**model_inputs)[0]
+        else:
+            output = self.model(**model_inputs)
+            logits = output["logits"] if isinstance(output, dict) else output[0]
+        return {"logits": logits, "is_last": is_last, **model_inputs}
 
-    def postprocess(self, model_outputs, function_to_apply=None, top_k=1, _legacy=True):
+    def postprocess(self, all_outputs, function_to_apply=None, top_k=1, _legacy=True):
         # `_legacy` is used to determine if we're running the naked pipeline and in backward
         # compatibility mode, or if running the pipeline with `pipeline(..., top_k=1)` we're running
         # the more natural result containing the list.
@@ -196,17 +290,21 @@ class TextClassificationPipeline(Pipeline):
             else:
                 function_to_apply = ClassificationFunction.NONE
 
-        outputs = model_outputs["logits"][0]
-        outputs = outputs.numpy()
+        all_scores = []
+        for model_outputs in all_outputs:
+            outputs = model_outputs["logits"][0]
+            outputs = outputs.numpy()
 
-        if function_to_apply == ClassificationFunction.SIGMOID:
-            scores = sigmoid(outputs)
-        elif function_to_apply == ClassificationFunction.SOFTMAX:
-            scores = softmax(outputs)
-        elif function_to_apply == ClassificationFunction.NONE:
-            scores = outputs
-        else:
-            raise ValueError(f"Unrecognized `function_to_apply` argument: {function_to_apply}")
+            if function_to_apply == ClassificationFunction.SIGMOID:
+                chunk_scores = sigmoid(outputs)
+            elif function_to_apply == ClassificationFunction.SOFTMAX:
+                chunk_scores = softmax(outputs)
+            elif function_to_apply == ClassificationFunction.NONE:
+                chunk_scores = outputs
+            else:
+                raise ValueError(f"Unrecognized `function_to_apply` argument: {function_to_apply}")
+            all_scores.append(chunk_scores)
+        scores = np.mean(all_scores, axis=0)
 
         if top_k == 1 and _legacy:
             return {"label": self.model.config.id2label[scores.argmax().item()], "score": scores.max().item()}
