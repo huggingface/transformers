@@ -88,7 +88,7 @@ pipe = pipeline(model=model_id, model_kwargs={"target_lang":"fra", "ignore_misma
 
 ## Inference
 
-Next, let's look at how we can run MMS in inference and change adapter layers after having called [`~ModelMixin.from_pretrained`]
+Next, let's look at how we can run MMS in inference and change adapter layers after having called [`~PretrainedModel.from_pretrained`]
 First, we load audio data in different languages using the [Datasets](https://github.com/huggingface/datasets).
 
 ```py
