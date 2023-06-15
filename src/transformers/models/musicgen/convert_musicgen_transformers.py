@@ -23,12 +23,12 @@ from audiocraft.models import MusicGen
 from transformers import (
     AutoFeatureExtractor,
     AutoTokenizer,
+    EncodecModel,
     MusicgenDecoderConfig,
     MusicgenForConditionalGeneration,
     MusicgenProcessor,
     T5EncoderModel,
 )
-from transformers.models.musicgen.modeling_encodec import EncodecModel
 from transformers.models.musicgen.modeling_musicgen import MusicgenForCausalLM
 from transformers.utils import logging
 
