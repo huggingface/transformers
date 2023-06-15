@@ -717,6 +717,7 @@ class TFModelTesterMixin:
             if tf_inputs_dict_with_labels:
                 self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict_with_labels)
 
+    @slow
     def test_compile_tf_model(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
