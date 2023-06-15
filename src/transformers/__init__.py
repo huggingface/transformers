@@ -5695,8 +5695,8 @@ if TYPE_CHECKING:
             MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST,
             MusicgenForConditionalGeneration,
             MusicgenModel,
-            MusicgenProcessor,
             MusicgenPreTrainedModel,
+            MusicgenProcessor,
         )
         from .models.mvp import (
             MVP_PRETRAINED_MODEL_ARCHIVE_LIST,

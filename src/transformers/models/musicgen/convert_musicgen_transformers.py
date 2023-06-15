@@ -23,13 +23,11 @@ from audiocraft.models import MusicGen
 from transformers import (
     MusicgenConfig,
     MusicgenDecoderConfig,
-    T5Config,
     MusicgenForConditionalGeneration,
-    MusicgenProcessor,
+    T5Config,
 )
 from transformers.utils import logging
 
-from transformers.models.musicgen.modeling_encodec import EncodecConfig, EncodecModel, EncodecFeatureExtractor
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)

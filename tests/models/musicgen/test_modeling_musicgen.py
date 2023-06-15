@@ -119,15 +119,6 @@ class MusicgenModelTester:
         return config, inputs_dict
 
     def get_config(self):
-        encoder_config = MusicgenEncoderConfig(
-            vocab_size=self.vocab_size,
-            d_model=self.hidden_size,
-            num_layers=self.num_layers,
-            num_heads=self.num_heads,
-            d_ff=self.intermediate_size,
-            d_kv=self.hidden_size // self.num_heads,
-            relative_attention_num_buckets=self.relative_attention_num_buckets,
-        )
         decoder_config = MusicgenDecoderConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
