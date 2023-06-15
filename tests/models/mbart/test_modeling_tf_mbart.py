@@ -15,7 +15,6 @@
 
 from __future__ import annotations
 
-import tempfile
 import unittest
 
 from transformers import AutoTokenizer, MBartConfig, is_tf_available

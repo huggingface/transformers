@@ -725,8 +725,11 @@ class TFModelTesterMixin:
             model = model_class(config)
             # These are maximally general inputs for the model, with multiple None dimensions
             # Hopefully this will catch any conditionals that fail for flexible shapes
-            functional_inputs = {key: tf.keras.Input(shape=val.shape[1:], dtype=val.dtype, name=key)
-                                 for key, val in model.input_signature.items() if key in model.dummy_inputs}
+            functional_inputs = {
+                key: tf.keras.Input(shape=val.shape[1:], dtype=val.dtype, name=key)
+                for key, val in model.input_signature.items()
+                if key in model.dummy_inputs
+            }
             outputs_dict = model(functional_inputs)
 
             hidden_states = outputs_dict[0]
