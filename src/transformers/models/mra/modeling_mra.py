@@ -956,7 +956,7 @@ MRA_INPUTS_DOCSTRING = r"""
     "The bare Mra Model transformer outputting raw hidden-states without any specific head on top.",
     MRA_START_DOCSTRING,
 )
-# Copied from transformers.models.yoso.modeling_yoso.YosoModel with YOSO->Mra,Yoso->Mra
+# Copied from transformers.models.yoso.modeling_yoso.YosoModel with YOSO->MRA,Yoso->Mra
 class MraModel(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
