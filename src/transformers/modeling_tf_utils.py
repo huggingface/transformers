@@ -1158,6 +1158,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         else:
             self.built = True
             # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
+            # Setting it in build() allows users to override the shape when loading a non-pretrained model from config
             self._set_save_spec(self._prune_signature(self.input_signature))
             self(self.dummy_inputs, training=False)
 
