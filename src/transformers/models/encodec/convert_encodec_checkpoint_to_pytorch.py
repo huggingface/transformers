@@ -301,7 +301,7 @@ def convert_checkpoint(
         config.codebook_size = 2048
         config.use_causal_conv = False
         config.normalize = False
-        config.use_conv_shortcut = True
+        config.use_conv_shortcut = False
     elif model_name == "encodec_48khz":
         config.upsampling_ratios = [8, 5, 4, 2]
         config.target_bandwidths = [3.0, 6.0, 12.0, 24.0]
