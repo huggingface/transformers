@@ -109,16 +109,18 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
             module._parameters[tensor_name] = new_value
 
 
-def _replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name=None, quantization_config=None):
+def _replace_with_bnb_linear(
+    model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, has_been_replaced=False
+):
     """
     Private method that wraps the recursion for module replacement.
 
     Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
     """
-    has_been_replaced = False
     for name, module in model.named_children():
         if current_key_name is None:
             current_key_name = []
+        current_key_name.append(name)
 
         if isinstance(module, nn.Linear) and name not in modules_to_not_convert:
             # Check if the current key is not in the `modules_to_not_convert`
@@ -151,14 +153,16 @@ def _replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_nam
                             has_been_replaced = True
                     # Force requires grad to False to avoid unexpected errors
                     model._modules[name].requires_grad_(False)
-        # Remove the last key for recursion
         if len(list(module.children())) > 0:
             _, has_been_replaced = _replace_with_bnb_linear(
                 module,
                 modules_to_not_convert,
                 current_key_name,
                 quantization_config,
+                has_been_replaced=has_been_replaced,
             )
+        # Remove the last key for recursion
+        current_key_name.pop(-1)
     return model, has_been_replaced
 
 
@@ -241,9 +245,9 @@ def get_keys_to_not_convert(model):
     tied_params = find_tied_parameters(tied_model)
     # For compatibility with Accelerate < 0.18
     if isinstance(tied_params, dict):
-        tied_keys = list(tied_params.values())
+        tied_keys = sum(list(tied_params.values()), []) + list(tied_params.keys())
     else:
-        tied_keys = sum([x[1:] for x in tied_params], [])
+        tied_keys = sum(tied_params, [])
     has_tied_params = len(tied_keys) > 0
 
     # Check if it is a base model
@@ -254,12 +258,12 @@ def get_keys_to_not_convert(model):
         return []
 
     # otherwise they have an attached head
-    list_modules = list(model.named_parameters())
+    list_modules = list(model.named_children())
     list_last_module = [list_modules[-1][0]]
 
     # add last module together with tied weights
     intersection = set(list_last_module) - set(tied_keys)
-    list_untouched = tied_keys + list(intersection)
+    list_untouched = list(set(tied_keys)) + list(intersection)
 
     # remove ".weight" from the keys
     names_to_remove = [".weight", ".bias"]

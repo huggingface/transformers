@@ -912,6 +912,8 @@ class RemBertModel(RemBertPreTrainedModel):
 
 @add_start_docstrings("""RemBERT Model with a `language modeling` head on top.""", REMBERT_START_DOCSTRING)
 class RemBertForMaskedLM(RemBertPreTrainedModel):
+    _tied_weights_keys = ["cls.predictions.decoder.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1015,6 +1017,7 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
 )
 class RemBertForCausalLM(RemBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
+    _tied_weights_keys = ["cls.predictions.decoder.weight"]
 
     def __init__(self, config):
         super().__init__(config)

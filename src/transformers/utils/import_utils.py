@@ -98,7 +98,6 @@ _natten_available = _is_package_available("natten")
 _onnx_available = _is_package_available("onnx")
 _openai_available = _is_package_available("openai")
 _optimum_available = _is_package_available("optimum")
-_optimumneuron_available = _optimum_available and _is_package_available("optimum.neuron")
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
@@ -106,6 +105,7 @@ _psutil_available = _is_package_available("psutil")
 _py3nvml_available = _is_package_available("py3nvml")
 _pyctcdecode_available = _is_package_available("pyctcdecode")
 _pytesseract_available = _is_package_available("pytesseract")
+_pytest_available = _is_package_available("pytest")
 _pytorch_quantization_available = _is_package_available("pytorch_quantization")
 _rjieba_available = _is_package_available("rjieba")
 _sacremoses_available = _is_package_available("sacremoses")
@@ -147,7 +147,9 @@ if FORCE_TF_AVAILABLE in ENV_VARS_TRUE_VALUES:
     _tf_available = True
 else:
     if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VALUES:
-        _tf_available = _is_package_available("tensorflow")
+        # Note: _is_package_available("tensorflow") fails for tensorflow-cpu. Please test any changes to the line below
+        # with tensorflow-cpu to make sure it still works!
+        _tf_available = importlib.util.find_spec("tensorflow") is not None
         if _tf_available:
             candidates = (
                 "tensorflow",
@@ -509,9 +511,9 @@ def is_protobuf_available():
     return importlib.util.find_spec("google.protobuf") is not None
 
 
-def is_accelerate_available(check_partial_state=False):
-    if check_partial_state:
-        return _accelerate_available and version.parse(_accelerate_version) >= version.parse("0.19.0")
+def is_accelerate_available(min_version: str = None):
+    if min_version is not None:
+        return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
     return _accelerate_available
 
 
@@ -520,7 +522,7 @@ def is_optimum_available():
 
 
 def is_optimum_neuron_available():
-    return _optimumneuron_available
+    return _optimum_available and _is_package_available("optimum.neuron")
 
 
 def is_safetensors_available():
@@ -546,6 +548,10 @@ def is_vision_available():
 
 def is_pytesseract_available():
     return _pytesseract_available
+
+
+def is_pytest_available():
+    return _pytest_available
 
 
 def is_spacy_available():

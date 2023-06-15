@@ -1509,6 +1509,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         "decoder.embed_positions.weights",
         "decoder.embed_positions.bias",
     ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: NllbMoeConfig):
         super().__init__(config)
@@ -1652,6 +1653,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
         r"decoder.embed_positions.weights",
         r"decoder.embed_positions.bias",
     ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: NllbMoeConfig):
         super().__init__(config)

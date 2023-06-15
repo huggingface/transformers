@@ -1146,6 +1146,7 @@ class M2M100Model(M2M100PreTrainedModel):
         "decoder.embed_positions.weights",
         "decoder.embed_positions.bias",
     ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: M2M100Config):
         super().__init__(config)
@@ -1269,6 +1270,7 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
         r"decoder.embed_positions.weights",
         r"decoder.embed_positions.bias",
     ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: M2M100Config):
         super().__init__(config)

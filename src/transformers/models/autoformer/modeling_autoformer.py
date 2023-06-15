@@ -1495,7 +1495,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
     def __init__(self, config: AutoformerConfig):
         super().__init__(config)
 
-        if config.scaling == "mean" or config.scaling:
+        if config.scaling == "mean" or config.scaling is True:
             self.scaler = AutoformerMeanScaler(dim=1, keepdim=True)
         elif config.scaling == "std":
             self.scaler = AutoformerStdScaler(dim=1, keepdim=True)

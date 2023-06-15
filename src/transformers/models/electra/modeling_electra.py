@@ -1167,6 +1167,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
 )
 class ElectraForMaskedLM(ElectraPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["generator_lm_head.weight"]
+    _tied_weights_keys = ["generator_lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1534,6 +1535,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
 )
 class ElectraForCausalLM(ElectraPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["generator_lm_head.weight"]
+    _tied_weights_keys = ["generator_lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)

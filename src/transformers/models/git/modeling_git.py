@@ -1324,6 +1324,8 @@ class GitModel(GitPreTrainedModel):
     """GIT Model with a `language modeling` head on top for autoregressive language modeling.""", GIT_START_DOCSTRING
 )
 class GitForCausalLM(GitPreTrainedModel):
+    _tied_weights_keys = ["output.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 

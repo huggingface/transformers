@@ -353,7 +353,9 @@ def extract_imports(module_fname, cache=None):
         content = f.read()
 
     # Filter out all docstrings to not get imports in code examples.
-    splits = content.split('"""')
+    # fmt: off
+    splits = content.split('\"\"\"')
+    # fmt: on
     content = "".join(splits[::2])
 
     module_parts = str(module_fname).split(os.path.sep)
@@ -533,6 +535,9 @@ def init_test_examples_dependencies():
             test_example_deps[str(test_file.relative_to(PATH_TO_REPO))] = [
                 str(e.relative_to(PATH_TO_REPO)) for e in examples if e.name in content
             ]
+            test_example_deps[str(test_file.relative_to(PATH_TO_REPO))].append(
+                str(test_file.relative_to(PATH_TO_REPO))
+            )
     return test_example_deps, all_examples
 
 
@@ -691,12 +696,14 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filter_models=T
             if f in test_map:
                 test_files_to_run.extend(test_map[f])
         test_files_to_run = sorted(set(test_files_to_run))
+        # Remove repo utils tests
+        test_files_to_run = [f for f in test_files_to_run if not f.split(os.path.sep)[1] == "repo_utils"]
         # Remove SageMaker tests
         test_files_to_run = [f for f in test_files_to_run if not f.split(os.path.sep)[1] == "sagemaker"]
         # Make sure we did not end up with a test file that was removed
         test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
 
-        repo_utils_launch = any(f.split(os.path.sep)[1] == "repo_utils" for f in modified_files)
+        repo_utils_launch = any(f.split(os.path.sep)[0] == "utils" for f in modified_files)
 
     if repo_utils_launch:
         repo_util_file = Path(output_file).parent / "test_repo_utils.txt"

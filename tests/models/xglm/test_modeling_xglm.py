@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import datetime
+import gc
 import math
 import unittest
 
@@ -349,6 +350,12 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
 @require_torch
 class XGLMModelLanguageGenerationTest(unittest.TestCase):
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        torch.cuda.empty_cache()
+
     def _test_lm_generate_xglm_helper(
         self,
         gradient_checkpointing=False,

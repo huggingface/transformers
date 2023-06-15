@@ -760,7 +760,7 @@ class Pipeline(_ScikitCompat):
         framework: Optional[str] = None,
         task: str = "",
         args_parser: ArgumentHandler = None,
-        device: Union[int, str, "torch.device"] = None,
+        device: Union[int, "torch.device"] = None,
         torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         binary_output: bool = False,
         **kwargs,
@@ -821,13 +821,15 @@ class Pipeline(_ScikitCompat):
                 # then we should keep working
                 self.image_processor = self.feature_extractor
 
-    def save_pretrained(self, save_directory: str):
+    def save_pretrained(self, save_directory: str, safe_serialization: bool = False):
         """
         Save the pipeline's model and tokenizer.
 
         Args:
             save_directory (`str`):
                 A path to the directory where to saved. It will be created if it doesn't exist.
+            safe_serialization (`str`):
+                Whether to save the model using `safetensors` or the traditional way for PyTorch or Tensorflow
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -855,7 +857,7 @@ class Pipeline(_ScikitCompat):
             # Save the pipeline custom code
             custom_object_save(self, save_directory)
 
-        self.model.save_pretrained(save_directory)
+        self.model.save_pretrained(save_directory, safe_serialization=safe_serialization)
 
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(save_directory)
