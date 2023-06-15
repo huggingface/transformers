@@ -464,10 +464,9 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length)
-        combined_attention_mask = tf.cond(input_shape[-1] > 1,
-                                          lambda: combined_attention_mask,
-                                          lambda: tf.ones_like(combined_attention_mask)
-                                          )
+        combined_attention_mask = tf.cond(
+            input_shape[-1] > 1, lambda: combined_attention_mask, lambda: tf.ones_like(combined_attention_mask)
+        )
         if attention_mask is None:
             return combined_attention_mask
         expand_attention_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
