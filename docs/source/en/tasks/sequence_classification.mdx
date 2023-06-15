@@ -259,12 +259,12 @@ Convert your datasets to the `tf.data.Dataset` format with [`~transformers.TFPre
 ... )
 ```
 
-Configure the model for training with [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
+Configure the model for training with [`compile`](https://keras.io/api/models/model_training_apis/#compile-method). Note that Transformers models all have a default task-relevant loss function, so you don't need to specify one unless you want to:
 
 ```py
 >>> import tensorflow as tf
 
->>> model.compile(optimizer=optimizer)
+>>> model.compile(optimizer=optimizer)  # No loss argument!
 ```
 
 The last two things to setup before you start training is to compute the accuracy from the predictions, and provide a way to push your model to the Hub. Both are done by using [Keras callbacks](../main_classes/keras_callbacks).

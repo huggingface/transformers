@@ -40,7 +40,12 @@ from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, TFGenerationMixin
-from .tf_utils import expand_1d, load_attributes_from_hdf5_group, save_attributes_to_hdf5_group, shape_list
+from .tf_utils import (
+    expand_1d,
+    load_attributes_from_hdf5_group,
+    save_attributes_to_hdf5_group,
+    shape_list,
+)
 from .utils import (
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
@@ -69,11 +74,14 @@ from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 if parse(tf.__version__).minor >= 13:
     from keras import backend as K
     from keras.__internal__ import KerasTensor
+    from keras.src.engine.base_layer_utils import call_context
 elif parse(tf.__version__).minor >= 11:
     from keras import backend as K
+    from keras.engine.base_layer_utils import call_context
     from keras.engine.keras_tensor import KerasTensor
 else:
     from tensorflow.python.keras import backend as K
+    from tensorflow.python.keras.engine.base_layer_utils import call_context
     from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 
 
@@ -1116,8 +1124,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         dummies = {}
         sig = self._prune_signature(self.input_signature)
         for key, spec in sig.items():
-            # 3 is the most correct arbitrary size. I will not be taking questions
-            dummies[key] = tf.ones(shape=[dim if dim is not None else 3 for dim in spec.shape], dtype=spec.dtype)
+            # 2 is the most correct arbitrary size. I will not be taking questions
+            dummy_shape = [dim if dim is not None else 2 for dim in spec.shape]
+            if spec.shape[0] is None:
+                # But let's make the batch size 1 to save memory anyway
+                dummy_shape[0] = 1
+            dummies[key] = tf.ones(shape=dummy_shape, dtype=spec.dtype)
             if key == "token_type_ids":
                 # Some models have token_type_ids but with a vocab_size of 1
                 dummies[key] = tf.zeros_like(dummies[key])
@@ -1125,7 +1137,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             if "encoder_hidden_states" not in dummies:
                 if self.main_input_name == "input_ids":
                     dummies["encoder_hidden_states"] = tf.ones(
-                        shape=(3, 3, self.config.hidden_size), dtype=tf.float32, name="encoder_hidden_states"
+                        shape=(1, 2, self.config.hidden_size), dtype=tf.float32, name="encoder_hidden_states"
                     )
                 else:
                     raise NotImplementedError(
@@ -1140,6 +1152,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         return "tf"
 
+    def build(self, input_shape=None):
+        if self.built or call_context().in_call:
+            self.built = True
+        else:
+            self.built = True
+            self(self.dummy_inputs, training=False)
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
         if not isinstance(config, PretrainedConfig):
@@ -1152,12 +1171,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         self.config = config
         self.name_or_path = config.name_or_path
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
-        if not hasattr(self, "serving"):  # Don't overwrite existing serving signatures
-            self.serving = tf.function(
-                self.eager_serving, input_signature=[self._prune_signature(self.input_signature)]
-            )
         # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
-        self._set_save_spec(self.serving.input_signature[0])
+        self._set_save_spec(self._prune_signature(self.input_signature))
 
     def get_config(self):
         return self.config.to_dict()
@@ -1207,15 +1222,31 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         head_mask = tf.cast(head_mask, tf.float32)  # switch to float if need + fp16 compatibility
         return head_mask
 
+    @tf.function
+    def serving(self, inputs):
+        """
+        Args:
+        Method used for serving the model. Does not have a specific signature, but will be specialized as concrete
+        functions when saving with `save_pretrained`.
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
     def eager_serving(self, inputs):
         """
-        Method used for serving the model. Intended not to be compiled with a tf.function decorator so that we can use
-        it to generate multiple signatures later.
+        Method used for serving the model. This method is deprecated, and will be removed.
 
         Args:
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
+        warnings.warn(
+            "The function `eager_serving` is deprecated and will be removed in version 4.32.0 of Transformers",
+            FutureWarning,
+        )
         output = self.call(inputs)
 
         return self.serving_output(output)
@@ -1498,7 +1529,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     def compile(
         self,
         optimizer="rmsprop",
-        loss="passthrough",
+        loss="auto_with_warning",
         metrics=None,
         loss_weights=None,
         weighted_metrics=None,
@@ -1510,13 +1541,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         This is a thin wrapper that sets the model's loss output head as the loss if the user does not specify a loss
         function themselves.
         """
-        if loss == "passthrough":
-            logger.warning(
+        if loss in ("auto_with_warning", "passthrough"):  # "passthrough" for workflow backward compatibility
+            logger.info(
                 "No loss specified in compile() - the model's internal loss computation will be used as the "
                 "loss. Don't panic - this is a common way to train TensorFlow models in Transformers! "
                 "To disable this behaviour please pass a loss argument, or explicitly pass "
-                "`loss=None` if you do not want your model to compute a loss."
+                "`loss=None` if you do not want your model to compute a loss. You can also specify `loss='auto'` to "
+                "get the internal loss without printing this info string."
             )
+            loss = "auto"
+        if loss == "auto":
             loss = dummy_loss
             self._using_dummy_loss = True
         else:
@@ -1864,7 +1898,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             main_layer.set_input_embeddings(value)
         except AttributeError:
             logger.info("Building the model")
-            self(self.dummy_inputs)
+            self.build()
             main_layer.set_input_embeddings(value)
 
     def get_output_embeddings(self) -> Union[None, tf.keras.layers.Layer]:
@@ -1881,7 +1915,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 return lm_head.get_output_embeddings()
             except AttributeError:
                 logger.info("Building the model")
-                self(self.dummy_inputs)
+                self.build()
 
                 return lm_head().get_output_embeddings()
 
@@ -1901,7 +1935,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 lm_head.set_output_embeddings(value)
             except AttributeError:
                 logger.info("Building the model")
-                self(self.dummy_inputs)
+                self.build()
                 lm_head.set_output_embeddings(value)
 
     def get_output_layer_with_bias(self) -> Union[None, tf.keras.layers.Layer]:
@@ -1939,7 +1973,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             try:
                 return lm_head.get_bias()
             except AttributeError:
-                self(self.dummy_inputs)
+                self.build()
 
                 return lm_head.get_bias()
         return None
@@ -1957,7 +1991,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             try:
                 lm_head.set_bias(value)
             except AttributeError:
-                self(self.dummy_inputs)
+                self.build()
                 lm_head.set_bias(value)
 
     def get_lm_head(self) -> tf.keras.layers.Layer:
@@ -2044,7 +2078,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # The reason why the attributes don't exist might be
         # because the model is not built, so retry getting
         # the argument after building the model
-        model(model.dummy_inputs)
+        model.build()
 
         embeds = getattr(embedding_layer, "weight", None)
         if embeds is not None:
@@ -2387,17 +2421,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             if getattr(self.config, "torch_dtype", None) is not None and not isinstance(self.config.torch_dtype, str):
                 self.config.torch_dtype = str(self.config.torch_dtype).split(".")[1]
             if signatures is None:
-                if any(spec.dtype == tf.int32 for spec in self.serving.input_signature[0].values()):
+                sig = self._prune_signature(self.input_signature)
+                serving_default = self.serving.get_concrete_function(sig)
+                if any(spec.dtype == tf.int32 for spec in sig.values()):
                     int64_spec = {
                         key: tf.TensorSpec(
                             shape=spec.shape, dtype=tf.int64 if spec.dtype == tf.int32 else spec.dtype, name=spec.name
                         )
-                        for key, spec in self.serving.input_signature[0].items()
+                        for key, spec in sig.items()
                     }
-                    int64_serving = tf.function(self.eager_serving, input_signature=[int64_spec])
-                    signatures = {"serving_default": self.serving, "int64_serving": int64_serving}
+                    int64_serving = self.serving.get_concrete_function(int64_spec)
+                    signatures = {"serving_default": serving_default, "int64_serving": int64_serving}
                 else:
-                    signatures = self.serving
+                    signatures = serving_default
             saved_model_dir = os.path.join(save_directory, "saved_model", str(version))
             self.save(saved_model_dir, include_optimizer=False, signatures=signatures)
             logger.info(f"Saved model created in {saved_model_dir}")
@@ -2867,9 +2903,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # we might need to extend the variable scope for composite models
         if load_weight_prefix is not None:
             with tf.compat.v1.variable_scope(load_weight_prefix):
-                model(model.dummy_inputs)  # build the network with dummy inputs
+                model.build()  # build the network with dummy inputs
         else:
-            model(model.dummy_inputs)  # build the network with dummy inputs
+            model.build()  # build the network with dummy inputs
 
         if safetensors_from_pt:
             from .modeling_tf_pytorch_utils import load_pytorch_state_dict_in_tf2_model
@@ -2921,8 +2957,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     "Unable to load weights from h5 file. "
                     "If you tried to load a TF 2.0 model from a PyTorch checkpoint, please set from_pt=True. "
                 )
-
-        model(model.dummy_inputs)  # Make sure restore ops are run
 
         if cls._keys_to_ignore_on_load_missing is not None:
             for pat in cls._keys_to_ignore_on_load_missing:
@@ -3388,14 +3422,14 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         return output
 
 
-def get_initializer(initializer_range: float = 0.02) -> tf.initializers.TruncatedNormal:
+def get_initializer(initializer_range: float = 0.02) -> tf.keras.initializers.TruncatedNormal:
     """
-    Creates a `tf.initializers.TruncatedNormal` with the given range.
+    Creates a `tf.keras.initializers.TruncatedNormal` with the given range.
 
     Args:
         initializer_range (*float*, defaults to 0.02): Standard deviation of the initializer range.
 
     Returns:
-        `tf.initializers.TruncatedNormal`: The truncated normal initializer.
+        `tf.keras.initializers.TruncatedNormal`: The truncated normal initializer.
     """
     return tf.keras.initializers.TruncatedNormal(stddev=initializer_range)

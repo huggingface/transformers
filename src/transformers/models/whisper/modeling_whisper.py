@@ -1324,6 +1324,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
     _keys_to_ignore_on_save = [
         r"proj_out.weight",
     ]
+    _tied_weights_keys = ["proj_out.weight"]
 
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
@@ -1519,10 +1520,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             return_timestamps (`bool`, *optional*):
                 Whether to return the timestamps with the text. This enables the `WhisperTimestampsLogitsProcessor`.
-            task (`bool`, *optional*):
+            task (`str`, *optional*):
                 Task to use for generation, either "translate" or "transcribe". The `model.config.forced_decoder_ids`
                 will be updated accordingly.
-            language (`bool`, *optional*):
+            language (`str`, *optional*):
                 Language token to use for generation, can be either in the form of `<|en|>`, `en` or `english`. You can
                 find all the possible language tokens in the `model.generation_config.lang_to_id` dictionary.
             is_multilingual (`bool`, *optional*):
@@ -1778,7 +1779,7 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
         >>> predicted_class_ids = torch.argmax(logits).item()
         >>> predicted_label = model.config.id2label[predicted_class_ids]
         >>> predicted_label
-        'af_za'
+        'Afrikaans'
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

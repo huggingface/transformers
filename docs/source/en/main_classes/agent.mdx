@@ -38,6 +38,10 @@ We provide three types of agents: [`HfAgent`] uses inference endpoints for opens
 
 [[autodoc]] OpenAiAgent
 
+### AzureOpenAiAgent
+
+[[autodoc]] AzureOpenAiAgent
+
 ### Agent
 
 [[autodoc]] Agent
@@ -66,3 +70,32 @@ We provide three types of agents: [`HfAgent`] uses inference endpoints for opens
 ### launch_gradio_demo
 
 [[autodoc]] launch_gradio_demo
+
+## Agent Types
+
+Agents can handle any type of object in-between tools; tools, being completely multimodal, can accept and return
+text, image, audio, video, among other types. In order to increase compatibility between tools, as well as to 
+correctly render these returns in ipython (jupyter, colab, ipython notebooks, ...), we implement wrapper classes
+around these types.
+
+The wrapped objects should continue behaving as initially; a text object should still behave as a string, an image
+object should still behave as a `PIL.Image`.
+
+These types have three specific purposes:
+
+- Calling `to_raw` on the type should return the underlying object
+- Calling `to_string` on the type should return the object as a string: that can be the string in case of an `AgentText`
+  but will be the path of the serialized version of the object in other instances
+- Displaying it in an ipython kernel should display the object correctly
+
+### AgentText
+
+[[autodoc]] transformers.tools.agent_types.AgentText
+
+### AgentImage
+
+[[autodoc]] transformers.tools.agent_types.AgentImage
+
+### AgentAudio
+
+[[autodoc]] transformers.tools.agent_types.AgentAudio

@@ -659,6 +659,7 @@ class NystromformerModel(NystromformerPreTrainedModel):
 @add_start_docstrings("""Nyströmformer Model with a `language modeling` head on top.""", NYSTROMFORMER_START_DOCSTRING)
 class NystromformerForMaskedLM(NystromformerPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["cls.predictions.decoder"]
+    _tied_weights_keys = ["cls.predictions.decoder"]
 
     def __init__(self, config):
         super().__init__(config)

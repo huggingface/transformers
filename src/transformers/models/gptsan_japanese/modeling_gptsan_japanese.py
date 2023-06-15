@@ -692,6 +692,7 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
     base_model_prefix = "gptsan_japanese"
     supports_gradient_checkpointing = False
     _no_split_modules = ["GPTSanJapaneseBlock"]
+    _skip_keys_device_placement = "past_key_values"
 
     @property
     def dummy_inputs(self):
@@ -1111,6 +1112,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
 )
 class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__(config)

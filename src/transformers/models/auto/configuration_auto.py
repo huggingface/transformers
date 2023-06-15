@@ -20,7 +20,7 @@ from collections import OrderedDict
 from typing import List, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module
+from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, logging
 
 
@@ -80,6 +80,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("efficientformer", "EfficientFormerConfig"),
         ("efficientnet", "EfficientNetConfig"),
         ("electra", "ElectraConfig"),
+        ("encodec", "EncodecConfig"),
         ("encoder-decoder", "EncoderDecoderConfig"),
         ("ernie", "ErnieConfig"),
         ("ernie_m", "ErnieMConfig"),
@@ -133,6 +134,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v1", "MobileNetV1Config"),
         ("mobilenet_v2", "MobileNetV2Config"),
         ("mobilevit", "MobileViTConfig"),
+        ("mobilevitv2", "MobileViTV2Config"),
         ("mpnet", "MPNetConfig"),
         ("mt5", "MT5Config"),
         ("mvp", "MvpConfig"),
@@ -185,6 +187,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("tapas", "TapasConfig"),
         ("time_series_transformer", "TimeSeriesTransformerConfig"),
         ("timesformer", "TimesformerConfig"),
+        ("timm_backbone", "TimmBackboneConfig"),
         ("trajectory_transformer", "TrajectoryTransformerConfig"),
         ("transfo-xl", "TransfoXLConfig"),
         ("trocr", "TrOCRConfig"),
@@ -271,6 +274,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("efficientformer", "EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("efficientnet", "EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("electra", "ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("encodec", "ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("ernie", "ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("ernie_m", "ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("esm", "ESM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -319,6 +323,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v1", "MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilenet_v2", "MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilevit", "MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("mobilevitv2", "MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mpnet", "MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mvp", "MVP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("nat", "NAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -458,6 +463,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("efficientformer", "EfficientFormer"),
         ("efficientnet", "EfficientNet"),
         ("electra", "ELECTRA"),
+        ("encodec", "EnCodec"),
         ("encoder-decoder", "Encoder decoder"),
         ("ernie", "ERNIE"),
         ("ernie_m", "ErnieM"),
@@ -515,10 +521,12 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("megatron_gpt2", "Megatron-GPT2"),
         ("mgp-str", "MGP-STR"),
         ("mluke", "mLUKE"),
+        ("mms", "MMS"),
         ("mobilebert", "MobileBERT"),
         ("mobilenet_v1", "MobileNetV1"),
         ("mobilenet_v2", "MobileNetV2"),
         ("mobilevit", "MobileViT"),
+        ("mobilevitv2", "MobileViTV2"),
         ("mpnet", "MPNet"),
         ("mt5", "MT5"),
         ("mvp", "MVP"),
@@ -575,6 +583,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("tapex", "TAPEX"),
         ("time_series_transformer", "Time Series Transformer"),
         ("timesformer", "TimeSformer"),
+        ("timm_backbone", "TimmBackbone"),
         ("trajectory_transformer", "Trajectory Transformer"),
         ("transfo-xl", "Transformer-XL"),
         ("trocr", "TrOCR"),
@@ -640,6 +649,10 @@ def config_class_to_model_type(config):
     """Converts a config class name to the corresponding model type"""
     for key, cls in CONFIG_MAPPING_NAMES.items():
         if cls == config:
+            return key
+    # if key not found check in extra content
+    for key, cls in CONFIG_MAPPING._extra_content.items():
+        if cls.__name__ == config:
             return key
     return None
 
@@ -930,15 +943,15 @@ class AutoConfig:
         ```"""
         kwargs["_from_auto"] = True
         kwargs["name_or_path"] = pretrained_model_name_or_path
-        trust_remote_code = kwargs.pop("trust_remote_code", False)
+        trust_remote_code = kwargs.pop("trust_remote_code", None)
         config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
-        if "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]:
-            if not trust_remote_code:
-                raise ValueError(
-                    f"Loading {pretrained_model_name_or_path} requires you to execute the configuration file in that"
-                    " repo on your local machine. Make sure you have read the code there to avoid malicious use, then"
-                    " set the option `trust_remote_code=True` to remove this error."
-                )
+        has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
+        has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
+        trust_remote_code = resolve_trust_remote_code(
+            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
+        )
+
+        if has_remote_code and trust_remote_code:
             class_ref = config_dict["auto_map"]["AutoConfig"]
             config_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
