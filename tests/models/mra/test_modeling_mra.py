@@ -35,7 +35,7 @@ if is_torch_available():
         MraForTokenClassification,
         MraModel,
     )
-    from transformers.models.mra.modeling_mra import Mra_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.mra.modeling_mra import MRA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class MraModelTester:
@@ -338,7 +338,7 @@ class MraModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in Mra_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in MRA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = MraModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 

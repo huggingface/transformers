@@ -53,7 +53,7 @@ _CHECKPOINT_FOR_DOC = "uw-madison/mra-base-512-4"
 _CONFIG_FOR_DOC = "MraConfig"
 _TOKENIZER_FOR_DOC = "AutoTokenizer"
 
-Mra_PRETRAINED_MODEL_ARCHIVE_LIST = [
+MRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "uw-madison/mra-base-512-4",
     # See all Mra models at https://huggingface.co/models?filter=mra
 ]
@@ -891,7 +891,7 @@ class MraPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-Mra_START_DOCSTRING = r"""
+MRA_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
@@ -902,7 +902,7 @@ Mra_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-Mra_INPUTS_DOCSTRING = r"""
+MRA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
@@ -954,7 +954,7 @@ Mra_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare Mra Model transformer outputting raw hidden-states without any specific head on top.",
-    Mra_START_DOCSTRING,
+    MRA_START_DOCSTRING,
 )
 # Copied from transformers.models.yoso.modeling_yoso.YosoModel with YOSO->Mra,Yoso->Mra
 class MraModel(MraPreTrainedModel):
@@ -982,7 +982,7 @@ class MraModel(MraPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(Mra_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithCrossAttentions,
@@ -1067,7 +1067,7 @@ class MraModel(MraPreTrainedModel):
         )
 
 
-@add_start_docstrings("""Mra Model with a `language modeling` head on top.""", Mra_START_DOCSTRING)
+@add_start_docstrings("""Mra Model with a `language modeling` head on top.""", MRA_START_DOCSTRING)
 # Copied from transformers.models.yoso.modeling_yoso.YosoForMaskedLM with YOSO->Mra,Yoso->Mra,yoso->mra
 class MraForMaskedLM(MraPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
@@ -1092,7 +1092,7 @@ class MraForMaskedLM(MraPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(Mra_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
@@ -1176,7 +1176,7 @@ class MraClassificationHead(nn.Module):
 @add_start_docstrings(
     """Mra Model transformer with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks.""",
-    Mra_START_DOCSTRING,
+    MRA_START_DOCSTRING,
 )
 # Copied from transformers.models.yoso.modeling_yoso.YosoForSequenceClassification with YOSO->Mra,Yoso->Mra,yoso->mra
 class MraForSequenceClassification(MraPreTrainedModel):
@@ -1189,7 +1189,7 @@ class MraForSequenceClassification(MraPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(Mra_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
@@ -1268,7 +1268,7 @@ class MraForSequenceClassification(MraPreTrainedModel):
 @add_start_docstrings(
     """Mra Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks.""",
-    Mra_START_DOCSTRING,
+    MRA_START_DOCSTRING,
 )
 # Copied from transformers.models.yoso.modeling_yoso.YosoForMultipleChoice with YOSO->Mra,Yoso->Mra,yoso->mra
 class MraForMultipleChoice(MraPreTrainedModel):
@@ -1282,7 +1282,7 @@ class MraForMultipleChoice(MraPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(Mra_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
@@ -1360,7 +1360,7 @@ class MraForMultipleChoice(MraPreTrainedModel):
 @add_start_docstrings(
     """Mra Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks.""",
-    Mra_START_DOCSTRING,
+    MRA_START_DOCSTRING,
 )
 # Copied from transformers.models.yoso.modeling_yoso.YosoForTokenClassification with YOSO->Mra,Yoso->Mra,yoso->mra
 class MraForTokenClassification(MraPreTrainedModel):
@@ -1375,7 +1375,7 @@ class MraForTokenClassification(MraPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(Mra_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
@@ -1446,7 +1446,7 @@ class MraForTokenClassification(MraPreTrainedModel):
 @add_start_docstrings(
     """Mra Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).""",
-    Mra_START_DOCSTRING,
+    MRA_START_DOCSTRING,
 )
 # Copied from transformers.models.yoso.modeling_yoso.YosoForQuestionAnswering with YOSO->Mra,Yoso->Mra,yoso->mra
 class MraForQuestionAnswering(MraPreTrainedModel):
@@ -1462,7 +1462,7 @@ class MraForQuestionAnswering(MraPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(Mra_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
