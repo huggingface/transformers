@@ -51,7 +51,7 @@ DEFAULT_MIN_BIN_WIDTH = 1e-3
 DEFAULT_MIN_BIN_HEIGHT = 1e-3
 DEFAULT_MIN_DERIVATIVE = 1e-3
 
-LRELU_SLOPE = 0.1  #TODO: config?
+LRELU_SLOPE = 0.1  #TODO: use config.leaky_relu_slope (see HifiGan again)
 
 
 @dataclass
@@ -67,36 +67,6 @@ class VitsModelOutput(ModelOutput):
     """
     audio: torch.FloatTensor = None
     sequence_lengths: torch.FloatTensor = None
-
-
-# TODO: get rid of this one?
-@dataclass
-class VitsTextEncoderOutput(ModelOutput):
-    """
-    Base class for model's outputs, with potential hidden states and attentions.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    m: torch.FloatTensor = None    # TODO: name!
-    logs: torch.FloatTensor = None    # TODO: name!
-    padding_mask: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
@@ -290,18 +260,23 @@ class VitsWaveNet(torch.nn.Module):
 
         self.in_layers = torch.nn.ModuleList()
         self.res_skip_layers = torch.nn.ModuleList()
-        self.drop = nn.Dropout(config.wavenet_dropout)
+        self.dropout = nn.Dropout(config.wavenet_dropout)
 
         if config.speaker_embedding_channels != 0:
             cond_layer = torch.nn.Conv1d(config.speaker_embedding_channels, 2 * config.hidden_size * num_layers, 1)
-            self.cond_layer = torch.nn.utils.weight_norm(cond_layer, name='weight')
+            self.cond_layer = torch.nn.utils.weight_norm(cond_layer, name="weight")
 
         for i in range(num_layers):
             dilation = config.wavenet_dilation_rate ** i
             padding = int((config.wavenet_kernel_size * dilation - dilation) / 2)
-            in_layer = torch.nn.Conv1d(config.hidden_size, 2*config.hidden_size, config.wavenet_kernel_size,
-                                    dilation=dilation, padding=padding)
-            in_layer = torch.nn.utils.weight_norm(in_layer, name='weight')
+            in_layer = torch.nn.Conv1d(
+                in_channels=config.hidden_size,
+                out_channels=2*config.hidden_size,
+                kernel_size=config.wavenet_kernel_size,
+                dilation=dilation,
+                padding=padding,
+            )
+            in_layer = torch.nn.utils.weight_norm(in_layer, name="weight")
             self.in_layers.append(in_layer)
 
             # last one is not necessary
@@ -311,7 +286,7 @@ class VitsWaveNet(torch.nn.Module):
                 res_skip_channels = config.hidden_size
 
             res_skip_layer = torch.nn.Conv1d(config.hidden_size, res_skip_channels, 1)
-            res_skip_layer = torch.nn.utils.weight_norm(res_skip_layer, name='weight')
+            res_skip_layer = torch.nn.utils.weight_norm(res_skip_layer, name="weight")
             self.res_skip_layers.append(res_skip_layer)
 
     def forward(self, x, x_mask, global_conditioning=None):
@@ -329,11 +304,8 @@ class VitsWaveNet(torch.nn.Module):
             else:
                 g_l = torch.zeros_like(x_in)
 
-            acts = fused_add_tanh_sigmoid_multiply(
-                x_in,
-                g_l,
-                n_channels_tensor)
-            acts = self.drop(acts)
+            acts = fused_add_tanh_sigmoid_multiply(x_in, g_l, n_channels_tensor)
+            acts = self.dropout(acts)
 
             res_skip_acts = self.res_skip_layers[i](acts)
             if i < self.num_layers - 1:
@@ -391,28 +363,27 @@ class VitsResidualCouplingLayer(nn.Module):
 class VitsResidualCouplingBlock(nn.Module):
     def __init__(self, config: VitsConfig):
         super().__init__()
-
         self.flows = nn.ModuleList()
-        for _ in range(config.num_flows):
+        for _ in range(config.prior_encoder_num_flows):
            self.flows.append(VitsResidualCouplingLayer(config, mean_only=True))
            self.flows.append(VitsFlip())
 
     def forward(self, x, x_mask, global_conditioning=None, reverse=False):
         if not reverse:
             for flow in self.flows:
-                x, _ = flow(x, x_mask, global_conditioning, reverse=reverse)
+                x, _ = flow(x, x_mask, global_conditioning)
         else:
             for flow in reversed(self.flows):
-                x = flow(x, x_mask, global_conditioning, reverse=reverse)
+                x = flow(x, x_mask, global_conditioning, reverse=True)
         return x
 
 
 class VitsDilatedDepthSeparableConv(nn.Module):
-    def __init__(self, channels, kernel_size, num_layers, p_dropout=0.):
+    def __init__(self, channels, kernel_size, num_layers, dropout_rate=0.0):
         super().__init__()
         self.num_layers = num_layers
 
-        self.drop = nn.Dropout(p_dropout)
+        self.dropout = nn.Dropout(dropout_rate)
         self.convs_sep = nn.ModuleList()
         self.convs_1x1 = nn.ModuleList()
         self.norms_1 = nn.ModuleList()
@@ -420,9 +391,16 @@ class VitsDilatedDepthSeparableConv(nn.Module):
         for i in range(num_layers):
             dilation = kernel_size ** i
             padding = (kernel_size * dilation - dilation) // 2
-            self.convs_sep.append(nn.Conv1d(channels, channels, kernel_size,
-                groups=channels, dilation=dilation, padding=padding
-            ))
+            self.convs_sep.append(
+                nn.Conv1d(
+                    in_channels=channels,
+                    out_channels=channels,
+                    kernel_size=kernel_size,
+                    groups=channels,
+                    dilation=dilation,
+                    padding=padding,
+                )
+            )
             self.convs_1x1.append(nn.Conv1d(channels, channels, 1))
             self.norms_1.append(nn.LayerNorm(channels))
             self.norms_2.append(nn.LayerNorm(channels))
@@ -437,7 +415,7 @@ class VitsDilatedDepthSeparableConv(nn.Module):
             y = self.convs_1x1[i](y)
             y = self.norms_2[i](y.transpose(1, -1)).transpose(1, -1)
             y = nn.functional.gelu(y)
-            y = self.drop(y)
+            y = self.dropout(y)
             x = x + y
         return x * x_mask
 
@@ -644,7 +622,7 @@ class VitsConvFlow(nn.Module):
         self.half_channels = in_channels // 2
 
         self.pre = nn.Conv1d(self.half_channels, filter_channels, 1)
-        self.convs = VitsDilatedDepthSeparableConv(filter_channels, kernel_size, num_layers, p_dropout=0.)
+        self.convs = VitsDilatedDepthSeparableConv(filter_channels, kernel_size, num_layers, dropout_rate=0.0)
         self.proj = nn.Conv1d(filter_channels, self.half_channels * (num_bins * 3 - 1), 1)
         self.proj.weight.data.zero_()
         self.proj.bias.data.zero_()
@@ -722,11 +700,13 @@ class VitsStochasticDurationPredictor(nn.Module):
     def __init__(self, config):
         super().__init__()
         kernel_size = config.duration_predictor_kernel_size
-        filter_channels = config.hidden_size # it needs to be removed from future version.
+        filter_channels = config.hidden_size
 
         self.pre = nn.Conv1d(config.hidden_size, filter_channels, 1)
         self.proj = nn.Conv1d(filter_channels, filter_channels, 1)
-        self.convs = VitsDilatedDepthSeparableConv(filter_channels, kernel_size, num_layers=3, p_dropout=config.duration_predictor_dropout)
+        self.convs = VitsDilatedDepthSeparableConv(
+            filter_channels, kernel_size, 3, config.duration_predictor_dropout
+        )
 
         if config.speaker_embedding_channels != 0:
             self.cond = nn.Conv1d(config.speaker_embedding_channels, filter_channels, 1)
@@ -740,10 +720,13 @@ class VitsStochasticDurationPredictor(nn.Module):
         self.log_flow = VitsLog()
         self.post_pre = nn.Conv1d(1, filter_channels, 1)
         self.post_proj = nn.Conv1d(filter_channels, filter_channels, 1)
-        self.post_convs = VitsDilatedDepthSeparableConv(filter_channels, kernel_size, num_layers=3, p_dropout=config.duration_predictor_dropout)
+        self.post_convs = VitsDilatedDepthSeparableConv(
+            filter_channels, kernel_size, 3, config.duration_predictor_dropout
+        )
+
         self.post_flows = nn.ModuleList()
         self.post_flows.append(VitsElementwiseAffine(2))
-        for _ in range(4):
+        for _ in range(config.duration_predictor_num_flows):
             self.post_flows.append(VitsConvFlow(2, filter_channels, kernel_size, num_layers=3))
             self.post_flows.append(VitsFlip())
 
@@ -760,7 +743,7 @@ class VitsStochasticDurationPredictor(nn.Module):
 
         if not reverse:
             flows = self.flows
-            assert w is not None
+            assert w is not None  # TODO
 
             logdet_tot_q = 0
             h_w = self.post_pre(w)
@@ -785,7 +768,7 @@ class VitsStochasticDurationPredictor(nn.Module):
                 z, logdet = flow(z, x_mask, global_conditioning=x, reverse=reverse)
                 logdet_tot = logdet_tot + logdet
             nll = torch.sum(0.5 * (math.log(2*math.pi) + (z**2)) * x_mask, [1,2]) - logdet_tot
-            return nll + logq # [b]
+            return nll + logq
 
         else:
             flows = list(reversed(self.flows))
@@ -804,10 +787,10 @@ class VitsDurationPredictor(nn.Module):
         kernel_size = config.duration_predictor_kernel_size
         filter_channels = config.duration_predictor_filter_channels
 
-        self.drop = nn.Dropout(config.duration_predictor_dropout)
-        self.conv_1 = nn.Conv1d(config.hidden_size, filter_channels, kernel_size, padding=kernel_size//2)
+        self.dropout = nn.Dropout(config.duration_predictor_dropout)
+        self.conv_1 = nn.Conv1d(config.hidden_size, filter_channels, kernel_size, padding=kernel_size // 2)
         self.norm_1 = nn.LayerNorm(filter_channels, eps=config.layer_norm_eps)
-        self.conv_2 = nn.Conv1d(filter_channels, filter_channels, kernel_size, padding=kernel_size//2)
+        self.conv_2 = nn.Conv1d(filter_channels, filter_channels, kernel_size, padding=kernel_size // 2)
         self.norm_2 = nn.LayerNorm(filter_channels, eps=config.layer_norm_eps)
         self.proj = nn.Conv1d(filter_channels, 1, 1)
 
@@ -816,17 +799,21 @@ class VitsDurationPredictor(nn.Module):
 
     def forward(self, x, x_mask, global_conditioning=None):
         x = torch.detach(x)
+
         if global_conditioning is not None:
             global_conditioning = torch.detach(global_conditioning)
             x = x + self.cond(global_conditioning)
+
         x = self.conv_1(x * x_mask)
         x = torch.relu(x)
         x = self.norm_1(x.transpose(1, -1)).transpose(1, -1)
-        x = self.drop(x)
+        x = self.dropout(x)
+
         x = self.conv_2(x * x_mask)
         x = torch.relu(x)
         x = self.norm_2(x.transpose(1, -1)).transpose(1, -1)
-        x = self.drop(x)
+        x = self.dropout(x)
+
         x = self.proj(x * x_mask)
         return x * x_mask
 

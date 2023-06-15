@@ -75,6 +75,8 @@ class VitsConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
+        leaky_relu_slope (`float`, *optional*, defaults to 0.1):
+            The angle of the negative slope used by the leaky ReLU activation.
         use_stochastic_duration_prediction (`bool`, *optional*, defaults to `True`):
             Whether to use the stochastic duration prediction module or the regular duration predictor.
         num_speakers (`int`, *optional*, defaults to 1):
@@ -100,7 +102,7 @@ class VitsConfig(PretrainedConfig):
         duration_predictor_filter_channels=256
 
 
-        num_flows=4,
+        prior_encoder_num_flows=4,
         wavenet_kernel_size=5,
             This must be an odd number.
         wavenet_dilation_rate=1,
@@ -145,6 +147,7 @@ class VitsConfig(PretrainedConfig):
         activation_dropout=0.1,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
+        leaky_relu_slope=0.1,
         use_stochastic_duration_prediction=True,
         num_speakers=1,
         speaker_embedding_channels=0,
@@ -157,7 +160,7 @@ class VitsConfig(PretrainedConfig):
         upsample_initial_channel=512,
         upsample_kernel_sizes=[16, 16, 4, 4],
 
-        num_flows=4,    # TODO: make more specific
+        prior_encoder_num_flows=4,
         wavenet_kernel_size=5,
         wavenet_dilation_rate=1,
         wavenet_dropout=0.0,
@@ -187,6 +190,7 @@ class VitsConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.leaky_relu_slope = leaky_relu_slope
         self.use_stochastic_duration_prediction = use_stochastic_duration_prediction
         self.num_speakers = num_speakers
         self.speaker_embedding_channels = speaker_embedding_channels
@@ -196,7 +200,7 @@ class VitsConfig(PretrainedConfig):
         self.upsample_rates = upsample_rates
         self.upsample_initial_channel = upsample_initial_channel
         self.upsample_kernel_sizes = upsample_kernel_sizes
-        self.num_flows = num_flows
+        self.prior_encoder_num_flows = prior_encoder_num_flows
         self.wavenet_kernel_size = wavenet_kernel_size
         self.wavenet_dilation_rate = wavenet_dilation_rate
         self.wavenet_dropout = wavenet_dropout
