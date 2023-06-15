@@ -464,6 +464,10 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length)
+        combined_attention_mask = tf.cond(input_shape[-1] > 1,
+                                          lambda: combined_attention_mask,
+                                          lambda: tf.ones_like(combined_attention_mask)
+                                          )
         if attention_mask is None:
             return combined_attention_mask
         expand_attention_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
@@ -504,10 +508,10 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
             input_ids = tf.reshape(input_ids, (-1, input_shape[-1]))
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
