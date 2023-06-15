@@ -344,7 +344,7 @@ if __name__ == "__main__":
         "--model",
         default="encodec_24khz",
         type=str,
-        help="The model to convert. Should be one of 'encodec_24khz', 'encodec_32khz' 'encodec_48khz'.",
+        help="The model to convert. Should be one of 'encodec_24khz', 'encodec_32khz', 'encodec_48khz'.",
     )
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
