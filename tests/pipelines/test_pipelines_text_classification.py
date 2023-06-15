@@ -196,3 +196,19 @@ class TextClassificationPipelineTests(unittest.TestCase):
             [{"label": ANY(str), "score": ANY(float)}],
         )
         self.assertTrue(outputs[0]["label"] in model.config.id2label.values())
+
+    @slow
+    @require_torch
+    def test_chunking(self):
+        text_classifier = pipeline("sentiment-analysis", stride=5)
+        text_classifier.tokenizer.model_max_length = 10
+        sentence = "'A very effective product; very effective and useful' <- reviews like this are fake and made by bots. Awful product. DO NOT BUY!"
+
+        output = text_classifier(sentence)
+        self.assertEqual(nested_simplify(output), [{"label": "NEGATIVE", "score": 0.555}])
+
+        # Test running the model on the entire text; it should be a different
+        # result than running a small sliding window
+        text_classifier.tokenizer.model_max_length = text_classifier.model.config.max_position_embeddings
+        output = text_classifier(sentence)
+        self.assertEqual(nested_simplify(output), [{"label": "NEGATIVE", "score": 0.99}])
