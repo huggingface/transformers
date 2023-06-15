@@ -90,6 +90,9 @@ class EncodecConfig(PretrainedConfig):
             Number of discret codes that make up VQVAE.
         codebook_dim (`int`, *optional*):
             Dimension of the codebook vectors. If not defined, uses `hidden_size`.
+        use_conv_shortcut (`bool`, *optional*, defaults to `True`):
+            Whether to use a convolutional layer as the 'skip' connection in the `EncodecResnetBlock` block. If False,
+            an identity function will be used, giving a generic residual connection.
 
     Example:
 
@@ -131,6 +134,7 @@ class EncodecConfig(PretrainedConfig):
         trim_right_ratio=1.0,
         codebook_size=1024,
         codebook_dim=None,
+        use_conv_shortcut=True,
         **kwargs,
     ):
         self.target_bandwidths = target_bandwidths
@@ -155,6 +159,7 @@ class EncodecConfig(PretrainedConfig):
         self.trim_right_ratio = trim_right_ratio
         self.codebook_size = codebook_size
         self.codebook_dim = codebook_dim if codebook_dim is not None else hidden_size
+        self.use_conv_shortcut = use_conv_shortcut
 
         if self.norm_type not in ["weight_norm", "time_group_norm"]:
             raise ValueError(

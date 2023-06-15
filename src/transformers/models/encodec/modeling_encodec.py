@@ -259,7 +259,10 @@ class EncodecResnetBlock(nn.Module):
             block += [EncodecConv1d(config, in_chs, out_chs, kernel_size, dilation=dilation)]
         self.block = nn.ModuleList(block)
 
-        self.shortcut = EncodecConv1d(config, dim, dim, kernel_size=1)
+        if config.use_conv_shortcut:
+            self.shortcut = EncodecConv1d(config, dim, dim, kernel_size=1)
+        else:
+            self.shortcut = nn.Identity()
 
     def forward(self, hidden_states):
         residual = hidden_states
