@@ -1068,7 +1068,7 @@ class MraModel(MraPreTrainedModel):
 
 
 @add_start_docstrings("""Mra Model with a `language modeling` head on top.""", MRA_START_DOCSTRING)
-# Copied from transformers.models.yoso.modeling_yoso.YosoForMaskedLM with YOSO->Mra,Yoso->Mra,yoso->mra
+# Copied from transformers.models.yoso.modeling_yoso.YosoForMaskedLM with YOSO->MRA,Yoso->Mra,yoso->mra
 class MraForMaskedLM(MraPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         "cls.predictions.decoder.bias",
@@ -1178,7 +1178,7 @@ class MraClassificationHead(nn.Module):
     the pooled output) e.g. for GLUE tasks.""",
     MRA_START_DOCSTRING,
 )
-# Copied from transformers.models.yoso.modeling_yoso.YosoForSequenceClassification with YOSO->Mra,Yoso->Mra,yoso->mra
+# Copied from transformers.models.yoso.modeling_yoso.YosoForSequenceClassification with YOSO->MRA,Yoso->Mra,yoso->mra
 class MraForSequenceClassification(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1270,7 +1270,7 @@ class MraForSequenceClassification(MraPreTrainedModel):
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks.""",
     MRA_START_DOCSTRING,
 )
-# Copied from transformers.models.yoso.modeling_yoso.YosoForMultipleChoice with YOSO->Mra,Yoso->Mra,yoso->mra
+# Copied from transformers.models.yoso.modeling_yoso.YosoForMultipleChoice with YOSO->MRA,Yoso->Mra,yoso->mra
 class MraForMultipleChoice(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1362,7 +1362,7 @@ class MraForMultipleChoice(MraPreTrainedModel):
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks.""",
     MRA_START_DOCSTRING,
 )
-# Copied from transformers.models.yoso.modeling_yoso.YosoForTokenClassification with YOSO->Mra,Yoso->Mra,yoso->mra
+# Copied from transformers.models.yoso.modeling_yoso.YosoForTokenClassification with YOSO->MRA,Yoso->Mra,yoso->mra
 class MraForTokenClassification(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1448,7 +1448,7 @@ class MraForTokenClassification(MraPreTrainedModel):
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).""",
     MRA_START_DOCSTRING,
 )
-# Copied from transformers.models.yoso.modeling_yoso.YosoForQuestionAnswering with YOSO->Mra,Yoso->Mra,yoso->mra
+# Copied from transformers.models.yoso.modeling_yoso.YosoForQuestionAnswering with YOSO->MRA,Yoso->Mra,yoso->mra
 class MraForQuestionAnswering(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
