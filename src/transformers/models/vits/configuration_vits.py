@@ -94,6 +94,12 @@ class VitsConfig(PretrainedConfig):
         upsample_kernel_sizes=[16, 16, 4, 4],
             TODO: is this HifiGan?
 
+        duration_predictor_kernel_size=3
+        duration_predictor_dropout=0.5
+        duration_predictor_num_flows=4
+        duration_predictor_filter_channels=256
+
+
         num_flows=4,
         wavenet_kernel_size=5,
             This must be an odd number.
@@ -151,11 +157,15 @@ class VitsConfig(PretrainedConfig):
         upsample_initial_channel=512,
         upsample_kernel_sizes=[16, 16, 4, 4],
 
-        num_flows=4,
+        num_flows=4,    # TODO: make more specific
         wavenet_kernel_size=5,
         wavenet_dilation_rate=1,
         wavenet_dropout=0.0,
 
+        duration_predictor_kernel_size=3,
+        duration_predictor_dropout=0.5,
+        duration_predictor_num_flows=4,
+        duration_predictor_filter_channels=256,
 
         use_cache=False,
         is_encoder_decoder=False,
@@ -190,6 +200,10 @@ class VitsConfig(PretrainedConfig):
         self.wavenet_kernel_size = wavenet_kernel_size
         self.wavenet_dilation_rate = wavenet_dilation_rate
         self.wavenet_dropout = wavenet_dropout
+        self.duration_predictor_kernel_size = duration_predictor_kernel_size
+        self.duration_predictor_dropout = duration_predictor_dropout
+        self.duration_predictor_num_flows = duration_predictor_num_flows
+        self.duration_predictor_filter_channels = duration_predictor_filter_channels
 
         self.use_cache = use_cache
         self.is_encoder_decoder = is_encoder_decoder
