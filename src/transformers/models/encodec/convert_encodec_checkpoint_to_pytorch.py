@@ -28,6 +28,7 @@ from transformers import (
 
 # checkpoints downloaded from:
 # https://dl.fbaipublicfiles.com/encodec/v0/encodec_24khz-d7cc33bc.th
+# https://huggingface.co/facebook/musicgen-small/resolve/main/compression_state_dict.bin
 # https://dl.fbaipublicfiles.com/encodec/v0/encodec_48khz-7e698e3e.th
 
 
@@ -206,7 +207,7 @@ def should_ignore(name, ignore_keys):
 def recursively_load_weights(orig_dict, hf_model, model_name):
     unused_weights = []
 
-    if model_name == "encodec_24khz":
+    if model_name == "encodec_24khz" or "encodec_32khz":
         MAPPING = MAPPING_24K
     elif model_name == "encodec_48khz":
         MAPPING = MAPPING_48K
@@ -292,6 +293,15 @@ def convert_checkpoint(
 
     if model_name == "encodec_24khz":
         pass  # config is already correct
+    elif model_name == "encodec_32khz":
+        config.upsampling_ratios = [8, 5, 4, 4]
+        config.target_bandwidths = [2.2]
+        config.num_filters = 64
+        config.sampling_rate = 32_000
+        config.codebook_size = 2048
+        config.use_causal_conv = False
+        config.normalize = False
+        config.use_conv_shortcut = False
     elif model_name == "encodec_48khz":
         config.upsampling_ratios = [8, 5, 4, 2]
         config.target_bandwidths = [3.0, 6.0, 12.0, 24.0]
@@ -316,6 +326,9 @@ def convert_checkpoint(
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     original_checkpoint = torch.load(checkpoint_path)
+    if "best_state" in original_checkpoint:
+        # we might have a training state saved, in which case discard the yaml results and just retain the weights
+        original_checkpoint = original_checkpoint["best_state"]
     recursively_load_weights(original_checkpoint, model, model_name)
     model.save_pretrained(pytorch_dump_folder_path)
 
@@ -331,7 +344,7 @@ if __name__ == "__main__":
         "--model",
         default="encodec_24khz",
         type=str,
-        help="The model to convert. Should be one of 'encodec_24khz', 'encodec_48khz'.",
+        help="The model to convert. Should be one of 'encodec_24khz', 'encodec_32khz', 'encodec_48khz'.",
     )
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
