@@ -290,21 +290,20 @@ class TextClassificationPipeline(ChunkPipeline):
             else:
                 function_to_apply = ClassificationFunction.NONE
 
-        all_scores = []
+        all_logits = []
         for model_outputs in all_outputs:
             outputs = model_outputs["logits"][0]
-            outputs = outputs.numpy()
+            all_logits.append(outputs.numpy())
+        mean_logits = np.mean(all_logits, axis=0)
 
-            if function_to_apply == ClassificationFunction.SIGMOID:
-                chunk_scores = sigmoid(outputs)
-            elif function_to_apply == ClassificationFunction.SOFTMAX:
-                chunk_scores = softmax(outputs)
-            elif function_to_apply == ClassificationFunction.NONE:
-                chunk_scores = outputs
-            else:
-                raise ValueError(f"Unrecognized `function_to_apply` argument: {function_to_apply}")
-            all_scores.append(chunk_scores)
-        scores = np.mean(all_scores, axis=0)
+        if function_to_apply == ClassificationFunction.SIGMOID:
+            scores = sigmoid(mean_logits)
+        elif function_to_apply == ClassificationFunction.SOFTMAX:
+            scores = softmax(mean_logits)
+        elif function_to_apply == ClassificationFunction.NONE:
+            scores = mean_logits
+        else:
+            raise ValueError(f"Unrecognized `function_to_apply` argument: {function_to_apply}")
 
         if top_k == 1 and _legacy:
             return {"label": self.model.config.id2label[scores.argmax().item()], "score": scores.max().item()}
