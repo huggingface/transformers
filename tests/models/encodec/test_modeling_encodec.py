@@ -385,6 +385,11 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
+    def test_identity_shortcut(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        config.use_conv_shortcut = False
+        self.model_tester.create_and_check_model_forward(config, inputs_dict)
+
 
 def normalize(arr):
     norm = np.linalg.norm(arr)
