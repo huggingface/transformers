@@ -439,8 +439,24 @@ TF_MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
 )
 TF_MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
     [
+        ("albert", "TFAlbertModel"),
+        ("bert", "TFBertModel"),
+        ("convbert", "TFConvBertModel"),
+        ("deberta", "TFDebertaModel"),
+        ("deberta-v2", "TFDebertaV2Model"),
+        ("distilbert", "TFDistilBertModel"),
+        ("electra", "TFElectraModel"),
+        ("flaubert", "TFFlaubertModel"),
+        ("longformer", "TFLongformerModel"),
+        ("mobilebert", "TFMobileBertModel"),
         ("mt5", "TFMT5EncoderModel"),
+        ("rembert", "TFRemBertModel"),
+        ("roberta", "TFRobertaModel"),
+        ("roberta-prelayernorm", "TFRobertaPreLayerNormModel"),
+        ("roformer", "TFRoFormerModel"),
         ("t5", "TFT5EncoderModel"),
+        ("xlm", "TFXLMModel"),
+        ("xlm-roberta", "TFXLMRobertaModel"),
     ]
 )
 
