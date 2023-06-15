@@ -3,17 +3,28 @@ LOG_DIR="./logs"
 OUTPUT_DIR="./outputs"
 mkdir -p $LOG_DIR
 mkdir -p $OUTPUT_DIR
-##    SETTINGS     ## 
-MODEL=$1
-BATCH_SIZE=$2
-log_file="${LOG_DIR}/${model_name}.log"
-output_dir=${3:-"$OUTPUT_DIR/$model_name"}
-gpu_size=$4
-## END OF SETTINGS ## 
 
 export TRANSFORMERS_CACHE=/nas/huggingface_pretrained_models
 export HF_DATASETS_CACHE=/nas/common_data/huggingface
-export TASK_NAME=${5:-mrcp}
+export TASK_NAME=mrpc
+
+##    SETTINGS     ## 
+# Defaul value
+output_dir="$OUTPUT_DIR"
+BATCH_SIZE=8
+gpu_size=2
+#Get the input arg
+while getopts m:b:o:g:t: flag
+do
+    case "${flag}" in
+        m) MODEL=${OPTARG};;
+        b) BATCH_SIZE=${OPTARG};;
+        o) output_dir=${OPTARG};;
+        g) gpu_size=${OPTARG};;
+        t) TASK_NAME=${OPTARG};;
+    esac
+done
+## END OF SETTINGS ## 
 
 ## task list ##
 task_list=(
@@ -36,7 +47,6 @@ args="
 --logging_strategy steps \
 --logging_steps 100 \
 --max_seq_length 384 \
---doc_stride 128 \
 --overwrite_output_dir \
 --save_strategy epoch \
 --save_total_limit 2 \

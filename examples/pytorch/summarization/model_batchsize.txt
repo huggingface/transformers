@@ -1,0 +1,2 @@
+google/pegasus-xsum 4
+t5-small 16

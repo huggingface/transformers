@@ -3,12 +3,23 @@ LOG_DIR="./logs"
 OUTPUT_DIR="./outputs"
 mkdir -p $LOG_DIR
 mkdir -p $OUTPUT_DIR
+
 ##    SETTINGS     ## 
-MODEL=$1
-BATCH_SIZE=$2
-log_file="${LOG_DIR}/${model_name}.log"
-output_dir=${3:-"$OUTPUT_DIR/$model_name"}
-gpu_size=$4
+# Defaul value
+output_dir="$OUTPUT_DIR"
+BATCH_SIZE=8
+gpu_size=2
+#Get the input arg
+while getopts m:b:o:g: flag
+do
+    case "${flag}" in
+        m) MODEL=${OPTARG};;
+        b) BATCH_SIZE=${OPTARG};;
+        o) output_dir=${OPTARG};;
+        g) gpu_size=${OPTARG};;
+    esac
+done
+log_file="${LOG_DIR}/train.log"
 ## END OF SETTINGS ## 
 
 export TRANSFORMERS_CACHE=/nas/huggingface_pretrained_models
