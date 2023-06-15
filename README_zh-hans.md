@@ -294,6 +294,7 @@ conda install -c huggingface transformers
 1. **[EfficientFormer](https://huggingface.co/docs/transformers/model_doc/efficientformer)** (来自 Snap Research) 伴随论文 [EfficientFormer: Vision Transformers at MobileNetSpeed](https://arxiv.org/abs/2206.01191) 由 Yanyu Li, Geng Yuan, Yang Wen, Ju Hu, Georgios Evangelidis, Sergey Tulyakov, Yanzhi Wang, Jian Ren 发布。
 1. **[EfficientNet](https://huggingface.co/docs/transformers/model_doc/efficientnet)** (from Google Brain) released with the paper [EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks](https://arxiv.org/abs/1905.11946) by Mingxing Tan, Quoc V. Le.
 1. **[ELECTRA](https://huggingface.co/docs/transformers/model_doc/electra)** (来自 Google Research/Stanford University) 伴随论文 [ELECTRA: Pre-training text encoders as discriminators rather than generators](https://arxiv.org/abs/2003.10555) 由 Kevin Clark, Minh-Thang Luong, Quoc V. Le, Christopher D. Manning 发布。
+1. **[EnCodec](https://huggingface.co/docs/transformers/main/model_doc/encodec)** (来自 Meta AI) 伴随论文 [High Fidelity Neural Audio Compression](https://arxiv.org/abs/2210.13438) 由 Alexandre Défossez, Jade Copet, Gabriel Synnaeve, Yossi Adi 发布。
 1. **[EncoderDecoder](https://huggingface.co/docs/transformers/model_doc/encoder-decoder)** (来自 Google Research) 伴随论文 [Leveraging Pre-trained Checkpoints for Sequence Generation Tasks](https://arxiv.org/abs/1907.12461) 由 Sascha Rothe, Shashi Narayan, Aliaksei Severyn 发布。
 1. **[ERNIE](https://huggingface.co/docs/transformers/model_doc/ernie)** (来自 Baidu) 伴随论文 [ERNIE: Enhanced Representation through Knowledge Integration](https://arxiv.org/abs/1904.09223) by Yu Sun, Shuohuan Wang, Yukun Li, Shikun Feng, Xuyi Chen, Han Zhang, Xin Tian, Danxiang Zhu, Hao Tian, Hua Wu 发布。
 1. **[ErnieM](https://huggingface.co/docs/transformers/model_doc/ernie_m)** (来自 Baidu) 伴随论文 [ERNIE-M: Enhanced Multilingual Representation by Aligning Cross-lingual Semantics with Monolingual Corpora](https://arxiv.org/abs/2012.15674) 由 Xuan Ouyang, Shuohuan Wang, Chao Pang, Yu Sun, Hao Tian, Hua Wu, Haifeng Wang 发布。
@@ -453,7 +454,7 @@ conda install -c huggingface transformers
 
 | 章节 | 描述 |
 |-|-|
-| [文档](https://huggingface.co/transformers/) | 完整的 API 文档和教程 |
+| [文档](https://huggingface.co/docs/transformers/) | 完整的 API 文档和教程 |
 | [任务总结](https://huggingface.co/docs/transformers/task_summary) | 🤗 Transformers 支持的任务 |
 | [预处理教程](https://huggingface.co/docs/transformers/preprocessing) | 使用 `Tokenizer` 来为模型准备数据 |
 | [训练和微调](https://huggingface.co/docs/transformers/training) | 在 PyTorch/TensorFlow 的训练循环或 `Trainer` API 中使用 🤗 Transformers 提供的模型 |

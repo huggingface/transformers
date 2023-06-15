@@ -58,15 +58,10 @@ class Blip2VisionConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported. layer_norm_eps (`float`, *optional*, defaults
             to 1e-5): The epsilon used by the layer normalization layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries and values in the self-attention layers.
 
@@ -91,18 +86,14 @@ class Blip2VisionConfig(PretrainedConfig):
         self,
         hidden_size=1408,
         intermediate_size=6144,
-        projection_dim=512,
         num_hidden_layers=39,
         num_attention_heads=16,
-        num_channels=3,
         image_size=224,
         patch_size=14,
         hidden_act="gelu",
         layer_norm_eps=0.00001,
-        dropout=0.0,
         attention_dropout=0.0,
         initializer_range=1e-10,
-        initializer_factor=1.0,
         qkv_bias=True,
         **kwargs,
     ):
@@ -110,15 +101,11 @@ class Blip2VisionConfig(PretrainedConfig):
 
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
-        self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
         self.patch_size = patch_size
         self.image_size = image_size
         self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
@@ -184,8 +171,6 @@ class Blip2QFormerConfig(PretrainedConfig):
             [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
             with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
-        classifier_dropout (`float`, *optional*):
-            The dropout ratio for the classification head.
         cross_attention_frequency (`int`, *optional*, defaults to 2):
             The frequency of adding cross-attention to the Transformer layers.
         encoder_hidden_size (`int`, *optional*, defaults to 1408):
@@ -221,7 +206,6 @@ class Blip2QFormerConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         pad_token_id=0,
         position_embedding_type="absolute",
-        classifier_dropout=None,
         cross_attention_frequency=2,
         encoder_hidden_size=1408,
         **kwargs,
@@ -240,7 +224,6 @@ class Blip2QFormerConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
-        self.classifier_dropout = classifier_dropout
         self.cross_attention_frequency = cross_attention_frequency
         self.encoder_hidden_size = encoder_hidden_size
 
