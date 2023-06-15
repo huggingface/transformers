@@ -1282,56 +1282,26 @@ class VitsTextEncoder(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
+        padding_mask: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, VitsTextEncoderOutput]:
-
-        # Workaround for tokenizer: filter out padding tokens.
-        input_ids[input_ids >= self.config.vocab_size] = 0
-
+    ):
         hidden_states = self.embed_tokens(input_ids) * math.sqrt(self.config.hidden_size)
-
-        # TODO: may not be needed for final model but is needed to get same outputs
-        if attention_mask is not None:
-            padding_mask = attention_mask.unsqueeze(-1).to(hidden_states.dtype)
-        else:
-            padding_mask = torch.ones_like(input_ids).unsqueeze(-1).to(hidden_states.dtype)
 
         encoder_outputs = self.encoder(
             hidden_states=hidden_states,
             padding_mask=padding_mask,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
         )
 
+        last_hidden_state = encoder_outputs.last_hidden_state
+
         # TODO: "a linear projection layer above the text encoder that produces the mean and variance
         # used for constructing the prior distribution." m = mean, logs = log variance?
-        stats = self.project(encoder_outputs.last_hidden_state.transpose(1, 2)).transpose(1, 2) * padding_mask
-        m, logs = torch.split(stats, self.config.inter_channels, dim=2)
+        stats = self.project(last_hidden_state.transpose(1, 2)).transpose(1, 2) * padding_mask
+        means, log_variances = torch.split(stats, self.config.inter_channels, dim=2)
 
-        # TODO: maybe just always return a tuple here, not a custom output object
-
-        if return_dict:
-            return VitsTextEncoderOutput(
-                last_hidden_state=encoder_outputs.last_hidden_state,
-                m=m,
-                logs=logs,
-                padding_mask=padding_mask,  # TODO: do we need to return this?
-                hidden_states=encoder_outputs.hidden_states,
-                attentions=encoder_outputs.attentions,
-            )
-
-        return tuple(
-            v
-            for v in [
-                encoder_outputs.last_hidden_state, m, logs, padding_mask, encoder_outputs.hidden_states, encoder_outputs.attentions
-            ]
-            if v is not None
-        )
+        return (last_hidden_state, means, log_variances)
 
 
 class VitsPreTrainedModel(PreTrainedModel):
@@ -1375,6 +1345,7 @@ class VitsPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
+#TODO docs
 VITS_BASE_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1507,10 +1478,7 @@ VITS_INPUTS_DOCSTRING = r"""
     VITS_BASE_START_DOCSTRING,
 )
 class VitsModel(VitsPreTrainedModel):
-    def __init__(
-        self,
-        config: VitsConfig,
-    ):
+    def __init__(self, config: VitsConfig):
         super().__init__(config)
         self.config = config
         self.text_encoder = VitsTextEncoder(config)
@@ -1526,7 +1494,6 @@ class VitsModel(VitsPreTrainedModel):
             self.duration_predictor = VitsStochasticDurationPredictor(config, config.hidden_size, 3, 0.5, 4)
         else:
             self.duration_predictor = VitsDurationPredictor(config, config.hidden_size, 256, 3, 0.5)
-        # TODO: try checkpoint with use_sdp=False
 
         if config.num_speakers > 1:
             self.emb_g = nn.Embedding(config.num_speakers, config.gin_channels)
@@ -1534,17 +1501,11 @@ class VitsModel(VitsPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # def get_input_embeddings(self):
-    #     return self.encoder.get_input_embeddings()
-
-    # def set_input_embeddings(self, value):
-    #     self.encoder.set_input_embeddings(value)
-
     def get_encoder(self):
         return self.text_encoder
 
     # @add_start_docstrings_to_model_forward(VITS_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
+    # @replace_return_docstrings(output_type=VitsModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1559,9 +1520,19 @@ class VitsModel(VitsPreTrainedModel):
     ) -> Union[Tuple[torch.FloatTensor], VitsModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # TODO: make padding_mask here instead of in text_encoder?
+        if attention_mask is not None:
+            input_padding_mask = attention_mask.unsqueeze(-1).float()
+        else:
+            input_padding_mask = torch.ones_like(input_ids).unsqueeze(-1).float()
 
-        text_encoder_outputs = self.text_encoder(input_ids, attention_mask)
+        # Workaround for tokenizer: filter out padding tokens.
+        input_ids[input_ids >= self.config.vocab_size] = 0
+
+        hidden_states, means_prior, log_variances_prior = self.text_encoder(input_ids, input_padding_mask, attention_mask)
+
+        # TODO: make betterer!
+        hidden_states = hidden_states.transpose(1, 2)
+        input_padding_mask = input_padding_mask.transpose(1, 2)
 
         if self.config.num_speakers > 1:
             if speaker_id is None:
@@ -1570,29 +1541,23 @@ class VitsModel(VitsPreTrainedModel):
         else:
             g = None
 
-        # TODO: make betterer!
-        x = text_encoder_outputs.last_hidden_state.transpose(1, 2)
-        x_mask = text_encoder_outputs.padding_mask.transpose(1, 2)  #TODO: input_padding_mask
-
-        # TODO: note about naming:
-        #     m_p, logs_p = prior
-        #     m_q, logs_q = posterior
+        # TODO: g = global_conditioning?  or speaker_embeddings
 
         if labels is not None:
             y_mask = labels[:, 0:1, :] != -100.0
-            z, m_q, logs_q = self.enc_q(labels, y_mask, g=g)
+            z, means_posterior, log_variances_posterior = self.enc_q(labels, y_mask, g=g)
             z_p = self.flow(z, y_mask, g=g)
 
             # TODO: did not implement this yet because of dependency on monotonic-align
             # negative cross-entropy
-            # s_p_sq_r = torch.exp(-2 * logs_p) # [b, d, t]
-            # neg_cent1 = torch.sum(-0.5 * math.log(2 * math.pi) - logs_p, [1], keepdim=True) # [b, 1, t_s]
+            # s_p_sq_r = torch.exp(-2 * log_variances_prior) # [b, d, t]
+            # neg_cent1 = torch.sum(-0.5 * math.log(2 * math.pi) - log_variances_prior, [1], keepdim=True) # [b, 1, t_s]
             # neg_cent2 = torch.matmul(-0.5 * (z_p ** 2).transpose(1, 2), s_p_sq_r) # [b, t_t, d] x [b, d, t_s] = [b, t_t, t_s]
-            # neg_cent3 = torch.matmul(z_p.transpose(1, 2), (m_p * s_p_sq_r)) # [b, t_t, d] x [b, d, t_s] = [b, t_t, t_s]
-            # neg_cent4 = torch.sum(-0.5 * (m_p ** 2) * s_p_sq_r, [1], keepdim=True) # [b, 1, t_s]
+            # neg_cent3 = torch.matmul(z_p.transpose(1, 2), (means_prior * s_p_sq_r)) # [b, t_t, d] x [b, d, t_s] = [b, t_t, t_s]
+            # neg_cent4 = torch.sum(-0.5 * (means_prior ** 2) * s_p_sq_r, [1], keepdim=True) # [b, 1, t_s]
             # neg_cent = neg_cent1 + neg_cent2 + neg_cent3 + neg_cent4
 
-            # attn_mask = torch.unsqueeze(x_mask, 2) * torch.unsqueeze(y_mask, -1)
+            # attn_mask = torch.unsqueeze(input_padding_mask, 2) * torch.unsqueeze(y_mask, -1)
             # attn = monotonic_align.maximum_path(neg_cent, attn_mask.squeeze(1)).unsqueeze(1).detach()
 
             # to test the logic, using a random placeholder
@@ -1600,16 +1565,16 @@ class VitsModel(VitsPreTrainedModel):
 
             w = attn.sum(2)
             if self.config.use_stochastic_duration_prediction:
-                l_length = self.duration_predictor(x, x_mask, w, g=g)
-                l_length = l_length / torch.sum(x_mask)
+                l_length = self.duration_predictor(hidden_states, input_padding_mask, w, g=g)
+                l_length = l_length / torch.sum(input_padding_mask)
             else:
-                logw_ = torch.log(w + 1e-6) * x_mask
-                logw = self.duration_predictor(x, x_mask, g=g)
-                l_length = torch.sum((logw - logw_)**2, [1,2]) / torch.sum(x_mask) # for averaging
+                logw_ = torch.log(w + 1e-6) * input_padding_mask
+                logw = self.duration_predictor(hidden_states, input_padding_mask, g=g)
+                l_length = torch.sum((logw - logw_)**2, [1,2]) / torch.sum(input_padding_mask) # for averaging
 
             # Expand prior
-            m_p = torch.matmul(attn.squeeze(1), text_encoder_outputs.m).transpose(1, 2)
-            logs_p = torch.matmul(attn.squeeze(1), text_encoder_outputs.logs).transpose(1, 2)
+            means_prior = torch.matmul(attn.squeeze(1), means_prior).transpose(1, 2)
+            log_variances_prior = torch.matmul(attn.squeeze(1), log_variances_prior).transpose(1, 2)
 
             y_lengths = y_mask.cumsum(dim=-1)[..., -1].squeeze()
             z_slice, ids_slice = self._rand_slice_segments(z, y_lengths, self.config.segment_size)
@@ -1617,7 +1582,7 @@ class VitsModel(VitsPreTrainedModel):
             y_hat = self.dec(z_slice, g=g)
 
             # Note: the original model returns the following; these outputs go into a GAN for training
-            # y_hat, l_length, attn, ids_slice, x_mask, y_mask, (z, z_p, m_p, logs_p, m_q, logs_q)
+            # y_hat, l_length, attn, ids_slice, input_padding_mask, y_mask, (z, z_p, m_p, log_variances_prior, means_posterior, log_variances_posterior)
 
             if return_dict:
                 return VitsModelOutput(audio=y_hat, sequence_lengths=l_length * 256)
@@ -1625,28 +1590,28 @@ class VitsModel(VitsPreTrainedModel):
             return (y_hat, y_mask)
 
         if self.config.use_stochastic_duration_prediction:
-            logw = self.duration_predictor(x, x_mask, g=g, reverse=True, noise_scale=noise_scale_w)
+            logw = self.duration_predictor(hidden_states, input_padding_mask, g=g, reverse=True, noise_scale=noise_scale_w)
         else:
-            logw = self.duration_predictor(x, x_mask, g=g)
+            logw = self.duration_predictor(hidden_states, input_padding_mask, g=g)
 
-        w = torch.exp(logw) * x_mask * length_scale
+        w = torch.exp(logw) * input_padding_mask * length_scale
         w_ceil = torch.ceil(w)   # TODO: duration
         y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()  # TODO predicted_lengths
 
         # Create a padding mask for the output lengths of shape (batch, 1, max_output_length)
         indices = torch.arange(y_lengths.max(), dtype=y_lengths.dtype, device=y_lengths.device)
         y_mask = indices.unsqueeze(0) < y_lengths.unsqueeze(1)
-        y_mask = y_mask.unsqueeze(1).to(x_mask.dtype)   # TODO: output_padding_mask
+        y_mask = y_mask.unsqueeze(1).to(input_padding_mask.dtype)   # TODO: output_padding_mask
 
         # Reconstruct an attention mask of shape (batch, 1, out_length, in_length)
-        attn_mask = torch.unsqueeze(x_mask, 2) * torch.unsqueeze(y_mask, -1)
+        attn_mask = torch.unsqueeze(input_padding_mask, 2) * torch.unsqueeze(y_mask, -1)
         attn = self._generate_path(w_ceil, attn_mask)
 
         # Expand prior
-        m_p = torch.matmul(attn.squeeze(1), text_encoder_outputs.m).transpose(1, 2)
-        logs_p = torch.matmul(attn.squeeze(1), text_encoder_outputs.logs).transpose(1, 2)
+        means_prior = torch.matmul(attn.squeeze(1), means_prior).transpose(1, 2)
+        log_variances_prior = torch.matmul(attn.squeeze(1), log_variances_prior).transpose(1, 2)
 
-        z_p = m_p + torch.randn_like(m_p) * torch.exp(logs_p) * noise_scale
+        z_p = means_prior + torch.randn_like(means_prior) * torch.exp(log_variances_prior) * noise_scale
 
         z = self.flow(z_p, y_mask, g=g, reverse=True)
         y_hat = self.dec((z * y_mask)[:,:,:max_len], g=g)
