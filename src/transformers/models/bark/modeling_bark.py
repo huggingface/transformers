@@ -1245,7 +1245,7 @@ class BarkModel(BarkPreTrainedModel):
                 Note that the output audios will be as long as the longest generation among the batch.
             The last token is `semantic_infer_token`. Note that batch_size is set to 1 to generate one audio per audio. Defaults to None.:
             history_prompt (Optional[Dict[str,np.ndarray]], optional):
-                Optional `Bark` speaker prompt. Defaults to None.
+                Optional `Bark` speaker prompt. Defaults to None. Note that for now, this model takes only one speaker prompt per batch. 
             max_coarse_history (int, optional):
                 Max length of the output of the coarse acoustics model used in the fine generation step. Defaults to
                 630.
