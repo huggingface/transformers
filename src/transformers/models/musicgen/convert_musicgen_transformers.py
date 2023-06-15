@@ -21,8 +21,11 @@ import torch
 from audiocraft.models import MusicGen
 
 from transformers import (
+    AutoFeatureExtractor,
+    AutoTokenizer,
     MusicgenDecoderConfig,
     MusicgenForConditionalGeneration,
+    MusicgenProcessor,
     T5EncoderModel,
 )
 from transformers.models.musicgen.modeling_encodec import EncodecModel
@@ -157,13 +160,21 @@ def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hu
     if torch.max(torch.abs(logits[0, 0, 0, :10] - torch.tensor(EXPECTED_SLICE))) > 1e-4:
         raise ValueError("Logits exceed tolerance threshold")
 
+    # now construct the processor
+    tokenizer = AutoTokenizer.from_pretrained(CHECKPOINT_TO_T5[checkpoint])
+    feature_extractor = AutoFeatureExtractor.from_pretrained(CHECKPOINT_TO_ENCODEC[checkpoint])
+
+    processor = MusicgenProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+
     if pytorch_dump_folder is not None:
         Path(pytorch_dump_folder).mkdir(exist_ok=True)
         logger.info(f"Saving model {checkpoint} to {pytorch_dump_folder}")
         model.save_pretrained(pytorch_dump_folder)
+        processor.save_pretrained(pytorch_dump_folder)
 
     if push_to_hub:
         model.push_to_hub(checkpoint)
+        processor.push_to_hub(checkpoint)
 
 
 if __name__ == "__main__":
