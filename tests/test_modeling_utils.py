@@ -86,11 +86,25 @@ if is_torch_available():
 
         def __init__(self, config):
             super().__init__(config)
-            self.linear = nn.Linear(4, 5)
-            self.linear_2 = nn.Linear(5, 6)
+            self.linear = nn.Linear(5, 5)
+            self.linear_2 = nn.Linear(5, 5)
 
         def forward(self, x):
             return self.linear_2(self.linear(x))
+
+    class BaseModelWithTiedWeights(PreTrainedModel):
+        config_class = PretrainedConfig
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(5, 5)
+            self.linear_2 = nn.Linear(5, 5)
+
+        def forward(self, x):
+            return self.linear_2(self.linear(x))
+
+        def tie_weights(self):
+            self.linear_2.weight = self.linear.weight
 
     class ModelWithHead(PreTrainedModel):
         base_model_prefix = "base"
@@ -103,11 +117,29 @@ if is_torch_available():
             super().__init__(config)
             self.base = BaseModel(config)
             # linear is a common name between Base and Head on purpose.
-            self.linear = nn.Linear(6, 3)
-            self.linear2 = nn.Linear(3, 5)
+            self.linear = nn.Linear(5, 5)
+            self.linear2 = nn.Linear(5, 5)
 
         def forward(self, x):
             return self.linear2(self.linear(self.base(x)))
+
+    class ModelWithHeadAndTiedWeights(PreTrainedModel):
+        base_model_prefix = "base"
+        config_class = PretrainedConfig
+
+        def _init_weights(self, module):
+            pass
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.base = BaseModel(config)
+            self.decoder = nn.Linear(5, 5)
+
+        def forward(self, x):
+            return self.decoder(self.base(x))
+
+        def tie_weights(self):
+            self.decoder.weight = self.base.linear.weight
 
 
 TINY_T5 = "patrickvonplaten/t5-tiny-random"
@@ -856,6 +888,29 @@ class ModelUtilsTest(TestCasePlus):
                 ValueError, "The state dictionary of the model you are trying to load is corrupted."
             ):
                 _ = ModelWithHead.from_pretrained(tmp_dir)
+
+    def test_tied_weights_reload(self):
+        # Base
+        model = BaseModelWithTiedWeights(PretrainedConfig())
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+
+            new_model = BaseModelWithTiedWeights.from_pretrained(tmp_dir)
+            self.assertIs(new_model.linear.weight, new_model.linear_2.weight)
+
+            state_dict = model.state_dict()
+            # Remove tied weight from state_dict -> model should load with no complain of missing keys
+            del state_dict["linear_2.weight"]
+            new_model, load_info = BaseModelWithTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
+            self.assertListEqual(load_info["missing_keys"], [])
+            self.assertIs(new_model.linear.weight, new_model.linear_2.weight)
+
+            # With head
+            model.save_pretrained(tmp_dir)
+            new_model, load_info = ModelWithHeadAndTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
+            self.assertIs(new_model.base.linear.weight, new_model.decoder.weight)
+            # Should only complain about the missing bias
+            self.assertListEqual(load_info["missing_keys"], ["decoder.bias"])
 
     @require_torch_gpu
     @slow
