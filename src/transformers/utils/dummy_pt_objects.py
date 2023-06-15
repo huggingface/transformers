@@ -726,6 +726,13 @@ class AutoModelForTableQuestionAnswering(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class AutoModelForTextEncoding(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class AutoModelForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
