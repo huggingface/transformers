@@ -17,6 +17,7 @@ import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -78,6 +79,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
     """
     model_type = "musicgen_decoder"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
     def __init__(
         self,
@@ -195,13 +197,10 @@ class MusicgenConfig(PretrainedConfig):
         audio_encoder_model_type = audio_encoder_config.pop("model_type")
 
         decoder_config = kwargs.pop("decoder")
-        decoder_model_type = decoder_config.pop("model_type")
-
-        from ..auto.configuration_auto import AutoConfig
 
         self.text_encoder = AutoConfig.for_model(text_encoder_model_type, **text_encoder_config)
         self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder_config)
-        self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
+        self.decoder = MusicgenDecoderConfig(**decoder_config)
         self.is_encoder_decoder = True
 
     @classmethod
@@ -221,9 +220,9 @@ class MusicgenConfig(PretrainedConfig):
         """
 
         return cls(
-            text_encoder_config=text_encoder_config.to_dict(),
-            audio_encoder_config=audio_encoder_config.to_dict(),
-            decoder_config=decoder_config.to_dict(),
+            text_encoder=text_encoder_config.to_dict(),
+            audio_encoder=audio_encoder_config.to_dict(),
+            decoder=decoder_config.to_dict(),
             **kwargs,
         )
 
@@ -235,8 +234,8 @@ class MusicgenConfig(PretrainedConfig):
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
-        output["text_encoder_config"] = self.text_encoder_config.to_dict()
-        output["audio_encoder_config"] = self.audio_encoder_config.to_dict()
-        output["decoder_config"] = self.decoder_config.to_dict()
+        output["text_encoder"] = self.text_encoder.to_dict()
+        output["audio_encoder"] = self.audio_encoder.to_dict()
+        output["decoder"] = self.decoder.to_dict()
         output["model_type"] = self.__class__.model_type
         return output

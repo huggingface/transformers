@@ -333,8 +333,8 @@ class MusicgenDecoderLayer(nn.Module):
             bias=False,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.fc1 = nn.Linear(self.embed_dim, config.d_ff, bias=False)
-        self.fc2 = nn.Linear(config.d_ff, self.embed_dim, bias=False)
+        self.fc1 = nn.Linear(self.embed_dim, config.ffn_dim, bias=False)
+        self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim, bias=False)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     # Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer.forward
@@ -440,7 +440,7 @@ class MusicgenPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["MusicgenDecoderLayer", "MusicgenAttention"]
 
     def _init_weights(self, module):
-        std = self.config.init_std
+        std = self.config.initializer_factor
         if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -991,7 +991,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_encoder_attention_mask=encoder_attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
             head_mask=head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
@@ -1163,9 +1163,10 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         super().__init__(config)
 
         if text_encoder is None:
-            from ..auto.modeling_auto import AutoModel
+            # TODO(SG): Swap this for an auto model
+            from ...models.t5.modeling_t5 import T5EncoderModel
 
-            text_encoder = AutoModel.from_config(config.text_encoder)
+            text_encoder = T5EncoderModel(config.text_encoder)
 
         if audio_encoder is None:
             from ..auto.modeling_auto import AutoModel
@@ -1203,7 +1204,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
 
         # text encoder outputs might need to be projected to different dimension for decoder
         if (
-            self.text_encoder.config.hidden_size != self.text_encoder.config.hidden_size
+            self.text_encoder.config.hidden_size != self.decoder.config.hidden_size
             and self.decoder.config.cross_attention_hidden_size is None
         ):
             self.enc_to_dec_proj = nn.Linear(self.text_encoder.config.hidden_size, self.decoder.config.hidden_size)
