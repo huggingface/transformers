@@ -206,8 +206,6 @@ class AlignVisionConfig(PretrainedConfig):
             The epsilon used by the batch normalization layers.
         batch_norm_momentum (`float`, *optional*, defaults to 0.99):
             The momentum used by the batch normalization layers.
-        dropout_rate (`float`, *optional*, defaults to 0.5):
-            The dropout rate to be applied before final classifier layer.
         drop_connect_rate (`float`, *optional*, defaults to 0.2):
             The drop rate for skip connections.
 
@@ -249,7 +247,6 @@ class AlignVisionConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         batch_norm_eps: float = 0.001,
         batch_norm_momentum: float = 0.99,
-        dropout_rate: float = 0.5,
         drop_connect_rate: float = 0.2,
         **kwargs,
     ):
@@ -274,7 +271,6 @@ class AlignVisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.batch_norm_eps = batch_norm_eps
         self.batch_norm_momentum = batch_norm_momentum
-        self.dropout_rate = dropout_rate
         self.drop_connect_rate = drop_connect_rate
         self.num_hidden_layers = sum(num_block_repeats) * 4
 
