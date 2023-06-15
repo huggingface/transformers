@@ -738,6 +738,8 @@ class TFModelTesterMixin:
             functional_model = tf.keras.Model(inputs=functional_inputs, outputs=hidden_states)
             model_out = functional_model.predict(model.dummy_inputs)  # Check we can pass inputs with the Keras API
             self.assertTrue(model_out is not None)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                functional_model.save(tmpdirname)  # Ensure we can save/export the whole functional model
 
     def test_keyword_and_dict_args(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
