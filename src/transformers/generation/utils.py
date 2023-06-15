@@ -2038,7 +2038,6 @@ class GenerationMixin:
                 new_key_values.append(items)
             model_kwargs["past_key_values"] = new_key_values
 
-            # if the used memory exceeds a threshold, do not batch
             if low_memory:
                 all_outputs = {key:[] for key in outputs} # defined in first loop iteration
                 for i in range(len(top_k_ids)):
