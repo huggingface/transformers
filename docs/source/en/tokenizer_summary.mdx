@@ -141,7 +141,7 @@ words. Pretokenization can be as simple as space tokenization, e.g. [GPT-2](mode
 [FlauBERT](model_doc/flaubert) which uses Moses for most languages, or [GPT](model_doc/gpt) which uses
 Spacy and ftfy, to count the frequency of each word in the training corpus.
 
-After pre-tokenization, a set of unique words has been created and the frequency of each word it occurred in the
+After pre-tokenization, a set of unique words has been created and the frequency with which each word occurred in the
 training data has been determined. Next, BPE creates a base vocabulary consisting of all symbols that occur in the set
 of unique words and learns merge rules to form a new symbol from two symbols of the base vocabulary. It does so until
 the vocabulary has attained the desired vocabulary size. Note that the desired vocabulary size is a hyperparameter to
