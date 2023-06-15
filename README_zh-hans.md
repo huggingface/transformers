@@ -454,7 +454,7 @@ conda install -c huggingface transformers
 
 | 章节 | 描述 |
 |-|-|
-| [文档](https://huggingface.co/transformers/) | 完整的 API 文档和教程 |
+| [文档](https://huggingface.co/docs/transformers/) | 完整的 API 文档和教程 |
 | [任务总结](https://huggingface.co/docs/transformers/task_summary) | 🤗 Transformers 支持的任务 |
 | [预处理教程](https://huggingface.co/docs/transformers/preprocessing) | 使用 `Tokenizer` 来为模型准备数据 |
 | [训练和微调](https://huggingface.co/docs/transformers/training) | 在 PyTorch/TensorFlow 的训练循环或 `Trainer` API 中使用 🤗 Transformers 提供的模型 |
