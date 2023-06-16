@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for ImageGPT."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, Optional, Union
 
 import numpy as np
 
@@ -93,7 +93,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 256, "width": 256}
         size = get_size_dict(size)
-        self.clusters = clusters
+        self.clusters = np.array(clusters) if clusters is not None else None
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
@@ -154,7 +154,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         resample: PILImageResampling = None,
         do_normalize: bool = None,
         do_color_quantize: Optional[bool] = None,
-        clusters: Optional[Union[int, List[int]]] = None,
+        clusters: Optional[np.ndarray] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
         **kwargs,
@@ -199,6 +199,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         do_color_quantize = do_color_quantize if do_color_quantize is not None else self.do_color_quantize
         clusters = clusters if clusters is not None else self.clusters
+        np.array(clusters)
 
         images = make_list_of_images(images)
 
@@ -227,7 +228,6 @@ class ImageGPTImageProcessor(BaseImageProcessor):
             images = [to_channel_dimension_format(image, ChannelDimension.LAST) for image in images]
             # color quantize from (batch_size, height, width, 3) to (batch_size, height, width)
             images = np.array(images)
-            clusters = np.array(clusters)
             images = color_quantize(images, clusters).reshape(images.shape[:-1])
 
             # flatten to (batch_size, height*width)
