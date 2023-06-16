@@ -4908,6 +4908,13 @@ class MusicgenForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MusicgenForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MusicgenModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -4916,6 +4923,13 @@ class MusicgenModel(metaclass=DummyObject):
 
 
 class MusicgenPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MusicgenProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

@@ -163,8 +163,8 @@ class MusicgenAttention(nn.Module):
         embed_dim: int,
         num_heads: int,
         dropout: float = 0.0,
-        is_decoder: bool = True,
-        bias: bool = False,
+        is_decoder: bool = False,
+        bias: bool = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -312,11 +312,11 @@ class MusicgenAttention(nn.Module):
 class MusicgenDecoderLayer(nn.Module):
     def __init__(self, config: MusicgenDecoderConfig):
         super().__init__()
-        self.embed_dim = config.d_model
+        self.embed_dim = config.hidden_size
 
         self.self_attn = MusicgenAttention(
             embed_dim=self.embed_dim,
-            num_heads=config.num_heads,
+            num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
             bias=False,
@@ -328,7 +328,7 @@ class MusicgenDecoderLayer(nn.Module):
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.encoder_attn = MusicgenAttention(
             self.embed_dim,
-            config.num_heads,
+            config.num_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
             bias=False,
@@ -564,7 +564,7 @@ MUSICGEN_INPUTS_DOCSTRING = r"""
 
 class MusicgenDecoder(MusicgenPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_layers* layers. Each layer is a [`MusicgenDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MusicgenDecoderLayer`]
     """
 
     def __init__(self, config: MusicgenDecoderConfig):
@@ -572,22 +572,22 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         self.dropout = config.dropout
         self.layerdrop = config.layerdrop
         self.max_target_positions = config.max_position_embeddings
-        self.d_model = config.d_model
+        self.d_model = config.hidden_size
         self.num_codebooks = config.num_codebooks
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 
         embed_dim = config.vocab_size + 1
         self.embed_tokens = nn.ModuleList(
-            [nn.Embedding(embed_dim, config.d_model) for _ in range(config.num_codebooks)]
+            [nn.Embedding(embed_dim, config.hidden_size) for _ in range(config.num_codebooks)]
         )
 
         self.embed_positions = MusicgenSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
-            config.d_model,
+            config.hidden_size,
         )
 
-        self.layers = nn.ModuleList([MusicgenDecoderLayer(config) for _ in range(config.num_layers)])
-        self.layer_norm = nn.LayerNorm(config.d_model)
+        self.layers = nn.ModuleList([MusicgenDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer_norm = nn.LayerNorm(config.hidden_size)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -718,8 +718,9 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
             input_shape = input.size()
             bsz, codebooks, seq_len = input_shape
         elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-            input = inputs_embeds[:, :, -1]
+            bsz, seq_len = inputs_embeds.size()[:-1]
+            input_shape = (bsz, self.num_codebooks, seq_len)
+            input = inputs_embeds[:, :, -1:]
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
@@ -936,7 +937,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
 
         self.num_codebooks = config.num_codebooks
         self.lm_heads = nn.ModuleList(
-            [nn.Linear(config.d_model, config.vocab_size, bias=False) for _ in range(config.num_codebooks)]
+            [nn.Linear(config.hidden_size, config.vocab_size, bias=False) for _ in range(config.num_codebooks)]
         )
 
         # Initialize weights and apply final processing
@@ -959,6 +960,10 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
 
     def get_decoder(self):
         return self.model.decoder
+
+    def can_generate(self) -> bool:
+        # LM head's' isn't recognised under the traditional weight structure so override
+        return True
 
     @add_start_docstrings_to_model_forward(MUSICGEN_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1024,6 +1029,34 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
+
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+    ):
+        if past_key_values:
+            input_ids = input_ids[..., -1:]
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids}
+
+        model_inputs.update(
+            {
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "attention_mask": attention_mask,
+            }
+        )
+        return model_inputs
+
+    @staticmethod
+    def _reorder_cache(past_key_values, beam_idx):
+        reordered_past = ()
+        for layer_past in past_key_values:
+            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+        return reordered_past
 
 
 @add_start_docstrings(

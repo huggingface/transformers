@@ -2127,6 +2127,7 @@ else:
         [
             "MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST",
             "MusicgenForConditionalGeneration",
+            "MusicgenForCausalLM",
             "MusicgenModel",
             "MusicgenProcessor",
             "MusicgenPreTrainedModel",
@@ -5694,6 +5695,7 @@ if TYPE_CHECKING:
         from .models.musicgen import (
             MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST,
             MusicgenForConditionalGeneration,
+            MusicgenForCausalLM,
             MusicgenModel,
             MusicgenPreTrainedModel,
             MusicgenProcessor,

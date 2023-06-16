@@ -43,11 +43,11 @@ class MusicgenDecoderConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 2048):
             Vocabulary size of the MusicgenDecoder model. Defines the number of different tokens that can be
             represented by the `inputs_ids` passed when calling [`MusicgenDecoder`].
-        d_model (`int`, *optional*, defaults to 1024):
+        hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
-        num_layers (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of decoder layers.
-        num_heads (`int`, *optional*, defaults to 16):
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer block.
         ffn_dim (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer block.
@@ -71,7 +71,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         scale_embedding (`bool`, *optional*, defaults to `False`):
-            Scale embeddings by diving by sqrt(d_model).
+            Scale embeddings by diving by sqrt(hidden_size).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether the model should return the last key/values attentions (not used by all models)
         num_codebooks (`int`, *optional*, defaults to 4):
@@ -79,19 +79,18 @@ class MusicgenDecoderConfig(PretrainedConfig):
     """
     model_type = "musicgen_decoder"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
     def __init__(
         self,
         vocab_size=2048,
         max_position_embeddings=1024,
-        num_layers=12,
+        num_hidden_layers=12,
         ffn_dim=4096,
-        num_heads=16,
+        num_attention_heads=16,
         layerdrop=0.0,
         use_cache=True,
         activation_function="gelu",
-        d_model=1024,
+        hidden_size=1024,
         dropout=0.1,
         attention_dropout=0.0,
         activation_dropout=0.0,
@@ -106,10 +105,10 @@ class MusicgenDecoderConfig(PretrainedConfig):
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
-        self.d_model = d_model
+        self.hidden_size = hidden_size
         self.ffn_dim = ffn_dim
-        self.num_layers = num_layers
-        self.num_heads = num_heads
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
