@@ -435,7 +435,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         added_tok_decoder = {v: k for k, v in zip(tokens_to_add, added_tok_encoder.values())}
         self.added_tokens_encoder.update(added_tok_encoder)
         self.added_tokens_decoder.update(added_tok_decoder)
-        self._create_trie(added_tok_encoder.keys())
+        self._create_trie() # could be faster no? since we are updating the trie! 
         return len(tokens_to_add)
 
     def _create_trie(self):

@@ -2008,7 +2008,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Removed: Now done at the base class level
         # tokenizer.init_inputs = init_inputs
         # tokenizer.init_kwargs = init_kwargs
-
+        added_tokens_decoder = {}
         # If there is a complementary special token map, load it
         special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
         if special_tokens_map_file is not None:
@@ -2021,27 +2021,30 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     continue
                 if isinstance(value, dict):
                     value = AddedToken(**value)
+                    added_tokens_decoder.update({tokenizer.convert_tokens_to_ids(value.content):value})
                 elif isinstance(value, list):
-                    value = [AddedToken(**token) if isinstance(token, dict) else token for token in value]
+                    final_value = []
+                    for token in value:
+                        added_token = AddedToken(**token) if isinstance(token, dict) else AddedToken(token) 
+                        final_value.append(added_token.content)
+                        added_tokens_decoder.update({tokenizer.convert_tokens_to_ids(added_token.content):added_token})
                 setattr(tokenizer, key, value)
 
-        added_tokens_decoder = { id:token for token,id in zip(tokenizer.all_special_ids, tokenizer.all_special_tokens_extended)}
         added_tokens_encoder = { token.content:id for id, token in added_tokens_decoder.items()}
-        
         if added_tokens_file is not None:
             with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                 added_tok_encoder = json.load(added_tokens_handle)
             for key, value in added_tok_encoder.items():
                 if isinstance(value, dict):
                     token = AddedToken(**value)
-                    added_tokens_encoder.update({token.content:int(key)})
                     added_tokens_decoder.update({int(key):token})
 
             # Sort added tokens by index
+            
             added_tok_encoder_sorted = sorted(added_tokens_encoder.items(), key=lambda x: x[1])
             nb_added_tokens = 0
             for token, index in added_tok_encoder_sorted:
-                current_index = len(tokenizer) + nb_added_tokens
+                current_index = tokenizer.vocab_size + nb_added_tokens
                 if has_tokenizer_file and index != current_index and tokenizer.convert_tokens_to_ids(token) != index:
                     # Tokenizer fast: added token needs to either be in the vocabulary with the proper index or the
                     # index is the current length of the tokenizer (not in vocabulary)
