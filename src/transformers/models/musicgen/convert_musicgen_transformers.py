@@ -115,10 +115,6 @@ def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hu
     fairseq_model = MusicGen.get_pretrained(checkpoint, device=device)
     decoder_config = decoder_config_from_checkpoint(checkpoint)
 
-    # TODO(SG): remove debugging statement
-    fairseq_model.lm.transformer.layers = fairseq_model.lm.transformer.layers[:2]
-    decoder_config.num_layers = 2
-
     decoder_state_dict = fairseq_model.lm.state_dict()
     decoder_state_dict, enc_dec_proj_state_dict = rename_state_dict(decoder_state_dict, d_model=decoder_config.d_model)
 
@@ -155,10 +151,11 @@ def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hu
     if logits.shape != (2, 4, 1, 2048):
         raise ValueError("Incorrect shape for logits")
 
-    EXPECTED_SLICE = [-3.3180, -1.5341, -3.2796, -2.0692, -2.1036, -2.3339, 0.6623, -6.3549, 0.8477, -2.0866]
+    if checkpoint == "dummy":
+        EXPECTED_SLICE = [-3.3180, -1.5341, -3.2796, -2.0692, -2.1036, -2.3339, 0.6623, -6.3549, 0.8477, -2.0866]
 
-    if torch.max(torch.abs(logits[0, 0, 0, :10] - torch.tensor(EXPECTED_SLICE))) > 1e-4:
-        raise ValueError("Logits exceed tolerance threshold")
+        if torch.max(torch.abs(logits[0, 0, 0, :10] - torch.tensor(EXPECTED_SLICE))) > 1e-4:
+            raise ValueError("Logits exceed tolerance threshold")
 
     # now construct the processor
     tokenizer = AutoTokenizer.from_pretrained(CHECKPOINT_TO_T5[checkpoint])
