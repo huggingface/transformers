@@ -1069,7 +1069,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         super().__init__(config)
 
         if text_encoder is None:
-            # TODO(SG): Swap this for an auto model
+            # TODO(SG): Swap this for an auto model after https://github.com/huggingface/transformers/pull/24305 is merged
             from ...models.t5.modeling_t5 import T5EncoderModel
 
             text_encoder = T5EncoderModel(config.text_encoder)
@@ -1538,8 +1538,8 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         if max_length < 2 * num_codebooks - 1:
             return decoder_input_ids, decoder_input_ids_shifted
 
-        # fill the shifted ids with the prompt entries, offset by the codebook idx
         if padding_mask is None:
+            # fill the shifted ids with the prompt entries, offset by the codebook idx
             for codebook in range(num_codebooks):
                 decoder_input_ids_shifted[:, codebook, codebook: seq_len + codebook] = decoder_input_ids[:, codebook]
 
@@ -1554,7 +1554,10 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             decoder_input_ids = mask * decoder_input_ids_shifted + ~mask * pad_token_id
 
         else:
+            # we have padded decoder input ids - put them at the start of our pattern matrix then build the delay
+            # pattern with an offset. This is a WIP
             for batch in range(bsz):
+                # how many padding tokens have we got
                 offset = sum(~padding_mask[batch, 0].bool())
                 # put the masked tokens at the start
                 decoder_input_ids_shifted[batch, :, :offset] = decoder_input_ids[batch, :, -offset:]
@@ -1563,6 +1566,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                     decoder_input_ids_shifted[batch, codebook,
                     offset + codebook: seq_len + codebook - offset] = decoder_input_ids[batch, codebook, :offset]
 
+            # fill the upper triangular portion of our matrix
             delay_pattern = torch.triu(
                 torch.ones((num_codebooks, max_length), dtype=torch.bool), diagonal=max_length - num_codebooks + 1
             )
@@ -1570,7 +1574,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             decoder_input_ids = mask * decoder_input_ids_shifted + ~mask * pad_token_id
 
         # find the first position to start generating - this is the first place we have the -1 token
-        # and will always be in the first codebook
+        # and will always be in the first codebook (since it has no codebook offset)
         first_codebook_ids = decoder_input_ids[:, 0, :]
         start_ids = (first_codebook_ids == -1).nonzero()[:, 1]
         first_start_id = min(start_ids)
@@ -1605,7 +1609,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             kwargs["decoder_delay_mask"] = decoder_delay_mask
 
         # apply the delay pattern mask
-        decoder_input_ids = self.apply_delay_pattern_mask(decoder_input_ids, kwargs["decoder_pad_token_mask"])
+        decoder_input_ids = self.apply_delay_pattern_mask(decoder_input_ids, kwargs["decoder_delay_mask"])
 
         if self.generation_config.guidance_scale > 1:
             # for classifier free guidance we need to replicate the decoder args across the batch dim (we'll split these
@@ -1733,10 +1737,6 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             " respective methods of the wrapped objects (model.encoder.resize_token_embeddings(...) or"
             " model.decoder.resize_token_embeddings(...))"
         )
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        # apply decoder cache reordering here
-        return self.decoder._reorder_cache(past_key_values, beam_idx)
 
     def generate(
         self,
@@ -1885,11 +1885,19 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         # revert the pattern delay mask by filtering the pad token id
         output_ids = output_ids[output_ids != self.generation_config.pad_token_id].reshape(bsz, codebooks, -1)
 
+        # TODO(SG): hacks to make the output ids compatible with encodec - add to encodec modelling code
         output_ids = output_ids.unsqueeze(0)
-        output_values = self.audio_encoder.decode(output_ids, audio_scales=kwargs.get("audio_scales"), padding_mask=kwargs.get("padding_mask"))
+        audio_scales = [kwargs.get("audio_scales")] * len(output_ids)
+        output_values = self.audio_encoder.decode(output_ids, audio_scales=audio_scales, padding_mask=kwargs.get("padding_mask"))
 
         if return_dict_in_generate:
             outputs.sequences = output_values
             return outputs
         else:
             return output_values
+
+    def generate_unconditional(self, num_samples=1, **kwargs):
+        last_hidden_state = torch.zeros((num_samples, 1, self.config.text_encoder.hidden_size), device=self.device, dtype=self.dtype)
+        # TODO(SG): check this works with fp16 precision
+        attention_mask = torch.zeros((num_samples, 1), device=self.device, dtype=torch.long)
+        return self.generate(attention_mask=attention_mask, encoder_outputs=(last_hidden_state,), **kwargs)

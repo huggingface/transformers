@@ -2348,6 +2348,15 @@ class GenerationMixin:
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
 
+            if self.config.model_type in ["musicgen", "musicgen_decoder"]:
+                # reshape the logits to combine the codebook axis with batch (4 dims -> 3 dims)
+                logits = outputs.logits
+                cfg_bsz, num_codebooks, seq_len, vocab_size = logits.shape
+                outputs.logits = logits.reshape(cfg_bsz * num_codebooks, seq_len, vocab_size)
+
+                bsz = input_ids.shape[0]
+                input_ids = input_ids.reshape(bsz * num_codebooks, -1)
+
             next_token_logits = outputs.logits[:, -1, :]
 
             # pre-process distribution
@@ -2373,6 +2382,10 @@ class GenerationMixin:
 
             # argmax
             next_tokens = torch.argmax(next_tokens_scores, dim=-1)
+
+            if self.config.model_type in ["musicgen", "musicgen_decoder"]:
+                next_tokens = next_tokens.reshape(bsz, num_codebooks)
+                input_ids = input_ids.reshape(bsz, num_codebooks, -1)
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
