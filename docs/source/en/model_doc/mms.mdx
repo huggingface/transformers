@@ -32,7 +32,7 @@ Whisper on 54 languages of the FLEURS benchmark while being trained on a small f
 
 Here are the different models open sourced in the MMS project. The models and code are originally released [here](https://github.com/facebookresearch/fairseq/tree/main/examples/mms). We have add them to the `transformers` framework, making them easier to use.
 
-### **Automatic Speech Recognition (ASR)**
+### Automatic Speech Recognition (ASR)
 
 The ASR model checkpoints  can be found here : [mms-1b-fl102](https://huggingface.co/facebook/mms-1b-fl102), [mms-1b-l1107](https://huggingface.co/facebook/mms-1b-l1107), [mms-1b-all](https://huggingface.co/facebook/mms-1b-all). For best accuracy, use the `mms-1b-all` model. 
 
@@ -43,9 +43,6 @@ Tips:
   [`Wav2Vec2CTCTokenizer`].
 - You can load different language adapter weights for different languages via [`~Wav2Vec2PreTrainedModel.load_adapter`]. Language adapters only consists of roughly 2 million parameters 
   and can therefore be efficiently loaded on the fly when needed.
-
-
-The original code can be found [here](https://github.com/facebookresearch/fairseq/tree/main/examples/mms).
 
 #### Loading
 
@@ -162,11 +159,11 @@ to see all supported languages.
 
 To further improve performance from ASR models, language model decoding can be used. See the documentation [here](https://huggingface.co/facebook/mms-1b-all) for further details.  
 
-### **Speech Synthesis (TTS)**
+### Speech Synthesis (TTS)
 
 Individual TTS models are available for each of the 1100+ languages. The models and inference documentation can be found [here](https://huggingface.co/facebook/mms-tts).
 
-### **Language Identification (LID)**
+### Language Identification (LID)
 
 Different LID models are available based on the number of languages they can recognize - [126](https://huggingface.co/facebook/mms-lid-126), [256](https://huggingface.co/facebook/mms-lid-256), [512](https://huggingface.co/facebook/mms-lid-512), [1024](https://huggingface.co/facebook/mms-lid-1024), [2048](https://huggingface.co/facebook/mms-lid-2048), [4017](https://huggingface.co/facebook/mms-lid-4017). 
 
@@ -234,6 +231,6 @@ To see all the supported languages of a checkpoint, you can print out the langua
 processor.id2label.values()
 ```
 
-### **Audio Pretrained Models**
+### Audio Pretrained Models
 
 Pretrained models are available for two different sizes - [300M](https://huggingface.co/facebook/mms-300m) , [1Bil](https://huggingface.co/facebook/mms-1b). The architecture is based on the Wav2Vec2 model, so one can refer to [Wav2Vec2's documentation page](wav2vec2) for further details on how to finetune with models for various downstream tasks.
