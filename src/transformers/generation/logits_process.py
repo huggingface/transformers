@@ -15,7 +15,7 @@
 
 import inspect
 import math
-from typing import Callable, Iterable, List, Optional, Tuple, Union
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -539,17 +539,121 @@ class EncoderNoRepeatNGramLogitsProcessor(LogitsProcessor):
         return scores
 
 
-class NoBadWordsLogitsProcessor(LogitsProcessor):
+class BiasLogitsProcessor(LogitsProcessor):
     """
-    [`LogitsProcessor`] that enforces that specified sequences will never be sampled.
+    [`LogitsProcessor`] that biases the logits towards particular sequences. The bias term is added to the logits.
+
+    <Tip>
+
+    In order to get the token ids of the sequences that you want to bias, make sure to set
+    `add_prefix_space=True` when initializing the tokenizer, and use
+    `tokenizer(bad_words, add_special_tokens=False).input_ids`. The `add_prefix_space`
+    argument is only supported for some slow tokenizers, as fast tokenizers' prefixing behaviours come from
+    `pre tokenizers`. Read more [here](https://huggingface.co/docs/tokenizers/api/pre-tokenizers).
+
+    </Tip>
+
+    Args:
+        bias_sequences (`Dict[Tuple[int], float]`):
+            Dictionary that maps a sequence of tokens to its bias term. Positive biases increase the odds of the
+            sequence being selected, while negative biases do the opposite. If a sequence has a length of 1, its bias
+            will always be applied. Otherwise, the bias will only be applied if the sequence in question is about to be
+            completed (in the token selection step after this processor is applied).
+    """
+
+    def __init__(self, bias_sequences: Dict[Tuple[int], float]):
+        bad_words_ids = list(bias_sequences.keys())
+
+        # Split bad words into length 1 and length greater than 1. The former can be handled separately for speed.
+        self.bad_words_id_length_1 = []
+        self.bad_words_id_length_greater_than_1 = []
+        for word in bad_words_ids:
+            if len(word) == 0:
+                raise ValueError(f"Banned words token sequences {bad_words_ids} cannot have an empty list")
+            elif len(word) == 1:
+                self.bad_words_id_length_1.append(word[0])
+            else:
+                self.bad_words_id_length_greater_than_1.append(word)
+
+        # Bias tensors that will be populated on the first call (for retrocompatibility purposes, the vocabulary size is infered in the first usage)
+        self.length_1_bias = None
+        self.length_greather_than_1_bias = None
+        self.prepared_bias_tensors = False
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # 1 - Prepares the bias tensors. This is only needed the first time the logit processor is called.
+        if not self.prepared_bias_tensors:
+            self._prepare_bias_tensors(scores)
+
+        # 2 - prepares an empty bias to add
+        bias = torch.zeros_like(scores)
+
+        # 3 - include the bias from length = 1
+        bias += self.length_1_bias
+
+        # 4 - include the bias from length > 1, after determining which biased sequences may be completed.
+        # `matching_mask` is a (batch_size, vocab_size) boolean mask that is True for all tokens whose corresponding
+        # bias should be applied. The bias is applied on the last token of the sequence, if (and only if) the sequence
+        # may become complete this iteration.
+        matching_mask = torch.zeros_like(scores, dtype=torch.bool)
+        for bad_word_ids in self.bad_words_id_length_greater_than_1:
+            if len(bad_word_ids) > input_ids.shape[1]:  # the bad word is longer than the context, ignore
+                continue
+            prefix_length = len(bad_word_ids) - 1
+            last_token = bad_word_ids[-1]
+            matching_rows = torch.eq(
+                input_ids[:, -prefix_length:],
+                torch.tensor(bad_word_ids[:-1], dtype=input_ids.dtype, device=input_ids.device)
+            ).prod(dim=1)
+            matching_mask[:, last_token] |= matching_rows.bool()
+        bias += self.length_greather_than_1_bias * matching_mask.to(torch.float)
+
+        # 5 - apply the bias to the scores
+        scores = scores + bias
+        return scores
+
+    def _prepare_bias_tensors(self, scores: torch.FloatTensor):
+        vocabulary_size = scores.shape[-1]
+
+        # Check biased tokens out of bounds
+        invalid_biases = []
+        invalid_biases += [bad_word_id for bad_word_id in self.bad_words_id_length_1 if bad_word_id >= vocabulary_size]
+        invalid_biases += [bad_word_id[-1] for bad_word_id in self.bad_words_id_length_greater_than_1 if bad_word_id[-1] >= vocabulary_size]
+        if len(invalid_biases) > 0:
+            raise ValueError(
+                f"Biases for the following tokens were set ({invalid_biases}), but the model vocabulary size is only {vocabulary_size}."
+            )
+
+        # Precompute the bias from length = 1 -- it will always be applied
+        self.length_1_bias = torch.zeros((vocabulary_size,), dtype=torch.float).to(scores.device)
+        for bad_word_id in self.bad_words_id_length_1:
+            self.length_1_bias[bad_word_id] = -float("inf")
+
+        # Precompute the bias from length > 1 -- it is only applied when the whole word is about to be generated
+        self.length_greather_than_1_bias = torch.zeros((vocabulary_size,), dtype=torch.float).to(scores.device)
+        for bad_word_ids in self.bad_words_id_length_greater_than_1:
+            self.length_greather_than_1_bias[bad_word_ids[-1]] = -float("inf")
+
+        self.prepared_bias_tensors = True
+
+
+class NoBadWordsLogitsProcessor(BiasLogitsProcessor):
+    """
+    [`LogitsProcessor`] that enforces that specified sequences will never be selected.
+
+    <Tip>
+
+    In order to get the token ids of the words that should not appear in the generated text, make sure to set
+    `add_prefix_space=True` when initializing the tokenizer, and use
+    `tokenizer(bad_words, add_special_tokens=False).input_ids`. The `add_prefix_space`
+    argument is only supported for some slow tokenizers, as fast tokenizers' prefixing behaviours come from
+    `pre tokenizers`. Read more [here](https://huggingface.co/docs/tokenizers/api/pre-tokenizers).
+
+    </Tip>
 
     Args:
         bad_words_ids (`List[List[int]]`):
-            List of list of token ids that are not allowed to be generated. In order to get the token ids of the words
-            that should not appear in the generated text, make sure to set `add_prefix_space=True` when initializing
-            the tokenizer, and use `tokenizer(bad_words, add_special_tokens=False).input_ids`. The `add_prefix_space`
-            argument is only supported for some slow tokenizers, as fast tokenizers' prefixing behaviours come from
-            `pre tokenizers`. Read more [here](https://huggingface.co/docs/tokenizers/api/pre-tokenizers).
+            List of list of token ids that are not allowed to be generated.
         eos_token_id (`Union[int, List[int]]`):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
     """
@@ -567,112 +671,18 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
                 f"Each list in `bad_words_ids` has to be a list of positive integers, but is {bad_words_ids}."
             )
 
+        # Filter EOS token from bad_words_ids
         if eos_token_id is None:
             eos_token_id = []
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
-
         bad_words_ids = list(
             filter(lambda bad_token_seq: all([bad_token_seq != [i] for i in eos_token_id]), bad_words_ids)
         )
-        self.bad_words_id_length_1 = []
-        self.bad_words_id_length_greater_than_1 = []
-        for word in bad_words_ids:
-            if len(word) == 1:
-                self.bad_words_id_length_1.append(word[0])
-            else:
-                self.bad_words_id_length_greater_than_1.append(word)
 
-        self.static_bad_words_mask: Optional[torch.LongTensor] = None
-
-        for banned_token_seq in self.bad_words_id_length_greater_than_1:
-            if len(banned_token_seq) == 0:
-                raise ValueError(f"Banned words token sequences {bad_words_ids} cannot have an empty list")
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        if self.static_bad_words_mask is None and len(self.bad_words_id_length_1) > 0:
-            self.static_bad_words_mask = self._calc_static_bad_word_mask(scores)
-
-        dynamic_banned_tokens = self._calc_banned_bad_words_ids(input_ids.tolist())
-        scores = self._set_scores_to_inf_for_banned_tokens(scores, dynamic_banned_tokens)
-
-        return scores
-
-    def _calc_static_bad_word_mask(self, scores: torch.FloatTensor) -> torch.BoolTensor:
-        static_bad_words_mask = torch.zeros(scores.shape[1])
-        static_bad_words_mask[self.bad_words_id_length_1] = 1
-        return static_bad_words_mask.unsqueeze(0).to(scores.device).bool()
-
-    def _tokens_match(self, prev_tokens: List[int], tokens: List[int]) -> bool:
-        if len(tokens) == 0:
-            # if bad word tokens is just one token always ban it
-            return True
-        elif len(tokens) > len(prev_tokens):
-            # if bad word tokens are longer then prev input_ids they can't be equal
-            return False
-        else:
-            return prev_tokens[-len(tokens) :] == tokens
-
-    def _calc_banned_bad_words_ids(self, prev_input_ids: List[List[int]]) -> Iterable[int]:
-        banned_tokens = []
-        for prev_input_ids_slice in prev_input_ids:
-            banned_tokens_slice = []
-            for banned_token_seq in self.bad_words_id_length_greater_than_1:
-                if self._tokens_match(prev_input_ids_slice, banned_token_seq[:-1]):
-                    banned_tokens_slice.append(banned_token_seq[-1])
-
-            banned_tokens.append(banned_tokens_slice)
-
-        return banned_tokens
-
-    def _set_scores_to_inf_for_banned_tokens(
-        self, scores: torch.Tensor, banned_tokens: List[List[int]]
-    ) -> torch.Tensor:
-        """
-        Modifies the scores in place by setting the banned token positions to `-inf`. Banned token is expected to be a
-        list of list of banned tokens to ban in the format [[batch index, vocabulary position],...
-
-        Args:
-            scores: logits distribution of shape (batch size, vocabulary size)
-            banned_tokens: list of list of tokens to ban of length (batch_size)
-        """
-        banned_mask_list = []
-        for idx, batch_banned_tokens in enumerate(banned_tokens):
-            for token in batch_banned_tokens:
-                # Eliminates invalid bad word IDs that are over the vocabulary size.
-                if token <= scores.shape[1]:
-                    banned_mask_list.append([idx, token])
-                else:
-                    logger.error(
-                        f"An invalid bad word ID is defined: {token}. This ID is not contained in the "
-                        "vocabulary, and is therefore ignored."
-                    )
-        if not banned_mask_list and self.static_bad_words_mask is None:
-            return scores
-
-        else:
-            if banned_mask_list:
-                indices = torch.ones(len(banned_mask_list))
-                banned_mask = torch.LongTensor(banned_mask_list, device=indices.device)
-                # A sparse tensor is generated from a list of coordinates: [[0, 1], [0, 2], [2, 0]]. A conversion to dense tensor generates:
-                # [ 0  1  1 ]
-                # [ 0  0  0 ]
-                # [ 1  0  0 ]
-
-                banned_mask = (
-                    torch.sparse.LongTensor(banned_mask.t(), indices, scores.size())
-                    .to(scores.device)
-                    .to_dense()
-                    .bool()
-                )
-
-                if self.static_bad_words_mask is not None:
-                    banned_mask = torch.bitwise_or(banned_mask, self.static_bad_words_mask)
-            else:
-                banned_mask = self.static_bad_words_mask
-
-            scores = scores.masked_fill(banned_mask, -float("inf"))
-            return scores
+        # Forbidding a sequence is equivalent to setting its bias to -inf
+        bias_sequences = {tuple(sequence): float("-inf") for sequence in bad_words_ids}
+        super().__init__(bias_sequences=bias_sequences)
 
 
 class PrefixConstrainedLogitsProcessor(LogitsProcessor):
