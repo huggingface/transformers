@@ -2042,6 +2042,7 @@ class GenerationMixin:
                 all_outputs = {key:[] for key in outputs} # defined in first loop iteration
                 all_last_hstates = []
                 all_hstates = []
+                all_logits = []
                 for i in range(top_k):
                     # compute the candidate tokens by the language model and collect their hidden_states
                     next_model_inputs = self.prepare_inputs_for_generation(top_k_ids[:, i].unsqueeze(0), 
@@ -2065,10 +2066,10 @@ class GenerationMixin:
                     
                     all_last_hstates.append(torch.squeeze(next_hidden, 1))
                     all_hstates.append(full_hidden_states)
+                    all_logits.append(outputs.logits[:, -1, :])
 
                 # stack hidden states
                 next_hidden = torch.stack([all_last_hstates[i] for i in range(top_k)], dim=0)
-                print (next_hidden.shape)
                 final_full_hstates = [0 for i in range(len(full_hidden_states))]
                 for layer in range(len(full_hidden_states)):
                     final_full_hstates[layer] = torch.stack([torch.squeeze(all_hstates[i][layer], 1)
@@ -2079,6 +2080,9 @@ class GenerationMixin:
                 for key in all_outputs:
                     if torch.is_tensor(all_outputs[key]):
                         outputs[key] = torch.stack(all_outputs[key], dim=0)
+
+                logits = torch.cat(all_logits, dim=0)
+                print (logits.shape)
                     
             else:
                 # compute the candidate tokens by the language model and collect their hidden_states
@@ -2099,11 +2103,10 @@ class GenerationMixin:
                     next_hidden = outputs.hidden_states[-1]
                     full_hidden_states = outputs.hidden_states
 
-            print (next_hidden.shape, full_hidden_states[0].shape)
+                logits = outputs.logits[:, -1, :]
+                print (logits.shape)
 
             next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
-            logits = outputs.logits[:, -1, :]
-            
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
 
             # compute the degeneration penalty and re-rank the candidates based on the degeneration penalty and the
