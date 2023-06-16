@@ -800,7 +800,10 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        assert codebook_idx > 0, "cannot predict 0th codebook"
+        if codebook_idx == 0:
+            raise ValueError(
+            "cannot predict 0th codebook"
+            )
 
         if input_ids is not None and input_embeds is not None:
             raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
@@ -829,7 +832,6 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
         if position_ids is None:
             position_ids = torch.arange(0, seq_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)  # shape (1, seq_length)
-            assert position_ids.shape == (1, seq_length)
 
         position_embeds = self.transformer.wpe(position_ids)  # position embeddings of shape (1, t, n_embd)
 
@@ -1218,8 +1220,10 @@ class BarkModel(BarkPreTrainedModel):
         if n_remove_from_end > 0:
             fine_input = fine_input[:, :, :-n_remove_from_end]
 
-        # assert same input and output seq_len
-        assert fine_input.shape[-1] == coarse_output.shape[-2]
+        if fine_input.shape[-1] != coarse_output.shape[-2]:
+            raise ValueError(
+            "input and output should have the same seq_len"
+            )
 
         # TODO: _clear_cuda_cache() ??
         return fine_input
@@ -1290,7 +1294,10 @@ class BarkModel(BarkPreTrainedModel):
 
 # TODO: (maybe do it in the preprocessor)
 def _flatten_codebooks(arr, offset_size):
-    assert len(arr.shape) == 2
+    if len(arr.shape) != 2:
+        raise ValueError(
+        "codebook array should be a 2D array"
+        )
     arr = arr.copy()
     if offset_size is not None:
         for n in range(1, arr.shape[0]):
