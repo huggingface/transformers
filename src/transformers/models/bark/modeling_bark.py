@@ -815,7 +815,7 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
             input_embeds = input_embeds[:, :, :, : codebook_idx + 1].sum(dim=-1)
 
         elif input_embeds is not None:
-            input_embeds = self.transformer.wte(input_ids)  # token embeddings of shape (b, t, n_embd)
+            pass
         else:
             raise ValueError("You have to specify either input_ids or input_embeds")
         
