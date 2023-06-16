@@ -1064,6 +1064,18 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 
 
 class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
+    r"""Logits processor for classifier free guidance (CFG). The scores are split over the batch dimension,
+    where the first half correspond to the conditional logits (predicted from the input prompt) and the
+    second half correspond to the unconditional logits (predicted from an empty or 'null' prompt). The
+    processor computes a weighted average across the conditional and unconditional logits, parameterised
+    by the `guidance_scale`.
+
+    Args:
+        guidance_scale (float):
+            The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale >
+            1`. Higher guidance scale encourages the model to generate samples that are more closely linked to
+            the input prompt, usually at the expense of poorer quality.
+    """
     def __init__(self, guidance_scale):
         self.guidance_scale = guidance_scale
 
