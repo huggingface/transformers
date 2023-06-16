@@ -2100,7 +2100,7 @@ class GenerationMixin:
                     next_hidden = outputs.hidden_states[-1]
                     full_hidden_states = outputs.hidden_states
 
-            print (next_hidden.shape, full_hidden_states.shape)
+            print (next_hidden.shape, full_hidden_states[0].shape)
 
             next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
             logits = outputs.logits[:, -1, :]
