@@ -239,7 +239,7 @@ class BarkSelfAttention(nn.Module):
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         # unlike GPTNeo's SelfAttention, divide by the square root of the dimension of the query and the key
-        attn_weights = torch.matmul(query, key.transpose(-1, -2)) * (1.0 / math.sqrt(key.size(-1)))
+        attn_weights = torch.matmul(query, key.transpose(-1, -2)) * (1.0 / math.sqrt(self.head_dim))
 
         if self.is_causal:
             query_length, key_length = query.size(-2), key.size(-2)
