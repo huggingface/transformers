@@ -1779,10 +1779,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for names in shared_ptrs.values():
                 # Removing the keys which are declared as known duplicates on
                 # load. This allows to make sure the name which is kept is consistent.
-                if self._keys_to_ignore_on_load_missing is not None:
+                if self._tied_weights_keys is not None:
                     found = 0
                     for name in sorted(names):
-                        matches_pattern = any(re.search(pat, name) for pat in self._keys_to_ignore_on_load_missing)
+                        matches_pattern = any(re.search(pat, name) for pat in self._tied_weights_keys)
                         if matches_pattern and name in state_dict:
                             found += 1
                             if found < len(names):
@@ -3020,22 +3020,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
 
         if is_accelerate_available():
+            model.tie_weights()
             tied_params = find_tied_parameters(model)
         else:
             tied_params = []
-        _missing = []
-        for k in missing_keys:
-            found = False
-            for group in tied_params:
-                if k in group:
-                    found = True
-                    if len(group) > 2:
-                        group.remove(k)
-                    else:
-                        _missing.append(k)
-            if not found:
-                _missing.append(k)
-        missing_keys = _missing
+
+        for group in tied_params:
+            missing_in_group = [k for k in missing_keys if k in group]
+            if len(missing_in_group) > 0 and len(missing_in_group) < len(group):
+                missing_keys = [k for k in missing_keys if k not in missing_in_group]
 
         # Some models may have keys that are not in the state by design, removing them before needlessly warning
         # the user.
@@ -3275,7 +3268,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             missing_keys = [elem for elem in missing_keys if "SCB" not in elem]
 
         if len(unexpected_keys) > 0:
-            logger.warning(
+            archs = [] if model.config.architectures is None else model.config.architectures
+            warner = logger.warn if model.__class__.__name__ in archs else logger.info
+            warner(
                 f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
                 f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
                 f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
