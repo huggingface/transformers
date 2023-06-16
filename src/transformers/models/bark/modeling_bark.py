@@ -261,10 +261,11 @@ class BarkSelfAttention(nn.Module):
         # Mask heads if we want to
         if head_mask is not None:
             attn_weights = attn_weights * head_mask
-
-        attn_output = torch.matmul(attn_weights, value)
+        
         # (batch, num_heads, seq_len, seq_len) x (batch, num_heads, seq_len, attn_head_size)
         # -> (batch, num_heads, seq_len, attn_head_size)
+        attn_output = torch.matmul(attn_weights, value)
+
 
         return attn_output, attn_weights
 
@@ -305,10 +306,9 @@ class BarkSelfAttention(nn.Module):
         if output_attentions:
             outputs += (attn_weights,)
 
-        return outputs  # a, present, (attentions)
+        return outputs
 
 
-# Same as model.py
 class LayerNorm(nn.Module):
     """LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False. Copied from Bark original
     implementation."""
