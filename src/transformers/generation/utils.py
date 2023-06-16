@@ -2045,7 +2045,7 @@ class GenerationMixin:
                     # compute the candidate tokens by the language model and collect their hidden_states
                     next_model_inputs = self.prepare_inputs_for_generation(top_k_ids[:, i].unsqueeze(0), 
                                                 **model_kwargs)
-                    print (next_model_inputs)
+
                     outputs = self(
                         **next_model_inputs, 
                         return_dict=True, 
@@ -2087,7 +2087,6 @@ class GenerationMixin:
                 # compute the candidate tokens by the language model and collect their hidden_states
                 # assembles top_k_ids into batch of size k (leading to OOM for large models)
                 next_model_inputs = self.prepare_inputs_for_generation(top_k_ids.view(-1, 1), **model_kwargs)
-                print (next_model_inputs)
 
                 outputs = self(
                     **next_model_inputs, 
@@ -2104,6 +2103,8 @@ class GenerationMixin:
                     full_hidden_states = outputs.hidden_states
 
                 logits = outputs.logits[:, -1, :]
+
+            print (top_k_ids)
 
             next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
