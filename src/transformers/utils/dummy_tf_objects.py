@@ -377,6 +377,13 @@ class TFAutoModelForTableQuestionAnswering(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFAutoModelForTextEncoding(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFAutoModelForTokenClassification(metaclass=DummyObject):
     _backends = ["tf"]
 
