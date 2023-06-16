@@ -2068,9 +2068,10 @@ class GenerationMixin:
 
                 # stack hidden states
                 next_hidden = torch.stack([all_last_hstates[i] for i in range(top_k)], dim=0)
+                print (next_hidden.shape)
                 final_full_hstates = [0 for i in range(len(full_hidden_states))]
                 for layer in range(len(full_hidden_states)):
-                    final_full_hstates[layer] = torch.stack([torch.squeeze(all_hstates[layer][i], 1)
+                    final_full_hstates[layer] = torch.stack([torch.squeeze(all_hstates[i][layer], 1)
                                                                             for i in range(top_k)], dim=0)
                 full_hidden_states = tuple(final_full_hstates)
 
