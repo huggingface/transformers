@@ -199,11 +199,12 @@ class BarkSelfAttention(nn.Module):
         self.num_heads = config.num_heads
         self.head_dim = self.embed_dim // self.num_heads
 
-        assert config.hidden_size % config.num_heads == 0, (
+        if config.hidden_size % config.num_heads != 0:
+            raise ValueError(
             f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
             f" {self.num_heads})."
-        )
-
+            )
+            
         # key, query, value projections for all heads, but in a batch
         self.att_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.bias)
         # output projection
@@ -776,8 +777,8 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
         self.transformer.wtes = new_embeddings
 
 
-    def _get_and_check_input_embeddings(self, input_ids, input_embeds, pred_idx):
-        # the input_embeddings are the sum of the j previous codebooks embeddings before the current pred_idx codebook
+    def _get_and_check_input_embeddings(self, input_ids, input_embeds, codebook_idx):
+        # the input_embeddings are the sum of the j previous codebooks embeddings before the current codebook_idx codebook
 
         if input_ids is not None and input_embeds is not None:
             raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
@@ -794,7 +795,7 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
                 wte(input_ids[:, :, i]).unsqueeze(-1) for i, wte in enumerate(self.transformer.wtes)
             ]  # token embeddings of shape (b, t, n_embd)
             input_embeds = torch.cat(input_embeds, dim=-1)
-            input_embeds = input_embeds[:, :, :, : pred_idx + 1].sum(dim=-1)
+            input_embeds = input_embeds[:, :, :, : codebook_idx + 1].sum(dim=-1)
 
         elif input_embeds is not None:
             input_embeds = self.transformer.wte(input_ids)  # token embeddings of shape (b, t, n_embd)
