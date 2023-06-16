@@ -2040,9 +2040,7 @@ class GenerationMixin:
 
             if low_memory:
                 all_outputs = {key:[] for key in outputs} # defined in first loop iteration
-                all_last_hstates = []
-                all_hstates = []
-                all_logits = []
+                all_last_hstates, all_hstates, all_logits = [], [], []
                 for i in range(top_k):
                     # compute the candidate tokens by the language model and collect their hidden_states
                     next_model_inputs = self.prepare_inputs_for_generation(top_k_ids[:, i].unsqueeze(0), 
@@ -2069,7 +2067,7 @@ class GenerationMixin:
                     all_logits.append(outputs.logits[:, -1, :])
 
                 # stack hidden states
-                next_hidden = torch.stack([all_last_hstates[i] for i in range(top_k)], dim=0)
+                cnext_hidden = torch.stack([all_last_hstates[i] for i in range(top_k)], dim=0)
                 final_full_hstates = [0 for i in range(len(full_hidden_states))]
                 for layer in range(len(full_hidden_states)):
                     final_full_hstates[layer] = torch.stack([torch.squeeze(all_hstates[i][layer], 1)
@@ -2081,30 +2079,34 @@ class GenerationMixin:
                     if torch.is_tensor(all_outputs[key]):
                         outputs[key] = torch.stack(all_outputs[key], dim=0)
 
-                logits = torch.cat(all_logits, dim=0)
-                print (logits.shape)
+                coutputs = torch.clone(outputs)
+                # stack logits
+                clogits = torch.cat(all_logits, dim=0)
                     
+            # else:
+            # compute the candidate tokens by the language model and collect their hidden_states
+            # assembles top_k_ids into batch of size k (leading to OOM for large models)
+            next_model_inputs = self.prepare_inputs_for_generation(top_k_ids.view(-1, 1), **model_kwargs)
+
+            outputs = self(
+                **next_model_inputs, 
+                return_dict=True, 
+                output_hidden_states=True, 
+                output_attentions=output_attentions
+            )
+            # name is different for encoder-decoder and decoder-only models
+            if self.config.is_encoder_decoder:
+                next_hidden = outputs.decoder_hidden_states[-1]
+                full_hidden_states = outputs.decoder_hidden_states
             else:
-                # compute the candidate tokens by the language model and collect their hidden_states
-                # assembles top_k_ids into batch of size k (leading to OOM for large models)
-                next_model_inputs = self.prepare_inputs_for_generation(top_k_ids.view(-1, 1), **model_kwargs)
+                next_hidden = outputs.hidden_states[-1]
+                full_hidden_states = outputs.hidden_states
 
-                outputs = self(
-                    **next_model_inputs, 
-                    return_dict=True, 
-                    output_hidden_states=True, 
-                    output_attentions=output_attentions
-                )
-                # name is different for encoder-decoder and decoder-only models
-                if self.config.is_encoder_decoder:
-                    next_hidden = outputs.decoder_hidden_states[-1]
-                    full_hidden_states = outputs.decoder_hidden_states
-                else:
-                    next_hidden = outputs.hidden_states[-1]
-                    full_hidden_states = outputs.hidden_states
+            logits = outputs.logits[:, -1, :]
 
-                logits = outputs.logits[:, -1, :]
-                print (logits.shape)
+            print (f'Logit equality: {torch.equal(clogits, logits)}')
+            print (f'Attentions equality: {torch.equal(outputs[key], coutputs[key])}')
+            print (f'Last hidden equality: {torch.equal(cnext_hidden, next_hidden)}')
 
             next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
