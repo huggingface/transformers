@@ -2079,7 +2079,6 @@ class GenerationMixin:
                     if torch.is_tensor(all_outputs[key]):
                         outputs[key] = torch.stack(all_outputs[key], dim=0)
 
-                coutputs = torch.clone(outputs)
                 # stack logits
                 clogits = torch.cat(all_logits, dim=0)
                     
@@ -2105,7 +2104,7 @@ class GenerationMixin:
             logits = outputs.logits[:, -1, :]
 
             print (f'Logit equality: {torch.equal(clogits, logits)}')
-            print (f'Attentions equality: {torch.equal(outputs[key], coutputs[key])}')
+            # print (f'Attentions equality: {torch.equal(outputs[key], coutputs[key])}')
             print (f'Last hidden equality: {torch.equal(cnext_hidden, next_hidden)}')
 
             next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
