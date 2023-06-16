@@ -2062,7 +2062,7 @@ class GenerationMixin:
                         next_hidden = outputs.hidden_states[-1]
                         full_hidden_states = outputs.hidden_states
                     
-                    all_last_hstates.append(torch.squeeze(next_hidden, 1))
+                    all_last_hstates.append(torch.squeeze(next_hidden, 0))
                     all_hstates.append(full_hidden_states)
                     all_logits.append(outputs.logits[:, -1, :])
 
@@ -2070,7 +2070,7 @@ class GenerationMixin:
                 next_hidden = torch.stack([all_last_hstates[i] for i in range(top_k)], dim=0)
                 final_full_hstates = [0 for i in range(len(full_hidden_states))]
                 for layer in range(len(full_hidden_states)):
-                    final_full_hstates[layer] = torch.stack([torch.squeeze(all_hstates[i][layer], 1)
+                    final_full_hstates[layer] = torch.stack([torch.squeeze(all_hstates[i][layer], 0)
                                                                             for i in range(top_k)], dim=0)
                 full_hidden_states = tuple(final_full_hstates)
 
@@ -2109,8 +2109,6 @@ class GenerationMixin:
             # compute the degeneration penalty and re-rank the candidates based on the degeneration penalty and the
             # model confidence
             selected_idx = _ranking_fast(context_hidden, next_hidden, top_k_probs, penalty_alpha, top_k)
-            print ('index: ', selected_idx)
-            print ('next_hidden', next_hidden)
 
             # prepare for the next step: (1) next token_id; (2) past_key_values; (3) last_hidden_states for computing
             # the degeneration penalty; (4) logits for selecting next top-k candidates; (5) selected tokens scores
