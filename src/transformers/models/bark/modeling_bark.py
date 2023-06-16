@@ -23,7 +23,10 @@ import torch.nn as nn
 
 from torch.nn import functional as F
 
-from transformers import LogitsProcessor, StoppingCriteria, EncodecModel
+from ...generation.logits_process import LogitsProcessor
+from ...generation.stopping_criteria import StoppingCriteria
+
+from ..encodec import EncodecModel
 
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel

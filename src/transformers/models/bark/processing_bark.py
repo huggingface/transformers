@@ -15,8 +15,8 @@
 """
 Processor class for Bark
 """
-
-from transformers import ProcessorMixin, AutoTokenizer
+from ...processing_utils import ProcessorMixin
+from ..auto import AutoTokenizer
 from typing import Optional, Tuple
 import warnings
 from transformers.utils.hub import cached_file
