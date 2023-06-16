@@ -339,7 +339,7 @@ class MLP(nn.Module):
 
 
 class BarkBlock(nn.Module):
-    def __init__(self, config, layer_idx, is_causal=False):
+    def __init__(self, config, is_causal=False):
         super().__init__()
 
         if is_causal:
@@ -358,7 +358,6 @@ class BarkBlock(nn.Module):
             self.ln_2 = nn.LayerNorm(config.hidden_size)
 
         self.mlp = MLP(config)
-        self.layer_idx = layer_idx
 
     def forward(
         self,
@@ -468,7 +467,7 @@ class BarkCausalModule(BarkModulePreTrainedModel):
                 "wte": nn.Embedding(config.input_vocab_size, config.hidden_size),
                 "wpe": nn.Embedding(config.block_size, config.hidden_size),
                 "drop": nn.Dropout(config.dropout),
-                "h": nn.ModuleList([BarkBlock(config, idx, is_causal=True) for idx in range(config.num_layers)]),
+                "h": nn.ModuleList([BarkBlock(config, is_causal=True) for _ in range(config.num_layers)]),
                 "ln_f": LayerNorm(config.hidden_size, bias=config.bias),
             }
         )
@@ -793,7 +792,7 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
                 "wpe": nn.Embedding(config.block_size, config.hidden_size),
                 "drop": nn.Dropout(config.dropout),
                 "h": nn.ModuleList(
-                    [BarkBlock(config, layer_idx, is_causal=False) for layer_idx in range(config.num_layers)]
+                    [BarkBlock(config, is_causal=False) for _ in range(config.num_layers)]
                 ),
                 "ln_f": nn.LayerNorm(config.hidden_size),
             }
