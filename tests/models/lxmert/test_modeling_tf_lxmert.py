@@ -532,55 +532,6 @@ class TFLxmertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
                 self.assert_outputs_same(after_outputs, outputs)
 
-    def test_compile_tf_model(self):
-        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
-        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
-
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(
-                return_obj_labels="PreTraining" in model_class.__name__
-            )
-
-            input_ids = tf.keras.Input(
-                batch_shape=(self.model_tester.batch_size, self.model_tester.seq_length),
-                name="input_ids",
-                dtype="int32",
-            )
-            visual_feats = tf.keras.Input(
-                batch_shape=(
-                    self.model_tester.batch_size,
-                    self.model_tester.num_visual_features,
-                    self.model_tester.visual_feat_dim,
-                ),
-                name="visual_feats",
-                dtype="int32",
-            )
-            visual_pos = tf.keras.Input(
-                batch_shape=(self.model_tester.batch_size, self.model_tester.num_visual_features, 4),
-                name="visual_pos",
-                dtype="int32",
-            )
-
-            # Prepare our model
-            model = model_class(config)
-
-            # Let's load it from the disk to be sure we can use pretrained weights
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                outputs = model(self._prepare_for_class(inputs_dict, model_class))  # build the model
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname)
-
-            outputs_dict = model(input_ids, visual_feats, visual_pos)
-            hidden_states = outputs_dict[0]
-
-            # Add a dense layer on top to test integration with other keras modules
-            outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
-
-            # Compile extended model
-            extended_model = tf.keras.Model(inputs=[input_ids, visual_feats, visual_pos], outputs=[outputs])
-            extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
-
     @tooslow
     def test_saved_model_creation(self):
         pass
