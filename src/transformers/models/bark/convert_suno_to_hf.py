@@ -10,8 +10,8 @@ from huggingface_hub import hf_hub_download
 from transformers import set_seed
 
 # TODO : how to import directly?
-from transformers.models.bark.configuration_bark import BarkModuleConfig
-from transformers.models.bark.modeling_bark import BarkCausalModule, BarkFineAcousticsModule
+from transformers.models.bark.configuration_bark import BarkSemanticConfig, BarkCoarseAcousticsConfig, BarkFineAcousticsConfig
+from transformers.models.bark.modeling_bark import BarkSemanticModule, BarkCoarseAcousticsModule, BarkFineAcousticsModule
 from transformers.utils import logging
 
 
@@ -73,11 +73,15 @@ def _download(from_hf_path, file_name):
 
 
 def _load_model(ckpt_path, device, use_small=False, model_type="text"):
-    ConfigClass = BarkModuleConfig
-    if model_type in ["text", "coarse"]:
-        ModelClass = BarkCausalModule
+    if model_type == "text":
+        ModelClass = BarkSemanticModule
+        ConfigClass = BarkSemanticConfig
+    elif model_type == "coarse":
+        ModelClass = BarkCoarseAcousticsModule
+        ConfigClass = BarkCoarseAcousticsConfig
     elif model_type == "fine":
         ModelClass = BarkFineAcousticsModule
+        ConfigClass = BarkFineAcousticsConfig
     else:
         raise NotImplementedError()
     model_key = f"{model_type}_small" if use_small else model_type

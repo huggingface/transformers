@@ -15,10 +15,12 @@
 """ BARK model configuration"""
 
 import copy
+import os
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
+from typing import Union
 
 logger = logging.get_logger(__name__)
 
@@ -122,6 +124,30 @@ class BarkModuleConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        # get the config dict if we are loading from Bark
+        if config_dict.get("model_type") == "bark":
+            config_dict = config_dict[f"{cls.model_type}_config"]
+
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warning(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
+
+        return cls.from_dict(config_dict, **kwargs)
+    
+class BarkSemanticConfig(BarkModuleConfig):
+    model_type = "semantic"
+
+class BarkCoarseAcousticsConfig(BarkModuleConfig):
+    model_type = "coarse_acoustics"
+
+class BarkFineAcousticsConfig(BarkModuleConfig):
+    model_type = "fine_acoustics"
 
 class BarkConfig(PretrainedConfig):
     """
@@ -170,9 +196,9 @@ class BarkConfig(PretrainedConfig):
 
     def __init__(
         self,
-        semantic_config: BarkModuleConfig = None,
-        coarse_acoustics_config: BarkModuleConfig = None,
-        fine_acoustics_config: BarkModuleConfig = None,
+        semantic_config: BarkSemanticConfig = None,
+        coarse_acoustics_config: BarkCoarseAcousticsConfig = None,
+        fine_acoustics_config: BarkFineAcousticsConfig = None,
         pretrained_encodec_name_or_path: str = "facebook/encodec_24khz",
         **kwargs,
     ):
@@ -190,9 +216,9 @@ class BarkConfig(PretrainedConfig):
             fine_acoustics_config = {}
             logger.info("fine_acoustics_config is None. initializing the Fine Acoustics module with default values.")
 
-        self.semantic_config = BarkModuleConfig(**semantic_config)
-        self.coarse_acoustics_config = BarkModuleConfig(**coarse_acoustics_config)
-        self.fine_acoustics_config = BarkModuleConfig(**fine_acoustics_config)
+        self.semantic_config = BarkSemanticConfig(**semantic_config)
+        self.coarse_acoustics_config = BarkCoarseAcousticsConfig(**coarse_acoustics_config)
+        self.fine_acoustics_config = BarkFineAcousticsConfig(**fine_acoustics_config)
         self.pretrained_encodec_name_or_path = pretrained_encodec_name_or_path
 
         # TODO: check if right place
@@ -217,9 +243,9 @@ class BarkConfig(PretrainedConfig):
     @classmethod
     def from_configs(
         cls,
-        semantic_config: BarkModuleConfig,
-        coarse_acoustics_config: BarkModuleConfig,
-        fine_acoustics_config: BarkModuleConfig,
+        semantic_config: BarkSemanticConfig,
+        coarse_acoustics_config: BarkCoarseAcousticsConfig,
+        fine_acoustics_config: BarkFineAcousticsConfig,
         **kwargs,
     ):
         r"""

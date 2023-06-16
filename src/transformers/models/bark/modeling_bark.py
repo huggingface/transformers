@@ -28,7 +28,7 @@ from transformers import LogitsProcessor, StoppingCriteria, EncodecModel
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from .configuration_bark import BarkConfig, BarkModuleConfig
+from .configuration_bark import BarkConfig, BarkModuleConfig, BarkSemanticConfig, BarkCoarseAcousticsConfig, BarkFineAcousticsConfig
 
 
 logger = logging.get_logger(__name__)
@@ -395,7 +395,6 @@ class BarkPreTrainedModel(PreTrainedModel):
     """
 
     config_class = BarkConfig
-    base_model_prefix = "bark"
     supports_gradient_checkpointing = False
 
     def _init_weights(self, module):
@@ -739,21 +738,24 @@ class BarkCausalModule(BarkModulePreTrainedModel):
     BARK_MODULE_START_DOCSTRING,
 )
 class BarkSemanticModule(BarkCausalModule):
-    base_model_prefix = "semantic_model"
+    base_model_prefix = "semantic"
+    config_class = BarkSemanticConfig
     
 @add_start_docstrings(
     "Bark sub-module at the core of the coarse acoustics sub-model. It shares the same architecture than the semantic model. It is a GPT-2 like autoregressive model with a language modeling head on top.",
     BARK_MODULE_START_DOCSTRING,
 )
 class BarkCoarseAcousticsModule(BarkCausalModule):
-    base_model_prefix = "coarse_acoustics_model"
+    base_model_prefix = "coarse_acoustics"
+    config_class = BarkCoarseAcousticsConfig
     
 @add_start_docstrings(
     "Bark sub-module at the core of the fine acoustics sub-model. It is a non-causal GPT-like model with 8 embedding layers and language modeling heads, one for each codebook.",
     BARK_MODULE_START_DOCSTRING,
 )
 class BarkFineAcousticsModule(BarkModulePreTrainedModel):
-    base_model_prefix = "fine_acoustics_model"
+    base_model_prefix = "fine_acoustics"
+    config_class = BarkFineAcousticsConfig
 
     def __init__(self, config):
         # non-causal gpt-like model with one embedding layer and one lm_head for each codebook of Encodec
@@ -954,13 +956,14 @@ class BarkModel(BarkPreTrainedModel):
     #    config_class=_CONFIG_FOR_DOC,
     # )
     _no_split_modules = ["BarkBlock"]
+    config_class = BarkConfig
 
     def __init__(self, config):
         super().__init__(config)
 
-        self.semantic_model = BarkSemanticModule(config.semantic_config)
-        self.coarse_acoustics_model = BarkCoarseAcousticsModule(config.coarse_acoustics_config)
-        self.fine_acoustics_model = BarkFineAcousticsModule(config.fine_acoustics_config)
+        self.semantic = BarkSemanticModule(config.semantic_config)
+        self.coarse_acoustics = BarkCoarseAcousticsModule(config.coarse_acoustics_config)
+        self.fine_acoustics = BarkFineAcousticsModule(config.fine_acoustics_config)
         
         self.codec_model = EncodecModel.from_pretrained(config.pretrained_encodec_name_or_path)
         
@@ -1037,8 +1040,8 @@ class BarkModel(BarkPreTrainedModel):
         # semantic_stopping_criteria = SemanticStoppingCriteria(min_eos_p , self.config.semantic_pad_token)
 
         # pass input_ids in order to stay consistent with the transformers generate method even though it is not used (except to get the input seq_len - that's why we keep the first 257 tokens)
-        semantic_output = self.semantic_model.generate(
-            input_ids[:, :257],
+        semantic_output = self.semantic.generate(
+            torch.ones((batch_size, 257), dtype = torch.int).to(self.device),
             input_embeds=input_embeds,
             logits_processor=[semantic_logits_processor],
             # stopping_criteria=[semantic_stopping_criteria],
@@ -1123,7 +1126,7 @@ class BarkModel(BarkPreTrainedModel):
                 x_in.shape[1], self.config.semantic_vocab_size, self.config.codebook_size
             )
 
-            x_out = self.coarse_acoustics_model.generate(
+            x_out = self.coarse_acoustics.generate(
                 x_in,
                 logits_processor=[alternatingLogitsProcessor],
                 renormalize_logits=True,  # renormalize after logits_processor
@@ -1216,7 +1219,7 @@ class BarkModel(BarkPreTrainedModel):
             rel_start_fill_idx = start_fill_idx - start_idx
             input_buffer = fine_input[:, start_idx : start_idx + 1024, :]
             for n_inner in range(n_coarse, self.config.n_fine_codebooks):
-                logits = self.fine_acoustics_model(n_inner, input_buffer).logits
+                logits = self.fine_acoustics(n_inner, input_buffer).logits
                 if temperature is None:
                     relevant_logits = logits[0, rel_start_fill_idx:, : self.config.codebook_size]
                     codebook_preds = torch.argmax(relevant_logits, -1)
