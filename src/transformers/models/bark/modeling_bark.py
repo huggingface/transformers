@@ -38,7 +38,8 @@ _CHECKPOINT_FOR_DOC = "suno/bark"
 _CONFIG_FOR_DOC = "BarkConfig"
 
 BARK_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "suno/bark",
+    "ylacombe/bark-small",
+    "ylacombe/bark-large",
     # See all Bark models at https://huggingface.co/models?filter=bark
 ]
 

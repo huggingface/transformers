@@ -20,6 +20,7 @@ from . import (
     auto,
     autoformer,
     bart,
+    bark,
     barthez,
     bartpho,
     beit,

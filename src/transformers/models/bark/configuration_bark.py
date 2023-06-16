@@ -26,7 +26,9 @@ logger = logging.get_logger(__name__)
 
 
 BARK_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "suno/bark": "https://huggingface.co/suno/bark/resolve/main/config.json",
+    "ylacombe/bark-small": "https://huggingface.co/ylacombe/bark-small/resolve/main/config.json",
+    "ylacombe/bark-large": "https://huggingface.co/ylacombe/bark-large/resolve/main/config.json",
+
 }
 
 

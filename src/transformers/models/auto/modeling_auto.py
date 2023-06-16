@@ -34,6 +34,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("audio-spectrogram-transformer", "ASTModel"),
         ("autoformer", "AutoformerModel"),
         ("bart", "BartModel"),
+        ("bark", "BarkModel"),
         ("beit", "BeitModel"),
         ("bert", "BertModel"),
         ("bert-generation", "BertGenerationEncoder"),
