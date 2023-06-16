@@ -492,7 +492,7 @@ class GenerationConfig(PushToHubMixin):
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
-            kwargs["token"] = use_auth_token
+            token = use_auth_token
 
         user_agent = {"file_type": "config", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
