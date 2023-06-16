@@ -1065,12 +1065,14 @@ class TFModelTesterMixin:
             output_for_kw_input = model(**inputs_np)
             self.assert_outputs_same(output_for_dict_input, output_for_kw_input)
 
-    def test_input_signature_valid(self):
+    def test_valid_input_signature_and_dummies(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config)
             call_args = inspect.signature(model.call).parameters
-            for key, val in model.input_signature.items():
+            for key in model.input_signature:
+                self.assertIn(key, call_args)
+            for key in model.dummy_inputs:
                 self.assertIn(key, call_args)
 
     def test_resize_token_embeddings(self):
