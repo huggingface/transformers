@@ -601,6 +601,7 @@ class TFGroupViTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
         pass
 
     @require_tensorflow_probability
+    @slow
     def test_keras_fit(self):
         super().test_keras_fit()
 
