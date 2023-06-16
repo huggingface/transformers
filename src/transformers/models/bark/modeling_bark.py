@@ -1081,29 +1081,29 @@ class BarkModel(BarkPreTrainedModel):
             semantic_idx = base_semantic_idx + int(round(total_generated_len / semantic_to_coarse_ratio))
 
             # pad from right side
-            x_in = semantic_output[:, np.max([0, semantic_idx - max_semantic_history]) :]
-            x_in = x_in[:, :256]
-            x_in = F.pad(
-                x_in,
-                (0, 256 - x_in.shape[-1]),
+            input_coarse = semantic_output[:, np.max([0, semantic_idx - max_semantic_history]) :]
+            input_coarse = input_coarse[:, :256]
+            input_coarse = F.pad(
+                input_coarse,
+                (0, 256 - input_coarse.shape[-1]),
                 "constant",
                 self.config.coarse_semantic_pad_token,
             )
 
-            x_in = torch.hstack(
+            input_coarse = torch.hstack(
                 [
-                    x_in,
+                    input_coarse,
                     torch.tensor([[self.config.coarse_infer_token]]*batch_size).to(self.device),
                     x_coarse[:, -max_coarse_history:],
                 ]
             )
 
             alternatingLogitsProcessor = AlternatingCodebooksLogitsProcessor(
-                x_in.shape[1], self.config.semantic_vocab_size, self.config.codebook_size
+                input_coarse.shape[1], self.config.semantic_vocab_size, self.config.codebook_size
             )
 
-            x_out = self.coarse_acoustics.generate(
-                x_in,
+            output_coarse = self.coarse_acoustics.generate(
+                input_coarse,
                 logits_processor=[alternatingLogitsProcessor],
                 renormalize_logits=True,  # renormalize after logits_processor
                 max_new_tokens=min(sliding_window_len, max_generated_len - total_generated_len),
@@ -1114,12 +1114,12 @@ class BarkModel(BarkPreTrainedModel):
                 **kwargs,
             )
 
-            x_in_len = x_in.shape[1]
+            input_coarse_len = input_coarse.shape[1]
 
-            x_coarse = torch.hstack([x_coarse, x_out[:, x_in_len:]])
+            x_coarse = torch.hstack([x_coarse, output_coarse[:, input_coarse_len:]])
             total_generated_len = x_coarse.shape[1] - len_coarse_history
 
-            del x_out
+            del output_coarse
 
         coarse_output = x_coarse[:, len_coarse_history:]
 
