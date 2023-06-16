@@ -2041,6 +2041,7 @@ class GenerationMixin:
             if low_memory:
                 all_outputs = {key:[] for key in outputs} # defined in first loop iteration
                 all_last_hstates = []
+                all_hstates = []
                 for i in range(len(top_k_ids)):
                     # compute the candidate tokens by the language model and collect their hidden_states
                     next_model_inputs = self.prepare_inputs_for_generation(top_k_ids[:, i].unsqueeze(0), 
@@ -2066,9 +2067,8 @@ class GenerationMixin:
                     all_hstates.append(full_hidden_states)
 
                 # stack hidden states
-                for i in range(top_k):
-                    next_hidden = torch.stack(all_last_hstates[i], dim=0)
-                    full_hidden_states = torch.stack(all_hstates[i], dim=0)
+                next_hidden = torch.stack([all_last_hstates[i] for i in range(top_k)], dim=0)
+                full_hidden_states = torch.stack([all_hstates[i] for i in range(top_k)], dim=0)
 
                 # stack all_outputs attentions
                 for key in all_outputs:
@@ -2099,8 +2099,6 @@ class GenerationMixin:
             next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
             logits = outputs.logits[:, -1, :]
             
-
-            print (next_hidden.shape)
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
 
             # compute the degeneration penalty and re-rank the candidates based on the degeneration penalty and the
