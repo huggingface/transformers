@@ -14,15 +14,14 @@
 # limitations under the License.
 """ Testing suite for the PyTorch MBART model. """
 import copy
-import tempfile
 import unittest
 
-from transformers import MusicgenConfig, MusicgenDecoderConfig, is_torch_available
+from transformers import MusicgenDecoderConfig, is_torch_available
 from transformers.testing_utils import require_torch, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -30,9 +29,8 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MusicgenForConditionalGeneration,
-        MusicgenModel,
         MusicgenForCausalLM,
+        MusicgenModel,
     )
 
 
@@ -50,13 +48,9 @@ def prepare_musicgen_decoder_inputs_dict(
     if head_mask is None:
         head_mask = torch.ones(config.num_hidden_layers, config.num_attention_heads, device=torch_device)
     if encoder_attention_mask is None and encoder_hidden_states is not None:
-        encoder_attention_mask = torch.ones(
-            encoder_hidden_states.shape[:2], device=torch_device
-        )
+        encoder_attention_mask = torch.ones(encoder_hidden_states.shape[:2], device=torch_device)
     if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(
-            config.num_hidden_layers, config.num_attention_heads, device=torch_device
-        )
+        cross_attn_head_mask = torch.ones(config.num_hidden_layers, config.num_attention_heads, device=torch_device)
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
@@ -111,7 +105,9 @@ class MusicgenDecoderTester:
         encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
 
         config = self.get_config()
-        inputs_dict = prepare_musicgen_decoder_inputs_dict(config, input_ids, encoder_hidden_states=encoder_hidden_states)
+        inputs_dict = prepare_musicgen_decoder_inputs_dict(
+            config, input_ids, encoder_hidden_states=encoder_hidden_states
+        )
         return config, inputs_dict
 
     def get_config(self):
@@ -131,6 +127,7 @@ class MusicgenDecoderTester:
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
+
 
 @require_torch
 class MusicgenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -179,8 +176,9 @@ class MusicgenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
             embed_tokens = model.get_input_embeddings()
 
-            inputs["inputs_embeds"] = sum([embed_tokens[codebook](input_ids[:, codebook]) for codebook in range(config.num_codebooks)])
+            inputs["inputs_embeds"] = sum(
+                [embed_tokens[codebook](input_ids[:, codebook]) for codebook in range(config.num_codebooks)]
+            )
 
             with torch.no_grad():
                 model(**inputs)[0]
-

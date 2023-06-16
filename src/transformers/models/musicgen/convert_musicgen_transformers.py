@@ -75,8 +75,8 @@ def rename_keys(name):
 
 def rename_state_dict(state_dict: OrderedDict, d_model: int) -> Tuple[Dict, Dict]:
     """Function that takes the fairseq Musicgen state dict and renames it according to the HF
-    module names. It further partitions the state dict into the decoder (LM) state dict, and that
-    for the encoder-decoder projection."""
+    module names. It further partitions the state dict into the decoder (LM) state dict, and that for the
+    encoder-decoder projection."""
     keys = list(state_dict.keys())
     enc_dec_proj_state_dict = {}
     for key in keys:

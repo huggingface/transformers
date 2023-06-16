@@ -140,10 +140,10 @@ class MusicgenConfig(PretrainedConfig):
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
 
-                - **text_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the text encoder config.
-                - **audio_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the audio encoder config.
+                - **text_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                  defines the text encoder config.
+                - **audio_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                  defines the audio encoder config.
                 - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
                   the decoder config.
 

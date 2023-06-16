@@ -2126,11 +2126,11 @@ else:
     _import_structure["models.musicgen"].extend(
         [
             "MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MusicgenForConditionalGeneration",
             "MusicgenForCausalLM",
+            "MusicgenForConditionalGeneration",
             "MusicgenModel",
-            "MusicgenProcessor",
             "MusicgenPreTrainedModel",
+            "MusicgenProcessor",
         ]
     )
     _import_structure["models.mvp"].extend(
@@ -5694,8 +5694,8 @@ if TYPE_CHECKING:
         from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model, MT5PreTrainedModel
         from .models.musicgen import (
             MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MusicgenForConditionalGeneration,
             MusicgenForCausalLM,
+            MusicgenForConditionalGeneration,
             MusicgenModel,
             MusicgenPreTrainedModel,
             MusicgenProcessor,

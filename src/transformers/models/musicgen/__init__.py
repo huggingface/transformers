@@ -55,8 +55,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_musicgen import (
             MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MusicgenForConditionalGeneration,
             MusicgenForCausalLM,
+            MusicgenForConditionalGeneration,
             MusicgenModel,
             MusicgenPreTrainedModel,
         )
