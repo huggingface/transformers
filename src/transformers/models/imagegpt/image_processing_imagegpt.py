@@ -199,7 +199,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         do_color_quantize = do_color_quantize if do_color_quantize is not None else self.do_color_quantize
         clusters = clusters if clusters is not None else self.clusters
-        np.array(clusters)
+        clusters = np.array(clusters)
 
         images = make_list_of_images(images)
 
