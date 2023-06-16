@@ -141,6 +141,7 @@ class OwlViTTextConfig(PretrainedConfig):
                 )
             token = use_auth_token
 
+        if token is not None:
             # change to `token` in a follow-up PR
             kwargs["use_auth_token"] = token
 
@@ -260,6 +261,7 @@ class OwlViTVisionConfig(PretrainedConfig):
                 )
             token = use_auth_token
 
+        if token is not None:
             # change to `token` in a follow-up PR
             kwargs["use_auth_token"] = token
 
@@ -347,6 +349,7 @@ class OwlViTConfig(PretrainedConfig):
                 )
             token = use_auth_token
 
+        if token is not None:
             # change to `token` in a follow-up PR
             kwargs["use_auth_token"] = token
 
