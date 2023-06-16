@@ -2042,7 +2042,7 @@ class GenerationMixin:
                 all_outputs = {key:[] for key in outputs} # defined in first loop iteration
                 all_last_hstates = []
                 all_hstates = []
-                for i in range(len(top_k_ids)):
+                for i in range(top_k):
                     # compute the candidate tokens by the language model and collect their hidden_states
                     next_model_inputs = self.prepare_inputs_for_generation(top_k_ids[:, i].unsqueeze(0), 
                                                 **model_kwargs)
@@ -2066,8 +2066,6 @@ class GenerationMixin:
                     all_last_hstates.append(next_hidden)
                     all_hstates.append(full_hidden_states)
 
-                print (len(all_last_hstates))
-                print (len(all_hstates))
                 # stack hidden states
                 next_hidden = torch.stack([all_last_hstates[i] for i in range(top_k)], dim=0)
                 full_hidden_states = torch.stack([all_hstates[i] for i in range(top_k)], dim=0)
