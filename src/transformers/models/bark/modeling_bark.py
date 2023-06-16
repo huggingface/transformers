@@ -84,7 +84,7 @@ BARK_START_DOCSTRING = r"""
 
 BARK_ACOUSTICS_FINE_INPUTS_DOCSTRING = r"""
     Args:
-        pred_idx (`int`):
+        codebook_idx (`int`):
             Indice of the codebook that will be predicted.
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, number_of_codebooks)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -777,17 +777,13 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
         self.transformer.wtes = new_embeddings
 
 
-    def _get_and_check_input_embeddings(self, input_ids, input_embeds, codebook_idx):
-
-
-        return input_embeds
 
     # contrary to the other main module of Bark (BarkCausalModule), it is non-causal, so no need for past key values
     # And there is an additionnal idx corresponding to the id of the codebook that will be predicted
     @add_start_docstrings_to_model_forward(BARK_ACOUSTICS_FINE_INPUTS_DOCSTRING)
     def forward(
         self,
-        pred_idx: int,
+        codebook_idx: int,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -804,17 +800,11 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        assert pred_idx > 0, "cannot predict 0th codebook"
+        assert codebook_idx > 0, "cannot predict 0th codebook"
 
         if input_ids is not None and input_embeds is not None:
             raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
         elif input_ids is not None:
-            batch_size, seq_len, codes = input_ids.size()
-            assert (
-                batch_size <= self.config.block_size
-            ), f"Cannot forward sequence of length {seq_len}, block size is only {self.config.block_size}"
-
-            assert codes == self.n_codes_total, (batch_size, seq_len, codes)
             # the input_embeddings are the sum of the j previous codebooks embeddings before the current codebook_idx codebook
 
             # forward the GPT model itself
@@ -883,7 +873,7 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        logits = self.lm_heads[pred_idx - self.config.n_codes_given](hidden_states)
+        logits = self.lm_heads[codebook_idx - self.config.n_codes_given](hidden_states)
 
         loss = None
         if labels is not None:
