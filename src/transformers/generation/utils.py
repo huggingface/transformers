@@ -2040,6 +2040,7 @@ class GenerationMixin:
 
             if low_memory:
                 all_outputs = {key:[] for key in outputs} # defined in first loop iteration
+                all_last_hstates = []
                 for i in range(len(top_k_ids)):
                     # compute the candidate tokens by the language model and collect their hidden_states
                     next_model_inputs = self.prepare_inputs_for_generation(top_k_ids[:, i].unsqueeze(0), 
@@ -2053,6 +2054,23 @@ class GenerationMixin:
                     for key in all_outputs:
                         all_outputs[key].append(outputs[key])
 
+                    if self.config.is_encoder_decoder:
+                        next_hidden = outputs.decoder_hidden_states[-1]
+                        full_hidden_states = outputs.decoder_hidden_states
+
+                    else:
+                        next_hidden = outputs.hidden_states[-1]
+                        full_hidden_states = outputs.hidden_states
+                    
+                    all_last_hstates.append(next_hidden)
+                    all_hstates.append(full_hidden_states)
+
+                # stack hidden states
+                for i in range(top_k):
+                    next_hidden = torch.stack(all_last_hstates[i], dim=0)
+                    full_hidden_states = torch.stack(all_hstates[i], dim=0)
+
+                # stack all_outputs attentions
                 for key in all_outputs:
                     if torch.is_tensor(all_outputs[key]):
                         outputs[key] = torch.stack(all_outputs[key], dim=0)
@@ -2068,16 +2086,19 @@ class GenerationMixin:
                     output_hidden_states=True, 
                     output_attentions=output_attentions
                 )
+                # name is different for encoder-decoder and decoder-only models
+                if self.config.is_encoder_decoder:
+                    next_hidden = outputs.decoder_hidden_states[-1]
+                    full_hidden_states = outputs.decoder_hidden_states
+                else:
+                    next_hidden = outputs.hidden_states[-1]
+                    full_hidden_states = outputs.hidden_states
+
+            print (next_hidden.shape, full_hidden_states.shape)
 
             next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
             logits = outputs.logits[:, -1, :]
-            # name is different for encoder-decoder and decoder-only models
-            if self.config.is_encoder_decoder:
-                next_hidden = outputs.decoder_hidden_states[-1]
-                full_hidden_states = outputs.decoder_hidden_states
-            else:
-                next_hidden = outputs.hidden_states[-1]
-                full_hidden_states = outputs.hidden_states
+            
 
             print (next_hidden.shape)
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
