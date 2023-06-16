@@ -1811,7 +1811,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
-        low_memory: Optional[bool] = True,
+        low_memory: Optional[bool] = False,
         **model_kwargs,
     ) -> Union[ContrastiveSearchOutput, torch.LongTensor]:
         r"""
@@ -2038,14 +2038,17 @@ class GenerationMixin:
                 new_key_values.append(items)
             model_kwargs["past_key_values"] = new_key_values
 
-            # if the used memory exceeds a threshold, do not batch
             if low_memory:
                 all_outputs = {key:[] for key in outputs} # defined in first loop iteration
                 for i in range(len(top_k_ids)):
                     # compute the candidate tokens by the language model and collect their hidden_states
-                    next_model_inputs = self.prepare_inputs_for_generation(top_k_ids[:, i].unsqueeze(0), **model_kwargs)
+                    next_model_inputs = self.prepare_inputs_for_generation(top_k_ids[:, i].unsqueeze(0), 
+                                                **model_kwargs)
                     outputs = self(
-                        **next_model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions
+                        **next_model_inputs, 
+                        return_dict=True, 
+                        output_hidden_states=True, 
+                        output_attentions=output_attentions
                     )
                     for key in all_outputs:
                         all_outputs[key].append(outputs[key])
@@ -2060,7 +2063,10 @@ class GenerationMixin:
                 next_model_inputs = self.prepare_inputs_for_generation(top_k_ids.view(-1, 1), **model_kwargs)
 
                 outputs = self(
-                    **next_model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions
+                    **next_model_inputs, 
+                    return_dict=True, 
+                    output_hidden_states=True, 
+                    output_attentions=output_attentions
                 )
 
             next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
@@ -2073,6 +2079,7 @@ class GenerationMixin:
                 next_hidden = outputs.hidden_states[-1]
                 full_hidden_states = outputs.hidden_states
 
+            print (next_hidden.shape)
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
 
             # compute the degeneration penalty and re-rank the candidates based on the degeneration penalty and the
