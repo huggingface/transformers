@@ -368,8 +368,11 @@ class BarkBlock(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
+        
+        hidden_states = self.ln_1(hidden_states)
+        
         attn_outputs = self.attn(
-            self.ln_1(hidden_states),
+            hidden_states,
             past_kv=past_kv,
             attention_mask=attention_mask,
             head_mask=head_mask,
