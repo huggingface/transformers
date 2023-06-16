@@ -778,29 +778,7 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
 
 
     def _get_and_check_input_embeddings(self, input_ids, input_embeds, codebook_idx):
-        # the input_embeddings are the sum of the j previous codebooks embeddings before the current codebook_idx codebook
 
-        if input_ids is not None and input_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
-        elif input_ids is not None:
-            batch_size, seq_len, codes = input_ids.size()
-            assert (
-                batch_size <= self.config.block_size
-            ), f"Cannot forward sequence of length {seq_len}, block size is only {self.config.block_size}"
-
-            assert codes == self.n_codes_total, (batch_size, seq_len, codes)
-
-            # forward the GPT model itself
-            input_embeds = [
-                wte(input_ids[:, :, i]).unsqueeze(-1) for i, wte in enumerate(self.transformer.wtes)
-            ]  # token embeddings of shape (b, t, n_embd)
-            input_embeds = torch.cat(input_embeds, dim=-1)
-            input_embeds = input_embeds[:, :, :, : codebook_idx + 1].sum(dim=-1)
-
-        elif input_embeds is not None:
-            input_embeds = self.transformer.wte(input_ids)  # token embeddings of shape (b, t, n_embd)
-        else:
-            raise ValueError("You have to specify either input_ids or input_embeds")
 
         return input_embeds
 
@@ -827,8 +805,31 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         assert pred_idx > 0, "cannot predict 0th codebook"
-        input_embeds = self._get_and_check_input_embeddings(input_ids, input_embeds, pred_idx)
 
+        if input_ids is not None and input_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
+        elif input_ids is not None:
+            batch_size, seq_len, codes = input_ids.size()
+            assert (
+                batch_size <= self.config.block_size
+            ), f"Cannot forward sequence of length {seq_len}, block size is only {self.config.block_size}"
+
+            assert codes == self.n_codes_total, (batch_size, seq_len, codes)
+            # the input_embeddings are the sum of the j previous codebooks embeddings before the current codebook_idx codebook
+
+            # forward the GPT model itself
+            input_embeds = [
+                wte(input_ids[:, :, i]).unsqueeze(-1) for i, wte in enumerate(self.transformer.wtes)
+            ]  # token embeddings of shape (b, t, n_embd)
+            input_embeds = torch.cat(input_embeds, dim=-1)
+            input_embeds = input_embeds[:, :, :, : codebook_idx + 1].sum(dim=-1)
+
+        elif input_embeds is not None:
+            input_embeds = self.transformer.wte(input_ids)  # token embeddings of shape (b, t, n_embd)
+        else:
+            raise ValueError("You have to specify either input_ids or input_embeds")
+        
+        
         input_shape = input_embeds.size()[:-1]
         batch_size = input_embeds.shape[0]
         seq_length = input_shape[1]
