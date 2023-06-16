@@ -204,11 +204,15 @@ class TextClassificationPipelineTests(unittest.TestCase):
         text_classifier.tokenizer.model_max_length = 10
         sentence = "'A very effective product; very effective and useful' <- reviews like this are fake and made by bots. Awful product. DO NOT BUY!"
 
-        output = text_classifier(sentence)
-        self.assertEqual(nested_simplify(output), [{"label": "NEGATIVE", "score": 0.555}])
+        output = text_classifier(sentence, return_all_scores=True)
+        self.assertEqual(
+            nested_simplify(output), [[{"label": "NEGATIVE", "score": 0.654}, {"label": "POSITIVE", "score": 0.346}]]
+        )
 
         # Test running the model on the entire text; it should be a different
         # result than running a small sliding window
         text_classifier.tokenizer.model_max_length = text_classifier.model.config.max_position_embeddings
-        output = text_classifier(sentence)
-        self.assertEqual(nested_simplify(output), [{"label": "NEGATIVE", "score": 0.99}])
+        output = text_classifier(sentence, return_all_scores=True)
+        self.assertEqual(
+            nested_simplify(output), [[{"label": "NEGATIVE", "score": 0.99}, {"label": "POSITIVE", "score": 0.01}]]
+        )
