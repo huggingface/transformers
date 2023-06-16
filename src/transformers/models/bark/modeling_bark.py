@@ -532,33 +532,6 @@ class BarkCausalModule(BarkModulePreTrainedModel):
             "attention_mask": attention_mask,
         }
 
-    def _get_and_check_input_embeddings(self, input_ids, input_embeds, past_key_values):
-        # Verify if input_embeds already exists, and check sequence_lengths are plausible
-        # then compute embeddings.
-        # In a separate function because the Semantic model computes it differently.
-
-        if input_ids is not None and input_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
-        elif input_embeds is not None and past_key_values is None:
-            # we want to return the input_embeds in priority so that it is in line with a weird hack of Bark which concatenate two bits of the input_embeds on the first forward pass of the semantic model
-            pass
-        elif input_ids is not None:
-            _, t = input_ids.size()  # (batch_size, seq_len)
-            if past_key_values is not None:
-                # in that case, embeddings for past tokens have already been computed, so only need to compute the most
-                # recent token embedding
-                assert t == 1
-            else:
-                assert (
-                    t <= self.config.block_size
-                ), f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
-            input_embeds = self.transformer.wte(input_ids)  # token embeddings of shape (b, t, n_embd)
-        elif input_embeds is not None:
-            pass
-        else:
-            raise ValueError("You have to specify either input_ids or input_embeds")
-
-        return input_embeds
 
     @add_start_docstrings_to_model_forward(BARK_CAUSAL_MODULE_INPUTS_DOCSTRING)
     def forward(
@@ -582,8 +555,20 @@ class BarkCausalModule(BarkModulePreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        input_embeds = self._get_and_check_input_embeddings(input_ids, input_embeds, past_key_values)
-
+        # Verify if input_embeds already exists
+        # then compute embeddings.
+        if input_ids is not None and input_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
+        elif input_embeds is not None and past_key_values is None:
+            # we want to return the input_embeds in priority so that it is in line with a weird hack of Bark which concatenate two bits of the input_embeds on the first forward pass of the semantic model
+            pass
+        elif input_ids is not None:
+            input_embeds = self.transformer.wte(input_ids)  # token embeddings of shape (b, t, n_embd)
+        elif input_embeds is not None:
+            pass
+        else:
+            raise ValueError("You have to specify either input_ids or input_embeds")
+        
         input_shape = input_embeds.size()[:-1]
         batch_size = input_embeds.shape[0]
         seq_length = input_shape[-1]
