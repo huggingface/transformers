@@ -151,6 +151,7 @@ else:
         "TFAutoModelForSequenceClassification",
         "TFAutoModelForSpeechSeq2Seq",
         "TFAutoModelForTableQuestionAnswering",
+        "TFAutoModelForTextEncoding",
         "TFAutoModelForTokenClassification",
         "TFAutoModelForVision2Seq",
         "TFAutoModelForZeroShotImageClassification",
