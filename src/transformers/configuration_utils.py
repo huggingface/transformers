@@ -560,8 +560,8 @@ class PretrainedConfig(PushToHubMixin):
                 )
             token = use_auth_token
 
-        # change to `token` in a follow-up PR
-        kwargs["use_auth_token"] = token
+            # change to `token` in a follow-up PR
+            kwargs["use_auth_token"] = token
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
