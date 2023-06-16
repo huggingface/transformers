@@ -18,7 +18,7 @@ from __future__ import annotations
 import unittest
 
 from transformers import T5Config, is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow, tooslow
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -299,10 +299,6 @@ class TFT5ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = (config, input_ids, None, input_mask)
 
         self.model_tester.create_and_check_t5_decoder_model_past_large_inputs(*config_and_inputs)
-
-    @tooslow
-    def test_saved_model_creation(self):
-        pass
 
     @slow
     def test_model_from_pretrained(self):

@@ -2676,7 +2676,6 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="model")
-        self.model._set_save_spec(self._prune_signature(self.input_signature))
         self.use_cache = config.use_cache
         # final_bias_logits is registered as a buffer in pytorch, so not trainable for the sake of consistency.
         self.bias_layer = BiasLayer(

@@ -1216,12 +1216,11 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
     def call(
         self,
         input_ids: tf.Tensor,
-        pixel_values: tf.Tensor,
+        pixel_values: tf.Tensor | None = None,
         decoder_input_ids: tf.Tensor | None = None,
         decoder_attention_mask: tf.Tensor | None = None,
         attention_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
-        foutput_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         labels: tf.Tensor | None = None,
         return_dict: Optional[bool] = None,
