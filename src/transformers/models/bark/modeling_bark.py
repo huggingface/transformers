@@ -1009,24 +1009,48 @@ class BarkModel(BarkPreTrainedModel):
 
     def generate_text_semantic(
         self,
-        inputs: torch.Tensor,
+        input_ids: torch.Tensor,
         history_prompt: Optional[Dict[str, np.ndarray]] = None,
         **kwargs,
     ) -> torch.LongTensor:
         # TODO: add a max_gen_duration_s early stop
-
-        input_ids = inputs
 
         # TODO: Not used for now. where to set the default value ?
         # min_eos_p = kwargs.get("min_eos_p", 0.2)
 
         # TODO: input_ids[:,256:256+256] (to verify) corresponds to history_prompt["semantic_prompt"], maybe use that
         # input_ids should be of shape (batch_size, seq_len) where seq_len = 513
+        batch_size = input_ids.shape[0]
+        
+        input_ids = input_ids + self.config.text_encoding_offset
+        
+        if "attention_mask" in kwargs:
+            input_ids.masked_fill_((1 - kwargs.pop("attention_mask")).bool(), self.config.text_pad_token)
+            
+        if history_prompt is not None:
+            semantic_history = history_prompt["semantic_prompt"][-256:]
+            semantic_history = np.pad(
+                    semantic_history,
+                    (0, 256 - len(semantic_history)),
+                    constant_values=self.config.semantic_pad_token,
+                    mode="constant",
+                )
+        else:
+            semantic_history = np.array([self.config.semantic_pad_token] * 256)
+        
+
+        semantic_history = np.repeat(semantic_history[None], batch_size, axis = 0)
+        semantic_history = torch.from_numpy(semantic_history).to(self.device)
+        
+        infer_array = torch.from_numpy(np.array([[self.config.semantic_infer_token]]*batch_size)).to(self.device)
+            
+            
+        
         input_embeds = torch.cat(
             [
-                self.semantic_model.transformer.wte(input_ids[:, :256])
-                + self.semantic_model.transformer.wte(input_ids[:, 256 : 256 + 256]),
-                self.semantic_model.transformer.wte(input_ids[:, 256 + 256 :]),
+                self.semantic.transformer.wte(input_ids[:, :256])
+                + self.semantic.transformer.wte(semantic_history[:, :257]),
+                self.semantic.transformer.wte(infer_array),
             ],
             dim=1,
         )
@@ -1263,7 +1287,7 @@ class BarkModel(BarkPreTrainedModel):
     # _inference_mode()
     def generate_audio(
         self,
-        inputs: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
         history_prompt: Optional[Dict[str, np.ndarray]] = None,
         max_coarse_history: int = 630,
         sliding_window_len: int = 60,
@@ -1273,9 +1297,8 @@ class BarkModel(BarkPreTrainedModel):
         Generates audio from an input prompt and an additional optional `Bark` speaker prompt.
 
         Args:
-            inputs (Optional[torch.Tensor] of shape (batch_size, 513), optional):
-                Input ids. The first 256 tokens correspond to the tokenized input prompts. The next 256 tokens
-                corresponds to a padded semantic prompt taken from history prompt.
+            input_ids (Optional[torch.Tensor] of shape (batch_size, seq_len), optional):
+                Input ids. Will be truncated up to 256 tokens.
                 Note that the output audios will be as long as the longest generation among the batch.
             The last token is `semantic_infer_token`. Note that batch_size is set to 1 to generate one audio per audio. Defaults to None.:
             history_prompt (Optional[Dict[str,np.ndarray]], optional):
@@ -1291,7 +1314,8 @@ class BarkModel(BarkPreTrainedModel):
 
         ##### 1. Generate from the semantic model
 
-        semantic_output = self.generate_text_semantic(inputs, history_prompt, **kwargs)
+        semantic_output = self.generate_text_semantic(input_ids, history_prompt, attention_mask = kwargs.pop("attention_mask", None),
+                                                      **kwargs)
 
         ##### 2. Generate from the coarse model
 
