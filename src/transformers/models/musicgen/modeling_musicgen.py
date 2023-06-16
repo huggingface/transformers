@@ -1909,9 +1909,17 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             return output_values
 
     def generate_unconditional(self, num_samples=1, **kwargs):
+        """A wrapper around the generate method for generating audio samples without any text or audio prompt,
+        enabling the model to be used without the feature extractor or tokenizer.
+        Parameters:
+            num_samples (int, *optional*):
+                Number of samples to unconditionally generate.
+        """
         last_hidden_state = torch.zeros(
             (num_samples, 1, self.config.text_encoder.hidden_size), device=self.device, dtype=self.dtype
         )
+        encoder_outputs = BaseModelOutput(last_hidden_state=last_hidden_state)
+
         # TODO(SG): check this works with fp16 precision
         attention_mask = torch.zeros((num_samples, 1), device=self.device, dtype=torch.long)
-        return self.generate(attention_mask=attention_mask, encoder_outputs=(last_hidden_state,), **kwargs)
+        return self.generate(attention_mask=attention_mask, encoder_outputs=encoder_outputs, guidance_scale=1, **kwargs)
