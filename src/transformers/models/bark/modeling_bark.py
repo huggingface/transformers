@@ -319,7 +319,7 @@ class LayerNorm(nn.Module):
         self.bias = nn.Parameter(torch.zeros(hidden_size)) if bias else None
 
     def forward(self, input):
-        return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-5)
+        return F.layer_norm(input, self.weight.shape, self.weight, self.bias, eps=1e-5)
 
 
 class MLP(nn.Module):
