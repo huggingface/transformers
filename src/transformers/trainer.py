@@ -2258,7 +2258,7 @@ class Trainer:
 
         if self.fsdp or self.is_fsdp_enabled:
             if self.is_fsdp_enabled:
-                save_fsdp_optimizer(
+                full_osd = save_fsdp_optimizer(
                     self.accelerator.state.fsdp_plugin, self.accelerator, self.optimizer, self.model, output_dir
                 )
             else:
