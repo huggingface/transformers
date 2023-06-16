@@ -125,7 +125,7 @@ def _load_model(ckpt_path, device, use_small=False, model_type="text"):
     if len(missing_keys) != 0:
         raise ValueError(f"missing keys: {missing_keys}")
     model.load_state_dict(state_dict, strict=False)
-    n_params = model.get_num_params()
+    n_params = model.num_parameters(exclude_embeddings=True)
     val_loss = checkpoint["best_val_loss"].item()
     logger.info(f"model loaded: {round(n_params/1e6,1)}M params, {round(val_loss,3)} loss")
     model.eval()
@@ -150,7 +150,7 @@ def load_model(pytorch_dump_folder_path, use_small=False, model_type="text"):
     if model_type == "text":
         bark_model = bark_model["model"]
     assert (
-        model.get_num_params() == bark_model.get_num_params()
+        model.num_parameters(exclude_embeddings=True) == bark_model.get_num_params()
     ), "initial and new models don't have the same number of parameters"
 
     # check if same output as the bark model

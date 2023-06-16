@@ -478,17 +478,6 @@ class BarkCausalModule(BarkModulePreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.transformer.wte = new_embeddings
 
-    def get_num_params(self, non_embedding=True):
-        """
-        Return the number of parameters in the model. For non-embedding count (default), the position embeddings get
-        subtracted. The token embeddings would too, except due to the parameter sharing these params are actually used
-        as weights in the final layer, so we include them.
-        """
-        n_params = sum(p.numel() for p in self.parameters())
-        if non_embedding:
-            n_params -= self.transformer.wte.weight.numel()
-            n_params -= self.transformer.wpe.weight.numel()
-        return n_params
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
         input_embeds = kwargs.get("input_embeds", None)
@@ -801,18 +790,6 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
         # one embedding layers for each codebook
         self.transformer.wtes = new_embeddings
 
-    def get_num_params(self, non_embedding=True):
-        """
-        Return the number of parameters in the model. For non-embedding count (default), the position embeddings get
-        subtracted. The token embeddings would too, except due to the parameter sharing these params are actually used
-        as weights in the final layer, so we include them.
-        """
-        n_params = sum(p.numel() for p in self.parameters())
-        if non_embedding:
-            for wte in self.transformer.wtes:
-                n_params -= wte.weight.numel()
-            n_params -= self.transformer.wpe.weight.numel()
-        return n_params
 
     def _get_and_check_input_embeddings(self, input_ids, input_embeds, pred_idx):
         # the input_embeddings are the sum of the j previous codebooks embeddings before the current pred_idx codebook
