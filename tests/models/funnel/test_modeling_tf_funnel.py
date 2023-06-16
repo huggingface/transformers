@@ -390,10 +390,6 @@ class TFFunnelModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_saved_model_creation(self):
         pass
 
-    def test_compile_tf_model(self):
-        # This test fails the CI. TODO Lysandre re-enable it
-        pass
-
 
 @require_tf
 class TFFunnelBaseModelTest(TFModelTesterMixin, unittest.TestCase):

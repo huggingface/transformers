@@ -766,12 +766,11 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         batch_size, seq_len = input_shape[0], input_shape[1]
 
-        if seq_len > 1:
-            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
-        else:
-            combined_attention_mask = _expand_mask(
-                tf.ones((batch_size, seq_len + past_key_values_length)), tgt_len=seq_len
-            )
+        combined_attention_mask = tf.cond(
+            tf.math.greater(seq_len, 1),
+            lambda: _make_causal_mask(input_shape, past_key_values_length=past_key_values_length),
+            lambda: _expand_mask(tf.ones((batch_size, seq_len + past_key_values_length)), tgt_len=seq_len),
+        )
 
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
