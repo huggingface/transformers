@@ -82,7 +82,7 @@ else:
         AddedToken represents a token to be added to a Tokenizer An AddedToken can have special options defining the
         way it should behave.
         """
-
+        id: int = None
         content: str = field(default_factory=str)
         single_word: bool = False
         lstrip: bool = False
@@ -1520,7 +1520,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     padding_side: str = "right"
     truncation_side: str = "right"
     slow_tokenizer_class = None
-
+    added_tokens_encoder: Dict[str, int] = {}
+    added_tokens_decoder: Dict[int, AddedToken] = {}
+        
     def __init__(self, **kwargs):
         # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
         self.init_inputs = ()
@@ -2016,29 +2018,30 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 if key in kwargs and kwargs[key]:
                     # This value has already been redefined by the kwargs
                     # We keep this new value and ignore the one stored in the special_tokens_map_file
-
                     continue
-
                 if isinstance(value, dict):
                     value = AddedToken(**value)
                 elif isinstance(value, list):
                     value = [AddedToken(**token) if isinstance(token, dict) else token for token in value]
                 setattr(tokenizer, key, value)
 
-        # Add supplementary tokens. The Trie is created here for slow.
-        special_tokens = tokenizer.all_special_tokens
+        added_tokens_decoder = { id:token for token,id in zip(tokenizer.all_special_ids, tokenizer.all_special_tokens_extended)}
+        added_tokens_encoder = { token.content:id for id, token in added_tokens_decoder.items()}
+        
         if added_tokens_file is not None:
             with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                 added_tok_encoder = json.load(added_tokens_handle)
+            for key, value in added_tok_encoder.items():
+                if isinstance(value, dict):
+                    token = AddedToken(**value)
+                    added_tokens_encoder.update({token.content:int(key)})
+                    added_tokens_decoder.update({int(key):token})
 
             # Sort added tokens by index
-            added_tok_encoder_sorted = sorted(added_tok_encoder.items(), key=lambda x: x[1])
-
-            added_special_tokens = []
-            non_special_tokens = []
-
+            added_tok_encoder_sorted = sorted(added_tokens_encoder.items(), key=lambda x: x[1])
+            nb_added_tokens = 0
             for token, index in added_tok_encoder_sorted:
-                current_index = len(tokenizer) + len(added_special_tokens) + len(non_special_tokens)
+                current_index = len(tokenizer) + nb_added_tokens
                 if has_tokenizer_file and index != current_index and tokenizer.convert_tokens_to_ids(token) != index:
                     # Tokenizer fast: added token needs to either be in the vocabulary with the proper index or the
                     # index is the current length of the tokenizer (not in vocabulary)
@@ -2054,31 +2057,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         f"Should have index {current_index} but has index {index} in saved vocabulary."
                     )
 
-                is_special = bool(token in special_tokens)
-                if is_special:
-                    added_special_tokens.append(token)
-                else:
-                    non_special_tokens.append(token)
-
-            if added_special_tokens:
-                tokenizer.add_tokens(added_special_tokens, special_tokens=True)
-
-            if non_special_tokens:
-                tokenizer.add_tokens(non_special_tokens, special_tokens=False)
-        
-        # this overwrites the ones added non? 
-        # tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
-        # the tokenizer.all_special_tokens should automatically be in `self.unique_no_split` and the trie should be created
-        # this would allow us to avoid having to `sanitize` which breaks.
-        # + adding a new token should recompute the trie
-        # Check all our special tokens are registered as "no split" token (we don't cut them) and are in the vocab
-        added_tokens = tokenizer.sanitize_special_tokens()
-        if added_tokens:
-            logger.warning_advice(
-                "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
-                " fine-tuned or trained."
-            )
-
+                nb_added_tokens += 1
+    
+        tokenizer.added_tokens_decoder = added_tokens_decoder
+        tokenizer.added_tokens_encoder = added_tokens_encoder
+        tokenizer._create_trie()        
         return tokenizer
 
     @staticmethod
@@ -2089,6 +2072,19 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # which we will correct in Transformers v5.
         return max_model_length
 
+            # Sanitize AddedTokens
+    def convert_added_tokens(self, obj: Union[AddedToken, Any], add_type_field=True):
+        if isinstance(obj, AddedToken):
+            out = obj.__getstate__()
+            if add_type_field:
+                out["__type"] = "AddedToken"
+            return out
+        elif isinstance(obj, (list, tuple)):
+            return [self.convert_added_tokens(o, add_type_field=add_type_field) for o in obj]
+        elif isinstance(obj, dict):
+            return {k: self.convert_added_tokens(v, add_type_field=add_type_field) for k, v in obj.items()}
+        return obj
+        
     def save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
@@ -2165,21 +2161,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         for file_id in self.vocab_files_names.keys():
             tokenizer_config.pop(file_id, None)
 
-        # Sanitize AddedTokens
-        def convert_added_tokens(obj: Union[AddedToken, Any], add_type_field=True):
-            if isinstance(obj, AddedToken):
-                out = obj.__getstate__()
-                if add_type_field:
-                    out["__type"] = "AddedToken"
-                return out
-            elif isinstance(obj, (list, tuple)):
-                return [convert_added_tokens(o, add_type_field=add_type_field) for o in obj]
-            elif isinstance(obj, dict):
-                return {k: convert_added_tokens(v, add_type_field=add_type_field) for k, v in obj.items()}
-            return obj
-
         # add_type_field=True to allow dicts in the kwargs / differentiate from AddedToken serialization
-        tokenizer_config = convert_added_tokens(tokenizer_config, add_type_field=True)
+        tokenizer_config = self.convert_added_tokens(tokenizer_config, add_type_field=True)
 
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
         tokenizer_class = self.__class__.__name__
@@ -2208,7 +2191,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         logger.info(f"tokenizer config file saved in {tokenizer_config_file}")
 
         # Sanitize AddedTokens in special_tokens_map
-        write_dict = convert_added_tokens(self.special_tokens_map_extended, add_type_field=False)
+        write_dict = self.convert_added_tokens(self.special_tokens_map_extended, add_type_field=False)
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(write_dict, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
             f.write(out_str)
@@ -2257,8 +2240,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         added_tokens_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
         )
-        added_vocab = self.get_added_vocab()
+        added_vocab = self.added_tokens_decoder
         if added_vocab:
+            added_vocab = self.convert_added_tokens(added_vocab, False)
             with open(added_tokens_file, "w", encoding="utf-8") as f:
                 out_str = json.dumps(added_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
                 f.write(out_str)

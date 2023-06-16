@@ -345,15 +345,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
-        # Added tokens - We store this for both slow and fast tokenizers
-        # until the serialization of Fast tokenizers is updated
-        self.added_tokens_encoder: Dict[str, int] = {}
-        self.added_tokens_decoder: Dict[int, str] = {}
-        self.unique_no_split_tokens: List[str] = []
-        self._create_trie(self.all_special_tokens)
-        if self.tokens_trie is None:
-            self.tokens_trie = Trie()
+        self._create_trie()
         self._decode_use_source_tokenizer = False
 
     @property
@@ -409,62 +401,46 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
         model.resize_token_embeddings(len(tokenizer))
         ```"""
-        token_contents = [str(tok) for tok in new_tokens]
-
         tokens_to_add = []
-        for i, token in enumerate(token_contents):
-            if not isinstance(token, str):
+        for i, token in enumerate(new_tokens):
+            if not isinstance(token, (str, AddedToken)):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
-            # if not special_tokens and hasattr(self, "do_lower_case") and self.do_lower_case:
-            #     token = token.lower() # is this useless? The `create_trie` function already does that.
-            # We lower only the content, but the added token
+            if isinstance(token, str):
+                token = AddedToken(token)
             if (
-                token != self.unk_token
-                and self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token)
+                token.content != self.unk_token
+                and self.convert_tokens_to_ids(token.content) == self.convert_tokens_to_ids(self.unk_token)
                 and token not in tokens_to_add
             ):
-                tokens_to_add.append(token)
-                if isinstance(new_tokens[i], AddedToken) and not special_tokens:
+                if not special_tokens:
                     if hasattr(self, "do_lower_case") and self.do_lower_case:
                         # this should maybe never arise? adding a token that has a mix of lower and upper, while model does lower. Or jsut addihng a non special token like `TOKEN`.
                         token = AddedToken(
-                            new_tokens[i].content.lower(),
-                            single_word=new_tokens[i].single_word,
-                            lstrip=new_tokens[i].lstrip,
-                            rstrip=new_tokens[i].rstrip,
-                            normalized=new_tokens[i].normalized,
+                            token.content.lower(),
+                            single_word=token.single_word,
+                            lstrip=token.lstrip,
+                            rstrip=token.rstrip,
+                            normalized=token.normalized,
                         )
-                    else:
-                        token = new_tokens[i]
-                    self._additional_special_tokens.append(token)
+                if special_tokens:
+                    self._additional_special_tokens.append(token.content)
+                tokens_to_add.append(token)
+                    
                 if self.verbose:
                     logger.info(f"Adding {token} to the vocabulary")
+            elif special_tokens and token.content not in self._additional_special_tokens:
+                self._additional_special_tokens.append(token.content)
 
-        added_tok_encoder = {tok: len(self) + i for i, tok in enumerate(tokens_to_add)}
-        added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
+        added_tok_encoder = {tok.content: len(self) + i for i, tok in enumerate(tokens_to_add)}
+        added_tok_decoder = {v: k for k, v in zip(tokens_to_add, added_tok_encoder.values())}
         self.added_tokens_encoder.update(added_tok_encoder)
         self.added_tokens_decoder.update(added_tok_decoder)
-
-        # Make sure we don't split on any special tokens (even if they were already in the vocab before e.g. for Albert)
-        if special_tokens:
-            if len(token_contents) == 1:
-                _insert_one_token_to_ordered_list(self.unique_no_split_tokens, token_contents[0])
-            else:
-                self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(token_contents)))
-        else:
-            # Or on the newly added tokens
-            if len(tokens_to_add) == 1:
-                _insert_one_token_to_ordered_list(self.unique_no_split_tokens, tokens_to_add[0])
-            else:
-                self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(tokens_to_add)))
-        self._create_trie(self.unique_no_split_tokens)
-
+        self._create_trie(added_tok_encoder.keys())
         return len(tokens_to_add)
 
-    def _create_trie(self, unique_no_split_tokens):
+    def _create_trie(self):
         trie = Trie()
-        for token in unique_no_split_tokens:
-            # if single_word=True, then we have to add ` token ` instead of `token`
+        for token in self.added_tokens_encoder.keys():
             if hasattr(self, "do_lower_case") and self.do_lower_case and token not in self.all_special_tokens:
                 trie.add(token.lower())
             else:
@@ -511,30 +487,24 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             `List[str]`: The list of tokens.
         """
         # Simple mapping string => AddedToken for special tokens with specific tokenization behaviors
-        all_special_tokens_extended = {
-            str(t): t for t in self.all_special_tokens_extended if isinstance(t, AddedToken)
-        }
-
         text, kwargs = self.prepare_for_tokenization(text, **kwargs)
 
         if kwargs:
             logger.warning(f"Keyword arguments {kwargs} not recognized.")
 
-        # TODO: should this be in the base class?
         if hasattr(self, "do_lower_case") and self.do_lower_case:
             # convert non-special tokens to lowercase
-            escaped_special_toks = [
-                re.escape(s_tok) for s_tok in (self.unique_no_split_tokens + self.all_special_tokens)
-            ]
+            escaped_special_toks = [re.escape(s_tok) for s_tok in (self.all_special_tokens)]
             pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
             text = re.sub(pattern, lambda m: m.groups()[0] or m.groups()[1].lower(), text)
 
-        no_split_token = set(self.all_special_tokens) # should use all added tokens
+        no_split_token = set(self.added_tokens_encoder.keys()) # don't s plit on added tokens
         tokens = self.tokens_trie.split(text)
         # ["This is something", "<special_token_1>", "  else"]
         for i, token in enumerate(tokens):
-            if token in self.all_special_tokens:
-                tok_extended = all_special_tokens_extended.get(token, None)
+            if token in no_split_token:
+                # we lose the info about normalizing or what not on the added tokens.....
+                tok_extended = self.added_tokens_decoder.get(self._convert_token_to_id(token), None)
                 left = tokens[i - 1] if i > 0 else None
                 right = tokens[i + 1] if i < len(tokens) - 1 else None
 
@@ -554,17 +524,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     # Strip white spaces on the left
                     if tok_extended.lstrip and left:
                         tokens[i - 1] = left.rstrip()  # Opposite here
-                else:
-                    # there should be a list of additional tokens that are not special. These have to be in no split
-                    # but they are not special. By default any added token should have right and left strip to True
-                    # Apparently. We need to keep this behaviour
-
-                    # We strip left and right by default
-                    if right:
-                        tokens[i + 1] = right.lstrip()
-                    if left:
-                        tokens[i - 1] = left.rstrip()
-
         # ["This is something", "<special_token_1>", "else"]
         tokenized_text = []
         for token in tokens:
@@ -928,7 +887,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         if isinstance(ids, int):
             if ids in self.added_tokens_decoder:
-                return self.added_tokens_decoder[ids]
+                return self.added_tokens_decoder[ids].content
             else:
                 return self._convert_id_to_token(ids)
         tokens = []
@@ -937,7 +896,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if skip_special_tokens and index in self.all_special_ids:
                 continue
             if index in self.added_tokens_decoder:
-                tokens.append(self.added_tokens_decoder[index])
+                tokens.append(self.added_tokens_decoder[index].content)
             else:
                 tokens.append(self._convert_id_to_token(index))
         return tokens
