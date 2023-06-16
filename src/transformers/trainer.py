@@ -1450,6 +1450,9 @@ class Trainer:
             if self.args.ddp_bucket_cap_mb is not None:
                 kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
 
+            if self.args.ddp_broadcast_buffers is not None:
+                kwargs["broadcast_buffers"] = self.args.ddp_broadcast_buffers
+
             self.accelerator.ddp_handler = DistributedDataParallelKwargs(**kwargs)
 
         return model
