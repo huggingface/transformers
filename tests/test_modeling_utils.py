@@ -82,6 +82,7 @@ if is_torch_available():
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
+        base_model_prefix = "base"
         config_class = PretrainedConfig
 
         def __init__(self, config):
@@ -901,6 +902,7 @@ class ModelUtilsTest(TestCasePlus):
             state_dict = model.state_dict()
             # Remove tied weight from state_dict -> model should load with no complain of missing keys
             del state_dict["linear_2.weight"]
+            torch.save(state_dict, os.path.join(tmp_dir, WEIGHTS_NAME))
             new_model, load_info = BaseModelWithTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
             self.assertListEqual(load_info["missing_keys"], [])
             self.assertIs(new_model.linear.weight, new_model.linear_2.weight)
@@ -911,6 +913,30 @@ class ModelUtilsTest(TestCasePlus):
             self.assertIs(new_model.base.linear.weight, new_model.decoder.weight)
             # Should only complain about the missing bias
             self.assertListEqual(load_info["missing_keys"], ["decoder.bias"])
+
+    def test_unexpected_keys_warnings(self):
+        model = ModelWithHead(PretrainedConfig())
+        logger = logging.get_logger("transformers.modeling_utils")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+
+            # Loading the model with a new class, we don't get a warning for unexpected weights, just an info
+            with CaptureLogger(logger) as cl:
+                _, loading_info = BaseModel.from_pretrained(tmp_dir, output_loading_info=True)
+            self.assertEqual(cl.out, "")
+            self.assertEqual(
+                set(loading_info["unexpected_keys"]),
+                {"linear.weight", "linear.bias", "linear2.weight", "linear2.bias"},
+            )
+
+            # Loading the model with the same class, we do get a warning for unexpected weights
+            state_dict = model.state_dict()
+            state_dict["added_key"] = state_dict["linear.weight"]
+            torch.save(state_dict, os.path.join(tmp_dir, WEIGHTS_NAME))
+            with CaptureLogger(logger) as cl:
+                _, loading_info = ModelWithHead.from_pretrained(tmp_dir, output_loading_info=True)
+            self.assertIn("were not used when initializing ModelWithHead: ['added_key']", cl.out)
+            self.assertEqual(loading_info["unexpected_keys"], ["added_key"])
 
     @require_torch_gpu
     @slow
