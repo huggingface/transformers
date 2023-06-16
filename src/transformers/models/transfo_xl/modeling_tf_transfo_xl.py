@@ -589,7 +589,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
 
         # Compute decoder attention mask
         all_ones = tf.ones([qlen, klen], dtype=tf.int32)
-        upper_mask = tf.linalg.band_part(all_ones, 0, -1) - tf.linalg.band_part(all_ones, 0, mlen)
+        upper_mask = 1 - tf.linalg.band_part(tf.ones([qlen, klen], dtype=tf.int32), -1, mlen)
         if self.same_length:
             mask_len = klen - self.mem_len
             mask_shift_len = qlen - tf.nn.relu(mask_len)  # Lazy clamping of negatives to zero
