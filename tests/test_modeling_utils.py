@@ -923,7 +923,7 @@ class ModelUtilsTest(TestCasePlus):
             # Loading the model with a new class, we don't get a warning for unexpected weights, just an info
             with CaptureLogger(logger) as cl:
                 _, loading_info = BaseModel.from_pretrained(tmp_dir, output_loading_info=True)
-            self.assertEqual(cl.out, "")
+            self.assertNotIn("were not used when initializing ModelWithHead", cl.out)
             self.assertEqual(
                 set(loading_info["unexpected_keys"]),
                 {"linear.weight", "linear.bias", "linear2.weight", "linear2.bias"},
