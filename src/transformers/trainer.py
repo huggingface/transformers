@@ -70,7 +70,7 @@ from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
-from .pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_10
+from .pytorch_utils import ALL_LAYERNORM_LAYERS
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -154,8 +154,6 @@ from .utils import (
 )
 from .utils.generic import ContextManagers
 
-
-_is_native_cpu_amp_available = is_torch_greater_or_equal_than_1_10
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
 DEFAULT_PROGRESS_CALLBACK = ProgressCallback
@@ -621,10 +619,8 @@ class Trainer:
                 if args.device == torch.device("cpu"):
                     if args.fp16:
                         raise ValueError("Tried to use `fp16` but it is not supported on cpu")
-                    elif _is_native_cpu_amp_available:
-                        args.half_precision_backend = "cpu_amp"
                     else:
-                        raise ValueError("Tried to use cpu amp but native cpu amp is not available")
+                        args.half_precision_backend = "cpu_amp"
                 else:
                     args.half_precision_backend = "cuda_amp"
 
@@ -2595,14 +2591,11 @@ class Trainer:
         arguments, depending on the situation.
         """
         if self.use_cuda_amp or self.use_cpu_amp:
-            if is_torch_greater_or_equal_than_1_10:
-                ctx_manager = (
-                    torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
-                    if self.use_cpu_amp
-                    else torch.cuda.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
-                )
-            else:
-                ctx_manager = torch.cuda.amp.autocast()
+            ctx_manager = (
+                torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
+                if self.use_cpu_amp
+                else torch.cuda.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
+            )
         else:
             ctx_manager = contextlib.nullcontext() if sys.version_info >= (3, 7) else contextlib.suppress()
 
