@@ -456,14 +456,6 @@ class BarkCausalModule(BarkModulePreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self._initialize_modules(config)
-
-        self.gradient_checkpointing = False
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def _initialize_modules(self, config):
         # initialize as an autoregressive GPT-like model
         self.transformer = nn.ModuleDict(
             {
@@ -475,6 +467,10 @@ class BarkCausalModule(BarkModulePreTrainedModel):
             }
         )
         self.lm_head = nn.Linear(config.hidden_size, config.output_vocab_size, bias=False)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.transformer.wte
@@ -768,23 +764,6 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self._initialize_modules(config)
-
-        self.gradient_checkpointing = False
-        self.n_codes_total = config.n_codes_total
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self):
-        # one embedding layers for each codebook
-        return self.transformer.wtes
-
-    def set_input_embeddings(self, new_embeddings):
-        # one embedding layers for each codebook
-        self.transformer.wtes = new_embeddings
-
-    def _initialize_modules(self, config):
         # initialize a modified non causal GPT-like model
         # note that for there is one embedding layer and one lm_head for each codebook of Encodec
         self.transformer = nn.ModuleDict(
@@ -808,6 +787,19 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
         )
         for i in range(config.n_codes_total - config.n_codes_given):
             self.transformer.wtes[i + 1].weight = self.lm_heads[i].weight
+        self.gradient_checkpointing = False
+        self.n_codes_total = config.n_codes_total
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        # one embedding layers for each codebook
+        return self.transformer.wtes
+
+    def set_input_embeddings(self, new_embeddings):
+        # one embedding layers for each codebook
+        self.transformer.wtes = new_embeddings
 
     def get_num_params(self, non_embedding=True):
         """
