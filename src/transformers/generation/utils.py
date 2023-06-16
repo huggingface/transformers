@@ -2103,8 +2103,6 @@ class GenerationMixin:
 
                 logits = outputs.logits[:, -1, :]
 
-            print ('Logits: ', logits)
-            print ('last hidden start', next_hidden[0])
             next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
 
@@ -2112,6 +2110,7 @@ class GenerationMixin:
             # model confidence
             selected_idx = _ranking_fast(context_hidden, next_hidden, top_k_probs, penalty_alpha, top_k)
             print ('index: ', selected_idx)
+            print ('next_hidden', next_hidden)
 
             # prepare for the next step: (1) next token_id; (2) past_key_values; (3) last_hidden_states for computing
             # the degeneration penalty; (4) logits for selecting next top-k candidates; (5) selected tokens scores
