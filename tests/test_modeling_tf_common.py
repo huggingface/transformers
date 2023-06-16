@@ -1415,6 +1415,7 @@ class TFModelTesterMixin:
     def check_keras_fit_results(self, val_loss1, val_loss2, atol=1e-2, rtol=1e-3):
         self.assertTrue(np.allclose(val_loss1, val_loss2, atol=atol, rtol=rtol))
 
+    @slow
     def test_keras_fit(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:

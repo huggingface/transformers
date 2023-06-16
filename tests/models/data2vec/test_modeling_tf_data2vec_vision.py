@@ -347,6 +347,7 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittes
             check_hidden_states_output(inputs_dict, config, model_class)
 
     # Overriding this method since the base method won't be compatible with Data2VecVision.
+    @slow
     def test_keras_fit(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
