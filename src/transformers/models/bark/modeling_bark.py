@@ -330,12 +330,12 @@ class MLP(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
         self.gelu = nn.GELU()
 
-    def forward(self, x):
-        x = self.in_proj(x)
-        x = self.gelu(x)
-        x = self.out_proj(x)
-        x = self.dropout(x)
-        return x
+    def forward(self, hidden_states):
+        hidden_states = self.in_proj(hidden_states)
+        hidden_states = self.gelu(hidden_states)
+        hidden_states = self.out_proj(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states
 
 
 class BarkBlock(nn.Module):
