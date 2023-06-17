@@ -2104,8 +2104,6 @@ class GenerationMixin:
 
                 logits = outputs.logits[:, -1, :]
 
-            print (top_k_ids)
-
             next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
 
