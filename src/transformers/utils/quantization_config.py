@@ -228,3 +228,6 @@ class BitsAndBytesConfig:
         output["bnb_4bit_compute_dtype"] = str(output["bnb_4bit_compute_dtype"]).split(".")[1]
 
         return output
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({', '.join([f'{k}={v}' for k, v in self.__dict__.items()])})"
