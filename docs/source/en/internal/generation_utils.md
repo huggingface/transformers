@@ -141,6 +141,9 @@ generation.
 [[autodoc]] NoRepeatNGramLogitsProcessor
     - __call__
 
+[[autodoc]] SequenceBiasLogitsProcessor
+    - __call__
+
 [[autodoc]] NoBadWordsLogitsProcessor
     - __call__
 

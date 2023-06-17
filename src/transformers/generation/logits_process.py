@@ -15,7 +15,7 @@
 
 import inspect
 import math
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Callable, Dict, Iterable, List, Tuple, Union
 
 import numpy as np
 import torch
@@ -539,9 +539,12 @@ class EncoderNoRepeatNGramLogitsProcessor(LogitsProcessor):
         return scores
 
 
-class BiasLogitsProcessor(LogitsProcessor):
+class SequenceBiasLogitsProcessor(LogitsProcessor):
     """
-    [`LogitsProcessor`] that biases the logits towards particular sequences. The bias term is added to the logits.
+    [`LogitsProcessor`] that applies an additive bias on sequences. The bias is applied to the last token of a sequence
+    when the next generated token can complete it. Consequently, to take the most of biasing sequences with more than
+    one token, consider using beam methods (to gracefully work around partially completed sequences that have a
+    negative bias) and applying the bias to their prefixes (to ensure the bias is applied earlier).
 
     <Tip>
 
@@ -554,36 +557,28 @@ class BiasLogitsProcessor(LogitsProcessor):
     </Tip>
 
     Args:
-        bias_sequences (`Dict[Tuple[int], float]`):
+        sequence_bias (`Dict[Tuple[int], float]`):
             Dictionary that maps a sequence of tokens to its bias term. Positive biases increase the odds of the
             sequence being selected, while negative biases do the opposite. If a sequence has a length of 1, its bias
             will always be applied. Otherwise, the bias will only be applied if the sequence in question is about to be
             completed (in the token selection step after this processor is applied).
     """
 
-    def __init__(self, bias_sequences: Dict[Tuple[int], float]):
-        bad_words_ids = list(bias_sequences.keys())
+    def __init__(self, sequence_bias: Dict[Tuple[int], float]):
+        self.sequence_bias = sequence_bias
+        self._validate_arguments()
 
-        # Split bad words into length 1 and length greater than 1. The former can be handled separately for speed.
-        self.bad_words_id_length_1 = []
-        self.bad_words_id_length_greater_than_1 = []
-        for word in bad_words_ids:
-            if len(word) == 0:
-                raise ValueError(f"Banned words token sequences {bad_words_ids} cannot have an empty list")
-            elif len(word) == 1:
-                self.bad_words_id_length_1.append(word[0])
-            else:
-                self.bad_words_id_length_greater_than_1.append(word)
-
-        # Bias tensors that will be populated on the first call (for retrocompatibility purposes, the vocabulary size is infered in the first usage)
+        # Bias variables that will be populated on the first call (for retrocompatibility purposes, the vocabulary size
+        # is infered in the first usage, which inhibits initializing here)
+        self.sequences_length_greater_than_1 = []
         self.length_1_bias = None
         self.length_greather_than_1_bias = None
-        self.prepared_bias_tensors = False
+        self.prepared_bias_variables = False
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         # 1 - Prepares the bias tensors. This is only needed the first time the logit processor is called.
-        if not self.prepared_bias_tensors:
-            self._prepare_bias_tensors(scores)
+        if not self.prepared_bias_variables:
+            self._prepare_bias_variables(scores)
 
         # 2 - prepares an empty bias to add
         bias = torch.zeros_like(scores)
@@ -596,14 +591,14 @@ class BiasLogitsProcessor(LogitsProcessor):
         # bias should be applied. The bias is applied on the last token of the sequence, if (and only if) the sequence
         # may become complete this iteration.
         matching_mask = torch.zeros_like(scores, dtype=torch.bool)
-        for bad_word_ids in self.bad_words_id_length_greater_than_1:
-            if len(bad_word_ids) > input_ids.shape[1]:  # the bad word is longer than the context, ignore
+        for sequence_ids in self.sequences_length_greater_than_1:
+            if len(sequence_ids) > input_ids.shape[1]:  # the sequence is longer than the context, ignore
                 continue
-            prefix_length = len(bad_word_ids) - 1
-            last_token = bad_word_ids[-1]
+            prefix_length = len(sequence_ids) - 1
+            last_token = sequence_ids[-1]
             matching_rows = torch.eq(
                 input_ids[:, -prefix_length:],
-                torch.tensor(bad_word_ids[:-1], dtype=input_ids.dtype, device=input_ids.device)
+                torch.tensor(sequence_ids[:-1], dtype=input_ids.dtype, device=input_ids.device),
             ).prod(dim=1)
             matching_mask[:, last_token] |= matching_rows.bool()
         bias += self.length_greather_than_1_bias * matching_mask.to(torch.float)
@@ -612,42 +607,68 @@ class BiasLogitsProcessor(LogitsProcessor):
         scores = scores + bias
         return scores
 
-    def _prepare_bias_tensors(self, scores: torch.FloatTensor):
+    def _prepare_bias_variables(self, scores: torch.FloatTensor):
         vocabulary_size = scores.shape[-1]
+        sequence_bias = self.sequence_bias
+        tokens_with_bias = []
 
         # Check biased tokens out of bounds
-        invalid_biases = []
-        invalid_biases += [bad_word_id for bad_word_id in self.bad_words_id_length_1 if bad_word_id >= vocabulary_size]
-        invalid_biases += [bad_word_id[-1] for bad_word_id in self.bad_words_id_length_greater_than_1 if bad_word_id[-1] >= vocabulary_size]
+        invalid_biases = [sequence_ids[-1] for sequence_ids in sequence_bias if sequence_ids[-1] >= vocabulary_size]
         if len(invalid_biases) > 0:
             raise ValueError(
-                f"Biases for the following tokens were set ({invalid_biases}), but the model vocabulary size is only {vocabulary_size}."
+                f"The model vocabulary size is {vocabulary_size}, but the following tokens were being biased: "
+                f"{invalid_biases}"
             )
 
-        # Precompute the bias from length = 1 -- it will always be applied
+        # Precompute the bias tensors to be applied. Sequences of length 1 are kept separately, as they can be applied
+        # with simpler logic.
         self.length_1_bias = torch.zeros((vocabulary_size,), dtype=torch.float).to(scores.device)
-        for bad_word_id in self.bad_words_id_length_1:
-            self.length_1_bias[bad_word_id] = -float("inf")
-
-        # Precompute the bias from length > 1 -- it is only applied when the whole word is about to be generated
         self.length_greather_than_1_bias = torch.zeros((vocabulary_size,), dtype=torch.float).to(scores.device)
-        for bad_word_ids in self.bad_words_id_length_greater_than_1:
-            self.length_greather_than_1_bias[bad_word_ids[-1]] = -float("inf")
+        for sequence_ids, bias in sequence_bias.items():
+            if len(sequence_ids) == 1:
+                self.length_1_bias[sequence_ids[-1]] = bias
+            else:
+                self.sequences_length_greater_than_1.append(sequence_ids)
+                self.length_greather_than_1_bias[sequence_ids[-1]] = bias
+            tokens_with_bias.append(sequence_ids[-1])
 
-        self.prepared_bias_tensors = True
+        self.prepared_bias_variables = True
+
+    def _validate_arguments(self):
+        sequence_bias = self.sequence_bias
+        if not isinstance(sequence_bias, dict) or len(sequence_bias) == 0:
+            raise ValueError(f"`sequence_bias` has to be a non-empty dictionary, but is {sequence_bias}.")
+        if any(not isinstance(sequence_ids, tuple) for sequence_ids in sequence_bias.keys()):
+            raise ValueError(f"`sequence_bias` has to be a dict with tuples as keys, but is {sequence_bias}.")
+        if any(
+            any((not isinstance(token_id, (int, np.integer)) or token_id < 0) for token_id in sequence_ids)
+            or len(sequence_ids) == 0
+            for sequence_ids in sequence_bias.keys()
+        ):
+            raise ValueError(
+                f"Each key in `sequence_bias` has to be a non-empty tuple of positive integers, but is "
+                f"{sequence_bias}."
+            )
+        if any(not isinstance(bias, float) for bias in sequence_bias.values()):
+            raise ValueError(f"`sequence_bias` has to be a dict with floats as values, but is {sequence_bias}.")
 
 
-class NoBadWordsLogitsProcessor(BiasLogitsProcessor):
+class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
     """
     [`LogitsProcessor`] that enforces that specified sequences will never be selected.
 
     <Tip>
 
+<<<<<<< HEAD
     In order to get the token ids of the words that should not appear in the generated text, make sure to set
     `add_prefix_space=True` when initializing the tokenizer, and use
     `tokenizer(bad_words, add_special_tokens=False).input_ids`. The `add_prefix_space`
     argument is only supported for some slow tokenizers, as fast tokenizers' prefixing behaviours come from
     `pre tokenizers`. Read more [here](https://huggingface.co/docs/tokenizers/api/pre-tokenizers).
+=======
+    In order to get the token ids of the sequences that you want to forbid, initialize a new tokenizer with
+    `add_prefix_space=True` and call `tokenizer(bad_words, add_special_tokens=False).input_ids`.
+>>>>>>> 000b413f1 (add slow tests)
 
     </Tip>
 
@@ -659,17 +680,8 @@ class NoBadWordsLogitsProcessor(BiasLogitsProcessor):
     """
 
     def __init__(self, bad_words_ids: List[List[int]], eos_token_id: Union[int, List[int]]):
-        if not isinstance(bad_words_ids, List) or len(bad_words_ids) == 0:
-            raise ValueError(f"`bad_words_ids` has to be a non-empty list, but is {bad_words_ids}.")
-        if any(not isinstance(bad_word_ids, list) for bad_word_ids in bad_words_ids):
-            raise ValueError(f"`bad_words_ids` has to be a list of lists, but is {bad_words_ids}.")
-        if any(
-            any((not isinstance(token_id, (int, np.integer)) or token_id < 0) for token_id in bad_word_ids)
-            for bad_word_ids in bad_words_ids
-        ):
-            raise ValueError(
-                f"Each list in `bad_words_ids` has to be a list of positive integers, but is {bad_words_ids}."
-            )
+        self.bad_word_ids = bad_words_ids
+        self._validate_arguments()
 
         # Filter EOS token from bad_words_ids
         if eos_token_id is None:
@@ -681,8 +693,22 @@ class NoBadWordsLogitsProcessor(BiasLogitsProcessor):
         )
 
         # Forbidding a sequence is equivalent to setting its bias to -inf
-        bias_sequences = {tuple(sequence): float("-inf") for sequence in bad_words_ids}
-        super().__init__(bias_sequences=bias_sequences)
+        sequence_bias = {tuple(sequence): float("-inf") for sequence in bad_words_ids}
+        super().__init__(sequence_bias=sequence_bias)
+
+    def _validate_arguments(self):
+        bad_words_ids = self.bad_word_ids
+        if not isinstance(bad_words_ids, list) or len(bad_words_ids) == 0:
+            raise ValueError(f"`bad_words_ids` has to be a non-empty list, but is {bad_words_ids}.")
+        if any(not isinstance(bad_word_ids, list) for bad_word_ids in bad_words_ids):
+            raise ValueError(f"`bad_words_ids` has to be a list of lists, but is {bad_words_ids}.")
+        if any(
+            any((not isinstance(token_id, (int, np.integer)) or token_id < 0) for token_id in bad_word_ids)
+            for bad_word_ids in bad_words_ids
+        ):
+            raise ValueError(
+                f"Each list in `bad_words_ids` has to be a list of positive integers, but is {bad_words_ids}."
+            )
 
 
 class PrefixConstrainedLogitsProcessor(LogitsProcessor):
