@@ -1058,6 +1058,15 @@ class Trainer:
             optimizer_kwargs.update(adam_kwargs)
             if args.optim == OptimizerNames.ADAMW_TORCH_FUSED:
                 optimizer_kwargs.update({"fused": True})
+        elif args.optim == OptimizerNames.SOPHIA_TORCH:
+            from transformers.torch.optim.sophia import SophiaG
+
+            optimizer_cls = SophiaG
+            sophia_kwargs = {
+                "betas": (args.adam_beta1, args.adam_beta2),
+                "rho": args.adam_epsilon,
+            }
+            optimizer_kwargs.update(sophia_kwargs)
         elif args.optim == OptimizerNames.ADAMW_TORCH_XLA:
             try:
                 from torch_xla.amp.syncfree import AdamW

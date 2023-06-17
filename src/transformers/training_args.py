@@ -150,6 +150,7 @@ class OptimizerNames(ExplicitEnum):
     PAGED_ADAMW_8BIT = "paged_adamw_8bit"
     PAGED_LION = "paged_lion_32bit"
     PAGED_LION_8BIT = "paged_lion_8bit"
+    SOPHIA_TORCH = "sophia_torch"
 
 
 @dataclass
