@@ -592,6 +592,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
 )
 class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", "embed_out.weight"]
+    _tied_weights_keys = ["embed_out.weight"]
 
     def __init__(self, config):
         super().__init__(config)

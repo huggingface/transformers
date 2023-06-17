@@ -234,7 +234,6 @@ class BlipVisionConfig(PretrainedConfig):
         projection_dim=512,
         num_hidden_layers=12,
         num_attention_heads=12,
-        num_channels=3,
         image_size=384,
         patch_size=16,
         hidden_act="gelu",
@@ -250,7 +249,6 @@ class BlipVisionConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
         self.patch_size = patch_size
         self.image_size = image_size
         self.initializer_range = initializer_range

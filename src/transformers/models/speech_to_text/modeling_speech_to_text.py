@@ -1272,6 +1272,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
         r"model.encoder.embed_positions.weights",
         r"model.decoder.embed_positions.weights",
     ]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: Speech2TextConfig):
         super().__init__(config)

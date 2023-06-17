@@ -48,6 +48,9 @@ if is_torch_available():
         Pix2StructVisionModel,
     )
     from transformers.models.pix2struct.modeling_pix2struct import PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_11
+else:
+    is_torch_greater_or_equal_than_1_11 = False
 
 
 if is_vision_available():
@@ -697,6 +700,10 @@ def prepare_img():
     return im
 
 
+@unittest.skipIf(
+    not is_torch_greater_or_equal_than_1_11,
+    reason="`Pix2StructImageProcessor` requires `torch>=1.11.0`.",
+)
 @require_vision
 @require_torch
 @slow

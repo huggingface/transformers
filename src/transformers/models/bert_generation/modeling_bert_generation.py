@@ -861,6 +861,7 @@ class BertGenerationOnlyLMHead(nn.Module):
 )
 class BertGenerationDecoder(BertGenerationPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["lm_head.decoder.weight", "lm_head.decoder.bias", "embeddings.position_ids"]
+    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)

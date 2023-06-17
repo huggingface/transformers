@@ -83,6 +83,7 @@ src/transformers/models/electra/configuration_electra.py
 src/transformers/models/electra/modeling_electra.py
 src/transformers/models/electra/modeling_tf_electra.py
 src/transformers/models/efficientformer/modeling_tf_efficientformer.py
+src/transformers/models/encodec/modeling_encodec.py
 src/transformers/models/ernie/configuration_ernie.py
 src/transformers/models/ernie_m/configuration_ernie_m.py
 src/transformers/models/ernie_m/modeling_ernie_m.py
@@ -101,6 +102,7 @@ src/transformers/models/groupvit/modeling_groupvit.py
 src/transformers/models/groupvit/modeling_tf_groupvit.py
 src/transformers/models/hubert/modeling_hubert.py
 src/transformers/models/imagegpt/configuration_imagegpt.py
+src/transformers/models/imagegpt/modeling_imagegpt.py
 src/transformers/models/layoutlm/configuration_layoutlm.py
 src/transformers/models/layoutlm/modeling_layoutlm.py
 src/transformers/models/layoutlm/modeling_tf_layoutlm.py
@@ -395,6 +397,7 @@ src/transformers/models/deit/feature_extraction_deit.py
 src/transformers/models/detr/feature_extraction_detr.py
 src/transformers/models/donut/feature_extraction_donut.py
 src/transformers/models/dpt/feature_extraction_dpt.py
+src/transformers/models/encodec/feature_extraction_encodec.py
 src/transformers/models/flava/feature_extraction_flava.py
 src/transformers/models/glpn/feature_extraction_glpn.py
 src/transformers/models/imagegpt/feature_extraction_imagegpt.py

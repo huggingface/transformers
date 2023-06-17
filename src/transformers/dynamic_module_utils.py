@@ -18,6 +18,7 @@ import importlib
 import os
 import re
 import shutil
+import signal
 import sys
 from pathlib import Path
 from typing import Dict, Optional, Union
@@ -513,3 +514,46 @@ def custom_object_save(obj, folder, config=None):
         result.append(dest_file)
 
     return result
+
+
+def _raise_timeout_error(signum, frame):
+    raise ValueError(
+        "Loading this model requires you to execute the configuration file in that repo on your local machine. We "
+        "asked if it was okay but did not get an answer. Make sure you have read the code there to avoid malicious "
+        "use, then set the option `trust_remote_code=True` to remove this error."
+    )
+
+
+TIME_OUT_REMOTE_CODE = 15
+
+
+def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has_remote_code):
+    if trust_remote_code is None:
+        if has_local_code:
+            trust_remote_code = False
+        elif has_remote_code and TIME_OUT_REMOTE_CODE > 0:
+            signal.signal(signal.SIGALRM, _raise_timeout_error)
+            signal.alarm(TIME_OUT_REMOTE_CODE)
+            while trust_remote_code is None:
+                answer = input(
+                    f"Loading {model_name} requires to execute some code in that repo, you can inspect the content of "
+                    f"the repository at https://hf.co/{model_name}. You can dismiss this prompt by passing "
+                    "`trust_remote_code=True`.\nDo you accept? [y/N] "
+                )
+                if answer.lower() in ["yes", "y", "1"]:
+                    trust_remote_code = True
+                elif answer.lower() in ["no", "n", "0", ""]:
+                    trust_remote_code = False
+            signal.alarm(0)
+        elif has_remote_code:
+            # For the CI which puts the timeout at 0
+            _raise_timeout_error(None, None)
+
+    if has_remote_code and not has_local_code and not trust_remote_code:
+        raise ValueError(
+            f"Loading {model_name} requires you to execute the configuration file in that"
+            " repo on your local machine. Make sure you have read the code there to avoid malicious use, then"
+            " set the option `trust_remote_code=True` to remove this error."
+        )
+
+    return trust_remote_code

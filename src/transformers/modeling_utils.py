@@ -82,26 +82,16 @@ XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 
 if is_accelerate_available():
-    from accelerate import __version__ as accelerate_version
     from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
     from accelerate.utils import (
+        check_tied_parameters_on_same_device,
         find_tied_parameters,
+        get_balanced_memory,
         load_offloaded_weights,
         offload_weight,
         save_offload_index,
         set_module_tensor_to_device,
     )
-
-    if version.parse(accelerate_version) > version.parse("0.11.0"):
-        from accelerate.utils import get_balanced_memory
-    else:
-        get_balanced_memory = None
-    if version.parse(accelerate_version) > version.parse("0.19.0"):
-        from accelerate.utils import check_tied_parameters_on_same_device
-    else:
-        check_tied_parameters_on_same_device = None
-else:
-    find_tied_parameters = None
 
 if is_safetensors_available():
     from safetensors import safe_open
@@ -1069,6 +1059,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # a list of `state_dict` keys to ignore when saving the model (useful for keys that aren't
     # trained, but which are either deterministic or tied variables)
     _keys_to_ignore_on_save = None
+    # a list of `state_dict` keys that are potentially tied to another key in the state_dict.
+    _tied_weights_keys = None
 
     is_parallelizable = False
     supports_gradient_checkpointing = False
@@ -1182,7 +1174,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         return getattr(self, self.base_model_prefix, self)
 
-    def can_generate(self) -> bool:
+    @classmethod
+    def can_generate(cls) -> bool:
         """
         Returns whether this model can generate sequences with `.generate()`.
 
@@ -1190,7 +1183,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
         # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation
-        if "GenerationMixin" in str(self.prepare_inputs_for_generation.__func__):
+        if "GenerationMixin" in str(cls.prepare_inputs_for_generation):
             return False
         return True
 
@@ -1778,8 +1771,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # We're going to remove aliases before saving
             ptrs = collections.defaultdict(list)
             for name, tensor in state_dict.items():
-                ident = (tensor.data_ptr(), tensor.device, tensor.shape, tensor.stride())
-                ptrs[ident].append(name)
+                ptrs[id_tensor_storage(tensor)].append(name)
 
             # These are all the pointers of shared tensors.
             shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
@@ -1787,10 +1779,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for names in shared_ptrs.values():
                 # Removing the keys which are declared as known duplicates on
                 # load. This allows to make sure the name which is kept is consistent.
-                if self._keys_to_ignore_on_load_missing is not None:
+                if self._tied_weights_keys is not None:
                     found = 0
                     for name in sorted(names):
-                        matches_pattern = any(re.search(pat, name) for pat in self._keys_to_ignore_on_load_missing)
+                        matches_pattern = any(re.search(pat, name) for pat in self._tied_weights_keys)
                         if matches_pattern and name in state_dict:
                             found += 1
                             if found < len(names):
@@ -2445,6 +2437,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         f" {pretrained_model_name_or_path} but there is a file for Flax weights. Use `from_flax=True`"
                         " to load this model from those weights."
                     )
+                elif use_safetensors:
+                    raise EnvironmentError(
+                        f"Error no file named {_add_variant(SAFE_WEIGHTS_NAME, variant)} found in directory"
+                        f" {pretrained_model_name_or_path}."
+                    )
                 else:
                     raise EnvironmentError(
                         f"Error no file named {_add_variant(WEIGHTS_NAME, variant)}, {TF2_WEIGHTS_NAME},"
@@ -2786,8 +2783,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "If passing a string for `device_map`, please choose 'auto', 'balanced', 'balanced_low_0' or "
                     "'sequential'."
                 )
-            elif device_map in ["balanced", "balanced_low_0"] and get_balanced_memory is None:
-                raise ValueError(f"`device_map={device_map}` requires a source install of Accelerate.")
 
             kwargs = {"no_split_module_classes": no_split_modules}
             if "special_dtypes" in inspect.signature(infer_auto_device_map).parameters:
@@ -2797,7 +2792,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "This model has some weights that should be kept in higher precision, you need to upgrade "
                     "`accelerate` to properly deal with them (`pip install --upgrade accelerate`)."
                 )
-            if device_map != "sequential" and get_balanced_memory is not None:
+            if device_map != "sequential":
                 max_memory = get_balanced_memory(
                     model,
                     dtype=target_dtype,
@@ -2832,8 +2827,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model.tie_weights()
             tied_params = find_tied_parameters(model)
             # check if we don't have tied param in different devices
-            if check_tied_parameters_on_same_device is not None:
-                check_tied_parameters_on_same_device(tied_params, device_map)
+            check_tied_parameters_on_same_device(tied_params, device_map)
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
@@ -3025,24 +3019,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         missing_keys = list(set(expected_keys) - set(loaded_keys))
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
 
-        if find_tied_parameters is not None:
+        if is_accelerate_available():
             model.tie_weights()
             tied_params = find_tied_parameters(model)
         else:
             tied_params = []
-        _missing = []
-        for k in missing_keys:
-            found = False
-            for group in tied_params:
-                if k in group:
-                    found = True
-                    if len(group) > 2:
-                        group.remove(k)
-                    else:
-                        _missing.append(k)
-            if not found:
-                _missing.append(k)
-        missing_keys = _missing
+
+        for group in tied_params:
+            missing_in_group = [k for k in missing_keys if k in group]
+            if len(missing_in_group) > 0 and len(missing_in_group) < len(group):
+                missing_keys = [k for k in missing_keys if k not in missing_in_group]
 
         # Some models may have keys that are not in the state by design, removing them before needlessly warning
         # the user.
@@ -3282,7 +3268,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             missing_keys = [elem for elem in missing_keys if "SCB" not in elem]
 
         if len(unexpected_keys) > 0:
-            logger.warning(
+            archs = [] if model.config.architectures is None else model.config.architectures
+            warner = logger.warn if model.__class__.__name__ in archs else logger.info
+            warner(
                 f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
                 f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
                 f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"

@@ -1194,15 +1194,15 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
     @property
     def dummy_inputs(self):
         return {
-            "input_values": tf.random.uniform(shape=(1, 16000), dtype=tf.float32),
-            "attention_mask": tf.ones(shape=(1, 16000), dtype=tf.float32),
+            "input_values": tf.random.uniform(shape=(1, 500), dtype=tf.float32),
+            "attention_mask": tf.ones(shape=(1, 500), dtype=tf.float32),
         }
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         logger.warning(
             f"\n{self.__class__.__name__} has backpropagation operations that are NOT supported on CPU. If you wish "
-            "to train/fine-tine this model, you need a GPU or a TPU"
+            "to train/fine-tune this model, you need a GPU or a TPU"
         )
 
     def _get_feat_extract_output_lengths(self, input_lengths, add_adapter=None):

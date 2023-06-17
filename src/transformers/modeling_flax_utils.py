@@ -468,13 +468,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         # the state dict is unflattened to the match the format of model.params
         return unflatten_dict(state_sharded_dict, sep="/")
 
-    def can_generate(self) -> bool:
+    @classmethod
+    def can_generate(cls) -> bool:
         """
         Returns whether this model can generate sequences with `.generate()`. Returns:
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
         # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation
-        if "GenerationMixin" in str(self.prepare_inputs_for_generation.__func__):
+        if "GenerationMixin" in str(cls.prepare_inputs_for_generation):
             return False
         return True
 

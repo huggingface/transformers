@@ -1178,8 +1178,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         if isinstance(module, (Wav2Vec2Encoder, Wav2Vec2EncoderStableLayerNorm, Wav2Vec2FeatureEncoder)):
             module.gradient_checkpointing = value
 
-    @property
-    def _adapters(self):
+    def _get_adapters(self):
         if self.config.adapter_attn_dim is None:
             raise ValueError(f"{self.__class__} has no adapter layers. Make sure to define `config.adapter_attn_dim`.")
 
@@ -1194,6 +1193,19 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                 adapter_weights[".".join(["lm_head", name])] = param
 
         return adapter_weights
+
+    def init_adapter_layers(self):
+        """
+        (Re-)initialize attention adapter layers and lm head for adapter-only fine-tuning
+        """
+        # init attention adapters
+        for module in self.modules():
+            if isinstance(module, Wav2Vec2AttnAdapterLayer):
+                self._init_weights(module)
+
+        # init lm head
+        if isinstance(self, Wav2Vec2ForCTC):
+            self._init_weights(self.lm_head)
 
     def load_adapter(self, target_lang: str, **kwargs):
         r"""
@@ -1339,7 +1351,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                     f" directory containing a file named {filepath}."
                 )
 
-        adapter_weights = self._adapters
+        adapter_weights = self._get_adapters()
         unexpected_keys = set(state_dict.keys()) - set(adapter_weights.keys())
         missing_keys = set(adapter_weights.keys()) - set(state_dict.keys())
 
@@ -1888,6 +1900,14 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
+
+    def freeze_base_model(self):
+        """
+        Calling this function will disable the gradient computation for the base model so that its parameters will not
+        be updated during training. Only the classification head will be updated.
+        """
+        for param in self.wav2vec2.parameters():
+            param.requires_grad = False
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

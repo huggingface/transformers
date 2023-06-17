@@ -156,16 +156,16 @@
     title: (번역중) Philosophy
   - local: in_translation
     title: (번역중) Glossary
-  - local: in_translation
-    title: (번역중) 🤗 What 🤗 Transformers can do
+  - local: task_summary
+    title: 🤗 Transformers로 할 수 있는 작업
   - local: tasks_explained
     title: 🤗 Transformers로 작업을 해결하는 방법
   - local: in_translation
     title: (번역중) The Transformer model family
   - local: in_translation
     title: (번역중) Summary of the tokenizers
-  - local: in_translation
-    title: (번역중) Attention mechanisms
+  - local: attention
+    title: 어텐션 매커니즘
   - local: pad_truncation
     title: 패딩과 잘라내기
   - local: bertology
