@@ -1481,7 +1481,10 @@ class GenerationTesterMixin:
 
             high_output = model.generate(input_ids, top_k=4, penalty_alpha=0.6, low_memory=False)
             hmem_usage = torch.cuda.max_memory_allocated()
+
+            # will usually fail due to the propegation of batch vs unbatched forward pass numerical errors
             self.assertListEqual(low_mem_output.tolist(), high_mem_output.tolist())
+
             assert lmem_usage < hmem_usage
 
         return
