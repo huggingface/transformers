@@ -1854,11 +1854,12 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
     WAV_2_VEC_2_START_DOCSTRING,
 )
 class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
-    def __init__(self, config, target_lang=None):
+    def __init__(self, config, target_lang: Optional[str] = None):
         super().__init__(config)
 
         self.wav2vec2 = Wav2Vec2Model(config)
         self.dropout = nn.Dropout(config.final_dropout)
+        self.target_lang = target_lang
 
         if config.vocab_size is None:
             raise ValueError(
@@ -1872,15 +1873,17 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         )
         self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
 
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def load_adaptive_weights(self):
+        target_lang = self.target_lang
         if target_lang is not None and getattr(self.config, "adapter_attn_dim", None) is None:
             raise ValueError(f"Cannot pass `target_lang`: {target_lang} if `config.adapter_attn_dim` is not defined.")
         elif target_lang is None and getattr(self.config, "adapter_attn_dim", None) is not None:
             logger.info("By default `target_lang` is set to 'eng'.")
         elif target_lang is not None:
             self.load_adapter(target_lang)
-
-        # Initialize weights and apply final processing
-        self.post_init()
 
     def freeze_feature_extractor(self):
         """

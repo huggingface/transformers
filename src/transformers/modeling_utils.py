@@ -1275,6 +1275,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if hasattr(module, "_tie_weights"):
                 module._tie_weights()
 
+    def load_adaptive_weights(self):
+        """
+        Load adaptive weights after state dict has been loaded. If required this method should be overridden by derived class.
+        """
+        pass
+
     @staticmethod
     def _tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str):
         uninitialized_encoder_weights: List[str] = []
@@ -2896,6 +2902,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
+
+        # make sure adaptive weights can be loaded dynamically
+        model.load_adaptive_weights()
 
         # Set model in evaluation mode to deactivate DropOut modules by default
         model.eval()
