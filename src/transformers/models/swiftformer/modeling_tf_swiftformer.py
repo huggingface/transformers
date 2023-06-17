@@ -16,13 +16,11 @@
 
 
 import collections.abc
-from typing import Optional, Tuple, Union, Dict
-
+from typing import Dict, Optional, Tuple, Union
 
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-
 from ...modeling_tf_outputs import (
     TFBaseModelOutputWithNoAttention,
     TFImageClassifierOutputWithNoAttention,
