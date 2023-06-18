@@ -2106,8 +2106,8 @@ class GenerationMixin:
                     next_hidden = outputs.hidden_states[-1]
                     full_hidden_states = outputs.hidden_states
 
-                next_hidden = next_hidden + (torch.randn(next_hidden.shape) / 100).to(input_ids.device)
-                for i in full_hidden_states:
+                next_hidden = next_hidden + (torch.randn(next_hidden.shape)/100).to(input_ids.device)
+                for i in range(len(full_hidden_states)):
                     full_hidden_states[i] += (torch.randn(full_hidden_states[i].shape)/100).to(input_ids.device)
 
 
