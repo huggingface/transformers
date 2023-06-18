@@ -21,6 +21,7 @@ import unittest
 
 import numpy as np
 
+from __future__ import annotations
 from transformers import WhisperConfig, WhisperFeatureExtractor, WhisperProcessor
 from transformers.testing_utils import is_tf_available, require_tf, require_tokenizers, run_test_in_subprocess, slow
 from transformers.utils import cached_property
@@ -284,7 +285,7 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         for model_class in self.all_model_classes:
             model = model_class(config)
 
-            model(model.dummy_inputs)
+            model.build()
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=False)

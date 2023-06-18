@@ -286,6 +286,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
         r"language_model.lm_head.weight",
     ]
     _no_split_modules = ["Blip2Attention", "T5Block", "OPTDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
     _keep_in_fp32_modules = ["wo"]
 
     def _init_weights(self, module):
@@ -1059,7 +1060,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
                 Mask with ones indicating tokens to attend to, zeros for tokens to ignore.
             input_shape (`Tuple[int]`):
                 The shape of the input to the model.
-            device: (`torch.device`):
+            device (`torch.device`):
                 The device of the input to the model.
 
         Returns:

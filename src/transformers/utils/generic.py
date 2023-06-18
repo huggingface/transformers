@@ -398,11 +398,10 @@ def can_return_loss(model_class):
     Args:
         model_class (`type`): The class of the model.
     """
-    base_classes = str(inspect.getmro(model_class))
-
-    if "keras.engine.training.Model" in base_classes:
+    framework = infer_framework(model_class)
+    if framework == "tf":
         signature = inspect.signature(model_class.call)  # TensorFlow models
-    elif "torch.nn.modules.module.Module" in base_classes:
+    elif framework == "pt":
         signature = inspect.signature(model_class.forward)  # PyTorch models
     else:
         signature = inspect.signature(model_class.__call__)  # Flax models
@@ -422,11 +421,10 @@ def find_labels(model_class):
         model_class (`type`): The class of the model.
     """
     model_name = model_class.__name__
-    base_classes = str(inspect.getmro(model_class))
-
-    if "keras.engine.training.Model" in base_classes:
+    framework = infer_framework(model_class)
+    if framework == "tf":
         signature = inspect.signature(model_class.call)  # TensorFlow models
-    elif "torch.nn.modules.module.Module" in base_classes:
+    elif framework == "pt":
         signature = inspect.signature(model_class.forward)  # PyTorch models
     else:
         signature = inspect.signature(model_class.__call__)  # Flax models
@@ -565,3 +563,21 @@ def add_model_info_to_auto_map(auto_map, repo_id):
             auto_map[key] = f"{repo_id}--{value}"
 
     return auto_map
+
+
+def infer_framework(model_class):
+    """
+    Infers the framework of a given model without using isinstance(), because we cannot guarantee that the relevant
+    classes are imported or available.
+    """
+    for base_class in inspect.getmro(model_class):
+        module = base_class.__module__
+        name = base_class.__name__
+        if module.startswith("tensorflow") or module.startswith("keras") or name == "TFPreTrainedModel":
+            return "tf"
+        elif module.startswith("torch") or name == "PreTrainedModel":
+            return "pt"
+        elif module.startswith("flax") or module.startswith("jax") or name == "FlaxPreTrainedModel":
+            return "flax"
+    else:
+        raise TypeError(f"Could not infer framework from class {model_class}.")

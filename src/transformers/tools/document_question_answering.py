@@ -46,13 +46,13 @@ class DocumentQuestionAnsweringTool(PipelineTool):
 
         super().__init__(*args, **kwargs)
 
-    def encode(self, image: "Image", question: str):
+    def encode(self, document: "Image", question: str):
         task_prompt = "<s_docvqa><s_question>{user_input}</s_question><s_answer>"
         prompt = task_prompt.replace("{user_input}", question)
         decoder_input_ids = self.pre_processor.tokenizer(
             prompt, add_special_tokens=False, return_tensors="pt"
         ).input_ids
-        pixel_values = self.pre_processor(image, return_tensors="pt").pixel_values
+        pixel_values = self.pre_processor(document, return_tensors="pt").pixel_values
 
         return {"decoder_input_ids": decoder_input_ids, "pixel_values": pixel_values}
 

@@ -573,10 +573,10 @@ class RagRetriever:
         Retrieves documents for specified `question_hidden_states`.
 
         Args:
-            question_input_ids: (`List[List[int]]`) batch of input ids
+            question_input_ids (`List[List[int]]`) batch of input ids
             question_hidden_states (`np.ndarray` of shape `(batch_size, vector_size)`:
                 A batch of query vectors to retrieve with.
-            prefix: (`str`, *optional*):
+            prefix (`str`, *optional*):
                 The prefix used by the generator's tokenizer.
             n_docs (`int`, *optional*):
                 The number of docs retrieved per query.

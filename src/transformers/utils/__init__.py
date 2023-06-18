@@ -39,6 +39,7 @@ from .generic import (
     expand_dims,
     find_labels,
     flatten_dict,
+    infer_framework,
     is_jax_tensor,
     is_numpy_array,
     is_tensor,
@@ -176,6 +177,8 @@ from .import_utils import (
 
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
+ADAPTER_WEIGHTS_NAME = "adapter_model.bin"
+ADAPTER_SAFE_WEIGHTS_NAME = "adapter_model.safetensors"
 TF2_WEIGHTS_NAME = "tf_model.h5"
 TF2_WEIGHTS_INDEX_NAME = "tf_model.h5.index.json"
 TF_WEIGHTS_NAME = "model.ckpt"
