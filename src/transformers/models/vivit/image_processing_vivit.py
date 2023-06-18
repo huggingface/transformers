@@ -202,7 +202,10 @@ class VivitImageProcessor(BaseImageProcessor):
         **kwargs,
     ):
         """
-        Rescale an image by a scale factor. image = image * scale.
+                Rescale an image by a scale factor. 
+        
+        If offset is `True`, image scaled between [-1, 1]: image = (image - 127.5) * scale. 
+        If offset is `False`, image scaled between [0, 1]: image = image * scale
 
         Args:
             image (`np.ndarray`):
