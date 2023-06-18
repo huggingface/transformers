@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Testing suite for the TensorFlow Whisper model. """
+from __future__ import annotations
+
 import copy
 import inspect
 import tempfile
@@ -21,7 +23,6 @@ import unittest
 
 import numpy as np
 
-from __future__ import annotations
 from transformers import WhisperConfig, WhisperFeatureExtractor, WhisperProcessor
 from transformers.testing_utils import is_tf_available, require_tf, require_tokenizers, run_test_in_subprocess, slow
 from transformers.utils import cached_property
