@@ -88,9 +88,9 @@ class VivitImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Defines the scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter
             in the `preprocess` method.
-        do_zero_centering (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image to values between [-1 - 1] instead of [0 - 1]. Can be overriden by the
-            `do_zero_centering` in the `preprocess` method.
+        offset (`bool`, *optional*, defaults to `True`):
+            Whether to scale the image in both negative and positive directions. Can be overriden by the
+            `offset` in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `False`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
@@ -113,7 +113,7 @@ class VivitImageProcessor(BaseImageProcessor):
         crop_size: Dict[str, int] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
-        do_zero_centering: bool = True,
+        offset: bool = True,
         do_normalize: bool = False,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -132,7 +132,7 @@ class VivitImageProcessor(BaseImageProcessor):
         self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
-        self.do_zero_centering = do_zero_centering
+        self.offset = offset
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
@@ -305,7 +305,7 @@ class VivitImageProcessor(BaseImageProcessor):
         crop_size: Dict[str, int] = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
-        do_zero_centering: bool = None,
+        offset: bool = None,
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -331,12 +331,12 @@ class VivitImageProcessor(BaseImageProcessor):
             crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 Size of the image after applying the centre crop.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between `[-1 - 1]` if `do_zero_centering` is `True`, `[0, 1]`
+                Whether to rescale the image values between `[-1 - 1]` if `offset` is `True`, `[0, 1]`
                 otherwise.
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_zero_centering (`bool`, *optional*, defaults to `self.do_zero_centering`):
-                Whether to rescale the image to values between [-1 - 1] instead of [0 - 1].
+            offset (`bool`, *optional*, defaults to `self.offset`):
+                Whether to scale the image in both negative and positive directions.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
@@ -361,7 +361,7 @@ class VivitImageProcessor(BaseImageProcessor):
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_zero_centering = do_zero_centering if do_zero_centering is not None else self.do_zero_centering
+        offset = offset if offset is not None else self.offset
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -390,7 +390,7 @@ class VivitImageProcessor(BaseImageProcessor):
                     crop_size=crop_size,
                     do_rescale=do_rescale,
                     rescale_factor=rescale_factor,
-                    do_zero_centering=do_zero_centering,
+                    offset=offset,
                     do_normalize=do_normalize,
                     image_mean=image_mean,
                     image_std=image_std,
