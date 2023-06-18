@@ -2106,7 +2106,12 @@ class GenerationMixin:
                     next_hidden = outputs.hidden_states[-1]
                     full_hidden_states = outputs.hidden_states
 
-                logits = outputs.logits[:, -1, :]
+                next_hidden = next_hidden + (torch.randn(next_hidden.shape) / 100).to(input_ids.device)
+                for i in full_hidden_states:
+                    full_hidden_states[i] += (torch.randn(full_hidden_states[i].shape)/100).to(input_ids.device)
+
+
+                logits = outputs.logits[:, -1, :] + torch.randn(outputs.logits[:, -1, :].shape).to(inputs_ids.device)
 
             next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
