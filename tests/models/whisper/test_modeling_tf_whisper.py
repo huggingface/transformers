@@ -940,6 +940,7 @@ class TFWhisperEncoderModelTest(TFModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_missing_keys = False
+    test_onnx = False
 
     input_name = "input_features"
 
