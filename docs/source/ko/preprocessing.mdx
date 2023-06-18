@@ -480,7 +480,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 >>> lj_speech = load_dataset("lj_speech", split="train")
 ```
 
-자동 음성 인식에서는 `audio`와 `text`에만 집중하면 되므로, 다른 열들은 제거할 수 있습니다:
+자동 음성 인식(ASR)에서는 `audio`와 `text`에만 집중하면 되므로, 다른 열들은 제거할 수 있습니다:
 
 ```py
 >>> lj_speech = lj_speech.map(remove_columns=["file", "id", "normalized_text"])
