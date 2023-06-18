@@ -255,7 +255,7 @@ class VivitImageProcessor(BaseImageProcessor):
         crop_size: Dict[str, int] = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
-        do_zero_centering: bool = None,
+        offset: bool = True,
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -274,8 +274,8 @@ class VivitImageProcessor(BaseImageProcessor):
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
-        if do_zero_centering and not do_rescale:
-            raise ValueError("For zero-centering, do_rescale must also be set to True.")
+        if offset and not do_rescale:
+            raise ValueError("For offset, do_rescale must also be set to True.")
 
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
@@ -287,7 +287,7 @@ class VivitImageProcessor(BaseImageProcessor):
             image = self.center_crop(image, size=crop_size)
 
         if do_rescale:
-            image = self.rescale(image=image, scale=rescale_factor, do_zero_centering=do_zero_centering)
+            image = self.rescale(image=image, scale=rescale_factor, offset=offset)
 
         if do_normalize:
             image = self.normalize(image=image, mean=image_mean, std=image_std)
