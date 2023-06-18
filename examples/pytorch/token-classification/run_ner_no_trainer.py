@@ -777,7 +777,7 @@ def main():
             if args.with_tracking:
                 all_results.update({"train_loss": total_loss.item() / len(train_dataloader)})
             with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
-                json.dump(all_results, f)
+                json.dump(all_results, f, default=int)
 
 
 if __name__ == "__main__":
