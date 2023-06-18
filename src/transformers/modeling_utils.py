@@ -1277,7 +1277,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def load_adaptive_weights(self):
         """
-        Load adaptive weights after state dict has been loaded. If required this method should be overridden by derived class.
+        Load adaptive weights after state dict has been loaded. If required this method should be overridden by derived
+        class.
         """
         pass
 

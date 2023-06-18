@@ -1271,6 +1271,10 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         if self.config.adapter_attn_dim is None:
             raise ValueError(f"Cannot load_adapter for {target_lang} if `config.adapter_attn_dim` is not defined.")
 
+        if target_lang == self.target_lang:
+            logger.warn(f"Adapter weights are already set to {target_lang}.")
+            return
+
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
@@ -1371,6 +1375,9 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         # make sure that adapter weights are put in exactly the same precision and device placement and overwritten adapter weights
         state_dict = {k: v.to(adapter_weights[k]) for k, v in state_dict.items()}
         self.load_state_dict(state_dict, strict=False)
+
+        # set target language corectly
+        self.target_lang = target_lang
 
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
