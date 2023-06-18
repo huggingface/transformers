@@ -684,10 +684,10 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=1, seg_len=len(videoreader))
         >>> video = videoreader.get_batch(indices).asnumpy()
 
-        >>> feature_extractor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2-kinetics400")
+        >>> image_processor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2-kinetics400")
         >>> model = VivitForVideoClassification.from_pretrained("google/vivit-b-16x2-kinetics400")
 
-        >>> inputs = feature_extractor(list(video), return_tensors="pt")
+        >>> inputs = image_processor(list(video), return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
