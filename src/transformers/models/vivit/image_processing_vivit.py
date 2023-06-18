@@ -217,14 +217,9 @@ class VivitImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
+        image = image.astype(np.float32)        
         if offset:
-            rescaled_image = (image - 127.5) * scale
-            if data_format is not None:
-                rescaled_image = to_channel_dimension_format(rescaled_image, data_format)
-            rescaled_image = rescaled_image.astype(np.float32)
-        else:
-            rescaled_image = rescale(image, scale=scale, data_format=data_format, **kwargs)
-
+        	image = image - 127.5
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
     def normalize(
