@@ -213,7 +213,6 @@ def convert(output_path: str):
 
     video = prepare_video()
     inputs = extractor(video, return_tensors="pt")
-    torch.save(inputs, "video_processed.pt")
 
     outputs = model(**inputs)
 
