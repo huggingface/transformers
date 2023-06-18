@@ -90,7 +90,7 @@ class VivitImageProcessor(BaseImageProcessor):
             in the `preprocess` method.
         do_zero_centering (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image to values between [-1 - 1] instead of [0 - 1]. Can be overriden by the
-            `do_zero_centering` in the `preprocess` method..
+            `do_zero_centering` in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `False`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
