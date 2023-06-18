@@ -680,7 +680,7 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         ... )
         >>> container = av.open(file_path)
 
-        >>> # sample 16 frames
+        >>> # sample 32 frames
         >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=1, seg_len=len(videoreader))
         >>> video = videoreader.get_batch(indices).asnumpy()
 
