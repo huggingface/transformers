@@ -2106,13 +2106,27 @@ class GenerationMixin:
                     next_hidden = outputs.hidden_states[-1]
                     full_hidden_states = outputs.hidden_states
 
-                next_hidden = next_hidden + (torch.randn(next_hidden.shape)/100).to(input_ids.device)
+                next_hidden = next_hidden #+ (torch.randn(next_hidden.shape)/100).to(input_ids.device)
                 final = []
                 for i in range(len(full_hidden_states)):
-                    final.append(full_hidden_states[i] + (torch.randn(full_hidden_states[i].shape)/100).to(input_ids.device))
+                    final.append(full_hidden_states[i]) #+ (torch.randn(full_hidden_states[i].shape)/100).to(input_ids.device))
                 full_hidden_states = tuple(final)
 
-                logits = outputs.logits[:, -1, :] + torch.randn(outputs.logits[:, -1, :].shape).to(inputs_ids.device)
+                logits = outputs.logits[:, -1, :] #+ torch.randn(outputs.logits[:, -1, :].shape).to(inputs_ids.device)
+
+            if low_memory:
+                _, model_kwargs = self._expand_inputs_for_generation(
+                        expand_size=top_k, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
+                    )
+
+                new_key_values = []
+                for layer in model_kwargs["past_key_values"]:
+                    items = []
+                    # item is either the key or the value matrix
+                    for item in layer:
+                        items.append(item.repeat_interleave(top_k, dim=0))
+                    new_key_values.append(items)
+                model_kwargs["past_key_values"] = new_key_values
 
             next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
@@ -2120,7 +2134,7 @@ class GenerationMixin:
             # compute the degeneration penalty and re-rank the candidates based on the degeneration penalty and the
             # model confidence
             selected_idx = _ranking_fast(context_hidden, next_hidden, top_k_probs, penalty_alpha, top_k)
-            print (selected_idx)
+            print (selected_idx.item)
 
             # prepare for the next step: (1) next token_id; (2) past_key_values; (3) last_hidden_states for computing
             # the degeneration penalty; (4) logits for selecting next top-k candidates; (5) selected tokens scores
