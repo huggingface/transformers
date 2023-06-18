@@ -289,12 +289,14 @@ class VivitLayer(nn.Module):
 
     def forward(self, hidden_states, head_mask=None, output_attentions=False):
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in Vivit, layernorm is applied before self-attention
+            # in Vivit, layernorm is applied before self-attention
+            self.layernorm_before(hidden_states),
             head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        # add self attentions if we output attention weights
+        outputs = self_attention_outputs[1:]
 
         # first residual connection
         hidden_states = attention_output + hidden_states
