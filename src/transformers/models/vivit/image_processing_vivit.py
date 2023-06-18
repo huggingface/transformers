@@ -202,10 +202,10 @@ class VivitImageProcessor(BaseImageProcessor):
         **kwargs,
     ):
         """
-                Rescale an image by a scale factor. 
-        
-        If offset is `True`, image scaled between [-1, 1]: image = (image - 127.5) * scale. 
-        If offset is `False`, image scaled between [0, 1]: image = image * scale
+                Rescale an image by a scale factor.
+
+        If offset is `True`, image scaled between [-1, 1]: image = (image - 127.5) * scale. If offset is `False`, image
+        scaled between [0, 1]: image = image * scale
 
         Args:
             image (`np.ndarray`):
@@ -217,9 +217,9 @@ class VivitImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        image = image.astype(np.float32)        
+        image = image.astype(np.float32)
         if offset:
-        	image = image - 127.5
+            image = image - 127.5
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
     def normalize(
