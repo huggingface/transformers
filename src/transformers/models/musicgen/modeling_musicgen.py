@@ -497,8 +497,10 @@ MUSICGEN_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary.
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary. Note that the `decoder_input_ids` will automatically
+            be converted from shape `(batch_size * num_codebooks, target_sequence_length)` to `(batch_size, num_codebooks, 
+            target_sequence_length)` in the forward pass.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
@@ -644,9 +646,10 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
+                provide it. Note that the input ids will automatically be converted from shape `(batch_size * num_codebooks,
+                sequence_length)` to `(batch_size, num_codebooks, sequence_length)` in the forward pass.
 
                 Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
