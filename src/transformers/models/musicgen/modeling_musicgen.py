@@ -13,18 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Musicgen model."""
+import copy
 import inspect
 import math
 import random
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
 
+from ... import StoppingCriteriaList
 from ...activations import ACT2FN
-from ...generation.logits_process import ClassifierFreeGuidanceLogitsProcessor
+from ...generation.configuration_utils import GenerationConfig
+from ...generation.logits_process import LogitsProcessorList
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -58,13 +61,14 @@ MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 
 
+# Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(
     input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
 ):
     """
     Make causal mask used for bi-directional self-attention.
     """
-    bsz, codebooks, tgt_len = input_ids_shape
+    bsz, tgt_len = input_ids_shape
     mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min, device=device), device=device)
     mask_cond = torch.arange(mask.size(-1), device=device)
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
@@ -716,10 +720,10 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         elif input_ids is not None:
             input = input_ids
             input_shape = input.size()
-            bsz, codebooks, seq_len = input_shape
+            # (bsz * codebooks, seq_len) -> (bsz, codebooks, seq_len)
+            input = input.reshape(-1, self.num_codebooks, input_shape[-1])
         elif inputs_embeds is not None:
-            bsz, seq_len = inputs_embeds.size()[:-1]
-            input_shape = (bsz, self.num_codebooks, seq_len)
+            input_shape = inputs_embeds.size()[:-1]
             input = inputs_embeds[:, :, -1:]
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
@@ -728,6 +732,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
+            bsz, seq_len = input.shape[:2]
             inputs_embeds = torch.zeros((bsz, seq_len, self.d_model), device=input_ids.device)
 
             for codebook in range(self.num_codebooks):
@@ -953,7 +958,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         return self.lm_heads
 
     def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
+        self.lm_heads = new_embeddings
 
     def set_decoder(self, decoder):
         self.model.decoder = decoder
@@ -1010,12 +1015,14 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
 
         hidden_states = outputs[0]
 
-        # (bsz, num_codebooks, seq_len, vocab_size)
         lm_logits = torch.stack([head(hidden_states) for head in self.lm_heads], dim=1)
 
         loss = None
         if labels is not None:
             raise NotImplementedError("Training is not implemented for Musicgen.")
+
+        # (bsz, num_codebooks, seq_len, vocab_size) -> (bsz * num_codebooks, seq_len, vocab_size)
+        lm_logits = lm_logits.reshape(-1, *lm_logits.shape[2:])
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
@@ -1040,28 +1047,29 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         cross_attn_head_mask=None,
         past_key_values=None,
         use_cache=True,
+        delay_pattern_mask=None,
+        guidance_scale=1.0,
         **kwargs,
     ):
-        if kwargs.get("delay_pattern_mask") is None:
+        if delay_pattern_mask is None:
             input_ids, delay_pattern_mask = self.build_delay_pattern_mask(
                 input_ids,
-                self.generation_config.pad_token_id,
+                pad_token_id=self.generation_config.pad_token_id,
                 max_length=self.generation_config.max_length,
             )
-            kwargs["delay_pattern_mask"] = delay_pattern_mask
 
         # apply the delay pattern mask
-        input_ids = self.apply_delay_pattern_mask(input_ids, kwargs["delay_pattern_mask"])
+        input_ids = self.apply_delay_pattern_mask(input_ids, delay_pattern_mask)
 
-        if hasattr(self.generation_config, "guidance_scale") and self.generation_config.guidance_scale > 1:
+        if guidance_scale > 1:
             # for classifier free guidance we need to replicate the decoder args across the batch dim (we'll split these
             # before sampling)
-            input_ids = input_ids.repeat((2, 1, 1))
+            input_ids = input_ids.repeat((2, 1))
             if attention_mask is not None:
                 attention_mask = attention_mask.repeat((2, 1))
 
         if past_key_values is not None:
-            input_ids = input_ids[..., -1:]
+            input_ids = input_ids[:, -1:]
 
         return {
             "input_ids": input_ids,
@@ -1093,7 +1101,10 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         where a-h indicate the input prompt (decoder input ids) that are offset by 1. Now, we only override the -1
         tokens in our prediction.
         """
+        # (bsz * num_codebooks, seq_len) -> (bsz, num_codebooks, seq_len)
+        input_ids = input_ids.reshape(-1, self.num_codebooks, input_ids.shape[-1])
         bsz, num_codebooks, seq_len = input_ids.shape
+
         max_length = max_length if max_length is not None else self.generation_config.max_length
         input_ids_shifted = (
             torch.ones((bsz, num_codebooks, max_length), dtype=torch.long, device=input_ids.device) * -1
@@ -1144,7 +1155,11 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         first_codebook_ids = input_ids[:, 0, :]
         start_ids = (first_codebook_ids == -1).nonzero()[:, 1]
         first_start_id = min(start_ids)
-        return input_ids[..., :first_start_id], input_ids
+
+        # (bsz * num_codebooks, seq_len) -> (bsz, num_codebooks, seq_len)
+        pattern_mask = input_ids.reshape(bsz * num_codebooks, -1)
+        input_ids = input_ids[..., :first_start_id].reshape(bsz * num_codebooks, -1)
+        return input_ids, pattern_mask
 
     @staticmethod
     def apply_delay_pattern_mask(input_ids, decoder_pad_token_mask):
@@ -1155,14 +1170,15 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         input_ids = torch.where(decoder_pad_token_mask == -1, input_ids, decoder_pad_token_mask)
         return input_ids
 
+    @torch.no_grad()
     def generate(
         self,
         inputs: Optional[torch.Tensor] = None,
-        generation_config=None,
-        logits_processor=None,
-        stopping_criteria=None,
-        prefix_allowed_tokens_fn=None,
-        synced_gpus=False,
+        generation_config: Optional[GenerationConfig] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
+        stopping_criteria: Optional[StoppingCriteriaList] = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        synced_gpus: Optional[bool] = None,
         **kwargs,
     ):
         """
@@ -1235,69 +1251,180 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                     - [`~generation.BeamSearchEncoderDecoderOutput`],
                     - [`~generation.BeamSampleEncoderDecoderOutput`]
         """
+        # 1. Handle `generation_config` and kwargs that might update it, and validate the resulting objects
         if generation_config is None:
             generation_config = self.generation_config
 
-        if inputs is not None:
-            seq_len = inputs.shape[-1] + 1
+        generation_config = copy.deepcopy(generation_config)
+        model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
+        generation_config.validate()
+        self._validate_model_kwargs(model_kwargs.copy())
+
+        # 2. Set generation parameters if not already defined
+        logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
+        stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
+
+        if generation_config.pad_token_id is None and generation_config.eos_token_id is not None:
+            if model_kwargs.get("attention_mask", None) is None:
+                logger.warning(
+                    "The attention mask and the pad token id were not set. As a consequence, you may observe "
+                    "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
+                )
+            eos_token_id = generation_config.eos_token_id
+            if isinstance(eos_token_id, list):
+                eos_token_id = eos_token_id[0]
+            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
+            generation_config.pad_token_id = eos_token_id
+
+        # 3. Define model inputs
+        # inputs_tensor has to be defined
+        # model_input_name is defined if model-specific keyword input is passed
+        # otherwise model_input_name is None
+        # all model-specific keyword inputs are removed from `model_kwargs`
+        input_ids, model_input_name, model_kwargs = self._prepare_model_inputs(
+            inputs, generation_config.bos_token_id, model_kwargs
+        )
+        batch_size = input_ids.shape[0]
+
+        # 4. Define other model kwargs
+        model_kwargs["output_attentions"] = generation_config.output_attentions
+        model_kwargs["output_hidden_states"] = generation_config.output_hidden_states
+        model_kwargs["use_cache"] = generation_config.use_cache
+        model_kwargs["guidance_scale"] = generation_config.guidance_scale
+
+        requires_attention_mask = "encoder_outputs" not in model_kwargs
+        if model_kwargs.get("attention_mask", None) is None and requires_attention_mask:
+            model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
+                input_ids, generation_config.pad_token_id, generation_config.eos_token_id
+            )
+
+        # 5. Prepare `max_length` depending on other stopping criteria.
+        input_ids_seq_length = input_ids.shape[-1]
+        has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
+        if has_default_max_length and generation_config.max_new_tokens is None:
+            logger.warning(
+                f"Using `max_length`'s default ({generation_config.max_length}) to control the generation length. "
+                "This behaviour is deprecated and will be removed from the config in v5 of Transformers -- we"
+                " recommend using `max_new_tokens` to control the maximum length of the generation.",
+                UserWarning,
+            )
+        elif generation_config.max_new_tokens is not None:
+            if not has_default_max_length:
+                logger.warning(
+                    f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
+                    f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
+                    "Please refer to the documentation for more information. "
+                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
+                )
+            generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
+
+        if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
+            raise ValueError(
+                f"Unfeasible length constraints: the minimum length ({generation_config.min_length}) is larger than"
+                f" the maximum length ({generation_config.max_length})"
+            )
+        if input_ids_seq_length >= generation_config.max_length:
+            logger.warning(
+                f"Input length of decoder_input_ids is {input_ids_seq_length}, but `max_length` is set to"
+                f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
+                " increasing `max_new_tokens`."
+            )
+
+        # 6. Prepare `input_ids` which will be used for auto-regressive generation
+        # Build the delay pattern mask for offsetting each codebook prediction by 1 (this behaviour is specific to MusicGen)
+        input_ids, delay_pattern_mask = self.build_delay_pattern_mask(
+            input_ids,
+            pad_token_id=generation_config.decoder_start_token_id,
+            padding_mask=model_kwargs.get("padding_mask"),
+            max_length=generation_config.max_length,
+        )
+
+        # stash the delay mask so that we don't have to recompute it in each forward pass
+        model_kwargs["delay_pattern_mask"] = delay_pattern_mask
+
+        # 7. determine generation mode
+        is_greedy_gen_mode = (
+            (generation_config.num_beams == 1)
+            and (generation_config.num_beam_groups == 1)
+            and generation_config.do_sample is False
+        )
+        is_sample_gen_mode = (
+            (generation_config.num_beams == 1)
+            and (generation_config.num_beam_groups == 1)
+            and generation_config.do_sample is True
+        )
+
+        if is_greedy_gen_mode:
+            if generation_config.num_return_sequences > 1:
+                raise ValueError(
+                    "num_return_sequences has to be 1 when doing greedy search, "
+                    f"but is {generation_config.num_return_sequences}."
+                )
+
+            # 8. run greedy search
+            outputs = self.greedy_search(
+                input_ids,
+                logits_processor=logits_processor,
+                stopping_criteria=stopping_criteria,
+                pad_token_id=generation_config.pad_token_id,
+                eos_token_id=generation_config.eos_token_id,
+                output_scores=generation_config.output_scores,
+                return_dict_in_generate=generation_config.return_dict_in_generate,
+                synced_gpus=synced_gpus,
+                **model_kwargs,
+            )
+
+        elif is_sample_gen_mode:
+            # 9. prepare logits warper
+            logits_warper = self._get_logits_warper(generation_config)
+
+            # expand input_ids with `num_return_sequences` additional sequences per batch
+            input_ids, model_kwargs = self._expand_inputs_for_generation(
+                input_ids=input_ids,
+                expand_size=generation_config.num_return_sequences,
+                **model_kwargs,
+            )
+
+            # 10. run sample
+            outputs = self.sample(
+                input_ids,
+                logits_processor=logits_processor,
+                logits_warper=logits_warper,
+                stopping_criteria=stopping_criteria,
+                pad_token_id=generation_config.pad_token_id,
+                eos_token_id=generation_config.eos_token_id,
+                output_scores=generation_config.output_scores,
+                return_dict_in_generate=generation_config.return_dict_in_generate,
+                synced_gpus=synced_gpus,
+                **model_kwargs,
+            )
+
         else:
-            seq_len = 1
+            raise ValueError("Got incompatible mode for generation, should be one of greedy or sampling.")
 
-        if "max_new_tokens" in kwargs:
-            generation_config.max_new_tokens = kwargs["max_new_tokens"]
-            generation_config.max_length = kwargs["max_new_tokens"] + seq_len
-        elif "max_length" in kwargs:
-            generation_config.max_new_tokens = kwargs["max_length"] - seq_len
-            generation_config.max_length = kwargs["max_length"]
-
-        if "guidance_scale" in kwargs:
-            generation_config.guidance_scale = kwargs["guidance_scale"]
-
-        # TODO(SG): enable CFG logits processor by default in generate
-        if hasattr(generation_config, "guidance_scale") and generation_config.guidance_scale > 1:
-            cfg_processor = ClassifierFreeGuidanceLogitsProcessor(guidance_scale=generation_config.guidance_scale)
-            if logits_processor is None:
-                logits_processor = [cfg_processor]
-            else:
-                logits_processor.append(cfg_processor)
-
-        outputs = super().generate(
-            inputs,
-            generation_config,
-            logits_processor,
-            stopping_criteria,
-            prefix_allowed_tokens_fn,
-            synced_gpus,
-            **kwargs,
-        )
-
-        return_dict_in_generate = (
-            kwargs.get("return_dict_in_generate", None) or self.generation_config.return_dict_in_generate
-        )
-
-        if return_dict_in_generate:
+        if generation_config.return_dict_in_generate:
             output_ids = outputs.sequences
         else:
             output_ids = outputs
 
-        bsz, codebooks = output_ids.shape[:2]
         # build and apply the final delay pattern mask
         _, pattern_mask = self.build_delay_pattern_mask(
-            inputs, self.generation_config.pad_token_id, max_length=self.generation_config.max_length
+            inputs, generation_config.pad_token_id, max_length=generation_config.max_length
         )
         output_ids = self.apply_delay_pattern_mask(output_ids, pattern_mask)
 
         # revert the pattern delay mask by filtering the pad token id
-        output_ids = output_ids[output_ids != self.generation_config.pad_token_id].reshape(bsz, codebooks, -1)
+        output_ids = output_ids[output_ids != generation_config.pad_token_id].reshape(
+            batch_size, self.num_codebooks, -1
+        )
 
-        if return_dict_in_generate:
+        if generation_config.return_dict_in_generate:
             outputs.sequences = output_ids
             return outputs
         else:
             return output_ids
 
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
@@ -1797,29 +1924,30 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
+        decoder_delay_pattern_mask=None,
+        guidance_scale=1.0,
         **kwargs,
     ):
-        if kwargs.get("decoder_delay_mask") is None:
-            decoder_input_ids, decoder_delay_mask = self.decoder.build_delay_pattern_mask(
+        if decoder_delay_pattern_mask is None:
+            decoder_input_ids, decoder_delay_pattern_mask = self.decoder.build_delay_pattern_mask(
                 decoder_input_ids,
                 self.generation_config.pad_token_id,
                 max_length=self.generation_config.max_length,
             )
-            kwargs["decoder_delay_mask"] = decoder_delay_mask
 
         # apply the delay pattern mask
-        decoder_input_ids = self.decoder.apply_delay_pattern_mask(decoder_input_ids, kwargs["decoder_delay_mask"])
+        decoder_input_ids = self.decoder.apply_delay_pattern_mask(decoder_input_ids, decoder_delay_pattern_mask)
 
-        if self.generation_config.guidance_scale > 1:
+        if guidance_scale > 1:
             # for classifier free guidance we need to replicate the decoder args across the batch dim (we'll split these
             # before sampling)
-            decoder_input_ids = decoder_input_ids.repeat((2, 1, 1))
+            decoder_input_ids = decoder_input_ids.repeat((2, 1))
             if decoder_attention_mask is not None:
                 decoder_attention_mask = decoder_attention_mask.repeat((2, 1))
 
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
-            decoder_input_ids = decoder_input_ids[..., -1:]
+            decoder_input_ids = decoder_input_ids[:, -1:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -1880,14 +2008,14 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 model_kwargs["decoder_attention_mask"] = decoder_attention_mask
 
         # build the delay pattern mask for offsetting each codebook prediction by 1 (this behaviour is specific to MusicGen)
-        decoder_input_ids, decoder_delay_mask = self.decoder.build_delay_pattern_mask(
+        decoder_input_ids, decoder_delay_pattern_mask = self.decoder.build_delay_pattern_mask(
             decoder_input_ids,
             decoder_start_token_id,
             padding_mask=model_kwargs.get("padding_mask"),
             max_length=self.generation_config.max_length,
         )
         # stash the delay mask so that we don't have to recompute in each forward pass
-        model_kwargs["decoder_delay_mask"] = decoder_delay_mask
+        model_kwargs["decoder_delay_pattern_mask"] = decoder_delay_pattern_mask
 
         return decoder_input_ids, model_kwargs
 
@@ -1943,14 +2071,15 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             " model.decoder.resize_token_embeddings(...))"
         )
 
+    @torch.no_grad()
     def generate(
         self,
         inputs: Optional[torch.Tensor] = None,
-        generation_config=None,
-        logits_processor=None,
-        stopping_criteria=None,
-        prefix_allowed_tokens_fn=None,
-        synced_gpus=False,
+        generation_config: Optional[GenerationConfig] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
+        stopping_criteria: Optional[StoppingCriteriaList] = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        synced_gpus: Optional[bool] = None,
         **kwargs,
     ):
         """
@@ -2023,74 +2152,178 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                     - [`~generation.BeamSearchEncoderDecoderOutput`],
                     - [`~generation.BeamSampleEncoderDecoderOutput`]
         """
+        # 1. Handle `generation_config` and kwargs that might update it, and validate the resulting objects
         if generation_config is None:
             generation_config = self.generation_config
 
-        decoder_input_ids = kwargs.get("decoder_input_ids")
-        if decoder_input_ids is not None:
-            seq_len = decoder_input_ids.shape[-1] + 1
+        generation_config = copy.deepcopy(generation_config)
+        model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
+        generation_config.validate()
+        self._validate_model_kwargs(model_kwargs.copy())
+
+        # 2. Set generation parameters if not already defined
+        logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
+        stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
+
+        if generation_config.pad_token_id is None and generation_config.eos_token_id is not None:
+            if model_kwargs.get("attention_mask", None) is None:
+                logger.warning(
+                    "The attention mask and the pad token id were not set. As a consequence, you may observe "
+                    "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
+                )
+            eos_token_id = generation_config.eos_token_id
+            if isinstance(eos_token_id, list):
+                eos_token_id = eos_token_id[0]
+            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
+            generation_config.pad_token_id = eos_token_id
+
+        # 3. Define model inputs
+        # inputs_tensor has to be defined
+        # model_input_name is defined if model-specific keyword input is passed
+        # otherwise model_input_name is None
+        # all model-specific keyword inputs are removed from `model_kwargs`
+        inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(
+            inputs, generation_config.bos_token_id, model_kwargs
+        )
+        batch_size = inputs_tensor.shape[0]
+
+        # 4. Define other model kwargs
+        model_kwargs["output_attentions"] = generation_config.output_attentions
+        model_kwargs["output_hidden_states"] = generation_config.output_hidden_states
+        model_kwargs["use_cache"] = generation_config.use_cache
+        model_kwargs["guidance_scale"] = generation_config.guidance_scale
+
+        requires_attention_mask = "encoder_outputs" not in model_kwargs
+
+        if model_kwargs.get("attention_mask", None) is None and requires_attention_mask:
+            model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
+                inputs_tensor, generation_config.pad_token_id, generation_config.eos_token_id
+            )
+
+        if "encoder_outputs" not in model_kwargs:
+            # encoder_outputs are created and added to `model_kwargs`
+            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
+                inputs_tensor, model_kwargs, model_input_name
+            )
+
+        # 5. Prepare `input_ids` which will be used for auto-regressive generation
+        input_ids, model_kwargs = self._prepare_decoder_input_ids_for_generation(
+            batch_size=batch_size,
+            model_input_name=model_input_name,
+            model_kwargs=model_kwargs,
+            decoder_start_token_id=generation_config.decoder_start_token_id,
+            bos_token_id=generation_config.bos_token_id,
+            device=inputs_tensor.device,
+        )
+
+        # 6. Prepare `max_length` depending on other stopping criteria.
+        input_ids_seq_length = input_ids.shape[-1]
+        has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
+        if has_default_max_length and generation_config.max_new_tokens is None:
+            logger.warning(
+                f"Using `max_length`'s default ({generation_config.max_length}) to control the generation length. "
+                "This behaviour is deprecated and will be removed from the config in v5 of Transformers -- we"
+                " recommend using `max_new_tokens` to control the maximum length of the generation.",
+                UserWarning,
+            )
+        elif generation_config.max_new_tokens is not None:
+            if not has_default_max_length:
+                logger.warning(
+                    f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
+                    f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
+                    "Please refer to the documentation for more information. "
+                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
+                )
+            generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
+
+        if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
+            raise ValueError(
+                f"Unfeasible length constraints: the minimum length ({generation_config.min_length}) is larger than"
+                f" the maximum length ({generation_config.max_length})"
+            )
+        if input_ids_seq_length >= generation_config.max_length:
+            logger.warning(
+                f"Input length of decoder_input_ids is {input_ids_seq_length}, but `max_length` is set to"
+                f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
+                " increasing `max_new_tokens`."
+            )
+
+        # 7. determine generation mode
+        is_greedy_gen_mode = (
+            (generation_config.num_beams == 1)
+            and (generation_config.num_beam_groups == 1)
+            and generation_config.do_sample is False
+        )
+        is_sample_gen_mode = (
+            (generation_config.num_beams == 1)
+            and (generation_config.num_beam_groups == 1)
+            and generation_config.do_sample is True
+        )
+
+        if is_greedy_gen_mode:
+            if generation_config.num_return_sequences > 1:
+                raise ValueError(
+                    "num_return_sequences has to be 1 when doing greedy search, "
+                    f"but is {generation_config.num_return_sequences}."
+                )
+
+            # 8. run greedy search
+            outputs = self.greedy_search(
+                input_ids,
+                logits_processor=logits_processor,
+                stopping_criteria=stopping_criteria,
+                pad_token_id=generation_config.pad_token_id,
+                eos_token_id=generation_config.eos_token_id,
+                output_scores=generation_config.output_scores,
+                return_dict_in_generate=generation_config.return_dict_in_generate,
+                synced_gpus=synced_gpus,
+                **model_kwargs,
+            )
+
+        elif is_sample_gen_mode:
+            # 9. prepare logits warper
+            logits_warper = self._get_logits_warper(generation_config)
+
+            # expand input_ids with `num_return_sequences` additional sequences per batch
+            input_ids, model_kwargs = self._expand_inputs_for_generation(
+                input_ids=input_ids,
+                expand_size=generation_config.num_return_sequences,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+                **model_kwargs,
+            )
+
+            # 10. run sample
+            outputs = self.sample(
+                input_ids,
+                logits_processor=logits_processor,
+                logits_warper=logits_warper,
+                stopping_criteria=stopping_criteria,
+                pad_token_id=generation_config.pad_token_id,
+                eos_token_id=generation_config.eos_token_id,
+                output_scores=generation_config.output_scores,
+                return_dict_in_generate=generation_config.return_dict_in_generate,
+                synced_gpus=synced_gpus,
+                **model_kwargs,
+            )
+
         else:
-            seq_len = 1
+            raise ValueError("Got incompatible mode for generation, should be one of greedy or sampling.")
 
-        if "max_new_tokens" in kwargs:
-            generation_config.max_new_tokens = kwargs["max_new_tokens"]
-            generation_config.max_length = kwargs["max_new_tokens"] + seq_len
-        elif "max_length" in kwargs:
-            generation_config.max_new_tokens = kwargs["max_length"] - seq_len
-            generation_config.max_length = kwargs["max_length"]
-
-        if "guidance_scale" in kwargs:
-            generation_config.guidance_scale = kwargs["guidance_scale"]
-
-        if generation_config.guidance_scale > 1:
-            cfg_processor = ClassifierFreeGuidanceLogitsProcessor(guidance_scale=generation_config.guidance_scale)
-            if logits_processor is None:
-                logits_processor = [cfg_processor]
-            else:
-                logits_processor.append(cfg_processor)
-
-        outputs = super().generate(
-            inputs,
-            generation_config,
-            logits_processor,
-            stopping_criteria,
-            prefix_allowed_tokens_fn,
-            synced_gpus,
-            **kwargs,
-        )
-
-        return_dict_in_generate = (
-            kwargs.get("return_dict_in_generate", None) or self.generation_config.return_dict_in_generate
-        )
-
-        if return_dict_in_generate:
+        if generation_config.return_dict_in_generate:
             output_ids = outputs.sequences
         else:
             output_ids = outputs
 
-        bsz, codebooks, seq_len = output_ids.shape
-        # we need the decoder input ids to recover our delay pattern mask - check if we had it in the inputs, or
-        # initialise them otherwise
-        decoder_start_token_id = self._get_decoder_start_token_id(
-            generation_config.decoder_start_token_id, generation_config.bos_token_id
-        )
-        decoder_input_ids_start = (
-            torch.ones((bsz, self.decoder.num_codebooks, 1), dtype=torch.long, device=output_ids.device)
-            * decoder_start_token_id
-        )
-        if decoder_input_ids is None:
-            decoder_input_ids = decoder_input_ids_start
-        elif (decoder_input_ids[:, :, 0] != decoder_start_token_id).all().item():
-            decoder_input_ids = torch.cat([decoder_input_ids_start, decoder_input_ids], dim=-1)
-
         # build and apply the final delay pattern mask
-        _, pattern_mask = self.decoder.build_delay_pattern_mask(
-            decoder_input_ids, self.generation_config.pad_token_id, max_length=self.generation_config.max_length
+        _, pattern_mask = self.build_delay_pattern_mask(
+            inputs, self.generation_config.pad_token_id, max_length=self.generation_config.max_length
         )
-        output_ids = self.decoder.apply_delay_pattern_mask(output_ids, pattern_mask)
+        output_ids = self.apply_delay_pattern_mask(output_ids, pattern_mask)
 
         # revert the pattern delay mask by filtering the pad token id
-        output_ids = output_ids[output_ids != self.generation_config.pad_token_id].reshape(bsz, codebooks, -1)
+        output_ids = output_ids[output_ids != self.generation_config.pad_token_id].reshape(
+            batch_size, self.num_codebooks, -1
+        )
 
         # TODO(SG): hacks to make the output ids compatible with encodec - add to encodec modelling code
         output_ids = output_ids.unsqueeze(0)
@@ -2099,7 +2332,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             output_ids, audio_scales=audio_scales, padding_mask=kwargs.get("padding_mask")
         )
 
-        if return_dict_in_generate:
+        if generation_config.return_dict_in_generate:
             outputs.sequences = output_values
             return outputs
         else:

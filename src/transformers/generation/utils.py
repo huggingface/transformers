@@ -38,6 +38,7 @@ from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .configuration_utils import GenerationConfig
 from .logits_process import (
+    ClassifierFreeGuidanceLogitsProcessor,
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
     EpsilonLogitsWarper,
@@ -940,6 +941,8 @@ class GenerationMixin:
             )
         if generation_config.forced_decoder_ids is not None:
             processors.append(ForceTokensLogitsProcessor(generation_config.forced_decoder_ids))
+        if generation_config.guidance_scale > 1:
+            processors.append(ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale))
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
@@ -2320,7 +2323,7 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        unfinished_sequences = torch.ones((input_ids.shape[:-1]), dtype=torch.long, device=input_ids.device)
+        unfinished_sequences = torch.ones((input_ids.shape[-1]), dtype=torch.long, device=input_ids.device)
 
         this_peer_finished = False  # used by synced_gpus only
         while True:
@@ -2348,15 +2351,6 @@ class GenerationMixin:
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
 
-            if self.config.model_type in ["musicgen", "musicgen_decoder"]:
-                # reshape the logits to combine the codebook axis with batch (4 dims -> 3 dims)
-                logits = outputs.logits
-                cfg_bsz, num_codebooks, seq_len, vocab_size = logits.shape
-                outputs.logits = logits.reshape(cfg_bsz * num_codebooks, seq_len, vocab_size)
-
-                bsz = input_ids.shape[0]
-                input_ids = input_ids.reshape(bsz * num_codebooks, -1)
-
             next_token_logits = outputs.logits[:, -1, :]
 
             # pre-process distribution
@@ -2383,10 +2377,6 @@ class GenerationMixin:
             # argmax
             next_tokens = torch.argmax(next_tokens_scores, dim=-1)
 
-            if self.config.model_type in ["musicgen", "musicgen_decoder"]:
-                next_tokens = next_tokens.reshape(bsz, num_codebooks)
-                input_ids = input_ids.reshape(bsz, num_codebooks, -1)
-
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
                 if pad_token_id is None:
@@ -2394,7 +2384,7 @@ class GenerationMixin:
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # update generated ids, model inputs, and length for next step
-            input_ids = torch.cat([input_ids, next_tokens[..., None]], dim=-1)
+            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
             model_kwargs = self._update_model_kwargs_for_generation(
