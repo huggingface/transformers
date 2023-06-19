@@ -216,6 +216,10 @@ class TFAlbertPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = None
+
+
+
 TF_MODEL_FOR_CAUSAL_LM_MAPPING = None
 
 
