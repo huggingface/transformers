@@ -86,6 +86,24 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
 
+
+
+        self._extra_ids = extra_ids
+
+        self._utf_vocab_size = 2**8  # utf is 8 bits
+
+        # define special tokens dict
+        self.special_tokens_encoder: Dict[int, str] = {
+            pad_token: 0,
+            eos_token: 1,
+            unk_token: 2,
+        }
+        self._num_special_tokens = len(self.special_tokens_encoder)
+        n = len(additional_special_tokens)
+        for i, token in enumerate(additional_special_tokens):
+            self.special_tokens_encoder[token] = self.vocab_size + i - n
+        self.special_tokens_decoder: Dict[str, int] = {v: k for k, v in self.special_tokens_encoder.items()}
+
         super().__init__(
             eos_token=eos_token,
             unk_token=unk_token,
@@ -95,21 +113,6 @@ class ByT5Tokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        self._extra_ids = extra_ids
-
-        self._utf_vocab_size = 2**8  # utf is 8 bits
-
-        # define special tokens dict
-        self.special_tokens_encoder: Dict[int, str] = {
-            self.pad_token: 0,
-            self.eos_token: 1,
-            self.unk_token: 2,
-        }
-        self._num_special_tokens = len(self.special_tokens_encoder)
-        n = len(additional_special_tokens)
-        for i, token in enumerate(additional_special_tokens):
-            self.special_tokens_encoder[token] = self.vocab_size + i - n
-        self.special_tokens_decoder: Dict[str, int] = {v: k for k, v in self.special_tokens_encoder.items()}
 
     @property
     def vocab_size(self):

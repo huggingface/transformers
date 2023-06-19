@@ -345,6 +345,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.added_tokens_encoder =  {tok.content: len(self) + i for i, tok in enumerate(self.all_special_tokens_extended)}
+        self.added_tokens_decoder = {v: k for k, v in zip(self.all_special_tokens_extended, self.added_tokens_encoder.values())}
         self._create_trie()
         self._decode_use_source_tokenizer = False
 
@@ -402,7 +404,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         model.resize_token_embeddings(len(tokenizer))
         ```"""
         tokens_to_add = []
-        for i, token in enumerate(new_tokens):
+        for token in new_tokens:
             if not isinstance(token, (str, AddedToken)):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
             if isinstance(token, str):
@@ -425,11 +427,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 if special_tokens:
                     self._additional_special_tokens.append(token.content)
                 tokens_to_add.append(token)
-                    
                 if self.verbose:
                     logger.info(f"Adding {token} to the vocabulary")
-            elif special_tokens and token.content not in self._additional_special_tokens:
-                self._additional_special_tokens.append(token.content)
+            elif special_tokens and token not in self._additional_special_tokens:
+                self._additional_special_tokens.append(token)
 
         added_tok_encoder = {tok.content: len(self) + i for i, tok in enumerate(tokens_to_add)}
         added_tok_decoder = {v: k for k, v in zip(tokens_to_add, added_tok_encoder.values())}
@@ -504,7 +505,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         for i, token in enumerate(tokens):
             if token in no_split_token:
                 # we lose the info about normalizing or what not on the added tokens.....
-                tok_extended = self.added_tokens_decoder.get(self._convert_token_to_id(token), None)
+                tok_extended = self.added_tokens_decoder.get(self.added_tokens_encoder[token], None)
                 left = tokens[i - 1] if i > 0 else None
                 right = tokens[i + 1] if i < len(tokens) - 1 else None
 

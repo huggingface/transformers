@@ -839,13 +839,15 @@ class SpecialTokensMixin:
                         isinstance(t, (str, AddedToken)) for t in value
                     ), "One of the tokens is not a string or an AddedToken"
                     setattr(self, key, value)
-                elif isinstance(value, (str, AddedToken)):
+                elif isinstance(value, (str)):
+                    value = AddedToken(value)
+                    setattr(self, key, value)
+                elif isinstance(value, AddedToken):
                     setattr(self, key, value)
                 else:
                     raise TypeError(f"special token {key} has to be either str or AddedToken but got: {type(value)}")
 
-        # TODO Trie should be created here, we initialized all the values but the Trie does not change
-        # the unique no split tokens should be updated here? Or is it _additional_special_tokens for fast
+
         # if self.is_fast:
         #     self.add_tokens(self.all_special_tokens, True) # we need to use fast functionalities to add special tokens
 
@@ -920,7 +922,7 @@ class SpecialTokensMixin:
         if not special_tokens_dict:
             return 0
 
-        added_tokens = 0
+        added_tokens = []
         for key, value in special_tokens_dict.items():
             assert key in self.SPECIAL_TOKENS_ATTRIBUTES, f"Key {key} is not a special token"
 
@@ -934,29 +936,32 @@ class SpecialTokensMixin:
 
                 if replace_additional_special_tokens:
                     setattr(self, key, value)
-                    # this does not work. The Trie is not updated and thus tokens that were previously here will no longer be there
+                    added_tokens.extend(self._additional_special_tokens)
+                    
+                    # this does not work. The Trie is not updated and thus tokens that were previously here will no longer be there.
+                    # Kept for backward compatibility, should be removed
                 else:
-                    # This is a copy of `self._additional_special_tokens`
-                    additional_special_tokens = getattr(self, key)
-                    additional_special_tokens_set = set(additional_special_tokens)
                     to_add = []
                     for token in value:
-                        if str(token) not in additional_special_tokens_set and str(token) not in to_add:
+                        if str(token) not in self._additional_special_tokens and str(token) not in to_add:
                             to_add.append(token)
+                            
                     # update the property
-                    additional_special_tokens.extend(to_add)
-                    self.additional_special_tokens = additional_special_tokens
-                # this is slow, trie is re-created here
-                # let's store all the tokens to add and add everything at the end
-                added_tokens += self.add_tokens(value, special_tokens=True)
+                    self._additional_special_tokens.extend(to_add)
+                    added_tokens.extend(to_add)
+
             else:
                 assert isinstance(
                     value, (str, AddedToken)
                 ), f"Token {value} for key {key} should be a str or an AddedToken instance"
-                setattr(self, key, value)
-                # and here.... and everytime
-                added_tokens += self.add_tokens([value], special_tokens=True)
+                if isinstance(value, (str)):
+                    value = AddedToken(value)
+                if isinstance(value, AddedToken):
+                    setattr(self, key, value)
 
+                added_tokens.append(value)
+
+        added_tokens = self.add_tokens(added_tokens, special_tokens = True)
         return added_tokens
 
     def add_tokens(
@@ -1133,7 +1138,7 @@ class SpecialTokensMixin:
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
-        self._additional_special_tokens = value
+        self._additional_special_tokens = [AddedToken(token) if isinstance(token,str) else token for token in value]
 
     @property
     def bos_token_id(self) -> Optional[int]:
@@ -1608,7 +1613,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length}, is_fast={self.is_fast},"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
-            f" special_tokens={self.special_tokens_map_extended}, clean_up_tokenization_spaces={self.clean_up_tokenization_spaces})"
+            f" special_tokens={self.special_tokens_map_extended}, clean_up_tokenization_spaces={self.clean_up_tokenization_spaces}), "
+            f" added_tokens_encoder={self.added_tokens_encoder}"
         )
 
     def __len__(self) -> int:
@@ -2038,13 +2044,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 if isinstance(value, dict):
                     token = AddedToken(**value)
                     added_tokens_decoder.update({int(key):token})
+                    added_tokens_encoder.update({token.content:int(key)})
 
             # Sort added tokens by index
             
             added_tok_encoder_sorted = sorted(added_tokens_encoder.items(), key=lambda x: x[1])
-            nb_added_tokens = 0
+            current_index = tokenizer.vocab_size
             for token, index in added_tok_encoder_sorted:
-                current_index = tokenizer.vocab_size + nb_added_tokens
                 if has_tokenizer_file and index != current_index and tokenizer.convert_tokens_to_ids(token) != index:
                     # Tokenizer fast: added token needs to either be in the vocabulary with the proper index or the
                     # index is the current length of the tokenizer (not in vocabulary)
@@ -2059,12 +2065,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         f"Non-consecutive added token '{token}' found. "
                         f"Should have index {current_index} but has index {index} in saved vocabulary."
                     )
+                current_index+=1
+                
 
-                nb_added_tokens += 1
-    
-        tokenizer.added_tokens_decoder = added_tokens_decoder
-        tokenizer.added_tokens_encoder = added_tokens_encoder
-        tokenizer._create_trie()        
+        tokenizer.added_tokens_decoder.update(added_tokens_decoder)
+        tokenizer.added_tokens_encoder.update(added_tokens_encoder)
+        if not tokenizer.is_fast:
+            tokenizer._create_trie()        
         return tokenizer
 
     @staticmethod
