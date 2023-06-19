@@ -520,7 +520,7 @@ class LogitsProcessorTest(unittest.TestCase):
         input_ids = torch.tensor([[0, 1, 3, 1], [0, 1, 0, 1]], device=torch_device, dtype=torch.long)
         positive_bias = {(1,): 100.0, (4,): 100.0}
         negative_bias = {(1, 0): -100.0, (0, 1, 2): -100.0, (1, 3, 1, 3): -100.0}
-        sequence_bias = positive_bias | negative_bias
+        sequence_bias = {**positive_bias, **negative_bias}
 
         # scores = 0 to facilitate checks
         scores = torch.zeros((batch_size, vocab_size), dtype=torch.float, device=torch_device)
