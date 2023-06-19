@@ -137,6 +137,14 @@ class T5Tokenizer(PreTrainedTokenizer):
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
+
+
+        self.vocab_file = vocab_file
+        self._extra_ids = extra_ids
+
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(vocab_file)
+        
         super().__init__(
             eos_token=eos_token,
             unk_token=unk_token,
@@ -146,12 +154,6 @@ class T5Tokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-
-        self.vocab_file = vocab_file
-        self._extra_ids = extra_ids
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
 
     @staticmethod
     def _eventually_correct_t5_max_length(pretrained_model_name_or_path, max_model_length, init_max_model_length):
@@ -300,18 +302,18 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        if token.startswith("<extra_id_"):
-            match = re.match(r"<extra_id_(\d+)>", token)
-            num = int(match.group(1))
-            return self.vocab_size - num - 1
+        # if token.startswith("<extra_id_"):
+        #     match = re.match(r"<extra_id_(\d+)>", token)
+        #     num = int(match.group(1))
+        #     return self.vocab_size - num - 1
         return self.sp_model.piece_to_id(token)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        if index < self.sp_model.get_piece_size():
-            token = self.sp_model.IdToPiece(index)
-        else:
-            token = f"<extra_id_{self.vocab_size - 1 - index}>"
+        # if index < self.sp_model.get_piece_size():
+        token = self.sp_model.IdToPiece(index)
+        # else:
+        #     token = f"<extra_id_{self.vocab_size - 1 - index}>"
         return token
 
     def convert_tokens_to_string(self, tokens):

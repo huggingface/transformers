@@ -345,15 +345,33 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.added_tokens_encoder =  {tok.content: len(self) + i for i, tok in enumerate(self.all_special_tokens_extended)}
-        self.added_tokens_decoder = {v: k for k, v in zip(self.all_special_tokens_extended, self.added_tokens_encoder.values())}
+        self._added_tokens_encoder = {}
+        self._added_tokens_decoder = {}
+        added_tokens = 0
+        for tok in self.all_special_tokens_extended:
+            if self._convert_token_to_id(self.unk_token) == self._convert_token_to_id(tok.content) and tok.content != self.unk_token:
+                self._added_tokens_encoder[tok.content] =  len(self) + added_tokens 
+                self._added_tokens_decoder [len(self) + added_tokens ] = tok
+                added_tokens += 1
+            else:
+                self._added_tokens_encoder[tok.content] = self._convert_token_to_id(tok.content)
+                self._added_tokens_decoder [self._convert_token_to_id(tok.content) ] = tok
+                
         self._create_trie()
         self._decode_use_source_tokenizer = False
 
     @property
     def is_fast(self) -> bool:
         return False
-
+    
+    @property
+    def added_tokens_encoder(self):
+        return self._added_tokens_encoder
+    
+    @property
+    def added_tokens_decoder(self):
+        return self._added_tokens_decoder
+    
     @property
     def vocab_size(self) -> int:
         """
@@ -379,7 +397,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
-        it with indices starting from length of the current vocabulary.
+        it with indices starting from length of the current vocabulary. Special tokens are sometimes already in the vocab
+        which is why they have to be handled specifically. If the unknown token
 
         Args:
             new_tokens (`List[str]`or `List[tokenizers.AddedToken]`):
@@ -414,7 +433,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 and self.convert_tokens_to_ids(token.content) == self.convert_tokens_to_ids(self.unk_token)
                 and token not in tokens_to_add
             ):
-                if not special_tokens:
+                if not special_tokens and not token.special:
                     if hasattr(self, "do_lower_case") and self.do_lower_case:
                         # this should maybe never arise? adding a token that has a mix of lower and upper, while model does lower. Or jsut addihng a non special token like `TOKEN`.
                         token = AddedToken(
@@ -424,15 +443,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                             rstrip=token.rstrip,
                             normalized=token.normalized,
                         )
-                if special_tokens:
-                    self._additional_special_tokens.append(token.content)
                 tokens_to_add.append(token)
                 if self.verbose:
                     logger.info(f"Adding {token} to the vocabulary")
-            elif special_tokens and token not in self._additional_special_tokens:
-                self._additional_special_tokens.append(token)
 
-        added_tok_encoder = {tok.content: len(self) + i for i, tok in enumerate(tokens_to_add)}
+        previous_length = len(self) - len(self.added_tok_encoder)
+        added_tok_encoder = {tok.content: previous_length + i for i, tok in enumerate(tokens_to_add)}
         added_tok_decoder = {v: k for k, v in zip(tokens_to_add, added_tok_encoder.values())}
         self.added_tokens_encoder.update(added_tok_encoder)
         self.added_tokens_decoder.update(added_tok_decoder)
@@ -442,6 +458,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     def _create_trie(self):
         trie = Trie()
         for token in self.added_tokens_encoder.keys():
+            # special tokens should not be normalized
             if hasattr(self, "do_lower_case") and self.do_lower_case and token not in self.all_special_tokens:
                 trie.add(token.lower())
             else:

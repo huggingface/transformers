@@ -88,10 +88,13 @@ else:
         lstrip: bool = False
         rstrip: bool = False
         normalized: bool = True
-        special: bool = False #TODO mght remove the confusion
 
         def __getstate__(self):
             return self.__dict__
+        
+        @property
+        def special(self):
+            return not self.normalized
 
     @dataclass
     class EncodingFast:
@@ -1255,6 +1258,8 @@ class SpecialTokensMixin:
 
     @additional_special_tokens_ids.setter
     def additional_special_tokens_ids(self, values):
+        # TODO no, let's not keep this but rather output only the added tokens that are not normalized / have the special attribute
+        # as this is what defines them. This is otherwise untractable.....
         self._additional_special_tokens = [self.convert_ids_to_tokens(value) for value in values]
 
     @property
@@ -1295,7 +1300,7 @@ class SpecialTokensMixin:
     @property
     def all_special_tokens(self) -> List[str]:
         """
-        `List[str]`: All the special tokens (`'<unk>'`, `'<cls>'`, etc.) mapped to class attributes.
+        `List[str]`: All the special tokens (`'<unk>'`, `'<cls>'`, ..., `_additional_special_tokens`.) mapped to class attributes.
 
         Convert tokens of `tokenizers.AddedToken` type to string.
         """
@@ -2010,11 +2015,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
 
-        # Save inputs and kwargs for saving and re-loading with ``save_pretrained``
-        # Removed: Now done at the base class level
-        # tokenizer.init_inputs = init_inputs
-        # tokenizer.init_kwargs = init_kwargs
-        added_tokens_decoder = {}
+        tokens_to_add = []
         # If there is a complementary special token map, load it
         special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
         if special_tokens_map_file is not None:
@@ -2027,51 +2028,51 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     continue
                 if isinstance(value, dict):
                     value = AddedToken(**value)
-                    added_tokens_decoder.update({tokenizer.convert_tokens_to_ids(value.content):value})
+                    tokens_to_add.append(value)
                 elif isinstance(value, list):
                     final_value = []
                     for token in value:
                         added_token = AddedToken(**token) if isinstance(token, dict) else AddedToken(token) 
-                        final_value.append(added_token.content)
-                        added_tokens_decoder.update({tokenizer.convert_tokens_to_ids(added_token.content):added_token})
-                setattr(tokenizer, key, value)
-
-        added_tokens_encoder = { token.content:id for id, token in added_tokens_decoder.items()}
+                        tokens_to_add.append(added_token)
+                        final_value.append(token)
+                setattr(tokenizer, key, final_value)
+        
         if added_tokens_file is not None:
+            # for backward compatibility, two cases have to be treated: 
+            # 1. the format is str:idx (legacy)
+            # 2. the format is idx: serialized(AddedToken)
+            
             with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                 added_tok_encoder = json.load(added_tokens_handle)
             for key, value in added_tok_encoder.items():
                 if isinstance(value, dict):
                     token = AddedToken(**value)
-                    added_tokens_decoder.update({int(key):token})
-                    added_tokens_encoder.update({token.content:int(key)})
-
+                    tokens_to_add.update(token)
             # Sort added tokens by index
             
-            added_tok_encoder_sorted = sorted(added_tokens_encoder.items(), key=lambda x: x[1])
+            added_tok_encoder_sorted = sorted(tokens_to_add, key=lambda x: x[1])
             current_index = tokenizer.vocab_size
             for token, index in added_tok_encoder_sorted:
-                if has_tokenizer_file and index != current_index and tokenizer.convert_tokens_to_ids(token) != index:
-                    # Tokenizer fast: added token needs to either be in the vocabulary with the proper index or the
-                    # index is the current length of the tokenizer (not in vocabulary)
-                    raise ValueError(
-                        f"Wrong index found for {token}: should be {tokenizer.convert_tokens_to_ids(token)} but found "
-                        f"{index}."
-                    )
-                elif not has_tokenizer_file and index != current_index:
-                    # Tokenizer slow: added token cannot already be in the vocabulary so its index needs to be the
-                    # current length of the tokenizer.
-                    raise ValueError(
-                        f"Non-consecutive added token '{token}' found. "
-                        f"Should have index {current_index} but has index {index} in saved vocabulary."
-                    )
-                current_index+=1
+                if index >= tokenizer.vocab_size:
+                    current_index+=1
+
+                    if has_tokenizer_file and index != current_index and tokenizer.convert_tokens_to_ids(token) != index:
+                        # Tokenizer fast: added token needs to either be in the vocabulary with the proper index or the
+                        # index is the current length of the tokenizer (not in vocabulary)
+                        raise ValueError(
+                            f"Wrong index found for {token}: should be {tokenizer.convert_tokens_to_ids(token)} but found "
+                            f"{index}."
+                        )
+                    elif not has_tokenizer_file and index != current_index:
+                        # Tokenizer slow: added token cannot already be in the vocabulary so its index needs to be the
+                        # current length of the tokenizer.
+                        raise ValueError(
+                            f"Non-consecutive added token '{token}' found. "
+                            f"Should have index {current_index} but has index {index} in saved vocabulary."
+                        )
                 
 
-        tokenizer.added_tokens_decoder.update(added_tokens_decoder)
-        tokenizer.added_tokens_encoder.update(added_tokens_encoder)
-        if not tokenizer.is_fast:
-            tokenizer._create_trie()        
+        tokenizer.add_tokens(tokens_to_add)     
         return tokenizer
 
     @staticmethod
