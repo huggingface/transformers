@@ -32,6 +32,8 @@ if is_torch_available():
 
     from transformers import TimmBackbone, TimmBackboneConfig
 
+from ...test_pipeline_mixin import PipelineTesterMixin
+
 
 class TimmBackboneModelTester:
     def __init__(
