@@ -1,27 +1,22 @@
 #!/bin/bash
-LOG_DIR="./logs"
-OUTPUT_DIR="./outputs"
-mkdir -p $LOG_DIR
-mkdir -p $OUTPUT_DIR
-##    SETTINGS     ## 
-# Defaul value
-gpu_size=2
-outputs=$OUTPUT_DIR
-#Get the input arg
-while getopts m:o:g: flag
+while getopts m:g: flag
 do
     case "${flag}" in
-        m) MODEL=${OPTARG};;
-        g) gpu_size=${OPTARG};;
-        o) outputs=${OPTARG}
+        m) model=${OPTARG};;
+        g) device_id=${OPTARG};;
     esac
 done
 
-log_file="${LOG_DIR}/train.log"
-## END OF SETTINGS ## 
+LOG_DIR="./logs"
+OUTPUT_DIR="./outputs"
+log_file=$LOG_DIR/$model.log
+output_dir=$OUTPUT_DIR/$model
 
-export TRANSFORMERS_CACHE=/nas/huggingface_pretrained_models
-export HF_DATASETS_CACHE=/nas/common_data/huggingface
+mkdir -p "$(dirname $log_file)"
+mkdir -p "$(dirname $output_dir)"
+
+## Using moreh device
+export MOREH_VISIBLE_DEVICE=$device_id
 
 args="
 --max_seq_length 128 \
@@ -30,9 +25,6 @@ args="
 --do_eval
 --seed 42 \
 "
-
-## Using moreh device
-moreh-switch-model --model $gpu_size
 
 python run_ner.py \
   --model_name_or_path=$MODEL \
