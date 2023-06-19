@@ -231,13 +231,6 @@ Keywords: Data augmentation, Synthetic data generation, Audio, NLP
 
 Keywords: Stable-Diffusion, Blender
 
-## [BentoML](https://github.com/bentoml/BentoML)
-
-[BentoML](https://github.com/bentoml) is the unified framework for for building, shipping, and scaling production-ready AI applications incorporating traditional ML, pre-trained AI models, Generative and Large Language Models. 
-All Hugging Face models and pipelines can be seamlessly integrated into BentoML applications, enabling the running of models on the most suitable hardware and independent scaling based on usage.
-
-Keywords: BentoML, Framework, Deployment, AI Applications
-
 ## [seldon-core](https://github.com/SeldonIO/seldon-core)
 
 Seldon core converts your ML models (Tensorflow, Pytorch, H2o, etc.) or language wrappers (Python, Java, etc.) into production REST/GRPC microservices.
@@ -600,4 +593,11 @@ Keywords: Active Learning, Research, Labeling
 [cleanlab](https://github.com/cleanlab/cleanlab) is the standard data-centric AI package for data quality and machine learning with messy, real-world data and labels. For text, image, tabular, audio (among others) datasets, you can use cleanlab to automatically: detect data issues (outliers, label errors, near duplicates, etc), train robust ML models, infer consensus + annotator-quality for multi-annotator data, suggest data to (re)label next (active learning).
 
 Keywords: Data-Centric AI, Data Quality, Noisy Labels, Outlier Detection, Active Learning  
+
+## [BentoML](https://github.com/bentoml/BentoML)
+
+[BentoML](https://github.com/bentoml) is the unified framework for for building, shipping, and scaling production-ready AI applications incorporating traditional ML, pre-trained AI models, Generative and Large Language Models. 
+All Hugging Face models and pipelines can be seamlessly integrated into BentoML applications, enabling the running of models on the most suitable hardware and independent scaling based on usage.
+
+Keywords: BentoML, Framework, Deployment, AI Applications
 
