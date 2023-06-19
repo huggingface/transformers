@@ -1,1 +1,3 @@
 bert-base-uncased
+distilbert-base-uncased
+albert-base-v2
