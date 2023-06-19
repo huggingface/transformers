@@ -2186,6 +2186,7 @@ class ReformerModel(ReformerPreTrainedModel):
 @add_start_docstrings("""Reformer Model with a `language modeling` head on top.""", REFORMER_START_DOCSTRING)
 class ReformerModelWithLMHead(ReformerPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["lm_head.decoder.bias"]
+    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -2311,6 +2312,8 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
 @add_start_docstrings("""Reformer Model with a `language modeling` head on top.""", REFORMER_START_DOCSTRING)
 class ReformerForMaskedLM(ReformerPreTrainedModel):
+    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
+
     def __init__(self, config):
         super().__init__(config)
         assert not config.is_decoder, (

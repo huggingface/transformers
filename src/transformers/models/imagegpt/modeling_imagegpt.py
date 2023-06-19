@@ -894,6 +894,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
 )
 class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: ImageGPTConfig):
         super().__init__(config)
@@ -982,9 +983,9 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
         >>> model.to(device)
 
         >>> # unconditional generation of 8 images
-        >>> batch_size = 8
+        >>> batch_size = 4
         >>> context = torch.full((batch_size, 1), model.config.vocab_size - 1)  # initialize with SOS token
-        >>> context = torch.tensor(context).to(device)
+        >>> context = context.to(device)
         >>> output = model.generate(
         ...     input_ids=context, max_length=model.config.n_positions + 1, temperature=1.0, do_sample=True, top_k=40
         ... )

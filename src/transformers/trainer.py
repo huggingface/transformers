@@ -32,8 +32,6 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
-from tqdm.auto import tqdm
-
 
 # Integrations must be imported before ML frameworks:
 # isort: off
@@ -72,7 +70,7 @@ from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
-from .pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_10
+from .pytorch_utils import ALL_LAYERNORM_LAYERS
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -157,8 +155,6 @@ from .utils import (
 from .utils.generic import ContextManagers
 
 
-_is_native_cpu_amp_available = is_torch_greater_or_equal_than_1_10
-
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
 DEFAULT_PROGRESS_CALLBACK = ProgressCallback
 
@@ -206,15 +202,18 @@ if is_peft_available():
     from peft import PeftModel
 
 
-skip_first_batches = None
 if is_accelerate_available():
+    from accelerate import Accelerator, skip_first_batches
     from accelerate import __version__ as accelerate_version
-
-    if version.parse(accelerate_version) >= version.parse("0.16"):
-        from accelerate import skip_first_batches
-
-    from accelerate import Accelerator
     from accelerate.utils import DistributedDataParallelKwargs
+
+    if version.parse(accelerate_version) > version.parse("0.20.3"):
+        from accelerate.utils import (
+            load_fsdp_model,
+            load_fsdp_optimizer,
+            save_fsdp_model,
+            save_fsdp_optimizer,
+        )
 
 
 if TYPE_CHECKING:
@@ -314,6 +313,7 @@ class Trainer:
 
     """
 
+    # Those are used as methods of the Trainer in examples.
     from .trainer_pt_utils import _get_learning_rate, log_metrics, metrics_format, save_metrics, save_state
 
     def __init__(
@@ -338,6 +338,7 @@ class Trainer:
         # Seed must be set before instantiating the model when using model
         enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
         self.hp_name = None
+        self.deepspeed = None
         self.is_in_train = False
 
         self.create_accelerator_and_postprocess()
@@ -618,10 +619,8 @@ class Trainer:
                 if args.device == torch.device("cpu"):
                     if args.fp16:
                         raise ValueError("Tried to use `fp16` but it is not supported on cpu")
-                    elif _is_native_cpu_amp_available:
-                        args.half_precision_backend = "cpu_amp"
                     else:
-                        raise ValueError("Tried to use cpu amp but native cpu amp is not available")
+                        args.half_precision_backend = "cpu_amp"
                 else:
                     args.half_precision_backend = "cuda_amp"
 
@@ -1451,6 +1450,9 @@ class Trainer:
             if self.args.ddp_bucket_cap_mb is not None:
                 kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
 
+            if self.args.ddp_broadcast_buffers is not None:
+                kwargs["broadcast_buffers"] = self.args.ddp_broadcast_buffers
+
             self.accelerator.ddp_handler = DistributedDataParallelKwargs(**kwargs)
 
         return model
@@ -1706,22 +1708,10 @@ class Trainer:
             logger.info(f"  Continuing training from epoch {epochs_trained}")
             logger.info(f"  Continuing training from global step {self.state.global_step}")
             if not args.ignore_data_skip:
-                if skip_first_batches is None:
-                    logger.info(
-                        f"  Will skip the first {epochs_trained} epochs then the first"
-                        f" {steps_trained_in_current_epoch} batches in the first epoch. If this takes a lot of time,"
-                        " you can install the latest version of Accelerate with `pip install -U accelerate`.You can"
-                        " also add the `--ignore_data_skip` flag to your launch command, but you will resume the"
-                        " training on data already seen by your model."
-                    )
-                else:
-                    logger.info(
-                        f"  Will skip the first {epochs_trained} epochs then the first"
-                        f" {steps_trained_in_current_epoch} batches in the first epoch."
-                    )
-                if self.is_local_process_zero() and not args.disable_tqdm and skip_first_batches is None:
-                    steps_trained_progress_bar = tqdm(total=steps_trained_in_current_epoch)
-                    steps_trained_progress_bar.set_description("Skipping the first batches")
+                logger.info(
+                    f"  Will skip the first {epochs_trained} epochs then the first"
+                    f" {steps_trained_in_current_epoch} batches in the first epoch."
+                )
 
         # Update the references
         self.callback_handler.model = self.model
@@ -1779,7 +1769,7 @@ class Trainer:
 
             rng_to_sync = False
             steps_skipped = 0
-            if skip_first_batches is not None and steps_trained_in_current_epoch > 0:
+            if steps_trained_in_current_epoch > 0:
                 epoch_iterator = skip_first_batches(epoch_iterator, steps_trained_in_current_epoch)
                 steps_skipped = steps_trained_in_current_epoch
                 steps_trained_in_current_epoch = 0
@@ -2035,7 +2025,7 @@ class Trainer:
                     # release memory
                     del state_dict
             elif self.is_fsdp_enabled:
-                self.accelerator.state.fsdp_plugin.load_model(self.accelerator, model, resume_from_checkpoint)
+                load_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, model, resume_from_checkpoint)
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
                 if self.args.save_safetensors and os.path.isfile(safe_weights_file):
@@ -2096,8 +2086,8 @@ class Trainer:
                         state_dict["_smp_is_partial"] = False
                         load_result = model.load_state_dict(state_dict, strict=True)
                 elif self.is_fsdp_enabled:
-                    self.accelerator.state.fsdp_plugin.load_model(
-                        self.accelerator, model, self.state.best_model_checkpoint
+                    load_fsdp_model(
+                        self.accelerator.state.fsdp_plugin, self.accelerator, model, self.state.best_model_checkpoint
                     )
                 else:
                     if is_peft_available() and isinstance(model, PeftModel):
@@ -2269,11 +2259,16 @@ class Trainer:
         if self.sharded_ddp == ShardedDDPOption.SIMPLE:
             self.optimizer.consolidate_state_dict()
 
-        if self.fsdp:
-            # FSDP has a different interface for saving optimizer states.
-            # Needs to be called on all ranks to gather all states.
-            # full_optim_state_dict will be deprecated after Pytorch 2.2!
-            full_osd = self.model.__class__.full_optim_state_dict(self.model, self.optimizer)
+        if self.fsdp or self.is_fsdp_enabled:
+            if self.is_fsdp_enabled:
+                save_fsdp_optimizer(
+                    self.accelerator.state.fsdp_plugin, self.accelerator, self.optimizer, self.model, output_dir
+                )
+            else:
+                # FSDP has a different interface for saving optimizer states.
+                # Needs to be called on all ranks to gather all states.
+                # full_optim_state_dict will be deprecated after Pytorch 2.2!
+                full_osd = self.model.__class__.full_optim_state_dict(self.model, self.optimizer)
 
         if is_torch_tpu_available():
             xm.rendezvous("saving_optimizer_states")
@@ -2413,14 +2408,23 @@ class Trainer:
                     # In distributed training however, we load directly on each GPU and risk the GPU OOM as it's more
                     # likely to get OOM on CPU (since we load num_gpu times the optimizer state
                     map_location = self.args.device if self.args.world_size > 1 else "cpu"
-                    if self.fsdp:
-                        full_osd = None
-                        # In FSDP, we need to load the full optimizer state dict on rank 0 and then shard it
-                        if self.args.process_index == 0:
-                            full_osd = torch.load(os.path.join(checkpoint, OPTIMIZER_NAME))
-                        # call scatter_full_optim_state_dict on all ranks
-                        sharded_osd = self.model.__class__.scatter_full_optim_state_dict(full_osd, self.model)
-                        self.optimizer.load_state_dict(sharded_osd)
+                    if self.fsdp or self.is_fsdp_enabled:
+                        if self.is_fsdp_enabled:
+                            load_fsdp_optimizer(
+                                self.accelerator.state.fsdp_plugin,
+                                self.accelerator,
+                                self.optimizer,
+                                self.model,
+                                checkpoint,
+                            )
+                        else:
+                            full_osd = None
+                            # In FSDP, we need to load the full optimizer state dict on rank 0 and then shard it
+                            if self.args.process_index == 0:
+                                full_osd = torch.load(os.path.join(checkpoint, OPTIMIZER_NAME))
+                            # call scatter_full_optim_state_dict on all ranks
+                            sharded_osd = self.model.__class__.scatter_full_optim_state_dict(full_osd, self.model)
+                            self.optimizer.load_state_dict(sharded_osd)
                     else:
                         self.optimizer.load_state_dict(
                             torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
@@ -2590,14 +2594,11 @@ class Trainer:
         arguments, depending on the situation.
         """
         if self.use_cuda_amp or self.use_cpu_amp:
-            if is_torch_greater_or_equal_than_1_10:
-                ctx_manager = (
-                    torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
-                    if self.use_cpu_amp
-                    else torch.cuda.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
-                )
-            else:
-                ctx_manager = torch.cuda.amp.autocast()
+            ctx_manager = (
+                torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
+                if self.use_cpu_amp
+                else torch.cuda.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
+            )
         else:
             ctx_manager = contextlib.nullcontext() if sys.version_info >= (3, 7) else contextlib.suppress()
 
@@ -2724,7 +2725,7 @@ class Trainer:
         ):
             if self.is_fsdp_enabled:
                 os.makedirs(output_dir, exist_ok=True)
-                self.accelerator.state.fsdp_plugin.save_model(self.accelerator, self.model, output_dir)
+                save_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir)
             else:
                 state_dict = self.model.state_dict()
 
@@ -3037,7 +3038,7 @@ class Trainer:
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
         # if eval is called w/o train, handle model prep here
-        if self.is_deepspeed_enabled and self.model_wrapped is self.model:
+        if self.is_deepspeed_enabled and self.deepspeed is None:
             _, _ = deepspeed_init(self, num_training_steps=0, inference=True)
 
         model = self._wrap_model(self.model, training=False, dataloader=dataloader)
@@ -3630,7 +3631,7 @@ class Trainer:
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
         # if eval is called w/o train, handle model prep here
-        if self.is_deepspeed_enabled and self.model_wrapped is self.model:
+        if self.is_deepspeed_enabled and self.deepspeed is None:
             _, _ = deepspeed_init(self, num_training_steps=0, inference=True)
 
         model = self._wrap_model(self.model, training=False, dataloader=dataloader)

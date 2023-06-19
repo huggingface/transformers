@@ -242,7 +242,7 @@ class BatchEncoding(UserDict):
         elif self._encodings is not None:
             return self._encodings[item]
         elif isinstance(item, slice):
-            return {key: self.data[key][slice] for key in self.data.keys()}
+            return {key: self.data[key][item] for key in self.data.keys()}
         else:
             raise KeyError(
                 "Invalid key. Only three types of key are available: "

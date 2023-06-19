@@ -1293,6 +1293,7 @@ class XLNetModel(XLNetPreTrainedModel):
 )
 class XLNetLMHeadModel(XLNetPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_loss.weight"]
+    _tied_weights_keys = ["lm_loss.weight"]
 
     def __init__(self, config):
         super().__init__(config)

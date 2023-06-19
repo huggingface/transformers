@@ -1166,6 +1166,7 @@ class BartDecoder(BartPretrainedModel):
 )
 class BartModel(BartPretrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: BartConfig):
         super().__init__(config)
@@ -1293,9 +1294,10 @@ class BartModel(BartPretrainedModel):
 )
 class BartForConditionalGeneration(BartPretrainedModel):
     base_model_prefix = "model"
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
     _keys_to_ignore_on_load_missing = [
-        r"final_logits_bias",
-        r"lm_head.weight",
+        "final_logits_bias",
+        "lm_head.weight",
         "encoder.embed_tokens.weight",
         "decoder.embed_tokens.weight",
     ]
@@ -1472,6 +1474,7 @@ class BartForConditionalGeneration(BartPretrainedModel):
 )
 class BartForSequenceClassification(BartPretrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(config, **kwargs)
@@ -1602,6 +1605,7 @@ class BartForSequenceClassification(BartPretrainedModel):
 )
 class BartForQuestionAnswering(BartPretrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1740,6 +1744,7 @@ class BartDecoderWrapper(BartPretrainedModel):
 )
 class BartForCausalLM(BartPretrainedModel):
     _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         config = copy.deepcopy(config)

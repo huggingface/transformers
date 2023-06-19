@@ -881,6 +881,7 @@ class ConvBertGeneratorPredictions(nn.Module):
 @add_start_docstrings("""ConvBERT Model with a `language modeling` head on top.""", CONVBERT_START_DOCSTRING)
 class ConvBertForMaskedLM(ConvBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["embeddings.position_ids", "generator.lm_head.weight"]
+    _tied_weights_keys = ["generator.lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)

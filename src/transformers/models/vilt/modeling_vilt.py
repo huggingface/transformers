@@ -36,7 +36,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import (
     find_pruneable_heads_and_indices,
-    is_torch_greater_or_equal_than_1_10,
     meshgrid,
     prune_linear_layer,
 )
@@ -45,12 +44,6 @@ from .configuration_vilt import ViltConfig
 
 
 logger = logging.get_logger(__name__)
-
-if not is_torch_greater_or_equal_than_1_10:
-    logger.warning(
-        f"You are using torch=={torch.__version__}, but torch>=1.10.0 is required to use "
-        "ViltModel. Please upgrade torch."
-    )
 
 _CONFIG_FOR_DOC = "ViltConfig"
 _CHECKPOINT_FOR_DOC = "dandelin/vilt-b32-mlm"
@@ -894,6 +887,7 @@ class ViltPooler(nn.Module):
 )
 class ViltForMaskedLM(ViltPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["mlm_score.decoder.bias"]
+    _tied_weights_keys = ["mlm_score.decoder.weight", "mlm_score.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
