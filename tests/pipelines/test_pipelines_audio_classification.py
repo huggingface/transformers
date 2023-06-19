@@ -36,7 +36,6 @@ class AudioClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 
-
     def get_test_pipeline(self, model, tokenizer, processor):
         audio_classifier = AudioClassificationPipeline(model=model, feature_extractor=processor)
 

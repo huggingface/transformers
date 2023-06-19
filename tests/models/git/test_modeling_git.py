@@ -396,7 +396,7 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     ):
         if pipeline_test_casse_name == "ImageToTextPipelineTests":
             return True
-            
+
         return False
 
     # special case for GitForCausalLM model

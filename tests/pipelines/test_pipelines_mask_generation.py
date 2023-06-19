@@ -18,7 +18,12 @@ from typing import Dict
 
 import numpy as np
 
-from transformers import MODEL_FOR_MASK_GENERATION_MAPPING, TF_MODEL_FOR_MASK_GENERATION_MAPPING, is_vision_available, pipeline
+from transformers import (
+    MODEL_FOR_MASK_GENERATION_MAPPING,
+    TF_MODEL_FOR_MASK_GENERATION_MAPPING,
+    is_vision_available,
+    pipeline,
+)
 from transformers.pipelines import MaskGenerationPipeline
 from transformers.testing_utils import (
     is_pipeline_test,
