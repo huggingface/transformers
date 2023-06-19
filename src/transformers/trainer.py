@@ -2071,13 +2071,13 @@ class Trainer:
         elif is_peft_available() and isinstance(model, PeftModel):
             # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
             if hasattr(model, "active_adapter") and hasattr(model, "load_adapter"):
-                if os.path.exists(resume_from_checkpoint) or os.path.exists(resume_from_checkpoint):
+                if os.path.exists(resume_from_checkpoint):
                     model.load_adapter(resume_from_checkpoint, model.active_adapter)
                 else:
                     logger.warning(
                         "The intermediate checkpoints of PEFT may not be saved correctly, "
-                        f"using `TrainerCallback` to save {ADAPTER_WEIGHTS_NAME} in corresponding folders, "
-                        "here are some examples https://github.com/huggingface/peft/issues/96"
+                        f"consider using a custom callback to save {ADAPTER_WEIGHTS_NAME} in corresponding saving folders. "
+                        "Check some examples here: https://github.com/huggingface/peft/issues/96"
                     )
             else:
                 logger.warning("Could not load adapter model, make sure to have `peft>=0.3.0` installed")
@@ -2144,8 +2144,8 @@ class Trainer:
                             else:
                                 logger.warning(
                                     "The intermediate checkpoints of PEFT may not be saved correctly, "
-                                    f"using `TrainerCallback` to save {ADAPTER_WEIGHTS_NAME} in corresponding folders, "
-                                    "here are some examples https://github.com/huggingface/peft/issues/96"
+                                    f"consider using a custom callback to save {ADAPTER_WEIGHTS_NAME} in corresponding saving folders. "
+                                    "Check some examples here: https://github.com/huggingface/peft/issues/96"
                                 )
                                 has_been_loaded = False
                         else:
