@@ -114,6 +114,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_auto"] = [
+        "TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
         "TF_MODEL_FOR_CAUSAL_LM_MAPPING",
         "TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
         "TF_MODEL_FOR_MASK_GENERATION_MAPPING",
@@ -280,6 +281,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_auto import (
+            TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_MASK_GENERATION_MAPPING,

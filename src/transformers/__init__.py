@@ -2965,6 +2965,7 @@ else:
     )
     _import_structure["models.auto"].extend(
         [
+            "TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
             "TF_MODEL_FOR_CAUSAL_LM_MAPPING",
             "TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
             "TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
@@ -6351,6 +6352,7 @@ if TYPE_CHECKING:
             TFAlbertPreTrainedModel,
         )
         from .models.auto import (
+            TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
