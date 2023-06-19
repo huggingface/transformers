@@ -31,11 +31,14 @@ logger = logging.get_logger(__name__)
 
 
 def get_dpt_config():
-    # beit-large uses [5, 11, 17, 23]
+    # beit-large-512 uses [5, 11, 17, 23]
     backbone_config = BeitConfig(
+        image_size=512,
         num_hidden_layers=24,
         hidden_size=1024,
+        intermediate_size=4096,
         num_attention_heads=16,
+        use_relative_position_bias=True,
         out_features=["stage5", "stage11", "stage17", "stage23"],
     )
 
@@ -45,12 +48,29 @@ def get_dpt_config():
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys():
+def create_rename_keys(config):
     rename_keys = []
 
     # fmt: off
     # stem
-    rename_keys.append(("pretrained.model.cls_token", "backbone.embeddings.patch_embeddings.weight"))
+    rename_keys.append(("pretrained.model.cls_token", "backbone.embeddings.cls_token"))
+    rename_keys.append(("pretrained.model.patch_embed.proj.weight", "backbone.embeddings.patch_embeddings.projection.weight"))
+    rename_keys.append(("pretrained.model.patch_embed.proj.bias", "backbone.embeddings.patch_embeddings.projection.bias"))
+
+    for i in range(config.backbone_config.num_hidden_layers):
+        rename_keys.append((f"pretrained.model.blocks.{i}.gamma_1", f"backbone.encoder.layer.{i}.lambda_1"))
+        rename_keys.append((f"pretrained.model.blocks.{i}.gamma_2", f"backbone.encoder.layer.{i}.lambda_2"))
+        rename_keys.append((f"pretrained.model.blocks.{i}.norm1.weight", f"backbone.encoder.layer.{i}.layernorm_before.weight"))
+        rename_keys.append((f"pretrained.model.blocks.{i}.norm1.bias", f"backbone.encoder.layer.{i}.layernorm_before.bias"))
+        rename_keys.append((f"pretrained.model.blocks.{i}.norm2.weight", f"backbone.encoder.layer.{i}.layernorm_after.weight"))
+        rename_keys.append((f"pretrained.model.blocks.{i}.norm2.bias", f"backbone.encoder.layer.{i}.layernorm_after.bias"))
+        rename_keys.append((f"pretrained.model.blocks.{i}.mlp.fc1.weight", f"backbone.encoder.layer.{i}.intermediate.dense.weight"))
+        rename_keys.append((f"pretrained.model.blocks.{i}.mlp.fc1.bias", f"backbone.encoder.layer.{i}.intermediate.dense.bias"))
+        rename_keys.append((f"pretrained.model.blocks.{i}.mlp.fc2.weight", f"backbone.encoder.layer.{i}.output.dense.weight"))
+        rename_keys.append((f"pretrained.model.blocks.{i}.mlp.fc2.bias", f"backbone.encoder.layer.{i}.output.dense.bias"))
+        rename_keys.append((f"pretrained.model.blocks.{i}.attn.proj.weight", f"backbone.encoder.layer.{i}.attention.output.dense.weight"))
+        rename_keys.append((f"pretrained.model.blocks.{i}.attn.proj.bias", f"backbone.encoder.layer.{i}.attention.output.dense.bias"))
+        rename_keys.append((f"pretrained.model.blocks.{i}.attn.relative_position_bias_table", f"backbone.encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_bias_table"))
 
     return rename_keys
 
@@ -63,23 +83,20 @@ def remove_ignore_keys_(state_dict):
 
 # we split up the matrix of each encoder layer into queries, keys and values
 def read_in_q_k_v(state_dict, config):
-    for i in range(config.num_hidden_layers):
-        # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"dpt.encoder.layer.{i}.attn.qkv.weight")
-        in_proj_bias = state_dict.pop(f"dpt.encoder.layer.{i}.attn.qkv.bias")
+    hidden_size = config.backbone_config.hidden_size
+    for i in range(config.backbone_config.num_hidden_layers):
+        # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
+        in_proj_weight = state_dict.pop(f"pretrained.model.blocks.{i}.attn.qkv.weight")
+        q_bias = state_dict.pop(f"pretrained.model.blocks.{i}.attn.q_bias")
+        v_bias = state_dict.pop(f"pretrained.model.blocks.{i}.attn.v_bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"dpt.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: config.hidden_size, :]
-        state_dict[f"dpt.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
-        state_dict[f"dpt.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            config.hidden_size : config.hidden_size * 2, :
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.bias"] = q_bias
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
+            hidden_size : hidden_size * 2, :
         ]
-        state_dict[f"dpt.encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
-            config.hidden_size : config.hidden_size * 2
-        ]
-        state_dict[f"dpt.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
-            -config.hidden_size :, :
-        ]
-        state_dict[f"dpt.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.bias"] = v_bias
 
 
 def rename_key(dct, old, new):
@@ -101,7 +118,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     """
 
     name_to_url = {
-        "dpt-beit-large-512": "https://github.com/intel-isl/DPT/releases/download/1_0/dpt_large-midas-2f21e586.pt",
+        "dpt-beit-large-512": "https://github.com/isl-org/MiDaS/releases/download/v3_1/dpt_beit_large_512.pt",
     }
 
     # define DPT configuration based on URL
@@ -112,19 +129,24 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     # remove certain keys
     remove_ignore_keys_(state_dict)
     # rename keys
-    for key in state_dict.copy().keys():
-        val = state_dict.pop(key)
-        state_dict[rename_key(key)] = val
+    rename_keys = create_rename_keys(config)
+    for src, dest in rename_keys:
+        rename_key(state_dict, src, dest)
     # read in qkv matrices
     read_in_q_k_v(state_dict, config)
 
     # load HuggingFace model
     model = DPTForDepthEstimation(config)
-    model.load_state_dict(state_dict)
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    print("Missing keys:", missing_keys)
+    print("Unexpected keys:")
+    for k in unexpected_keys:
+        if "index" not in k:
+            print(k)
     model.eval()
 
     # Check outputs on an image
-    size = 384
+    size = 512
     processor = DPTImageProcessor(size={"height": size, "width": size})
 
     image = prepare_img()
@@ -162,9 +184,9 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="dpt-large",
+        default="dpt-beit-large-512",
         type=str,
-        choices=["dpt-large", "dpt-large-ade"],
+        choices=["dpt-beit-large-512"],
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(

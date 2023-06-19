@@ -1305,9 +1305,11 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
         super().__init__(config)
         super()._init_backbone(config)
 
+        print("Backbone config:", config)
+
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
-        self.embedder = BeitEmbeddings(config)
-        self.encoder = BeitEncoder(config)
+        self.embeddings = BeitEmbeddings(config)
+        self.encoder = BeitEncoder(config, window_size=self.embeddings.patch_embeddings.patch_shape)
 
         # initialize weights and apply final processing
         self.post_init()
@@ -1348,7 +1350,7 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        embedding_output = self.embedder(pixel_values)
+        embedding_output = self.embeddings(pixel_values)
 
         outputs = self.encoder(embedding_output, output_hidden_states=True, return_dict=True)
 
