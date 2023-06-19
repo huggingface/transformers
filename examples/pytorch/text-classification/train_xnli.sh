@@ -7,6 +7,8 @@ do
     esac
 done
 
+LOG_DIR="./logs"
+OUTPUT_DIR="./outputs"
 log_file=$LOG_DIR/$model.log
 output_dir=$OUTPUT_DIR/$model
 
