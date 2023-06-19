@@ -224,7 +224,9 @@ class KerasMetricCallback(Callback):
                 if self.use_xla_generation:
                     predictions = self.generation_function(generation_inputs, attention_mask=attention_mask)
                 else:
-                    predictions = self.model.generate(generation_inputs, attention_mask=attention_mask)
+                    predictions = self.model.generate(
+                        generation_inputs, attention_mask=attention_mask, **self.generate_kwargs
+                    )
             else:
                 predictions = self.model.predict_on_batch(batch)
                 if isinstance(predictions, dict):
