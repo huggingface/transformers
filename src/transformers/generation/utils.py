@@ -2323,7 +2323,7 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        unfinished_sequences = torch.ones((input_ids.shape[0]), dtype=torch.long, device=input_ids.device)
+        unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
 
         this_peer_finished = False  # used by synced_gpus only
         while True:
