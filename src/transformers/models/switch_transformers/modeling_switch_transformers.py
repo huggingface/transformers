@@ -798,7 +798,7 @@ class SwitchTransformersBlock(nn.Module):
         if isinstance(hidden_states, tuple):
             hidden_states, router_tuple = hidden_states
         else:
-            router_tuple = (torch.tensor([0]),)
+            router_tuple = (torch.tensor([0], device=hidden_states.device),)
 
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
