@@ -89,8 +89,8 @@ class VivitImageProcessor(BaseImageProcessor):
             Defines the scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter
             in the `preprocess` method.
         offset (`bool`, *optional*, defaults to `True`):
-            Whether to scale the image in both negative and positive directions. Can be overriden by the
-            `offset` in the `preprocess` method.
+            Whether to scale the image in both negative and positive directions. Can be overriden by the `offset` in
+            the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `False`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
@@ -331,8 +331,7 @@ class VivitImageProcessor(BaseImageProcessor):
             crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 Size of the image after applying the centre crop.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between `[-1 - 1]` if `offset` is `True`, `[0, 1]`
-                otherwise.
+                Whether to rescale the image values between `[-1 - 1]` if `offset` is `True`, `[0, 1]` otherwise.
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             offset (`bool`, *optional*, defaults to `self.offset`):
