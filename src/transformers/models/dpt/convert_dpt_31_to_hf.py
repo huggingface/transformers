@@ -42,7 +42,8 @@ def get_dpt_config():
         out_features=["stage6", "stage12", "stage18", "stage24"],
     )
 
-    config = DPTConfig(backbone_config=backbone_config)
+    # TODO get rid of config.hidden_size, using config.backbone_config.hidden_size instead
+    config = DPTConfig(backbone_config=backbone_config, hidden_size=1024, neck_hidden_sizes=[256, 512, 1024, 1024])
 
     return config
 
@@ -57,6 +58,7 @@ def create_rename_keys(config):
     rename_keys.append(("pretrained.model.patch_embed.proj.weight", "backbone.embeddings.patch_embeddings.projection.weight"))
     rename_keys.append(("pretrained.model.patch_embed.proj.bias", "backbone.embeddings.patch_embeddings.projection.bias"))
 
+    # Transfomer encoder
     for i in range(config.backbone_config.num_hidden_layers):
         rename_keys.append((f"pretrained.model.blocks.{i}.gamma_1", f"backbone.encoder.layer.{i}.lambda_1"))
         rename_keys.append((f"pretrained.model.blocks.{i}.gamma_2", f"backbone.encoder.layer.{i}.lambda_2"))
@@ -72,6 +74,20 @@ def create_rename_keys(config):
         rename_keys.append((f"pretrained.model.blocks.{i}.attn.proj.bias", f"backbone.encoder.layer.{i}.attention.output.dense.bias"))
         rename_keys.append((f"pretrained.model.blocks.{i}.attn.relative_position_bias_table", f"backbone.encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_bias_table"))
         rename_keys.append((f"pretrained.model.blocks.{i}.attn.relative_position_index", f"backbone.encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_index"))
+
+    # activation postprocessing (readout projections)
+    for i in range(4):
+        rename_keys.append((f"pretrained.act_postprocess{i+1}.0.project.0.weight", f"neck.reassemble_stage.readout_projects.{i}.0.weight"))
+        rename_keys.append((f"pretrained.act_postprocess{i+1}.0.project.0.bias", f"neck.reassemble_stage.readout_projects.{i}.0.bias"))
+
+    # scratch convolutions
+    for i in range(4):
+        rename_keys.append((f"scratch.layer{i+1}_rn.weight", f"neck.convs.{i}.weight"))
+
+    # head
+    for i in range(0, 5, 2):
+        rename_keys.append((f"scratch.output_conv.{i}.weight", f"head.head.{i}.weight"))
+        rename_keys.append((f"scratch.output_conv.{i}.bias", f"head.head.{i}.bias"))
 
     return rename_keys
 
