@@ -2073,10 +2073,6 @@ class Trainer:
             if hasattr(model, "active_adapter") and hasattr(model, "load_adapter"):
                 if os.path.exists(resume_from_checkpoint) or os.path.exists(resume_from_checkpoint):
                     model.load_adapter(resume_from_checkpoint, model.active_adapter)
-                    # Load_adapter has no return value present, modify it when appropriate.
-                    from torch.nn.modules.module import _IncompatibleKeys
-
-                    load_result = _IncompatibleKeys([], [])
                 else:
                     logger.warning(
                         "The intermediate checkpoints of PEFT may not be saved correctly, "
