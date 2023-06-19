@@ -231,6 +231,13 @@ Keywords: Data augmentation, Synthetic data generation, Audio, NLP
 
 Keywords: Stable-Diffusion, Blender
 
+## [BentoML](https://github.com/bentoml/BentoML)
+
+[BentoML](https://github.com/bentoml) is the unified framework for for building, shipping, and scaling production-ready AI applications incorporating traditional ML, pre-trained AI models, Generative and Large Language Models. 
+All Hugging Face models and pipelines can be seamlessly integrated into BentoML applications, enabling the running of models on the most suitable hardware and independent scaling based on usage.
+
+Keywords: BentoML, Framework, Deployment, AI Applications
+
 ## [seldon-core](https://github.com/SeldonIO/seldon-core)
 
 Seldon core converts your ML models (Tensorflow, Pytorch, H2o, etc.) or language wrappers (Python, Java, etc.) into production REST/GRPC microservices.
