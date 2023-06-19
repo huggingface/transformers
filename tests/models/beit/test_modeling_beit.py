@@ -37,6 +37,7 @@ if is_torch_available():
 
     from transformers import (
         MODEL_MAPPING,
+        BeitBackbone,
         BeitForImageClassification,
         BeitForMaskedImageModeling,
         BeitForSemanticSegmentation,
@@ -193,7 +194,13 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (
-        (BeitModel, BeitForImageClassification, BeitForMaskedImageModeling, BeitForSemanticSegmentation)
+        (
+            BeitModel,
+            BeitForImageClassification,
+            BeitForMaskedImageModeling,
+            BeitForSemanticSegmentation,
+            BeitBackbone,
+        )
         if is_torch_available()
         else ()
     )

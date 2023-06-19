@@ -1053,7 +1053,10 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.dpt = DPTModel(config, add_pooling_layer=False)
+        if config.backbone_config is not None:
+            self.backbone = AutoBackbone.from_config(config.backbone_config)
+        else:
+            self.dpt = DPTModel(config, add_pooling_layer=False)
 
         # Neck
         self.neck = DPTNeck(config)
@@ -1120,29 +1123,35 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        outputs = self.dpt(
-            pixel_values,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=True,  # we need the intermediate hidden states
-            return_dict=return_dict,
-        )
-
-        hidden_states = outputs.hidden_states if return_dict else outputs[1]
-
-        # only keep certain features based on config.backbone_out_indices
-        # note that the hidden_states also include the initial embeddings
-        if not self.config.is_hybrid:
-            hidden_states = [
-                feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices
-            ]
-        else:
-            backbone_hidden_states = outputs.intermediate_activations if return_dict else list(outputs[-1])
-            backbone_hidden_states.extend(
-                feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices[2:]
+        if self.backbone is not None:
+            outputs = self.backbone.forward_with_filtered_kwargs(
+                pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
             )
+            hidden_states = outputs.feature_maps
+        else:
+            outputs = self.dpt(
+                pixel_values,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=True,  # we need the intermediate hidden states
+                return_dict=return_dict,
+            )
+            hidden_states = outputs.hidden_states if return_dict else outputs[1]
+            # only keep certain features based on config.backbone_out_indices
+            # note that the hidden_states also include the initial embeddings
+            if not self.config.is_hybrid:
+                hidden_states = [
+                    feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices
+                ]
+            else:
+                backbone_hidden_states = outputs.intermediate_activations if return_dict else list(outputs[-1])
+                backbone_hidden_states.extend(
+                    feature
+                    for idx, feature in enumerate(hidden_states[1:])
+                    if idx in self.config.backbone_out_indices[2:]
+                )
 
-            hidden_states = backbone_hidden_states
+                hidden_states = backbone_hidden_states
 
         hidden_states = self.neck(hidden_states)
 

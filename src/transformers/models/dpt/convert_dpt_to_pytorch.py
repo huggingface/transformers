@@ -186,12 +186,18 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub, model_name):
+def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     """
     Copy/paste/tweak model's weights to our DPT structure.
     """
 
+    name_to_url = {
+        "dpt-large": "https://github.com/intel-isl/DPT/releases/download/1_0/dpt_large-midas-2f21e586.pt",
+        "dpt-large-ade": "https://github.com/intel-isl/DPT/releases/download/1_0/dpt_large-ade20k-b12dca68.pt",
+    }
+
     # define DPT configuration based on URL
+    checkpoint_url = name_to_url[model_name]
     config, expected_shape = get_dpt_config(checkpoint_url)
     # load original state_dict from URL
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
@@ -211,10 +217,10 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
 
     # Check outputs on an image
     size = 480 if "ade" in checkpoint_url else 384
-    image_processor = DPTImageProcessor(size=size)
+    processor = DPTImageProcessor(size={"height": size, "width": size})
 
     image = prepare_img()
-    encoding = image_processor(image, return_tensors="pt")
+    encoding = processor(image, return_tensors="pt")
 
     # forward pass
     outputs = model(**encoding).logits if "ade" in checkpoint_url else model(**encoding).predicted_depth
@@ -229,55 +235,41 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
         if "ade" in checkpoint_url
         else torch.allclose(outputs[0, :3, :3], expected_slice)
     )
+    print("Looks ok!")
 
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving image processor to {pytorch_dump_folder_path}")
-    image_processor.save_pretrained(pytorch_dump_folder_path)
+    if pytorch_dump_folder_path is not None:
+        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+        print(f"Saving model and processor to {pytorch_dump_folder_path}")
+        model.save_pretrained(pytorch_dump_folder_path)
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print("Pushing model to hub...")
-        model.push_to_hub(
-            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-            organization="nielsr",
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
-        image_processor.push_to_hub(
-            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-            organization="nielsr",
-            commit_message="Add image processor",
-            use_temp_dir=True,
-        )
+        print("Pushing model and processor to hub...")
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
+        processor.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--checkpoint_url",
-        default="https://github.com/intel-isl/DPT/releases/download/1_0/dpt_large-midas-2f21e586.pt",
+        "--model_name",
+        default="dpt-large",
         type=str,
-        help="URL of the original DPT checkpoint you'd like to convert.",
+        choices=["dpt-large", "dpt-large-ade"],
+        help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
         default=None,
         type=str,
-        required=True,
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
         "--push_to_hub",
         action="store_true",
-    )
-    parser.add_argument(
-        "--model_name",
-        default="dpt-large",
-        type=str,
-        help="Name of the model, in case you're pushing to the hub.",
+        help="Whether to push the model to the hub after conversion.",
     )
 
     args = parser.parse_args()
-    convert_dpt_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub, args.model_name)
+    convert_dpt_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
