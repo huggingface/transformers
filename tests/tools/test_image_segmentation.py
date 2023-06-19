@@ -33,21 +33,21 @@ class ImageSegmentationToolTester(unittest.TestCase, ToolTesterMixin):
         self.remote_tool = load_tool("image-segmentation", remote=True)
 
     def test_exact_match_arg(self):
-        image = Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png").resize((512, 512))
+        image = Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png")
         result = self.tool(image, "cat")
         self.assertTrue(isinstance(result, Image.Image))
 
     def test_exact_match_arg_remote(self):
-        image = Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png").resize((512, 512))
+        image = Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png")
         result = self.remote_tool(image, "cat")
         self.assertTrue(isinstance(result, Image.Image))
 
     def test_exact_match_kwarg(self):
-        image = Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png").resize((512, 512))
+        image = Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png")
         result = self.tool(image=image, label="cat")
         self.assertTrue(isinstance(result, Image.Image))
 
     def test_exact_match_kwarg_remote(self):
-        image = Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png").resize((512, 512))
+        image = Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png")
         result = self.remote_tool(image=image, label="cat")
         self.assertTrue(isinstance(result, Image.Image))

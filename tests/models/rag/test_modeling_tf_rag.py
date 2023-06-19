@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import gc
 import json
 import os
 import shutil
@@ -491,6 +490,7 @@ class TFRagTestMixin:
         inputs_dict = self.config_and_inputs
         self.check_model_without_retriever(**inputs_dict)
 
+    @slow
     def test_model_generate_from_context_input_ids(self):
         inputs_dict = self.config_and_inputs
         self.check_model_generate_from_context_input_ids(**inputs_dict)
@@ -499,6 +499,7 @@ class TFRagTestMixin:
         inputs_dict = self.config_and_inputs
         self.check_model_with_encoder_outputs(**inputs_dict)
 
+    @slow
     def test_model_generate(self):
         inputs_dict = self.config_and_inputs
         self.check_model_generate(**inputs_dict)
@@ -551,11 +552,6 @@ class TFRagDPRBartTest(TFRagTestMixin, unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 class TFRagModelIntegrationTests(unittest.TestCase):
-    def tearDown(self):
-        super().tearDown()
-        # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-
     @cached_property
     def token_model(self):
         return TFRagTokenForGeneration.from_pretrained_question_encoder_generator(

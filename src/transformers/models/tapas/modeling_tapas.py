@@ -32,6 +32,7 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import (
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
+    is_torch_greater_or_equal_than_1_12,
     prune_linear_layer,
 )
 from ...utils import (
@@ -45,6 +46,12 @@ from .configuration_tapas import TapasConfig
 
 
 logger = logging.get_logger(__name__)
+
+if not is_torch_greater_or_equal_than_1_12:
+    logger.warning(
+        f"You are using torch=={torch.__version__}, but torch>=1.12.0 is required to use "
+        "TapasModel. Please upgrade torch."
+    )
 
 _CONFIG_FOR_DOC = "TapasConfig"
 _CHECKPOINT_FOR_DOC = "google/tapas-base"
@@ -992,6 +999,7 @@ class TapasModel(TapasPreTrainedModel):
 @add_start_docstrings("""Tapas Model with a `language modeling` head on top.""", TAPAS_START_DOCSTRING)
 class TapasForMaskedLM(TapasPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
     config_class = TapasConfig
     base_model_prefix = "tapas"
 

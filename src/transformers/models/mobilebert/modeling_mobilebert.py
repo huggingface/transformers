@@ -928,6 +928,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
         "cls.predictions.decoder.bias",
         "embeddings.position_ids",
     ]
+    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1041,6 +1042,7 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
         "cls.predictions.decoder.bias",
         "embeddings.position_ids",
     ]
+    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)

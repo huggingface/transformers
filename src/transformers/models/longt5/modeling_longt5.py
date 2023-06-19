@@ -1770,6 +1770,7 @@ class LongT5Model(LongT5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [
         r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: LongT5Config):
         super().__init__(config)
@@ -1924,6 +1925,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [
         r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: LongT5Config):
         super().__init__(config)
@@ -2159,6 +2161,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
 )
 class LongT5EncoderModel(LongT5PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight"]
 
     def __init__(self, config: LongT5Config):
         super().__init__(config)

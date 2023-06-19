@@ -221,13 +221,13 @@ class TFCoreModelTesterMixin:
 
             for key in list(class_inputs_dict.keys()):
                 # Remove keys not in the serving signature, as the SavedModel will not be compiled to deal with them
-                if key not in model.serving.input_signature[0]:
+                if key not in model.input_signature:
                     del class_inputs_dict[key]
                 # Check it's a tensor, in case the inputs dict has some bools in it too
                 elif isinstance(class_inputs_dict[key], tf.Tensor) and class_inputs_dict[key].dtype.is_integer:
                     class_inputs_dict[key] = tf.cast(class_inputs_dict[key], tf.int32)
 
-            if set(class_inputs_dict.keys()) != set(model.serving.input_signature[0].keys()):
+            if set(class_inputs_dict.keys()) != set(model.input_signature.keys()):
                 continue  # Some models have inputs that the preparation functions don't create, we skip those
 
             with tempfile.TemporaryDirectory() as tmpdirname:

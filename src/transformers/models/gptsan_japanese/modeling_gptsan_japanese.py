@@ -1112,6 +1112,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
 )
 class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__(config)
@@ -1347,7 +1348,7 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         total_router_logits = []
         total_expert_indexes = []
         for router_output in router_outputs:
-            if router_output[0] is not None:
+            if len(router_output[0].shape) > 1:
                 router_logits, expert_indexes = router_output
                 total_router_logits.append(router_logits)
                 total_expert_indexes.append(expert_indexes)
