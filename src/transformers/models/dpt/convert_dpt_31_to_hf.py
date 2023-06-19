@@ -39,7 +39,7 @@ def get_dpt_config():
         intermediate_size=4096,
         num_attention_heads=16,
         use_relative_position_bias=True,
-        out_features=["stage5", "stage11", "stage17", "stage23"],
+        out_features=["stage6", "stage12", "stage18", "stage24"],
     )
 
     config = DPTConfig(backbone_config=backbone_config)
@@ -151,10 +151,28 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     processor = DPTImageProcessor(size={"height": size, "width": size})
 
     image = prepare_img()
-    encoding = processor(image, return_tensors="pt")
+    processor(image, return_tensors="pt")
+
+    import requests
+    from PIL import Image
+    from torchvision import transforms
+
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image = Image.open(requests.get(url, stream=True).raw)
+
+    transforms = transforms.Compose(
+        [
+            transforms.Resize((512, 512)),
+            transforms.ToTensor(),
+        ]
+    )
+    pixel_values = transforms(image).unsqueeze(0)
+
+    with torch.no_grad():
+        model(pixel_values)
 
     # forward pass
-    model(**encoding).predicted_depth
+    # model(**encoding).predicted_depth
 
     # TODO assert logits
     # expected_slice = torch.tensor([[6.3199, 6.3629, 6.4148], [6.3850, 6.3615, 6.4166], [6.3519, 6.3176, 6.3575]])

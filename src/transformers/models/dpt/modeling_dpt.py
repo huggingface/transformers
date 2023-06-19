@@ -1153,6 +1153,10 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
                 hidden_states = backbone_hidden_states
 
+        for i in hidden_states:
+            print(i.shape)
+            print(i[0, :3, :3])
+
         hidden_states = self.neck(hidden_states)
 
         predicted_depth = self.head(hidden_states)
