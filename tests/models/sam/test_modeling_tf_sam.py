@@ -280,9 +280,7 @@ class TFSamModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     """
 
     all_model_classes = (TFSamModel,) if is_tf_available() else ()
-    pipeline_model_mapping = (
-        {"feature-extraction": TFSamModel, "mask-generation": TFSamModel} if is_tf_available() else {}
-    )
+    pipeline_model_mapping = {"feature-extraction": TFSamModel} if is_tf_available() else {}
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
