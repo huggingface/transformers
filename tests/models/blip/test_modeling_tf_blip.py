@@ -681,8 +681,6 @@ class TFBlipTextRetrievalModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-
-
     def test_training(self):
         if not self.model_tester.is_training:
             return

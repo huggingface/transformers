@@ -365,7 +365,6 @@ class TFLongformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
         pass
 
 
-
 @require_tf
 @require_sentencepiece
 @require_tokenizers
