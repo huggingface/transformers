@@ -162,7 +162,7 @@ class MusicgenConfig(PretrainedConfig):
     >>> audio_encoder_config = EncodecConfig()
     >>> decoder_config = MusicgenDecoderConfig()
 
-    >>> config = MusicgenConfig.from_encoder_decoder_configs(text_encoder_config, audio_encoder_config, decoder_config)
+    >>> config = MusicgenConfig.from_sub_model_configs(text_encoder_config, audio_encoder_config, decoder_config)
 
     >>> # Initializing a MusicgenForConditionalGeneration (with random weights) from the facebook/musicgen-small style configuration
     >>> model = MusicgenForConditionalGeneration(configuration)
@@ -203,7 +203,7 @@ class MusicgenConfig(PretrainedConfig):
         self.is_encoder_decoder = True
 
     @classmethod
-    def from_encoder_decoder_configs(
+    def from_sub_model_configs(
         cls,
         text_encoder_config: PretrainedConfig,
         audio_encoder_config: PretrainedConfig,

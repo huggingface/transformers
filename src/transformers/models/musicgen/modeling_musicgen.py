@@ -1659,7 +1659,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         >>> from transformers import MusicgenForConditionalGeneration
 
         >>> # initialize a musicgen model from a t5 text encoder, encodec audio encoder, and musicgen decoder
-        >>> model = MusicgenForConditionalGeneration.from_encoder_decoder_pretrained(
+        >>> model = MusicgenForConditionalGeneration.from_sub_model_pretrained(
         ...     text_encoder_pretrained_model_name_or_path="t5-base",
         ...     audio_encoder_pretrained_model_name_or_path="facebook/encodec_24khz",
         ...     decoder_pretrained_model_name_or_path="facebook/musicgen-small",
@@ -1780,8 +1780,8 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                     f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. "
                     f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
                     "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` "
-                    "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a "
-                    "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
+                    "passed to `.from_sub_model_pretrained(...)` are set to `True` or do not pass a "
+                    "`decoder_config` to `.from_sub_model_pretrained(...)`"
                 )
 
             decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
