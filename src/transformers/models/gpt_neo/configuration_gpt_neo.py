@@ -74,8 +74,8 @@ class GPTNeoConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         classifier_dropout (`float`, *optional*, defaults to 0.1):
-            Argument used when doing token classification, used in the model [`GPTNeoForTokenClassification`].
-            The dropout ratio for the hidden layer.
+            Argument used when doing token classification, used in the model [`GPTNeoForTokenClassification`]. The
+            dropout ratio for the hidden layer.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
