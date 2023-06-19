@@ -800,6 +800,9 @@ class SwitchTransformersBlock(nn.Module):
         else:
             router_tuple = (torch.tensor([0]),)
 
+        # Send elements in `router_tuple` to the correct device (due to the above if/else statement)
+        router_tuple = tuple(x.to(hidden_states.device) for x in router_tuple)
+
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
