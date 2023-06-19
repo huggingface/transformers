@@ -31,7 +31,13 @@ logger = logging.get_logger(__name__)
 
 
 def get_dpt_config():
-    backbone_config = BeitConfig(out_features=["stage1", "stage2", "stage3", "stage4"])
+    # beit-large uses [5, 11, 17, 23]
+    backbone_config = BeitConfig(
+        num_hidden_layers=24,
+        hidden_size=1024,
+        num_attention_heads=16,
+        out_features=["stage5", "stage11", "stage17", "stage23"],
+    )
 
     config = DPTConfig(backbone_config=backbone_config)
 
@@ -44,11 +50,8 @@ def create_rename_keys():
 
     # fmt: off
     # stem
-    rename_keys.append(("backbone.downsample_layers.0.0.weight", "backbone.embeddings.patch_embeddings.weight"))
-    rename_keys.append(("backbone.downsample_layers.0.0.bias", "backbone.embeddings.patch_embeddings.bias"))
-    rename_keys.append(("backbone.downsample_layers.0.1.weight", "backbone.embeddings.layernorm.weight"))
-    rename_keys.append(("backbone.downsample_layers.0.1.bias", "backbone.embeddings.layernorm.bias"))
-    
+    rename_keys.append(("pretrained.model.cls_token", "backbone.embeddings.patch_embeddings.weight"))
+
     return rename_keys
 
 
@@ -128,7 +131,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     encoding = processor(image, return_tensors="pt")
 
     # forward pass
-    outputs = model(**encoding).predicted_depth
+    model(**encoding).predicted_depth
 
     # TODO assert logits
     # expected_slice = torch.tensor([[6.3199, 6.3629, 6.4148], [6.3850, 6.3615, 6.4166], [6.3519, 6.3176, 6.3575]])

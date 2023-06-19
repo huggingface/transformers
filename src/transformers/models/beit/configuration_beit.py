@@ -183,7 +183,7 @@ class BeitConfig(PretrainedConfig, BackboneConfigMixin):
         self.drop_path_rate = drop_path_rate
         self.use_mean_pooling = use_mean_pooling
         # decode head attributes (semantic segmentation)
-        self.out_indices = out_indices
+        # self.out_indices = out_indices
         self.pool_scales = pool_scales
         # auxiliary head attributes (semantic segmentation)
         self.use_auxiliary_head = use_auxiliary_head
@@ -194,7 +194,7 @@ class BeitConfig(PretrainedConfig, BackboneConfigMixin):
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
 
         # backbone attributes
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.num_hidden_layers) + 1)]
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )

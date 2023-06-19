@@ -18,6 +18,7 @@ import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto.configuration_auto import CONFIG_MAPPING
 from ..bit import BitConfig
 
 
@@ -104,7 +105,8 @@ class DPTConfig(PretrainedConfig):
         neck_ignore_stages (`List[int]`, *optional*, defaults to `[0, 1]`):
             Used only for the `hybrid` embedding type. The stages of the readout layers to ignore.
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
-            Used only for the `hybrid` embedding type. The configuration of the backbone in a dictionary.
+            The configuration of the backbone model. Only used in case `is_hybrid` or in case you want to leverage the
+            [`AutoBackbone`] API.
 
     Example:
 
@@ -186,7 +188,12 @@ class DPTConfig(PretrainedConfig):
             if readout_type != "project":
                 raise ValueError("Readout type must be 'project' when using `DPT-hybrid` mode.")
         else:
-            self.backbone_config = None
+            if isinstance(backbone_config, dict):
+                backbone_model_type = backbone_config.get("model_type")
+                config_class = CONFIG_MAPPING[backbone_model_type]
+                backbone_config = config_class.from_dict(backbone_config)
+
+            self.backbone_config = backbone_config
             self.backbone_featmap_shape = None
             self.neck_ignore_stages = []
 
