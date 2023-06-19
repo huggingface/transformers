@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Facebook and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Meta AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1596,7 +1596,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     @classmethod
-    def from_encoder_decoder_pretrained(
+    def from_sub_models_pretrained(
         cls,
         text_encoder_pretrained_model_name_or_path: str = None,
         audio_encoder_pretrained_model_name_or_path: str = None,
