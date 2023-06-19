@@ -219,7 +219,6 @@ class TFAlbertPreTrainedModel(metaclass=DummyObject):
 TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = None
 
 
-
 TF_MODEL_FOR_CAUSAL_LM_MAPPING = None
 
 
