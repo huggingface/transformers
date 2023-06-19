@@ -2331,6 +2331,7 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
     _keys_to_ignore_on_save = [
         r"speecht5.encoder.prenet.pos_sinusoidal_embed.weights",
     ]
+    _tied_weights_keys = ["text_decoder_postnet.lm_head.weight"]
 
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)

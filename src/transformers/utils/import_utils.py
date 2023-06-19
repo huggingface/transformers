@@ -105,6 +105,7 @@ _psutil_available = _is_package_available("psutil")
 _py3nvml_available = _is_package_available("py3nvml")
 _pyctcdecode_available = _is_package_available("pyctcdecode")
 _pytesseract_available = _is_package_available("pytesseract")
+_pytest_available = _is_package_available("pytest")
 _pytorch_quantization_available = _is_package_available("pytorch_quantization")
 _rjieba_available = _is_package_available("rjieba")
 _sacremoses_available = _is_package_available("sacremoses")
@@ -146,7 +147,9 @@ if FORCE_TF_AVAILABLE in ENV_VARS_TRUE_VALUES:
     _tf_available = True
 else:
     if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VALUES:
-        _tf_available = _is_package_available("tensorflow")
+        # Note: _is_package_available("tensorflow") fails for tensorflow-cpu. Please test any changes to the line below
+        # with tensorflow-cpu to make sure it still works!
+        _tf_available = importlib.util.find_spec("tensorflow") is not None
         if _tf_available:
             candidates = (
                 "tensorflow",
@@ -255,16 +258,12 @@ def is_torch_bf16_gpu_available():
     # since currently no utility function is available we build our own.
     # some bits come from https://github.com/pytorch/pytorch/blob/2289a12f21c54da93bf5d696e3f9aea83dd9c10d/torch/testing/_internal/common_cuda.py#L51
     # with additional check for torch version
-    # to succeed:
-    # 1. torch >= 1.10 (1.9 should be enough for AMP API has changed in 1.10, so using 1.10 as minimal)
-    # 2. the hardware needs to support bf16 (GPU arch >= Ampere, or CPU)
-    # 3. if using gpu, CUDA >= 11
-    # 4. torch.autocast exists
+    # to succeed: (torch is required to be >= 1.10 anyway)
+    # 1. the hardware needs to support bf16 (GPU arch >= Ampere, or CPU)
+    # 2. if using gpu, CUDA >= 11
+    # 3. torch.autocast exists
     # XXX: one problem here is that it may give invalid results on mixed gpus setup, so it's
     # really only correct for the 0th gpu (or currently set default device if different from 0)
-    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.10"):
-        return False
-
     if torch.cuda.is_available() and torch.version.cuda is not None:
         if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
             return False
@@ -283,9 +282,6 @@ def is_torch_bf16_cpu_available():
         return False
 
     import torch
-
-    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.10"):
-        return False
 
     try:
         # multiple levels of AttributeError depending on the pytorch version so do them all in one check
@@ -523,8 +519,6 @@ def is_optimum_neuron_available():
 
 
 def is_safetensors_available():
-    if is_torch_available() and version.parse(_torch_version) < version.parse("1.10"):
-        return False
     return _safetensors_available
 
 
@@ -545,6 +539,10 @@ def is_vision_available():
 
 def is_pytesseract_available():
     return _pytesseract_available
+
+
+def is_pytest_available():
+    return _pytest_available
 
 
 def is_spacy_available():

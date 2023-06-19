@@ -283,52 +283,6 @@ class TFViTMAEModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
         super().check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
 
-    # overwrite from common since TFViTMAEForPretraining outputs loss along with
-    # logits and mask indices. loss and mask indices are not suitable for integration
-    # with other keras modules.
-    def test_compile_tf_model(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
-        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
-
-        for model_class in self.all_model_classes:
-            # `pixel_values` implies that the input is an image
-            inputs = tf.keras.Input(
-                batch_shape=(
-                    3,
-                    self.model_tester.num_channels,
-                    self.model_tester.image_size,
-                    self.model_tester.image_size,
-                ),
-                name="pixel_values",
-                dtype="float32",
-            )
-
-            # Prepare our model
-            model = model_class(config)
-            model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
-            # Let's load it from the disk to be sure we can use pretrained weights
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname, saved_model=False)
-                model = model_class.from_pretrained(tmpdirname)
-
-            outputs_dict = model(inputs)
-            hidden_states = outputs_dict[0]
-
-            # `TFViTMAEForPreTraining` outputs are not recommended to be used for
-            #  downstream application. This is just to check if the outputs of
-            # `TFViTMAEForPreTraining` can be integrated with other keras modules.
-            if model_class.__name__ == "TFViTMAEForPreTraining":
-                hidden_states = outputs_dict["logits"]
-
-            # Add a dense layer on top to test integration with other keras modules
-            outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
-
-            # Compile extended model
-            extended_model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
-            extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
-
     # overwrite from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
     def test_keras_save_load(self):

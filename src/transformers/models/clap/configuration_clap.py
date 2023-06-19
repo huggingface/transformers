@@ -65,8 +65,6 @@ class ClapTextConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
             The vocabulary size of the `token_type_ids` passed when calling [`ClapTextModel`].
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
@@ -80,8 +78,6 @@ class ClapTextConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        classifier_dropout (`float`, *optional*):
-            The dropout ratio for the classification head.
         projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the projection layer. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
@@ -116,7 +112,6 @@ class ClapTextConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=514,
         type_vocab_size=1,
-        initializer_range=0.02,
         initializer_factor=1.0,
         layer_norm_eps=1e-12,
         projection_dim=512,
@@ -125,7 +120,6 @@ class ClapTextConfig(PretrainedConfig):
         eos_token_id=2,
         position_embedding_type="absolute",
         use_cache=True,
-        classifier_dropout=None,
         projection_hidden_act="relu",
         **kwargs,
     ):
@@ -141,12 +135,10 @@ class ClapTextConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
-        self.classifier_dropout = classifier_dropout
         self.projection_hidden_act = projection_hidden_act
         self.projection_dim = projection_dim
 

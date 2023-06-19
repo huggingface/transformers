@@ -1122,8 +1122,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         dummies = {}
-        sig = self._prune_signature(self.input_signature)
-        for key, spec in sig.items():
+        for key, spec in self.input_signature.items():
             # 2 is the most correct arbitrary size. I will not be taking questions
             dummy_shape = [dim if dim is not None else 2 for dim in spec.shape]
             if spec.shape[0] is None:
@@ -1157,6 +1156,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             self.built = True
         else:
             self.built = True
+            # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
+            # Setting it in build() allows users to override the shape when loading a non-pretrained model from config
+            self._set_save_spec(self.input_signature)
             self(self.dummy_inputs, training=False)
 
     def __init__(self, config, *inputs, **kwargs):
@@ -1171,12 +1173,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         self.config = config
         self.name_or_path = config.name_or_path
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
-        if not hasattr(self, "serving"):  # Don't overwrite existing serving signatures
-            self.serving = tf.function(
-                self.eager_serving, input_signature=[self._prune_signature(self.input_signature)]
-            )
-        # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
-        self._set_save_spec(self.serving.input_signature[0])
 
     def get_config(self):
         return self.config.to_dict()
@@ -1226,15 +1222,31 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         head_mask = tf.cast(head_mask, tf.float32)  # switch to float if need + fp16 compatibility
         return head_mask
 
+    @tf.function
+    def serving(self, inputs):
+        """
+        Args:
+        Method used for serving the model. Does not have a specific signature, but will be specialized as concrete
+        functions when saving with `save_pretrained`.
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
     def eager_serving(self, inputs):
         """
-        Method used for serving the model. Intended not to be compiled with a tf.function decorator so that we can use
-        it to generate multiple signatures later.
+        Method used for serving the model. This method is deprecated, and will be removed.
 
         Args:
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
+        warnings.warn(
+            "The function `eager_serving` is deprecated and will be removed in version 4.32.0 of Transformers",
+            FutureWarning,
+        )
         output = self.call(inputs)
 
         return self.serving_output(output)
@@ -1287,11 +1299,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             raise NotImplementedError("Audio models need a manually defined input_signature")
         return sig
 
-    def _prune_signature(self, signature):
-        """Keeps only the keys of a given input signature that are valid for this model."""
-        model_inputs = list(inspect.signature(self.call).parameters)
-        return {key: val for key, val in signature.items() if key in model_inputs}
-
     def serving_output(self, output):
         """
         Prepare the output of the saved model. Can be overridden if specific serving modifications are required.
@@ -1316,7 +1323,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     pass  # Layers may not have the same dimensions
         return output
 
-    def can_generate(self) -> bool:
+    @classmethod
+    def can_generate(cls) -> bool:
         """
         Returns whether this model can generate sequences with `.generate()`.
 
@@ -1324,7 +1332,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
         # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation
-        if "GenerationMixin" in str(self.prepare_inputs_for_generation.__func__):
+        if "GenerationMixin" in str(cls.prepare_inputs_for_generation):
             return False
         return True
 
@@ -2409,17 +2417,18 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             if getattr(self.config, "torch_dtype", None) is not None and not isinstance(self.config.torch_dtype, str):
                 self.config.torch_dtype = str(self.config.torch_dtype).split(".")[1]
             if signatures is None:
-                if any(spec.dtype == tf.int32 for spec in self.serving.input_signature[0].values()):
+                serving_default = self.serving.get_concrete_function(self.input_signature)
+                if any(spec.dtype == tf.int32 for spec in self.input_signature.values()):
                     int64_spec = {
                         key: tf.TensorSpec(
                             shape=spec.shape, dtype=tf.int64 if spec.dtype == tf.int32 else spec.dtype, name=spec.name
                         )
-                        for key, spec in self.serving.input_signature[0].items()
+                        for key, spec in self.input_signature.items()
                     }
-                    int64_serving = tf.function(self.eager_serving, input_signature=[int64_spec])
-                    signatures = {"serving_default": self.serving, "int64_serving": int64_serving}
+                    int64_serving = self.serving.get_concrete_function(int64_spec)
+                    signatures = {"serving_default": serving_default, "int64_serving": int64_serving}
                 else:
-                    signatures = self.serving
+                    signatures = serving_default
             saved_model_dir = os.path.join(save_directory, "saved_model", str(version))
             self.save(saved_model_dir, include_optimizer=False, signatures=signatures)
             logger.info(f"Saved model created in {saved_model_dir}")

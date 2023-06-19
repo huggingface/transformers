@@ -789,7 +789,7 @@ class DisentangledSelfAttention(nn.Module):
         if "p2c" in self.pos_att_type:
             scale_factor += 1
         scale = torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
-        attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2)) / scale.to(dtype=query_layer.dtype)
+        attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2) / scale.to(dtype=query_layer.dtype))
         if self.relative_attention:
             rel_embeddings = self.pos_dropout(rel_embeddings)
             rel_att = self.disentangled_attention_bias(
@@ -1555,6 +1555,14 @@ class SEWDForCTC(SEWDPreTrainedModel):
         not be updated during training.
         """
         self.sew_d.feature_extractor._freeze_parameters()
+
+    def freeze_base_model(self):
+        """
+        Calling this function will disable the gradient computation for the base model so that its parameters will not
+        be updated during training. Only the classification head will be updated.
+        """
+        for param in self.sew_d.parameters():
+            param.requires_grad = False
 
     @add_start_docstrings_to_model_forward(SEWD_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

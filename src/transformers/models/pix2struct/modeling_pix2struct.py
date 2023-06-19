@@ -1317,6 +1317,7 @@ PIX2STRUCT_INPUTS_DOCSTRING = r"""
 class Pix2StructTextModel(Pix2StructPreTrainedModel):
     config_class = Pix2StructTextConfig
     _no_split_modules = ["Pix2StructTextBlock"]
+    _tied_weights_keys = ["lm_head.weight"]
     supports_gradient_checkpointing = True
 
     def _set_gradient_checkpointing(self, module, value=False):
@@ -1604,6 +1605,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [
         r"decoder.layer.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
+    _tied_weights_keys = ["decoder.lm_head.weight"]
 
     def __init__(self, config: Pix2StructConfig):
         super().__init__(config)

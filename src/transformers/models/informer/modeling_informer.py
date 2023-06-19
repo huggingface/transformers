@@ -1504,7 +1504,7 @@ class InformerModel(InformerPreTrainedModel):
     def __init__(self, config: InformerConfig):
         super().__init__(config)
 
-        if config.scaling == "mean" or config.scaling:
+        if config.scaling == "mean" or config.scaling is True:
             self.scaler = InformerMeanScaler(dim=1, keepdim=True)
         elif config.scaling == "std":
             self.scaler = InformerStdScaler(dim=1, keepdim=True)

@@ -726,27 +726,6 @@ class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
         model = TFBertModel.from_pretrained("jplu/tiny-tf-bert-random")
         self.assertIsNotNone(model)
 
-    def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        list_lm_models = [TFBertForMaskedLM, TFBertForPreTraining, TFBertLMHeadModel]
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in list_lm_models:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert isinstance(name, dict)
-                for k, v in name.items():
-                    assert isinstance(v, tf.Variable)
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
-
     def test_custom_load_tf_weights(self):
         model, output_loading_info = TFBertForTokenClassification.from_pretrained(
             "jplu/tiny-tf-bert-random", output_loading_info=True

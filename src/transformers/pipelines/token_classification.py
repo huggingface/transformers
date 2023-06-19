@@ -491,7 +491,8 @@ class TokenClassificationPipeline(ChunkPipeline):
                 word_entities.append(self.aggregate_word(word_group, aggregation_strategy))
                 word_group = [entity]
         # Last item
-        word_entities.append(self.aggregate_word(word_group, aggregation_strategy))
+        if word_group is not None:
+            word_entities.append(self.aggregate_word(word_group, aggregation_strategy))
         return word_entities
 
     def group_sub_entities(self, entities: List[dict]) -> dict:
