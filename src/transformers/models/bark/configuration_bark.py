@@ -95,6 +95,10 @@ class BarkModuleConfig(PretrainedConfig):
     model_type = "bark_module"
     keys_to_ignore_at_inference = ["past_key_values"]
 
+    attribute_map = {"num_attention_heads": "num_heads", 
+                     "num_hidden_layers": "num_layers",
+                     "vocab_size": "input_vocab_size",}
+    
     def __init__(
         self,
         block_size=1024,
