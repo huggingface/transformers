@@ -142,7 +142,8 @@ class GenerationConfig(PushToHubMixin):
         no_repeat_ngram_size (`int`, *optional*, defaults to 0):
             If set to int > 0, all ngrams of that size can only occur once.
         bad_words_ids(`List[List[int]]`, *optional*):
-            List of list of token ids that are not allowed to be generated.
+            List of list of token ids that are not allowed to be generated. Check
+            [`~generation.NoBadWordsLogitsProcessor`] for further documentation and examples.
         force_words_ids(`List[List[int]]` or `List[List[List[int]]]`, *optional*):
             List of token ids that must be generated. If given a `List[List[int]]`, this is treated as a simple list of
             words that must be included, the opposite to `bad_words_ids`. If given `List[List[List[int]]]`, this
@@ -179,11 +180,10 @@ class GenerationConfig(PushToHubMixin):
             A list of pairs of integers which indicates a mapping from generation indices to token indices that will be
             forced before sampling. For example, `[[1, 123]]` means the second generated token will always be a token
             of index 123.
-        sequence_bias (`Dict[Tuple[int], float]`):
+        sequence_bias (`Dict[Tuple[int], float]`, *optional*)):
             Dictionary that maps a sequence of tokens to its bias term. Positive biases increase the odds of the
-            sequence being selected, while negative biases do the opposite. If a sequence has a length of 1, its bias
-            will always be applied. Otherwise, the bias will only be applied if the sequence in question is about to be
-            completed (in the token selection step after this processor is applied).
+            sequence being selected, while negative biases do the opposite. Check
+            [`~generation.SequenceBiasLogitsProcessor`] for further documentation and examples.
 
         > Parameters that define the output variables of `generate`
 

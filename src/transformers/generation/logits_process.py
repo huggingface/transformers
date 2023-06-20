@@ -562,6 +562,44 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
             sequence being selected, while negative biases do the opposite. If a sequence has a length of 1, its bias
             will always be applied. Otherwise, the bias will only be applied if the sequence in question is about to be
             completed (in the token selection step after this processor is applied).
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> inputs = tokenizer(["The full name of Donald is Donald"], return_tensors="pt")
+
+    >>> summary_ids = model.generate(inputs["input_ids"], max_new_tokens=4)
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True)[0])
+    The full name of Donald is Donald J. Trump Jr
+
+    >>> # Now let's control generation through a bias. Please note that the tokenizer is initialized differently!
+    >>> tokenizer_with_prefix_space = AutoTokenizer.from_pretrained("gpt2", add_prefix_space=True)
+
+
+    >>> def get_tokens_as_tuple(word):
+    ...     return tuple(tokenizer_with_prefix_space([word], add_special_tokens=False).input_ids[0])
+
+
+    >>> # If we add a negative bias without beam search, it may become "stuck" in a prefix without good continuations
+    >>> sequence_bias = {get_tokens_as_tuple("Trump"): -10.0}
+    >>> biased_ids = model.generate(inputs["input_ids"], max_new_tokens=4, sequence_bias=sequence_bias)
+    >>> print(tokenizer.batch_decode(biased_ids, skip_special_tokens=True)[0])
+    The full name of Donald is Donald J. Donald,
+
+    >>> biased_ids = model.generate(inputs["input_ids"], max_new_tokens=4, num_beams=4, sequence_bias=sequence_bias)
+    >>> print(tokenizer.batch_decode(biased_ids, skip_special_tokens=True)[0])
+    The full name of Donald is Donald Rumsfeld,
+
+    >>> # We can also add a positive bias to nudge the model towards specific tokens or continuations
+    >>> sequence_bias = {get_tokens_as_tuple("Donald Duck"): 10.0}
+    >>> biased_ids = model.generate(inputs["input_ids"], max_new_tokens=4, num_beams=4, sequence_bias=sequence_bias)
+    >>> print(tokenizer.batch_decode(biased_ids, skip_special_tokens=True)[0])
+    The full name of Donald is Donald Duck.
+    ```
     """
 
     def __init__(self, sequence_bias: Dict[Tuple[int], float]):
@@ -613,7 +651,11 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         tokens_with_bias = []
 
         # Check biased tokens out of bounds
-        invalid_biases = [sequence_ids[-1] for sequence_ids in sequence_bias if sequence_ids[-1] >= vocabulary_size]
+        invalid_biases = []
+        for sequence_ids in sequence_bias:
+            for token_id in sequence_ids:
+                if token_id >= vocabulary_size:
+                    invalid_biases.append(token_id)
         if len(invalid_biases) > 0:
             raise ValueError(
                 f"The model vocabulary size is {vocabulary_size}, but the following tokens were being biased: "
@@ -629,6 +671,12 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
                 self.length_1_bias[sequence_ids[-1]] = bias
             else:
                 self.sequences_length_greater_than_1.append(sequence_ids)
+                if self.length_greather_than_1_bias[sequence_ids[-1]] != 0.0:
+                    raise ValueError(
+                        "Setting a bias on sequences that share a common token termination is not yet supported. "
+                        "Please open an issue if you see this error message (after checking that it doesn't already "
+                        "exist)."
+                    )
                 self.length_greather_than_1_bias[sequence_ids[-1]] = bias
             tokens_with_bias.append(sequence_ids[-1])
 
