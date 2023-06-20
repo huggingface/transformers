@@ -1086,7 +1086,7 @@ def _combine_tokens_into_words(
     tokenizer,
     tokens: List[int],
     language: str = None,
-    prepend_punctuations: str = "\"'“¿([{-",
+    prepend_punctuations: str = "\"'“¡¿([{-",
     append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
 ):
     """

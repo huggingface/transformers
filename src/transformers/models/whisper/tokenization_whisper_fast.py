@@ -24,13 +24,7 @@ from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .english_normalizer import EnglishTextNormalizer
-from .tokenization_whisper import (
-    LANGUAGES,
-    TASK_IDS,
-    TO_LANGUAGE_CODE,
-    WhisperTokenizer,
-    _decode_asr,
-)
+from .tokenization_whisper import LANGUAGES, TASK_IDS, TO_LANGUAGE_CODE, WhisperTokenizer, _decode_asr
 
 
 logger = logging.get_logger(__name__)

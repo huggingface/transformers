@@ -246,11 +246,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                       treat the first `left` samples and last `right` samples to be ignored in decoding (but used at
                       inference to provide more context to the model). Only use `stride` with CTC models.
             return_timestamps (*optional*, `str`):
-                Only available for pure CTC models. If set to `"char"`, the pipeline will return `timestamps` along the
+                Only available for pure CTC models. If set to `"char"`, the pipeline will return timestamps along the
                 text for every character in the text. For instance if you get `[{"text": "h", "timestamp": (0.5, 0.6)},
                 {"text": "i", "timestamp": (0.7, 0.9)}]`, then it means the model predicts that the letter "h" was
                 pronounced after `0.5` and before `0.6` seconds. If set to `"word"`, the pipeline will return
-                `timestamps` along the text for every word in the text. For instance if you get `[{"text": "hi ",
+                timestamps along the text for every word in the text. For instance if you get `[{"text": "hi ",
                 "timestamp": (0.5, 0.9)}, {"text": "there", "timestamp": (1.0, 1.5)}]`, then it means the model
                 predicts that the word "hi" was pronounced after `0.5` and before `0.9` seconds.
             generate_kwargs (`dict`, *optional*):
