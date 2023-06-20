@@ -27,7 +27,6 @@ from collections import defaultdict
 from typing import Dict, List, Tuple
 
 import numpy as np
-import pytest
 from pytest import mark
 
 import transformers
