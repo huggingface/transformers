@@ -783,7 +783,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 # handle layernorm
                 if op_name.startswith("ln"):
                     out_name = "input_layernorm" if op_name.endswith("1") else "post_attention_layernorm"
-                    layer_name = f"layers.{layer}.{out_name}.{weight_or_bias}"
+                    layer_name = f"layers.{pp_layer_id}.{out_name}.{weight_or_bias}"
 
                 # handle attention K, V, Q weights
                 elif op_name.startswith("attn.c_attn") and weight_or_bias == "weight":
@@ -797,7 +797,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                         heads,
                         hidden_size_per_head,
                     )
-                    layer_name = f"layers.{layer}.self_attention.query_key_value.{weight_or_bias}"
+                    layer_name = f"layers.{pp_layer_id}.self_attention.query_key_value.{weight_or_bias}"
 
                 # handle attention K, V, Q bias
                 elif op_name.startswith("attn.c_attn") and weight_or_bias == "bias":
@@ -808,7 +808,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                         heads,
                         hidden_size_per_head,
                     )
-                    layer_name = f"layers.{layer}.self_attention.query_key_value.{weight_or_bias}"
+                    layer_name = f"layers.{pp_layer_id}.self_attention.query_key_value.{weight_or_bias}"
 
                 # handle attention and mlp weights
                 elif weight_or_bias == "weight":
@@ -816,14 +816,14 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                     if out_name is None:
                         continue
                     params = params.transpose(0, 1)
-                    layer_name = f"layers.{layer}.{out_name}.{weight_or_bias}"
+                    layer_name = f"layers.{pp_layer_id}.{out_name}.{weight_or_bias}"
 
                 # handle attention and mlp bias
                 elif weight_or_bias == "bias":
                     out_name = transformers_to_megatron.get(op_name, None)
                     if out_name is None:
                         continue
-                    layer_name = f"layers.{layer}.{out_name}.{weight_or_bias}"
+                    layer_name = f"layers.{pp_layer_id}.{out_name}.{weight_or_bias}"
 
                 # skip
                 else:
