@@ -17,7 +17,7 @@ import copy
 import inspect
 import math
 import random
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -1407,7 +1407,10 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             )
 
         else:
-            raise ValueError("Got incompatible mode for generation, should be one of greedy or sampling.")
+            raise ValueError(
+                "Got incompatible mode for generation, should be one of greedy or sampling."
+                "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
+            )
 
         if generation_config.return_dict_in_generate:
             output_ids = outputs.sequences
@@ -2311,7 +2314,10 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             )
 
         else:
-            raise ValueError("Got incompatible mode for generation, should be one of greedy or sampling.")
+            raise ValueError(
+                "Got incompatible mode for generation, should be one of greedy or sampling."
+                "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
+            )
 
         if generation_config.return_dict_in_generate:
             output_ids = outputs.sequences
