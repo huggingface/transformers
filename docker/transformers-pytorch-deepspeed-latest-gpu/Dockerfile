@@ -36,7 +36,7 @@ RUN python3 -m pip uninstall -y torch-tensorrt
 RUN python3 -m pip uninstall -y apex
 RUN git clone https://github.com/NVIDIA/apex
 #  `MAX_JOBS=1` disables parallel building to avoid cpu memory OOM when building image on GitHub Action (standard) runners
-RUN cd apex && MAX_JOBS=1 python3 -m pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache -v --disable-pip-version-check .
+RUN cd apex && git checkout 82ee367f3da74b4cd62a1fb47aa9806f0f47b58b && MAX_JOBS=1 python3 -m pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache -v --disable-pip-version-check .
 
 # Pre-build **latest** DeepSpeed, so it would be ready for testing (otherwise, the 1st deepspeed test will timeout)
 RUN python3 -m pip uninstall -y deepspeed
