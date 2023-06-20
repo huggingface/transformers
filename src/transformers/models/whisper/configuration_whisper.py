@@ -127,7 +127,7 @@ class WhisperConfig(PretrainedConfig):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 50256):
             Begin of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 50257):
+        eos_token_id (`int`, *optional*, defaults to 50256):
             End of stream token id.
         suppress_tokens (`List[int]`, *optional*):
             A list containing the non-speech tokens that will be used by the logit processor in the `generate`
@@ -216,7 +216,7 @@ class WhisperConfig(PretrainedConfig):
         max_source_positions=1500,
         max_target_positions=448,
         pad_token_id=50256,
-        bos_token_id=50257,
+        bos_token_id=50256,
         eos_token_id=50256,
         suppress_tokens=None,
         begin_suppress_tokens=[220, 50256],
