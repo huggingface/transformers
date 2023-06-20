@@ -546,8 +546,10 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
     Args:
         bad_words_ids (`List[List[int]]`):
             List of list of token ids that are not allowed to be generated. In order to get the token ids of the words
-            that should not appear in the generated text, use `tokenizer(bad_words, add_prefix_space=True,
-            add_special_tokens=False).input_ids`.
+            that should not appear in the generated text, make sure to set `add_prefix_space=True` when initializing
+            the tokenizer, and use `tokenizer(bad_words, add_special_tokens=False).input_ids`. The `add_prefix_space`
+            argument is only supported for some slow tokenizers, as fast tokenizers' prefixing behaviours come from
+            `pre tokenizers`. Read more [here](https://huggingface.co/docs/tokenizers/api/pre-tokenizers).
         eos_token_id (`Union[int, List[int]]`):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
     """
