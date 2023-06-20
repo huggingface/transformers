@@ -316,6 +316,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 "chunks": [{"text": " Conquered returned to its place amidst the tents.", "timestamp": (0.0, 3.36)}],
             },
         )
+        pipe.model.generation_config.alignment_heads = [[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]]
         res = pipe(sample["audio"]["array"], return_timestamps="word")
         # fmt: off
         # Note that the word-level timestamps predicted here are pretty bad.
@@ -719,6 +720,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 ],
             },
         )
+        speech_recognizer.model.generation_config.alignment_heads = [[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]]
         output = speech_recognizer(filename, return_timestamps="word")
         # fmt: off
         self.assertEqual(
