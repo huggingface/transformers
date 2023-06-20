@@ -1891,13 +1891,13 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         This method overwrites [`~PreTrainedModel.tie_weights`] so that adapter weights can be correctly loaded when
         passing `target_lang=...` to `from_pretrained(...)`.
 
-        Note that `tie_weights` is usually used to tie input and output embedding weights. The method is re-purposed to
-        correctly load adapter layers for Wav2Vec2 so that we do not have to introduce a new API to
-        [`PreTrainedModel`]. While slighly hacky, Wav2Vec2 never has to tie input and output embeddings, so that it is
-        ok to repurpose this function here.
-
         This method is **not** supposed to be called by the user and is prone to be changed in the future.
         """
+
+        # Note that `tie_weights` is usually used to tie input and output embedding weights. The method is re-purposed to
+        # correctly load adapter layers for Wav2Vec2 so that we do not have to introduce a new API to
+        # [`PreTrainedModel`]. While slightly hacky, Wav2Vec2 never has to tie input and output embeddings, so that it is
+        # ok to repurpose this function here.
         target_lang = self.target_lang
 
         if target_lang is not None and getattr(self.config, "adapter_attn_dim", None) is None:
