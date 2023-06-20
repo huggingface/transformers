@@ -959,7 +959,14 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                 chunk["timestamp"] = tuple(chunk["timestamp"])
             if not return_language:
                 chunk.pop("language")
-        optional = {"chunks": chunks}
+
+        if return_timestamps == "word":
+            new_chunks = []
+            for chunk in chunks:
+                new_chunks.extend(chunk["words"])
+            optional = {"chunks": new_chunks}
+        else:
+            optional = {"chunks": chunks}
     else:
         optional = {}
     return full_text, optional
