@@ -551,7 +551,6 @@ class ModelTesterMixin:
 
     @slow
     @require_torch_gpu
-    @pytest.mark.gradient_checkpointing_autocast_test
     def test_training_gradient_checkpointing_autocast(self):
         if not self.model_tester.is_training:
             return
