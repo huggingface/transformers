@@ -1172,7 +1172,7 @@ def _split_tokens_on_spaces(tokenizer, tokens: List[int]):
 
 def _merge_punctuations(words, tokens, indices, prepended, appended):
     """Merges punctuation tokens with neighboring words."""
-    # merge prepended punctuations
+    # prepend punctuations
     i = len(words) - 2
     j = len(words) - 1
     while i >= 0:
@@ -1187,7 +1187,7 @@ def _merge_punctuations(words, tokens, indices, prepended, appended):
             j = i
         i -= 1
 
-    # merge appended punctuations
+    # append punctuations
     i = 0
     j = 1
     while j < len(words):
