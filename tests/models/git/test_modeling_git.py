@@ -390,15 +390,6 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     fx_compatible = False
     test_torchscript = False
 
-    # `GitForCausalLM` doesn't fit into image-to-text pipeline. We might need to overwrite its `generate` function.
-    def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
-    ):
-        if pipeline_test_casse_name == "ImageToTextPipelineTests":
-            return True
-
-        return False
-
     # special case for GitForCausalLM model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
