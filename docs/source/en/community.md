@@ -2,7 +2,7 @@
 rendered properly in your Markdown viewer.
 -->
 
-﻿# Community
+# Community
 
 This page regroups resources around 🤗 Transformers developed by the community.
 
