@@ -31,7 +31,6 @@ from .test_pipelines_common import ANY
 
 
 @is_pipeline_test
-@require_torch
 class AudioClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
