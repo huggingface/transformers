@@ -357,7 +357,7 @@ Flax), PyTorch, and/or TensorFlow.
 |              LED              |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 |             LeViT             |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |             LiLT              |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
-|             LLaMA             |       ✅       |       ✅       |       ✅        |         ❌         |      ❌      |
+|             LLaMA             |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 |          Longformer           |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 |            LongT5             |       ❌       |       ❌       |       ✅        |         ❌         |      ✅      |
 |             LUKE              |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |

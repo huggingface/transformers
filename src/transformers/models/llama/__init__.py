@@ -17,6 +17,7 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_sentencepiece_available,
+    is_tf_available,
     is_tokenizers_available,
     is_torch_available,
 )
@@ -55,6 +56,19 @@ else:
         "LlamaForSequenceClassification",
     ]
 
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_llama"] = [
+        "TFLlamaForCausalLM",
+        "TFLlamaModel",
+        "TFLlamaPreTrainedModel",
+        "TFLlamaForSequenceClassification",
+    ]
+
 
 if TYPE_CHECKING:
     from .configuration_llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaConfig
@@ -82,6 +96,19 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
+
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_llama import (
+            TFLlamaForCausalLM,
+            TFLlamaForSequenceClassification,
+            TFLlamaModel,
+            TFLlamaPreTrainedModel,
+        )
 
 
 else:

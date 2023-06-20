@@ -87,3 +87,19 @@ This model was contributed by [zphang](https://huggingface.co/zphang) with contr
 
 [[autodoc]] LlamaForSequenceClassification
     - forward
+
+## TFLlamaModel
+
+[[autodoc]] TFLlamaModel
+    - call
+
+
+## TFLlamaForCausalLM
+
+[[autodoc]] TFLlamaForCausalLM
+    - call
+
+## TFLlamaForSequenceClassification
+
+[[autodoc]] TFLlamaForSequenceClassification
+    - call

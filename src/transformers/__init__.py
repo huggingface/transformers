@@ -3311,6 +3311,9 @@ else:
         ]
     )
     _import_structure["models.led"].extend(["TFLEDForConditionalGeneration", "TFLEDModel", "TFLEDPreTrainedModel"])
+    _import_structure["models.llama"].extend(
+        ["TFLlamaForCausalLM", "TFLlamaForSequenceClassification", "TFLlamaModel", "TFLlamaPreTrainedModel"]
+    )
     _import_structure["models.longformer"].extend(
         [
             "TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -6671,6 +6674,12 @@ if TYPE_CHECKING:
             TFLayoutLMv3PreTrainedModel,
         )
         from .models.led import TFLEDForConditionalGeneration, TFLEDModel, TFLEDPreTrainedModel
+        from .models.llama import (
+            TFLlamaForCausalLM,
+            TFLlamaForSequenceClassification,
+            TFLlamaModel,
+            TFLlamaPreTrainedModel,
+        )
         from .models.longformer import (
             TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFLongformerForMaskedLM,
