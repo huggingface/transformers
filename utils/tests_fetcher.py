@@ -263,7 +263,7 @@ def get_diff_for_doctesting(repo, base_commit, commits):
     code_diff = []
     for commit in commits:
         for diff_obj in commit.diff(base_commit):
-            # We always add new python/mdx files
+            # We always add new python/md files
             if diff_obj.change_type in ["A"] and (diff_obj.b_path.endswith(".py") or diff_obj.b_path.endswith(".md")):
                 code_diff.append(diff_obj.b_path)
             # Now for modified files
