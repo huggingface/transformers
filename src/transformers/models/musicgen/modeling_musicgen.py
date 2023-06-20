@@ -498,9 +498,9 @@ MUSICGEN_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, target_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary. Note that the `decoder_input_ids` will automatically
-            be converted from shape `(batch_size * num_codebooks, target_sequence_length)` to `(batch_size, num_codebooks, 
-            target_sequence_length)` in the forward pass.
+            Indices of decoder input sequence tokens in the vocabulary. Note that the `decoder_input_ids` will
+            automatically be converted from shape `(batch_size * num_codebooks, target_sequence_length)` to
+            `(batch_size, num_codebooks, target_sequence_length)` in the forward pass.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
@@ -648,8 +648,8 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it. Note that the input ids will automatically be converted from shape `(batch_size * num_codebooks,
-                sequence_length)` to `(batch_size, num_codebooks, sequence_length)` in the forward pass.
+                provide it. Note that the input ids will automatically be converted from shape `(batch_size *
+                num_codebooks, sequence_length)` to `(batch_size, num_codebooks, sequence_length)` in the forward pass.
 
                 Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
@@ -1441,7 +1441,6 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             return output_ids
 
 
-
 @add_start_docstrings(
     "The composite MusicGen model with a text encoder, audio encoder and Musicgen decoder,"
     "for music generation tasks with one or both of text and audio prompts.",
@@ -1465,9 +1464,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 "Either a configuration has to be provided, or all three of text encoder, audio encoder and MusicGen decoder."
             )
         if config is None:
-            config = MusicgenConfig.from_sub_model_configs(
-                text_encoder.config, audio_encoder.config, decoder.config
-            )
+            config = MusicgenConfig.from_sub_model_configs(text_encoder.config, audio_encoder.config, decoder.config)
         else:
             if not isinstance(config, self.config_class):
                 raise ValueError(f"Config: {config} has to be of type {self.config_class}")
@@ -2363,20 +2360,38 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         else:
             return output_values
 
-    def generate_unconditional(self, num_samples=1, **kwargs):
-        """A wrapper around the generate method for generating audio samples without any text or audio prompt,
-        Parameters:
-        enabling the model to be used without the feature extractor or tokenizer.
-            num_samples (int, *optional*):
-                Number of samples to unconditionally generate.
+    def get_unconditional_inputs(self, num_samples=1, max_new_tokens=256):
         """
+        Helper function to get null inputs for unconditional generation, enabling the model to be used without the
+        feature extractor or tokenizer.
+
+        Args:
+            num_samples (int, *optional*):
+                Number of audio samples to unconditionally generate.
+            max_new_tokens (int, *optional*):
+                Number of tokens to generate for each sample. More tokens means longer audio samples, at the expense of
+                longer inference (since more audio tokens need to be generated per sample).
+
+        Example:
+        ```python
+        >>> from transformers import MusicgenForConditionalGeneration
+
+        >>> model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+        # get the unconditional (or 'null') inputs from the model
+
+        >>> unconditional_inputs = model.get_unconditional_inputs(num_samples=1)
+        >>> audio_samples = model.generate(**unconditional_inputs)
+        ```"""
         last_hidden_state = torch.zeros(
             (num_samples, 1, self.config.text_encoder.hidden_size), device=self.device, dtype=self.dtype
         )
         encoder_outputs = BaseModelOutput(last_hidden_state=last_hidden_state)
 
-        # TODO(SG): check this works with fp16 precision
         attention_mask = torch.zeros((num_samples, 1), device=self.device, dtype=torch.long)
-        return self.generate(
-            attention_mask=attention_mask, encoder_outputs=encoder_outputs, guidance_scale=1, **kwargs
-        )
+
+        return {
+            "attention_mask": attention_mask,
+            "encoder_outputs": encoder_outputs,
+            "max_new_tokens": max_new_tokens,
+            "guidance_scale": 1.0,
+        }
