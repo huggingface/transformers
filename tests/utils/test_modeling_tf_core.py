@@ -217,6 +217,7 @@ class TFCoreModelTesterMixin:
         for model_class in self.all_model_classes:
             class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config)
+            model.build()
             num_out = len(model(class_inputs_dict))
 
             for key in list(class_inputs_dict.keys()):
