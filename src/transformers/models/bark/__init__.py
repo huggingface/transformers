@@ -38,6 +38,7 @@ else:
         "BarkSemanticModule",
         "BarkCoarseAcousticsModule",
         "BarkModel",
+        "BarkPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -55,6 +56,7 @@ if TYPE_CHECKING:
             BarkSemanticModule,
             BarkFineAcousticsModule,
             BarkModel,
+            BarkPreTrainedModel,
         )
 
 else:

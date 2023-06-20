@@ -161,7 +161,7 @@ _import_structure = {
         "AutoformerConfig",
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
-    "models.bark": ["BarkConfig", "BarkProcessor"],
+    "models.bark": ["BarkConfig", "BarkProcessor", "BarkSemanticConfig", "BarkCoarseAcousticsConfig", "BarkFineAcousticsConfig"],
     "models.barthez": [],
     "models.bartpho": [],
     "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig"],
@@ -1138,6 +1138,9 @@ else:
             "BARK_PRETRAINED_MODEL_ARCHIVE_LIST",
             "BarkModel",
             "BarkPreTrainedModel",
+            "BarkSemanticModule",
+            "BarkCoarseAcousticsModule",
+            "BarkFineAcousticsModule",
         ]
     )
     _import_structure["models.beit"].extend(
@@ -4060,7 +4063,7 @@ if TYPE_CHECKING:
         AutoformerConfig,
     )
     from .models.bart import BartConfig, BartTokenizer
-    from .models.bark import BarkConfig, BarkProcessor
+    from .models.bark import BarkConfig, BarkSemanticConfig, BarkCoarseAcousticsConfig, BarkFineAcousticsConfig, BarkProcessor
     from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
     from .models.bert import (
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4942,6 +4945,9 @@ if TYPE_CHECKING:
             BARK_PRETRAINED_MODEL_ARCHIVE_LIST,
             BarkModel,
             BarkPreTrainedModel,
+            BarkSemanticModule,
+            BarkCoarseAcousticsModule,
+            BarkFineAcousticsModule,
         )
         from .models.beit import (
             BEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
