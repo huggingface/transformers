@@ -183,7 +183,6 @@ class DPTConfig(PretrainedConfig):
                     f"backbone_config must be a dictionary or a `PretrainedConfig`, got {backbone_config.__class__}."
                 )
 
-            self.backbone_config = backbone_config
             self.backbone_featmap_shape = backbone_featmap_shape
             self.neck_ignore_stages = neck_ignore_stages
 

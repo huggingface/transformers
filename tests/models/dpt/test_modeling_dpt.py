@@ -120,8 +120,6 @@ class DPTModelTester:
             is_hybrid=self.is_hybrid,
             neck_hidden_sizes=self.neck_hidden_sizes,
         )
-    
-        
 
     def create_and_check_model(self, config, pixel_values, labels):
         model = DPTModel(config=config)
