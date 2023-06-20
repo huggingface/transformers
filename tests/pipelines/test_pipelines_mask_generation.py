@@ -74,7 +74,7 @@ class MaskGenerationPipelineTests(unittest.TestCase):
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
         ]
 
-    # TODO: Fix me @Arthur
+    # TODO: Implement me @Arthur
     def run_pipeline_test(self, mask_generator, examples):
         pass
 
