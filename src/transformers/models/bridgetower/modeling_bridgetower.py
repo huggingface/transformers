@@ -46,12 +46,6 @@ from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig,
 
 logger = logging.get_logger(__name__)
 
-if not is_torch_greater_or_equal_than_1_10:
-    logger.warning(
-        f"You are using torch=={torch.__version__}, but torch>=1.10.0 is required to use "
-        "BridgeTowerModel. Please upgrade torch."
-    )
-
 _CONFIG_FOR_DOC = "BridgeTowerConfig"
 _CHECKPOINT_FOR_DOC = "BridgeTower/bridgetower-base"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"

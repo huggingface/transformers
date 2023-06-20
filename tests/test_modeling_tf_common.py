@@ -685,105 +685,30 @@ class TFModelTesterMixin:
             if tf_inputs_dict_with_labels:
                 self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict_with_labels)
 
+    @slow
     def test_compile_tf_model(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        max_input = getattr(self.model_tester, "max_position_embeddings", 512)
-        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
-        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            if model_class.__name__ in ["TFSpeech2TextModel", "TFSpeech2TextForConditionalGeneration"]:
-                inputs = {
-                    "decoder_input_ids": tf.keras.Input(
-                        batch_shape=(2, max_input),
-                        name="decoder_input_ids",
-                        dtype="int32",
-                    ),
-                    "input_features": tf.keras.Input(
-                        batch_shape=(
-                            2,
-                            max_input,
-                            self.model_tester.input_feat_per_channel * self.model_tester.input_channels,
-                        ),
-                        name="input_features",
-                        dtype="float32",
-                    ),
-                }
-            elif model_class.__name__ in ["TFWhisperModel", "TFWhisperForConditionalGeneration"]:
-                inputs = {
-                    "decoder_input_ids": tf.keras.Input(
-                        batch_shape=(2, max_input),
-                        name="decoder_input_ids",
-                        dtype="int32",
-                    ),
-                    "input_features": tf.keras.Input(
-                        batch_shape=(
-                            2,
-                            self.model_tester.num_mel_bins,
-                            self.model_tester.seq_length,
-                        ),
-                        name="input_features",
-                        dtype="float32",
-                    ),
-                }
-            elif self.is_encoder_decoder:
-                inputs = {
-                    "decoder_input_ids": tf.keras.Input(
-                        batch_shape=(2, max_input),
-                        name="decoder_input_ids",
-                        dtype="int32",
-                    ),
-                    "input_ids": tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32"),
-                }
-            # `pixel_values` implies that the input is an image
-            elif model_class.main_input_name == "pixel_values":
-                inputs = tf.keras.Input(
-                    batch_shape=(
-                        3,
-                        self.model_tester.num_channels,
-                        self.model_tester.image_size,
-                        self.model_tester.image_size,
-                    ),
-                    name="pixel_values",
-                    dtype="float32",
-                )
-            elif model_class.__name__ in ["TFCLIPModel", "TFGroupViTModel", "TFBlipModel"]:
-                inputs = {
-                    "input_ids": tf.keras.Input(batch_shape=(3, max_input), name="input_ids", dtype="int32"),
-                    "pixel_values": tf.keras.Input(
-                        batch_shape=(
-                            3,
-                            self.model_tester.vision_model_tester.num_channels,
-                            self.model_tester.vision_model_tester.image_size,
-                            self.model_tester.vision_model_tester.image_size,
-                        ),
-                        name="pixel_values",
-                        dtype="float32",
-                    ),
-                }
-            elif model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
-                inputs = tf.keras.Input(batch_shape=(4, 2, max_input), name="input_ids", dtype="int32")
-            else:
-                inputs = tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32")
-
             # Prepare our model
             model = model_class(config)
-            model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
-            # Let's load it from the disk to be sure we can use pretrained weights
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname, saved_model=False)
-                model = model_class.from_pretrained(tmpdirname)
+            # These are maximally general inputs for the model, with multiple None dimensions
+            # Hopefully this will catch any conditionals that fail for flexible shapes
+            functional_inputs = {
+                key: tf.keras.Input(shape=val.shape[1:], dtype=val.dtype, name=key)
+                for key, val in model.input_signature.items()
+                if key in model.dummy_inputs
+            }
+            outputs_dict = model(functional_inputs)
 
-            outputs_dict = model(inputs)
             hidden_states = outputs_dict[0]
 
-            # Add a dense layer on top to test integration with other keras modules
-            outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
-
             # Compile extended model
-            extended_model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
-            extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
+            functional_model = tf.keras.Model(inputs=functional_inputs, outputs=hidden_states)
+            model_out = functional_model.predict(model.dummy_inputs)  # Check we can pass inputs with the Keras API
+            self.assertTrue(model_out is not None)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                functional_model.save(tmpdirname)  # Ensure we can save/export the whole functional model
 
     def test_keyword_and_dict_args(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1140,6 +1065,16 @@ class TFModelTesterMixin:
             output_for_kw_input = model(**inputs_np)
             self.assert_outputs_same(output_for_dict_input, output_for_kw_input)
 
+    def test_valid_input_signature_and_dummies(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            call_args = inspect.signature(model.call).parameters
+            for key in model.input_signature:
+                self.assertIn(key, call_args)
+            for key in model.dummy_inputs:
+                self.assertIn(key, call_args)
+
     def test_resize_token_embeddings(self):
         # TODO (joao): after the embeddings refactor is complete, rework this test so as to rely exclusively on
         # tf.keras.layers.Embedding
@@ -1490,6 +1425,7 @@ class TFModelTesterMixin:
     def check_keras_fit_results(self, val_loss1, val_loss2, atol=1e-2, rtol=1e-3):
         self.assertTrue(np.allclose(val_loss1, val_loss2, atol=atol, rtol=rtol))
 
+    @slow
     def test_keras_fit(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -1774,7 +1710,7 @@ class TFModelTesterMixin:
                 for tensor in test_batch.values():
                     self.assertTrue(isinstance(tensor, tf.Tensor))
                     self.assertEqual(len(tensor), len(input_dataset))  # Assert we didn't lose any data
-                    model(test_batch, training=False)
+            model(test_batch, training=False)
 
             if "labels" in inspect.signature(model_class.call).parameters.keys():
                 tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class, return_labels=True)

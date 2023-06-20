@@ -25,6 +25,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 TOLERANCE = 1e-4
@@ -201,9 +202,10 @@ class AutoformerModelTester:
 
 
 @require_torch
-class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
+class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AutoformerModel, AutoformerForPrediction) if is_torch_available() else ()
     all_generative_model_classes = (AutoformerForPrediction,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": AutoformerModel} if is_torch_available() else {}
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False

@@ -32,6 +32,8 @@ if is_torch_available():
 
     from transformers import TimmBackbone, TimmBackboneConfig
 
+from ...test_pipeline_mixin import PipelineTesterMixin
+
 
 class TimmBackboneModelTester:
     def __init__(
@@ -95,8 +97,9 @@ class TimmBackboneModelTester:
 
 @require_torch
 @require_timm
-class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, unittest.TestCase):
+class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TimmBackbone,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": TimmBackbone} if is_torch_available() else {}
     test_resize_embeddings = False
     test_head_masking = False
     test_pruning = False

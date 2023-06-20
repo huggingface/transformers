@@ -38,9 +38,6 @@ if is_torch_available():
         BloomModel,
         BloomTokenizerFast,
     )
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10
-else:
-    is_torch_greater_or_equal_than_1_10 = False
 
 
 @require_torch
@@ -518,10 +515,6 @@ class BloomEmbeddingTest(unittest.TestCase):
         super().setUp()
         self.path_bigscience_model = "bigscience/bigscience-small-testing"
 
-    @unittest.skipIf(
-        not is_torch_greater_or_equal_than_1_10,
-        "Test failed with torch < 1.10 (`LayerNormKernelImpl` not implemented for `BFloat16`)",
-    )
     @require_torch
     def test_embeddings(self):
         # The config in this checkpoint has `bfloat16` as `torch_dtype` -> model in `bfloat16`

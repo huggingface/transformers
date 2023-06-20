@@ -258,16 +258,12 @@ def is_torch_bf16_gpu_available():
     # since currently no utility function is available we build our own.
     # some bits come from https://github.com/pytorch/pytorch/blob/2289a12f21c54da93bf5d696e3f9aea83dd9c10d/torch/testing/_internal/common_cuda.py#L51
     # with additional check for torch version
-    # to succeed:
-    # 1. torch >= 1.10 (1.9 should be enough for AMP API has changed in 1.10, so using 1.10 as minimal)
-    # 2. the hardware needs to support bf16 (GPU arch >= Ampere, or CPU)
-    # 3. if using gpu, CUDA >= 11
-    # 4. torch.autocast exists
+    # to succeed: (torch is required to be >= 1.10 anyway)
+    # 1. the hardware needs to support bf16 (GPU arch >= Ampere, or CPU)
+    # 2. if using gpu, CUDA >= 11
+    # 3. torch.autocast exists
     # XXX: one problem here is that it may give invalid results on mixed gpus setup, so it's
     # really only correct for the 0th gpu (or currently set default device if different from 0)
-    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.10"):
-        return False
-
     if torch.cuda.is_available() and torch.version.cuda is not None:
         if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
             return False
@@ -286,9 +282,6 @@ def is_torch_bf16_cpu_available():
         return False
 
     import torch
-
-    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.10"):
-        return False
 
     try:
         # multiple levels of AttributeError depending on the pytorch version so do them all in one check
@@ -526,8 +519,6 @@ def is_optimum_neuron_available():
 
 
 def is_safetensors_available():
-    if is_torch_available() and version.parse(_torch_version) < version.parse("1.10"):
-        return False
     return _safetensors_available
 
 

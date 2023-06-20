@@ -70,7 +70,7 @@ from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
-from .pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_10
+from .pytorch_utils import ALL_LAYERNORM_LAYERS
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -154,8 +154,6 @@ from .utils import (
 )
 from .utils.generic import ContextManagers
 
-
-_is_native_cpu_amp_available = is_torch_greater_or_equal_than_1_10
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
 DEFAULT_PROGRESS_CALLBACK = ProgressCallback
@@ -621,10 +619,8 @@ class Trainer:
                 if args.device == torch.device("cpu"):
                     if args.fp16:
                         raise ValueError("Tried to use `fp16` but it is not supported on cpu")
-                    elif _is_native_cpu_amp_available:
-                        args.half_precision_backend = "cpu_amp"
                     else:
-                        raise ValueError("Tried to use cpu amp but native cpu amp is not available")
+                        args.half_precision_backend = "cpu_amp"
                 else:
                     args.half_precision_backend = "cuda_amp"
 
@@ -1454,6 +1450,9 @@ class Trainer:
             if self.args.ddp_bucket_cap_mb is not None:
                 kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
 
+            if self.args.ddp_broadcast_buffers is not None:
+                kwargs["broadcast_buffers"] = self.args.ddp_broadcast_buffers
+
             self.accelerator.ddp_handler = DistributedDataParallelKwargs(**kwargs)
 
         return model
@@ -1980,14 +1979,23 @@ class Trainer:
             model = self.model
 
         config_file = os.path.join(resume_from_checkpoint, CONFIG_NAME)
-
+        adapter_weights_file = os.path.join(resume_from_checkpoint, ADAPTER_WEIGHTS_NAME)
+        adapter_safe_weights_file = os.path.join(resume_from_checkpoint, ADAPTER_SAFE_WEIGHTS_NAME)
         weights_file = os.path.join(resume_from_checkpoint, WEIGHTS_NAME)
         weights_index_file = os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)
         safe_weights_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_NAME)
         safe_weights_index_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_INDEX_NAME)
 
         if not any(
-            os.path.isfile(f) for f in [weights_file, safe_weights_file, weights_index_file, safe_weights_index_file]
+            os.path.isfile(f)
+            for f in [
+                weights_file,
+                safe_weights_file,
+                weights_index_file,
+                safe_weights_index_file,
+                adapter_weights_file,
+                adapter_safe_weights_file,
+            ]
         ):
             raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
@@ -2040,6 +2048,21 @@ class Trainer:
                 # release memory
                 del state_dict
                 self._issue_warnings_after_load(load_result)
+
+        # Load adapters following PR # 24096
+        elif is_peft_available() and isinstance(model, PeftModel):
+            # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
+            if hasattr(model, "active_adapter") and hasattr(model, "load_adapter"):
+                if os.path.exists(resume_from_checkpoint):
+                    model.load_adapter(resume_from_checkpoint, model.active_adapter)
+                else:
+                    logger.warning(
+                        "The intermediate checkpoints of PEFT may not be saved correctly, "
+                        f"consider using a custom callback to save {ADAPTER_WEIGHTS_NAME} in corresponding saving folders. "
+                        "Check some examples here: https://github.com/huggingface/peft/issues/96"
+                    )
+            else:
+                logger.warning("Could not load adapter model, make sure to have `peft>=0.3.0` installed")
         else:
             # We load the sharded checkpoint
             load_result = load_sharded_checkpoint(
@@ -2103,8 +2126,8 @@ class Trainer:
                             else:
                                 logger.warning(
                                     "The intermediate checkpoints of PEFT may not be saved correctly, "
-                                    f"using `TrainerCallback` to save {ADAPTER_WEIGHTS_NAME} in corresponding folders, "
-                                    "here are some examples https://github.com/huggingface/peft/issues/96"
+                                    f"consider using a custom callback to save {ADAPTER_WEIGHTS_NAME} in corresponding saving folders. "
+                                    "Check some examples here: https://github.com/huggingface/peft/issues/96"
                                 )
                                 has_been_loaded = False
                         else:
@@ -2595,14 +2618,11 @@ class Trainer:
         arguments, depending on the situation.
         """
         if self.use_cuda_amp or self.use_cpu_amp:
-            if is_torch_greater_or_equal_than_1_10:
-                ctx_manager = (
-                    torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
-                    if self.use_cpu_amp
-                    else torch.cuda.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
-                )
-            else:
-                ctx_manager = torch.cuda.amp.autocast()
+            ctx_manager = (
+                torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
+                if self.use_cpu_amp
+                else torch.cuda.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
+            )
         else:
             ctx_manager = contextlib.nullcontext() if sys.version_info >= (3, 7) else contextlib.suppress()
 
