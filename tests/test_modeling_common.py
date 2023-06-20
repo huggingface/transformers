@@ -27,11 +27,7 @@ from collections import defaultdict
 from typing import Dict, List, Tuple
 
 import numpy as np
-
 import pytest
-from huggingface_hub import HfFolder, delete_repo
-from huggingface_hub.file_download import http_get
-
 from pytest import mark
 
 import transformers
@@ -554,6 +550,7 @@ class ModelTesterMixin:
             loss.backward()
 
     @slow
+    @require_torch_gpu
     @pytest.mark.gradient_checkpointing_autocast_test
     def test_training_gradient_checkpointing_autocast(self):
         if not self.model_tester.is_training:

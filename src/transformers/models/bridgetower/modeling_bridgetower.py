@@ -36,7 +36,6 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import (
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
-    is_torch_greater_or_equal_than_1_10,
     prune_linear_layer,
     torch_custom_checkpointing,
 )
