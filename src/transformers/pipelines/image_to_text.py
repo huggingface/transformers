@@ -145,7 +145,6 @@ class ImageToTextPipeline(Pipeline):
         return model_inputs
 
     def _forward(self, model_inputs, generate_kwargs=None):
-
         # Git model sets `model_inputs["input_ids"] = None` in `preprocess` (when `prompt=None`). In batch model, the
         # pipeline will group them into a list of `None`, which fail `_forward`. Avoid this by checking it first.
         if "input_ids" in model_inputs and type(model_inputs["input_ids"]) == list:
