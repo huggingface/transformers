@@ -11,7 +11,7 @@ backbone_config = BeitConfig(
     out_features=["stage5", "stage11", "stage17", "stage23"],
 )
 
-config = DPTConfig(backbone_config=backbone_config, hidden_size=1024)
+config = DPTConfig(backbone_config=backbone_config, hidden_size=1024, neck_hidden_sizes=[256, 512, 1024, 1024])
 
 model = DPTForDepthEstimation(config)
 

@@ -75,10 +75,33 @@ def create_rename_keys(config):
         rename_keys.append((f"pretrained.model.blocks.{i}.attn.relative_position_bias_table", f"backbone.encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_bias_table"))
         rename_keys.append((f"pretrained.model.blocks.{i}.attn.relative_position_index", f"backbone.encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_index"))
 
-    # activation postprocessing (readout projections)
+    # activation postprocessing (readout projections + resize blocks)
     for i in range(4):
         rename_keys.append((f"pretrained.act_postprocess{i+1}.0.project.0.weight", f"neck.reassemble_stage.readout_projects.{i}.0.weight"))
         rename_keys.append((f"pretrained.act_postprocess{i+1}.0.project.0.bias", f"neck.reassemble_stage.readout_projects.{i}.0.bias"))
+
+        rename_keys.append((f"pretrained.act_postprocess{i+1}.3.weight", f"neck.reassemble_stage.layers.{i}.projection.weight"))
+        rename_keys.append((f"pretrained.act_postprocess{i+1}.3.bias", f"neck.reassemble_stage.layers.{i}.projection.bias"))
+
+        if i != 2:
+            rename_keys.append((f"pretrained.act_postprocess{i+1}.4.weight", f"neck.reassemble_stage.layers.{i}.resize.weight"))
+            rename_keys.append((f"pretrained.act_postprocess{i+1}.4.bias", f"neck.reassemble_stage.layers.{i}.resize.bias"))
+
+    # refinenet (tricky here)
+    mapping = {1:3, 2:2, 3:1, 4:0}
+
+    for i in range(1, 5):
+        j = mapping[i]
+        rename_keys.append((f"scratch.refinenet{i}.out_conv.weight", f"neck.fusion_stage.layers.{j}.projection.weight"))
+        rename_keys.append((f"scratch.refinenet{i}.out_conv.bias", f"neck.fusion_stage.layers.{j}.projection.bias"))
+        rename_keys.append((f"scratch.refinenet{i}.resConfUnit1.conv1.weight", f"neck.fusion_stage.layers.{j}.residual_layer1.convolution1.weight"))
+        rename_keys.append((f"scratch.refinenet{i}.resConfUnit1.conv1.bias", f"neck.fusion_stage.layers.{j}.residual_layer1.convolution1.bias"))
+        rename_keys.append((f"scratch.refinenet{i}.resConfUnit1.conv2.weight", f"neck.fusion_stage.layers.{j}.residual_layer1.convolution2.weight"))
+        rename_keys.append((f"scratch.refinenet{i}.resConfUnit1.conv2.bias", f"neck.fusion_stage.layers.{j}.residual_layer1.convolution2.bias"))
+        rename_keys.append((f"scratch.refinenet{i}.resConfUnit2.conv1.weight", f"neck.fusion_stage.layers.{j}.residual_layer2.convolution1.weight"))
+        rename_keys.append((f"scratch.refinenet{i}.resConfUnit2.conv1.bias", f"neck.fusion_stage.layers.{j}.residual_layer2.convolution1.bias"))
+        rename_keys.append((f"scratch.refinenet{i}.resConfUnit2.conv2.weight", f"neck.fusion_stage.layers.{j}.residual_layer2.convolution2.weight"))
+        rename_keys.append((f"scratch.refinenet{i}.resConfUnit2.conv2.bias", f"neck.fusion_stage.layers.{j}.residual_layer2.convolution2.bias"))
 
     # scratch convolutions
     for i in range(4):
@@ -155,11 +178,8 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     # load HuggingFace model
     model = DPTForDepthEstimation(config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    print("Missing keys:", missing_keys)
-    print("Unexpected keys:")
-    for k in unexpected_keys:
-        if "index" not in k:
-            print(k)
+    assert missing_keys == []
+    assert unexpected_keys == ["pretrained.model.fc_norm.weight", "pretrained.model.fc_norm.bias"]
     model.eval()
 
     # Check outputs on an image
@@ -184,23 +204,23 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     )
     pixel_values = transforms(image).unsqueeze(0)
 
-    with torch.no_grad():
-        model(pixel_values)
-
     # forward pass
-    # model(**encoding).predicted_depth
+    with torch.no_grad():
+        outputs = model(pixel_values)
 
-    # TODO assert logits
-    # expected_slice = torch.tensor([[6.3199, 6.3629, 6.4148], [6.3850, 6.3615, 6.4166], [6.3519, 6.3176, 6.3575]])
-    # if "ade" in checkpoint_url:
-    #     expected_slice = torch.tensor([[4.0480, 4.2420, 4.4360], [4.3124, 4.5693, 4.8261], [4.5768, 4.8965, 5.2163]])
-    # assert outputs.shape == torch.Size(expected_shape)
-    # assert (
-    #     torch.allclose(outputs[0, 0, :3, :3], expected_slice, atol=1e-4)
-    #     if "ade" in checkpoint_url
-    #     else torch.allclose(outputs[0, :3, :3], expected_slice)
-    # )
-    # print("Looks ok!")
+    predicted_depth = outputs.predicted_depth
+
+    print("Shape of predicted depth:", predicted_depth.shape)
+    print("First values of predicted depth:", predicted_depth[0, :3, :3])
+
+    # assert logits
+    expected_shape = torch.Size([1, 512, 512])
+    expected_slice = torch.tensor(
+        [[2804.6260, 2792.5708, 2812.9263], [2772.0288, 2780.1118, 2796.2529], [2748.1094, 2766.6558, 2766.9834]]
+    )
+    assert predicted_depth.shape == torch.Size(expected_shape)
+    assert torch.allclose(predicted_depth[0, :3, :3], expected_slice)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
