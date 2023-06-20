@@ -756,7 +756,7 @@ def find_all_documented_objects():
             content = f.read()
         raw_doc_objs = re.findall(r"(?:autoclass|autofunction):: transformers.(\S+)\s+", content)
         documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
-    for doc_file in Path(PATH_TO_DOC).glob("**/*.mdx"):
+    for doc_file in Path(PATH_TO_DOC).glob("**/*.md"):
         with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
             content = f.read()
         raw_doc_objs = re.findall(r"\[\[autodoc\]\]\s+(\S+)\s+", content)
@@ -908,7 +908,7 @@ def check_all_objects_are_documented():
 def check_model_type_doc_match():
     """Check all doc pages have a corresponding model type."""
     model_doc_folder = Path(PATH_TO_DOC) / "model_doc"
-    model_docs = [m.stem for m in model_doc_folder.glob("*.mdx")]
+    model_docs = [m.stem for m in model_doc_folder.glob("*.md")]
 
     model_types = list(transformers.models.auto.configuration_auto.MODEL_NAMES_MAPPING.keys())
     model_types = [MODEL_TYPE_TO_DOC_MAPPING[m] if m in MODEL_TYPE_TO_DOC_MAPPING else m for m in model_types]
