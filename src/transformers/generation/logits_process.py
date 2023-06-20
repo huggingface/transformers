@@ -707,16 +707,11 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
 
     <Tip>
 
-<<<<<<< HEAD
     In order to get the token ids of the words that should not appear in the generated text, make sure to set
     `add_prefix_space=True` when initializing the tokenizer, and use
     `tokenizer(bad_words, add_special_tokens=False).input_ids`. The `add_prefix_space`
     argument is only supported for some slow tokenizers, as fast tokenizers' prefixing behaviours come from
     `pre tokenizers`. Read more [here](https://huggingface.co/docs/tokenizers/api/pre-tokenizers).
-=======
-    In order to get the token ids of the sequences that you want to forbid, initialize a new tokenizer with
-    `add_prefix_space=True` and call `tokenizer(bad_words, add_special_tokens=False).input_ids`.
->>>>>>> 000b413f1 (add slow tests)
 
     </Tip>
 
