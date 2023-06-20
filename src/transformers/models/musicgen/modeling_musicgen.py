@@ -1063,7 +1063,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         # apply the delay pattern mask
         input_ids = self.apply_delay_pattern_mask(input_ids, delay_pattern_mask)
 
-        if guidance_scale > 1:
+        if guidance_scale is not None and guidance_scale > 1:
             # for classifier free guidance we need to replicate the decoder args across the batch dim (we'll split these
             # before sampling)
             input_ids = input_ids.repeat((2, 1))
@@ -1114,7 +1114,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
 
         # we only apply the mask if we have a large enough seq len - otherwise we return as is
         if max_length < 2 * num_codebooks - 1:
-            return input_ids, input_ids_shifted
+            return input_ids.reshape(bsz * num_codebooks, -1), input_ids_shifted.reshape(bsz * num_codebooks, -1)
 
         if padding_mask is None:
             # fill the shifted ids with the prompt entries, offset by the codebook idx
@@ -1156,7 +1156,10 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         # and will always be in the first codebook (since it has no codebook offset)
         first_codebook_ids = input_ids[:, 0, :]
         start_ids = (first_codebook_ids == -1).nonzero()[:, 1]
-        first_start_id = min(start_ids)
+        if len(start_ids) > 0:
+            first_start_id = min(start_ids)
+        else:
+            first_start_id = seq_len
 
         # (bsz * num_codebooks, seq_len) -> (bsz, num_codebooks, seq_len)
         pattern_mask = input_ids.reshape(bsz * num_codebooks, -1)
@@ -1278,7 +1281,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         input_ids, model_input_name, model_kwargs = self._prepare_model_inputs(
             inputs, generation_config.bos_token_id, model_kwargs
         )
-        batch_size = input_ids.shape[0]
+        batch_size = input_ids.shape[0] // self.num_codebooks
 
         # 4. Define other model kwargs
         model_kwargs["output_attentions"] = generation_config.output_attentions
@@ -1353,6 +1356,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             generation_config=generation_config,
             input_ids_seq_length=input_ids_seq_length,
             encoder_input_ids=input_ids,
+            prefix_allowed_tokens_fn=None,
             logits_processor=logits_processor,
         )
 
@@ -1940,7 +1944,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         # apply the delay pattern mask
         decoder_input_ids = self.decoder.apply_delay_pattern_mask(decoder_input_ids, decoder_delay_pattern_mask)
 
-        if guidance_scale > 1:
+        if guidance_scale is not None and guidance_scale > 1:
             # for classifier free guidance we need to replicate the decoder args across the batch dim (we'll split these
             # before sampling)
             decoder_input_ids = decoder_input_ids.repeat((2, 1))
@@ -2259,6 +2263,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             generation_config=generation_config,
             input_ids_seq_length=input_ids_seq_length,
             encoder_input_ids=inputs_tensor,
+            prefix_allowed_tokens_fn=None,
             logits_processor=logits_processor,
         )
 
