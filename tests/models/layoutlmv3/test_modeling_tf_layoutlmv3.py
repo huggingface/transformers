@@ -277,7 +277,11 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
         if is_tf_available()
         else ()
     )
-    pipeline_model_mapping = {"feature-extraction": TFLayoutLMv3Model} if is_tf_available() else {}
+    pipeline_model_mapping = (
+        {"document-question-answering": TFLayoutLMv3Model, "feature-extraction": TFLayoutLMv3Model}
+        if is_tf_available()
+        else {}
+    )
 
     test_pruning = False
     test_resize_embeddings = False
