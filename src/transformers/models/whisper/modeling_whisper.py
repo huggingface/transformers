@@ -1747,10 +1747,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
             if getattr(generation_config, "task", None) == "translate":
                 logger.warning("Token-level timestamps may not be reliable for task 'translate'.")
-            if not hasattr(self.config, "alignment_heads"):
-                logger.warning(
-                    "Model configuration has no `alignment_heads`, token-level timestamps not available. "
-                    "See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the model config."
+            if not hasattr(generation_config, "alignment_heads"):
+                raise ValueError(
+                    "Model generation config has no `alignment_heads`, token-level timestamps not available. "
+                    "See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the generation config."
                 )
 
         outputs = super().generate(
@@ -1763,8 +1763,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             **kwargs,
         )
 
-        if return_token_timestamps and hasattr(self.config, "alignment_heads"):
-            outputs["token_timestamps"] = self._extract_token_timestamps(outputs)
+        if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
+            outputs["token_timestamps"] = self._extract_token_timestamps(outputs, generation_config.alignment_heads)
 
         return outputs
 
@@ -1796,7 +1796,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 
-    def _extract_token_timestamps(self, generate_outputs, time_precision=0.02):
+    def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02):
         """
         Calculates token-level timestamps using the encoder-decoder cross-attentions and dynamic time-warping (DTW) to
         map each output token to a position in the input audio.
@@ -1812,7 +1812,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         # Select specific cross-attention layers and heads. This is a tensor
         # of shape (batch size, num selected, output length, input length).
-        weights = torch.stack([cross_attentions[l][:, h] for l, h in self.config.alignment_heads])
+        weights = torch.stack([cross_attentions[l][:, h] for l, h in alignment_heads])
         weights = weights.permute([1, 0, 2, 3])
 
         # Normalize and smoothen the weights.
