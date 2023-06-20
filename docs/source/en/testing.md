@@ -221,7 +221,7 @@ Just run the following line to automatically test every docstring example in the
 ```bash 
 pytest --doctest-modules <path_to_file_or_dir>
 ```
-If the file has a markdown extention, you should add the `--doctest-glob="*.mdx"` argument.
+If the file has a markdown extention, you should add the `--doctest-glob="*.md"` argument.
 
 ### Run only modified tests
 

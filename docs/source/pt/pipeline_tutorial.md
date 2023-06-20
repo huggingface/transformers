@@ -109,7 +109,7 @@ Passe seu texto de entrada ao [`pipeline`] para gerar algum texto:
 A flexibilidade do [`pipeline`] significa que também pode-se extender às tarefas de áudio.
 La flexibilidad de [`pipeline`] significa que también se puede extender a tareas de audio.
 
-Por exemplo, classifiquemos a emoção de um breve fragmento do famoso discurso de John F. Kennedy /home/rzimmerdev/dev/transformers/docs/source/pt/pipeline_tutorial.mdx
+Por exemplo, classifiquemos a emoção de um breve fragmento do famoso discurso de John F. Kennedy /home/rzimmerdev/dev/transformers/docs/source/pt/pipeline_tutorial.md
 Encontre um modelo de [audio classification](https://huggingface.co/models?pipeline_tag=audio-classification) para
 reconhecimento de emoções no Model Hub e carregue-o usando o [`pipeline`]:
 

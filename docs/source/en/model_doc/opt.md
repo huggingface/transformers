@@ -49,7 +49,7 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 <PipelineTag pipeline="text-classification" />
 
-- [Text classification task guide](sequence_classification.mdx)
+- [Text classification task guide](sequence_classification.md)
 - [`OPTForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb).
 
 <PipelineTag pipeline="question-answering" />

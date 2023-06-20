@@ -821,7 +821,7 @@ tests for you.
 
 Now, all the necessary functionality for *brand_new_bert* is added - you're almost done! The only thing left to add is
 a nice docstring and a doc page. The Cookiecutter should have added a template file called
-`docs/source/model_doc/brand_new_bert.mdx` that you should fill out. Users of your model will usually first look at
+`docs/source/model_doc/brand_new_bert.md` that you should fill out. Users of your model will usually first look at
 this page before using your model. Hence, the documentation must be understandable and concise. It is very useful for
 the community to add some *Tips* to show how the model should be used. Don't hesitate to ping the Hugging Face team
 regarding the docstrings.
