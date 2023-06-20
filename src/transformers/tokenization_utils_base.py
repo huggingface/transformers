@@ -82,7 +82,7 @@ else:
         AddedToken represents a token to be added to a Tokenizer An AddedToken can have special options defining the
         way it should behave.
         """
-        id: int = None
+
         content: str = field(default_factory=str)
         single_word: bool = False
         lstrip: bool = False
@@ -850,22 +850,6 @@ class SpecialTokensMixin:
                 else:
                     raise TypeError(f"special token {key} has to be either str or AddedToken but got: {type(value)}")
 
-
-        # if self.is_fast:
-        #     self.add_tokens(self.all_special_tokens, True) # we need to use fast functionalities to add special tokens
-
-    def sanitize_special_tokens(self) -> int:
-        """
-        Make sure that all the special tokens attributes of the tokenizer (`tokenizer.mask_token`,
-        `tokenizer.cls_token`, etc.) are in the vocabulary.
-
-        Add the missing ones to the vocabulary if needed.
-
-        Return:
-            `int`: The number of tokens added in the vocabulary during the operation.
-        """
-        return self.add_tokens(self.all_special_tokens_extended, special_tokens=True)
-
     def add_special_tokens(
         self, special_tokens_dict: Dict[str, Union[str, AddedToken]], replace_additional_special_tokens=True
     ) -> int:
@@ -948,9 +932,6 @@ class SpecialTokensMixin:
                     for token in value:
                         if str(token) not in self._additional_special_tokens and str(token) not in to_add:
                             to_add.append(token)
-                            
-                    # update the property
-                    self._additional_special_tokens.extend(to_add)
                     added_tokens.extend(to_add)
 
             else:
@@ -961,9 +942,7 @@ class SpecialTokensMixin:
                     value = AddedToken(value)
                 if isinstance(value, AddedToken):
                     setattr(self, key, value)
-
                 added_tokens.append(value)
-
         added_tokens = self.add_tokens(added_tokens, special_tokens = True)
         return added_tokens
 
@@ -1109,7 +1088,7 @@ class SpecialTokensMixin:
             if self.verbose:
                 logger.error("Using additional_special_tokens, but it is not set yet.")
             return None
-        return [str(tok) for tok in self._additional_special_tokens]
+        return [str(tok) for tok in self._additional_special_tokens if tok.special]
 
     @bos_token.setter
     def bos_token(self, value):
