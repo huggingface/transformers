@@ -278,7 +278,7 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
         else ()
     )
     pipeline_model_mapping = (
-        {"document-question-answering": TFLayoutLMv3Model, "feature-extraction": TFLayoutLMv3Model}
+        {"document-question-answering": TFLayoutLMv3ForQuestionAnswering, "feature-extraction": TFLayoutLMv3Model}
         if is_tf_available()
         else {}
     )
