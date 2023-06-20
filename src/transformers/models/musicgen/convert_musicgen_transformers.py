@@ -98,12 +98,12 @@ def decoder_config_from_checkpoint(checkpoint: str) -> MusicgenDecoderConfig:
     if checkpoint == "small":
         d_model = 1024
         ffn_dim = d_model * 4
-        num_layers = 24
+        num_hidden_layers = 2
         num_codebooks = 4
     config = MusicgenDecoderConfig(
         d_model=d_model,
         ffn_dim=ffn_dim,
-        num_layers=num_layers,
+        num_hidden_layers=num_hidden_layers,
         num_codebooks=num_codebooks,
         tie_word_embeddings=False,
     )
@@ -114,6 +114,8 @@ def decoder_config_from_checkpoint(checkpoint: str) -> MusicgenDecoderConfig:
 def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hub=False, device="cpu"):
     fairseq_model = MusicGen.get_pretrained(checkpoint, device=device)
     decoder_config = decoder_config_from_checkpoint(checkpoint)
+
+    fairseq_model.lm.transformer.layers = fairseq_model.lm.transformer.layers[:2]
 
     decoder_state_dict = fairseq_model.lm.state_dict()
     decoder_state_dict, enc_dec_proj_state_dict = rename_state_dict(decoder_state_dict, d_model=decoder_config.d_model)
@@ -143,22 +145,22 @@ def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hu
 
     # check we can do a forward pass
     input_ids = torch.arange(0, 8, dtype=torch.long).reshape(2, -1)
-    decoder_input_ids = input_ids.reshape(2, 4, -1)
+    decoder_input_ids = input_ids.reshape(2 * 4, -1)
 
     with torch.no_grad():
         logits = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
 
-    if logits.shape != (2, 4, 1, 2048):
+    if logits.shape != (8, 1, 2048):
         raise ValueError("Incorrect shape for logits")
 
-    if checkpoint == "dummy":
+    if checkpoint == "small":
         EXPECTED_SLICE = [-3.3180, -1.5341, -3.2796, -2.0692, -2.1036, -2.3339, 0.6623, -6.3549, 0.8477, -2.0866]
 
-        if torch.max(torch.abs(logits[0, 0, 0, :10] - torch.tensor(EXPECTED_SLICE))) > 1e-4:
+        if torch.max(torch.abs(logits[0, 0, :10] - torch.tensor(EXPECTED_SLICE))) > 1e-4:
             raise ValueError("Logits exceed tolerance threshold")
 
     # now construct the processor
-    tokenizer = AutoTokenizer.from_pretrained(CHECKPOINT_TO_T5[checkpoint])
+    tokenizer = AutoTokenizer.from_pretrained(CHECKPOINT_TO_T5[checkpoint], return_attention_mask=True, padding=True)
     feature_extractor = AutoFeatureExtractor.from_pretrained(CHECKPOINT_TO_ENCODEC[checkpoint])
 
     processor = MusicgenProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)

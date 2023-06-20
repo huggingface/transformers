@@ -721,10 +721,10 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
-            input = input_ids
-            input_shape = input.size()
             # (bsz * codebooks, seq_len) -> (bsz, codebooks, seq_len)
-            input = input.reshape(-1, self.num_codebooks, input_shape[-1])
+            input = input_ids.reshape(-1, self.num_codebooks, input_ids.shape[-1])
+            bsz, num_codebooks, seq_len = input.shape
+            input_shape = (bsz, seq_len)
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
             input = inputs_embeds[:, :, -1:]
@@ -735,10 +735,9 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            bsz, seq_len = input.shape[:2]
             inputs_embeds = torch.zeros((bsz, seq_len, self.d_model), device=input_ids.device)
 
-            for codebook in range(self.num_codebooks):
+            for codebook in range(num_codebooks):
                 inputs_embeds += self.embed_tokens[codebook](input[:, codebook])
 
         attention_mask = self._prepare_decoder_attention_mask(
@@ -1355,6 +1354,20 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             (generation_config.num_beams == 1)
             and (generation_config.num_beam_groups == 1)
             and generation_config.do_sample is True
+        )
+
+        # 8. prepare distribution pre_processing samplers
+        logits_processor = self._get_logits_processor(
+            generation_config=generation_config,
+            input_ids_seq_length=input_ids_seq_length,
+            encoder_input_ids=input_ids,
+            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+            logits_processor=logits_processor,
+        )
+
+        # 9. prepare stopping criteria
+        stopping_criteria = self._get_stopping_criteria(
+            generation_config=generation_config, stopping_criteria=stopping_criteria
         )
 
         if is_greedy_gen_mode:
@@ -2005,16 +2018,6 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 )
                 model_kwargs["decoder_attention_mask"] = decoder_attention_mask
 
-        # build the delay pattern mask for offsetting each codebook prediction by 1 (this behaviour is specific to MusicGen)
-        decoder_input_ids, decoder_delay_pattern_mask = self.decoder.build_delay_pattern_mask(
-            decoder_input_ids,
-            decoder_start_token_id,
-            padding_mask=model_kwargs.get("padding_mask"),
-            max_length=self.generation_config.max_length,
-        )
-        # stash the delay mask so that we don't have to recompute in each forward pass
-        model_kwargs["decoder_delay_pattern_mask"] = decoder_delay_pattern_mask
-
         return decoder_input_ids, model_kwargs
 
     def _prepare_encoder_decoder_kwargs_for_generation(
@@ -2246,6 +2249,16 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 " increasing `max_new_tokens`."
             )
 
+        # build the delay pattern mask for offsetting each codebook prediction by 1 (this behaviour is specific to MusicGen)
+        input_ids, decoder_delay_pattern_mask = self.decoder.build_delay_pattern_mask(
+            input_ids,
+            pad_token_id=generation_config.decoder_start_token_id,
+            padding_mask=model_kwargs.get("padding_mask"),
+            max_length=generation_config.max_length,
+        )
+        # stash the delay mask so that we don't have to recompute in each forward pass
+        model_kwargs["decoder_delay_pattern_mask"] = decoder_delay_pattern_mask
+
         # 7. determine generation mode
         is_greedy_gen_mode = (
             (generation_config.num_beams == 1)
@@ -2258,6 +2271,20 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             and generation_config.do_sample is True
         )
 
+        # 8. prepare distribution pre_processing samplers
+        logits_processor = self._get_logits_processor(
+            generation_config=generation_config,
+            input_ids_seq_length=input_ids_seq_length,
+            encoder_input_ids=inputs_tensor,
+            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+            logits_processor=logits_processor,
+        )
+
+        # 9. prepare stopping criteria
+        stopping_criteria = self._get_stopping_criteria(
+            generation_config=generation_config, stopping_criteria=stopping_criteria
+        )
+
         if is_greedy_gen_mode:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
@@ -2265,7 +2292,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                     f"but is {generation_config.num_return_sequences}."
                 )
 
-            # 8. run greedy search
+            # 10. run greedy search
             outputs = self.greedy_search(
                 input_ids,
                 logits_processor=logits_processor,
@@ -2279,7 +2306,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             )
 
         elif is_sample_gen_mode:
-            # 9. prepare logits warper
+            # 11. prepare logits warper
             logits_warper = self._get_logits_warper(generation_config)
 
             # expand input_ids with `num_return_sequences` additional sequences per batch
@@ -2290,7 +2317,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 **model_kwargs,
             )
 
-            # 10. run sample
+            # 12. run sample
             outputs = self.sample(
                 input_ids,
                 logits_processor=logits_processor,
@@ -2313,14 +2340,14 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             output_ids = outputs
 
         # build and apply the final delay pattern mask
-        _, pattern_mask = self.build_delay_pattern_mask(
-            inputs, self.generation_config.pad_token_id, max_length=self.generation_config.max_length
+        _, pattern_mask = self.decoder.build_delay_pattern_mask(
+            input_ids, generation_config.pad_token_id, max_length=generation_config.max_length
         )
-        output_ids = self.apply_delay_pattern_mask(output_ids, pattern_mask)
+        output_ids = self.decoder.apply_delay_pattern_mask(output_ids, pattern_mask)
 
         # revert the pattern delay mask by filtering the pad token id
-        output_ids = output_ids[output_ids != self.generation_config.pad_token_id].reshape(
-            batch_size, self.num_codebooks, -1
+        output_ids = output_ids[output_ids != generation_config.pad_token_id].reshape(
+            batch_size, self.decoder.num_codebooks, -1
         )
 
         # TODO(SG): hacks to make the output ids compatible with encodec - add to encodec modelling code
