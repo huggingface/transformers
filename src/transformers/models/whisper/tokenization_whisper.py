@@ -940,7 +940,9 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                 "Also make sure WhisperTimeStampLogitsProcessor was used during generation."
             )
         # Happens when we don't use timestamps
-        resolved_tokens, resolved_token_timestamps = _find_longest_common_sequence(previous_tokens, previous_token_timestamps)
+        resolved_tokens, resolved_token_timestamps = _find_longest_common_sequence(
+            previous_tokens, previous_token_timestamps
+        )
         resolved_text = tokenizer.decode(resolved_tokens)
         chunk["text"] = resolved_text
         if return_timestamps == "word":
