@@ -231,8 +231,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
         unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str`, *optional*, defaults to `"<|startoftranscript|>"`):
-            The beginning of sequence token.
+        bos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+            The beginning of sequence token. The `decoder_start_token_id` is used to set the first token as
+            `"<|startoftranscript|>"` when generating.
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
@@ -261,7 +262,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         normalizer_file=None,
         errors="replace",
         unk_token="<|endoftext|>",
-        bos_token="<|startoftranscript|>",
+        bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
         pad_token=None,
         add_prefix_space=False,
