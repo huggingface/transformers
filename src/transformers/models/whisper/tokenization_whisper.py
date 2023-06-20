@@ -904,7 +904,6 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
         if current_tokens:
             previous_tokens.append(current_tokens)
         elif not (any(p for p in previous_tokens)):
-            # print("Flushing previous tokens (END)")
             chunk = new_chunk()
             previous_tokens = []
             current_tokens = []
@@ -917,7 +916,6 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
             )
         # Happens when we don't use timestamps
         resolved_tokens = _find_longest_common_sequence(previous_tokens)
-        # print("Flushing previous tokens (FINAL)")
         resolved_text = tokenizer.decode(resolved_tokens)
         chunk["text"] = resolved_text
         chunks.append(chunk)
