@@ -214,6 +214,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     print("First values of predicted depth:", predicted_depth[0, :3, :3])
 
     # assert logits
+    # TODO there's still a small difference with the original logits
     expected_shape = torch.Size([1, 512, 512])
     expected_slice = torch.tensor(
         [[2804.6260, 2792.5708, 2812.9263], [2772.0288, 2780.1118, 2796.2529], [2748.1094, 2766.6558, 2766.9834]]

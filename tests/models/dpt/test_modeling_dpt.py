@@ -120,6 +120,8 @@ class DPTModelTester:
             is_hybrid=self.is_hybrid,
             neck_hidden_sizes=self.neck_hidden_sizes,
         )
+    
+        
 
     def create_and_check_model(self, config, pixel_values, labels):
         model = DPTModel(config=config)
@@ -130,6 +132,7 @@ class DPTModelTester:
 
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
+        print("Config:", config)
         model = DPTForDepthEstimation(config)
         model.to(torch_device)
         model.eval()
