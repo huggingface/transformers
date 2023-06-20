@@ -269,7 +269,7 @@ class GenerationConfig(PushToHubMixin):
         self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
         self.forced_decoder_ids = kwargs.pop("forced_decoder_ids", None)
         self.sequence_bias = kwargs.pop("sequence_bias", None)
-        self.guidance_scale = kwargs.pop("guidance_scale", 1.0)
+        self.guidance_scale = kwargs.pop("guidance_scale", None)
 
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
