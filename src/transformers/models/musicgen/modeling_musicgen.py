@@ -1457,7 +1457,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 "Either a configuration has to be provided, or all three of text encoder, audio encoder and MusicGen decoder."
             )
         if config is None:
-            config = MusicgenConfig.from_encoder_decoder_configs(
+            config = MusicgenConfig.from_sub_model_configs(
                 text_encoder.config, audio_encoder.config, decoder.config
             )
         else:
@@ -1790,7 +1790,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
         # instantiate config with corresponding kwargs
-        config = MusicgenConfig.from_encoder_decoder_configs(
+        config = MusicgenConfig.from_sub_model_configs(
             text_encoder.config, audio_encoder.config, decoder.config, **kwargs
         )
         return cls(text_encoder=text_encoder, audio_encoder=audio_encoder, decoder=decoder, config=config)
