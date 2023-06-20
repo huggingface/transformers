@@ -1207,7 +1207,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         if isinstance(self, Wav2Vec2ForCTC):
             self._init_weights(self.lm_head)
 
-    def load_adapter(self, target_lang: str, **kwargs):
+    def load_adapter(self, target_lang: str, force_load=True, **kwargs):
         r"""
         Load a language adapter model from a pre-trained adapter model.
 
@@ -1215,6 +1215,8 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             target_lang (`str`):
                 Has to be a language id of an existing adapter weight. Adapter weights are stored in the format
                 adapter.<lang>.safetensors or adapter.<lang>.bin
+            force_load (`bool`, defaults to `True`):
+                Whether the weights shall be loaded even if `target_lang` matches `self.target_lang`.
             cache_dir (`Union[str, os.PathLike]`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
@@ -1270,6 +1272,10 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         """
         if self.config.adapter_attn_dim is None:
             raise ValueError(f"Cannot load_adapter for {target_lang} if `config.adapter_attn_dim` is not defined.")
+
+        if target_lang == self.target_lang and not force_load:
+            logger.warn(f"Adapter weights are already set to {target_lang}.")
+            return
 
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
@@ -1371,6 +1377,9 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         # make sure that adapter weights are put in exactly the same precision and device placement and overwritten adapter weights
         state_dict = {k: v.to(adapter_weights[k]) for k, v in state_dict.items()}
         self.load_state_dict(state_dict, strict=False)
+
+        # set target language corectly
+        self.target_lang = target_lang
 
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
@@ -1854,11 +1863,13 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
     WAV_2_VEC_2_START_DOCSTRING,
 )
 class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
-    def __init__(self, config, target_lang=None):
+    def __init__(self, config, target_lang: Optional[str] = None):
         super().__init__(config)
 
         self.wav2vec2 = Wav2Vec2Model(config)
         self.dropout = nn.Dropout(config.final_dropout)
+
+        self.target_lang = target_lang
 
         if config.vocab_size is None:
             raise ValueError(
@@ -1872,15 +1883,29 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         )
         self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
 
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def tie_weights(self):
+        """
+        This method overwrites [`~PreTrainedModel.tie_weights`] so that adapter weights can be correctly loaded when
+        passing `target_lang=...` to `from_pretrained(...)`.
+
+        This method is **not** supposed to be called by the user and is prone to be changed in the future.
+        """
+
+        # Note that `tie_weights` is usually used to tie input and output embedding weights. The method is re-purposed to
+        # correctly load adapter layers for Wav2Vec2 so that we do not have to introduce a new API to
+        # [`PreTrainedModel`]. While slightly hacky, Wav2Vec2 never has to tie input and output embeddings, so that it is
+        # ok to repurpose this function here.
+        target_lang = self.target_lang
+
         if target_lang is not None and getattr(self.config, "adapter_attn_dim", None) is None:
             raise ValueError(f"Cannot pass `target_lang`: {target_lang} if `config.adapter_attn_dim` is not defined.")
         elif target_lang is None and getattr(self.config, "adapter_attn_dim", None) is not None:
             logger.info("By default `target_lang` is set to 'eng'.")
         elif target_lang is not None:
-            self.load_adapter(target_lang)
-
-        # Initialize weights and apply final processing
-        self.post_init()
+            self.load_adapter(target_lang, force_load=True)
 
     def freeze_feature_extractor(self):
         """
