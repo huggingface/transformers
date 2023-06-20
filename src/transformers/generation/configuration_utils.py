@@ -143,8 +143,10 @@ class GenerationConfig(PushToHubMixin):
             If set to int > 0, all ngrams of that size can only occur once.
         bad_words_ids(`List[List[int]]`, *optional*):
             List of token ids that are not allowed to be generated. In order to get the token ids of the words that
-            should not appear in the generated text, use `tokenizer(bad_words, add_prefix_space=True,
-            add_special_tokens=False).input_ids`.
+            should not appear in the generated text, make sure to set `add_prefix_space=True` when initializing the
+            tokenizer, and use `tokenizer(bad_words, add_special_tokens=False).input_ids`. The `add_prefix_space`
+            argument is only supported for some slow tokenizers, as fast tokenizers' prefixing behaviours come from
+            `pre tokenizers`. Read more [here](https://huggingface.co/docs/tokenizers/api/pre-tokenizers).
         force_words_ids(`List[List[int]]` or `List[List[List[int]]]`, *optional*):
             List of token ids that must be generated. If given a `List[List[int]]`, this is treated as a simple list of
             words that must be included, the opposite to `bad_words_ids`. If given `List[List[List[int]]]`, this
