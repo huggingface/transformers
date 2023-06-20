@@ -233,7 +233,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             token instead.
         bos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The beginning of sequence token. The `decoder_start_token_id` is used to set the first token as
-            `"<startoftranscript">`.
+            `"<|startoftranscript|>"` when generating.
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
