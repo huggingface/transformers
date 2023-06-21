@@ -295,10 +295,7 @@ def load_pytorch_state_dict_in_tf2_model(
     all_pytorch_weights = set(tf_keys_to_pt_keys.keys())
     missing_keys = []
     mismatched_keys = []
-    if hasattr(pt_state_dict, "get_tensor"):
-        is_safetensor_archive = True
-    else:
-        is_safetensor_archive = False
+    is_safetensor_archive = hasattr(pt_state_dict, "get_tensor")
     for symbolic_weight in symbolic_weights:
         sw_name = symbolic_weight.name
         name, transpose = convert_tf_weight_name_to_pt_weight_name(
