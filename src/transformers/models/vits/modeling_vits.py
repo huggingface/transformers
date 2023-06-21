@@ -332,30 +332,29 @@ class VitsResidualCouplingLayer(nn.Module):
         self.half_channels = config.inter_channels // 2
         self.mean_only = mean_only
 
-        self.pre = nn.Conv1d(self.half_channels, config.hidden_size, 1)
-        self.enc = VitsWaveNet(config, num_layers=4)
-        self.post = nn.Conv1d(config.hidden_size, self.half_channels * (2 - mean_only), 1)
-        self.post.weight.data.zero_()
-        self.post.bias.data.zero_()
+        self.conv_pre = nn.Conv1d(self.half_channels, config.hidden_size, 1)
+        self.wavenet = VitsWaveNet(config, num_layers=4)
+        self.conv_post = nn.Conv1d(config.hidden_size, self.half_channels * (2 - mean_only), 1)
 
     def forward(self, inputs, padding_mask, global_conditioning=None, reverse=False):
         x0, x1 = torch.split(inputs, [self.half_channels]*2, 1)
-        h = self.pre(x0) * padding_mask
-        h = self.enc(h, padding_mask, global_conditioning)
-        stats = self.post(h) * padding_mask
-        if not self.mean_only:
-            m, logs = torch.split(stats, [self.half_channels]*2, 1)
+        h = self.conv_pre(x0) * padding_mask
+        h = self.wavenet(h, padding_mask, global_conditioning)
+        stats = self.conv_post(h) * padding_mask
+
+        if self.mean_only:
+            mean = stats
+            log_stddev = torch.zeros_like(mean)
         else:
-            m = stats
-            logs = torch.zeros_like(m)
+            mean, log_stddev = torch.split(stats, [self.half_channels]*2, 1)
 
         if not reverse:
-            x1 = m + x1 * torch.exp(logs) * padding_mask
+            x1 = mean + x1 * torch.exp(log_stddev) * padding_mask
             outputs = torch.cat([x0, x1], 1)
-            log_determinant = torch.sum(logs, [1,2])
+            log_determinant = torch.sum(log_stddev, [1, 2])
             return outputs, log_determinant
         else:
-            x1 = (x1 - m) * torch.exp(-logs) * padding_mask
+            x1 = (x1 - mean) * torch.exp(-log_stddev) * padding_mask
             outputs = torch.cat([x0, x1], 1)
             return outputs
 
@@ -365,8 +364,8 @@ class VitsResidualCouplingBlock(nn.Module):
         super().__init__()
         self.flows = nn.ModuleList()
         for _ in range(config.prior_encoder_num_flows):
-           self.flows.append(VitsResidualCouplingLayer(config, mean_only=True))
-           self.flows.append(VitsFlip())
+            self.flows.append(VitsResidualCouplingLayer(config, mean_only=True))
+            self.flows.append(VitsFlip())
 
     def forward(self, inputs, padding_mask, global_conditioning=None, reverse=False):
         if not reverse:
@@ -408,18 +407,21 @@ class VitsDilatedDepthSeparableConv(nn.Module):
     def forward(self, inputs, padding_mask, global_conditioning=None):
         if global_conditioning is not None:
             inputs = inputs + global_conditioning
+
         for i in range(self.num_layers):
-            y = self.convs_sep[i](inputs * padding_mask)
-            y = self.norms_1[i](y.transpose(1, -1)).transpose(1, -1)
-            y = nn.functional.gelu(y)
-            y = self.convs_1x1[i](y)
-            y = self.norms_2[i](y.transpose(1, -1)).transpose(1, -1)
-            y = nn.functional.gelu(y)
-            y = self.dropout(y)
-            inputs = inputs + y
+            hidden_states = self.convs_sep[i](inputs * padding_mask)
+            hidden_states = self.norms_1[i](hidden_states.transpose(1, -1)).transpose(1, -1)
+            hidden_states = nn.functional.gelu(hidden_states)
+            hidden_states = self.convs_1x1[i](hidden_states)
+            hidden_states = self.norms_2[i](hidden_states.transpose(1, -1)).transpose(1, -1)
+            hidden_states = nn.functional.gelu(hidden_states)
+            hidden_states = self.dropout(hidden_states)
+            inputs = inputs + hidden_states
+
         return inputs * padding_mask
 
 
+# TODO: move into rational_quadratic_spline
 def searchsorted(bin_locations, inputs, eps=1e-6):
     bin_locations[..., -1] += eps
     return torch.sum(inputs[..., None] >= bin_locations, dim=-1) - 1
@@ -613,25 +615,20 @@ def piecewise_rational_quadratic_transform(
 class VitsConvFlow(nn.Module):
     def __init__(self, in_channels, filter_channels, kernel_size, num_layers, num_bins=10, tail_bound=5.0):
         super().__init__()
-        self.in_channels = in_channels
         self.filter_channels = filter_channels
-        self.kernel_size = kernel_size
-        self.num_layers = num_layers
         self.num_bins = num_bins
         self.tail_bound = tail_bound
         self.half_channels = in_channels // 2
 
-        self.pre = nn.Conv1d(self.half_channels, filter_channels, 1)
-        self.convs = VitsDilatedDepthSeparableConv(filter_channels, kernel_size, num_layers, dropout_rate=0.0)
-        self.proj = nn.Conv1d(filter_channels, self.half_channels * (num_bins * 3 - 1), 1)
-        self.proj.weight.data.zero_()
-        self.proj.bias.data.zero_()
+        self.conv_pre = nn.Conv1d(self.half_channels, filter_channels, 1)
+        self.conv_dds = VitsDilatedDepthSeparableConv(filter_channels, kernel_size, num_layers, dropout_rate=0.0)
+        self.conv_proj = nn.Conv1d(filter_channels, self.half_channels * (num_bins * 3 - 1), 1)
 
     def forward(self, inputs, padding_mask, global_conditioning=None, reverse=False):
         x0, x1 = torch.split(inputs, [self.half_channels]*2, 1)
-        h = self.pre(x0)
-        h = self.convs(h, padding_mask, global_conditioning)
-        h = self.proj(h) * padding_mask
+        h = self.conv_pre(x0)
+        h = self.conv_dds(h, padding_mask, global_conditioning)
+        h = self.conv_proj(h) * padding_mask
 
         b, c, t = x0.shape
         h = h.reshape(b, c, -1, t).permute(0, 1, 3, 2) # [b, cx?, t] -> [b, c, t, ?]
@@ -645,7 +642,7 @@ class VitsConvFlow(nn.Module):
             unnormalized_heights,
             unnormalized_derivatives,
             inverse=reverse,
-            tails='linear',
+            tails="linear",
             tail_bound=self.tail_bound
         )
 
@@ -702,8 +699,8 @@ class VitsStochasticDurationPredictor(nn.Module):
         kernel_size = config.duration_predictor_kernel_size
         filter_channels = config.hidden_size
 
-        self.pre = nn.Conv1d(config.hidden_size, filter_channels, 1)
-        self.proj = nn.Conv1d(filter_channels, filter_channels, 1)
+        self.conv_pre = nn.Conv1d(config.hidden_size, filter_channels, 1)
+        self.conv_proj = nn.Conv1d(filter_channels, filter_channels, 1)
         self.convs = VitsDilatedDepthSeparableConv(
             filter_channels, kernel_size, 3, config.duration_predictor_dropout
         )
@@ -732,14 +729,14 @@ class VitsStochasticDurationPredictor(nn.Module):
 
     def forward(self, inputs, padding_mask, global_conditioning=None, w=None, reverse=False, noise_scale=1.0):
         inputs = torch.detach(inputs)
-        inputs = self.pre(inputs)
+        inputs = self.conv_pre(inputs)
 
         if global_conditioning is not None:
             global_conditioning = torch.detach(global_conditioning)
             inputs = inputs + self.cond(global_conditioning)
 
         inputs = self.convs(inputs, padding_mask)
-        inputs = self.proj(inputs) * padding_mask
+        inputs = self.conv_proj(inputs) * padding_mask
 
         if not reverse:
             flows = self.flows
