@@ -1859,7 +1859,8 @@ class Trainer:
                             self.scaler.step(self.optimizer)
                             self.scaler.update()
                         else:
-                            xm.optimizer_step(self.optimizer)
+                            # tpu-comment: accelerate wrapped optimizers call xm.optimizer_step
+                            self.optimizer.step()
                     elif self.do_grad_scaling:
                         scale_before = self.scaler.get_scale()
                         self.scaler.step(self.optimizer)
