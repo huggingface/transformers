@@ -22,11 +22,15 @@ from typing import List, Optional, Tuple, Union
 
 import tensorflow as tf
 
-from ...activations import ACT2FN
-from ...modeling_tf_outputs import TFBaseModelOutputWithPast, TFCausalLMOutputWithPast, TFSequenceClassifierOutputWithPast
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...activations_tf import ACT2FN
+from ...modeling_tf_outputs import (
+    TFBaseModelOutputWithPast,
+    TFCausalLMOutputWithPast,
+    TFSequenceClassifierOutputWithPast,
+)
+from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, unpack_inputs, TFSequenceClassificationLoss, TFCausalLanguageModelingLoss
 from ...tf_utils import shape_list
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_llama import LlamaConfig
 
 
@@ -67,6 +71,8 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     expanded_mask = tf.tile(mask[:, None, None, :], (1, 1, tgt_len, 1))
 
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
+
+
 class TFLlamaRMSNorm(tf.keras.layers.Layer):
     def __init__(self, hidden_size, eps=1e-6, **kwargs):
         """
@@ -81,8 +87,11 @@ class TFLlamaRMSNorm(tf.keras.layers.Layer):
         variance = tf.math.reduce_mean(tf.math.square(tf.cast(hidden_states, tf.float32)), axis=-1, keepdims=True)
         hidden_states = hidden_states * tf.math.rsqrt(variance + self.variance_epsilon)
 
-        return (self.weight * hidden_states).cast(input_dtype)
+        return tf.cast(self.weight * hidden_states, input_dtype)
+
+
 class TFLlamaRotaryEmbedding(tf.keras.layers.Layer):
+    # TODO Get this to match the Torch behaviour without the horrific call-time breaking of class variables
     def __init__(self, dim, max_position_embeddings=2048, base=10000, **kwargs):
         super().__init__(**kwargs)
         inv_freq = 1.0 / (base ** (tf.range(0, dim, 2, dtype=tf.float32) / dim))
@@ -96,6 +105,20 @@ class TFLlamaRotaryEmbedding(tf.keras.layers.Layer):
         emb = tf.concat([freqs, freqs], axis=-1)
         self.cos_cached = tf.math.cos(emb)[None, None, :, :]
         self.sin_cached = tf.math.sin(emb)[None, None, :, :]
+
+    def build(self, input_shape):
+        super().build(input_shape)
+        # Matt: The PyTorch version of this layer does a lot of work to cache values, but we just rely on TF compilation
+        # and/or XLA to sort out constants like that. It actually may not seem like this layer needs to be stateful at
+        # all when we benefit from TF compilation, but it does. The reason is that self.inv_freq is a buffer in the
+        # original implementation, and may be quantized as (b)float16. We need to replicate the exact values in order
+        # for our outputs to match those from PyTorch checkpoints.
+        self.inv_freq = self.add_weight(
+            "inv_freq", shape=(self.dim // 2,), dtype=tf.float32, initializer=get_initializer(1.0), trainable=False
+        )
+        self.inv_freq.assign(
+            1.0 / (10000 ** (tf.range(start=0, limit=self.dim, delta=2, dtype=tf.float32) / self.dim))
+        )
 
     def call(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
@@ -112,13 +135,17 @@ class TFLlamaRotaryEmbedding(tf.keras.layers.Layer):
             self.cos_cached[:, :, :seq_len, ...],
             self.sin_cached[:, :, :seq_len, ...],
         )
-def rotate_half(self, x):
+
+
+def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x_shape = shape_list(x)
     x1 = x[..., : x_shape[-1] // 2]
     x2 = x[..., x_shape[-1] // 2 :]
     return tf.concat((-x2, x1), axis=-1)
-def apply_rotary_pos_emb(self, q, k, cos, sin, position_ids):
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
     cos = tf.squeeze(cos, axis=[0, 1])  # [seq_len, dim]
     sin = tf.squeeze(sin, axis=[0, 1])  # [seq_len, dim]
@@ -126,9 +153,11 @@ def apply_rotary_pos_emb(self, q, k, cos, sin, position_ids):
     cos = tf.expand_dims(cos, axis=1)  # [bs, 1, seq_len, dim]
     sin = tf.gather(sin, position_ids, axis=0)
     sin = tf.expand_dims(sin, axis=1)  # [bs, 1, seq_len, dim]
-    q_embed = (q * cos) + (self.rotate_half(q) * sin)
-    k_embed = (k * cos) + (self.rotate_half(k) * sin)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
+
+
 class TFLlamaMLP(tf.keras.layers.Layer):
     def __init__(
         self,
@@ -145,6 +174,8 @@ class TFLlamaMLP(tf.keras.layers.Layer):
 
     def call(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+
+
 class TFLlamaAttention(tf.keras.layers.Layer):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -165,7 +196,9 @@ class TFLlamaAttention(tf.keras.layers.Layer):
         self.k_proj = tf.keras.layers.Dense(self.num_heads * self.head_dim, use_bias=False, name="k_proj")
         self.v_proj = tf.keras.layers.Dense(self.num_heads * self.head_dim, use_bias=False, name="v_proj")
         self.o_proj = tf.keras.layers.Dense(self.hidden_size, use_bias=False, name="o_proj")
-        self.rotary_emb = TFLlamaRotaryEmbedding(self.head_dim, max_position_embeddings=self.max_position_embeddings, name="rotary_emb")
+        self.rotary_emb = TFLlamaRotaryEmbedding(
+            self.head_dim, max_position_embeddings=self.max_position_embeddings, name="rotary_emb"
+        )
 
     def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
         return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), perm=[0, 2, 1, 3])
@@ -197,7 +230,9 @@ class TFLlamaAttention(tf.keras.layers.Layer):
 
         past_key_value = (key_states, value_states) if use_cache else None
 
-        attn_weights = tf.matmul(query_states, tf.transpose(key_states, perm=[0, 1, 3, 2])) / tf.math.sqrt(float(self.head_dim))
+        attn_weights = tf.matmul(query_states, tf.transpose(key_states, perm=[0, 1, 3, 2])) / tf.math.sqrt(
+            float(self.head_dim)
+        )
 
         if shape_list(attn_weights) != [bsz, self.num_heads, q_len, kv_seq_len]:
             raise ValueError(
@@ -211,9 +246,8 @@ class TFLlamaAttention(tf.keras.layers.Layer):
                     f"Attention mask should be of size {[bsz, 1, q_len, kv_seq_len]}, but is {shape_list(attention_mask)}"
                 )
             attn_weights = attn_weights + attention_mask
-            attn_weights = tf.math.maximum(
-                attn_weights, tf.constant(float(tf.keras.backend.min_value()), dtype=attn_weights.dtype)
-            )
+            attn_weights = tf.math.maximum(attn_weights, attn_weights.dtype.min)
+
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
         attn_output = tf.matmul(attn_weights, value_states)
@@ -233,6 +267,8 @@ class TFLlamaAttention(tf.keras.layers.Layer):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
+
 class TFLlamaDecoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: LlamaConfig, **kwargs):
         super().__init__(**kwargs)
@@ -245,7 +281,9 @@ class TFLlamaDecoderLayer(tf.keras.layers.Layer):
             name="mlp",
         )
         self.input_layernorm = TFLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="input_layernorm")
-        self.post_attention_layernorm = TFLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="post_attention_layernorm")
+        self.post_attention_layernorm = TFLlamaRMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps, name="post_attention_layernorm"
+        )
 
     def call(
         self,
@@ -320,6 +358,8 @@ TF_LLAMA_START_DOCSTRING = r"""
             load the weights associated with the model, only the configuration. Check out the
             [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
 """
+
+
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     TF_LLAMA_START_DOCSTRING,
@@ -327,7 +367,6 @@ TF_LLAMA_START_DOCSTRING = r"""
 class TFLlamaPreTrainedModel(TFPreTrainedModel):
     config_class = LlamaConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
     _no_split_modules = ["TFLlamaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
@@ -340,10 +379,6 @@ class TFLlamaPreTrainedModel(TFPreTrainedModel):
                 module.bias = tf.zeros_like(module.bias)
         elif isinstance(module, tf.keras.layers.Embedding):
             module.embeddings = tf.random.normal(shape=module.embeddings.shape, mean=0.0, stddev=std)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, TFLlamaModel):
-            module.gradient_checkpointing = value
 
 
 LLAMA_INPUTS_DOCSTRING = r"""
@@ -408,6 +443,8 @@ LLAMA_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
+
+
 @add_start_docstrings(
     "The bare TFLLaMA Model outputting raw hidden-states without any specific head on top.",
     TF_LLAMA_START_DOCSTRING,
@@ -425,13 +462,10 @@ class TFLlamaModel(TFLlamaPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = tf.keras.layers.Embedding(config.vocab_size, config.hidden_size)
-        self.layers = [TFLlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)]
-        self.norm = TFLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        self.gradient_checkpointing = False
-        # Initialize weights and apply final processing
-        self.post_init()
+        self.embed_tokens = tf.keras.layers.Embedding(config.vocab_size, config.hidden_size, name="embed_tokens")
+        # self.layers is a protected TF property, so we can't use that name
+        self.layers_ = [TFLlamaDecoderLayer(config, name=f"layers_._{i}") for i in range(config.num_hidden_layers)]
+        self.norm = TFLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="norm")
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -446,19 +480,19 @@ class TFLlamaModel(TFLlamaPreTrainedModel):
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(
                 input_shape,
-                inputs_embeds.dtype,
                 past_key_values_length=past_key_values_length,
             )
 
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+            expanded_attn_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
             combined_attention_mask = (
                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
             )
 
         return combined_attention_mask
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     def call(
         self,
@@ -499,9 +533,7 @@ class TFLlamaModel(TFLlamaPreTrainedModel):
             seq_length_with_past = seq_length_with_past + past_key_values_length
 
         if position_ids is None:
-            position_ids = tf.range(
-                past_key_values_length, seq_length + past_key_values_length, dtype=tf.int32
-            )
+            position_ids = tf.range(past_key_values_length, seq_length + past_key_values_length, dtype=tf.int32)
             position_ids = tf.expand_dims(position_ids, 0)
         else:
             position_ids = tf.cast(position_ids, dtype=tf.int32)
@@ -510,28 +542,19 @@ class TFLlamaModel(TFLlamaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
         # embed positions
         if attention_mask is None:
-            attention_mask = tf.ones(
-                (batch_size, seq_length_with_past), dtype=tf.bool
-            )
+            attention_mask = tf.ones((batch_size, seq_length_with_past), dtype=tf.bool)
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
         )
 
         hidden_states = inputs_embeds
 
-        if self.gradient_checkpointing and training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
 
-        for idx, decoder_layer in enumerate(self.layers):
+        for idx, decoder_layer in enumerate(self.layers_):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -570,7 +593,9 @@ class TFLlamaModel(TFLlamaPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-class TFLlamaForCausalLM(TFLlamaPreTrainedModel):
+
+
+class TFLlamaForCausalLM(TFLlamaPreTrainedModel, TFCausalLanguageModelingLoss):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config, **kwargs):
@@ -578,9 +603,6 @@ class TFLlamaForCausalLM(TFLlamaPreTrainedModel):
         self.model = TFLlamaModel(config)
 
         self.lm_head = tf.keras.layers.Dense(config.vocab_size, use_bias=False, name="lm_head")
-
-        # Initialize weights and apply final processing
-        self.post_init()
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -600,6 +622,7 @@ class TFLlamaForCausalLM(TFLlamaPreTrainedModel):
     def get_decoder(self):
         return self.model
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -667,14 +690,10 @@ class TFLlamaForCausalLM(TFLlamaPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :]
-            shift_labels = labels[..., 1:]
-            # Flatten the tokens
-            loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-            shift_logits = tf.reshape(shift_logits, (-1, self.config.vocab_size))
-            shift_labels = tf.reshape(shift_labels, (-1,))
-            loss = loss_fct(shift_labels, shift_logits)
+            # shift labels to the left and cut last logit token
+            shifted_logits = logits[:, :-1]
+            labels = labels[:, 1:]
+            loss = self.hf_compute_loss(labels, shifted_logits)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -722,10 +741,10 @@ class TFLlamaForCausalLM(TFLlamaPreTrainedModel):
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
-            reordered_past += (
-                tuple(tf.gather(past_state, beam_idx) for past_state in layer_past),
-            )
+            reordered_past += (tuple(tf.gather(past_state, beam_idx) for past_state in layer_past),)
         return reordered_past
+
+
 @add_start_docstrings(
     """
     The LLaMa Model transformer with a sequence classification head on top (linear layer).
@@ -741,14 +760,16 @@ class TFLlamaForCausalLM(TFLlamaPreTrainedModel):
     """,
     TF_LLAMA_START_DOCSTRING,
 )
-class TFLlamaForSequenceClassification(TFLlamaPreTrainedModel):
+class TFLlamaForSequenceClassification(TFLlamaPreTrainedModel, TFSequenceClassificationLoss):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
 
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
         self.num_labels = config.num_labels
         self.model = TFLlamaModel(config)
-        self.score = tf.keras.layers.Dense(self.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="score")
+        self.score = tf.keras.layers.Dense(
+            self.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="score"
+        )
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -756,6 +777,7 @@ class TFLlamaForSequenceClassification(TFLlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     def call(
         self,
@@ -801,38 +823,21 @@ class TFLlamaForSequenceClassification(TFLlamaPreTrainedModel):
 
         if self.config.pad_token_id is None and batch_size != 1:
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-        if self.config.pad_token_id is None:
-            sequence_lengths = -1
+        if input_ids is not None and self.config.pad_token_id is not None:
+            sequence_lengths = (
+                tf.reduce_sum(tf.cast(tf.not_equal(input_ids, self.config.pad_token_id), dtype=tf.int32), axis=-1)
+                - 1
+            )
+            pooled_logits = tf.gather(logits, sequence_lengths, batch_dims=1)
         else:
-            if input_ids is not None:
-                sequence_lengths = tf.reduce_sum(tf.cast(tf.not_equal(input_ids, self.config.pad_token_id), dtype=tf.int32), axis=-1) - 1
-            else:
-                sequence_lengths = -1
+            pooled_logits = logits[:, -1]
 
-        pooled_logits = tf.gather(logits, sequence_lengths, batch_dims=1)
-
-        loss = None
-        if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == tf.int32 or labels.dtype == tf.int64):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = tf.keras.losses.MeanSquaredError()
-                if self.num_labels == 1:
-                    loss = loss_fct(pooled_logits[:, 0], labels)
-                else:
-                    loss = loss_fct(pooled_logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-                loss = loss_fct(labels, pooled_logits)
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = tf.keras.losses.BinaryCrossentropy(from_logits=True)
-                loss = loss_fct(labels, pooled_logits)
+        if labels is None:
+            loss = None
+        elif self.config.problem_type == "multi_label_classification" or self.num_labels > 1 and labels.dtype.is_floating:
+            loss = tf.keras.losses.binary_crossentropy(labels, pooled_logits)
+        else:
+            loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=pooled_logits)
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
