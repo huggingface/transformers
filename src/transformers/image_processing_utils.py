@@ -85,7 +85,11 @@ class ImageProcessingMixin(PushToHubMixin):
     def from_pretrained(
         cls,
         pretrained_model_name_or_path: Union[str, os.PathLike],
+        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        force_download: bool = False,
+        local_files_only: bool = False,
         token: Optional[Union[str, bool]] = None,
+        revision: str = "main",
         **kwargs,
     ):
         r"""
@@ -168,6 +172,11 @@ class ImageProcessingMixin(PushToHubMixin):
         assert image_processor.do_normalize is False
         assert unused_kwargs == {"foo": False}
         ```"""
+        kwargs["cache_dir"] = cache_dir
+        kwargs["force_download"] = force_download
+        kwargs["local_files_only"] = local_files_only
+        kwargs["revision"] = revision
+
         use_auth_token = kwargs.pop("use_auth_token", None)
         if use_auth_token is not None:
             warnings.warn(

@@ -1616,7 +1616,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike],
+        cls,
+        pretrained_model_name_or_path: Union[str, os.PathLike],
         *init_inputs,
         cache_dir: Optional[Union[str, os.PathLike]] = None,
         force_download: bool = False,

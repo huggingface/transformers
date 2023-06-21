@@ -18,9 +18,10 @@ import gc
 import json
 import os
 import re
+import warnings
 from functools import partial
 from pickle import UnpicklingError
-from typing import Any, Dict, Set, Tuple, Union
+from typing import Any, Dict, Optional, Set, Tuple, Union
 
 import flax.linen as nn
 import jax
