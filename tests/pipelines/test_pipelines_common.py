@@ -547,7 +547,6 @@ class PipelineUtilsTest(unittest.TestCase):
     @require_torch
     @require_torch_gpu
     def test_pipeline_cuda(self):
-
         pipe = pipeline("text-generation", device="cuda")
         _ = pipe("Hello")
 
