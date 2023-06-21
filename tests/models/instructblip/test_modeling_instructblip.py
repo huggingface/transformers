@@ -452,7 +452,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unit
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
+    @unittest.skip(reason="InstructBlipForConditionalGeneration doesn't support inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
