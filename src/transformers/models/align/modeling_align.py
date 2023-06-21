@@ -30,7 +30,12 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import (
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+    torch_custom_checkpointing,
+)
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -1100,7 +1105,7 @@ class AlignTextEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = torch_custom_checkpointing(
                     create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask,

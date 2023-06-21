@@ -444,6 +444,12 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
+    @unittest.skip(
+        reason="The model does not support GC + autocast + fp16: https://github.com/huggingface/transformers/pull/24247"
+    )
+    def test_training_gradient_checkpointing_autocast(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in FNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:

@@ -28,7 +28,7 @@ from ...activations import ACT2FN
 from ...file_utils import ModelOutput
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
+from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer, torch_custom_checkpointing
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_maskformer_swin import MaskFormerSwinConfig
 
@@ -695,7 +695,7 @@ class MaskFormerSwinEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_hidden_states, output_dimensions, layer_all_hidden_states = torch.utils.checkpoint.checkpoint(
+                layer_hidden_states, output_dimensions, layer_all_hidden_states = torch_custom_checkpointing(
                     create_custom_forward(layer_module), hidden_states, layer_head_mask
                 )
             else:

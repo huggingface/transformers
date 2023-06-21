@@ -243,6 +243,12 @@ class VanModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = VanModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skip(
+        reason="The model does not support GC + autocast + fp16: https://github.com/huggingface/transformers/pull/24247"
+    )
+    def test_training_gradient_checkpointing_autocast(self):
+        pass
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():

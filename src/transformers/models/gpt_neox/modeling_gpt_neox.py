@@ -36,6 +36,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import torch_custom_checkpointing
 from ...utils import logging
 from .configuration_gpt_neox import GPTNeoXConfig
 
@@ -557,7 +558,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 
                     return custom_forward
 
-                outputs = torch.utils.checkpoint.checkpoint(
+                outputs = torch_custom_checkpointing(
                     create_custom_forward(layer),
                     hidden_states,
                     attention_mask,

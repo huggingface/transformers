@@ -28,6 +28,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import torch_custom_checkpointing
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -593,7 +594,7 @@ class FocalNetEncoder(nn.Module):
 
                     return custom_forward
 
-                stage_outputs = torch.utils.checkpoint.checkpoint(
+                stage_outputs = torch_custom_checkpointing(
                     create_custom_forward(stage_module),
                     hidden_states,
                     input_dimensions,
