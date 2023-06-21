@@ -46,7 +46,7 @@ PROCESS_INPUTS_DOCSTRING = r"""
         beam_indices (`torch.LongTensor]`, *optional*):
             Beam indices indicating to which beam hypothesis each token correspond.
         group_index (`int`, *optional*):
-            The index of beams in each groups. Optionally, use when want to use group_beam_search.
+            The index of beams in each groups. Optionally, use when group_beam_search.
 
     Return:
         `UserDict`: A dictionary composed of the fields as defined above:
