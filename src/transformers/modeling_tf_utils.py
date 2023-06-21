@@ -2895,13 +2895,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if safetensors_from_pt:
             from .modeling_tf_pytorch_utils import load_pytorch_state_dict_in_tf2_model
 
-            with safe_open(resolved_archive_file, framework="tf") as state_dict:
+            with safe_open(resolved_archive_file, framework="tf") as safetensors_archive:
                 # Load from a PyTorch checkpoint
                 # We load in TF format here because PT weights often need to be transposed, and this is much
                 # faster on GPU. Loading as numpy and transposing on CPU adds several seconds to load times.
                 return load_pytorch_state_dict_in_tf2_model(
                     model,
-                    state_dict,
+                    safetensors_archive,
                     tf_inputs=False,  # No need to build the model again
                     allow_missing_keys=True,
                     output_loading_info=output_loading_info,
