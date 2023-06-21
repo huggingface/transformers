@@ -1002,10 +1002,8 @@ def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismat
     # Read the safetensors file
     with safe_open(resolved_archive_file, framework="np") as safetensors_archive:
         mismatched_layers = []
-
         weight_names = [format_weight_name(w.name, _prefix=_prefix) for w in model.weights]
         loaded_weight_names = list(safetensors_archive.keys())
-
         # Find the missing layers from the high level list of layers
         missing_layers = list(set(weight_names) - set(loaded_weight_names))
         # Find the unexpected layers from the high level list of layers
