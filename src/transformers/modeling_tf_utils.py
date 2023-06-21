@@ -1000,42 +1000,35 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
 
 def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
     # Read the safetensors file
-    state_dict = safe_load_file(resolved_archive_file)
+    with safe_open(resolved_archive_file, framework="np") as safetensors_archive:
+        mismatched_layers = []
 
-    weight_value_tuples = []
-    mismatched_layers = []
+        weight_names = [format_weight_name(w.name, _prefix=_prefix) for w in model.weights]
+        loaded_weight_names = list(safetensors_archive.keys())
 
-    weight_names = [format_weight_name(w.name, _prefix=_prefix) for w in model.weights]
-    loaded_weight_names = list(state_dict.keys())
+        # Find the missing layers from the high level list of layers
+        missing_layers = list(set(weight_names) - set(loaded_weight_names))
+        # Find the unexpected layers from the high level list of layers
+        unexpected_layers = list(set(loaded_weight_names) - set(weight_names))
 
-    # Find the missing layers from the high level list of layers
-    missing_layers = list(set(weight_names) - set(loaded_weight_names))
-    # Find the unexpected layers from the high level list of layers
-    unexpected_layers = list(set(loaded_weight_names) - set(weight_names))
+        for weight in model.weights:
+            weight_name = format_weight_name(weight.name, _prefix=_prefix)
+            if weight_name in loaded_weight_names:
+                weight_value = safetensors_archive.get_tensor(weight_name)
+                # Check if the shape of the current weight and the one from the H5 file are different
+                if K.int_shape(weight) != weight_value.shape:
+                    # If yes we reshape the weight from the H5 file accordingly to the current weight
+                    # If the two shapes are not compatible we raise an issue
+                    try:
+                        weight_value = tf.reshape(weight_value, K.int_shape(weight))
+                    except ValueError as e:
+                        if ignore_mismatched_sizes:
+                            mismatched_layers.append((weight_name, weight_value.shape, K.int_shape(weight)))
+                            continue
+                        else:
+                            raise e
 
-    weight_value_tuples = []
-    for weight in model.weights:
-        weight_name = format_weight_name(weight.name, _prefix=_prefix)
-        if weight_name in state_dict:
-            weight_value = state_dict[weight_name]
-            # Check if the shape of the current weight and the one from the H5 file are different
-            if K.int_shape(weight) != weight_value.shape:
-                # If yes we reshape the weight from the H5 file accordingly to the current weight
-                # If the two shapes are not compatible we raise an issue
-                try:
-                    weight_value = tf.reshape(weight_value, K.int_shape(weight))
-                except ValueError as e:
-                    if ignore_mismatched_sizes:
-                        mismatched_layers.append((weight_name, weight_value.shape, K.int_shape(weight)))
-                        continue
-                    else:
-                        raise e
-
-            weight_value_tuples.append((weight, weight_value))
-
-    # Load all the weights
-    K.batch_set_value(weight_value_tuples)
-
+                K.set_value(weight, weight_value)  # weight.assign() might break if weight is a DTensor
     return missing_layers, unexpected_layers, mismatched_layers
 
 
