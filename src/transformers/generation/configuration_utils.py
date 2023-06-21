@@ -383,7 +383,11 @@ class GenerationConfig(PushToHubMixin):
         cls,
         pretrained_model_name: Union[str, os.PathLike],
         config_file_name: Optional[Union[str, os.PathLike]] = None,
+        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        force_download: bool = False,
+        local_files_only: bool = False,
         token: Optional[Union[str, bool]] = None,
+        revision: str = "main",
         **kwargs,
     ) -> "GenerationConfig":
         r"""
