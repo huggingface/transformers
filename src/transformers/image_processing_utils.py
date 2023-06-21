@@ -16,6 +16,7 @@
 import copy
 import json
 import os
+import warnings
 from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import numpy as np
@@ -81,7 +82,12 @@ class ImageProcessingMixin(PushToHubMixin):
         self._processor_class = processor_class
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs):
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Union[str, os.PathLike],
+        token: Optional[Union[str, bool]] = None,
+        **kwargs,
+    ):
         r"""
         Instantiate a type of [`~image_processing_utils.ImageProcessingMixin`] from an image processor.
 
@@ -109,7 +115,7 @@ class ImageProcessingMixin(PushToHubMixin):
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            use_auth_token (`str` or `bool`, *optional*):
+            token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
                 the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
@@ -162,6 +168,21 @@ class ImageProcessingMixin(PushToHubMixin):
         assert image_processor.do_normalize is False
         assert unused_kwargs == {"foo": False}
         ```"""
+        use_auth_token = kwargs.pop("use_auth_token", None)
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
+
+        if token is not None:
+            # change to `token` in a follow-up PR
+            kwargs["use_auth_token"] = token
+
         image_processor_dict, kwargs = cls.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
 
         return cls.from_dict(image_processor_dict, **kwargs)
