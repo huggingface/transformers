@@ -467,6 +467,33 @@ class PretrainedConfig(PushToHubMixin):
             )
 
     @classmethod
+    def _set_token_in_kwargs(self, kwargs, token=None):
+        """Temporary method to deal with `token` and `use_auth_token`.
+
+        This method is to avoid apply the same changes in all model config classes that overwrite `from_pretrained`.
+
+        Need to clean up `use_auth_token` in a follow PR.
+        """
+        # Some model config classes like CLIP define their own `from_pretrained` without the new argument `token` yet.
+        if token is None:
+            token = kwargs.pop("token", None)
+        use_auth_token = kwargs.pop("use_auth_token", None)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
+
+        if token is not None:
+            # change to `token` in a follow-up PR
+            kwargs["use_auth_token"] = token
+
+    @classmethod
     def from_pretrained(
         cls,
         pretrained_model_name_or_path: Union[str, os.PathLike],
@@ -558,20 +585,7 @@ class PretrainedConfig(PushToHubMixin):
         kwargs["local_files_only"] = local_files_only
         kwargs["revision"] = revision
 
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
-
-        if token is not None:
-            # change to `token` in a follow-up PR
-            kwargs["use_auth_token"] = token
+        cls._set_token_in_kwargs(token, **kwargs)
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
