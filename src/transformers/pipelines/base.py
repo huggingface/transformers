@@ -34,7 +34,6 @@ from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
-from ..pytorch_utils import is_torch_greater_or_equal_than_2_0
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import ModelOutput, add_end_docstrings, infer_framework, is_tf_available, is_torch_available, logging
 
@@ -51,6 +50,7 @@ if is_torch_available():
     from torch.utils.data import DataLoader, Dataset
 
     from ..models.auto.modeling_auto import AutoModel
+    from ..pytorch_utils import is_torch_greater_or_equal_than_2_0
 
     # Re-export for backward compatibility
     from .pt_utils import KeyDataset
