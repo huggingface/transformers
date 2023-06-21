@@ -793,6 +793,8 @@ class Pipeline(_ScikitCompat):
             if isinstance(device, torch.device):
                 self.device = device
             elif isinstance(device, str):
+                if device == "cuda":
+                    device = f"cuda:{torch.cuda.current_device()}"
                 self.device = torch.device(device)
             elif device < 0:
                 self.device = torch.device("cpu")
