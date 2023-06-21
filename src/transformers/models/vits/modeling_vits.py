@@ -84,13 +84,12 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-#TODO: make betterer
 @torch.jit.script
-def fused_add_tanh_sigmoid_multiply(input_a, input_b, n_channels):
-    n_channels_int = n_channels[0]
+def fused_add_tanh_sigmoid_multiply(input_a, input_b, num_channels):
+    num_channels_int = num_channels[0]
     in_act = input_a + input_b
-    t_act = torch.tanh(in_act[:, :n_channels_int, :])
-    s_act = torch.sigmoid(in_act[:, n_channels_int:, :])
+    t_act = torch.tanh(in_act[:, :num_channels_int, :])
+    s_act = torch.sigmoid(in_act[:, num_channels_int:, :])
     acts = t_act * s_act
     return acts
 
@@ -268,7 +267,7 @@ class VitsWaveNet(torch.nn.Module):
 
         for i in range(num_layers):
             dilation = config.wavenet_dilation_rate ** i
-            padding = int((config.wavenet_kernel_size * dilation - dilation) / 2)
+            padding = (config.wavenet_kernel_size * dilation - dilation) // 2
             in_layer = torch.nn.Conv1d(
                 in_channels=config.hidden_size,
                 out_channels=2*config.hidden_size,
@@ -291,27 +290,28 @@ class VitsWaveNet(torch.nn.Module):
 
     def forward(self, inputs, padding_mask, global_conditioning=None):
         outputs = torch.zeros_like(inputs)
-        n_channels_tensor = torch.IntTensor([self.hidden_size])
+        num_channels_tensor = torch.IntTensor([self.hidden_size])
 
         if global_conditioning is not None:
             global_conditioning = self.cond_layer(global_conditioning)
 
         for i in range(self.num_layers):
-            x_in = self.in_layers[i](inputs)
+            hidden_states = self.in_layers[i](inputs)
+
             if global_conditioning is not None:
                 cond_offset = i * 2 * self.hidden_size
-                g_l = global_conditioning[:,cond_offset:cond_offset+2*self.hidden_size,:]
+                global_states = global_conditioning[:, cond_offset : cond_offset + 2 * self.hidden_size, :]
             else:
-                g_l = torch.zeros_like(x_in)
+                global_states = torch.zeros_like(hidden_states)
 
-            acts = fused_add_tanh_sigmoid_multiply(x_in, g_l, n_channels_tensor)
+            acts = fused_add_tanh_sigmoid_multiply(hidden_states, global_states, num_channels_tensor)
             acts = self.dropout(acts)
 
             res_skip_acts = self.res_skip_layers[i](acts)
             if i < self.num_layers - 1:
-                res_acts = res_skip_acts[:,:self.hidden_size,:]
+                res_acts = res_skip_acts[:, :self.hidden_size, :]
                 inputs = (inputs + res_acts) * padding_mask
-                outputs = outputs + res_skip_acts[:,self.hidden_size:,:]
+                outputs = outputs + res_skip_acts[:, self.hidden_size:, :]
             else:
                 outputs = outputs + res_skip_acts
 
@@ -320,10 +320,10 @@ class VitsWaveNet(torch.nn.Module):
     def remove_weight_norm(self):
         if self.speaker_embedding_channels != 0:
             torch.nn.utils.remove_weight_norm(self.cond_layer)
-        for l in self.in_layers:
-            torch.nn.utils.remove_weight_norm(l)
-        for l in self.res_skip_layers:
-            torch.nn.utils.remove_weight_norm(l)
+        for layer in self.in_layers:
+            torch.nn.utils.remove_weight_norm(layer)
+        for layer in self.res_skip_layers:
+            torch.nn.utils.remove_weight_norm(layer)
 
 
 class VitsResidualCouplingLayer(nn.Module):
@@ -352,8 +352,8 @@ class VitsResidualCouplingLayer(nn.Module):
         if not reverse:
             x1 = m + x1 * torch.exp(logs) * padding_mask
             outputs = torch.cat([x0, x1], 1)
-            logdet = torch.sum(logs, [1,2])
-            return outputs, logdet
+            log_determinant = torch.sum(logs, [1,2])
+            return outputs, log_determinant
         else:
             x1 = (x1 - m) * torch.exp(-logs) * padding_mask
             outputs = torch.cat([x0, x1], 1)
@@ -651,8 +651,8 @@ class VitsConvFlow(nn.Module):
 
         outputs = torch.cat([x0, x1], 1) * padding_mask
         if not reverse:
-            logdet = torch.sum(logabsdet * padding_mask, [1, 2])
-            return outputs, logdet
+            log_determinant = torch.sum(logabsdet * padding_mask, [1, 2])
+            return outputs, log_determinant
         else:
             return outputs
 
@@ -661,8 +661,8 @@ class VitsLog(nn.Module):
     def forward(self, inputs, padding_mask, reverse=False, **kwargs):
         if not reverse:
             outputs = torch.log(torch.clamp_min(inputs, 1e-5)) * padding_mask
-            logdet = torch.sum(-y, [1, 2])
-            return outputs, logdet
+            log_determinant = torch.sum(-y, [1, 2])
+            return outputs, log_determinant
         else:
             outputs = torch.exp(inputs) * padding_mask
             return outputs
@@ -672,8 +672,8 @@ class VitsFlip(nn.Module):
     def forward(self, inputs, *args, reverse=False, **kwargs):
         outputs = torch.flip(inputs, [1])
         if not reverse:
-            logdet = torch.zeros(outputs.size(0)).to(dtype=outputs.dtype, device=outputs.device)
-            return outputs, logdet
+            log_determinant = torch.zeros(outputs.size(0)).to(dtype=outputs.dtype, device=outputs.device)
+            return outputs, log_determinant
         else:
             return outputs
 
@@ -689,8 +689,8 @@ class VitsElementwiseAffine(nn.Module):
         if not reverse:
             outputs = self.m + torch.exp(self.logs) * inputs
             outputs = outputs * padding_mask
-            logdet = torch.sum(self.logs * padding_mask, [1,2])
-            return outputs, logdet
+            log_determinant = torch.sum(self.logs * padding_mask, [1,2])
+            return outputs, log_determinant
         else:
             outputs = (inputs - self.m) * torch.exp(-self.logs) * padding_mask
             return outputs
