@@ -493,7 +493,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         local_files_only: bool = False,
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
-        use_safetensors: bool = None,
         **kwargs,
     ):
         r"""
