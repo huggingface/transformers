@@ -21,8 +21,13 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_bark": ["BARK_PRETRAINED_CONFIG_ARCHIVE_MAP", "BarkConfig",
-                           "BarkSemanticConfig", "BarkCoarseAcousticsConfig", "BarkFineAcousticsConfig"],
+    "configuration_bark": [
+        "BARK_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BarkCoarseAcousticsConfig",
+        "BarkConfig",
+        "BarkFineAcousticsConfig",
+        "BarkSemanticConfig",
+    ],
     "processing_bark": ["BarkProcessor"],
 }
 
@@ -42,7 +47,13 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_bark import BARK_PRETRAINED_CONFIG_ARCHIVE_MAP, BarkConfig, BarkSemanticConfig, BarkCoarseAcousticsConfig, BarkFineAcousticsConfig
+    from .configuration_bark import (
+        BARK_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BarkCoarseAcousticsConfig,
+        BarkConfig,
+        BarkFineAcousticsConfig,
+        BarkSemanticConfig,
+    )
 
     try:
         if not is_torch_available():
@@ -53,10 +64,10 @@ if TYPE_CHECKING:
         from .modeling_bark import (
             BARK_PRETRAINED_MODEL_ARCHIVE_LIST,
             BarkCoarseAcousticsModule,
-            BarkSemanticModule,
             BarkFineAcousticsModule,
             BarkModel,
             BarkPreTrainedModel,
+            BarkSemanticModule,
         )
 
 else:

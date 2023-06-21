@@ -16,11 +16,11 @@
 
 import copy
 import os
+from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-from typing import Union
 
 logger = logging.get_logger(__name__)
 
@@ -28,9 +28,7 @@ logger = logging.get_logger(__name__)
 BARK_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "ylacombe/bark-small": "https://huggingface.co/ylacombe/bark-small/resolve/main/config.json",
     "ylacombe/bark-large": "https://huggingface.co/ylacombe/bark-large/resolve/main/config.json",
-
 }
-
 
 
 class BarkModuleConfig(PretrainedConfig):
@@ -95,11 +93,13 @@ class BarkModuleConfig(PretrainedConfig):
     model_type = "bark_module"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    attribute_map = {"num_attention_heads": "num_heads", 
-                     "num_hidden_layers": "num_layers",
-                     "vocab_size": "input_vocab_size",
-                     "window_size": "block_size"}
-    
+    attribute_map = {
+        "num_attention_heads": "num_heads",
+        "num_hidden_layers": "num_layers",
+        "vocab_size": "input_vocab_size",
+        "window_size": "block_size",
+    }
+
     def __init__(
         self,
         block_size=1024,
@@ -146,22 +146,22 @@ class BarkModuleConfig(PretrainedConfig):
             )
 
         return cls.from_dict(config_dict, **kwargs)
-    
+
+
 class BarkSemanticConfig(BarkModuleConfig):
     model_type = "semantic"
+
 
 class BarkCoarseAcousticsConfig(BarkModuleConfig):
     model_type = "coarse_acoustics"
 
+
 class BarkFineAcousticsConfig(BarkModuleConfig):
     model_type = "fine_acoustics"
-    def __init__(self,
-                 *args, 
-                 tie_word_embeddings = True, 
-                 **kwargs):
-        super().__init__(*args,
-                         tie_word_embeddings=tie_word_embeddings, 
-                         **kwargs)
+
+    def __init__(self, *args, tie_word_embeddings=True, **kwargs):
+        super().__init__(*args, tie_word_embeddings=tie_word_embeddings, **kwargs)
+
 
 class BarkConfig(PretrainedConfig):
     """
@@ -290,4 +290,3 @@ class BarkConfig(PretrainedConfig):
 
         output["model_type"] = self.__class__.model_type
         return output
-

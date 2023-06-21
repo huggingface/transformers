@@ -15,23 +15,23 @@
 """
 Processor class for Bark
 """
-from ...processing_utils import ProcessorMixin
-from ..auto import AutoTokenizer
-from typing import Optional, Tuple
-import warnings
-from ...utils.hub import cached_file
+from typing import Optional
+
 import numpy as np
+
+from ...processing_utils import ProcessorMixin
+from ...utils.hub import cached_file
+from ..auto import AutoTokenizer
 
 
 class BarkProcessor(ProcessorMixin):
     r"""
-    Constructs a Bark processor which wraps a Bark voice preset and a text tokenizer into a single
-    processor.
+    Constructs a Bark processor which wraps a Bark voice preset and a text tokenizer into a single processor.
 
     Args:
         tokenizer ([`PreTrainedTokenizer`], *optional*):
-            An instance of [`PreTrainedTokenizer`]. The tokenizer is optional. 
-            By default, it will instantiated as "bert-base-multilingual-cased".
+            An instance of [`PreTrainedTokenizer`]. The tokenizer is optional. By default, it will instantiated as
+            "bert-base-multilingual-cased".
         repo_id (`str`, *optional*, defaults to ""):
             This can be either:
 
@@ -43,59 +43,62 @@ class BarkProcessor(ProcessorMixin):
     """
     tokenizer_class = "AutoTokenizer"
     attributes = ["tokenizer"]
-    
+
     preset_shape = {
-        "semantic_prompt" : 1,
-        "coarse_prompt" : 2,
-        "fine_prompt" : 2,
+        "semantic_prompt": 1,
+        "coarse_prompt": 2,
+        "fine_prompt": 2,
     }
 
-    def __init__(self, tokenizer: Optional[AutoTokenizer] = None, repo_id = "", subfolder = "",
-                 **kwargs):
+    def __init__(self, tokenizer: Optional[AutoTokenizer] = None, repo_id="", subfolder="", **kwargs):
         if tokenizer is None:
             tokenizer = AutoTokenizer.from_pretrained("bert-base-multilingual-cased")
         super().__init__(tokenizer)
-        
-        
+
         self.repo_id = repo_id
         self.subfolder = subfolder
 
-
     @classmethod
-    def from_pretrained(cls, pretrained_tokenizer_name_or_path, repo_id = None, subfolder = "speaker_embeddings", **kwargs):
-        """Same initialization than __init__ except that you can specify the tokenizer name or path instead of passing a 
+    def from_pretrained(
+        cls, pretrained_tokenizer_name_or_path, repo_id=None, subfolder="speaker_embeddings", **kwargs
+    ):
+        """Same initialization than __init__ except that you can specify the tokenizer name or path instead of passing a
         [`PreTrainedTokenizer`].
         """
 
         tokenizer = AutoTokenizer.from_pretrained(pretrained_tokenizer_name_or_path, **kwargs)
-        
 
-        return cls(tokenizer=tokenizer,
-                    repo_id = repo_id,
-                    subfolder = subfolder,
-                    **kwargs)
-        
+        return cls(tokenizer=tokenizer, repo_id=repo_id, subfolder=subfolder, **kwargs)
+
     def _validate_voice_preset_dict(cls, voice_preset: Optional[dict] = None):
         if voice_preset is None:
             return
         for key in ["semantic_prompt", "coarse_prompt", "fine_prompt"]:
             if key not in voice_preset:
                 raise ValueError(f"Voice preset unrecognized, missing {key} as a key.")
-            
+
             if not isinstance(voice_preset[key], np.ndarray):
                 raise ValueError(f"{key} voice preset must be a {str(cls.preset_shape[key])}D ndarray.")
-            
+
             if len(voice_preset[key].shape) != cls.preset_shape[key]:
                 raise ValueError(f"{key} voice preset must be a {str(cls.preset_shape[key])}D ndarray.")
-        
-    def __call__(self, text=None, voice_preset=None, return_tensors="pt", max_length = 256, add_special_tokens=False, 
-                 return_attention_mask = True, return_token_type_ids = False,**kwargs):
+
+    def __call__(
+        self,
+        text=None,
+        voice_preset=None,
+        return_tensors="pt",
+        max_length=256,
+        add_special_tokens=False,
+        return_attention_mask=True,
+        return_token_type_ids=False,
+        **kwargs,
+    ):
         """
-        Main method to prepare for the model one or several sequences(s). This method forwards the `text`
-        and `kwargs` arguments to the AutoTokenizer's [`~AutoTokenizer.__call__`] to encode the text. 
-        The method also proposes a voice preset which is a dictionary of arrays that conditions `Bark`'s output.  
-        `kwargs` arguments are forwarded to the tokenizer and to `cached_file` if `voice_preset` 
-        ... TODO
+        Main method to prepare for the model one or several sequences(s). This method forwards the `text` and `kwargs`
+        arguments to the AutoTokenizer's [`~AutoTokenizer.__call__`] to encode the text. The method also proposes a
+        voice preset which is a dictionary of arrays that conditions `Bark`'s output. `kwargs` arguments are forwarded
+        to the tokenizer and to `cached_file` if `voice_preset` ... TODO
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
@@ -114,20 +117,22 @@ class BarkProcessor(ProcessorMixin):
                 - `'np'`: Return NumPy `np.ndarray` objects.
 
         Returns:
-            Tuple...
-            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
+            Tuple... [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
 
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
         """
         if voice_preset is None or isinstance(voice_preset, dict):
-            pass            
+            pass
         else:
-            # if not dict, either 
+            # if not dict, either
             if isinstance(voice_preset, str) and not voice_preset.endswith(".npz"):
                 voice_preset = voice_preset + ".npz"
-            
-            file_path = cached_file(self.repo_id, voice_preset, subfolder = self.subfolder,
+
+            file_path = cached_file(
+                self.repo_id,
+                voice_preset,
+                subfolder=self.subfolder,
                 cache_dir=kwargs.pop("cache_dir", None),
                 force_download=kwargs.pop("force_download", False),
                 proxies=kwargs.pop("proxies", None),
@@ -137,14 +142,19 @@ class BarkProcessor(ProcessorMixin):
                 user_agent=kwargs.pop("user_agent", None),
                 revision=kwargs.pop("revision", None),
                 repo_type=kwargs.pop("repo_type", None),
-            )            
+            )
             voice_preset = np.load(file_path)
-            
-                    
+
         self._validate_voice_preset_dict(voice_preset)
-        encoded_text = self.tokenizer(text, return_tensors=return_tensors, padding = "max_length"
-                                      , max_length = max_length, return_attention_mask = return_attention_mask, return_token_type_ids = return_token_type_ids,
-                                      add_special_tokens=add_special_tokens,
-                                      **kwargs)    
-        
+        encoded_text = self.tokenizer(
+            text,
+            return_tensors=return_tensors,
+            padding="max_length",
+            max_length=max_length,
+            return_attention_mask=return_attention_mask,
+            return_token_type_ids=return_token_type_ids,
+            add_special_tokens=add_special_tokens,
+            **kwargs,
+        )
+
         return encoded_text, voice_preset

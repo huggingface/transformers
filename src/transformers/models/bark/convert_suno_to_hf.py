@@ -10,8 +10,16 @@ from huggingface_hub import hf_hub_download
 from transformers import set_seed
 
 # TODO : how to import directly?
-from transformers.models.bark.configuration_bark import BarkSemanticConfig, BarkCoarseAcousticsConfig, BarkFineAcousticsConfig
-from transformers.models.bark.modeling_bark import BarkSemanticModule, BarkCoarseAcousticsModule, BarkFineAcousticsModule
+from transformers.models.bark.configuration_bark import (
+    BarkCoarseAcousticsConfig,
+    BarkFineAcousticsConfig,
+    BarkSemanticConfig,
+)
+from transformers.models.bark.modeling_bark import (
+    BarkCoarseAcousticsModule,
+    BarkFineAcousticsModule,
+    BarkSemanticModule,
+)
 from transformers.utils import logging
 
 
@@ -162,7 +170,7 @@ def load_model(pytorch_dump_folder_path, use_small=False, model_type="text"):
         output_old_model = bark_model(vec)[0]
 
         output_new_model_total = model(vec)
-        
+
         # take last logits
         output_new_model = output_new_model_total.logits[:, [-1], :]
 
@@ -173,7 +181,7 @@ def load_model(pytorch_dump_folder_path, use_small=False, model_type="text"):
 
         output_new_model_total = model(prediction_codeboook_channel, vec)
         output_old_model = bark_model(prediction_codeboook_channel, vec)
-        
+
         output_new_model = output_new_model_total.logits
 
     # output difference should come from the difference of self-attention implementation design
