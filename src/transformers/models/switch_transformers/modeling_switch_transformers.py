@@ -23,7 +23,6 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
-from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -33,7 +32,12 @@ from ...modeling_outputs import (
     Seq2SeqMoEOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import (
+    ALL_LAYERNORM_LAYERS,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+    torch_custom_checkpointing,
+)
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -1075,7 +1079,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = checkpoint(
+                layer_outputs = torch_custom_checkpointing(
                     create_custom_forward(layer_module),
                     hidden_states,
                     extended_attention_mask,

@@ -26,6 +26,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import torch_custom_checkpointing
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -708,7 +709,7 @@ class XCLIPEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = torch_custom_checkpointing(
                     create_custom_forward(encoder_layer),
                     hidden_states,
                     attention_mask,
@@ -955,7 +956,7 @@ class XCLIPVisionEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = torch_custom_checkpointing(
                     create_custom_forward(encoder_layer),
                     hidden_states,
                     attention_mask,

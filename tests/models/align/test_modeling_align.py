@@ -352,6 +352,12 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="The model does not support GC + autocast + fp16: https://github.com/huggingface/transformers/pull/24247"
+    )
+    def test_training_gradient_checkpointing_autocast(self):
+        pass
+
     @unittest.skip(reason="ALIGN does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass

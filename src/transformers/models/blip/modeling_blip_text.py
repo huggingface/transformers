@@ -34,6 +34,7 @@ from ...modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
+from ...pytorch_utils import torch_custom_checkpointing
 from ...utils import logging
 from .configuration_blip import BlipTextConfig
 
@@ -427,7 +428,7 @@ class BlipTextEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = torch_custom_checkpointing(
                     create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask,

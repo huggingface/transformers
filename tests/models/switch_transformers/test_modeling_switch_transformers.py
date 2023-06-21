@@ -613,6 +613,12 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    @unittest.skip(
+        reason="The model does not support GC + autocast + fp16: https://github.com/huggingface/transformers/pull/24247"
+    )
+    def test_training_gradient_checkpointing_autocast(self):
+        pass
+
     @slow
     def test_beam_sample_generate_dict_output(self):
         r"""

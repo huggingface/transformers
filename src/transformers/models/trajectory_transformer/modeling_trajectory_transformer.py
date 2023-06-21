@@ -26,6 +26,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import torch_custom_checkpointing
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -556,7 +557,7 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
 
                     return custom_forward
 
-                outputs = torch.utils.checkpoint.checkpoint(
+                outputs = torch_custom_checkpointing(
                     create_custom_forward(block),
                     hidden_states,
                     layer_past,
