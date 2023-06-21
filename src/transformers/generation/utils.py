@@ -2055,7 +2055,6 @@ class GenerationMixin:
                         return_dict=True, 
                         output_hidden_states=True, 
                         output_attentions=output_attentions,
-                        past_key_values=model.past_key_values
                     )
                     for key in all_outputs:
                         all_outputs[key].append(outputs[key])
