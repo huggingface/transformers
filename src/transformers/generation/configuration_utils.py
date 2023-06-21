@@ -142,11 +142,8 @@ class GenerationConfig(PushToHubMixin):
         no_repeat_ngram_size (`int`, *optional*, defaults to 0):
             If set to int > 0, all ngrams of that size can only occur once.
         bad_words_ids(`List[List[int]]`, *optional*):
-            List of token ids that are not allowed to be generated. In order to get the token ids of the words that
-            should not appear in the generated text, make sure to set `add_prefix_space=True` when initializing the
-            tokenizer, and use `tokenizer(bad_words, add_special_tokens=False).input_ids`. The `add_prefix_space`
-            argument is only supported for some slow tokenizers, as fast tokenizers' prefixing behaviours come from
-            `pre tokenizers`. Read more [here](https://huggingface.co/docs/tokenizers/api/pre-tokenizers).
+            List of list of token ids that are not allowed to be generated. Check
+            [`~generation.NoBadWordsLogitsProcessor`] for further documentation and examples.
         force_words_ids(`List[List[int]]` or `List[List[List[int]]]`, *optional*):
             List of token ids that must be generated. If given a `List[List[int]]`, this is treated as a simple list of
             words that must be included, the opposite to `bad_words_ids`. If given `List[List[List[int]]]`, this
@@ -183,6 +180,10 @@ class GenerationConfig(PushToHubMixin):
             A list of pairs of integers which indicates a mapping from generation indices to token indices that will be
             forced before sampling. For example, `[[1, 123]]` means the second generated token will always be a token
             of index 123.
+        sequence_bias (`Dict[Tuple[int], float]`, *optional*)):
+            Dictionary that maps a sequence of tokens to its bias term. Positive biases increase the odds of the
+            sequence being selected, while negative biases do the opposite. Check
+            [`~generation.SequenceBiasLogitsProcessor`] for further documentation and examples.
 
         > Parameters that define the output variables of `generate`
 
@@ -262,6 +263,7 @@ class GenerationConfig(PushToHubMixin):
         self.suppress_tokens = kwargs.pop("suppress_tokens", None)
         self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
         self.forced_decoder_ids = kwargs.pop("forced_decoder_ids", None)
+        self.sequence_bias = kwargs.pop("sequence_bias", None)
 
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
