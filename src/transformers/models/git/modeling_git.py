@@ -34,7 +34,12 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import (
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+    torch_custom_checkpointing,
+)
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_git import GitConfig, GitVisionConfig
 
@@ -457,7 +462,7 @@ class GitEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = torch_custom_checkpointing(
                     create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask,
@@ -883,7 +888,7 @@ class GitVisionEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = torch_custom_checkpointing(
                     create_custom_forward(encoder_layer),
                     hidden_states,
                     attention_mask,

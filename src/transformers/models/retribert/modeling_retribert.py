@@ -21,10 +21,10 @@ import math
 from typing import Optional
 
 import torch
-import torch.utils.checkpoint as checkpoint
 from torch import nn
 
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import torch_custom_checkpointing
 from ...utils import add_start_docstrings, logging
 from ..bert.modeling_bert import BertModel
 from .configuration_retribert import RetriBertConfig
@@ -141,7 +141,7 @@ class RetriBertModel(RetriBertPreTrainedModel):
             for b in range(math.ceil(input_ids.shape[0] / checkpoint_batch_size)):
                 b_embedding_output = embedding_output[b * checkpoint_batch_size : (b + 1) * checkpoint_batch_size]
                 b_attention_mask = extended_attention_mask[b * checkpoint_batch_size : (b + 1) * checkpoint_batch_size]
-                pooled_output = checkpoint.checkpoint(partial_encode, b_embedding_output, b_attention_mask)
+                pooled_output = torch_custom_checkpointing(partial_encode, b_embedding_output, b_attention_mask)
                 pooled_output_list.append(pooled_output)
             return torch.cat(pooled_output_list, dim=0)
 
