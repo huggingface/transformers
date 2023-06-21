@@ -530,6 +530,7 @@ _import_structure = {
     "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+    "models.restormer": ["RESTORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RestormerConfig"],
     "models.vit_hybrid": ["VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTHybridConfig"],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
@@ -2707,6 +2708,15 @@ else:
             "ViTPreTrainedModel",
         ]
     )
+    _import_structure["models.restormer"].extend(
+        [
+            "RESTORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RestormerForImageClassification",
+            "RestormerForMaskedImageModeling",
+            "RestormerModel",
+            "RestormerPreTrainedModel",
+        ]
+    )
     _import_structure["models.vit_hybrid"].extend(
         [
             "VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4341,6 +4351,7 @@ if TYPE_CHECKING:
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+    from .models.restormer import RESTORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RestormerConfig
     from .models.vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
@@ -6143,6 +6154,13 @@ if TYPE_CHECKING:
             ViTForMaskedImageModeling,
             ViTModel,
             ViTPreTrainedModel,
+        )
+        from .models.restormer import (
+            RESTORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RestormerForImageClassification,
+            RestormerForMaskedImageModeling,
+            RestormerModel,
+            RestormerPreTrainedModel,
         )
         from .models.vit_hybrid import (
             VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST,
