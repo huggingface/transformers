@@ -246,7 +246,7 @@ class BeamSearchScorer(BeamScorer):
             eos_token_id = [eos_token_id]
 
         for batch_idx in range(batch_size):
-            batch_group_idx = batch_idx*self.num_beam_groups+group_index
+            batch_group_idx = batch_idx * self.num_beam_groups + group_index
             if self._done[batch_group_idx]:
                 if self.num_beams < len(self._beam_hyps[batch_group_idx]):
                     raise ValueError(f"Batch can only be done if at least {self.num_beams} beams have been generated")
@@ -323,7 +323,7 @@ class BeamSearchScorer(BeamScorer):
         eos_token_id: Optional[Union[int, List[int]]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.LongTensor]:
-        batch_size = len(self._beam_hyps)//self.num_beam_groups
+        batch_size = len(self._beam_hyps) // self.num_beam_groups
 
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
