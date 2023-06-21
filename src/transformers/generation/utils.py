@@ -2054,7 +2054,7 @@ class GenerationMixin:
                         **next_model_inputs, 
                         return_dict=True, 
                         output_hidden_states=True, 
-                        output_attentions=output_attentions
+                        output_attentions=output_attentions,
                     )
                     for key in all_outputs:
                         all_outputs[key].append(outputs[key])
@@ -2079,9 +2079,23 @@ class GenerationMixin:
                                                                             for i in range(top_k)], dim=0)
                 full_hidden_states = tuple(final_full_hstates)
 
-                # stack all_outputs attentions
                 for key in all_outputs:
-                    if torch.is_tensor(all_outputs[key]):
+                    # rebuild key value output 
+                    if key == 'past_key_values':
+                        pass
+                        # layers_kv = []
+                        # for layer in range(len(all_outputs[key][0])):
+                        #     kv = []
+                        #     kv.append(torch.cat([all_outputs[key][seq][layer][0] 
+                        #         for seq in range(len(all_outputs[key]))], dim=0))
+
+                        #     kv.append(torch.cat([all_outputs[key][seq][layer][1] 
+                        #         for seq in range(len(all_outputs[key]))], dim=0))
+
+                        #     layers_kv.append(tuple(kv))
+                        # outputs[key] = tuple(layers_kv)
+
+                    elif torch.is_tensor(all_outputs[key]):
                         outputs[key] = torch.stack(all_outputs[key], dim=0)
 
                 # stack logits
@@ -2106,9 +2120,14 @@ class GenerationMixin:
                     next_hidden = outputs.hidden_states[-1]
                     full_hidden_states = outputs.hidden_states
 
-                logits = outputs.logits[:, -1, :]
+                next_hidden = next_hidden #+ (torch.randn(next_hidden.shape)/100).to(input_ids.device)
+                final = []
+                for i in range(len(full_hidden_states)):
+                    final.append(full_hidden_states[i]) #+ (torch.randn(full_hidden_states[i].shape)/100).to(input_ids.device))
+                full_hidden_states = tuple(final)
 
-            next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
+                logits = outputs.logits[:, -1, :] #+ torch.randn(outputs.logits[:, -1, :].shape).to(inputs_ids.device)
+
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
 
             # compute the degeneration penalty and re-rank the candidates based on the degeneration penalty and the
@@ -2129,16 +2148,29 @@ class GenerationMixin:
                 next_decoder_hidden_states += (layer,)
 
             # select the past_key_value
-            new_key_values = ()
-            for layer in next_past_key_values:
-                items = ()
-                # item is either the key or the value matrix
-                for item in layer:
-                    item = torch.stack(torch.split(item, top_k, dim=0))  # [B, K, num_head, seq_len, esz]
-                    item = item[range(batch_size), selected_idx, ...]  # [B, num_head, seq_len, esz]
-                    items += (item,)
-                new_key_values += (items,)
-            next_past_key_values = new_key_values
+            if low_memory:
+                next_model_input = self.prepare_inputs_for_generation(top_k_ids[:, selected_idx].unsqueeze(0), 
+                                                **model_kwargs)
+                selected_outputs = self(
+                    **next_model_input, 
+                    return_dict=True, 
+                    output_hidden_states=False, 
+                    output_attentions=False,
+                )
+                next_past_key_values = selected_outputs['past_key_values']
+
+            else:
+                next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
+                new_key_values = ()
+                for layer in next_past_key_values:
+                    items = ()
+                    # item is either the key or the value matrix
+                    for item in layer:
+                        item = torch.stack(torch.split(item, top_k, dim=0))  # [B, K, num_head, seq_len, esz]
+                        item = item[range(batch_size), selected_idx, ...]  # [B, num_head, seq_len, esz]
+                        items += (item,)
+                    new_key_values += (items,)
+                next_past_key_values = new_key_values
 
             logit_for_next_step = torch.stack(torch.split(logits, top_k))[range(batch_size), selected_idx, :]
 
