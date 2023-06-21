@@ -1025,7 +1025,7 @@ class BarkModel(BarkPreTrainedModel):
         
         input_ids = input_ids + self.config.text_encoding_offset
         
-        if "attention_mask" in kwargs:
+        if kwargs.get("attention_mask", None) is not None:
             input_ids.masked_fill_((1 - kwargs.pop("attention_mask")).bool(), self.config.text_pad_token)
             
         if history_prompt is not None:
