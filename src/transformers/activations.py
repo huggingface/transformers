@@ -46,15 +46,6 @@ class PytorchGELUTanh(nn.Module):
         return nn.functional.gelu(input, approximate="tanh")
 
 
-class NewGELUActivation(nn.Module):
-    """
-    Implementation of the GELU activation function currently in Google BERT repo (identical to OpenAI GPT). Also see
-    the Gaussian Error Linear Units paper: https://arxiv.org/abs/1606.08415
-    """
-
-    def forward(self, input: Tensor) -> Tensor:
-        return 0.5 * input * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
-
 
 class GELUActivation(nn.Module):
     """
@@ -214,7 +205,7 @@ ACT2CLS = {
     "gelu": GELUActivation,
     "gelu_10": (ClippedGELUActivation, {"min": -10, "max": 10}),
     "gelu_fast": FastGELUActivation,
-    "gelu_new": NewGELUActivation,
+    "gelu_new": nn.GELU,
     "gelu_python": (GELUActivation, {"use_gelu_python": True}),
     "gelu_pytorch_tanh": PytorchGELUTanh,
     "gelu_accurate": AccurateGELUActivation,
