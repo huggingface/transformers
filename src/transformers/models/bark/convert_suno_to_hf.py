@@ -162,6 +162,9 @@ def load_model(pytorch_dump_folder_path, use_small=False, model_type="text"):
         output_old_model = bark_model(vec)[0]
 
         output_new_model_total = model(vec)
+        
+        # take last logits
+        output_new_model = output_new_model_total.logits[:, [-1], :]
 
     else:
         prediction_codeboook_channel = 3
@@ -170,8 +173,8 @@ def load_model(pytorch_dump_folder_path, use_small=False, model_type="text"):
 
         output_new_model_total = model(prediction_codeboook_channel, vec)
         output_old_model = bark_model(prediction_codeboook_channel, vec)
-
-    output_new_model = output_new_model_total.logits
+        
+        output_new_model = output_new_model_total.logits
 
     # output difference should come from the difference of self-attention implementation design
     assert output_new_model.shape == output_old_model.shape, "initial and new outputs don't have the same shape"
