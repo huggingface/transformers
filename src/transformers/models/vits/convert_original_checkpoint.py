@@ -139,11 +139,11 @@ MAPPING_GENERATOR = {
     "dec.cond" : "decoder.cond",  # num_speakers > 1
 }
 MAPPING_POSTERIOR_ENCODER = {
-    "enc_q.pre" : "posterior_encoder.pre",
-    "enc_q.enc.in_layers.*" : "posterior_encoder.enc.in_layers.*",
-    "enc_q.enc.res_skip_layers.*" : "posterior_encoder.enc.res_skip_layers.*",
-    "enc_q.proj" : "posterior_encoder.proj",
-    "enc_q.enc.cond_layer" : "posterior_encoder.enc.cond_layer",  # num_speakers > 1
+    "enc_q.pre" : "posterior_encoder.conv_pre",
+    "enc_q.enc.in_layers.*" : "posterior_encoder.wavenet.in_layers.*",
+    "enc_q.enc.res_skip_layers.*" : "posterior_encoder.wavenet.res_skip_layers.*",
+    "enc_q.enc.cond_layer" : "posterior_encoder.wavenet.cond_layer",  # num_speakers > 1
+    "enc_q.proj" : "posterior_encoder.conv_proj",
 }
 MAPPING = {
     **MAPPING_TEXT_ENCODER,

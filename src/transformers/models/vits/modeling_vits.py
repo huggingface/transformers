@@ -112,17 +112,17 @@ class VitsPosteriorEncoder(nn.Module):
         super().__init__()
         self.out_channels = config.inter_channels
 
-        self.pre = nn.Conv1d(config.spec_channels, config.hidden_size, 1)
-        self.enc = VitsWaveNet(config, num_layers=16)
-        self.proj = nn.Conv1d(config.hidden_size, self.out_channels * 2, 1)
+        self.conv_pre = nn.Conv1d(config.spec_channels, config.hidden_size, 1)
+        self.wavenet = VitsWaveNet(config, num_layers=16)
+        self.conv_proj = nn.Conv1d(config.hidden_size, self.out_channels * 2, 1)
 
-    def forward(self, x, x_mask, global_conditioning=None):
-        x = self.pre(x) * x_mask
-        x = self.enc(x, x_mask, global_conditioning)
-        stats = self.proj(x) * x_mask
-        m, logs = torch.split(stats, self.out_channels, dim=1)
-        z = (m + torch.randn_like(m) * torch.exp(logs)) * x_mask
-        return z, m, logs
+    def forward(self, inputs, padding_mask, global_conditioning=None):
+        inputs = self.conv_pre(inputs) * padding_mask
+        inputs = self.wavenet(inputs, padding_mask, global_conditioning)
+        stats = self.conv_proj(inputs) * padding_mask
+        mean, log_stddev = torch.split(stats, self.out_channels, dim=1)
+        z = (mean + torch.randn_like(mean) * torch.exp(log_stddev)) * padding_mask
+        return z, mean, log_stddev
 
 
 class VitsResBlock1(torch.nn.Module):
@@ -148,19 +148,19 @@ class VitsResBlock1(torch.nn.Module):
         ])
         self.convs2.apply(init_weights)
 
-    def forward(self, x, x_mask=None):
+    def forward(self, x, padding_mask=None):
         for c1, c2 in zip(self.convs1, self.convs2):
             xt = nn.functional.leaky_relu(x, LRELU_SLOPE)
-            if x_mask is not None:
-                xt = xt * x_mask
+            if padding_mask is not None:
+                xt = xt * padding_mask
             xt = c1(xt)
             xt = nn.functional.leaky_relu(xt, LRELU_SLOPE)
-            if x_mask is not None:
-                xt = xt * x_mask
+            if padding_mask is not None:
+                xt = xt * padding_mask
             xt = c2(xt)
             x = xt + x
-        if x_mask is not None:
-            x = x * x_mask
+        if padding_mask is not None:
+            x = x * padding_mask
         return x
 
     def remove_weight_norm(self):
@@ -181,15 +181,15 @@ class VitsResBlock2(torch.nn.Module):
         ])
         self.convs.apply(init_weights)
 
-    def forward(self, x, x_mask=None):
+    def forward(self, x, padding_mask=None):
         for c in self.convs:
             xt = nn.functional.leaky_relu(x, LRELU_SLOPE)
-            if x_mask is not None:
-                xt = xt * x_mask
+            if padding_mask is not None:
+                xt = xt * padding_mask
             xt = c(xt)
             x = xt + x
-        if x_mask is not None:
-            x = x * x_mask
+        if padding_mask is not None:
+            x = x * padding_mask
         return x
 
     def remove_weight_norm(self):
@@ -289,7 +289,7 @@ class VitsWaveNet(torch.nn.Module):
             res_skip_layer = torch.nn.utils.weight_norm(res_skip_layer, name="weight")
             self.res_skip_layers.append(res_skip_layer)
 
-    def forward(self, x, x_mask, global_conditioning=None):
+    def forward(self, x, padding_mask, global_conditioning=None):
         output = torch.zeros_like(x)
         n_channels_tensor = torch.IntTensor([self.hidden_size])
 
@@ -310,12 +310,12 @@ class VitsWaveNet(torch.nn.Module):
             res_skip_acts = self.res_skip_layers[i](acts)
             if i < self.num_layers - 1:
                 res_acts = res_skip_acts[:,:self.hidden_size,:]
-                x = (x + res_acts) * x_mask
+                x = (x + res_acts) * padding_mask
                 output = output + res_skip_acts[:,self.hidden_size:,:]
             else:
                 output = output + res_skip_acts
 
-        return output * x_mask
+        return output * padding_mask
 
     def remove_weight_norm(self):
         if self.speaker_embedding_channels != 0:
@@ -338,11 +338,11 @@ class VitsResidualCouplingLayer(nn.Module):
         self.post.weight.data.zero_()
         self.post.bias.data.zero_()
 
-    def forward(self, x, x_mask, global_conditioning=None, reverse=False):
+    def forward(self, x, padding_mask, global_conditioning=None, reverse=False):
         x0, x1 = torch.split(x, [self.half_channels]*2, 1)
-        h = self.pre(x0) * x_mask
-        h = self.enc(h, x_mask, global_conditioning)
-        stats = self.post(h) * x_mask
+        h = self.pre(x0) * padding_mask
+        h = self.enc(h, padding_mask, global_conditioning)
+        stats = self.post(h) * padding_mask
         if not self.mean_only:
             m, logs = torch.split(stats, [self.half_channels]*2, 1)
         else:
@@ -350,12 +350,12 @@ class VitsResidualCouplingLayer(nn.Module):
             logs = torch.zeros_like(m)
 
         if not reverse:
-            x1 = m + x1 * torch.exp(logs) * x_mask
+            x1 = m + x1 * torch.exp(logs) * padding_mask
             x = torch.cat([x0, x1], 1)
             logdet = torch.sum(logs, [1,2])
             return x, logdet
         else:
-            x1 = (x1 - m) * torch.exp(-logs) * x_mask
+            x1 = (x1 - m) * torch.exp(-logs) * padding_mask
             x = torch.cat([x0, x1], 1)
             return x
 
@@ -368,13 +368,13 @@ class VitsResidualCouplingBlock(nn.Module):
            self.flows.append(VitsResidualCouplingLayer(config, mean_only=True))
            self.flows.append(VitsFlip())
 
-    def forward(self, x, x_mask, global_conditioning=None, reverse=False):
+    def forward(self, x, padding_mask, global_conditioning=None, reverse=False):
         if not reverse:
             for flow in self.flows:
-                x, _ = flow(x, x_mask, global_conditioning)
+                x, _ = flow(x, padding_mask, global_conditioning)
         else:
             for flow in reversed(self.flows):
-                x = flow(x, x_mask, global_conditioning, reverse=True)
+                x = flow(x, padding_mask, global_conditioning, reverse=True)
         return x
 
 
@@ -405,11 +405,11 @@ class VitsDilatedDepthSeparableConv(nn.Module):
             self.norms_1.append(nn.LayerNorm(channels))
             self.norms_2.append(nn.LayerNorm(channels))
 
-    def forward(self, x, x_mask, global_conditioning=None):
+    def forward(self, x, padding_mask, global_conditioning=None):
         if global_conditioning is not None:
             x = x + global_conditioning
         for i in range(self.num_layers):
-            y = self.convs_sep[i](x * x_mask)
+            y = self.convs_sep[i](x * padding_mask)
             y = self.norms_1[i](y.transpose(1, -1)).transpose(1, -1)
             y = nn.functional.gelu(y)
             y = self.convs_1x1[i](y)
@@ -417,7 +417,7 @@ class VitsDilatedDepthSeparableConv(nn.Module):
             y = nn.functional.gelu(y)
             y = self.dropout(y)
             x = x + y
-        return x * x_mask
+        return x * padding_mask
 
 
 def searchsorted(bin_locations, inputs, eps=1e-6):
@@ -627,11 +627,11 @@ class VitsConvFlow(nn.Module):
         self.proj.weight.data.zero_()
         self.proj.bias.data.zero_()
 
-    def forward(self, x, x_mask, global_conditioning=None, reverse=False):
+    def forward(self, x, padding_mask, global_conditioning=None, reverse=False):
         x0, x1 = torch.split(x, [self.half_channels]*2, 1)
         h = self.pre(x0)
-        h = self.convs(h, x_mask, global_conditioning)
-        h = self.proj(h) * x_mask
+        h = self.convs(h, padding_mask, global_conditioning)
+        h = self.proj(h) * padding_mask
 
         b, c, t = x0.shape
         h = h.reshape(b, c, -1, t).permute(0, 1, 3, 2) # [b, cx?, t] -> [b, c, t, ?]
@@ -649,22 +649,22 @@ class VitsConvFlow(nn.Module):
             tail_bound=self.tail_bound
         )
 
-        x = torch.cat([x0, x1], 1) * x_mask
+        x = torch.cat([x0, x1], 1) * padding_mask
         if not reverse:
-            logdet = torch.sum(logabsdet * x_mask, [1, 2])
+            logdet = torch.sum(logabsdet * padding_mask, [1, 2])
             return x, logdet
         else:
             return x
 
 
 class VitsLog(nn.Module):
-    def forward(self, x, x_mask, reverse=False, **kwargs):
+    def forward(self, x, padding_mask, reverse=False, **kwargs):
         if not reverse:
-            y = torch.log(torch.clamp_min(x, 1e-5)) * x_mask
+            y = torch.log(torch.clamp_min(x, 1e-5)) * padding_mask
             logdet = torch.sum(-y, [1, 2])
             return y, logdet
         else:
-            x = torch.exp(x) * x_mask
+            x = torch.exp(x) * padding_mask
             return x
 
 
@@ -685,14 +685,14 @@ class VitsElementwiseAffine(nn.Module):
         self.m = nn.Parameter(torch.zeros(channels,1))
         self.logs = nn.Parameter(torch.zeros(channels,1))
 
-    def forward(self, x, x_mask, reverse=False, **kwargs):
+    def forward(self, x, padding_mask, reverse=False, **kwargs):
         if not reverse:
             y = self.m + torch.exp(self.logs) * x
-            y = y * x_mask
-            logdet = torch.sum(self.logs * x_mask, [1,2])
+            y = y * padding_mask
+            logdet = torch.sum(self.logs * padding_mask, [1,2])
             return y, logdet
         else:
-            x = (x - self.m) * torch.exp(-self.logs) * x_mask
+            x = (x - self.m) * torch.exp(-self.logs) * padding_mask
             return x
 
 
@@ -730,7 +730,7 @@ class VitsStochasticDurationPredictor(nn.Module):
             self.post_flows.append(VitsConvFlow(2, filter_channels, kernel_size, num_layers=3))
             self.post_flows.append(VitsFlip())
 
-    def forward(self, x, x_mask, global_conditioning=None, w=None, reverse=False, noise_scale=1.0):
+    def forward(self, x, padding_mask, global_conditioning=None, w=None, reverse=False, noise_scale=1.0):
         x = torch.detach(x)
         x = self.pre(x)
 
@@ -738,8 +738,8 @@ class VitsStochasticDurationPredictor(nn.Module):
             global_conditioning = torch.detach(global_conditioning)
             x = x + self.cond(global_conditioning)
 
-        x = self.convs(x, x_mask)
-        x = self.proj(x) * x_mask
+        x = self.convs(x, padding_mask)
+        x = self.proj(x) * padding_mask
 
         if not reverse:
             flows = self.flows
@@ -747,27 +747,27 @@ class VitsStochasticDurationPredictor(nn.Module):
 
             logdet_tot_q = 0
             h_w = self.post_pre(w)
-            h_w = self.post_convs(h_w, x_mask)
-            h_w = self.post_proj(h_w) * x_mask
-            e_q = torch.randn(w.size(0), 2, w.size(2)).to(device=x.device, dtype=x.dtype) * x_mask
+            h_w = self.post_convs(h_w, padding_mask)
+            h_w = self.post_proj(h_w) * padding_mask
+            e_q = torch.randn(w.size(0), 2, w.size(2)).to(device=x.device, dtype=x.dtype) * padding_mask
             z_q = e_q
             for flow in self.post_flows:
-                z_q, logdet_q = flow(z_q, x_mask, global_conditioning=x + h_w)
+                z_q, logdet_q = flow(z_q, padding_mask, global_conditioning=x + h_w)
                 logdet_tot_q += logdet_q
             z_u, z1 = torch.split(z_q, [1, 1], 1)
-            u = torch.sigmoid(z_u) * x_mask
-            z0 = (w - u) * x_mask
-            logdet_tot_q += torch.sum((nn.functional.logsigmoid(z_u) + nn.functional.logsigmoid(-z_u)) * x_mask, [1,2])
-            logq = torch.sum(-0.5 * (math.log(2*math.pi) + (e_q**2)) * x_mask, [1,2]) - logdet_tot_q
+            u = torch.sigmoid(z_u) * padding_mask
+            z0 = (w - u) * padding_mask
+            logdet_tot_q += torch.sum((nn.functional.logsigmoid(z_u) + nn.functional.logsigmoid(-z_u)) * padding_mask, [1,2])
+            logq = torch.sum(-0.5 * (math.log(2*math.pi) + (e_q**2)) * padding_mask, [1,2]) - logdet_tot_q
 
             logdet_tot = 0
-            z0, logdet = self.log_flow(z0, x_mask)
+            z0, logdet = self.log_flow(z0, padding_mask)
             logdet_tot += logdet
             z = torch.cat([z0, z1], 1)
             for flow in flows:
-                z, logdet = flow(z, x_mask, global_conditioning=x, reverse=reverse)
+                z, logdet = flow(z, padding_mask, global_conditioning=x, reverse=reverse)
                 logdet_tot = logdet_tot + logdet
-            nll = torch.sum(0.5 * (math.log(2*math.pi) + (z**2)) * x_mask, [1,2]) - logdet_tot
+            nll = torch.sum(0.5 * (math.log(2*math.pi) + (z**2)) * padding_mask, [1,2]) - logdet_tot
             return nll + logq
 
         else:
@@ -775,7 +775,7 @@ class VitsStochasticDurationPredictor(nn.Module):
             flows = flows[:-2] + [flows[-1]] # remove a useless vflow
             z = torch.randn(x.size(0), 2, x.size(2)).to(device=x.device, dtype=x.dtype) * noise_scale
             for flow in flows:
-                z = flow(z, x_mask, global_conditioning=x, reverse=reverse)
+                z = flow(z, padding_mask, global_conditioning=x, reverse=reverse)
             z0, z1 = torch.split(z, [1, 1], 1)
             logw = z0
             return logw
@@ -797,25 +797,25 @@ class VitsDurationPredictor(nn.Module):
         if config.speaker_embedding_channels != 0:
             self.cond = nn.Conv1d(config.speaker_embedding_channels, config.hidden_size, 1)
 
-    def forward(self, x, x_mask, global_conditioning=None):
+    def forward(self, x, padding_mask, global_conditioning=None):
         x = torch.detach(x)
 
         if global_conditioning is not None:
             global_conditioning = torch.detach(global_conditioning)
             x = x + self.cond(global_conditioning)
 
-        x = self.conv_1(x * x_mask)
+        x = self.conv_1(x * padding_mask)
         x = torch.relu(x)
         x = self.norm_1(x.transpose(1, -1)).transpose(1, -1)
         x = self.dropout(x)
 
-        x = self.conv_2(x * x_mask)
+        x = self.conv_2(x * padding_mask)
         x = torch.relu(x)
         x = self.norm_2(x.transpose(1, -1)).transpose(1, -1)
         x = self.dropout(x)
 
-        x = self.proj(x * x_mask)
-        return x * x_mask
+        x = self.proj(x * padding_mask)
+        return x * padding_mask
 
 
 class VitsAttention(nn.Module):
