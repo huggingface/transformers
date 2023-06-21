@@ -141,6 +141,21 @@ def apply_rotary_pos_emb(tensor, sincos):
     cos_pos = cos_pos[:, :, None, :].repeat(2, 3)
     return (tensor * cos_pos) + (rotate_every_two(tensor) * sin_pos)
 
+class FlaxLlamaRMSNorm(nn.Module):
+    eps: float = 1e-6
+
+    @nn.compact
+    def __call__(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        variance = jnp.asarray(hidden_states, dtype=jnp.float32)
+        variance = jnp.square(variance)
+        variance = variance.mean(-1, keepdims=True)
+        hidden_states = hidden_states * jax.lax.rsqrt(variance + self.eps)
+
+        weight = self.param('weight', lambda _, shape: jnp.ones(shape), hidden_states.shape[-1])
+
+        return jnp.asarray(weight * hidden_states, dtype=input_dtype)
+
 
 class FlaxLlamaAttention(nn.Module):
     config: LlamaConfig
@@ -311,9 +326,9 @@ class FlaxLlamaBlock(nn.Module):
         hidden_size = self.config.hidden_size
         inner_dim = self.config.intermediate_size if self.config.intermediate_size is not None else 4 * hidden_size
 
-        self.ln_1 = nn.RMSNorm(epsilon=self.config.rms_norm_eps, dtype=self.dtype)
+        self.ln_1 = FlaxLlamaRMSNorm(epsilon=self.config.rms_norm_eps, dtype=self.dtype)
         self.attn = FlaxLlamaAttention(self.config, dtype=self.dtype)
-        self.ln_2 = nn.RMSNorm(epsilon=self.config.rms_norm_eps, dtype=self.dtype)
+        self.ln_2 = FlaxLlamaRMSNorm(epsilon=self.config.rms_norm_eps, dtype=self.dtype)
         self.mlp = FlaxLlamaMLP(self.config, inner_dim, dtype=self.dtype)
 
     def __call__(
@@ -696,28 +711,26 @@ if __name__ == "__main__":
     import flax
     from flax.traverse_util import flatten_dict
     from .configuration_llama import LlamaConfig
-    from .modeling_llama import LlamaMLP
+    from .modeling_llama import LlamaRMSNorm
     import torch
 
     key = jax.random.PRNGKey(0)
     config = LlamaConfig()
 
-    model = FlaxLlamaMLP(config, 4 * config.intermediate_size)
-    pt_model = LlamaMLP(config.hidden_size, 4 * config.intermediate_size, config.hidden_act)
+    model = FlaxLlamaRMSNorm(eps=1e-6)
+    pt_model = LlamaRMSNorm(config.hidden_size, eps=1e-6)
 
     key, subkey = jax.random.split(key)
-    x = jax.random.normal(subkey, (4, 128, config.hidden_size)) * 0.1
+    x = jax.random.normal(subkey, (4, 128, config.hidden_size)) * 1.0
 
     key, model_key = jax.random.split(key)
     params = model.init(model_key, x)
 
     y = model.apply(params, x)
 
-    params = flatten_dict(params, sep='.')
+    params = flatten_dict(params['params'], sep='.')
     pt_model.load_state_dict({
-        'gate_proj.weight': torch.from_numpy(np.asarray(params['params.gate_proj.kernel'])).T,
-        'down_proj.weight': torch.from_numpy(np.asarray(params['params.down_proj.kernel'])).T,
-        'up_proj.weight': torch.from_numpy(np.asarray(params['params.up_proj.kernel'])).T,
+        'weight': torch.from_numpy(np.asarray(params['weight'])),
     })
     x = torch.tensor(np.asarray(x))
     pt_y = pt_model(x)
@@ -726,7 +739,7 @@ if __name__ == "__main__":
     pt_y = pt_y.detach().numpy()
 
     try:
-        np.testing.assert_allclose(y, pt_y, atol=1e-4, rtol=1e-4)
+        np.testing.assert_allclose(y, pt_y, atol=1e-5, rtol=1e-5)
     except AssertionError as e:
         import ipdb; ipdb.set_trace()
 
