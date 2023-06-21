@@ -88,7 +88,8 @@ class BarkProcessor(ProcessorMixin):
             if len(voice_preset[key].shape) != cls.preset_shape[key]:
                 raise ValueError(f"{key} voice preset must be a {str(cls.preset_shape[key])}D ndarray.")
         
-    def __call__(self, text=None, voice_preset=None, return_tensors="pt", max_length = 256, **kwargs):
+    def __call__(self, text=None, voice_preset=None, return_tensors="pt", max_length = 256, add_special_tokens=False, 
+                 return_attention_mask = True, return_token_type_ids = False,**kwargs):
         """
         Main method to prepare for the model one or several sequences(s). This method forwards the `text`
         and `kwargs` arguments to the AutoTokenizer's [`~AutoTokenizer.__call__`] to encode the text. 
@@ -142,7 +143,8 @@ class BarkProcessor(ProcessorMixin):
                     
         self._validate_voice_preset_dict(voice_preset)
         encoded_text = self.tokenizer(text, return_tensors=return_tensors, padding = "max_length"
-                                      , max_length = max_length, return_attention_mask = True, return_token_type_ids = False,
+                                      , max_length = max_length, return_attention_mask = return_attention_mask, return_token_type_ids = return_token_type_ids,
+                                      add_special_tokens=add_special_tokens,
                                       **kwargs)    
         
         return encoded_text, voice_preset
