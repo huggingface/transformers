@@ -97,7 +97,8 @@ class BarkModuleConfig(PretrainedConfig):
 
     attribute_map = {"num_attention_heads": "num_heads", 
                      "num_hidden_layers": "num_layers",
-                     "vocab_size": "input_vocab_size",}
+                     "vocab_size": "input_vocab_size",
+                     "window_size": "block_size"}
     
     def __init__(
         self,
