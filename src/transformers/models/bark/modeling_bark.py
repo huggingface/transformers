@@ -674,8 +674,7 @@ class BarkCausalModule(BarkModulePreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        # inference-time mini-optimization: only forward the lm_head on the very last position
-        logits = self.lm_head(hidden_states[:, [-1], :])  # note: using list [-1] to preserve the time dim
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
