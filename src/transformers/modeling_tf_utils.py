@@ -87,7 +87,6 @@ else:
 
 if is_safetensors_available():
     from safetensors import safe_open
-    from safetensors.tensorflow import load_file as safe_load_file
     from safetensors.tensorflow import save_file as safe_save_file
 
 if TYPE_CHECKING:
@@ -2896,16 +2895,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if safetensors_from_pt:
             from .modeling_tf_pytorch_utils import load_pytorch_state_dict_in_tf2_model
 
-            state_dict = safe_load_file(resolved_archive_file)
-            # Load from a PyTorch checkpoint
-            return load_pytorch_state_dict_in_tf2_model(
-                model,
-                state_dict,
-                allow_missing_keys=True,
-                output_loading_info=output_loading_info,
-                _prefix=load_weight_prefix,
-                ignore_mismatched_sizes=ignore_mismatched_sizes,
-            )
+            with safe_open(resolved_archive_file, framework="np") as state_dict:
+                # Load from a PyTorch checkpoint
+                return load_pytorch_state_dict_in_tf2_model(
+                    model,
+                    state_dict,
+                    tf_inputs=False,  # No need to build the model again
+                    allow_missing_keys=True,
+                    output_loading_info=output_loading_info,
+                    _prefix=load_weight_prefix,
+                    ignore_mismatched_sizes=ignore_mismatched_sizes,
+                )
 
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357

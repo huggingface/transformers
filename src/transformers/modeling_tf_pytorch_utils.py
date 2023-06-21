@@ -263,10 +263,9 @@ def load_pytorch_state_dict_in_tf2_model(
 
     if _prefix is None:
         _prefix = ""
-    if tf_inputs is not None:
+    if tf_inputs:
         with tf.name_scope(_prefix):
             tf_model(tf_inputs, training=False)  # Make sure model is built
-    # Adapt state dict - TODO remove this and update the AWS weights files instead
     # Convert old format to new format if needed from a PyTorch state_dict
     tf_keys_to_pt_keys = {}
     for key in pt_state_dict.keys():
@@ -296,6 +295,10 @@ def load_pytorch_state_dict_in_tf2_model(
     all_pytorch_weights = set(tf_keys_to_pt_keys.keys())
     missing_keys = []
     mismatched_keys = []
+    if hasattr(pt_state_dict, "get_tensor"):
+        is_safetensor_archive = True
+    else:
+        is_safetensor_archive = False
     for symbolic_weight in symbolic_weights:
         sw_name = symbolic_weight.name
         name, transpose = convert_tf_weight_name_to_pt_weight_name(
@@ -318,8 +321,12 @@ def load_pytorch_state_dict_in_tf2_model(
                     continue
             raise AttributeError(f"{name} not found in PyTorch model")
         state_dict_name = tf_keys_to_pt_keys[name]
+        if is_safetensor_archive:
+            array = pt_state_dict.get_tensor(state_dict_name)
+        else:
+            array = pt_state_dict[state_dict_name]
         try:
-            array = apply_transpose(transpose, pt_state_dict[state_dict_name], symbolic_weight.shape)
+            array = apply_transpose(transpose, array, symbolic_weight.shape)
         except tf.errors.InvalidArgumentError as e:
             if not ignore_mismatched_sizes:
                 error_msg = str(e)
@@ -328,7 +335,7 @@ def load_pytorch_state_dict_in_tf2_model(
                 )
                 raise tf.errors.InvalidArgumentError(error_msg)
             else:
-                mismatched_keys.append((name, pt_state_dict[state_dict_name].shape, symbolic_weight.shape))
+                mismatched_keys.append((name, array, symbolic_weight.shape))
                 continue
 
         tf_loaded_numel += tensor_size(array)
