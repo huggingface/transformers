@@ -1233,7 +1233,9 @@ class BarkModelTest(unittest.TestCase):
         # greedy decoding
         output_ids = self.model.generate_text_semantic(**input_ids, history_prompt=history_prompt, do_sample=False)
 
-        self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
+        # transformers' implementation of the Bark algorithm pads by default to the maximum length possible
+        # since it will be padded anyways in generate_coarse.
+        self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
     @slow
     def test_generate_coarse(self):
