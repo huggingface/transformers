@@ -1017,7 +1017,7 @@ def check_repo_quality():
     print("Checking all keys in auto name mappings are defined in `CONFIG_MAPPING_NAMES`.")
     check_all_auto_mapping_names_in_config_mapping_names()
     print("Checking all auto mappings could be imported.")
-    print(check_all_auto_mappings_importable)
+    check_all_auto_mappings_importable()
 
 
 if __name__ == "__main__":
