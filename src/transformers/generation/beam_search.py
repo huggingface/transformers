@@ -43,6 +43,10 @@ PROCESS_INPUTS_DOCSTRING = r"""
             The id of the *padding* token.
         eos_token_id (`Union[int, List[int]]`, *optional*):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+        beam_indices (`torch.LongTensor]`, *optional*):
+            Beam indices indicating to which beam hypothesis each token correspond.
+        group_index (`int`, *optional*):
+            The index of beams in each groups. Optionally, use when want to use group_beam_search.
 
     Return:
         `UserDict`: A dictionary composed of the fields as defined above:
