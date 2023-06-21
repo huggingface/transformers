@@ -716,7 +716,7 @@ def check_all_auto_mappings_importable():
     check_missing_backends()
 
     failures = []
-    mappings_to_check = dict()
+    mappings_to_check = {}
     # Each auto modeling files contains multiple mappings. Let's get them in a dynamic way.
     for module_name in ["modeling_auto", "modeling_tf_auto", "modeling_flax_auto"]:
         module = getattr(transformers.models.auto, module_name, None)
@@ -729,9 +729,7 @@ def check_all_auto_mappings_importable():
     for name, _ in mappings_to_check.items():
         name = name.replace("_MAPPING_NAMES", "")
         if not hasattr(transformers, name):
-            failures.append(
-                f"`{name}` should be defined in the main `__init__` file."
-            )
+            failures.append(f"`{name}` should be defined in the main `__init__` file.")
     if len(failures) > 0:
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
