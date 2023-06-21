@@ -190,9 +190,11 @@ class BeamSearchScorer(BeamScorer):
             )
             for _ in range(batch_size * self.num_beam_groups)
         ]
-        # self._done[i*self.num_beam_groups+j] indicates whether the generation of the beam_hyps of the j-th group 
+        # self._done[i*self.num_beam_groups+j] indicates whether the generation of the beam_hyps of the j-th group
         # in the i-th mini-batch is complete.
-        self._done = torch.tensor([False for _ in range(batch_size * self.num_beam_groups)], dtype=torch.bool, device=self.device)
+        self._done = torch.tensor(
+            [False for _ in range(batch_size * self.num_beam_groups)], dtype=torch.bool, device=self.device
+        )
 
         if not isinstance(num_beams, int) or num_beams <= 1:
             raise ValueError(
@@ -221,7 +223,6 @@ class BeamSearchScorer(BeamScorer):
         beam_indices: Optional[torch.LongTensor] = None,
         group_index: Optional[int] = 0,
     ) -> Dict[str, torch.Tensor]:
-        
         cur_len = input_ids.shape[-1] + 1  # add up to the length which the next_scores is calculated on
         batch_size = len(self._beam_hyps) // self.num_beam_groups
 
@@ -299,8 +300,7 @@ class BeamSearchScorer(BeamScorer):
                 )
 
             # Check if we are done so that we can save a pad step if all(done)
-            self._done[batch_group_idx] = self._done[batch_group_idx] or \
-                self._beam_hyps[batch_group_idx].is_done(
+            self._done[batch_group_idx] = self._done[batch_group_idx] or self._beam_hyps[batch_group_idx].is_done(
                 next_scores[batch_idx].max().item(), cur_len
             )
 
@@ -350,7 +350,7 @@ class BeamSearchScorer(BeamScorer):
 
         # retrieve best hypotheses
         for i in range(batch_size):
-            beam_hyps_in_batch = self._beam_hyps[i*self.num_beam_groups:(i+1)*self.num_beam_groups]
+            beam_hyps_in_batch = self._beam_hyps[i * self.num_beam_groups : (i + 1) * self.num_beam_groups]
             candidate_beams = [beam for beam_hyp in beam_hyps_in_batch for beam in beam_hyp.beams]
             sorted_hyps = sorted(candidate_beams, key=lambda x: x[0])
             for j in range(self.num_beam_hyps_to_keep):
