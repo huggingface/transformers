@@ -476,13 +476,9 @@ class GenerationConfig(PushToHubMixin):
         ```"""
         config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
 
-        cache_dir = kwargs.pop("cache_dir", None)
-        force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
-        local_files_only = kwargs.pop("local_files_only", False)
-        revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
