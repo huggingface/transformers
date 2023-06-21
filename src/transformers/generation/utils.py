@@ -2153,11 +2153,11 @@ class GenerationMixin:
                                                 **model_kwargs)
                 selected_outputs = self(
                     **next_model_input, 
-                    return_dict=False, 
+                    return_dict=True, 
                     output_hidden_states=False, 
                     output_attentions=False,
                 )
-                next_past_key_values = selected_outputs.past_key_values
+                next_past_key_values = selected_outputs['past_key_values']
 
             else:
                 next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
