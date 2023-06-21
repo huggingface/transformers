@@ -2853,7 +2853,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         safetensors_from_pt = False
         if filename == SAFE_WEIGHTS_NAME:
-            with safe_open(resolved_archive_file, framework="tf") as f:
+            with safe_open(resolved_archive_file, framework="np") as f:
                 safetensors_metadata = f.metadata()
             if safetensors_metadata is None or safetensors_metadata.get("format") not in ["pt", "tf", "flax"]:
                 raise OSError(
@@ -2895,8 +2895,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if safetensors_from_pt:
             from .modeling_tf_pytorch_utils import load_pytorch_state_dict_in_tf2_model
 
-            with safe_open(resolved_archive_file, framework="np") as state_dict:
+            with safe_open(resolved_archive_file, framework="tf") as state_dict:
                 # Load from a PyTorch checkpoint
+                # We load in TF format here because PT weights often need to be transposed, and this is much
+                # faster on GPU. Loading as numpy and transposing on CPU adds several seconds to load times.
                 return load_pytorch_state_dict_in_tf2_model(
                     model,
                     state_dict,
