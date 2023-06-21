@@ -2078,6 +2078,9 @@ class GenerationMixin:
                     final_full_hstates[layer] = torch.stack([torch.squeeze(all_hstates[i][layer], 0)
                                                                             for i in range(top_k)], dim=0)
                 full_hidden_states = tuple(final_full_hstates)
+
+                # stack logits
+                logits = torch.cat(all_logits, dim=0)
                     
             else:
                 # compute the candidate tokens by the language model and collect their hidden_states
