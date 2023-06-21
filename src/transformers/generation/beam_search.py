@@ -179,6 +179,8 @@ class BeamSearchScorer(BeamScorer):
         self.group_size = self.num_beams // self.num_beam_groups
 
         self._is_init = False
+        # self._beam_hyps[i*self.num_beam_groups+j] is the beam_hyps of the j-th group in the i-th mini-batch.
+        # If group_beam_search is not used, the list consists of `batch_size` beam_hyps.
         self._beam_hyps = [
             BeamHypotheses(
                 num_beams=self.group_size,
@@ -188,6 +190,8 @@ class BeamSearchScorer(BeamScorer):
             )
             for _ in range(batch_size * self.num_beam_groups)
         ]
+        # self._done[i*self.num_beam_groups+j] indicates whether the generation of the beam_hyps of the j-th group 
+        # in the i-th mini-batch is complete.
         self._done = torch.tensor([False for _ in range(batch_size * self.num_beam_groups)], dtype=torch.bool, device=self.device)
 
         if not isinstance(num_beams, int) or num_beams <= 1:
@@ -346,7 +350,8 @@ class BeamSearchScorer(BeamScorer):
 
         # retrieve best hypotheses
         for i in range(batch_size):
-            candidate_beams = [beam for beam_hyp in self._beam_hyps[i*self.num_beam_groups:(i+1)*self.num_beam_groups] for beam in beam_hyp.beams]
+            beam_hyps_in_batch = self._beam_hyps[i*self.num_beam_groups:(i+1)*self.num_beam_groups]
+            candidate_beams = [beam for beam_hyp in beam_hyps_in_batch for beam in beam_hyp.beams]
             sorted_hyps = sorted(candidate_beams, key=lambda x: x[0])
             for j in range(self.num_beam_hyps_to_keep):
                 best_hyp_tuple = sorted_hyps.pop()
