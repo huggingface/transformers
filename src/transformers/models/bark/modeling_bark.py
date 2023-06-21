@@ -370,10 +370,10 @@ class BarkBlock(nn.Module):
         output_attentions=False,
     ):
         
-        hidden_states = self.ln_1(hidden_states)
+        intermediary_hidden_states = self.ln_1(hidden_states)
         
         attn_outputs = self.attn(
-            hidden_states,
+            intermediary_hidden_states,
             past_kv=past_kv,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -384,13 +384,13 @@ class BarkBlock(nn.Module):
         attn_output = attn_outputs[0]  # output_attn: output, present_kv, (attn_weights)
         outputs = attn_outputs[1:]
 
-        hidden_states = hidden_states + attn_output
-        hidden_states = hidden_states + self.mlp(self.ln_2(hidden_states))
+        intermediary_hidden_states = hidden_states + attn_output
+        intermediary_hidden_states = intermediary_hidden_states + self.mlp(self.ln_2(intermediary_hidden_states))
 
         if use_cache:
-            outputs = (hidden_states,) + outputs
+            outputs = (intermediary_hidden_states,) + outputs
         else:
-            outputs = (hidden_states,) + outputs[1:]
+            outputs = (intermediary_hidden_states,) + outputs[1:]
 
         return outputs  # hidden_states, ((present), attentions)
 
