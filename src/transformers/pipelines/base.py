@@ -50,7 +50,6 @@ if is_torch_available():
     from torch.utils.data import DataLoader, Dataset
 
     from ..models.auto.modeling_auto import AutoModel
-    from ..pytorch_utils import is_torch_greater_or_equal_than_2_0
 
     # Re-export for backward compatibility
     from .pt_utils import KeyDataset
@@ -794,16 +793,11 @@ class Pipeline(_ScikitCompat):
             if isinstance(device, torch.device):
                 self.device = device
             elif isinstance(device, str):
-                if device == "cuda" and not is_torch_greater_or_equal_than_2_0:
-                    # for backward compatiblity if using `set_device` and `cuda`
-                    device = f"cuda:{torch.cuda.current_device()}"
                 self.device = torch.device(device)
             elif device < 0:
                 self.device = torch.device("cpu")
-            elif isinstance(device, int):
-                self.device = torch.device(f"cuda:{device}")
             else:
-                raise ValueError(f"Device type not supported. Got {device}")
+                self.device = torch.device(f"cuda:{device}")
         else:
             self.device = device if device is not None else -1
         self.torch_dtype = torch_dtype
@@ -908,13 +902,10 @@ class Pipeline(_ScikitCompat):
             with tf.device("/CPU:0" if self.device == -1 else f"/device:GPU:{self.device}"):
                 yield
         else:
-            if is_torch_greater_or_equal_than_2_0:
-                with torch.device(self.device):
+            if self.device.type == "cuda":
+                with torch.cuda.device(self.device):
                     yield
-            # for backward compatibility
             else:
-                if self.device.type == "cuda":
-                    torch.cuda.set_device(self.device)
                 yield
 
     def ensure_tensor_on_device(self, **inputs):
