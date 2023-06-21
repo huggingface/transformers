@@ -585,7 +585,7 @@ class PretrainedConfig(PushToHubMixin):
         kwargs["local_files_only"] = local_files_only
         kwargs["revision"] = revision
 
-        cls._set_token_in_kwargs(token, kwargs)
+        cls._set_token_in_kwargs(kwargs, token)
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
