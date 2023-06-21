@@ -2054,7 +2054,8 @@ class GenerationMixin:
                         **next_model_inputs, 
                         return_dict=True, 
                         output_hidden_states=True, 
-                        output_attentions=output_attentions
+                        output_attentions=output_attentions,
+                        past_key_values=model.past_key_values
                     )
                     for key in all_outputs:
                         all_outputs[key].append(outputs[key])
@@ -2079,9 +2080,22 @@ class GenerationMixin:
                                                                             for i in range(top_k)], dim=0)
                 full_hidden_states = tuple(final_full_hstates)
 
-                # stack all_outputs attentions
                 for key in all_outputs:
-                    if torch.is_tensor(all_outputs[key]):
+                    # rebuild key value output 
+                    if key == 'past_key_values':
+                        layers_kv = []
+                        for layer in range(len(all_outputs[key][0])):
+                            kv = []
+                            kv.append(torch.cat([all_outputs[key][seq][layer][0] 
+                                for seq in range(len(all_outputs[key]))], dim=0))
+
+                            kv.append(torch.cat([all_outputs[key][seq][layer][1] 
+                                for seq in range(len(all_outputs[key]))], dim=0))
+
+                            layers_kv.append(tuple(kv))
+                        outputs[key] = tuple(layers_kv)
+
+                    elif torch.is_tensor(all_outputs[key]):
                         outputs[key] = torch.stack(all_outputs[key], dim=0)
 
                 # stack logits
@@ -2113,20 +2127,6 @@ class GenerationMixin:
                 full_hidden_states = tuple(final)
 
                 logits = outputs.logits[:, -1, :] #+ torch.randn(outputs.logits[:, -1, :].shape).to(inputs_ids.device)
-
-            if low_memory:
-                _, model_kwargs = self._expand_inputs_for_generation(
-                        expand_size=top_k, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
-                    )
-
-                new_key_values = []
-                for layer in model_kwargs["past_key_values"]:
-                    items = []
-                    # item is either the key or the value matrix
-                    for item in layer:
-                        items.append(item.repeat_interleave(top_k, dim=0))
-                    new_key_values.append(items)
-                model_kwargs["past_key_values"] = new_key_values
 
             next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
