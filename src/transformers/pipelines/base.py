@@ -793,6 +793,9 @@ class Pipeline(_ScikitCompat):
             if isinstance(device, torch.device):
                 self.device = device
             elif isinstance(device, str):
+                if device == "cuda":
+                    # for backward compatiblity if using `set_device` and `cuda`
+                    device = f"cuda:{torch.cuda.current_device()}"
                 self.device = torch.device(device)
             elif device < 0:
                 self.device = torch.device("cpu")
@@ -904,7 +907,13 @@ class Pipeline(_ScikitCompat):
             with tf.device("/CPU:0" if self.device == -1 else f"/device:GPU:{self.device}"):
                 yield
         else:
-            with torch.device(self.device):
+            if hasattr(torch.device, "__enter__"):
+                with torch.device(self.device):
+                    yield
+            # for backward compatibility
+            else:
+                if self.device.type == "cuda":
+                    torch.cuda.set_device(self.device)
                 yield
 
     def ensure_tensor_on_device(self, **inputs):
