@@ -999,7 +999,7 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
 
 def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
     # Read the safetensors file
-    with safe_open(resolved_archive_file, framework="np") as safetensors_archive:
+    with safe_open(resolved_archive_file, framework="tf") as safetensors_archive:
         mismatched_layers = []
         weight_names = [format_weight_name(w.name, _prefix=_prefix) for w in model.weights]
         loaded_weight_names = list(safetensors_archive.keys())
@@ -2853,7 +2853,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         safetensors_from_pt = False
         if filename == SAFE_WEIGHTS_NAME:
-            with safe_open(resolved_archive_file, framework="np") as f:
+            with safe_open(resolved_archive_file, framework="tf") as f:
                 safetensors_metadata = f.metadata()
             if safetensors_metadata is None or safetensors_metadata.get("format") not in ["pt", "tf", "flax"]:
                 raise OSError(
