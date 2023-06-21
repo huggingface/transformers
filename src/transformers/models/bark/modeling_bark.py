@@ -18,7 +18,7 @@ from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 from torch.nn import functional as F
@@ -733,6 +733,9 @@ class BarkCoarseAcousticsModule(BarkCausalModule):
 class BarkFineAcousticsModule(BarkModulePreTrainedModel):
     base_model_prefix = "fine_acoustics"
     config_class = BarkFineAcousticsConfig
+    main_input_name = "codebook_idx"
+    _tied_weights_keys = []
+    _keys_to_ignore_on_load_missing = []
 
     def __init__(self, config):
         # non-causal gpt-like model with one embedding layer and one lm_head for each codebook of Encodec
@@ -760,13 +763,14 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
                 for _ in range(config.n_codes_given, config.n_codes_total)
             ]
         )
-        for i in range(config.n_codes_total - config.n_codes_given):
-            self.transformer.wtes[i + 1].weight = self.lm_heads[i].weight
         self.gradient_checkpointing = False
         self.n_codes_total = config.n_codes_total
 
         # Initialize weights and apply final processing
         self.post_init()
+        
+        if self.config.tie_word_embeddings:
+            self.tie_weights()
 
     def get_input_embeddings(self):
         # one embedding layers for each codebook
@@ -775,6 +779,49 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         # one embedding layers for each codebook
         self.transformer.wtes = new_embeddings
+        
+    def get_output_embeddings(self):
+        # one lm_head for each codebook
+        return self.lm_heads
+    
+    def set_output_embeddings(self, new_output_embeddings):
+        # one lm_head for each codebook
+        self.lm_heads = new_output_embeddings
+        
+    def _resize_token_embeddings(self, new_num_tokens):
+        old_embeddings_list = self.get_input_embeddings()
+        new_embeddings_list = nn.ModuleList([self._get_resized_embeddings(old_embeddings, new_num_tokens) for old_embeddings in old_embeddings_list])
+        self.set_input_embeddings(new_embeddings_list)
+
+        # if word embeddings are not tied, make sure that lm head is resized as well
+        if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
+            old_lm_head_list = self.get_output_embeddings()
+            new_lm_head_list = nn.ModuleList([self._get_resized_lm_head(old_lm_head, new_num_tokens) for old_lm_head in old_lm_head_list])
+            self.set_output_embeddings(new_lm_head_list)
+
+        return self.get_input_embeddings()
+    
+    def tie_weights(self):
+        """
+        Tie the weights between the input embeddings list and the output embeddings list.
+
+        If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
+        weights instead.
+        """
+        if getattr(self.config, "tie_word_embeddings", True):
+            output_embeddings = self.get_output_embeddings()
+            input_embeddings = self.get_input_embeddings()
+            
+            for i in range(self.config.n_codes_total - self.config.n_codes_given):
+                #self.transformer.wtes[i + 1].weight = self.lm_heads[i].weight
+                self._tie_or_clone_weights(output_embeddings[i], input_embeddings[i +1])
+                self._tied_weights_keys.append(f"lm_heads.{i}.weight")
+                self._keys_to_ignore_on_load_missing.append(f"lm_heads.{i}.weight")
+
+        for module in self.modules():
+            if hasattr(module, "_tie_weights"):
+                module._tie_weights()
+
 
 
 

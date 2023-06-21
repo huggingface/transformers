@@ -155,6 +155,13 @@ class BarkCoarseAcousticsConfig(BarkModuleConfig):
 
 class BarkFineAcousticsConfig(BarkModuleConfig):
     model_type = "fine_acoustics"
+    def __init__(self,
+                 *args, 
+                 tie_word_embeddings = True, 
+                 **kwargs):
+        super().__init__(*args,
+                         tie_word_embeddings=tie_word_embeddings, 
+                         **kwargs)
 
 class BarkConfig(PretrainedConfig):
     """
