@@ -420,7 +420,6 @@ class BarkModulePreTrainedModel(PreTrainedModel):
 
     config_class = BarkModuleConfig
     # supports_gradient_checkpointing = True
-    _no_split_modules = ["BarkBlock"]  # TODO: what to do with this?
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -955,7 +954,6 @@ class BarkModel(BarkPreTrainedModel):
     #    output_type=BaseModelOutputWithPast,
     #    config_class=_CONFIG_FOR_DOC,
     # )
-    _no_split_modules = ["BarkBlock"]
     config_class = BarkConfig
 
     def __init__(self, config):
