@@ -341,6 +341,7 @@ def load_pytorch_state_dict_in_tf2_model(
         tf_loaded_numel += tensor_size(array)
 
         K.set_value(symbolic_weight, array)
+        del array  # Immediately free memory to keep peak usage as low as possible
         all_pytorch_weights.discard(name)
 
     logger.info(f"Loaded {tf_loaded_numel:,} parameters in the TF 2.0 model.")
