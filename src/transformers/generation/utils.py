@@ -2078,28 +2078,6 @@ class GenerationMixin:
                     final_full_hstates[layer] = torch.stack([torch.squeeze(all_hstates[i][layer], 0)
                                                                             for i in range(top_k)], dim=0)
                 full_hidden_states = tuple(final_full_hstates)
-
-                for key in all_outputs:
-                    # rebuild key value output 
-                    if key == 'past_key_values':
-                        pass
-                        # layers_kv = []
-                        # for layer in range(len(all_outputs[key][0])):
-                        #     kv = []
-                        #     kv.append(torch.cat([all_outputs[key][seq][layer][0] 
-                        #         for seq in range(len(all_outputs[key]))], dim=0))
-
-                        #     kv.append(torch.cat([all_outputs[key][seq][layer][1] 
-                        #         for seq in range(len(all_outputs[key]))], dim=0))
-
-                        #     layers_kv.append(tuple(kv))
-                        # outputs[key] = tuple(layers_kv)
-
-                    elif torch.is_tensor(all_outputs[key]):
-                        outputs[key] = torch.stack(all_outputs[key], dim=0)
-
-                # stack logits
-                logits = torch.cat(all_logits, dim=0)
                     
             else:
                 # compute the candidate tokens by the language model and collect their hidden_states
@@ -2120,13 +2098,13 @@ class GenerationMixin:
                     next_hidden = outputs.hidden_states[-1]
                     full_hidden_states = outputs.hidden_states
 
-                next_hidden = next_hidden #+ (torch.randn(next_hidden.shape)/100).to(input_ids.device)
+                next_hidden = next_hidden 
                 final = []
                 for i in range(len(full_hidden_states)):
-                    final.append(full_hidden_states[i]) #+ (torch.randn(full_hidden_states[i].shape)/100).to(input_ids.device))
+                    final.append(full_hidden_states[i]) 
                 full_hidden_states = tuple(final)
 
-                logits = outputs.logits[:, -1, :] #+ torch.randn(outputs.logits[:, -1, :].shape).to(inputs_ids.device)
+                logits = outputs.logits[:, -1, :]
 
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
 
