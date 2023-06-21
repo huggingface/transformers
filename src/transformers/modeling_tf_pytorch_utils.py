@@ -332,7 +332,7 @@ def load_pytorch_state_dict_in_tf2_model(
                 )
                 raise tf.errors.InvalidArgumentError(error_msg)
             else:
-                mismatched_keys.append((name, array, symbolic_weight.shape))
+                mismatched_keys.append((name, array.shape, symbolic_weight.shape))
                 continue
 
         tf_loaded_numel += tensor_size(array)
