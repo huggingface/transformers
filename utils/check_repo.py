@@ -727,7 +727,7 @@ def check_all_auto_mappings_importable():
         mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
 
     for name, _ in mappings_to_check.items():
-        name = name.replace("_MAPPING_NAMES", "")
+        name = name.replace("_MAPPING_NAMES", "_MAPPING")
         if not hasattr(transformers, name):
             failures.append(f"`{name}` should be defined in the main `__init__` file.")
     if len(failures) > 0:
