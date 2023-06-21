@@ -264,6 +264,7 @@ _import_structure = {
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
     "models.deta": ["DETA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetaConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
+    "models.sptsv2": ["SPTSV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Sptsv2Config"],
     "models.dialogpt": [],
     "models.dinat": ["DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DinatConfig"],
     "models.distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig", "DistilBertTokenizer"],
@@ -890,6 +891,7 @@ else:
     _import_structure["models.deit"].extend(["DeiTFeatureExtractor", "DeiTImageProcessor"])
     _import_structure["models.deta"].append("DetaImageProcessor")
     _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor"])
+    _import_structure["models.sptsv2"].extend(["Sptsv2FeatureExtractor", "Sptsv2ImageProcessor"])
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientformer"].append("EfficientFormerImageProcessor")
@@ -1488,6 +1490,15 @@ else:
             "DetrForSegmentation",
             "DetrModel",
             "DetrPreTrainedModel",
+        ]
+    )
+    _import_structure["models.sptsv2"].extend(
+        [
+            "SPTSV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Sptsv2ForObjectDetection",
+            "Sptsv2ForSegmentation",
+            "Sptsv2Model",
+            "Sptsv2PreTrainedModel",
         ]
     )
     _import_structure["models.dinat"].extend(
@@ -4099,6 +4110,7 @@ if TYPE_CHECKING:
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
     from .models.deta import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP, DetaConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
+    from .models.sptsv2 import SPTSV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Sptsv2Config
     from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DinatConfig
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
     from .models.donut import DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, DonutProcessor, DonutSwinConfig
@@ -4658,6 +4670,7 @@ if TYPE_CHECKING:
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
         from .models.deta import DetaImageProcessor
         from .models.detr import DetrFeatureExtractor, DetrImageProcessor
+        from .models.sptsv2 import Sptsv2FeatureExtractor, Sptsv2ImageProcessor
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientformer import EfficientFormerImageProcessor
@@ -5165,6 +5178,13 @@ if TYPE_CHECKING:
             DetrForSegmentation,
             DetrModel,
             DetrPreTrainedModel,
+        )
+        from .models.sptsv2 import (
+            SPTSV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Sptsv2ForObjectDetection,
+            Sptsv2ForSegmentation,
+            Sptsv2Model,
+            Sptsv2PreTrainedModel,
         )
         from .models.dinat import (
             DINAT_PRETRAINED_MODEL_ARCHIVE_LIST,

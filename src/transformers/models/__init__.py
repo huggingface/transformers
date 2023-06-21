@@ -62,6 +62,7 @@ from . import (
     deit,
     deta,
     detr,
+    sptsv2,
     dialogpt,
     dinat,
     distilbert,
