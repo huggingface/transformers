@@ -297,8 +297,7 @@ class FlaxLlamaMLP(nn.Module):
         self.up_proj = nn.Dense(self.intermediate_size, use_bias=False)
 
     def __call__(self, hidden_states):
-        hidden_states = self.up_proj(hidden_states) * self.gate_proj(hidden_states)
-        hidden_states = self.act(hidden_states)
+        hidden_states = self.up_proj(hidden_states) * self.act(self.gate_proj(hidden_states))
         hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
@@ -694,16 +693,42 @@ class FlaxLlamaForCausalLM(FlaxLlamaPreTrainedModel):
 # append_call_sample_docstring(FlaxLlamaForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC)
 
 if __name__ == "__main__":
+    import flax
+    from flax.traverse_util import flatten_dict
     from .configuration_llama import LlamaConfig
+    from .modeling_llama import LlamaMLP
+    import torch
 
     key = jax.random.PRNGKey(0)
     config = LlamaConfig()
 
     model = FlaxLlamaMLP(config, 4 * config.intermediate_size)
-    x = jnp.zeros((4, 128, config.hidden_size))
+    pt_model = LlamaMLP(config.hidden_size, 4 * config.intermediate_size, config.hidden_act)
+
+    key, subkey = jax.random.split(key)
+    x = jax.random.normal(subkey, (4, 128, config.hidden_size)) * 0.1
 
     key, model_key = jax.random.split(key)
     params = model.init(model_key, x)
 
     y = model.apply(params, x)
+
+    params = flatten_dict(params, sep='.')
+    pt_model.load_state_dict({
+        'gate_proj.weight': torch.from_numpy(np.asarray(params['params.gate_proj.kernel'])).T,
+        'down_proj.weight': torch.from_numpy(np.asarray(params['params.down_proj.kernel'])).T,
+        'up_proj.weight': torch.from_numpy(np.asarray(params['params.up_proj.kernel'])).T,
+    })
+    x = torch.tensor(np.asarray(x))
+    pt_y = pt_model(x)
+
+    y = np.asarray(y)
+    pt_y = pt_y.detach().numpy()
+
+    try:
+        np.testing.assert_allclose(y, pt_y, atol=1e-4, rtol=1e-4)
+    except AssertionError as e:
+        import ipdb; ipdb.set_trace()
+
+    print(config)
     print("done")
