@@ -286,8 +286,8 @@ def load_pytorch_state_dict_in_tf2_model(
         pt_state_dict[new_key] = pt_state_dict.pop(old_key)
 
     # Matt: All TF models store the actual model stem in a MainLayer class, including the base model.
-    # In PT, the derived models (with heads) use the base model class as the stem instead, and the base model
-    # just contains the stem itself, and there is no MainLayer class. This means that TF base classes have one
+    # In PT, the derived models (with heads) use the base model class as the stem instead,
+    # and there is no MainLayer class. This means that TF base classes have one
     # extra layer in their weight names, corresponding to the MainLayer class. This code block compensates for that.
     start_prefix_to_remove = ""
     if not any(s.startswith(tf_model.base_model_prefix) for s in pt_state_dict.keys()):
