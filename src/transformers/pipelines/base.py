@@ -798,8 +798,10 @@ class Pipeline(_ScikitCompat):
                 self.device = torch.device(device)
             elif device < 0:
                 self.device = torch.device("cpu")
-            else:
+            elif isinstance(device, int):
                 self.device = torch.device(f"cuda:{device}")
+            else:
+                raise ValueError(f"Device type not supported. Got {device}")
         else:
             self.device = device if device is not None else -1
         self.torch_dtype = torch_dtype

@@ -551,6 +551,13 @@ class PipelineUtilsTest(unittest.TestCase):
         _ = pipe("Hello")
 
     @slow
+    @require_torch
+    @require_torch_gpu
+    def test_pipeline_cuda_indexed(self):
+        pipe = pipeline("text-generation", device="cuda:0")
+        _ = pipe("Hello")
+
+    @slow
     @require_tf
     @require_tensorflow_probability
     def test_load_default_pipelines_tf_table_qa(self):
