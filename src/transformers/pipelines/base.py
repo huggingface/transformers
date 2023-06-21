@@ -34,6 +34,7 @@ from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
+from ..pytorch_utils import is_torch_greater_or_equal_than_2_0
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import ModelOutput, add_end_docstrings, infer_framework, is_tf_available, is_torch_available, logging
 
@@ -793,7 +794,7 @@ class Pipeline(_ScikitCompat):
             if isinstance(device, torch.device):
                 self.device = device
             elif isinstance(device, str):
-                if device == "cuda":
+                if device == "cuda" and not is_torch_greater_or_equal_than_2_0:
                     # for backward compatiblity if using `set_device` and `cuda`
                     device = f"cuda:{torch.cuda.current_device()}"
                 self.device = torch.device(device)
@@ -907,7 +908,7 @@ class Pipeline(_ScikitCompat):
             with tf.device("/CPU:0" if self.device == -1 else f"/device:GPU:{self.device}"):
                 yield
         else:
-            if hasattr(torch.device, "__enter__"):
+            if is_torch_greater_or_equal_than_2_0:
                 with torch.device(self.device):
                     yield
             # for backward compatibility
