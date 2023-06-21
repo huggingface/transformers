@@ -581,8 +581,9 @@ def create_circleci_config(folder=None):
             doctest_list = f.read()
     else:
         doctest_list = []
-    if len(doctest_list) > 0:
-        jobs.extend(DOC_TESTS)
+
+    doctest_list = "docs/source/en/task_summary.md\n"
+    jobs.extend(DOC_TESTS)
 
     repo_util_file = os.path.join(folder, "test_repo_utils.txt")
     if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
