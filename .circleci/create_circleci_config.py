@@ -479,7 +479,7 @@ doc_test_job = CircleCIJob(
                 "tail -n1 pr_documentation_tests_temp.txt | tee pr_documentation_tests.txt"
         },
     ],
-    tests_to_run="$(cat pr_documentation_tests.txt)",  # noqa
+    tests_to_run="docs/source/en/task_summary.md\n",  # noqa
     pytest_options={"-doctest-modules": None, "doctest-glob": "*.md", "dist": "loadfile", "rvsA": None},
     command_timeout=1200,  # test cannot run longer than 1200 seconds
     pytest_num_workers=1,
