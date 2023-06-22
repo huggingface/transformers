@@ -1399,11 +1399,8 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         else:
             output_ids = outputs
 
-        # build and apply the final delay pattern mask
-        _, pattern_mask = self.build_delay_pattern_mask(
-            inputs, generation_config.pad_token_id, max_length=generation_config.max_length
-        )
-        output_ids = self.apply_delay_pattern_mask(output_ids, pattern_mask)
+        # apply the pattern mask to the final ids
+        output_ids = self.apply_delay_pattern_mask(output_ids, model_kwargs["delay_pattern_mask"])
 
         # revert the pattern delay mask by filtering the pad token id
         output_ids = output_ids[output_ids != generation_config.pad_token_id].reshape(
@@ -2039,7 +2036,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
 
         return model_kwargs
 
-    def _prepare_audio_encoder_kwargs_for_generation(self, input_values, model_kwargs, model_input_name: Optional[str] = None,):
+    def _prepare_audio_encoder_kwargs_for_generation(self, input_values, model_kwargs, model_input_name: Optional[str] = None):
         # 1. get audio encoder
         encoder = self.get_audio_encoder()
         # Compatibility with Accelerate big model inference: we need the encoder to outputs stuff on the same device
@@ -2066,7 +2063,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         encoder_kwargs["return_dict"] = True
         encoder_kwargs[model_input_name] = input_values
 
-        audio_encoder_outputs = encoder(**encoder_kwargs)
+        audio_encoder_outputs = encoder.encode(**encoder_kwargs)
 
         audio_codes = audio_encoder_outputs.audio_codes
         # TODO(SG): hacks to make the output ids compatible with encodec - add to encodec modelling code
@@ -2214,7 +2211,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 inputs_tensor,
                 model_kwargs,
                 model_input_name,
-                generation_config.guidance_scale,
+                guidance_scale=generation_config.guidance_scale,
             )
 
         if "decoder_input_ids" not in model_kwargs and "input_values" in model_kwargs:
@@ -2357,21 +2354,22 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         else:
             output_ids = outputs
 
-        # build and apply the final delay pattern mask
-        _, pattern_mask = self.decoder.build_delay_pattern_mask(
-            input_ids, generation_config.pad_token_id, max_length=generation_config.max_length
-        )
-        output_ids = self.decoder.apply_delay_pattern_mask(output_ids, pattern_mask)
+        # apply the pattern mask to the final ids
+        output_ids = self.decoder.apply_delay_pattern_mask(output_ids, model_kwargs["decoder_delay_pattern_mask"])
 
         # revert the pattern delay mask by filtering the pad token id
         output_ids = output_ids[output_ids != generation_config.pad_token_id].reshape(
             batch_size, self.decoder.num_codebooks, -1
         )
 
+        audio_scales = model_kwargs.get("audio_scales")
+        if audio_scales is None:
+            audio_scales = [None] * batch_size
+
         # TODO(SG): hacks to make the output ids compatible with encodec - add to encodec modelling code
         output_ids = output_ids.unsqueeze(0)
         output_values = self.audio_encoder.decode(
-            output_ids, audio_scales=model_kwargs.get("audio_scales"),
+            output_ids, audio_scales=audio_scales,
         )
 
         if generation_config.return_dict_in_generate:

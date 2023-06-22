@@ -98,7 +98,7 @@ def decoder_config_from_checkpoint(checkpoint: str) -> MusicgenDecoderConfig:
     if checkpoint == "small":
         d_model = 1024
         ffn_dim = d_model * 4
-        num_hidden_layers = 2
+        num_hidden_layers = 24
         num_codebooks = 4
     config = MusicgenDecoderConfig(
         d_model=d_model,
@@ -114,8 +114,6 @@ def decoder_config_from_checkpoint(checkpoint: str) -> MusicgenDecoderConfig:
 def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hub=False, device="cpu"):
     fairseq_model = MusicGen.get_pretrained(checkpoint, device=device)
     decoder_config = decoder_config_from_checkpoint(checkpoint)
-
-    fairseq_model.lm.transformer.layers = fairseq_model.lm.transformer.layers[:2]
 
     decoder_state_dict = fairseq_model.lm.state_dict()
     decoder_state_dict, enc_dec_proj_state_dict = rename_state_dict(decoder_state_dict, d_model=decoder_config.d_model)
@@ -153,17 +151,15 @@ def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hu
     if logits.shape != (8, 1, 2048):
         raise ValueError("Incorrect shape for logits")
 
-    if checkpoint == "small":
-        EXPECTED_SLICE = [-3.3180, -1.5341, -3.2796, -2.0692, -2.1036, -2.3339, 0.6623, -6.3549, 0.8477, -2.0866]
-
-        if torch.max(torch.abs(logits[0, 0, :10] - torch.tensor(EXPECTED_SLICE))) > 1e-4:
-            raise ValueError("Logits exceed tolerance threshold")
-
     # now construct the processor
     tokenizer = AutoTokenizer.from_pretrained(CHECKPOINT_TO_T5[checkpoint])
     feature_extractor = AutoFeatureExtractor.from_pretrained(CHECKPOINT_TO_ENCODEC[checkpoint], padding_side="left")
 
     processor = MusicgenProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+
+    # set the appropriate bos/pad token ids
+    model.generation_config.decoder_start_token_id = 2048
+    model.generation_config.pad_token_id = 2048
 
     if pytorch_dump_folder is not None:
         Path(pytorch_dump_folder).mkdir(exist_ok=True)
@@ -183,11 +179,11 @@ if __name__ == "__main__":
         "--checkpoint",
         default="small",
         type=str,
-        help="Checkpoint size of the Musicgen model you'd like to convert. Can be one of: small, medium, large.",
+        help="Checkpoint size of the MusicGen model you'd like to convert. Can be one of: `['small', 'medium', 'large']`.",
     )
     parser.add_argument(
         "--pytorch_dump_folder",
-        default="/Users/sanchitgandhi/convert-musicgen",
+        default="/home/sanchit/convert-musicgen",
         type=str,
         help="Path to the output PyTorch model directory.",
     )
