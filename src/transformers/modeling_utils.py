@@ -305,7 +305,12 @@ def shard_checkpoint(
     storage_id_to_block = {}
 
     for key, weight in state_dict.items():
-        storage_id = id_tensor_storage(weight)
+        # when bnb serialization is used the weights in the state dict can be strings
+        # check: https://github.com/huggingface/transformers/pull/24416 for more details
+        if isinstance(weight, str):
+            continue
+        else:
+            storage_id = id_tensor_storage(weight)
 
         # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
         if storage_id in storage_id_to_block:
