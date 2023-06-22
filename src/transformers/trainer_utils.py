@@ -301,14 +301,6 @@ class HPSearchBackend(ExplicitEnum):
     WANDB = "wandb"
 
 
-default_hp_space = {
-    HPSearchBackend.OPTUNA: default_hp_space_optuna,
-    HPSearchBackend.RAY: default_hp_space_ray,
-    HPSearchBackend.SIGOPT: default_hp_space_sigopt,
-    HPSearchBackend.WANDB: default_hp_space_wandb,
-}
-
-
 def is_main_process(local_rank):
     """
     Whether or not the current process is the local process, based on `xm.get_ordinal()` (for TPUs) first, then on
