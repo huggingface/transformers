@@ -248,7 +248,8 @@ def load_pytorch_state_dict_in_tf2_model(
     tf_to_pt_weight_rename=None,
     ignore_mismatched_sizes=False,
 ):
-    """Load a pytorch state_dict in a TF 2.0 model."""
+    """Load a pytorch state_dict in a TF 2.0 model. pt_state_dict can be either an actual dict or a lazy-loading
+    safetensors archive created with the safe_open() function."""
     import tensorflow as tf
     from packaging.version import parse
 
@@ -262,13 +263,11 @@ def load_pytorch_state_dict_in_tf2_model(
 
     if _prefix is None:
         _prefix = ""
-    if tf_inputs is not None:
+    if tf_inputs:
         with tf.name_scope(_prefix):
             tf_model(tf_inputs, training=False)  # Make sure model is built
-    # Adapt state dict - TODO remove this and update the AWS weights files instead
     # Convert old format to new format if needed from a PyTorch state_dict
-    old_keys = []
-    new_keys = []
+    tf_keys_to_pt_keys = {}
     for key in pt_state_dict.keys():
         new_key = None
         if "gamma" in key:
@@ -279,26 +278,24 @@ def load_pytorch_state_dict_in_tf2_model(
             new_key = key.replace("running_var", "moving_variance")
         if "running_mean" in key:
             new_key = key.replace("running_mean", "moving_mean")
-        if new_key:
-            old_keys.append(key)
-            new_keys.append(new_key)
-    for old_key, new_key in zip(old_keys, new_keys):
-        pt_state_dict[new_key] = pt_state_dict.pop(old_key)
+        if new_key is None:
+            new_key = key
+        tf_keys_to_pt_keys[new_key] = key
 
     # Matt: All TF models store the actual model stem in a MainLayer class, including the base model.
-    # In PT, the derived models (with heads) use the base model class as the stem instead, and the base model
-    # just contains the stem itself, and there is no MainLayer class. This means that TF base classes have one
+    # In PT, the derived models (with heads) use the base model class as the stem instead,
+    # and there is no MainLayer class. This means that TF base classes have one
     # extra layer in their weight names, corresponding to the MainLayer class. This code block compensates for that.
     start_prefix_to_remove = ""
-    if not any(s.startswith(tf_model.base_model_prefix) for s in pt_state_dict.keys()):
+    if not any(s.startswith(tf_model.base_model_prefix) for s in tf_keys_to_pt_keys.keys()):
         start_prefix_to_remove = tf_model.base_model_prefix + "."
 
     symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
     tf_loaded_numel = 0
-    weight_value_tuples = []
-    all_pytorch_weights = set(pt_state_dict.keys())
+    all_pytorch_weights = set(tf_keys_to_pt_keys.keys())
     missing_keys = []
     mismatched_keys = []
+    is_safetensor_archive = hasattr(pt_state_dict, "get_tensor")
     for symbolic_weight in symbolic_weights:
         sw_name = symbolic_weight.name
         name, transpose = convert_tf_weight_name_to_pt_weight_name(
@@ -311,7 +308,7 @@ def load_pytorch_state_dict_in_tf2_model(
             name = tf_to_pt_weight_rename(name)
 
         # Find associated numpy array in pytorch model state dict
-        if name not in pt_state_dict:
+        if name not in tf_keys_to_pt_keys:
             if allow_missing_keys:
                 missing_keys.append(name)
                 continue
@@ -320,9 +317,13 @@ def load_pytorch_state_dict_in_tf2_model(
                 if any(re.search(pat, name) is not None for pat in tf_model._keys_to_ignore_on_load_missing):
                     continue
             raise AttributeError(f"{name} not found in PyTorch model")
-
+        state_dict_name = tf_keys_to_pt_keys[name]
+        if is_safetensor_archive:
+            array = pt_state_dict.get_tensor(state_dict_name)
+        else:
+            array = pt_state_dict[state_dict_name]
         try:
-            array = apply_transpose(transpose, pt_state_dict[name], symbolic_weight.shape)
+            array = apply_transpose(transpose, array, symbolic_weight.shape)
         except tf.errors.InvalidArgumentError as e:
             if not ignore_mismatched_sizes:
                 error_msg = str(e)
@@ -331,15 +332,14 @@ def load_pytorch_state_dict_in_tf2_model(
                 )
                 raise tf.errors.InvalidArgumentError(error_msg)
             else:
-                mismatched_keys.append((name, pt_state_dict[name].shape, symbolic_weight.shape))
+                mismatched_keys.append((name, array.shape, symbolic_weight.shape))
                 continue
 
         tf_loaded_numel += tensor_size(array)
 
-        weight_value_tuples.append((symbolic_weight, array))
+        K.set_value(symbolic_weight, array)
+        del array  # Immediately free memory to keep peak usage as low as possible
         all_pytorch_weights.discard(name)
-
-    K.batch_set_value(weight_value_tuples)
 
     logger.info(f"Loaded {tf_loaded_numel:,} parameters in the TF 2.0 model.")
 
