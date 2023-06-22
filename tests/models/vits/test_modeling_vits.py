@@ -14,9 +14,6 @@
 # limitations under the License.
 """ Testing suite for the PyTorch VITS model. """
 
-import copy
-import inspect
-import tempfile
 import unittest
 
 from transformers import VitsConfig
@@ -27,22 +24,17 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.trainer_utils import set_seed
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
+    global_rng,
     ids_tensor,
     random_attention_mask,
-    global_rng,
 )
-from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
-    import torch
     from transformers import VitsModel
 
 

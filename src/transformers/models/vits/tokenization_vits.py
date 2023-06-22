@@ -69,13 +69,7 @@ class VitsMmsTokenizer(PreTrainedTokenizer):
         add_blank=True,
         **kwargs,
     ) -> None:
-        super().__init__(
-            pad_token=pad_token,
-            unk_token=unk_token,
-            language=language,
-            add_blank=add_blank,
-            **kwargs
-        )
+        super().__init__(pad_token=pad_token, unk_token=unk_token, language=language, add_blank=add_blank, **kwargs)
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -83,9 +77,9 @@ class VitsMmsTokenizer(PreTrainedTokenizer):
         # The original model pads with token_id 0, but that doesn't work here
         # as token_id 0 is an actual character. So we add a fake padding token
         # and then filter that out in the model.
-        if not pad_token in self.encoder:
+        if pad_token not in self.encoder:
             self.encoder[pad_token] = len(self.encoder)
-        if not unk_token in self.encoder:
+        if unk_token not in self.encoder:
             self.encoder[unk_token] = len(self.encoder)
 
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -105,7 +99,7 @@ class VitsMmsTokenizer(PreTrainedTokenizer):
         text = self._preprocess_char(text.lower())
         valid_chars = self.encoder
         filtered_text = "".join(list(filter(lambda char: char in valid_chars, text)))
-        tokens = [token for token in filtered_text.strip()]
+        tokens = list(filtered_text.strip())
 
         if self.add_blank:
             interspersed = [self._convert_id_to_token(0)] * (len(tokens) * 2 + 1)

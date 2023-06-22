@@ -32,12 +32,14 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        vocab = "k ' z y u d h e s w – 3 c p - 1 j m i X f l o 0 b r a 4 2 n _ x v t q 5 6 g < > | <pad> <unk>".split(" ")
+        vocab = "k ' z y u d h e s w – 3 c p - 1 j m i X f l o 0 b r a 4 2 n _ x v t q 5 6 g < > | <pad> <unk>".split(
+            " "
+        )
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         vocab_tokens[" "] = vocab_tokens["X"]
         del vocab_tokens["X"]
 
-        self.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>" }
+        self.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>"}
 
         self.tmpdirname = tempfile.mkdtemp()
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])

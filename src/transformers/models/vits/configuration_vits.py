@@ -14,8 +14,6 @@
 # limitations under the License.
 """ VITS model configuration"""
 
-import functools
-import operator
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -30,18 +28,17 @@ VITS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class VitsConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VitsModel`]. It is used to instantiate a
-    VITS model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the VITS
-    [TODO](https://huggingface.co/TODO) architecture.
+    This is the configuration class to store the configuration of a [`VitsModel`]. It is used to instantiate a VITS
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the VITS [TODO](https://huggingface.co/TODO) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 38):
-            Vocabulary size of the VITS model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed to the forward method of [`VitsModel`].
+            Vocabulary size of the VITS model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed to the forward method of [`VitsModel`].
         hidden_size (`int`, *optional*, defaults to 192):
             Dimensionality of the text encoder layers.
         encoder_layers (`int`, *optional*, defaults to 6):
@@ -56,8 +53,7 @@ class VitsConfig(PretrainedConfig):
         ffn_kernel_size (`int`, *optional*, defaults to 3):
             TODO
         inter_channels (`int`, *optional*, defaults to 192):
-            TODO
-            Should be divisible by two.
+            TODO Should be divisible by two.
         spec_channels (`int`, *optional*, defaults to 513):
             Number of channels in the target spectrograms.
         segment_size (`int`, *optional*, defaults to 32):
@@ -84,16 +80,16 @@ class VitsConfig(PretrainedConfig):
         upsample_initial_channel (`int`, *optional*, defaults to 512):
             The number of input channels into the HiFi-GAN upsampling network.
         upsample_rates (`Tuple[int]` or `List[int]`, *optional*, defaults to `[8, 8, 2, 2]`):
-            A tuple of integers defining the stride of each 1D convolutional layer in the HiFi-GAN upsampling network. The
-            length of *upsample_rates* defines the number of convolutional layers and has to match the length of
+            A tuple of integers defining the stride of each 1D convolutional layer in the HiFi-GAN upsampling network.
+            The length of *upsample_rates* defines the number of convolutional layers and has to match the length of
             *upsample_kernel_sizes*.
         upsample_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[16, 16, 4, 4]`):
-            A tuple of integers defining the kernel size of each 1D convolutional layer in the HiFi-GAN upsampling network. The
-            length of *upsample_kernel_sizes* defines the number of convolutional layers and has to match the length of
-            *upsample_rates*.
+            A tuple of integers defining the kernel size of each 1D convolutional layer in the HiFi-GAN upsampling
+            network. The length of *upsample_kernel_sizes* defines the number of convolutional layers and has to match
+            the length of *upsample_rates*.
         resblock_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 7, 11]`):
-            A tuple of integers defining the kernel sizes of the 1D convolutional layers in the HiFi-GAN multi-receptive field
-            fusion (MRF) module.
+            A tuple of integers defining the kernel sizes of the 1D convolutional layers in the HiFi-GAN
+            multi-receptive field fusion (MRF) module.
         resblock_dilation_sizes (`Tuple[Tuple[int]]` or `List[List[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
             A nested tuple of integers defining the dilation rates of the dilated 1D convolutional layers in the
             HiFi-GAN multi-receptive field fusion (MRF) module.
@@ -110,8 +106,7 @@ class VitsConfig(PretrainedConfig):
         prior_encoder_num_flows=4,
             TODO
         wavenet_kernel_size=5,
-            TODO
-            This must be an odd number.
+            TODO This must be an odd number.
         wavenet_dilation_rate=1,
             TODO
         wavenet_dropout (`float`, *optional*, defaults to 0.1):
@@ -146,8 +141,8 @@ class VitsConfig(PretrainedConfig):
         encoder_layerdrop=0.1,
         ffn_kernel_size=3,
         inter_channels=192,  # TODO: better name?  intermediate_size?
-        spec_channels=513,   # TODO: spectrogram_channels?
-        segment_size=32,     # TODO: hps.train.segment_size // hps.data.hop_length
+        spec_channels=513,  # TODO: spectrogram_channels?  num_spectrogram_bins?
+        segment_size=32,  # TODO: hps.train.segment_size // hps.data.hop_length
         hidden_act="relu",  # or quick_gelu
         hidden_dropout=0.1,
         attention_dropout=0.1,
