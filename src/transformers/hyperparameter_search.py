@@ -1,5 +1,3 @@
-from typing import Callable, Dict, Type
-
 from .integrations import (
     is_optuna_available,
     is_ray_available,
@@ -20,11 +18,17 @@ from .trainer_utils import (
 
 
 class HyperParamSearchBackendBase:
-    name: HPSearchBackend
+    name: str
     pip_package: str = None
-    is_available: Callable[[], bool]
-    run: Callable
-    default_hp_space: Callable
+
+    def is_available(self):
+        raise NotImplementedError
+
+    def run(self, trainer, n_trials: int, direction: str, **kwargs):
+        raise NotImplementedError
+
+    def default_hp_space(self, trial):
+        raise NotImplementedError
 
     def ensure_available(self):
         if not self.is_available():
@@ -38,49 +42,77 @@ class HyperParamSearchBackendBase:
 
 
 class OptunaBackend(HyperParamSearchBackendBase):
-    is_available = staticmethod(is_optuna_available)
-    run = staticmethod(run_hp_search_optuna)
-    default_hp_space = staticmethod(default_hp_space_optuna)
+    name = "optuna"
+
+    def is_available(self):
+        return is_optuna_available()
+
+    def run(self, trainer, n_trials: int, direction: str, **kwargs):
+        return run_hp_search_optuna(trainer, n_trials, direction, **kwargs)
+
+    def default_hp_space(self, trial):
+        return default_hp_space_optuna(trial)
 
 
 class RayTuneBackend(HyperParamSearchBackendBase):
+    name = "ray"
     pip_package = "'ray[tune]'"
-    is_available = staticmethod(is_ray_available)
-    run = staticmethod(run_hp_search_ray)
-    default_hp_space = staticmethod(default_hp_space_ray)
+
+    def is_available(self):
+        return is_ray_available()
+
+    def run(self, trainer, n_trials: int, direction: str, **kwargs):
+        return run_hp_search_ray(trainer, n_trials, direction, **kwargs)
+
+    def default_hp_space(self, trial):
+        return default_hp_space_ray(trial)
 
 
 class SigOptBackend(HyperParamSearchBackendBase):
-    is_available = staticmethod(is_sigopt_available)
-    run = staticmethod(run_hp_search_sigopt)
-    default_hp_space = staticmethod(default_hp_space_sigopt)
+    name = "sigopt"
+
+    def is_available(self):
+        return is_sigopt_available()
+
+    def run(self, trainer, n_trials: int, direction: str, **kwargs):
+        return run_hp_search_sigopt(trainer, n_trials, direction, **kwargs)
+
+    def default_hp_space(self, trial):
+        return default_hp_space_sigopt(trial)
 
 
 class WandbBackend(HyperParamSearchBackendBase):
-    is_available = staticmethod(is_wandb_available)
-    run = staticmethod(run_hp_search_wandb)
-    default_hp_space = staticmethod(default_hp_space_wandb)
+    name = "wandb"
+
+    def is_available(self):
+        return is_wandb_available()
+
+    def run(self, trainer, n_trials: int, direction: str, **kwargs):
+        return run_hp_search_wandb(trainer, n_trials, direction, **kwargs)
+
+    def default_hp_space(self, trial):
+        return default_hp_space_wandb(trial)
 
 
-all_backends: Dict[HPSearchBackend, Type[HyperParamSearchBackendBase]] = {
-    HPSearchBackend.OPTUNA: OptunaBackend,
-    HPSearchBackend.RAY: RayTuneBackend,
-    HPSearchBackend.SIGOPT: SigOptBackend,
-    HPSearchBackend.WANDB: WandbBackend,
+ALL_HYPERPARAMETER_SEARCH_BACKENDS = {
+    HPSearchBackend(backend.name): backend
+    for backend in [OptunaBackend, RayTuneBackend, SigOptBackend, WandbBackend]
 }
-
-assert list(all_backends) == list(HPSearchBackend)
-
-for _name, _backend in all_backends.items():
-    _backend.name = _name
 
 
 def default_hp_search_backend() -> str:
-    available_backends = [backend for backend in all_backends.values() if backend.is_available()]
+    available_backends = [
+        backend
+        for backend in ALL_HYPERPARAMETER_SEARCH_BACKENDS.values()
+        if backend.is_available()
+    ]
     if available_backends:
         # TODO warn if len(available_backends) > 1 ?
         return available_backends[0].name
     raise RuntimeError(
         "No hyperparameter search backend available.\n"
-        + "\n".join(f" - To install {backend.name} run {backend.pip_install()}" for backend in all_backends.values())
+        + "\n".join(
+            f" - To install {backend.name} run {backend.pip_install()}"
+            for backend in ALL_HYPERPARAMETER_SEARCH_BACKENDS.values()
+        )
     )

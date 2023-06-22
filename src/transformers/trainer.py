@@ -57,7 +57,7 @@ from .data.data_collator import DataCollator, DataCollatorWithPadding, default_d
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
-from .hyperparameter_search import all_backends, default_hp_search_backend
+from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
@@ -2508,7 +2508,7 @@ class Trainer:
         if backend is None:
             backend = default_hp_search_backend()
         backend = HPSearchBackend(backend)
-        backend_obj = all_backends[backend]()
+        backend_obj = ALL_HYPERPARAMETER_SEARCH_BACKENDS[backend]()
         backend_obj.ensure_available()
         self.hp_search_backend = backend
         if self.model_init is None:
