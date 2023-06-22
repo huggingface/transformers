@@ -35,7 +35,7 @@ from ...modeling_tf_utils import (
     get_initializer,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import check_embeddings_within_bounds, shape_list
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_llama import LlamaConfig
 
@@ -284,7 +284,6 @@ class TFLlamaDecoderLayer(tf.keras.layers.Layer):
         past_key_value: Optional[Tuple[tf.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
-        training=False,
     ) -> Tuple[tf.Tensor, Optional[Tuple[tf.Tensor, tf.Tensor]]]:
         """
         Args:
@@ -312,7 +311,6 @@ class TFLlamaDecoderLayer(tf.keras.layers.Layer):
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
-            training=training,
         )
         hidden_states = residual + hidden_states
 
@@ -458,6 +456,7 @@ class TFLlamaModel(TFLlamaPreTrainedModel):
         # self.layers is a protected TF property, so we can't use that name
         self.layers_ = [TFLlamaDecoderLayer(config, name=f"layers_._{i}") for i in range(config.num_hidden_layers)]
         self.norm = TFLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="norm")
+        self.config = config
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -465,20 +464,24 @@ class TFLlamaModel(TFLlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    # Copied from transformers.models.bart.modeling_tf_whisper.TFWhisperDecoder._prepare_decoder_attention_mask
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, past_key_values_length):
         # create causal mask
-        # # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
-        else:
-            combined_attention_mask = _expand_mask(
-                tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
-            )
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        batch_size, seq_len = input_shape[0], input_shape[1]
+
+        combined_attention_mask = tf.cond(
+            tf.math.greater(seq_len, 1),
+            lambda: _make_causal_mask(input_shape, past_key_values_length=past_key_values_length),
+            lambda: _expand_mask(tf.ones((batch_size, seq_len + past_key_values_length)), tgt_len=seq_len),
+        )
 
         if attention_mask is not None:
-            combined_attention_mask = combined_attention_mask + _expand_mask(attention_mask, tgt_len=input_shape[-1])
-
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            expanded_attn_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
+            combined_attention_mask = (
+                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
+            )
         return combined_attention_mask
 
     @unpack_inputs
@@ -494,7 +497,7 @@ class TFLlamaModel(TFLlamaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: bool = False,
+        training: Optional[bool] = None,
     ) -> Union[Tuple, TFBaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -528,6 +531,7 @@ class TFLlamaModel(TFLlamaPreTrainedModel):
             position_ids = tf.cast(position_ids, dtype=tf.int32)
 
         if inputs_embeds is None:
+            check_embeddings_within_bounds(input_ids, self.config.vocab_size)
             inputs_embeds = self.embed_tokens(input_ids)
         # embed positions
         if attention_mask is None:
@@ -556,7 +560,6 @@ class TFLlamaModel(TFLlamaPreTrainedModel):
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
-                training=training,
             )
 
             hidden_states = layer_outputs[0]
@@ -626,7 +629,7 @@ class TFLlamaForCausalLM(TFLlamaPreTrainedModel, TFCausalLanguageModelingLoss):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training=False,
+        training: Optional[bool] = None,
     ) -> Union[Tuple, TFCausalLMOutputWithPast]:
         r"""
         Args:
@@ -671,7 +674,6 @@ class TFLlamaForCausalLM(TFLlamaPreTrainedModel, TFCausalLanguageModelingLoss):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=training,
         )
 
         hidden_states = outputs[0]
@@ -800,7 +802,6 @@ class TFLlamaForSequenceClassification(TFLlamaPreTrainedModel, TFSequenceClassif
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=training,
         )
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
