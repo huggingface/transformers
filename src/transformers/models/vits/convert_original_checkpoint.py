@@ -125,10 +125,10 @@ MAPPING_FLOW = {
 }
 MAPPING_GENERATOR = {
     "dec.conv_pre" : "decoder.conv_pre",
-    "dec.ups.0" : "decoder.ups.0",
-    "dec.ups.1" : "decoder.ups.1",
-    "dec.ups.2" : "decoder.ups.2",
-    "dec.ups.3" : "decoder.ups.3",
+    "dec.ups.0" : "decoder.upsampler.0",
+    "dec.ups.1" : "decoder.upsampler.1",
+    "dec.ups.2" : "decoder.upsampler.2",
+    "dec.ups.3" : "decoder.upsampler.3",
     "dec.resblocks.*.convs1.0" : "decoder.resblocks.*.convs1.0",
     "dec.resblocks.*.convs1.1" : "decoder.resblocks.*.convs1.1",
     "dec.resblocks.*.convs1.2" : "decoder.resblocks.*.convs1.2",
@@ -297,8 +297,12 @@ def convert_checkpoint(
     config.vocab_size = len(symbols)
     model = VitsModel(config)
 
+    model.decoder.apply_weight_norm()
+
     orig_checkpoint = torch.load(checkpoint_path, map_location=torch.device("cpu"))
     recursively_load_weights(orig_checkpoint["model"], model)
+
+    model.decoder.remove_weight_norm()
 
     model.save_pretrained(pytorch_dump_folder_path)
     tokenizer.save_pretrained(pytorch_dump_folder_path)

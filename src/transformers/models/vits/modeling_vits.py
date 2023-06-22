@@ -47,9 +47,6 @@ VITS_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-LRELU_SLOPE = 0.1  #TODO: use config.leaky_relu_slope (see HifiGan again)
-
-
 @dataclass
 class VitsModelOutput(ModelOutput):
     """
@@ -90,18 +87,6 @@ def fused_add_tanh_sigmoid_multiply(input_a, input_b, num_channels):
     return acts
 
 
-# TODO: replace with PreTrainedModel stuff
-def init_weights(m, mean=0.0, std=0.01):
-  classname = m.__class__.__name__
-  if classname.find("Conv") != -1:
-    m.weight.data.normal_(mean, std)
-
-
-def get_padding(kernel_size, dilation=1):
-    return int((kernel_size*dilation - dilation)/2)
-
-
-
 class VitsPosteriorEncoder(nn.Module):
     def __init__(self, config: VitsConfig):
         super().__init__()
@@ -120,131 +105,156 @@ class VitsPosteriorEncoder(nn.Module):
         return z, mean, log_stddev
 
 
-class VitsResBlock1(torch.nn.Module):
-    def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5)):
+class VitsHifiGanResidualBlock(nn.Module):
+    def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5), leaky_relu_slope=0.1):
         super().__init__()
-        self.convs1 = nn.ModuleList([
-            nn.utils.weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, dilation=dilation[0],
-                               padding=get_padding(kernel_size, dilation[0]))),
-            nn.utils.weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, dilation=dilation[1],
-                               padding=get_padding(kernel_size, dilation[1]))),
-            nn.utils.weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, dilation=dilation[2],
-                               padding=get_padding(kernel_size, dilation[2])))
-        ])
-        self.convs1.apply(init_weights)
+        self.leaky_relu_slope = leaky_relu_slope
 
-        self.convs2 = nn.ModuleList([
-            nn.utils.weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, dilation=1,
-                               padding=get_padding(kernel_size, 1))),
-            nn.utils.weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, dilation=1,
-                               padding=get_padding(kernel_size, 1))),
-            nn.utils.weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, dilation=1,
-                               padding=get_padding(kernel_size, 1)))
-        ])
-        self.convs2.apply(init_weights)
+        self.convs1 = nn.ModuleList(
+            [
+                nn.Conv1d(
+                    channels,
+                    channels,
+                    kernel_size,
+                    stride=1,
+                    dilation=dilation[i],
+                    padding=self.get_padding(kernel_size, dilation[i]),
+                )
+                for i in range(len(dilation))
+            ]
+        )
+        self.convs2 = nn.ModuleList(
+            [
+                nn.Conv1d(
+                    channels,
+                    channels,
+                    kernel_size,
+                    stride=1,
+                    dilation=1,
+                    padding=self.get_padding(kernel_size, 1),
+                )
+                for _ in range(len(dilation))
+            ]
+        )
 
-    def forward(self, inputs, padding_mask=None):
-        for c1, c2 in zip(self.convs1, self.convs2):
-            xt = nn.functional.leaky_relu(inputs, LRELU_SLOPE)
-            if padding_mask is not None:
-                xt = xt * padding_mask
-            xt = c1(xt)
-            xt = nn.functional.leaky_relu(xt, LRELU_SLOPE)
-            if padding_mask is not None:
-                xt = xt * padding_mask
-            xt = c2(xt)
-            inputs = xt + inputs
-        if padding_mask is not None:
-            inputs = inputs * padding_mask
-        return inputs
+    def get_padding(self, kernel_size, dilation=1):
+        return (kernel_size * dilation - dilation) // 2
+
+    def apply_weight_norm(self):
+        for layer in self.convs1:
+            nn.utils.weight_norm(layer)
+        for layer in self.convs2:
+            nn.utils.weight_norm(layer)
 
     def remove_weight_norm(self):
-        for l in self.convs1:
-            nn.utils.remove_weight_norm(l)
-        for l in self.convs2:
-            nn.utils.remove_weight_norm(l)
+        for layer in self.convs1:
+            nn.utils.remove_weight_norm(layer)
+        for layer in self.convs2:
+            nn.utils.remove_weight_norm(layer)
+
+    def forward(self, hidden_states):
+        for conv1, conv2 in zip(self.convs1, self.convs2):
+            residual = hidden_states
+            hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
+            hidden_states = conv1(hidden_states)
+            hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
+            hidden_states = conv2(hidden_states)
+            hidden_states = hidden_states + residual
+        return hidden_states
 
 
-class VitsResBlock2(torch.nn.Module):
-    def __init__(self, channels, kernel_size=3, dilation=(1, 3)):
-        super().__init__()
-        self.convs = nn.ModuleList([
-            nn.utils.weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, dilation=dilation[0],
-                               padding=get_padding(kernel_size, dilation[0]))),
-            nn.utils.weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, dilation=dilation[1],
-                               padding=get_padding(kernel_size, dilation[1])))
-        ])
-        self.convs.apply(init_weights)
+class VitsHifiGan(PreTrainedModel):
+    config_class = VitsConfig
+    main_input_name = "spectrogram"
 
-    def forward(self, inputs, padding_mask=None):
-        for c in self.convs:
-            xt = nn.functional.leaky_relu(inputs, LRELU_SLOPE)
-            if padding_mask is not None:
-                xt = xt * padding_mask
-            xt = c(xt)
-            inputs = xt + inputs
-        if padding_mask is not None:
-            inputs = inputs * padding_mask
-        return inputs
-
-    def remove_weight_norm(self):
-        for l in self.convs:
-            nn.utils.remove_weight_norm(l)
-
-
-# TODO: is this just HifiGAN? then see SpeechT5
-class VitsGenerator(torch.nn.Module):
-    def __init__(self, config):
-        super().__init__()
+    def __init__(self, config: VitsConfig):
+        super().__init__(config)
         self.num_kernels = len(config.resblock_kernel_sizes)
         self.num_upsamples = len(config.upsample_rates)
-        self.conv_pre = nn.Conv1d(config.inter_channels, config.upsample_initial_channel, 7, 1, padding=3)
-        resblock = VitsResBlock1 if config.resblock == '1' else VitsResBlock2   # TODO: which one in our checkpoints?
+        self.conv_pre = nn.Conv1d(
+            config.inter_channels,
+            config.upsample_initial_channel,
+            kernel_size=7,
+            stride=1,
+            padding=3,
+        )
 
-        self.ups = nn.ModuleList()
-        for i, (u, k) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes)):
-            self.ups.append(nn.utils.weight_norm(
-                nn.ConvTranspose1d(config.upsample_initial_channel//(2**i), config.upsample_initial_channel//(2**(i+1)),
-                                k, u, padding=(k-u)//2)))
+        self.upsampler = nn.ModuleList()
+        for i, (upsample_rate, kernel_size) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes)):
+            self.upsampler.append(
+                nn.ConvTranspose1d(
+                    config.upsample_initial_channel // (2**i),
+                    config.upsample_initial_channel // (2 ** (i + 1)),
+                    kernel_size=kernel_size,
+                    stride=upsample_rate,
+                    padding=(kernel_size - upsample_rate) // 2,
+                )
+            )
 
         self.resblocks = nn.ModuleList()
-        for i in range(len(self.ups)):
-            ch = config.upsample_initial_channel//(2**(i+1))
-            for j, (k, d) in enumerate(zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes)):
-                self.resblocks.append(resblock(ch, k, d))
+        for i in range(len(self.upsampler)):
+            channels = config.upsample_initial_channel // (2 ** (i + 1))
+            for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes):
+                self.resblocks.append(VitsHifiGanResidualBlock(channels, kernel_size, dilation, config.leaky_relu_slope))
 
-        self.conv_post = nn.Conv1d(ch, 1, 7, 1, padding=3, bias=False)
-        self.ups.apply(init_weights)
+        self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3, bias=False)
 
         if config.speaker_embedding_channels != 0:
             self.cond = nn.Conv1d(config.speaker_embedding_channels, config.upsample_initial_channel, 1)
 
-    def forward(self, x, global_conditioning=None):
-        x = self.conv_pre(x)
-        if global_conditioning is not None:
-          x = x + self.cond(global_conditioning)
+        # Initialize weights and apply final processing
+        self.post_init()
 
-        for i in range(self.num_upsamples):
-            x = nn.functional.leaky_relu(x, LRELU_SLOPE)
-            x = self.ups[i](x)
-            xs = None
-            for j in range(self.num_kernels):
-                if xs is None:
-                    xs = self.resblocks[i*self.num_kernels+j](x)
-                else:
-                    xs += self.resblocks[i*self.num_kernels+j](x)
-            x = xs / self.num_kernels
-        x = nn.functional.leaky_relu(x)
-        x = self.conv_post(x)
-        x = torch.tanh(x)
-        return x
+    def _init_weights(self, module):
+        """Initialize the weights."""
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+
+    def apply_weight_norm(self):
+        for layer in self.upsampler:
+            nn.utils.weight_norm(layer)
+        for layer in self.resblocks:
+            layer.apply_weight_norm()
 
     def remove_weight_norm(self):
-        print('Removing weight norm...')
-        for l in self.ups:
-            nn.utils.remove_weight_norm(l)
-        for l in self.resblocks:
-            l.remove_weight_norm()
+        for layer in self.upsampler:
+            nn.utils.remove_weight_norm(layer)
+        for layer in self.resblocks:
+            layer.remove_weight_norm()
+
+    def forward(self, spectrogram: torch.FloatTensor, global_conditioning: Optional[torch.FloatTensor] = None) -> torch.FloatTensor:
+        r"""
+        Converts a spectrogram into a speech waveform.
+
+        Args:
+            spectrogram (`torch.FloatTensor` of shape `(batch_size, config.inter_channels, sequence_length)`):
+                Tensor containing the spectrograms.
+            global_conditioning (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_channels, 1)`, *optional*):
+                Tensor containing speaker embeddings, for multispeaker models.
+
+        Returns:
+            `torch.FloatTensor`: Tensor of shape shape `(batch_size, 1, num_frames)` containing the speech waveform.
+        """
+        hidden_states = self.conv_pre(spectrogram)
+
+        if global_conditioning is not None:
+            hidden_states = hidden_states + self.cond(global_conditioning)
+
+        for i in range(self.num_upsamples):
+            hidden_states = nn.functional.leaky_relu(hidden_states, self.config.leaky_relu_slope)
+            hidden_states = self.upsampler[i](hidden_states)
+
+            res_state = self.resblocks[i * self.num_kernels](hidden_states)
+            for j in range(1, self.num_kernels):
+                res_state += self.resblocks[i * self.num_kernels + j](hidden_states)
+            hidden_states = res_state / self.num_kernels
+
+        hidden_states = nn.functional.leaky_relu(hidden_states)
+        hidden_states = self.conv_post(hidden_states)
+        waveform = torch.tanh(hidden_states)
+        return waveform
 
 
 class VitsWaveNet(torch.nn.Module):
@@ -1351,7 +1361,7 @@ class VitsModel(VitsPreTrainedModel):
         self.config = config
         self.text_encoder = VitsTextEncoder(config)
         self.flow = VitsResidualCouplingBlock(config)
-        self.decoder = VitsGenerator(config)
+        self.decoder = VitsHifiGan(config)
 
         if config.use_stochastic_duration_prediction:
             self.duration_predictor = VitsStochasticDurationPredictor(config)

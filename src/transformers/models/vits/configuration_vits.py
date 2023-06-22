@@ -75,40 +75,47 @@ class VitsConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
-        leaky_relu_slope (`float`, *optional*, defaults to 0.1):
-            The angle of the negative slope used by the leaky ReLU activation.
         use_stochastic_duration_prediction (`bool`, *optional*, defaults to `True`):
             Whether to use the stochastic duration prediction module or the regular duration predictor.
         num_speakers (`int`, *optional*, defaults to 1):
             Number of speakers if this is a multi-speaker model.
         speaker_embedding_channels (`int`, *optional*, defaults to 0):
             Number of channels used by the speaker embeddings. Is zero for single-speaker models.
-        resblock="1",
-            TODO: is this HifiGan?
-        resblock_kernel_sizes=[3, 7, 11],
-            TODO: is this HifiGan?
-        resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
-            TODO: is this HifiGan?
-        upsample_rates=[8, 8, 2, 2],
-            TODO: is this HifiGan?
-        upsample_initial_channel=512,
-            TODO: is this HifiGan?
-        upsample_kernel_sizes=[16, 16, 4, 4],
-            TODO: is this HifiGan?
-
+        upsample_initial_channel (`int`, *optional*, defaults to 512):
+            The number of input channels into the HiFi-GAN upsampling network.
+        upsample_rates (`Tuple[int]` or `List[int]`, *optional*, defaults to `[8, 8, 2, 2]`):
+            A tuple of integers defining the stride of each 1D convolutional layer in the HiFi-GAN upsampling network. The
+            length of *upsample_rates* defines the number of convolutional layers and has to match the length of
+            *upsample_kernel_sizes*.
+        upsample_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[16, 16, 4, 4]`):
+            A tuple of integers defining the kernel size of each 1D convolutional layer in the HiFi-GAN upsampling network. The
+            length of *upsample_kernel_sizes* defines the number of convolutional layers and has to match the length of
+            *upsample_rates*.
+        resblock_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 7, 11]`):
+            A tuple of integers defining the kernel sizes of the 1D convolutional layers in the HiFi-GAN multi-receptive field
+            fusion (MRF) module.
+        resblock_dilation_sizes (`Tuple[Tuple[int]]` or `List[List[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
+            A nested tuple of integers defining the dilation rates of the dilated 1D convolutional layers in the
+            HiFi-GAN multi-receptive field fusion (MRF) module.
+        leaky_relu_slope (`float`, *optional*, defaults to 0.1):
+            The angle of the negative slope used by the leaky ReLU activation.
         duration_predictor_kernel_size=3
+            TODO
         duration_predictor_dropout=0.5
+            TODO
         duration_predictor_num_flows=4
+            TODO
         duration_predictor_filter_channels=256
-
-
+            TODO
         prior_encoder_num_flows=4,
+            TODO
         wavenet_kernel_size=5,
+            TODO
             This must be an odd number.
         wavenet_dilation_rate=1,
+            TODO
         wavenet_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the WaveNet layers.
-
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
@@ -147,29 +154,23 @@ class VitsConfig(PretrainedConfig):
         activation_dropout=0.1,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
-        leaky_relu_slope=0.1,
         use_stochastic_duration_prediction=True,
         num_speakers=1,
         speaker_embedding_channels=0,
-
-        # TODO: is this HifiGan?
-        resblock="1",
+        upsample_initial_channel=512,
+        upsample_rates=[8, 8, 2, 2],
+        upsample_kernel_sizes=[16, 16, 4, 4],
         resblock_kernel_sizes=[3, 7, 11],
         resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
-        upsample_rates=[8, 8, 2, 2],
-        upsample_initial_channel=512,
-        upsample_kernel_sizes=[16, 16, 4, 4],
-
+        leaky_relu_slope=0.1,
         prior_encoder_num_flows=4,
         wavenet_kernel_size=5,
         wavenet_dilation_rate=1,
         wavenet_dropout=0.0,
-
         duration_predictor_kernel_size=3,
         duration_predictor_dropout=0.5,
         duration_predictor_num_flows=4,
         duration_predictor_filter_channels=256,
-
         use_cache=False,
         is_encoder_decoder=False,
         **kwargs,
@@ -190,16 +191,15 @@ class VitsConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.leaky_relu_slope = leaky_relu_slope
         self.use_stochastic_duration_prediction = use_stochastic_duration_prediction
         self.num_speakers = num_speakers
         self.speaker_embedding_channels = speaker_embedding_channels
-        self.resblock = resblock
+        self.upsample_initial_channel = upsample_initial_channel
+        self.upsample_rates = upsample_rates
+        self.upsample_kernel_sizes = upsample_kernel_sizes
         self.resblock_kernel_sizes = resblock_kernel_sizes
         self.resblock_dilation_sizes = resblock_dilation_sizes
-        self.upsample_rates = upsample_rates
-        self.upsample_initial_channel = upsample_initial_channel
-        self.upsample_kernel_sizes = upsample_kernel_sizes
+        self.leaky_relu_slope = leaky_relu_slope
         self.prior_encoder_num_flows = prior_encoder_num_flows
         self.wavenet_kernel_size = wavenet_kernel_size
         self.wavenet_dilation_rate = wavenet_dilation_rate
@@ -208,7 +208,6 @@ class VitsConfig(PretrainedConfig):
         self.duration_predictor_dropout = duration_predictor_dropout
         self.duration_predictor_num_flows = duration_predictor_num_flows
         self.duration_predictor_filter_channels = duration_predictor_filter_channels
-
         self.use_cache = use_cache
         self.is_encoder_decoder = is_encoder_decoder
 
