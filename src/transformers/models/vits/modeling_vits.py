@@ -1377,57 +1377,7 @@ class VitsModel(VitsPreTrainedModel):
             speaker_embeddings = None
 
         if labels is not None:
-            output_padding_mask = labels[:, 0:1, :] != -100.0
-            z, means_posterior, log_variances_posterior = self.posterior_encoder(
-                labels, output_padding_mask, speaker_embeddings
-            )
-            z_p = self.flow(z, output_padding_mask, speaker_embeddings)
-
-            # TODO: did not implement this yet because of dependency on monotonic-align
-            # negative cross-entropy
-            # s_p_sq_r = torch.exp(-2 * log_variances_prior) # [b, d, t]
-            # neg_cent1 = torch.sum(-0.5 * math.log(2 * math.pi) - log_variances_prior, [1], keepdim=True) # [b, 1, t_s]
-            # neg_cent2 = torch.matmul(-0.5 * (z_p ** 2).transpose(1, 2), s_p_sq_r) # [b, t_t, d] x [b, d, t_s] = [b, t_t, t_s]
-            # neg_cent3 = torch.matmul(z_p.transpose(1, 2), (means_prior * s_p_sq_r)) # [b, t_t, d] x [b, d, t_s] = [b, t_t, t_s]
-            # neg_cent4 = torch.sum(-0.5 * (means_prior ** 2) * s_p_sq_r, [1], keepdim=True) # [b, 1, t_s]
-            # neg_cent = neg_cent1 + neg_cent2 + neg_cent3 + neg_cent4
-
-            # attn_mask = torch.unsqueeze(input_padding_mask, 2) * torch.unsqueeze(output_padding_mask, -1)
-            # attn = monotonic_align.maximum_path(neg_cent, attn_mask.squeeze(1)).unsqueeze(1).detach()
-
-            # to test the logic, using a random placeholder
-            attn = torch.randn((input_ids.shape[0], 1, labels.shape[-1], input_ids.shape[-1]))
-
-            w = attn.sum(2)
-            if self.config.use_stochastic_duration_prediction:
-                predicted_lengths = self.duration_predictor(hidden_states, input_padding_mask, speaker_embeddings, w)
-                predicted_lengths = predicted_lengths / torch.sum(input_padding_mask)
-            else:
-                logw_ = torch.log(w + 1e-6) * input_padding_mask
-                log_duration = self.duration_predictor(hidden_states, input_padding_mask, speaker_embeddings)
-                predicted_lengths = torch.sum((log_duration - logw_) ** 2, [1, 2]) / torch.sum(
-                    input_padding_mask
-                )  # for averaging
-
-            # Expand prior
-            means_prior = torch.matmul(attn.squeeze(1), means_prior).transpose(1, 2)
-            log_variances_prior = torch.matmul(attn.squeeze(1), log_variances_prior).transpose(1, 2)
-
-            target_lengths = output_padding_mask.cumsum(dim=-1)[..., -1].squeeze()
-            z_slice, ids_slice = self._rand_slice_segments(z, target_lengths, self.config.segment_size)
-
-            predicted_audio = self.decoder(z_slice, speaker_embeddings)
-
-            # Note: the original model returns the following; these outputs go into a GAN for training
-            # predicted_audio, predicted_lengths, attn, ids_slice, input_padding_mask, output_padding_mask,
-            # (z, z_p, m_p, log_variances_prior, means_posterior, log_variances_posterior)
-
-            sequence_lengths = predicted_lengths * 256
-
-            if return_dict:
-                return VitsModelOutput(audio=predicted_audio, sequence_lengths=sequence_lengths)
-
-            return (predicted_audio, sequence_lengths)
+            raise NotImplementedError("Training of VITS is not supported yet.")
 
         if self.config.use_stochastic_duration_prediction:
             log_duration = self.duration_predictor(
@@ -1479,16 +1429,3 @@ class VitsModel(VitsPreTrainedModel):
         path = path - nn.functional.pad(path, [0, 0, 1, 0, 0, 0])[:, :-1]
         path = path.unsqueeze(1).transpose(2, 3) * mask
         return path
-
-    # TODO: cleanup
-    def _rand_slice_segments(self, x, x_lengths, segment_size=4):
-        ids_str_max = x_lengths - segment_size + 1
-        ids_str = (torch.rand([x.size(0)]).to(device=x.device) * ids_str_max).to(dtype=torch.long)
-
-        ret = torch.zeros_like(x[:, :, :segment_size])
-        for i in range(x.size(0)):
-            idx_str = ids_str[i]
-            idx_end = idx_str + segment_size
-            ret[i] = x[i, :, idx_str:idx_end]
-
-        return ret, ids_str

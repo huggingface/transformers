@@ -53,8 +53,6 @@ class VitsConfig(PretrainedConfig):
             Dimensionality of the flow layers.
         spectrogram_bins (`int`, *optional*, defaults to 513):
             Number of frequency bins in the target spectrogram.
-        segment_size (`int`, *optional*, defaults to 32):
-            TODO (used only during training)
         hidden_act (`str` or `function`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
@@ -138,7 +136,6 @@ class VitsConfig(PretrainedConfig):
         ffn_kernel_size=3,
         flow_size=192,
         spectrogram_bins=513,
-        segment_size=32,  # TODO: hps.train.segment_size // hps.data.hop_length
         hidden_act="relu",
         hidden_dropout=0.1,
         attention_dropout=0.1,
@@ -173,7 +170,6 @@ class VitsConfig(PretrainedConfig):
         self.ffn_kernel_size = ffn_kernel_size
         self.flow_size = flow_size
         self.spectrogram_bins = spectrogram_bins
-        self.segment_size = segment_size
         self.hidden_act = hidden_act
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
