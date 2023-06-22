@@ -1136,13 +1136,13 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             # pattern with an offset. This is a WIP
             for batch in range(bsz):
                 # how many padding tokens have we got
-                offset = sum(~padding_mask[batch, 0].bool())
+                offset = sum(~padding_mask[batch].bool())
                 # put the masked tokens at the start
-                input_ids_shifted[batch, :, :offset] = input_ids[batch, :, -offset:]
+                input_ids_shifted[batch, :, :offset] = input_ids[batch, :, :offset]
                 for codebook in range(num_codebooks):
                     input_ids_shifted[batch, codebook, offset : codebook + offset] = pad_token_id
                     input_ids_shifted[batch, codebook, offset + codebook : seq_len + codebook - offset] = input_ids[
-                        batch, codebook, :offset
+                        batch, codebook, offset:
                     ]
 
             # fill the upper triangular portion of our matrix
@@ -1159,6 +1159,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         if len(start_ids) > 0:
             first_start_id = min(start_ids)
         else:
+            # we have no tokens that need to be filled - return entire matrix of input ids
             first_start_id = seq_len
 
         # (bsz * num_codebooks, seq_len) -> (bsz, num_codebooks, seq_len)
@@ -2377,8 +2378,8 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         >>> from transformers import MusicgenForConditionalGeneration
 
         >>> model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
-        # get the unconditional (or 'null') inputs from the model
 
+        # get the unconditional (or 'null') inputs for the model
         >>> unconditional_inputs = model.get_unconditional_inputs(num_samples=1)
         >>> audio_samples = model.generate(**unconditional_inputs)
         ```"""
@@ -2393,5 +2394,5 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             "attention_mask": attention_mask,
             "encoder_outputs": encoder_outputs,
             "max_new_tokens": max_new_tokens,
-            "guidance_scale": 1.0,
+            "guidance_scale": None,
         }
