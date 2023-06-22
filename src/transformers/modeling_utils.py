@@ -305,6 +305,8 @@ def shard_checkpoint(
     storage_id_to_block = {}
 
     for key, weight in state_dict.items():
+        # when bnb serialization is used the weights in the state dict can be strings
+        # check: https://github.com/huggingface/transformers/pull/24416 for more details
         if isinstance(weight, str):
             continue
         else:
