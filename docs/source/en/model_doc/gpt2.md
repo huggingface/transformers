@@ -60,6 +60,94 @@ different sizes: small, medium, large, xl and a distilled version of the small c
 
 This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://openai.com/blog/better-language-models/).
 
+## Training
+
+GPT-2 is a decoder-only Transformer. It is trained using teacher forcing. This means that during training, we feed the ground truth
+previous tokens to the model in order to predict the next one. During training, one needs to provide the input sequences to the model as
+`input_ids`, as well as `labels`. The latter are identical to the `input_ids`. In teacher-forcing style, the model will internally shift the
+logits before calculating the loss. This ensures that the model is trained to predict the next token.
+
+One can use [`GPT2LMHeadModel`] (or the Tensorflow/Flax variant), which includes the language modeling head on top of the Transformer decoder.
+
+Suppose that we want to train the model for causal language modeling, then examples should be prepared for the model as follows:
+
+```python
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+>>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+>>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+
+>>> input_ids = tokenizer("Hugging Face is a company based in Paris and New York.", return_tensors="pt").input_ids
+>>> labels = input_ids.clone()
+
+>>> # the forward function internally shifts the logits to predict the next tokens and computes a cross-entropy loss
+>>> loss = model(input_ids=input_ids, labels=labels).loss
+>>> loss.item()
+4.075357437133789
+```
+
+As you can see, only 2 inputs are required for the model in order to compute a loss: `input_ids` (which are the
+`input_ids` of the encoded text) and `labels` (which are an exact copy of the `input_ids`, representing the text to be predicted).
+
+However, the example above only shows a single training example. In practice, one trains deep learning models in
+batches. What is typically done is one takes a large corpus of text, concatenates all text into one long sequence, and then chunks them up
+into smaller blocks. Hence GPT-2 style models typically don't require padding or truncation of text during training, as one simply trains on blocks of
+continuous text.
+
+## Inference
+
+At inference time, it is recommended to use [`~generation.GenerationMixin.generate`]. This method takes care of encoding the
+input and auto-regressively generates the next tokens. Check out [this blog post](https://huggingface.co/blog/how-to-generate) to know
+all the details about generating text with Transformers.
+
+```python
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+>>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+>>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+
+>>> prompt = """In a shocking finding, scientist discovered a herd of unicorns living in a remote, previously unexplored valley, in the Andes Mountains.
+... Even more surprising to the researchers was the fact that the unicorns spoke perfect English."""
+
+>>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+>>> outputs = model.generate(input_ids, max_new_tokens=50)
+>>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+In a shocking finding, scientist discovered a herd of unicorns living in a remote, previously unexplored valley, in the Andes Mountains.
+Even more surprising to the researchers was the fact that the unicorns spoke perfect English. "The unicorns were very intelligent, and they were very intelligent," said Dr. David S. Siegel, a professor of anthropology at the University of California, Berkeley. "They were very intelligent, and they were very intelligent, and
+```
+
+The example above only shows a single example. You can also do batched inference, like so:
+
+```python
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+>>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+>>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+
+>>> tokenizer.padding_side = "left"
+
+>>> # Define PAD Token = EOS Token = 50256
+>>> tokenizer.pad_token = tokenizer.eos_token
+>>> model.config.pad_token_id = model.config.eos_token_id
+
+>>> # use different length sentences to test batching
+>>> sentences = [
+...         "Hello, my dog is a little",
+...          "Today, I",
+... ]
+
+>>> inputs = tokenizer(sentences, return_tensors="pt", padding=True)
+
+>>> output_sequences = model.generate(
+...     input_ids=inputs["input_ids"],
+...     attention_mask=inputs["attention_mask"],
+...     do_sample=False,  # disable sampling to test if batching affects output
+... )
+
+>>> print(tokenizer.batch_decode(output_sequences, skip_special_tokens=True))
+["Hello, my dog is a little bit of a mess. I'm not sure if he's going", "Today, I'm going to be doing a lot of research on this. I"]
+```
+
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with GPT2. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
