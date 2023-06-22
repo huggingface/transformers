@@ -15,6 +15,9 @@ from .trainer_utils import (
     default_hp_space_sigopt,
     default_hp_space_wandb,
 )
+from .utils import logging
+
+logger = logging.get_logger(__name__)
 
 
 class HyperParamSearchBackendBase:
@@ -106,9 +109,14 @@ def default_hp_search_backend() -> str:
         for backend in ALL_HYPERPARAMETER_SEARCH_BACKENDS.values()
         if backend.is_available()
     ]
-    if available_backends:
-        # TODO warn if len(available_backends) > 1 ?
-        return available_backends[0].name
+    if len(available_backends) > 0:
+        name = available_backends[0].name
+        if len(available_backends) > 1:
+            logger.info(
+                f"{len(available_backends)} hyperparameter search backends available. "
+                f"Using {name} as the default."
+            )
+        return name
     raise RuntimeError(
         "No hyperparameter search backend available.\n"
         + "\n".join(
