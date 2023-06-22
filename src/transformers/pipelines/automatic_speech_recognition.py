@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Dict, Optional, Union
 import numpy as np
 import requests
 
-from ..utils import is_torch_available, logging
+from ..utils import is_torch_available, is_torchaudio_available, logging
 from .audio_utils import ffmpeg_read
 from .base import ChunkPipeline
 
@@ -349,7 +349,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             inputs = _inputs
             if in_sampling_rate != self.feature_extractor.sampling_rate:
                 import torch
-                from torchaudio import functional as F
+
+                if is_torchaudio_available():
+                    from torchaudio import functional as F
+                else:
+                    raise ImportError(
+                        "torchaudio is required to resample audio samples in AutomaticSpeechRecognitionPipeline. "
+                        "The torchaudio package can be installed through: `pip install torchaudio`."
+                    )
 
                 inputs = F.resample(
                     torch.from_numpy(inputs), in_sampling_rate, self.feature_extractor.sampling_rate
