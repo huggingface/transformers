@@ -33,8 +33,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
     }
 }
 
-# TODO: We don't have this; still need to specify it?
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    # This model does not have a maximum input length.
     "TODO": 4096,
 }
 

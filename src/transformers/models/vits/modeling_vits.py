@@ -685,7 +685,6 @@ class VitsStochasticDurationPredictor(nn.Module):
             self.post_flows.append(VitsConvFlow(2, filter_channels, kernel_size, num_layers=3))
             self.post_flows.append(VitsFlip())
 
-    # TODO: w? I think this is the durations
     def forward(self, inputs, padding_mask, global_conditioning=None, w=None, reverse=False, noise_scale=1.0):
         inputs = torch.detach(inputs)
         inputs = self.conv_pre(inputs)
@@ -881,12 +880,10 @@ class VitsAttention(nn.Module):
                 f" {attn_weights.size()}"
             )
 
-        # TODO: do this better!
         if self.window_size is not None:
             key_relative_embeddings = self._get_relative_embeddings(self.emb_rel_k, src_len)
             relative_logits = torch.matmul(query_states, key_relative_embeddings.transpose(-2, -1))
-            rel_pos_bias = self._relative_position_to_absolute_position(relative_logits.unsqueeze(0))
-            rel_pos_bias = rel_pos_bias.view(bsz * self.num_heads, rel_pos_bias.size(-2), rel_pos_bias.size(-1))
+            rel_pos_bias = self._relative_position_to_absolute_position(relative_logits)
             attn_weights += rel_pos_bias
 
         if attention_mask is not None:
@@ -928,12 +925,10 @@ class VitsAttention(nn.Module):
                 f" {attn_output.size()}"
             )
 
-        # TODO: do this better!
         if self.window_size is not None:
             value_relative_embeddings = self._get_relative_embeddings(self.emb_rel_v, src_len)
-            relative_weights = self._absolute_position_to_relative_position(attn_probs.unsqueeze(0))
+            relative_weights = self._absolute_position_to_relative_position(attn_probs)
             rel_pos_bias = torch.matmul(relative_weights, value_relative_embeddings)
-            rel_pos_bias = rel_pos_bias.view(bsz * self.num_heads, rel_pos_bias.size(-2), rel_pos_bias.size(-1))
             attn_output += rel_pos_bias
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
@@ -957,37 +952,30 @@ class VitsAttention(nn.Module):
         return relative_embeddings[:, slice_start_position:slice_end_position]
 
     def _relative_position_to_absolute_position(self, x):
-        """
-        x: [b, h, l, 2*l-1] ret: [b, h, l, l]
-        """
-        # TODO: we actually have shape (1, b*h, l, 2*l-1) and return (1, b*h, l, l)
-        # so make this work with 3 dimensions instead of 4! then the unsqueeze() and view()
-        # can be removed too
+        batch_heads, length, _ = x.size()
 
-        batch, heads, length, _ = x.size()
         # Concat columns of pad to shift from relative to absolute indexing.
-        x = nn.functional.pad(x, [0, 1, 0, 0, 0, 0, 0, 0])
+        x = nn.functional.pad(x, [0, 1, 0, 0, 0, 0])
 
         # Concat extra elements so to add up to shape (len+1, 2*len-1).
-        x_flat = x.view([batch, heads, length * 2 * length])
-        x_flat = nn.functional.pad(x_flat, [0, length - 1, 0, 0, 0, 0])
+        x_flat = x.view([batch_heads, length * 2 * length])
+        x_flat = nn.functional.pad(x_flat, [0, length - 1, 0, 0])
 
         # Reshape and slice out the padded elements.
-        x_final = x_flat.view([batch, heads, length + 1, 2 * length - 1])[:, :, :length, length - 1 :]
+        x_final = x_flat.view([batch_heads, length + 1, 2 * length - 1])
+        x_final = x_final[:, :length, length - 1 :]
         return x_final
 
     def _absolute_position_to_relative_position(self, x):
-        """
-        x: [b, h, l, l] ret: [b, h, l, 2*l-1]
-        """
-        # TODO: same remarks as for _relative_position_to_absolute_position
-        batch, heads, length, _ = x.size()
-        # pad along column
-        x = nn.functional.pad(x, [0, length - 1, 0, 0, 0, 0, 0, 0])
-        x_flat = x.view([batch, heads, length**2 + length * (length - 1)])
-        # add 0's in the beginning that will skew the elements after reshape
-        x_flat = nn.functional.pad(x_flat, [length, 0, 0, 0, 0, 0])
-        x_final = x_flat.view([batch, heads, length, 2 * length])[:, :, :, 1:]
+        batch_heads, length, _ = x.size()
+
+        # Pad along column
+        x = nn.functional.pad(x, [0, length - 1, 0, 0, 0, 0])
+        x_flat = x.view([batch_heads, length**2 + length * (length - 1)])
+
+        # Add 0's in the beginning that will skew the elements after reshape
+        x_flat = nn.functional.pad(x_flat, [length, 0, 0, 0])
+        x_final = x_flat.view([batch_heads, length, 2 * length])[:, :, 1:]
         return x_final
 
 
@@ -1414,18 +1402,12 @@ class VitsModel(VitsPreTrainedModel):
 
         return (predicted_audio, sequence_lengths)
 
-    # TODO: cleanup
     def _generate_path(self, duration, mask):
-        """
-        duration: [b, 1, t_x] mask: [b, 1, t_y, t_x]
-        """
-        b, _, t_y, t_x = mask.shape
-        cum_duration = torch.cumsum(duration, -1)
-        cum_duration_flat = cum_duration.view(b * t_x)
-
-        indices = torch.arange(t_y, dtype=duration.dtype, device=duration.device)
-        path = indices.unsqueeze(0) < cum_duration_flat.unsqueeze(1)
-        path = path.to(mask.dtype).view(b, t_x, t_y)
+        batch_size, _, output_length, input_length = mask.shape
+        cum_duration = torch.cumsum(duration, -1).view(batch_size * input_length, 1)
+        indices = torch.arange(output_length, dtype=duration.dtype, device=duration.device)
+        path = indices.unsqueeze(0) < cum_duration
+        path = path.to(mask.dtype).view(batch_size, input_length, output_length)
         path = path - nn.functional.pad(path, [0, 0, 1, 0, 0, 0])[:, :-1]
         path = path.unsqueeze(1).transpose(2, 3) * mask
         return path
