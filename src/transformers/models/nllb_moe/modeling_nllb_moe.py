@@ -22,6 +22,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
+from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
@@ -32,7 +33,6 @@ from ...modeling_outputs import (
     Seq2SeqMoEOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import torch_custom_checkpointing
 from ...utils import (
     add_end_docstrings,
     add_start_docstrings,
@@ -1155,7 +1155,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
 
                         return custom_forward
 
-                    layer_outputs = torch_custom_checkpointing(
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
                         create_custom_forward(encoder_layer),
                         hidden_states,
                         attention_mask,
@@ -1428,7 +1428,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
 
                         return custom_forward
 
-                    layer_outputs = torch_custom_checkpointing(
+                    layer_outputs = checkpoint(
                         create_custom_forward(decoder_layer),
                         hidden_states,
                         combined_attention_mask,

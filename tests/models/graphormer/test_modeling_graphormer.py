@@ -356,12 +356,6 @@ class GraphormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(
-        reason="The model does not support GC + autocast + fp16: https://github.com/huggingface/transformers/pull/24247"
-    )
-    def test_training_gradient_checkpointing_autocast(self):
-        pass
-
     @unittest.skip(reason="Graphormer does not share input and output embeddings")
     def test_model_common_attributes(self):
         pass

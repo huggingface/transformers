@@ -32,7 +32,6 @@ from ...modeling_outputs import (
     SemanticSegmenterOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import torch_custom_checkpointing
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -590,7 +589,7 @@ class MobileViTV2Encoder(nn.Module):
 
                     return custom_forward
 
-                hidden_states = torch_custom_checkpointing(
+                hidden_states = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer_module),
                     hidden_states,
                 )

@@ -185,12 +185,6 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
         # FLAVA does not use inputs_embeds
         pass
 
-    @unittest.skip(
-        reason="The model does not support GC + autocast + fp16: https://github.com/huggingface/transformers/pull/24247"
-    )
-    def test_training_gradient_checkpointing_autocast(self):
-        pass
-
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -468,12 +462,6 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
         # FLAVA does not use inputs_embeds
         pass
 
-    @unittest.skip(
-        reason="The model does not support GC + autocast + fp16: https://github.com/huggingface/transformers/pull/24247"
-    )
-    def test_training_gradient_checkpointing_autocast(self):
-        pass
-
     # skip this test as FlavaTextModel has no base class and is
     # not available in MODEL_MAPPING
     def test_save_load_fast_init_from_base(self):
@@ -636,12 +624,6 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @unittest.skip(
-        reason="The model does not support GC + autocast + fp16: https://github.com/huggingface/transformers/pull/24247"
-    )
-    def test_training_gradient_checkpointing_autocast(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -747,12 +729,6 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     # skip this test as FlavaImageCodebook has no base class and is
     # not available in MODEL_MAPPING
     def test_save_load_fast_init_to_base(self):
-        pass
-
-    @unittest.skip(
-        reason="The model does not support GC + autocast + fp16: https://github.com/huggingface/transformers/pull/24247"
-    )
-    def test_training_gradient_checkpointing_autocast(self):
         pass
 
     @slow
@@ -1179,12 +1155,6 @@ class FlavaForPreTrainingTest(FlavaModelTest):
     all_model_classes = (FlavaForPreTraining,) if is_torch_available() else ()
     class_for_tester = FlavaForPreTrainingTester
     test_torchscript = False
-
-    @unittest.skip(
-        reason="The model does not support GC + autocast + fp16: https://github.com/huggingface/transformers/pull/24247"
-    )
-    def test_training_gradient_checkpointing_autocast(self):
-        pass
 
 
 # We will verify our results on an image of cute cats
