@@ -162,7 +162,7 @@ class AudioClassificationPipeline(Pipeline):
             # better integration
             if not ("sampling_rate" in inputs and ("raw" in inputs or "array" in inputs)):
                 raise ValueError(
-                    "When passing a dictionary to AutomaticSpeechRecognitionPipeline, the dict needs to contain a "
+                    "When passing a dictionary to AudioClassificationPipeline, the dict needs to contain a "
                     '"raw" key containing the numpy array representing the audio and a "sampling_rate" key, '
                     "containing the sampling_rate associated with that array"
                 )
