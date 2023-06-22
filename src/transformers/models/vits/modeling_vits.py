@@ -42,7 +42,7 @@ _CONFIG_FOR_DOC = "VitsConfig"
 
 
 VITS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # "TODO",
+    "Matthijs/mms-tts-eng",
     # See all VITS models at https://huggingface.co/models?filter=vits
 ]
 
@@ -1327,8 +1327,8 @@ class VitsModel(VitsPreTrainedModel):
         >>> from transformers import VitsMmsTokenizer, VitsModel, set_seed
         >>> import torch
 
-        >>> tokenizer = VitsMmsTokenizer.from_pretrained("TODO")
-        >>> model = VitsModel.from_pretrained("TODO")
+        >>> tokenizer = VitsMmsTokenizer.from_pretrained("Matthijs/mms-tts-eng")
+        >>> model = VitsModel.from_pretrained("Matthijs/mms-tts-eng")
 
         >>> inputs = tokenizer(text="Hello, my dog is cute", return_tensors="pt")
 

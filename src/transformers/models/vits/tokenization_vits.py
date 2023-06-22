@@ -29,13 +29,13 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "TODO": "https://huggingface.co/TODO/resolve/main/vocab.json",
+        "Matthijs/mms-tts-eng": "https://huggingface.co/Matthijs/mms-tts-eng/resolve/main/vocab.json",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     # This model does not have a maximum input length.
-    "TODO": 4096,
+    "Matthijs/mms-tts-eng": 4096,
 }
 
 
