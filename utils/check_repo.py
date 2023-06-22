@@ -964,6 +964,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "NatBackbone",
     "ResNetBackbone",
     "SwinBackbone",
+    "Swinv2Backbone",
     "TimmBackbone",
     "TimmBackboneConfig",
 ]

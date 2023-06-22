@@ -33,6 +33,7 @@ else:
         "Swinv2ForMaskedImageModeling",
         "Swinv2Model",
         "Swinv2PreTrainedModel",
+        "Swinv2Backbone",
     ]
 
 
@@ -47,6 +48,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_swinv2 import (
             SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Swinv2Backbone,
             Swinv2ForImageClassification,
             Swinv2ForMaskedImageModeling,
             Swinv2Model,

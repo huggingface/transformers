@@ -1305,8 +1305,6 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
         super().__init__(config)
         super()._init_backbone(config)
 
-        print("Backbone config:", config)
-
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = BeitEmbeddings(config)
         self.encoder = BeitEncoder(config, window_size=self.embeddings.patch_embeddings.patch_shape)
@@ -1317,7 +1315,11 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+        self,
+        pixel_values: Tensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
         """
         Returns:
@@ -1349,10 +1351,13 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         embedding_output = self.embeddings(pixel_values)
 
-        outputs = self.encoder(embedding_output, output_hidden_states=True, return_dict=True)
+        outputs = self.encoder(
+            embedding_output, output_hidden_states=True, output_attentions=output_attentions, return_dict=True
+        )
 
         hidden_states = outputs.hidden_states
 
@@ -1370,5 +1375,5 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
         return BackboneOutput(
             feature_maps=feature_maps,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=None,
+            attentions=outputs.attentions,
         )
