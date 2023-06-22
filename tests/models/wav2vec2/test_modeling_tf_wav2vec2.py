@@ -322,7 +322,7 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
         (TFWav2Vec2Model, TFWav2Vec2ForCTC, TFWav2Vec2ForSequenceClassification) if is_tf_available() else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": TFWav2Vec2Model, "audio-classification": TFWav2Vec2ForSequenceClassification}
+        {"audio-classification": TFWav2Vec2ForSequenceClassification, "feature-extraction": TFWav2Vec2Model}
         if is_tf_available()
         else {}
     )

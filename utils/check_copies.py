@@ -440,7 +440,7 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
 
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
     index_list, start_index, end_index, lines = _find_text_in_file(
-        filename=os.path.join(PATH_TO_DOCS, "index.mdx"),
+        filename=os.path.join(PATH_TO_DOCS, "index.md"),
         start_prompt="<!--This list is updated automatically from the README",
         end_prompt="### Supported frameworks",
     )
@@ -464,11 +464,11 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
     converted_md_list = convert_readme_to_index(md_list)
     if converted_md_list != index_list:
         if overwrite:
-            with open(os.path.join(PATH_TO_DOCS, "index.mdx"), "w", encoding="utf-8", newline="\n") as f:
+            with open(os.path.join(PATH_TO_DOCS, "index.md"), "w", encoding="utf-8", newline="\n") as f:
                 f.writelines(lines[:start_index] + [converted_md_list] + lines[end_index:])
         else:
             raise ValueError(
-                "The model list in the README changed and the list in `index.mdx` has not been updated. Run "
+                "The model list in the README changed and the list in `index.md` has not been updated. Run "
                 "`make fix-copies` to fix this."
             )
 

@@ -360,6 +360,10 @@ class TFLongformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_saved_model_creation(self):
         pass
 
+    @unittest.skip("Longformer keeps using potentially symbolic tensors in conditionals and breaks tracing.")
+    def test_compile_tf_model(self):
+        pass
+
 
 @require_tf
 @require_sentencepiece
