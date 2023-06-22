@@ -15,7 +15,6 @@
 # limitations under the License.
 """ PyTorch Time Series Transformer model."""
 
-import random
 from typing import List, Optional, Tuple, Union
 
 import numpy as np

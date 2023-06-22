@@ -28,7 +28,6 @@
 """PyTorch Fairseq model, ported from https://github.com/pytorch/fairseq/tree/master/examples/wmt19"""
 
 import math
-import random
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch

@@ -15,7 +15,6 @@
 """ PyTorch PLBART model."""
 import copy
 import math
-import random
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch

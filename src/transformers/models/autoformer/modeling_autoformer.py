@@ -17,7 +17,6 @@
 """ PyTorch Autoformer model."""
 
 import math
-import random
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 

@@ -15,7 +15,6 @@
 """ PyTorch MVP model."""
 import copy
 import math
-import random
 from typing import List, Optional, Tuple, Union
 
 import torch

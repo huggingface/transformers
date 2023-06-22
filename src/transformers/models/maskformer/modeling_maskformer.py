@@ -15,7 +15,6 @@
 """ PyTorch MaskFormer model."""
 
 import math
-import random
 from dataclasses import dataclass
 from numbers import Number
 from typing import Dict, List, Optional, Tuple

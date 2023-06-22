@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch Informer model."""
 
-import random
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
