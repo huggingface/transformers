@@ -160,8 +160,8 @@ def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hu
             raise ValueError("Logits exceed tolerance threshold")
 
     # now construct the processor
-    tokenizer = AutoTokenizer.from_pretrained(CHECKPOINT_TO_T5[checkpoint], return_attention_mask=True, padding=True)
-    feature_extractor = AutoFeatureExtractor.from_pretrained(CHECKPOINT_TO_ENCODEC[checkpoint])
+    tokenizer = AutoTokenizer.from_pretrained(CHECKPOINT_TO_T5[checkpoint])
+    feature_extractor = AutoFeatureExtractor.from_pretrained(CHECKPOINT_TO_ENCODEC[checkpoint], padding_side="left")
 
     processor = MusicgenProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 

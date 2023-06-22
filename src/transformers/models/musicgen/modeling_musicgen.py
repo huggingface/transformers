@@ -1084,7 +1084,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             "use_cache": use_cache,
         }
 
-    def build_delay_pattern_mask(self, input_ids, pad_token_id, padding_mask=None, max_length=None):
+    def build_delay_pattern_mask(self, input_ids: torch.LongTensor, pad_token_id: int, max_length: int = None):
         """Build a delayed pattern mask to the input_ids. Each codebook is offset by the previous codebook by
         one, giving a delayed pattern mask at the start of sequence and end of sequence. Take the example where there
         are 4 codebooks and a max sequence length of 8, we have the delayed pattern mask of shape `(codebooks,
@@ -1116,41 +1116,19 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         if max_length < 2 * num_codebooks - 1:
             return input_ids.reshape(bsz * num_codebooks, -1), input_ids_shifted.reshape(bsz * num_codebooks, -1)
 
-        if padding_mask is None:
-            # fill the shifted ids with the prompt entries, offset by the codebook idx
-            for codebook in range(num_codebooks):
-                input_ids_shifted[:, codebook, codebook : seq_len + codebook] = input_ids[:, codebook]
+        # fill the shifted ids with the prompt entries, offset by the codebook idx
+        for codebook in range(num_codebooks):
+            input_ids_shifted[:, codebook, codebook: seq_len + codebook] = input_ids[:, codebook]
 
-            # construct a pattern mask that indicates the positions of padding tokens for each codebook
-            # first fill the upper triangular part (the EOS padding)
-            delay_pattern = torch.triu(
+        # construct a pattern mask that indicates the positions of padding tokens for each codebook
+        # first fill the upper triangular part (the EOS padding)
+        delay_pattern = torch.triu(
                 torch.ones((num_codebooks, max_length), dtype=torch.bool), diagonal=max_length - num_codebooks + 1
             )
-            # then fill the lower triangular part (the BOS padding)
-            delay_pattern = delay_pattern + torch.tril(torch.ones((num_codebooks, max_length), dtype=torch.bool))
-            mask = ~delay_pattern.to(input_ids.device)
-            input_ids = mask * input_ids_shifted + ~mask * pad_token_id
-
-        else:
-            # we have padded decoder input ids - put them at the start of our pattern matrix then build the delay
-            # pattern with an offset. This is a WIP
-            for batch in range(bsz):
-                # how many padding tokens have we got
-                offset = sum(~padding_mask[batch].bool())
-                # put the masked tokens at the start
-                input_ids_shifted[batch, :, :offset] = input_ids[batch, :, :offset]
-                for codebook in range(num_codebooks):
-                    input_ids_shifted[batch, codebook, offset : codebook + offset] = pad_token_id
-                    input_ids_shifted[batch, codebook, offset + codebook : seq_len + codebook - offset] = input_ids[
-                        batch, codebook, offset:
-                    ]
-
-            # fill the upper triangular portion of our matrix
-            delay_pattern = torch.triu(
-                torch.ones((num_codebooks, max_length), dtype=torch.bool), diagonal=max_length - num_codebooks + 1
-            )
-            mask = ~delay_pattern.to(input_ids.device)
-            input_ids = mask * input_ids_shifted + ~mask * pad_token_id
+        # then fill the lower triangular part (the BOS padding)
+        delay_pattern = delay_pattern + torch.tril(torch.ones((num_codebooks, max_length), dtype=torch.bool))
+        mask = ~delay_pattern.to(input_ids.device)
+        input_ids = mask * input_ids_shifted + ~mask * pad_token_id
 
         # find the first position to start generating - this is the first place we have the -1 token
         # and will always be in the first codebook (since it has no codebook offset)
@@ -1333,7 +1311,6 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         input_ids, delay_pattern_mask = self.build_delay_pattern_mask(
             input_ids,
             pad_token_id=generation_config.decoder_start_token_id,
-            padding_mask=model_kwargs.get("padding_mask"),
             max_length=generation_config.max_length,
         )
 
@@ -1994,7 +1971,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         if device is None:
             device = self.device
         decoder_input_ids_start = (
-            torch.ones((batch_size, self.decoder.num_codebooks, 1), dtype=torch.long, device=device)
+            torch.ones((batch_size * self.decoder.num_codebooks, 1), dtype=torch.long, device=device)
             * decoder_start_token_id
         )
 
@@ -2004,7 +1981,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
 
         # user input but doesn't start with decoder_start_token_id -> prepend decoder_start_token_id (and adjust
         # decoder_attention_mask if provided)
-        elif (decoder_input_ids[:, :, 0] != decoder_start_token_id).all().item():
+        elif (decoder_input_ids[..., 0] != decoder_start_token_id).all().item():
             decoder_input_ids = torch.cat([decoder_input_ids_start, decoder_input_ids], dim=-1)
             if "decoder_attention_mask" in model_kwargs:
                 decoder_attention_mask = model_kwargs["decoder_attention_mask"]
@@ -2016,7 +1993,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
 
         return decoder_input_ids, model_kwargs
 
-    def _prepare_encoder_decoder_kwargs_for_generation(
+    def _prepare_text_encoder_kwargs_for_generation(
         self,
         inputs_tensor: torch.Tensor,
         model_kwargs,
@@ -2045,7 +2022,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             }
 
         # 3. make sure that encoder returns `ModelOutput`
-        model_input_name = model_input_name if model_input_name is not None else self.main_input_name
+        model_input_name = model_input_name if model_input_name is not None else self.text_encoder.main_input_name
         encoder_kwargs["return_dict"] = True
         encoder_kwargs[model_input_name] = inputs_tensor
         last_hidden_state = encoder(**encoder_kwargs).last_hidden_state
@@ -2060,6 +2037,44 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
 
         model_kwargs["encoder_outputs"] = BaseModelOutput(last_hidden_state=last_hidden_state)
 
+        return model_kwargs
+
+    def _prepare_audio_encoder_kwargs_for_generation(self, input_values, model_kwargs, model_input_name: Optional[str] = None,):
+        # 1. get audio encoder
+        encoder = self.get_audio_encoder()
+        # Compatibility with Accelerate big model inference: we need the encoder to outputs stuff on the same device
+        # as the inputs.
+        if hasattr(encoder, "_hf_hook"):
+            encoder._hf_hook.io_same_device = True
+
+        # 2. Prepare encoder args and encoder kwargs from model kwargs.
+        irrelevant_prefix = ["decoder_", "cross_attn", "use_cache"]
+        encoder_kwargs = {
+            argument: value
+            for argument, value in model_kwargs.items()
+            if not any(argument.startswith(p) for p in irrelevant_prefix)
+        }
+        encoder_signature = set(inspect.signature(encoder.forward).parameters)
+        encoder_accepts_wildcard = "kwargs" in encoder_signature or "model_kwargs" in encoder_signature
+        if not encoder_accepts_wildcard:
+            encoder_kwargs = {
+                argument: value for argument, value in encoder_kwargs.items() if argument in encoder_signature
+            }
+
+        # 3. make sure that encoder returns `ModelOutput`
+        model_input_name = model_input_name if model_input_name is not None else self.audio_encoder.main_input_name
+        encoder_kwargs["return_dict"] = True
+        encoder_kwargs[model_input_name] = input_values
+
+        audio_encoder_outputs = encoder(**encoder_kwargs)
+
+        audio_codes = audio_encoder_outputs.audio_codes
+        # TODO(SG): hacks to make the output ids compatible with encodec - add to encodec modelling code
+        channels, bsz, codebooks, seq_len = audio_codes.shape
+        decoder_input_ids = audio_codes[0, ...].reshape(bsz * self.decoder.num_codebooks, seq_len)
+
+        model_kwargs["decoder_input_ids"] = decoder_input_ids
+        model_kwargs["audio_scales"] = audio_encoder_outputs.audio_scales
         return model_kwargs
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
@@ -2195,11 +2210,17 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
 
         if "encoder_outputs" not in model_kwargs:
             # encoder_outputs are created and added to `model_kwargs`
-            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
+            model_kwargs = self._prepare_text_encoder_kwargs_for_generation(
                 inputs_tensor,
                 model_kwargs,
                 model_input_name,
                 generation_config.guidance_scale,
+            )
+
+        if "decoder_input_ids" not in model_kwargs and "input_values" in model_kwargs:
+            model_kwargs = self._prepare_audio_encoder_kwargs_for_generation(
+                model_kwargs["input_values"],
+                model_kwargs,
             )
 
         # 5. Prepare `input_ids` which will be used for auto-regressive generation
@@ -2248,7 +2269,6 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         input_ids, decoder_delay_pattern_mask = self.decoder.build_delay_pattern_mask(
             input_ids,
             pad_token_id=generation_config.decoder_start_token_id,
-            padding_mask=model_kwargs.get("padding_mask"),
             max_length=generation_config.max_length,
         )
         # stash the delay mask so that we don't have to recompute in each forward pass
@@ -2350,9 +2370,8 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
 
         # TODO(SG): hacks to make the output ids compatible with encodec - add to encodec modelling code
         output_ids = output_ids.unsqueeze(0)
-        audio_scales = [kwargs.get("audio_scales")] * len(output_ids)
         output_values = self.audio_encoder.decode(
-            output_ids, audio_scales=audio_scales, padding_mask=kwargs.get("padding_mask")
+            output_ids, audio_scales=model_kwargs.get("audio_scales"),
         )
 
         if generation_config.return_dict_in_generate:
