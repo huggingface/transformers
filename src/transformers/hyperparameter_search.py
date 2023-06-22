@@ -1,4 +1,4 @@
-from typing import Dict, Callable, Type
+from typing import Callable, Dict, Type
 
 from .integrations import (
     is_optuna_available,
@@ -29,8 +29,7 @@ class HyperParamSearchBackendBase:
     def ensure_available(self):
         if not self.is_available():
             raise RuntimeError(
-                f"You picked the {self.name} backend, but it is not installed. "
-                f"Run {self.pip_install()}."
+                f"You picked the {self.name} backend, but it is not installed. Run {self.pip_install()}."
             )
 
     @classmethod
@@ -83,8 +82,5 @@ def default_hp_search_backend() -> str:
         return available_backends[0].name
     raise RuntimeError(
         "No hyperparameter search backend available.\n"
-        + "\n".join(
-            f" - To install {backend.name} run {backend.pip_install()}"
-            for backend in all_backends.values()
-        )
+        + "\n".join(f" - To install {backend.name} run {backend.pip_install()}" for backend in all_backends.values())
     )
