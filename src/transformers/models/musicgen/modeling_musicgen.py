@@ -2016,7 +2016,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         return decoder_input_ids, model_kwargs
 
     def _prepare_encoder_decoder_kwargs_for_generation(
-        self, inputs_tensor: torch.Tensor, model_kwargs, model_input_name: Optional[str] = None
+        self, inputs_tensor: torch.Tensor, model_kwargs, model_input_name: Optional[str] = None, guidance_scale: Optional[float] = None,
     ) -> Dict[str, Any]:
         # 1. get text encoder
         encoder = self.get_text_encoder()
@@ -2046,7 +2046,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         last_hidden_state = encoder(**encoder_kwargs).last_hidden_state
 
         # for classifier free guidance we need to add a 'null' input to our encoder hidden states
-        if self.generation_config.guidance_scale > 1:
+        if guidance_scale is not None and guidance_scale > 1:
             last_hidden_state = torch.concatenate([last_hidden_state, torch.zeros_like(last_hidden_state)], dim=0)
             if "attention_mask" in model_kwargs:
                 model_kwargs["attention_mask"] = torch.concatenate(
@@ -2191,7 +2191,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         if "encoder_outputs" not in model_kwargs:
             # encoder_outputs are created and added to `model_kwargs`
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
-                inputs_tensor, model_kwargs, model_input_name
+                inputs_tensor, model_kwargs, model_input_name, generation_config.guidance_scale,
             )
 
         # 5. Prepare `input_ids` which will be used for auto-regressive generation
@@ -2348,10 +2348,10 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         )
 
         if generation_config.return_dict_in_generate:
-            outputs.sequences = output_values
+            outputs.sequences = output_values.audio_values
             return outputs
         else:
-            return output_values
+            return output_values.audio_values
 
     def get_unconditional_inputs(self, num_samples=1, max_new_tokens=256):
         """
