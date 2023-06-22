@@ -580,7 +580,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
         attentions = () if output_attentions else None
         for i in range(self.n_layers):
             # LayerDrop
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
