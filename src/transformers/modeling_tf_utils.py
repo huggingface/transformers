@@ -87,7 +87,6 @@ else:
 
 if is_safetensors_available():
     from safetensors import safe_open
-    from safetensors.tensorflow import load_file as safe_load_file
     from safetensors.tensorflow import save_file as safe_save_file
 
 if TYPE_CHECKING:
@@ -1000,42 +999,33 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
 
 def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
     # Read the safetensors file
-    state_dict = safe_load_file(resolved_archive_file)
+    with safe_open(resolved_archive_file, framework="tf") as safetensors_archive:
+        mismatched_layers = []
+        weight_names = [format_weight_name(w.name, _prefix=_prefix) for w in model.weights]
+        loaded_weight_names = list(safetensors_archive.keys())
+        # Find the missing layers from the high level list of layers
+        missing_layers = list(set(weight_names) - set(loaded_weight_names))
+        # Find the unexpected layers from the high level list of layers
+        unexpected_layers = list(set(loaded_weight_names) - set(weight_names))
 
-    weight_value_tuples = []
-    mismatched_layers = []
+        for weight in model.weights:
+            weight_name = format_weight_name(weight.name, _prefix=_prefix)
+            if weight_name in loaded_weight_names:
+                weight_value = safetensors_archive.get_tensor(weight_name)
+                # Check if the shape of the current weight and the one from the H5 file are different
+                if K.int_shape(weight) != weight_value.shape:
+                    # If yes we reshape the weight from the H5 file accordingly to the current weight
+                    # If the two shapes are not compatible we raise an issue
+                    try:
+                        weight_value = tf.reshape(weight_value, K.int_shape(weight))
+                    except ValueError as e:
+                        if ignore_mismatched_sizes:
+                            mismatched_layers.append((weight_name, weight_value.shape, K.int_shape(weight)))
+                            continue
+                        else:
+                            raise e
 
-    weight_names = [format_weight_name(w.name, _prefix=_prefix) for w in model.weights]
-    loaded_weight_names = list(state_dict.keys())
-
-    # Find the missing layers from the high level list of layers
-    missing_layers = list(set(weight_names) - set(loaded_weight_names))
-    # Find the unexpected layers from the high level list of layers
-    unexpected_layers = list(set(loaded_weight_names) - set(weight_names))
-
-    weight_value_tuples = []
-    for weight in model.weights:
-        weight_name = format_weight_name(weight.name, _prefix=_prefix)
-        if weight_name in state_dict:
-            weight_value = state_dict[weight_name]
-            # Check if the shape of the current weight and the one from the H5 file are different
-            if K.int_shape(weight) != weight_value.shape:
-                # If yes we reshape the weight from the H5 file accordingly to the current weight
-                # If the two shapes are not compatible we raise an issue
-                try:
-                    weight_value = tf.reshape(weight_value, K.int_shape(weight))
-                except ValueError as e:
-                    if ignore_mismatched_sizes:
-                        mismatched_layers.append((weight_name, weight_value.shape, K.int_shape(weight)))
-                        continue
-                    else:
-                        raise e
-
-            weight_value_tuples.append((weight, weight_value))
-
-    # Load all the weights
-    K.batch_set_value(weight_value_tuples)
-
+                K.set_value(weight, weight_value)  # weight.assign() might break if weight is a DTensor
     return missing_layers, unexpected_layers, mismatched_layers
 
 
@@ -2921,16 +2911,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if safetensors_from_pt:
             from .modeling_tf_pytorch_utils import load_pytorch_state_dict_in_tf2_model
 
-            state_dict = safe_load_file(resolved_archive_file)
-            # Load from a PyTorch checkpoint
-            return load_pytorch_state_dict_in_tf2_model(
-                model,
-                state_dict,
-                allow_missing_keys=True,
-                output_loading_info=output_loading_info,
-                _prefix=load_weight_prefix,
-                ignore_mismatched_sizes=ignore_mismatched_sizes,
-            )
+            with safe_open(resolved_archive_file, framework="tf") as safetensors_archive:
+                # Load from a PyTorch checkpoint
+                # We load in TF format here because PT weights often need to be transposed, and this is much
+                # faster on GPU. Loading as numpy and transposing on CPU adds several seconds to load times.
+                return load_pytorch_state_dict_in_tf2_model(
+                    model,
+                    safetensors_archive,
+                    tf_inputs=False,  # No need to build the model again
+                    allow_missing_keys=True,
+                    output_loading_info=output_loading_info,
+                    _prefix=load_weight_prefix,
+                    ignore_mismatched_sizes=ignore_mismatched_sizes,
+                )
 
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
