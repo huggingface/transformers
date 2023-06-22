@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -1223,31 +1223,6 @@ class VitsPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-#TODO docs
-VITS_BASE_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`VitsConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        encoder ([`VitsEncoderWithSpeechPrenet`] or [`VitsEncoderWithTextPrenet`] or `None`):
-            The Transformer encoder module that applies the appropiate speech or text encoder prenet. If `None`,
-            [`VitsEncoderWithoutPrenet`] will be used and the `input_values` are assumed to be hidden states.
-        decoder ([`VitsDecoderWithSpeechPrenet`] or [`VitsDecoderWithTextPrenet`] or `None`):
-            The Transformer decoder module that applies the appropiate speech or text decoder prenet. If `None`,
-            [`VitsDecoderWithoutPrenet`] will be used and the `decoder_input_values` are assumed to be hidden
-            states.
-"""
-
-
 VITS_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1267,85 +1242,29 @@ VITS_START_DOCSTRING = r"""
 
 VITS_INPUTS_DOCSTRING = r"""
     Args:
-        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-            1]`:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-
-            <Tip warning={true}>
-
-            `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
-            True`. For all models whose processor has `config.return_attention_mask == False`, `attention_mask` should
-            **not** be passed to avoid degraded performance when doing batched inference. For such models
-            `input_values` should simply be padded with 0 and passed without `attention_mask`. Be aware that these
-            models also yield slightly different results depending on whether `input_values` is padded or not.
-
-            </Tip>
-
-        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_values`. Causal mask will
-            also be used by default.
-
-            If you want to change padding behavior, you should read [`VitsDecoder._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-
-        head_mask (`torch.FloatTensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        decoder_head_mask (`torch.FloatTensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_values` (those
-            that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_values` of shape `(batch_size, sequence_length)`. decoder_inputs_embeds (`torch.FloatTensor`
-            of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-            `decoder_input_values` you can choose to directly pass an embedded representation. If `past_key_values` is
-            used, optionally only the last `decoder_inputs_embeds` have to be input (see `past_key_values`). This is
-            useful if you want more control over how to convert `decoder_input_values` indices into associated vectors
-            than the model's internal embedding lookup matrix.
-
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-
+        speed (`float`, *optional*, defaults to 1.0):
+            Speaking rate. Larger values are faster.
+        noise_scale (`float`, *optional*, defaults to 1.0):
+            How random the speech prediction is.
+        noise_scale_duration (`float`, *optional*, defaults to 1.0):
+            How random the duration prediction is.
+        speaker_id (`int`, *optional*):
+            Which speaker embedding to use. Only used for multispeaker models.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -1353,7 +1272,7 @@ VITS_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The VITS model.",
-    VITS_BASE_START_DOCSTRING,
+    VITS_START_DOCSTRING,
 )
 class VitsModel(VitsPreTrainedModel):
     def __init__(self, config: VitsConfig):
@@ -1380,20 +1299,45 @@ class VitsModel(VitsPreTrainedModel):
     def get_encoder(self):
         return self.text_encoder
 
-    # @add_start_docstrings_to_model_forward(VITS_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=VitsModelOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(VITS_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=VitsModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        speaker_id: Optional[torch.Tensor] = None,
-        length_scale: int = 1,  # TODO!
-        noise_scale: int = 1,  # TODO!
-        noise_scale_w: float = 1.0,   # TODO!
-        max_len: Optional[int] = None,   # TODO!
+        speed: float = 1.0,
+        noise_scale: float = 1.0,
+        noise_scale_duration: float = 1.0,
+        speaker_id: Optional[int] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.FloatTensor] = None,
     ) -> Union[Tuple[torch.FloatTensor], VitsModelOutput]:
+        r"""
+        labels (`torch.FloatTensor` of shape `(batch_size, config.spec_channels, sequence_length)`, *optional*):
+            Float values of target spectrogram. Timesteps set to `-100.0` are ignored (masked) for the loss
+            computation.
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import VitsMmsTokenizer, VitsModel, set_seed
+        >>> import torch
+
+        >>> tokenizer = VitsMmsTokenizer.from_pretrained("TODO")
+        >>> model = VitsModel.from_pretrained("TODO")
+
+        >>> inputs = tokenizer(text="Hello, my dog is cute", return_tensors="pt")
+
+        >>> set_seed(555)  # make deterministic
+
+        >>> # generate speech
+        >>> outputs = model(inputs["input_ids"])
+        >>> outputs.audio.shape
+        torch.Size([1, 1, 33280])
+        ```
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if attention_mask is not None:
@@ -1412,7 +1356,7 @@ class VitsModel(VitsPreTrainedModel):
         if self.config.num_speakers > 1:
             if speaker_id is None:
                 raise ValueError("Expected speaker_id")
-            speaker_embeddings = self.embed_speaker(speaker_id).unsqueeze(-1)
+            speaker_embeddings = self.embed_speaker(torch.tensor([speaker_id])).unsqueeze(-1)
         else:
             speaker_embeddings = None
 
@@ -1466,10 +1410,11 @@ class VitsModel(VitsPreTrainedModel):
             return (predicted_audio, sequence_lengths)
 
         if self.config.use_stochastic_duration_prediction:
-            log_duration = self.duration_predictor(hidden_states, input_padding_mask, speaker_embeddings, reverse=True, noise_scale=noise_scale_w)
+            log_duration = self.duration_predictor(hidden_states, input_padding_mask, speaker_embeddings, reverse=True, noise_scale=noise_scale_duration)
         else:
             log_duration = self.duration_predictor(hidden_states, input_padding_mask, speaker_embeddings)
 
+        length_scale = 1.0 / speed
         duration = torch.ceil(torch.exp(log_duration) * input_padding_mask * length_scale)
         predicted_lengths = torch.clamp_min(torch.sum(duration, [1, 2]), 1).long()
 
@@ -1489,7 +1434,7 @@ class VitsModel(VitsPreTrainedModel):
         z_p = means_prior + torch.randn_like(means_prior) * torch.exp(log_variances_prior) * noise_scale
         z = self.flow(z_p, output_padding_mask, speaker_embeddings, reverse=True)
 
-        predicted_audio = self.decoder((z * output_padding_mask)[:,:,:max_len], speaker_embeddings)
+        predicted_audio = self.decoder((z * output_padding_mask), speaker_embeddings)
         sequence_lengths = predicted_lengths * 256
 
         if return_dict:
