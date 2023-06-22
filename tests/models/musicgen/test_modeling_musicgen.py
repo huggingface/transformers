@@ -17,14 +17,14 @@ import copy
 import inspect
 import unittest
 
-from transformers import MusicgenDecoderConfig, T5Config, EncodecConfig, MusicgenConfig, PretrainedConfig
+from transformers import EncodecConfig, MusicgenConfig, MusicgenDecoderConfig, PretrainedConfig, T5Config
 from transformers.generation import (
     GreedySearchDecoderOnlyOutput,
+    GreedySearchEncoderDecoderOutput,
     SampleDecoderOnlyOutput,
-GreedySearchEncoderDecoderOutput,
-SampleEncoderDecoderOutput,
+    SampleEncoderDecoderOutput,
 )
-from transformers.testing_utils import require_torch, torch_device, is_torch_available
+from transformers.testing_utils import is_torch_available, require_torch, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -36,13 +36,11 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        T5EncoderModel,  #TODO(SG): swap for automodel
-        AutoModel,
-        MusicgenForCausalLM,
-        MusicgenModel,
-        MusicgenForConditionalGeneration,
         InfNanRemoveLogitsProcessor,
         LogitsProcessorList,
+        MusicgenForCausalLM,
+        MusicgenForConditionalGeneration,
+        MusicgenModel,  # TODO(SG): swap for automodel
     )
 
 
@@ -55,6 +53,7 @@ def _config_zero_init(config):
             no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
             setattr(configs_no_init, key, no_init_subconfig)
     return configs_no_init
+
 
 def prepare_musicgen_decoder_inputs_dict(
     config,
@@ -368,14 +367,22 @@ def prepare_musicgen_inputs_dict(
     cross_attn_head_mask=None,
 ):
     if decoder_attention_mask is None:
-        decoder_attention_mask = decoder_input_ids.reshape(-1, config.decoder.num_codebooks, decoder_input_ids.shape[-1])[:, 0, :]
+        decoder_attention_mask = decoder_input_ids.reshape(
+            -1, config.decoder.num_codebooks, decoder_input_ids.shape[-1]
+        )[:, 0, :]
         decoder_attention_mask = decoder_attention_mask.ne(config.decoder.pad_token_id)
     if head_mask is None:
-        head_mask = torch.ones(config.text_encoder.num_hidden_layers, config.text_encoder.num_attention_heads, device=torch_device)
+        head_mask = torch.ones(
+            config.text_encoder.num_hidden_layers, config.text_encoder.num_attention_heads, device=torch_device
+        )
     if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder.num_hidden_layers, config.decoder.num_attention_heads, device=torch_device)
+        decoder_head_mask = torch.ones(
+            config.decoder.num_hidden_layers, config.decoder.num_attention_heads, device=torch_device
+        )
     if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder.num_hidden_layers, config.decoder.num_attention_heads, device=torch_device)
+        cross_attn_head_mask = torch.ones(
+            config.decoder.num_hidden_layers, config.decoder.num_attention_heads, device=torch_device
+        )
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
@@ -385,6 +392,7 @@ def prepare_musicgen_inputs_dict(
         "decoder_head_mask": decoder_head_mask,
         "cross_attn_head_mask": cross_attn_head_mask,
     }
+
 
 class MusicgenTester:
     def __init__(
@@ -434,9 +442,7 @@ class MusicgenTester:
         decoder_input_ids = ids_tensor([self.batch_size * self.num_codebooks, self.seq_length], self.vocab_size)
 
         config = self.get_config()
-        inputs_dict = prepare_musicgen_inputs_dict(
-            config, input_ids, decoder_input_ids=decoder_input_ids
-        )
+        inputs_dict = prepare_musicgen_inputs_dict(config, input_ids, decoder_input_ids=decoder_input_ids)
         return config, inputs_dict
 
     def get_config(self):
@@ -473,6 +479,7 @@ class MusicgenTester:
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
 
+
 @require_torch
 class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MusicgenForConditionalGeneration,) if is_torch_available() else ()
@@ -485,9 +492,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def setUp(self):
         self.model_tester = MusicgenTester(self)
 
-    def _check_output_with_attentions(
-            self, outputs, config, input_ids, decoder_input_ids
-    ):
+    def _check_output_with_attentions(self, outputs, config, input_ids, decoder_input_ids):
         text_encoder_config = config.text_encoder
         decoder_config = config.decoder
 
@@ -495,7 +500,8 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.assertEqual(len(encoder_attentions), text_encoder_config.num_hidden_layers)
 
         self.assertEqual(
-            encoder_attentions[0].shape[-3:], (text_encoder_config.num_attention_heads, input_ids.shape[-1], input_ids.shape[-1])
+            encoder_attentions[0].shape[-3:],
+            (text_encoder_config.num_attention_heads, input_ids.shape[-1], input_ids.shape[-1]),
         )
 
         decoder_attentions = outputs["decoder_attentions"]
@@ -517,14 +523,14 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         )
 
     def check_musicgen_model_output_attentions(
-            self,
-            model_class,
-            config,
-            input_ids,
-            attention_mask,
-            decoder_input_ids,
-            decoder_attention_mask,
-            **kwargs,
+        self,
+        model_class,
+        config,
+        input_ids,
+        attention_mask,
+        decoder_input_ids,
+        decoder_attention_mask,
+        **kwargs,
     ):
         model = model_class(config)
         model.to(torch_device)
@@ -539,19 +545,17 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 output_attentions=True,
                 **kwargs,
             )
-        self._check_output_with_attentions(
-            outputs, config, input_ids, decoder_input_ids
-        )
+        self._check_output_with_attentions(outputs, config, input_ids, decoder_input_ids)
 
     def check_musicgen_model_output_attentions_from_config(
-            self,
-            model_class,
-            config,
-            input_ids,
-            attention_mask,
-            decoder_input_ids,
-            decoder_attention_mask,
-            **kwargs,
+        self,
+        model_class,
+        config,
+        input_ids,
+        attention_mask,
+        decoder_input_ids,
+        decoder_attention_mask,
+        **kwargs,
     ):
         # Similar to `check_encoder_decoder_model_output_attentions`, but with `output_attentions` triggered from the
         # config file. Contrarily to most models, changing the model's config won't work -- the defaults are loaded
@@ -571,10 +575,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 **kwargs,
             )
         self.assertTrue(
-            all(
-                key not in outputs
-                for key in ["encoder_attentions", "decoder_attentions", "cross_attentions"]
-            )
+            all(key not in outputs for key in ["encoder_attentions", "decoder_attentions", "cross_attentions"])
         )
         config.text_encoder.output_attentions = True  # inner model config -> will work
         config.audio_encoder.output_attentions = True
@@ -586,15 +587,13 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
         with torch.no_grad():
             outputs = model(
-            input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
-            decoder_attention_mask=decoder_attention_mask,
-            **kwargs,
-        )
-        self._check_output_with_attentions(
-            outputs, config, input_ids, decoder_input_ids
-        )
+                input_ids=input_ids,
+                decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=decoder_attention_mask,
+                **kwargs,
+            )
+        self._check_output_with_attentions(outputs, config, input_ids, decoder_input_ids)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -762,13 +761,14 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                             [0.0, 1.0],
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
+
     def _get_input_ids_and_config(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict["input_ids"]
 
         # take max batch_size
         sequence_length = input_ids.shape[-1]
-        input_ids = input_ids[: batch_size, :]
+        input_ids = input_ids[:batch_size, :]
         attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long)
 
         # generate max 3 tokens

@@ -2016,7 +2016,11 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         return decoder_input_ids, model_kwargs
 
     def _prepare_encoder_decoder_kwargs_for_generation(
-        self, inputs_tensor: torch.Tensor, model_kwargs, model_input_name: Optional[str] = None, guidance_scale: Optional[float] = None,
+        self,
+        inputs_tensor: torch.Tensor,
+        model_kwargs,
+        model_input_name: Optional[str] = None,
+        guidance_scale: Optional[float] = None,
     ) -> Dict[str, Any]:
         # 1. get text encoder
         encoder = self.get_text_encoder()
@@ -2191,7 +2195,10 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         if "encoder_outputs" not in model_kwargs:
             # encoder_outputs are created and added to `model_kwargs`
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
-                inputs_tensor, model_kwargs, model_input_name, generation_config.guidance_scale,
+                inputs_tensor,
+                model_kwargs,
+                model_input_name,
+                generation_config.guidance_scale,
             )
 
         # 5. Prepare `input_ids` which will be used for auto-regressive generation
