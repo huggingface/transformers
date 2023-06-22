@@ -48,13 +48,13 @@ class VitsConfig(PretrainedConfig):
         encoder_ffn_dim (`int`, *optional*, defaults to 768):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         ffn_kernel_size (`int`, *optional*, defaults to 3):
-            TODO
-        inter_channels (`int`, *optional*, defaults to 192):
-            TODO Should be divisible by two.
-        spec_channels (`int`, *optional*, defaults to 513):
-            Number of channels in the target spectrograms.
+            Kernel size of the 1D convolution layers used by the feed-forward network in the Transformer encoder.
+        flow_size (`int`, *optional*, defaults to 192):
+            Dimensionality of the flow layers.
+        spectrogram_bins (`int`, *optional*, defaults to 513):
+            Number of frequency bins in the target spectrogram.
         segment_size (`int`, *optional*, defaults to 32):
-            TODO
+            TODO (used only during training)
         hidden_act (`str` or `function`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
@@ -72,7 +72,7 @@ class VitsConfig(PretrainedConfig):
             Whether to use the stochastic duration prediction module or the regular duration predictor.
         num_speakers (`int`, *optional*, defaults to 1):
             Number of speakers if this is a multi-speaker model.
-        speaker_embedding_channels (`int`, *optional*, defaults to 0):
+        speaker_embedding_size (`int`, *optional*, defaults to 0):
             Number of channels used by the speaker embeddings. Is zero for single-speaker models.
         upsample_initial_channel (`int`, *optional*, defaults to 512):
             The number of input channels into the HiFi-GAN upsampling network.
@@ -92,20 +92,20 @@ class VitsConfig(PretrainedConfig):
             HiFi-GAN multi-receptive field fusion (MRF) module.
         leaky_relu_slope (`float`, *optional*, defaults to 0.1):
             The angle of the negative slope used by the leaky ReLU activation.
-        duration_predictor_kernel_size=3
-            TODO
-        duration_predictor_dropout=0.5
-            TODO
-        duration_predictor_num_flows=4
-            TODO
-        duration_predictor_filter_channels=256
-            TODO
-        prior_encoder_num_flows=4,
-            TODO
-        wavenet_kernel_size=5,
-            TODO This must be an odd number.
-        wavenet_dilation_rate=1,
-            TODO
+        duration_predictor_kernel_size (`int`, *optional*, defaults to 3):
+            Kernel size of the 1D convolution layers used in the duration predictor model.
+        duration_predictor_dropout (`float`, *optional*, defaults to 0.5):
+            The dropout ratio for the duration predictor model.
+        duration_predictor_num_flows (`int`, *optional*, defaults to 4):
+            Number of flow stages used by the duration predictor model.
+        duration_predictor_filter_channels (`int`, *optional*, defaults to 256):
+            Number of channels for the convolution layers used in the duration predictor model.
+        prior_encoder_num_flows (`int`, *optional*, defaults to 4):
+            Number of flow stages used by the prior encoder flow model.
+        wavenet_kernel_size (`int`, *optional*, defaults to 5):
+            Kernel size of the 1D convolution layers used in the WaveNet model.
+        wavenet_dilation_rate (`int`, *optional*, defaults to 1):
+            Dilation rates of the dilated 1D convolutional layers used in the WaveNet model.
         wavenet_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the WaveNet layers.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -136,10 +136,10 @@ class VitsConfig(PretrainedConfig):
         encoder_attention_heads=2,
         encoder_ffn_dim=768,
         ffn_kernel_size=3,
-        inter_channels=192,  # TODO: better name?  intermediate_size?
-        spec_channels=513,  # TODO: spectrogram_channels?  num_spectrogram_bins?
+        flow_size=192,
+        spectrogram_bins=513,
         segment_size=32,  # TODO: hps.train.segment_size // hps.data.hop_length
-        hidden_act="relu",  # or quick_gelu
+        hidden_act="relu",
         hidden_dropout=0.1,
         attention_dropout=0.1,
         activation_dropout=0.1,
@@ -147,7 +147,7 @@ class VitsConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         use_stochastic_duration_prediction=True,
         num_speakers=1,
-        speaker_embedding_channels=0,
+        speaker_embedding_size=0,
         upsample_initial_channel=512,
         upsample_rates=[8, 8, 2, 2],
         upsample_kernel_sizes=[16, 16, 4, 4],
@@ -171,8 +171,8 @@ class VitsConfig(PretrainedConfig):
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_attention_heads = encoder_attention_heads
         self.ffn_kernel_size = ffn_kernel_size
-        self.inter_channels = inter_channels
-        self.spec_channels = spec_channels
+        self.flow_size = flow_size
+        self.spectrogram_bins = spectrogram_bins
         self.segment_size = segment_size
         self.hidden_act = hidden_act
         self.hidden_dropout = hidden_dropout
@@ -182,7 +182,7 @@ class VitsConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_stochastic_duration_prediction = use_stochastic_duration_prediction
         self.num_speakers = num_speakers
-        self.speaker_embedding_channels = speaker_embedding_channels
+        self.speaker_embedding_size = speaker_embedding_size
         self.upsample_initial_channel = upsample_initial_channel
         self.upsample_rates = upsample_rates
         self.upsample_kernel_sizes = upsample_kernel_sizes

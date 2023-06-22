@@ -91,9 +91,9 @@ def fused_add_tanh_sigmoid_multiply(input_a, input_b, num_channels):
 class VitsPosteriorEncoder(nn.Module):
     def __init__(self, config: VitsConfig):
         super().__init__()
-        self.out_channels = config.inter_channels
+        self.out_channels = config.flow_size
 
-        self.conv_pre = nn.Conv1d(config.spec_channels, config.hidden_size, 1)
+        self.conv_pre = nn.Conv1d(config.spectrogram_bins, config.hidden_size, 1)
         self.wavenet = VitsWaveNet(config, num_layers=16)
         self.conv_proj = nn.Conv1d(config.hidden_size, self.out_channels * 2, 1)
 
@@ -171,7 +171,7 @@ class VitsHifiGan(nn.Module):
         self.num_kernels = len(config.resblock_kernel_sizes)
         self.num_upsamples = len(config.upsample_rates)
         self.conv_pre = nn.Conv1d(
-            config.inter_channels,
+            config.flow_size,
             config.upsample_initial_channel,
             kernel_size=7,
             stride=1,
@@ -200,8 +200,8 @@ class VitsHifiGan(nn.Module):
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3, bias=False)
 
-        if config.speaker_embedding_channels != 0:
-            self.cond = nn.Conv1d(config.speaker_embedding_channels, config.upsample_initial_channel, 1)
+        if config.speaker_embedding_size != 0:
+            self.cond = nn.Conv1d(config.speaker_embedding_size, config.upsample_initial_channel, 1)
 
     def apply_weight_norm(self):
         for layer in self.upsampler:
@@ -222,9 +222,9 @@ class VitsHifiGan(nn.Module):
         Converts a spectrogram into a speech waveform.
 
         Args:
-            spectrogram (`torch.FloatTensor` of shape `(batch_size, config.inter_channels, sequence_length)`):
+            spectrogram (`torch.FloatTensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`):
                 Tensor containing the spectrograms.
-            global_conditioning (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_channels, 1)`, *optional*):
+            global_conditioning (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_size, 1)`, *optional*):
                 Tensor containing speaker embeddings, for multispeaker models.
 
         Returns:
@@ -260,8 +260,8 @@ class VitsWaveNet(torch.nn.Module):
         self.res_skip_layers = torch.nn.ModuleList()
         self.dropout = nn.Dropout(config.wavenet_dropout)
 
-        if config.speaker_embedding_channels != 0:
-            cond_layer = torch.nn.Conv1d(config.speaker_embedding_channels, 2 * config.hidden_size * num_layers, 1)
+        if config.speaker_embedding_size != 0:
+            cond_layer = torch.nn.Conv1d(config.speaker_embedding_size, 2 * config.hidden_size * num_layers, 1)
             self.cond_layer = torch.nn.utils.weight_norm(cond_layer, name="weight")
 
         for i in range(num_layers):
@@ -317,7 +317,7 @@ class VitsWaveNet(torch.nn.Module):
         return outputs * padding_mask
 
     def remove_weight_norm(self):
-        if self.speaker_embedding_channels != 0:
+        if self.speaker_embedding_size != 0:
             torch.nn.utils.remove_weight_norm(self.cond_layer)
         for layer in self.in_layers:
             torch.nn.utils.remove_weight_norm(layer)
@@ -328,7 +328,7 @@ class VitsWaveNet(torch.nn.Module):
 class VitsResidualCouplingLayer(nn.Module):
     def __init__(self, config: VitsConfig, mean_only: bool = False):
         super().__init__()
-        self.half_channels = config.inter_channels // 2
+        self.half_channels = config.flow_size // 2
         self.mean_only = mean_only
 
         self.conv_pre = nn.Conv1d(self.half_channels, config.hidden_size, 1)
@@ -663,8 +663,8 @@ class VitsStochasticDurationPredictor(nn.Module):
             filter_channels, kernel_size, 3, config.duration_predictor_dropout
         )
 
-        if config.speaker_embedding_channels != 0:
-            self.cond = nn.Conv1d(config.speaker_embedding_channels, filter_channels, 1)
+        if config.speaker_embedding_size != 0:
+            self.cond = nn.Conv1d(config.speaker_embedding_size, filter_channels, 1)
 
         self.flows = nn.ModuleList()
         self.flows.append(VitsElementwiseAffine(2))
@@ -755,8 +755,8 @@ class VitsDurationPredictor(nn.Module):
         self.norm_2 = nn.LayerNorm(filter_channels, eps=config.layer_norm_eps)
         self.proj = nn.Conv1d(filter_channels, 1, 1)
 
-        if config.speaker_embedding_channels != 0:
-            self.cond = nn.Conv1d(config.speaker_embedding_channels, config.hidden_size, 1)
+        if config.speaker_embedding_size != 0:
+            self.cond = nn.Conv1d(config.speaker_embedding_size, config.hidden_size, 1)
 
     def forward(self, inputs, padding_mask, global_conditioning=None):
         inputs = torch.detach(inputs)
@@ -1169,7 +1169,7 @@ class VitsTextEncoder(nn.Module):
         self.config = config
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
         self.encoder = VitsEncoder(config)
-        self.project = nn.Conv1d(config.hidden_size, config.inter_channels * 2, kernel_size=1)
+        self.project = nn.Conv1d(config.hidden_size, config.flow_size * 2, kernel_size=1)
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -1194,7 +1194,7 @@ class VitsTextEncoder(nn.Module):
         last_hidden_state = encoder_outputs[0]
 
         stats = self.project(last_hidden_state.transpose(1, 2)).transpose(1, 2) * padding_mask
-        means, log_variances = torch.split(stats, self.config.inter_channels, dim=2)
+        means, log_variances = torch.split(stats, self.config.flow_size, dim=2)
 
         return (last_hidden_state, means, log_variances)
 
@@ -1302,7 +1302,7 @@ class VitsModel(VitsPreTrainedModel):
             self.duration_predictor = VitsDurationPredictor(config)
 
         if config.num_speakers > 1:
-            self.embed_speaker = nn.Embedding(config.num_speakers, config.speaker_embedding_channels)
+            self.embed_speaker = nn.Embedding(config.num_speakers, config.speaker_embedding_size)
 
         # This is used only for training.
         self.posterior_encoder = VitsPosteriorEncoder(config)
@@ -1327,7 +1327,7 @@ class VitsModel(VitsPreTrainedModel):
         labels: Optional[torch.FloatTensor] = None,
     ) -> Union[Tuple[torch.FloatTensor], VitsModelOutput]:
         r"""
-        labels (`torch.FloatTensor` of shape `(batch_size, config.spec_channels, sequence_length)`, *optional*):
+        labels (`torch.FloatTensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`, *optional*):
             Float values of target spectrogram. Timesteps set to `-100.0` are ignored (masked) for the loss
             computation.
 

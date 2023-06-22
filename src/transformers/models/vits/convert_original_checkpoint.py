@@ -279,7 +279,7 @@ def convert_checkpoint(
 
     if num_speakers:
         config.num_speakers = num_speakers
-        config.speaker_embedding_channels = 256
+        config.speaker_embedding_size = 256
 
     # Save vocab as temporary json file
     symbols = [line.replace("\n", "") for line in open(vocab_path, encoding="utf-8").readlines()]
