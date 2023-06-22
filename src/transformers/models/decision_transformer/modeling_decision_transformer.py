@@ -27,7 +27,7 @@ from torch.cuda.amp import autocast
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer, torch_custom_checkpointing
+from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -643,7 +643,7 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
 
                     return custom_forward
 
-                outputs = torch_custom_checkpointing(
+                outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(block),
                     hidden_states,
                     None,

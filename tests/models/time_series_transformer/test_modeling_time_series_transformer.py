@@ -200,12 +200,6 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(
-        reason="The model does not support GC + autocast + fp16: https://github.com/huggingface/transformers/pull/24247"
-    )
-    def test_training_gradient_checkpointing_autocast(self):
-        pass
-
     def test_save_load_strict(self):
         config, _ = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:

@@ -41,7 +41,7 @@ from ...file_utils import (
 )
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import meshgrid, torch_custom_checkpointing
+from ...pytorch_utils import meshgrid
 from ...utils import is_ninja_available, logging
 from ..auto import AutoBackbone
 from .configuration_deformable_detr import DeformableDetrConfig
@@ -1380,7 +1380,7 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = torch_custom_checkpointing(
+                layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(decoder_layer),
                     hidden_states,
                     encoder_hidden_states,

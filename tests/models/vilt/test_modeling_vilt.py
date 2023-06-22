@@ -340,12 +340,6 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip(
-        reason="The model does not support GC + autocast + fp16: https://github.com/huggingface/transformers/pull/24247"
-    )
-    def test_training_gradient_checkpointing_autocast(self):
-        pass
-
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True

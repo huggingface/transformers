@@ -609,12 +609,6 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_change_to_full_attn(*config_and_inputs)
 
-    @unittest.skip(
-        reason="The model does not support GC + autocast + fp16: https://github.com/huggingface/transformers/pull/24247"
-    )
-    def test_training_gradient_checkpointing_autocast(self):
-        pass
-
     # overwrite from common in order to skip the check on `attentions`
     def check_pt_flax_outputs(self, fx_outputs, pt_outputs, model_class, tol=1e-5, name="outputs", attributes=None):
         # `bigbird_block_sparse_attention` in `FlaxBigBird` returns `attention_probs = None`, while in PyTorch version,

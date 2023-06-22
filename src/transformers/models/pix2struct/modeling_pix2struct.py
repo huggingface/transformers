@@ -20,6 +20,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
+from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -30,7 +31,7 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS, torch_custom_checkpointing
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -349,7 +350,7 @@ class Pix2StructVisionEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch_custom_checkpointing(
+                layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask,
@@ -1501,7 +1502,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = torch_custom_checkpointing(
+                layer_outputs = checkpoint(
                     create_custom_forward(layer_module),
                     hidden_states,
                     extended_attention_mask,
