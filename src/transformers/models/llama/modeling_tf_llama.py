@@ -28,7 +28,13 @@ from ...modeling_tf_outputs import (
     TFCausalLMOutputWithPast,
     TFSequenceClassifierOutputWithPast,
 )
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, unpack_inputs, TFSequenceClassificationLoss, TFCausalLanguageModelingLoss
+from ...modeling_tf_utils import (
+    TFCausalLanguageModelingLoss,
+    TFPreTrainedModel,
+    TFSequenceClassificationLoss,
+    get_initializer,
+    unpack_inputs,
+)
 from ...tf_utils import shape_list
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_llama import LlamaConfig
@@ -73,14 +79,34 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
 
+def rotate_half(x):
+    x1, x2 = tf.split(x, 2, axis=-1)
+    return tf.concat((-x2, x1), axis=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
+    # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
+    cos = tf.squeeze(cos, (0, 1))  # [seq_len, dim]
+    sin = tf.squeeze(sin, (0, 1))  # [seq_len, dim]
+    cos = tf.expand_dims(tf.gather(cos, position_ids), 1)  # [bs, 1, seq_len, dim]
+    sin = tf.expand_dims(tf.gather(sin, position_ids), 1)  # [bs, 1, seq_len, dim]
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
 class TFLlamaRMSNorm(tf.keras.layers.Layer):
     def __init__(self, hidden_size, eps=1e-6, **kwargs):
         """
         LlamaRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__(**kwargs)
-        self.weight = self.add_weight(name="weight", shape=(hidden_size,), initializer="ones")
+        self.hidden_size = hidden_size
         self.variance_epsilon = eps
+
+    def build(self, input_shape=None):
+        super().build(input_shape)
+        self.weight = self.add_weight(name="weight", shape=(self.hidden_size,), initializer="ones")
 
     def call(self, hidden_states):
         input_dtype = hidden_states.dtype
@@ -91,71 +117,36 @@ class TFLlamaRMSNorm(tf.keras.layers.Layer):
 
 
 class TFLlamaRotaryEmbedding(tf.keras.layers.Layer):
-    # TODO Get this to match the Torch behaviour without the horrific call-time breaking of class variables
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, **kwargs):
+    def __init__(self, dim, base=10000, **kwargs):
         super().__init__(**kwargs)
-        inv_freq = 1.0 / (base ** (tf.range(0, dim, 2, dtype=tf.float32) / dim))
-        self.inv_freq = tf.constant(inv_freq, dtype=tf.float32)
-
-        # Build here to make `tf.function` work.
-        self.max_seq_len_cached = max_position_embeddings
-        t = tf.range(self.max_seq_len_cached, dtype=self.inv_freq.dtype)
-        freqs = tf.einsum("i,j->ij", t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = tf.concat([freqs, freqs], axis=-1)
-        self.cos_cached = tf.math.cos(emb)[None, None, :, :]
-        self.sin_cached = tf.math.sin(emb)[None, None, :, :]
-
-    def build(self, input_shape):
-        super().build(input_shape)
         # Matt: The PyTorch version of this layer does a lot of work to cache values, but we just rely on TF compilation
         # and/or XLA to sort out constants like that. It actually may not seem like this layer needs to be stateful at
         # all when we benefit from TF compilation, but it does. The reason is that self.inv_freq is a buffer in the
-        # original implementation, and may be quantized as (b)float16. We need to replicate the exact values in order
-        # for our outputs to match those from PyTorch checkpoints.
+        # original implementation, so for fp16 checkpoints some precision will be lost, and we need to mimic
+        # that to get the same outputs in TF.
+        self.dim = dim
+        self.base = base
+
+    def build(self, input_shape):
+        super().build(input_shape)
         self.inv_freq = self.add_weight(
             "inv_freq", shape=(self.dim // 2,), dtype=tf.float32, initializer=get_initializer(1.0), trainable=False
         )
         self.inv_freq.assign(
-            1.0 / (10000 ** (tf.range(start=0, limit=self.dim, delta=2, dtype=tf.float32) / self.dim))
+            1.0 / (self.base ** (tf.range(start=0, limit=self.dim, delta=2, dtype=tf.float32) / self.dim))
         )
 
-    def call(self, x, seq_len=None):
-        # x: [bs, num_attention_heads, seq_len, head_size]
-        # This `if` block is unlikely to be run after we build sin/cos in `__init__`. Keep the logic here just in case.
-        if seq_len > self.max_seq_len_cached:
-            self.max_seq_len_cached = seq_len
-            t = tf.range(self.max_seq_len_cached, dtype=self.inv_freq.dtype)
-            freqs = tf.einsum("i,j->ij", t, self.inv_freq)
-            # Different from paper, but it uses a different permutation in order to obtain the same calculation
-            emb = tf.concat([freqs, freqs], axis=-1)
-            self.cos_cached = tf.math.cos(emb)[None, None, :, :]
-            self.sin_cached = tf.math.sin(emb)[None, None, :, :]
-        return (
-            self.cos_cached[:, :, :seq_len, ...],
-            self.sin_cached[:, :, :seq_len, ...],
-        )
+    def _compute_cos_sin(self, seq_offset, seq_end):
+        t = tf.range(start=seq_offset, limit=seq_end, dtype=self.inv_freq.dtype)
+        freqs = tf.einsum("i, j -> ij", t, self.inv_freq)  # Outer multiplication
+        emb = tf.concat((freqs, freqs), axis=-1)[None, None, :, :]
 
+        return tf.cos(emb), tf.sin(emb)
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x_shape = shape_list(x)
-    x1 = x[..., : x_shape[-1] // 2]
-    x2 = x[..., x_shape[-1] // 2 :]
-    return tf.concat((-x2, x1), axis=-1)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
-    # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
-    cos = tf.squeeze(cos, axis=[0, 1])  # [seq_len, dim]
-    sin = tf.squeeze(sin, axis=[0, 1])  # [seq_len, dim]
-    cos = tf.gather(cos, position_ids, axis=0)
-    cos = tf.expand_dims(cos, axis=1)  # [bs, 1, seq_len, dim]
-    sin = tf.gather(sin, position_ids, axis=0)
-    sin = tf.expand_dims(sin, axis=1)  # [bs, 1, seq_len, dim]
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
+    def call(self, x, seq_offset) -> Tuple[tf.Tensor, tf.Tensor]:
+        # Because we're civilized and not randomly resizing our model weights during our forward pass,
+        # we can radically simplify this layer compared to the Torch version.
+        return self._compute_cos_sin(seq_offset, tf.shape(x)[2] + seq_offset)
 
 
 class TFLlamaMLP(tf.keras.layers.Layer):
@@ -185,7 +176,6 @@ class TFLlamaAttention(tf.keras.layers.Layer):
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
-        self.max_position_embeddings = config.max_position_embeddings
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -196,9 +186,7 @@ class TFLlamaAttention(tf.keras.layers.Layer):
         self.k_proj = tf.keras.layers.Dense(self.num_heads * self.head_dim, use_bias=False, name="k_proj")
         self.v_proj = tf.keras.layers.Dense(self.num_heads * self.head_dim, use_bias=False, name="v_proj")
         self.o_proj = tf.keras.layers.Dense(self.hidden_size, use_bias=False, name="o_proj")
-        self.rotary_emb = TFLlamaRotaryEmbedding(
-            self.head_dim, max_position_embeddings=self.max_position_embeddings, name="rotary_emb"
-        )
+        self.rotary_emb = TFLlamaRotaryEmbedding(self.head_dim, name="rotary_emb")
 
     def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
         return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), perm=[0, 2, 1, 3])
@@ -220,8 +208,11 @@ class TFLlamaAttention(tf.keras.layers.Layer):
 
         kv_seq_len = shape_list(key_states)[-2]
         if past_key_value is not None:
-            kv_seq_len += shape_list(past_key_value[0])[-2]
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+            seq_offset = shape_list(past_key_value[0])[-2]
+            kv_seq_len += seq_offset
+        else:
+            seq_offset = 0
+        cos, sin = self.rotary_emb(value_states, seq_offset=seq_offset)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
@@ -234,29 +225,29 @@ class TFLlamaAttention(tf.keras.layers.Layer):
             float(self.head_dim)
         )
 
-        if shape_list(attn_weights) != [bsz, self.num_heads, q_len, kv_seq_len]:
-            raise ValueError(
-                f"Attention weights should be of size {[bsz, self.num_heads, q_len, kv_seq_len]}, but is"
-                f" {shape_list(attn_weights)}"
-            )
+        tf.debugging.assert_equal(
+            shape_list(attn_weights),
+            [bsz, self.num_heads, q_len, kv_seq_len],
+            message=f"Attention weights should be of size {[bsz, self.num_heads, q_len, kv_seq_len]}, but is {shape_list(attn_weights)}",
+        )
 
         if attention_mask is not None:
-            if shape_list(attention_mask) != [bsz, 1, q_len, kv_seq_len]:
-                raise ValueError(
-                    f"Attention mask should be of size {[bsz, 1, q_len, kv_seq_len]}, but is {shape_list(attention_mask)}"
-                )
+            tf.debugging.assert_equal(
+                shape_list(attention_mask),
+                [bsz, 1, q_len, kv_seq_len],
+                message=f"Attention mask should be of size {[bsz, 1, q_len, kv_seq_len]}, but is {shape_list(attention_mask)}",
+            )
             attn_weights = attn_weights + attention_mask
             attn_weights = tf.math.maximum(attn_weights, attn_weights.dtype.min)
-
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
         attn_output = tf.matmul(attn_weights, value_states)
 
-        if shape_list(attn_output) != [bsz, self.num_heads, q_len, self.head_dim]:
-            raise ValueError(
-                f"`attn_output` should be of size {[bsz, self.num_heads, q_len, self.head_dim]}, but is"
-                f" {shape_list(attn_output)}"
-            )
+        tf.debugging.assert_equal(
+            shape_list(attn_output),
+            [bsz, self.num_heads, q_len, self.head_dim],
+            message=f"`attn_output` should be of size {[bsz, self.num_heads, q_len, self.head_dim]}, but is {shape_list(attn_output)}",
+        )
 
         attn_output = tf.transpose(attn_output, perm=[0, 2, 1, 3])
         attn_output = tf.reshape(attn_output, (bsz, q_len, self.hidden_size))
@@ -371,6 +362,7 @@ class TFLlamaPreTrainedModel(TFPreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
 
+    # TODO Distribute these around the model and then delete this
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, tf.keras.layers.Dense):
@@ -473,22 +465,19 @@ class TFLlamaModel(TFLlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
+    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, past_key_values_length):
         # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        # # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
         if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
-                input_shape,
-                past_key_values_length=past_key_values_length,
+            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
+        else:
+            combined_attention_mask = _expand_mask(
+                tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
             )
 
         if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
+            combined_attention_mask = combined_attention_mask + _expand_mask(attention_mask, tgt_len=input_shape[-1])
 
         return combined_attention_mask
 
@@ -544,7 +533,7 @@ class TFLlamaModel(TFLlamaPreTrainedModel):
         if attention_mask is None:
             attention_mask = tf.ones((batch_size, seq_length_with_past), dtype=tf.bool)
         attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+            attention_mask, (batch_size, seq_length), past_key_values_length
         )
 
         hidden_states = inputs_embeds
@@ -600,7 +589,7 @@ class TFLlamaForCausalLM(TFLlamaPreTrainedModel, TFCausalLanguageModelingLoss):
 
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
-        self.model = TFLlamaModel(config)
+        self.model = TFLlamaModel(config, name="model")
 
         self.lm_head = tf.keras.layers.Dense(config.vocab_size, use_bias=False, name="lm_head")
 
@@ -766,9 +755,9 @@ class TFLlamaForSequenceClassification(TFLlamaPreTrainedModel, TFSequenceClassif
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
         self.num_labels = config.num_labels
-        self.model = TFLlamaModel(config)
+        self.model = TFLlamaModel(config, name="model")
         self.score = tf.keras.layers.Dense(
-            self.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="score"
+            self.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="score", use_bias=False
         )
 
     def get_input_embeddings(self):
@@ -825,8 +814,7 @@ class TFLlamaForSequenceClassification(TFLlamaPreTrainedModel, TFSequenceClassif
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
         if input_ids is not None and self.config.pad_token_id is not None:
             sequence_lengths = (
-                tf.reduce_sum(tf.cast(tf.not_equal(input_ids, self.config.pad_token_id), dtype=tf.int32), axis=-1)
-                - 1
+                tf.reduce_sum(tf.cast(tf.not_equal(input_ids, self.config.pad_token_id), dtype=tf.int32), axis=-1) - 1
             )
             pooled_logits = tf.gather(logits, sequence_lengths, batch_dims=1)
         else:
@@ -834,7 +822,11 @@ class TFLlamaForSequenceClassification(TFLlamaPreTrainedModel, TFSequenceClassif
 
         if labels is None:
             loss = None
-        elif self.config.problem_type == "multi_label_classification" or self.num_labels > 1 and labels.dtype.is_floating:
+        elif (
+            self.config.problem_type == "multi_label_classification"
+            or self.num_labels > 1
+            and labels.dtype.is_floating
+        ):
             loss = tf.keras.losses.binary_crossentropy(labels, pooled_logits)
         else:
             loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=pooled_logits)
