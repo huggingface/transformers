@@ -54,7 +54,7 @@ For optuna, see optuna [object_parameter](https://optuna.readthedocs.io/en/stabl
 ...     }
 ```
 
-For raytune, see raytune [object_parameter](https://docs.ray.io/en/latest/tune/api_docs/search_space.html), it's like following:
+For raytune, see raytune [object_parameter](https://docs.ray.io/en/latest/tune/api/search_space.html), it's like following:
 
 ```py
 >>> def ray_hp_space(trial):
