@@ -87,9 +87,9 @@ if is_torch_neuroncore_available(check_device=False):
             )
             import torch_xla.distributed.xla_backend as xbn
 
-            if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
-                torch.distributed.init_process_group(backend="xla")
-                if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
+            if not isinstance(dist.group.WORLD, xbn.ProcessGroupXla):
+                dist.init_process_group(backend="xla")
+                if not isinstance(dist.group.WORLD, xbn.ProcessGroupXla):
                     raise AssertionError("Failed to initialize torch.distributed process group using XLA backend.")
 
 
@@ -873,7 +873,7 @@ class TrainingArguments:
             )
         },
     )
-    debug: str = field(
+    debug: Union[str, List[DebugOption]] = field(
         default="",
         metadata={
             "help": (
@@ -1563,8 +1563,11 @@ class TrainingArguments:
             )
             self.debug += " tpu_metrics_debug"
             self.tpu_metrics_debug = False
+
         if isinstance(self.debug, str):
             self.debug = [DebugOption(s) for s in self.debug.split()]
+        elif self.debug is None:
+            self.debug = []
 
         self.deepspeed_plugin = None
         if self.deepspeed:
@@ -1713,11 +1716,7 @@ class TrainingArguments:
         if not is_sagemaker_mp_enabled():
             device = self.distributed_state.device
             self.local_rank = self.distributed_state.local_process_index
-        if (
-            torch.distributed.is_available()
-            and torch.distributed.is_initialized()
-            and self.parallel_mode != ParallelMode.DISTRIBUTED
-        ):
+        if dist.is_available() and dist.is_initialized() and self.parallel_mode != ParallelMode.DISTRIBUTED:
             logger.warning(
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
@@ -1816,15 +1815,10 @@ class TrainingArguments:
         The number of processes used in parallel.
         """
         requires_backends(self, ["torch"])
-
-        if is_torch_tpu_available():
-            return xm.xrt_world_size()
+        if self.distributed_state is not None:
+            return self.distributed_state.num_processes
         elif is_sagemaker_mp_enabled():
             return smp.dp_size() if not smp.state.cfg.prescaled_batch else smp.rdp_size()
-        elif is_sagemaker_dp_enabled():
-            return dist.get_world_size()
-        elif self.parallel_mode == ParallelMode.DISTRIBUTED:
-            return torch.distributed.get_world_size()
         return 1
 
     @property
@@ -1833,14 +1827,10 @@ class TrainingArguments:
         The index of the current process used.
         """
         requires_backends(self, ["torch"])
-        if is_torch_tpu_available():
-            return xm.get_ordinal()
+        if self.distributed_state is not None:
+            return self.distributed_state.process_index
         elif is_sagemaker_mp_enabled():
             return smp.dp_rank() if not smp.state.cfg.prescaled_batch else smp.rdp_rank()
-        elif is_sagemaker_dp_enabled():
-            return dist.get_rank()
-        elif self.parallel_mode == ParallelMode.DISTRIBUTED:
-            return torch.distributed.get_rank()
         return 0
 
     @property
@@ -1849,14 +1839,11 @@ class TrainingArguments:
         The index of the local process used.
         """
         requires_backends(self, ["torch"])
-        if is_torch_tpu_available():
-            return xm.get_local_ordinal()
+
+        if self.distributed_state is not None:
+            return self.distributed_state.local_process_index
         elif is_sagemaker_mp_enabled():
             return smp.local_rank()
-        elif is_sagemaker_dp_enabled():
-            return dist.get_rank()
-        elif self.parallel_mode == ParallelMode.DISTRIBUTED:
-            return self.local_rank
         return 0
 
     @property
@@ -1945,25 +1932,23 @@ class TrainingArguments:
 
         """
         if is_torch_available() and self.world_size > 1:
-            main_process_desc = "main process"
-            if local:
-                is_main_process = self.local_process_index == 0
-                main_process_desc = "main local process"
+            main_process_desc = "main local process" if local else "main process"
+            if self.distributed_state is not None:
+                is_main_process = (
+                    self.distributed_state.is_local_main_process if local else self.distributed_state.is_main_process
+                )
             elif is_sagemaker_mp_enabled():
                 is_main_process = smp.rank() == 0
-            else:
-                is_main_process = self.process_index == 0
 
             try:
                 if not is_main_process:
                     # tell all replicas to wait
                     logger.debug(f"{self.process_index}: waiting for the {main_process_desc} to perform {desc}")
+
                     if is_torch_tpu_available():
                         xm.rendezvous(desc)
-                    elif is_sagemaker_dp_enabled():
-                        dist.barrier()
                     else:
-                        torch.distributed.barrier()
+                        dist.barrier()
                 yield
             finally:
                 if is_main_process:
@@ -1971,10 +1956,8 @@ class TrainingArguments:
                     logger.debug(f"{self.process_index}: {main_process_desc} completed {desc}, releasing all replicas")
                     if is_torch_tpu_available():
                         xm.rendezvous(desc)
-                    elif is_sagemaker_dp_enabled():
-                        dist.barrier()
                     else:
-                        torch.distributed.barrier()
+                        dist.barrier()
         else:
             yield
 

@@ -109,7 +109,7 @@ class CircleCIJob:
         ]
         steps.extend([{"run": l} for l in self.install_steps])
         # TODO (ydshieh): Remove this line after the next release (the one after 2023/06/19) of `huggingface_hub`
-        steps.append({"run": {"name": "Split tests", "command": "pip uninstall -y huggingface_hub && pip install git+https://github.com/huggingface/huggingface_hub.git@92028da882e47d61703e8c9144028e1ecadab415"}})
+        steps.append({"run": {"name": "Split tests", "command": "pip uninstall -y huggingface_hub && pip install git+https://github.com/huggingface/huggingface_hub.git@c36817701ecd4694b290178846176da2e195d838"}})
         steps.append(
             {
                 "save_cache": {
@@ -454,7 +454,7 @@ doc_test_job = CircleCIJob(
     "pr_documentation_tests",
     additional_env={"TRANSFORMERS_VERBOSITY": "error", "DATASETS_VERBOSITY": "error", "SKIP_CUDA_DOCTEST": "1"},
     install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
+        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time ffmpeg",
         "pip install --upgrade pip",
         "pip install -e .[dev]",
         "pip install git+https://github.com/huggingface/accelerate",
@@ -480,7 +480,7 @@ doc_test_job = CircleCIJob(
         },
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",  # noqa
-    pytest_options={"-doctest-modules": None, "doctest-glob": "*.mdx", "dist": "loadfile", "rvsA": None},
+    pytest_options={"-doctest-modules": None, "doctest-glob": "*.md", "dist": "loadfile", "rvsA": None},
     command_timeout=1200,  # test cannot run longer than 1200 seconds
     pytest_num_workers=1,
 )

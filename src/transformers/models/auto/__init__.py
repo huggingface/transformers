@@ -40,6 +40,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_auto"] = [
         "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
+        "MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING",
         "MODEL_FOR_AUDIO_XVECTOR_MAPPING",
         "MODEL_FOR_BACKBONE_MAPPING",
         "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
@@ -114,8 +115,10 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_auto"] = [
+        "TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
         "TF_MODEL_FOR_CAUSAL_LM_MAPPING",
         "TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
+        "TF_MODEL_FOR_MASK_GENERATION_MAPPING",
         "TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
         "TF_MODEL_FOR_MASKED_LM_MAPPING",
         "TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
@@ -160,6 +163,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_flax_auto"] = [
+        "FLAX_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
         "FLAX_MODEL_FOR_CAUSAL_LM_MAPPING",
         "FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
         "FLAX_MODEL_FOR_MASKED_LM_MAPPING",
@@ -205,6 +209,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_auto import (
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
+            MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING,
             MODEL_FOR_AUDIO_XVECTOR_MAPPING,
             MODEL_FOR_BACKBONE_MAPPING,
             MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
@@ -279,9 +284,11 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_auto import (
+            TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_MASK_GENERATION_MAPPING,
             TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
             TF_MODEL_FOR_MASKED_LM_MAPPING,
             TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
@@ -325,6 +332,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_flax_auto import (
+            FLAX_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
             FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
             FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             FLAX_MODEL_FOR_MASKED_LM_MAPPING,

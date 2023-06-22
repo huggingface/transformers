@@ -240,6 +240,13 @@ class RepetitionPenaltyLogitsProcessor(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class SequenceBiasLogitsProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class StoppingCriteria(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -443,6 +450,9 @@ class ASTPreTrainedModel(metaclass=DummyObject):
 
 
 MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = None
+
+
+MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING = None
 
 
 MODEL_FOR_AUDIO_XVECTOR_MAPPING = None

@@ -810,6 +810,7 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
         if self.use_rel_pos:
             if input_size is None:
                 raise ValueError("Input size must be provided if using relative positional encoding.")
+        self.config = config
 
     def build(self, input_shape):
         if self.input_size is not None:
@@ -928,7 +929,7 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
 
         attn_output = tf.reshape(attn_probs @ value, (batch_size, self.num_attention_heads, height, width, -1))
         attn_output = tf.transpose(attn_output, perm=(0, 2, 3, 1, 4))
-        attn_output = tf.reshape(attn_output, (batch_size, height, width, -1))
+        attn_output = tf.reshape(attn_output, (batch_size, height, width, self.config.hidden_size))
 
         attn_output = self.proj(attn_output)
 
