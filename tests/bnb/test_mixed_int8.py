@@ -748,3 +748,79 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
                 self.assertTrue(module.adapter[1].weight.grad.norm().item() > 0)
             elif isinstance(module, nn.Embedding):
                 self.assertTrue(module.weight.grad is None)
+
+
+class MixedInt8GPT2Test(MixedInt8Test):
+    model_name = "gpt2-xl"
+    MLP_FC_NAME = "c_fc"
+    EXPECTED_RELATIVE_DIFFERENCE = 1.8720077507258357
+    EXPECTED_OUTPUT = "Hello my name is John Doe, and I am a member of the"
+
+    def test_memory_footprint(self):
+        r"""
+        A simple test to check if the model conversion has been done correctly by checking on the
+        memory footprint of the converted model and the class type of the linear layers of the converted models
+        """
+        from bitsandbytes.nn import Int8Params
+
+        mem_fp16 = self.model_fp16.get_memory_footprint()
+        mem_8bit = self.model_8bit.get_memory_footprint()
+
+        self.assertAlmostEqual(mem_fp16 / mem_8bit, self.EXPECTED_RELATIVE_DIFFERENCE)
+        self.assertTrue(self.model_8bit.transformer.h[0].mlp.c_fc.weight.__class__ == Int8Params)
+
+    def test_int8_serialization(self):
+        r"""
+        Test whether it is possible to serialize a model in 8-bit.
+        """
+        from bitsandbytes.nn import Int8Params
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.model_8bit.save_pretrained(tmpdirname)
+
+            # check that the file `quantization_config` is present
+            config = AutoConfig.from_pretrained(tmpdirname)
+            self.assertTrue(hasattr(config, "quantization_config"))
+
+            model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
+
+            self.assertTrue(model_from_saved.transformer.h[0].mlp.c_fc.weight.__class__ == Int8Params)
+            self.assertTrue(hasattr(model_from_saved.transformer.h[0].mlp.c_fc.weight, "SCB"))
+
+            # generate
+            encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+            output_sequences = model_from_saved.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+
+            self.assertEqual(
+                self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT
+            )
+
+    def test_int8_serialization_sharded(self):
+        r"""
+        Test whether it is possible to serialize a model in 8-bit - sharded version.
+        """
+        from bitsandbytes.nn import Int8Params
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.model_8bit.save_pretrained(tmpdirname, max_shard_size="200MB")
+
+            # check that the file `quantization_config` is present
+            config = AutoConfig.from_pretrained(tmpdirname)
+            self.assertTrue(hasattr(config, "quantization_config"))
+
+            model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname)
+
+            self.assertTrue(model_from_saved.transformer.h[0].mlp.c_fc.weight.__class__ == Int8Params)
+            self.assertTrue(hasattr(model_from_saved.transformer.h[0].mlp.c_fc.weight, "SCB"))
+
+            # generate
+            encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+            output_sequences = model_from_saved.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+
+            self.assertEqual(
+                self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT
+            )
+
+    def test_int8_from_pretrained(self):
+        # TODO: Test loading quantized gpt2 model from the hub.
+        pass
