@@ -300,8 +300,8 @@ def shard_checkpoint(
         weights_name (`str`, *optional*, defaults to `"pytorch_model.bin"`):
             The name of the model save file.
         state_dict_contains_metadata (`bool`, *optional*, defaults to `False`):
-            Whether or not the state dictionary contains metadata about the model (used in 8bit serialization for instance).
-            Check https://github.com/TimDettmers/bitsandbytes/pull/503 for reference.
+            Whether or not the state dictionary contains metadata about the model (used in 8bit serialization for
+            instance). Check https://github.com/TimDettmers/bitsandbytes/pull/503 for reference.
     """
     max_shard_size = convert_file_size_to_int(max_shard_size)
 
