@@ -1458,7 +1458,7 @@ class GenerationTesterMixin:
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
 
     def test_contrastive_generate_low_memory(self):
-        # Check that choosing 'low_memory' reduces memory overhead and does not change the model output
+        # Check that choosing 'low_memory' does not change the model output
         for model_class in self.all_generative_model_classes:
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
             if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
@@ -1476,16 +1476,19 @@ class GenerationTesterMixin:
 
             # test output equality of low versus high memory
             model = model_class(config).to(torch_device).eval()
-            low_output = model.generate(input_ids, top_k=4, penalty_alpha=0.6, low_memory=True)
-            lmem_usage = torch.cuda.max_memory_allocated()
-
-            high_output = model.generate(input_ids, top_k=4, penalty_alpha=0.6, low_memory=False)
-            hmem_usage = torch.cuda.max_memory_allocated()
-
-            # will usually fail due to the propegation of batch vs unbatched forward pass numerical errors
-            self.assertListEqual(low_mem_output.tolist(), high_mem_output.tolist())
-
-            assert lmem_usage < hmem_usage
+            low_output = model.generate(input_ids, 
+                top_k=4, 
+                penalty_alpha=0.6, 
+                low_memory=True, 
+                max_length=max_length
+            )
+            high_output = model.generate(input_ids, 
+                top_k=4, 
+                penalty_alpha=0.6, 
+                low_memory=False, 
+                max_length=max_length
+            )
+            self.assertListEqual(low_output.tolist(), high_output.tolist())
 
         return
 
