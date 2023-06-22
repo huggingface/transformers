@@ -164,12 +164,10 @@ class VitsHifiGanResidualBlock(nn.Module):
         return hidden_states
 
 
-class VitsHifiGan(PreTrainedModel):
-    config_class = VitsConfig
-    main_input_name = "spectrogram"
-
+class VitsHifiGan(nn.Module):
     def __init__(self, config: VitsConfig):
-        super().__init__(config)
+        super().__init__()
+        self.config = config
         self.num_kernels = len(config.resblock_kernel_sizes)
         self.num_upsamples = len(config.upsample_rates)
         self.conv_pre = nn.Conv1d(
@@ -204,16 +202,6 @@ class VitsHifiGan(PreTrainedModel):
 
         if config.speaker_embedding_channels != 0:
             self.cond = nn.Conv1d(config.speaker_embedding_channels, config.upsample_initial_channel, 1)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
 
     def apply_weight_norm(self):
         for layer in self.upsampler:
