@@ -472,7 +472,7 @@ class AdamW(Optimizer):
                     bias_correction2 = 1.0 - beta2 ** state["step"]
                     step_size = step_size * math.sqrt(bias_correction2) / bias_correction1
 
-                p.addcdiv_(exp_avg, denom, value=-step_size)
+                p = p.addcdiv(exp_avg, denom, value=-step_size)
 
                 # Just adding the square of the weights to the loss function is *not*
                 # the correct way of using L2 regularization/weight decay with Adam,
@@ -483,7 +483,7 @@ class AdamW(Optimizer):
                 # of the weights to the loss with plain (non-momentum) SGD.
                 # Add weight decay at the end (fixed version)
                 if group["weight_decay"] > 0.0:
-                    p.add_(p, alpha=(-group["lr"] * group["weight_decay"]))
+                    p = p.add(p, alpha=(-group["lr"] * group["weight_decay"]))
 
         return loss
 
@@ -718,9 +718,9 @@ class Adafactor(Optimizer):
                     update = exp_avg
 
                 if group["weight_decay"] != 0:
-                    p_data_fp32.add_(p_data_fp32, alpha=(-group["weight_decay"] * lr))
+                    p_data_fp32 = p_data_fp32.add(p_data_fp32, alpha=(-group["weight_decay"] * lr))
 
-                p_data_fp32.add_(-update)
+                p_data_fp32 = p_data_fp32.add(-update)
 
                 if p.dtype in {torch.float16, torch.bfloat16}:
                     p.copy_(p_data_fp32)
