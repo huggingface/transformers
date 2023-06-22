@@ -26,7 +26,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN, gelu
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, torch_custom_checkpointing
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -795,7 +795,7 @@ class LukeEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch_custom_checkpointing(
+                layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer_module),
                     word_hidden_states,
                     entity_hidden_states,

@@ -37,7 +37,6 @@ from ...modeling_outputs import (
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import torch_custom_checkpointing
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -459,7 +458,7 @@ class Wav2Vec2FeatureEncoder(nn.Module):
 
                     return custom_forward
 
-                hidden_states = torch_custom_checkpointing(
+                hidden_states = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(conv_layer),
                     hidden_states,
                 )
@@ -811,7 +810,7 @@ class Wav2Vec2Encoder(nn.Module):
 
                         return custom_forward
 
-                    layer_outputs = torch_custom_checkpointing(
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
                         create_custom_forward(layer),
                         hidden_states,
                         attention_mask,
@@ -900,7 +899,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
 
                         return custom_forward
 
-                    layer_outputs = torch_custom_checkpointing(
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
                         create_custom_forward(layer),
                         hidden_states,
                         attention_mask,

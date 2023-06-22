@@ -32,7 +32,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer, torch_custom_checkpointing
+from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_imagegpt import ImageGPTConfig
 
@@ -826,7 +826,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
 
                     return custom_forward
 
-                outputs = torch_custom_checkpointing(
+                outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(block),
                     hidden_states,
                     None,

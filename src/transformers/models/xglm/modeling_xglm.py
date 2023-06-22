@@ -27,7 +27,6 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import torch_custom_checkpointing
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_xglm import XGLMConfig
 
@@ -684,7 +683,7 @@ class XGLMModel(XGLMPreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = torch_custom_checkpointing(
+                layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(decoder_layer),
                     hidden_states,
                     attention_mask,

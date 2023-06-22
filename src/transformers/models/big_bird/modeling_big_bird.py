@@ -37,7 +37,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, torch_custom_checkpointing
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -1622,7 +1622,7 @@ class BigBirdEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch_custom_checkpointing(
+                layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask,

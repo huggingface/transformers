@@ -34,7 +34,6 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import torch_custom_checkpointing
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_gpt_neo import GPTNeoConfig
 
@@ -614,7 +613,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
                     return custom_forward
 
-                outputs = torch_custom_checkpointing(
+                outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(block),
                     hidden_states,
                     None,

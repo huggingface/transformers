@@ -28,7 +28,6 @@ from torch.nn import LayerNorm
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import torch_custom_checkpointing
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -1337,7 +1336,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = torch_custom_checkpointing(
+                layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(encoder_layer),
                     hidden_states,
                     extended_attention_mask,
@@ -1578,7 +1577,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = torch_custom_checkpointing(
+                layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(decoder_layer),
                     hidden_states,
                     extended_attention_mask,
