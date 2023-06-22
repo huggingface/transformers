@@ -271,7 +271,10 @@ def dtype_byte_size(dtype):
 
 
 def shard_checkpoint(
-    state_dict: Dict[str, torch.Tensor], max_shard_size: Union[int, str] = "10GB", weights_name: str = WEIGHTS_NAME
+    state_dict: Dict[str, torch.Tensor],
+    max_shard_size: Union[int, str] = "10GB",
+    weights_name: str = WEIGHTS_NAME,
+    state_dict_contains_metadata: bool = False,
 ):
     """
     Splits a model state dictionary in sub-checkpoints so that the final size of each sub-checkpoint does not exceed a
@@ -296,6 +299,9 @@ def shard_checkpoint(
             (like `"5MB"`).
         weights_name (`str`, *optional*, defaults to `"pytorch_model.bin"`):
             The name of the model save file.
+        state_dict_contains_metadata (`bool`, *optional*, defaults to `False`):
+            Whether or not the state dictionary contains metadata about the model (used in 8bit serialization for instance).
+            Check https://github.com/TimDettmers/bitsandbytes/pull/503 for reference.
     """
     max_shard_size = convert_file_size_to_int(max_shard_size)
 
@@ -305,7 +311,10 @@ def shard_checkpoint(
     storage_id_to_block = {}
 
     for key, weight in state_dict.items():
-        storage_id = id_tensor_storage(weight)
+        if state_dict_contains_metadata and isinstance(weight, str):
+            continue
+        else:
+            storage_id = id_tensor_storage(weight)
 
         # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
         if storage_id in storage_id_to_block:
@@ -1809,7 +1818,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
         weights_name = _add_variant(weights_name, variant)
 
-        shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size, weights_name=weights_name)
+        # For now only 8bit models contains metadata on the model's state_dict
+        state_dict_contains_metadata = getattr(self, "is_loaded_in_8bit", False)
+
+        shards, index = shard_checkpoint(
+            state_dict,
+            max_shard_size=max_shard_size,
+            weights_name=weights_name,
+            state_dict_contains_metadata=state_dict_contains_metadata,
+        )
 
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
