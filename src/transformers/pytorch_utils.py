@@ -285,18 +285,3 @@ def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
     non-overlapping lifetimes may have the same id.
     """
     return tensor.device, storage_ptr(tensor), storage_size(tensor)
-
-
-def torch_custom_checkpointing(*args):
-    r"""
-    A correct usage of `torch.utils.checkpoint.checkpoint` as the default call leads to silent bugs that leads to the
-    gradients of the last layers not being updated. For more in depth detail of the issue, please have a look at:
-    https://github.com/huggingface/transformers/pull/24247
-    """
-    kwargs = {}
-    if "use_reentrant" in list(inspect.signature(torch.utils.checkpoint.checkpoint).parameters):
-        kwargs["use_reentrant"] = False
-    return torch.utils.checkpoint.checkpoint(
-        *args,
-        **kwargs,
-    )

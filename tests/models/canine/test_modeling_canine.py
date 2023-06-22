@@ -499,12 +499,6 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         # ViT does not use inputs_embeds
         pass
 
-    @unittest.skip(
-        reason="The model does not support GC + autocast + fp16: https://github.com/huggingface/transformers/pull/24247"
-    )
-    def test_training_gradient_checkpointing_autocast(self):
-        pass
-
     @unittest.skip("CANINE does not have a get_input_embeddings() method.")
     def test_model_common_attributes(self):
         pass

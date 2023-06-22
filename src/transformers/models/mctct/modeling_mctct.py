@@ -33,7 +33,6 @@ from ...modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
-from ...pytorch_utils import torch_custom_checkpointing
 from ...utils import logging
 from .configuration_mctct import MCTCTConfig
 
@@ -624,7 +623,7 @@ class MCTCTEncoder(MCTCTPreTrainedModel):
 
                         return custom_forward
 
-                    layer_outputs = torch_custom_checkpointing(
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
                         create_custom_forward(encoder_layer),
                         hidden_states,
                         attention_mask,
