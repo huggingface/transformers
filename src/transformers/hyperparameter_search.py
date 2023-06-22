@@ -1,5 +1,4 @@
-from abc import ABC, abstractmethod
-from typing import Dict
+from typing import Dict, Callable, Type
 
 from .integrations import (
     is_optuna_available,
@@ -20,109 +19,72 @@ from .trainer_utils import (
 )
 
 
-class HyperParamSearchBackendBase(ABC):
-    @abstractmethod
-    def name(self) -> str:
-        raise NotImplementedError
-
-    @abstractmethod
-    def is_available(self):
-        raise NotImplementedError
-
-    @abstractmethod
-    def run(self, trainer, n_trials: int, direction: str, **kwargs):
-        raise NotImplementedError
-
-    @abstractmethod
-    def default_hp_space(self, trial):
-        raise NotImplementedError
+class HyperParamSearchBackendBase:
+    name: HPSearchBackend
+    pip_package: str = None
+    is_available: Callable[[], bool]
+    run: Callable
+    default_hp_space: Callable
 
     def ensure_available(self):
         if not self.is_available():
             raise RuntimeError(
-                f"You picked the {self.name()} backend, but it is not installed. "
-                f"Use `pip install {self.pip_install}`."
+                f"You picked the {self.name} backend, but it is not installed. "
+                f"Run {self.pip_install()}."
             )
 
-    def pip_install(self):
-        return self.name()
+    @classmethod
+    def pip_install(cls):
+        return f"`pip install {cls.pip_package or cls.name}`"
 
 
 class OptunaBackend(HyperParamSearchBackendBase):
-    def name(self) -> str:
-        return "optuna"
-
-    def is_available(self):
-        return is_optuna_available()
-
-    def run(self, trainer, n_trials: int, direction: str, **kwargs):
-        return run_hp_search_optuna(trainer, n_trials, direction, **kwargs)
-
-    def default_hp_space(self, trial):
-        return default_hp_space_optuna(trial)
+    is_available = staticmethod(is_optuna_available)
+    run = staticmethod(run_hp_search_optuna)
+    default_hp_space = staticmethod(default_hp_space_optuna)
 
 
 class RayTuneBackend(HyperParamSearchBackendBase):
-    def name(self) -> str:
-        return "ray"
-
-    def pip_install(self):
-        return "'ray[tune]'"
-
-    def is_available(self):
-        return is_ray_available()
-
-    def run(self, trainer, n_trials: int, direction: str, **kwargs):
-        return run_hp_search_ray(trainer, n_trials, direction, **kwargs)
-
-    def default_hp_space(self, trial):
-        return default_hp_space_ray(trial)
+    pip_package = "'ray[tune]'"
+    is_available = staticmethod(is_ray_available)
+    run = staticmethod(run_hp_search_ray)
+    default_hp_space = staticmethod(default_hp_space_ray)
 
 
 class SigOptBackend(HyperParamSearchBackendBase):
-    def name(self) -> str:
-        return "sigopt"
-
-    def is_available(self):
-        return is_sigopt_available()
-
-    def run(self, trainer, n_trials: int, direction: str, **kwargs):
-        return run_hp_search_sigopt(trainer, n_trials, direction, **kwargs)
-
-    def default_hp_space(self, trial):
-        return default_hp_space_sigopt(trial)
+    is_available = staticmethod(is_sigopt_available)
+    run = staticmethod(run_hp_search_sigopt)
+    default_hp_space = staticmethod(default_hp_space_sigopt)
 
 
 class WandbBackend(HyperParamSearchBackendBase):
-    def name(self) -> str:
-        return "wandb"
-
-    def is_available(self):
-        return is_wandb_available()
-
-    def run(self, trainer, n_trials: int, direction: str, **kwargs):
-        return run_hp_search_wandb(trainer, n_trials, direction, **kwargs)
-
-    def default_hp_space(self, trial):
-        return default_hp_space_wandb(trial)
+    is_available = staticmethod(is_wandb_available)
+    run = staticmethod(run_hp_search_wandb)
+    default_hp_space = staticmethod(default_hp_space_wandb)
 
 
-all_backends: Dict[str, HyperParamSearchBackendBase] = {
-    backend.name(): backend for backend in [OptunaBackend(), RayTuneBackend(), SigOptBackend(), WandbBackend()]
+all_backends: Dict[HPSearchBackend, Type[HyperParamSearchBackendBase]] = {
+    HPSearchBackend.OPTUNA: OptunaBackend,
+    HPSearchBackend.RAY: RayTuneBackend,
+    HPSearchBackend.SIGOPT: SigOptBackend,
+    HPSearchBackend.WANDB: WandbBackend,
 }
 
 assert list(all_backends) == list(HPSearchBackend)
+
+for _name, _backend in all_backends.items():
+    _backend.name = _name
 
 
 def default_hp_search_backend() -> str:
     available_backends = [backend for backend in all_backends.values() if backend.is_available()]
     if available_backends:
         # TODO warn if len(available_backends) > 1 ?
-        return available_backends[0].name()
+        return available_backends[0].name
     raise RuntimeError(
         "No hyperparameter search backend available.\n"
         + "\n".join(
-            f" - To install {backend.name()} run `pip install {backend.pip_install()}`"
+            f" - To install {backend.name} run {backend.pip_install()}"
             for backend in all_backends.values()
         )
     )

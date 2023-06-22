@@ -2508,7 +2508,7 @@ class Trainer:
         if backend is None:
             backend = default_hp_search_backend()
         backend = HPSearchBackend(backend)
-        backend_obj = all_backends[backend]
+        backend_obj = all_backends[backend]()
         backend_obj.ensure_available()
         self.hp_search_backend = backend
         if self.model_init is None:
