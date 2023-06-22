@@ -426,7 +426,6 @@ class AdamW(Optimizer):
         defaults = {"lr": lr, "betas": betas, "eps": eps, "weight_decay": weight_decay, "correct_bias": correct_bias}
         super().__init__(params, defaults)
 
-    @torch.no_grad()
     def step(self, closure: Callable = None):
         """
         Performs a single optimization step.
@@ -635,7 +634,6 @@ class Adafactor(Optimizer):
         c_factor = exp_avg_sq_col.unsqueeze(-2).rsqrt()
         return torch.mul(r_factor, c_factor)
 
-    @torch.no_grad()
     def step(self, closure=None):
         """
         Performs a single optimization step
