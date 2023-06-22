@@ -27,6 +27,7 @@ from ...image_utils import (
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
+    ImageObject,
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
@@ -354,8 +355,7 @@ class SamImageProcessor(BaseImageProcessor):
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
 
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
+        images = [ImageObject(image) for image in images]
 
         original_sizes = [get_image_size(image) for image in images]
 

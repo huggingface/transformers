@@ -28,9 +28,9 @@ from ...image_utils import (
     OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
+    ImageObject,
     PILImageResampling,
     make_list_of_images,
-    to_numpy_array,
     valid_images,
 )
 from ...utils import TensorType, is_vision_available, logging
@@ -455,8 +455,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
-        # All transformations expect numpy arrays.
-        image = to_numpy_array(image)
+        image = ImageObject(image)
 
         if do_resize:
             image = self.resize(image=image, size=size, resample=resample)

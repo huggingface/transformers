@@ -25,6 +25,7 @@ from ...image_transforms import convert_to_rgb, normalize, to_channel_dimension_
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
+    ImageObject,
     get_image_size,
     infer_channel_dimension_format,
     make_list_of_images,
@@ -396,8 +397,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
 
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
+        images = [ImageObject(image) for image in images]
 
         if is_vqa:
             if header_text is None:

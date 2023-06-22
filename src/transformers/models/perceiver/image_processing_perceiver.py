@@ -25,10 +25,10 @@ from ...image_utils import (
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
+    ImageObject,
     PILImageResampling,
     get_image_size,
     make_list_of_images,
-    to_numpy_array,
     valid_images,
 )
 from ...utils import TensorType, is_vision_available, logging
@@ -306,8 +306,7 @@ class PerceiverImageProcessor(BaseImageProcessor):
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and image standard deviation must be specified if do_normalize is True.")
 
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
+        images = [ImageObject(image) for image in images]
 
         if do_center_crop:
             images = [self.center_crop(image, crop_size, size=size) for image in images]

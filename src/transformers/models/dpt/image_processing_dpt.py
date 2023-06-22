@@ -26,12 +26,12 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
+    ImageObject,
     PILImageResampling,
     get_image_size,
     is_torch_available,
     is_torch_tensor,
     make_list_of_images,
-    to_numpy_array,
     valid_images,
 )
 from ...utils import TensorType, is_vision_available, logging
@@ -322,8 +322,7 @@ class DPTImageProcessor(BaseImageProcessor):
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
+        images = [ImageObject(image) for image in images]
 
         if do_resize:
             images = [self.resize(image=image, size=size, resample=resample) for image in images]

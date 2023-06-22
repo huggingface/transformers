@@ -25,9 +25,9 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
+    ImageObject,
     PILImageResampling,
     make_list_of_images,
-    to_numpy_array,
     valid_images,
 )
 from ...utils import TensorType, is_pytesseract_available, is_vision_available, logging, requires_backends
@@ -319,8 +319,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("If do_normalize is True, image_mean and image_std must be specified.")
 
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
+        images = [ImageObject(image) for image in images]
 
         # Tesseract OCR to get words + normalized bounding boxes
         if apply_ocr:

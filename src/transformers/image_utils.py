@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import os
-from typing import TYPE_CHECKING, Dict, Iterable, List, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 import numpy as np
 import requests
@@ -62,6 +62,107 @@ ImageInput = Union[
 class ChannelDimension(ExplicitEnum):
     FIRST = "channels_first"
     LAST = "channels_last"
+    NONE = "none"
+
+
+class ImageObject(np.lib.mixins.NDArrayOperatorsMixin):
+    """
+    Array container for images. This class is a wrapper around `np.ndarray` that includes image specific information
+    such as the channel dimension format and the number of channels.
+
+    See: https://numpy.org/doc/stable/user/basics.dispatch.html
+
+    Args:
+        data (`ImageInput`):
+            The image data.
+        data_format (`ChannelDimension`, *optional*):
+            The channel dimension format of the image. If `None`, will be inferred from the image data.
+        num_channels (`int`, *optional*):
+            The number of channels in the image. If `None`, will be inferred from the image data.
+    """
+
+    def __init__(
+        self, data: ImageInput, data_format: Optional[ChannelDimension] = None, num_channels: int = None
+    ) -> None:
+        if isinstance(data, PIL.Image.Image):
+            if data.mode in ("1", "L", "P", "I;16", "I", "F"):
+                data_format = ChannelDimension.NONE
+            else:
+                # PIL images are always channels last when converted to numpy arrays
+                data_format = ChannelDimension.LAST
+
+        data = np.array(data)
+
+        if data_format is None:
+            data_format = infer_channel_dimension_format(data)
+
+        if data_format == ChannelDimension.NONE:
+            num_channels = 0
+            height = data.shape[-2]
+            width = data.shape[-1]
+        elif data_format == ChannelDimension.FIRST:
+            num_channels = data.shape[-3]
+            height = data.shape[-2]
+            width = data.shape[-1]
+        elif data_format == ChannelDimension.LAST:
+            num_channels = data.shape[-1]
+            height = data.shape[-3]
+            width = data.shape[-2]
+        else:
+            raise ValueError("Invalid channel dimension format")
+
+        self._data = data
+        self._data_format = data_format
+        self._num_channels = num_channels
+        self._height = height
+        self._width = width
+
+    def __getattribute__(self, __name: str) -> Any:
+        if __name == "_data":
+            return super().__getattribute__(__name)
+
+        if hasattr(self._data, __name):
+            result = getattr(self._data, __name)
+        else:
+            result = super().__getattribute__(__name)
+        return ImageObject(result) if isinstance(result, np.ndarray) else result
+
+    def __getitem__(self, key: Any) -> Any:
+        result = self._data[key]
+        return ImageObject(result) if isinstance(result, np.ndarray) else result
+
+    def __setitem__(self, key: Any, value: Any) -> None:
+        self._data[key] = value
+
+    def __array__(self, dtype=None):
+        return self._data.astype(dtype)
+
+    def __array_ufunc__(self, ufunc, method, *inputs: Iterable[Any], **kwargs: Mapping[str, Any]) -> Any:
+        if not all(isinstance(input, (np.ndarray, ImageObject) + np.ScalarType) for input in inputs):
+            return NotImplemented
+
+        scalars = ()
+        for input in inputs:
+            if isinstance(input, ImageObject):
+                scalars += (input._data,)
+            else:
+                scalars += (input,)
+        result = getattr(ufunc, method)(*scalars, **kwargs)
+        return ImageObject(result) if isinstance(result, np.ndarray) else result
+
+    def __array_function__(
+        self, func: Callable[..., Any], types: Iterable[type], args: Iterable[any], kwargs: Mapping[str, Any]
+    ) -> Any:
+        if not all(issubclass(_type, (np.ndarray, ImageObject) + np.ScalarType) for _type in types):
+            return NotImplemented
+
+        types = tuple(_type for _type in types if not issubclass(_type, ImageObject))
+        args = tuple(arg._data if isinstance(arg, ImageObject) else arg for arg in args)
+        result = func(*args, **kwargs)
+        return ImageObject(result) if isinstance(result, np.ndarray) else result
+
+    def __repr__(self) -> str:
+        return f"ImageObject({self._data}, data_format={self._data_format}, num_channels={self._num_channels}, shape={self.shape})"
 
 
 def is_pil_image(img):
@@ -155,6 +256,9 @@ def infer_channel_dimension_format(image: np.ndarray) -> ChannelDimension:
     Returns:
         The channel dimension of the image.
     """
+    if image.ndim == 2:
+        return ChannelDimension.NONE
+
     if image.ndim == 3:
         first_dim, last_dim = 0, 2
     elif image.ndim == 4:

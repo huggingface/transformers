@@ -40,11 +40,11 @@ from ...image_utils import (
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
+    ImageObject,
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
     make_list_of_images,
-    to_numpy_array,
     valid_coco_detection_annotations,
     valid_coco_panoptic_annotations,
     valid_images,
@@ -1173,7 +1173,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
             )
 
         # All transformations expect numpy arrays
-        images = [to_numpy_array(image) for image in images]
+        images = [ImageObject(image) for image in images]
 
         # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
         if annotations is not None:

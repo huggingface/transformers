@@ -33,9 +33,9 @@ from ...image_utils import (
     OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
+    ImageObject,
     PILImageResampling,
     make_list_of_images,
-    to_numpy_array,
     valid_images,
 )
 from ...utils import TensorType, is_torch_available, logging
@@ -317,7 +317,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
             )
 
         # All transformations expect numpy arrays
-        images = [to_numpy_array(image) for image in images]
+        images = [ImageObject(image) for image in images]
 
         if do_resize:
             images = [self.resize(image, size=size, resample=resample) for image in images]

@@ -23,10 +23,10 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
+    ImageObject,
     PILImageResampling,
     get_image_size,
     make_list_of_images,
-    to_numpy_array,
     valid_images,
 )
 from ...utils import TensorType, logging
@@ -175,8 +175,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         if not valid_images(images):
             raise ValueError("Invalid image(s)")
 
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(img) for img in images]
+        images = [ImageObject(img) for img in images]
 
         if do_resize:
             images = [self.resize(image, size_divisor=size_divisor, resample=resample) for image in images]
