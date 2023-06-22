@@ -192,7 +192,7 @@ class AudioClassificationPipeline(Pipeline):
         if not isinstance(inputs, np.ndarray):
             raise ValueError("We expect a numpy ndarray as input")
         if len(inputs.shape) != 1:
-            raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
+            raise ValueError("We expect a single channel audio input for AudioClassificationPipeline")
 
         processed = self.feature_extractor(
             inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
