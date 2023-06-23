@@ -37,13 +37,6 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-CHECKPOINT_TO_T5 = {
-    "small": "t5-base",
-}
-CHECKPOINT_TO_ENCODEC = {
-    "small": "facebook/encodec_32khz",
-}
-
 EXPECTED_MISSING_KEYS = ["model.decoder.embed_positions.weights"]
 
 
@@ -73,7 +66,7 @@ def rename_keys(name):
     return name
 
 
-def rename_state_dict(state_dict: OrderedDict, d_model: int) -> Tuple[Dict, Dict]:
+def rename_state_dict(state_dict: OrderedDict, hidden_size: int) -> Tuple[Dict, Dict]:
     """Function that takes the fairseq Musicgen state dict and renames it according to the HF
     module names. It further partitions the state dict into the decoder (LM) state dict, and that for the
     encoder-decoder projection."""
@@ -84,9 +77,9 @@ def rename_state_dict(state_dict: OrderedDict, d_model: int) -> Tuple[Dict, Dict
         key = rename_keys(key)
         if "in_proj_weight" in key:
             # split fused qkv proj
-            state_dict[key.replace("in_proj_weight", "q_proj.weight")] = val[:d_model, :]
-            state_dict[key.replace("in_proj_weight", "k_proj.weight")] = val[d_model : 2 * d_model, :]
-            state_dict[key.replace("in_proj_weight", "v_proj.weight")] = val[-d_model:, :]
+            state_dict[key.replace("in_proj_weight", "q_proj.weight")] = val[:hidden_size, :]
+            state_dict[key.replace("in_proj_weight", "k_proj.weight")] = val[hidden_size : 2 * hidden_size, :]
+            state_dict[key.replace("in_proj_weight", "v_proj.weight")] = val[-hidden_size:, :]
         elif "enc_to_dec_proj" in key:
             enc_dec_proj_state_dict[key[len("enc_to_dec_proj.") :]] = val
         else:
@@ -96,15 +89,20 @@ def rename_state_dict(state_dict: OrderedDict, d_model: int) -> Tuple[Dict, Dict
 
 def decoder_config_from_checkpoint(checkpoint: str) -> MusicgenDecoderConfig:
     if checkpoint == "small":
-        d_model = 1024
-        ffn_dim = d_model * 4
+        hidden_size = 1024
         num_hidden_layers = 24
-        num_codebooks = 4
+    elif checkpoint == "medium":
+        hidden_size = 1536
+        num_hidden_layers = 48
+    elif checkpoint == "large":
+        hidden_size = 2048
+        num_hidden_layers = 48
+    else:
+        raise ValueError(f"Checkpoint should be one of `['small', 'medium', 'large']`, got {checkpoint}.")
     config = MusicgenDecoderConfig(
-        d_model=d_model,
-        ffn_dim=ffn_dim,
+        hidden_size=hidden_size,
+        ffn_dim=hidden_size * 4,
         num_hidden_layers=num_hidden_layers,
-        num_codebooks=num_codebooks,
         tie_word_embeddings=False,
     )
     return config
@@ -116,10 +114,12 @@ def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hu
     decoder_config = decoder_config_from_checkpoint(checkpoint)
 
     decoder_state_dict = fairseq_model.lm.state_dict()
-    decoder_state_dict, enc_dec_proj_state_dict = rename_state_dict(decoder_state_dict, d_model=decoder_config.d_model)
+    decoder_state_dict, enc_dec_proj_state_dict = rename_state_dict(
+        decoder_state_dict, hidden_size=decoder_config.hidden_size
+    )
 
-    text_encoder = T5EncoderModel.from_pretrained(CHECKPOINT_TO_T5[checkpoint])
-    audio_encoder = EncodecModel.from_pretrained(CHECKPOINT_TO_ENCODEC[checkpoint])
+    text_encoder = T5EncoderModel.from_pretrained("t5-base")
+    audio_encoder = EncodecModel.from_pretrained("facebook/encodec_32khz")
     decoder = MusicgenForCausalLM(decoder_config).eval()
 
     # load all decoder weights - expect that we'll be missing embeddings and enc-dec projection
@@ -152,8 +152,8 @@ def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hu
         raise ValueError("Incorrect shape for logits")
 
     # now construct the processor
-    tokenizer = AutoTokenizer.from_pretrained(CHECKPOINT_TO_T5[checkpoint])
-    feature_extractor = AutoFeatureExtractor.from_pretrained(CHECKPOINT_TO_ENCODEC[checkpoint], padding_side="left")
+    tokenizer = AutoTokenizer.from_pretrained("t5-base")
+    feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/encodec_32khz", padding_side="left")
 
     processor = MusicgenProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 

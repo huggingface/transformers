@@ -45,7 +45,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
             represented by the `inputs_ids` passed when calling [`MusicgenDecoder`].
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of decoder layers.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer block.
@@ -84,7 +84,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
         self,
         vocab_size=2048,
         max_position_embeddings=1024,
-        num_hidden_layers=12,
+        num_hidden_layers=24,
         ffn_dim=4096,
         num_attention_heads=16,
         layerdrop=0.0,
