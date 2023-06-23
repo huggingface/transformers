@@ -1642,7 +1642,11 @@ class ModelTesterMixin:
                     tied_params[i] = [p for p in tied_params[i] if re.search(key, p) is None]
 
             tied_params = [group for group in tied_params if len(group) > 1]
-            self.assertListEqual(tied_params, [])
+            self.assertListEqual(
+                tied_params,
+                [],
+                f"Missing `_tied_weights_keys` for {model_class}: add all of {tied_params} except one.",
+            )
 
     def test_model_weights_reload_no_missing_tied_weights(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

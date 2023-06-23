@@ -113,7 +113,9 @@ class EfficientFormerSelfAttention(nn.Module):
                     attention_offsets[offset] = len(attention_offsets)
                 idxs.append(attention_offsets[offset])
         self.attention_biases = torch.nn.Parameter(torch.zeros(num_heads, len(attention_offsets)))
-        self.register_buffer("attention_bias_idxs", torch.LongTensor(idxs).view(num_points, num_points))
+        self.register_buffer(
+            "attention_bias_idxs", torch.LongTensor(idxs).view(num_points, num_points), persistent=False
+        )
 
     @torch.no_grad()
     def train(self, mode=True):
