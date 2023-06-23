@@ -103,6 +103,10 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         ]
         self.assertIn(nested_simplify(output, decimals=4), [EXPECTED_OUTPUT, EXPECTED_OUTPUT_PT_2])
 
+        audio_dict = {"array": np.ones((8000,)), "sampling_rate": audio_classifier.feature_extractor.sampling_rate}
+        output = audio_classifier(audio_dict, top_k=4)
+        self.assertIn(nested_simplify(output, decimals=4), [EXPECTED_OUTPUT, EXPECTED_OUTPUT_PT_2])
+
     @require_torch
     @slow
     def test_large_model_pt(self):
