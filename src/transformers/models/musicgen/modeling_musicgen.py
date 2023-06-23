@@ -15,10 +15,9 @@
 """ PyTorch Musicgen model."""
 import copy
 import inspect
-from dataclasses import dataclass
-
 import math
 import random
+from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
@@ -34,8 +33,8 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
-    Seq2SeqLMOutput,
     ModelOutput,
+    Seq2SeqLMOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -69,8 +68,8 @@ class MusicgenUnconditionalInput(ModelOutput):
     """
     Args:
         attention_mask (`torch.LongTensor`)  of shape `(batch_size, sequence_length)`, *optional*):
-            Encoder attention mask to avoid performing attention on padding token indices. Mask values selected in
-            `[0, 1]`: 1 for tokens that are **not masked**, 0 for tokens that are **masked**.
+            Encoder attention mask to avoid performing attention on padding token indices. Mask values selected in `[0,
+            1]`: 1 for tokens that are **not masked**, 0 for tokens that are **masked**.
         encoder_outputs (`BaseModelOutput`, *optional*):
             Outputs of the text encoder model, wrapped as a `BaseModelOutput`.
         max_new_tokens (`int`, *optional*):
@@ -79,6 +78,7 @@ class MusicgenUnconditionalInput(ModelOutput):
             Guidance scale for classifier free guidance, setting the balance between the conditional logits (predicted
             from the prompts) and the unconditional logits (predicted without prompts).
     """
+
     attention_mask: torch.FloatTensor = None
     encoder_outputs: BaseModelOutput = None
     max_new_tokens: int = None
