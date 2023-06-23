@@ -1644,40 +1644,37 @@ class ModelTesterMixin:
             tied_params = [group for group in tied_params if len(group) > 1]
             self.assertListEqual(tied_params, [])
 
-    def test_tied_model_weights_key_ignore(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    def test_model_weights_load_missing_unexpected(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            model_tied = model_class(config)
-            with tempfile.TemporaryDirectory() as d:
-                model_tied.save_pretrained(d)
+            model = model_class(config)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.save_pretrained(tmp_dir)
 
                 # We are nuking ALL weights on file, so every parameter should
                 # yell on load. We're going to detect if we yell too much, or too little.
-                with open(os.path.join(d, "pytorch_model.bin"), "wb") as f:
+                with open(os.path.join(tmp_dir, "pytorch_model.bin"), "wb") as f:
                     torch.save({}, f)
-                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
-
-                # ! Actually we could use `state_dict()` and check iteratively the tensors which are the same (for instance using `tensor.data_ptr()`). to detect the duplicates.
-                # ```python
-                # model = GPT2LMHeadModel.from_pretrained("gpt2")
-                # "lm_head.weight" in model.state_dict().keys()  # True
-                # "lm_head.weight" in model.named_parameters() # False
-                # In [6]: model.lm_head.weight.data_ptr()
-                # Out[6]: 139901378371648
-                # In [9]: model.transformer.wte.weight.data_ptr()
-                # Out[9]: 139901378371648  # Same PTR, it's the same DATA ! we would need to check for stride too to be 100% accurate.
-                # ```
+                model_reloaded, infos = model_class.from_pretrained(tmp_dir, output_loading_info=True)
 
                 prefix = f"{model_reloaded.base_model_prefix}."
                 params = dict(model_reloaded.named_parameters())
                 params.update(dict(model_reloaded.named_buffers()))
-                # param_names = set(k[len(prefix) :] if k.startswith(prefix) else k for k in params.keys())
                 param_names = {k[len(prefix) :] if k.startswith(prefix) else k for k in params.keys()}
 
                 missing_keys = set(infos["missing_keys"])
 
                 extra_missing = missing_keys - param_names
-                # missed_missing = param_names - missing_keys
+                # Remove tied weights from extra missing: they are normally not warned as missing if their tied
+                # counterpart is present but here there are no weights at all so we do get the warning.
+                ptrs = collections.defaultdict(list)
+                for name, tensor in model_reloaded.state_dict().items():
+                    ptrs[id_tensor_storage(tensor)].append(name)
+                tied_params = [names for _, names in ptrs.items() if len(names) > 1]
+                for group in tied_params:
+                    # We remove the group from extra_missing if not all weights from group are in it
+                    if len(set(group) - extra_missing) > 0:
+                        extra_missing = extra_missing - set(group)
 
                 self.assertEqual(
                     extra_missing,
@@ -1685,12 +1682,22 @@ class ModelTesterMixin:
                     f"This model {model_class.__name__} might be missing some `keys_to_ignore`: {extra_missing}",
                 )
 
-                # self.assertEqual(
-                #     missed_missing,
-                #     set(),
-                #     f"This model {model_class.__name__} ignores keys {missed_missing} but they look like real"
-                #     " parameters",
-                # )
+                missed_missing = param_names - missing_keys
+                # Remove nonpersistent buffers from missed_missing
+                buffers = [n for n, _ in model_reloaded.named_buffers()]
+                nonpersistent_buffers = {n for n in buffers if n not in model_reloaded.state_dict()}
+                nonpersistent_buffers = {
+                    k[len(prefix) :] if k.startswith(prefix) else k for k in nonpersistent_buffers
+                }
+                missed_missing = missed_missing - nonpersistent_buffers
+
+                self.assertEqual(
+                    missed_missing,
+                    set(),
+                    f"This model {model_class.__name__} ignores keys {missed_missing} but they look like real"
+                    " parameters. If they are non persistent buffers make sure to instantiate them with"
+                    " `persistent=False`",
+                )
 
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
