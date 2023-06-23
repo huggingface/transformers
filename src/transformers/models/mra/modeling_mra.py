@@ -408,12 +408,6 @@ def mra2_attention(
     key = key.reshape(meta_batch, seq_len, head_dim)
     value = value.reshape(meta_batch, seq_len, head_dim)
 
-    """
-    mask = (
-        None if torch.all(mask == 1).item() else mask[:, None, :].repeat(1, num_head, 1).reshape(meta_batch, seq_len)
-    )
-    """
-
     if mask is not None:
         query = query * mask[:, :, None]
         key = key * mask[:, :, None]
