@@ -39,6 +39,7 @@ Tips:
 2. Pop2Piano can be used to generate midi-audio files for a given audio sequence.
 3. Choosing different composers in `Pop2PianoForConditionalGeneration.generate()` can lead to variety of different results.
 4. Setting the sampling rate to 44.1 kHz when loading the audio file can give good performance.
+5. Though Pop2Piano was mainly trained on Korean Pop music, it also does pretty well on other Western Pop or Hip Hop songs.    
 
 This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
 The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
