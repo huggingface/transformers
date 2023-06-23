@@ -25,7 +25,6 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...generation.logits_process import WhisperTimeStampLogitsProcessor
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPastAndCrossAttentions,
@@ -1440,8 +1439,10 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
             forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_decoder_ids)]
             generation_config.forced_decoder_ids = forced_decoder_ids
 
+        # TODO: Implement `WhisperTimeStampLogitsProcessor`
         if generation_config.return_timestamps:
-            logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
+            # logits_processor = [TFWhisperTimeStampLogitsProcessor(generation_config)]
+            pass
 
         if return_token_timestamps:
             kwargs["output_attentions"] = True
