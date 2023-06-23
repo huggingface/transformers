@@ -18,12 +18,14 @@ The MusicGen model was proposed in the paper [Simple and Controllable Music Gene
 by Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi and Alexandre Défossez.
 
 MusicGen is a single stage auto-regressive Transformer model capable of generating high-quality music samples conditioned
-on text descriptions or audio prompts. It is trained to predict four discrete codebooks that are decoded using the Encodec
-audio compression model.
+on text descriptions or audio prompts. The text descriptions are passed through a frozen text encoder model to obtain a
+sequence of hidden-state representations. MusicGen is then trained to predict discrete audio tokens, or *audio codes*,
+conditioned on these hidden-states. These audio tokens are then decoded using an audio compression model, such as EnCodec,
+to recover the audio waveform.
 
 Through an efficient token interleaving pattern, MusicGen does not require a self-supervised semantic representation of
 the text/audio prompts, thus eliminating the need to cascade multiple models to predict a set of codebooks (e.g.
-hierarchically or upsampling). Instead, it is able to generate all four codebooks in a single forward pass.
+hierarchically or upsampling). Instead, it is able to generate all the codebooks in a single forward pass.
 
 The abstract from the paper is the following:
 
@@ -36,11 +38,140 @@ controls over the generated output. We conduct extensive empirical evaluation, c
 studies, showing the proposed approach is superior to the evaluated baselines on a standard text-to-music benchmark.
 Through ablation studies, we shed light over the importance of each of the components comprising MusicGen.*
 
+This model was contributed by [sanchit-gandhi](https://huggingface.co/sanchit-gandhi). The original code can be found
+[here](https://github.com/facebookresearch/audiocraft). The pre-trained checkpoints can be found on the
+[Hugging Face Hub](https://huggingface.co/models?sort=downloads&search=facebook%2Fmusicgen-).
+
+## Generation
+
+MusicGen is compatible with two generation modes: greedy and sampling. In practice, sampling leads to significantly
+better results than greedy, thus we encourage sampling mode to be used where possible. Sampling is enabled by setting
+`do_sample=True` in the call to [`MusicgenForConditionalGeneration.generate`] (see below).
+
+### Unconditional Generation
+
+The inputs for unconditional (or 'null') generation can be obtained through the method
+[`MusicgenForConditionalGeneration.get_unconditional_inputs`]:
+
+```python
+>>> from transformers import MusicgenForConditionalGeneration
+
+>>> model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+>>> unconditional_inputs = model.get_unconditional_inputs(num_samples=1, max_new_tokens=256)
+
+>>> audio_values = model.generate(**unconditional_inputs, do_sample=True)
+```
+
+The audio outputs are a three-dimensional Torch tensor of shape `(batch_size, num_channels, sequence_length)`. To listen
+to the generated audio samples, you can either play them in an ipynb notebook:
+
+```python
+from IPython.display import Audio
+
+sampling_rate = model.config.audio_encoder.sampling_rate
+Audio(audio_values[0].numpy(), rate=sampling_rate)
+```
+
+Or save them as a `.wav` file using a third-party library, e.g. `scipy`:
+
+```python
+>>> import scipy
+
+>>> sampling_rate = model.config.audio_encoder.sampling_rate
+>>> scipy.io.wavfile.write("musicgen_out.wav", rate=16000, data=audio_values[0].numpy())
+```
+
+### Text-Conditional Generation
+
+The model can generate an audio sample conditioned on a text prompt through use of the [`MusicgenProcessor`] to pre-process
+the inputs:
+
+```python
+>>> from transformers import AutoProcessor, MusicgenForConditionalGeneration
+
+>>> processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
+>>> model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+
+>>> inputs = processor(
+...     text=["80s pop track with bassy drums and synth", "90s rock song with loud guitars and heavy drums"],
+...     padding=True,
+...     return_tensors="pt",
+... )
+>>> audio_values = model.generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=256)
+```
+
+The `guidance_scale` is used in classifier free guidance (CFG), setting the weighting between the conditional logits
+(which are predicted from the text prompts) and the unconditional logits (which are predicted from an unconditional or
+'null' prompt). Higher guidance scale encourages the model to generate samples that are more closely linked to the input
+prompt, usually at the expense of poorer audio quality. CFG is enabled by setting `guidance_scale > 1`. For best results,
+use a `guidance_scale=3`.
+
+### Audio-Prompted Generation
+
+The same [`MusicgenProcessor`] can be used to pre-process an audio prompt that is used for audio continuation. In the
+following example, we load an audio file using the 🤗 Datasets library, which can be pip installed through the command
+below:
+
+```
+pip install --upgrade pip
+pip install datasets[audio]
+```
+
+```python
+>>> from transformers import AutoProcessor, MusicgenForConditionalGeneration
+>>> from datasets import load_dataset
+
+>>> processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
+>>> model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+
+>>> dataset = load_dataset("sanchit-gandhi/gtzan", split="train", streaming=True)
+>>> sample = next(iter(dataset))["audio"]
+
+>>> # take the first half of the audio sample
+>>> sample["array"] = sample["array"][: len(sample["array"]) // 2]
+
+>>> inputs = processor(
+...     audio=sample["array"],
+...     sampling_rate=sample["sampling_rate"],
+...     text=["80s pop track with bassy drums and synth"],
+...     padding=True,
+...     return_tensors="pt",
+... )
+>>> audio_values = model.generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=512)
+```
+
+## Model Structure
+
+The MusicGen model can be de-composed into three distinct stages:
+1. Text encoder: maps the text inputs to a sequence of hidden-state representations. The pre-trained MusicGen models use a frozen text encoder from either T5 or Flan-T5
+2. MusicGen decoder: a language model (LM) that auto-regressively generates audio tokens (or codes) conditional on the encoder hidden-state representations
+3. Audio encoder/decoder: used to encode an audio prompt to use as prompt tokens, and recover the audio waveform from the audio tokens predicted by the decoder
+
+Thus, the MusicGen model can either be used as a standalone decoder model, corresponding to the class [`MusicgenForCausalLM`],
+or as a composite model that includes the text encoder and audio encoder/decoder, corresponding to the class
+[`MusicgenForConditionalGeneration`].
+
+Since the text encoder and audio encoder/decoder models are frozen during training, the MusicGen decoder [`MusicgenForCausalLM`]
+can be trained standalone on a dataset of encoder hidden-states and audio codes. For inference, the trained decoder can
+be combined with the frozen text encoder and audio encoder/decoders to recover the composite [`MusicgenForConditionalGeneration`]
+model.
+
+Below, we demonstrate how to construct the composite [`MusicgenForConditionalGeneration`] model from its three constituent
+parts, as would typically be done following training of the MusicGen decoder LM:
+
+```python
+>>> from transformers import AutoModelForTextEncoding, AutoModel, MusicgenForCausalLM, MusicgenForConditionalGeneration
+
+>>> text_encoder = AutoModelForTextEncoding.from_pretrained("t5-base")
+>>> audio_encoder = AutoModel.from_pretrained("facebook/encodec_32khz")
+>>> decoder = MusicgenForCausalLM.from_pretrained("facebook/musicgen-small")
+
+>>> model = MusicgenForConditionalGeneration.from_sub_models_pretrained(text_encoder, audio_encoder, decoder)
+```
+
 Tips:
 * MusicGen is trained on the 32kHz checkpoint of Encodec. You should ensure you use a compatible version of the Encodec model.
-
-This model was contributed by [sanchit-gandhi](https://huggingface.co/sanchit-gandhi). The original code can be found [here](https://github.com/facebookresearch/audiocraft).
-
+* Sampling mode tends to deliver better results than greedy - you can toggle sampling with the variable `do_sample` in the call to [`MusicgenForConditionalGeneration.generate`]
 
 ## MusicgenConfig
 
@@ -51,6 +182,11 @@ This model was contributed by [sanchit-gandhi](https://huggingface.co/sanchit-ga
 ## MusicgenModel
 
 [[autodoc]] MusicgenModel
+    - forward
+
+## MusicgenForCausalLM
+
+[[autodoc]] MusicgenForCausalLM
     - forward
 
 ## MusicgenForConditionalGeneration
