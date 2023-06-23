@@ -351,16 +351,16 @@ class MraModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
         model = MraModel.from_pretrained("uw-madison/mra-base-512-4")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
+        input_ids = torch.arange(256).unsqueeze(0)
 
         with torch.no_grad():
             output = model(input_ids)[0]
 
-        expected_shape = torch.Size((1, 6, 768))
+        expected_shape = torch.Size((1, 256, 768))
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[-0.0611, 0.1242, 0.0840], [0.0280, -0.0048, 0.1125], [0.0106, 0.0226, 0.0751]]]
+            [[[-0.0140,  0.0830, -0.0381], [ 0.1546,  0.1402,  0.0220], [ 0.1162,  0.0851,  0.0165]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
@@ -368,25 +368,25 @@ class MraModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
         model = MraForMaskedLM.from_pretrained("uw-madison/mra-base-512-4")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
+        input_ids = torch.arange(256).unsqueeze(0)
 
         with torch.no_grad():
             output = model(input_ids)[0]
 
         vocab_size = 50265
 
-        expected_shape = torch.Size((1, 6, vocab_size))
+        expected_shape = torch.Size((1, 256, vocab_size))
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[-2.1313, -3.7285, -2.2407], [-2.7047, -3.3314, -2.6408], [0.0629, -2.5166, -0.3356]]]
+            [[[ 9.2595, -3.6038, 11.8819], [ 9.3869, -3.2693, 11.0956], [11.8524, -3.4938, 13.1210]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
     @slow
     def test_inference_masked_lm_long_input(self):
-        model = MraForMaskedLM.from_pretrained("uw-madison/mra-base-512-4")
+        model = MraForMaskedLM.from_pretrained("uw-madison/mra-base-4096-8-d3")
         input_ids = torch.arange(4096).unsqueeze(0)
 
         with torch.no_grad():
@@ -398,7 +398,7 @@ class MraModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[-2.3914, -4.3742, -5.0956], [-4.0988, -4.2384, -7.0406], [-3.1427, -3.7192, -6.6800]]]
+            [[[ 5.4789, -2.3564,  7.5064], [ 7.9067, -1.3369,  9.9668], [ 9.0712, -1.8106,  7.0380]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
