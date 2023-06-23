@@ -3048,6 +3048,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Remove nonpersistent buffers from unexpected keys: they are not in the state dict but will be in the model
         # buffers
         model_buffers = {n for n, _ in model.named_buffers()}
+        if remove_prefix_from_model:
+            model_buffers = {key[len(_prefix) :] if key.startswith(_prefix) else key for key in model_buffers}
+        elif add_prefix_to_model:
+            model_buffers = {".".join([prefix, key]) for key in model_buffers}
         unexpected_keys = list(unexpected_keys - model_buffers)
 
         if is_accelerate_available():
@@ -3057,6 +3061,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             tied_params = []
 
         for group in tied_params:
+            if remove_prefix_from_model:
+                group = [key[len(_prefix) :] if key.startswith(_prefix) else key for key in group]
+            elif add_prefix_to_model:
+                group = [".".join([prefix, key]) for key in group]
             missing_in_group = [k for k in missing_keys if k in group]
             if len(missing_in_group) > 0 and len(missing_in_group) < len(group):
                 missing_keys = [k for k in missing_keys if k not in missing_in_group]

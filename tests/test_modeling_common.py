@@ -1644,7 +1644,7 @@ class ModelTesterMixin:
             tied_params = [group for group in tied_params if len(group) > 1]
             self.assertListEqual(tied_params, [])
 
-    def test_model_weights_reload_no_missing_weights(self):
+    def test_model_weights_reload_no_missing_tied_weights(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -1672,14 +1672,16 @@ class ModelTesterMixin:
                     ptrs[id_tensor_storage(tensor)].append(name)
                 tied_params = [names for _, names in ptrs.items() if len(names) > 1]
                 for group in tied_params:
+                    group = {k[len(prefix) :] if k.startswith(prefix) else k for k in group}
                     # We remove the group from extra_missing if not all weights from group are in it
-                    if len(set(group) - extra_missing) > 0:
+                    if len(group - extra_missing) > 0:
                         extra_missing = extra_missing - set(group)
 
                 self.assertEqual(
                     extra_missing,
                     set(),
-                    f"This model {model_class.__name__} might be missing some `keys_to_ignore`: {extra_missing}",
+                    f"This model {model_class.__name__} might be missing some `keys_to_ignore`: {extra_missing}. "
+                    f"For debugging, tied parameters are {tied_params}",
                 )
 
                 missed_missing = param_names - missing_keys
@@ -1691,9 +1693,13 @@ class ModelTesterMixin:
                 }
                 missed_missing = missed_missing - nonpersistent_buffers
 
+                if model_reloaded._keys_to_ignore_on_load_missing is None:
+                    expected_missing = set()
+                else:
+                    expected_missing = set(model_reloaded._keys_to_ignore_on_load_missing)
                 self.assertEqual(
                     missed_missing,
-                    set(),
+                    expected_missing,
                     f"This model {model_class.__name__} ignores keys {missed_missing} but they look like real"
                     " parameters. If they are non persistent buffers make sure to instantiate them with"
                     " `persistent=False`",
