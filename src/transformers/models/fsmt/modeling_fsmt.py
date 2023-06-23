@@ -28,7 +28,6 @@
 """PyTorch Fairseq model, ported from https://github.com/pytorch/fairseq/tree/master/examples/wmt19"""
 
 import math
-import random
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -550,7 +549,7 @@ class FSMTEncoder(nn.Module):
                 encoder_states += (x,)
                 x = x.transpose(0, 1)  # B x T x C -> T x B x C
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 attn = None
             else:
@@ -794,7 +793,7 @@ class FSMTDecoder(nn.Module):
                 x = x.transpose(0, 1)
                 all_hidden_states += (x,)
                 x = x.transpose(0, 1)
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
