@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Mra model."""
+""" PyTorch MRA model."""
 
 
 import math
@@ -953,7 +953,7 @@ MRA_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Mra Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare MRA Model transformer outputting raw hidden-states without any specific head on top.",
     MRA_START_DOCSTRING,
 )
 # Copied from transformers.models.yoso.modeling_yoso.YosoModel with YOSO->MRA,Yoso->Mra
@@ -1067,7 +1067,7 @@ class MraModel(MraPreTrainedModel):
         )
 
 
-@add_start_docstrings("""Mra Model with a `language modeling` head on top.""", MRA_START_DOCSTRING)
+@add_start_docstrings("""MRA Model with a `language modeling` head on top.""", MRA_START_DOCSTRING)
 # Copied from transformers.models.yoso.modeling_yoso.YosoForMaskedLM with YOSO->MRA,Yoso->Mra,yoso->mra
 class MraForMaskedLM(MraPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
@@ -1174,7 +1174,7 @@ class MraClassificationHead(nn.Module):
 
 
 @add_start_docstrings(
-    """Mra Model transformer with a sequence classification/regression head on top (a linear layer on top of
+    """MRA Model transformer with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks.""",
     MRA_START_DOCSTRING,
 )
@@ -1266,7 +1266,7 @@ class MraForSequenceClassification(MraPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Mra Model with a multiple choice classification head on top (a linear layer on top of
+    """MRA Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks.""",
     MRA_START_DOCSTRING,
 )
@@ -1358,7 +1358,7 @@ class MraForMultipleChoice(MraPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Mra Model with a token classification head on top (a linear layer on top of
+    """MRA Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks.""",
     MRA_START_DOCSTRING,
 )
@@ -1444,7 +1444,7 @@ class MraForTokenClassification(MraPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Mra Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    """MRA Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).""",
     MRA_START_DOCSTRING,
 )
