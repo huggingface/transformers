@@ -4901,14 +4901,14 @@ class MT5PreTrainedModel(metaclass=DummyObject):
 MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class MusicgenForConditionalGeneration(metaclass=DummyObject):
+class MusicgenForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MusicgenForCausalLM(metaclass=DummyObject):
+class MusicgenForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
