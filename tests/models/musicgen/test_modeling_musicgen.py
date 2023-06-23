@@ -27,13 +27,6 @@ from transformers import (
     MusicgenProcessor,
     PretrainedConfig,
     T5Config,
-    set_seed,
-)
-from transformers.generation import (
-    GreedySearchDecoderOnlyOutput,
-    GreedySearchEncoderDecoderOutput,
-    SampleDecoderOnlyOutput,
-    SampleEncoderDecoderOutput,
 )
 from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
 from transformers.utils import cached_property
@@ -48,11 +41,18 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        InfNanRemoveLogitsProcessor,
-        LogitsProcessorList,
         MusicgenForCausalLM,
         MusicgenForConditionalGeneration,
         MusicgenModel,
+        set_seed,
+    )
+    from transformers.generation import (
+        GreedySearchDecoderOnlyOutput,
+        GreedySearchEncoderDecoderOutput,
+        InfNanRemoveLogitsProcessor,
+        LogitsProcessorList,
+        SampleDecoderOnlyOutput,
+        SampleEncoderDecoderOutput,
     )
 
 
