@@ -1013,10 +1013,6 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
     def get_decoder(self):
         return self.model.decoder
 
-    def can_generate(self) -> bool:
-        # LM head's' isn't recognised under the traditional weight structure so override
-        return True
-
     @add_start_docstrings_to_model_forward(MUSICGEN_DECODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
