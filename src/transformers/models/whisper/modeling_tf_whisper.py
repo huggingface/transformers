@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import math
 import random
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
