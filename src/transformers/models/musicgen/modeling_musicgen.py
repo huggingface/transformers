@@ -67,7 +67,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 class MusicgenUnconditionalInput(ModelOutput):
     """
     Args:
-        last_hidden_state  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        encoder_outputs  (`Tuple[torch.FloatTensor]` of length 1, with tensor shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the text encoder model.
         attention_mask (`torch.LongTensor`)  of shape `(batch_size, sequence_length)`, *optional*):
             Encoder attention mask to avoid performing attention on padding token indices. Mask values selected in `[0,
@@ -79,7 +79,7 @@ class MusicgenUnconditionalInput(ModelOutput):
             from the prompts) and the unconditional logits (predicted without prompts).
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    encoder_outputs: Tuple[torch.FloatTensor] = None
     attention_mask: torch.LongTensor = None
     max_new_tokens: int = None
     guidance_scale: float = None
@@ -2139,6 +2139,34 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             " model.decoder.resize_token_embeddings(...))"
         )
 
+    def _maybe_initialize_input_ids_for_generation(
+        self,
+        inputs: Optional[torch.Tensor] = None,
+        bos_token_id: Optional[int] = None,
+        model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
+    ) -> torch.LongTensor:
+        """Initializes input ids for generation, if necessary."""
+        if inputs is not None:
+            return inputs
+
+        encoder_outputs = model_kwargs.get("encoder_outputs")
+        if encoder_outputs is not None:
+            # make dummy input_ids with value -100, as a sanity check ensuring that they won't be used for encoding
+            shape = encoder_outputs[0].size()[:-1]
+            return torch.ones(shape, dtype=torch.long, device=self.device) * -100
+
+        if bos_token_id is None:
+            raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
+
+        # If there is some tensor in `model_kwargs`, we can infer the batch size from it. This is helpful with
+        # soft-prompting or in multimodal implementations built on top of decoder-only language models.
+        batch_size = 1
+        for value in model_kwargs.values():
+            if isinstance(value, torch.Tensor):
+                batch_size = value.shape[0]
+                break
+        return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
+
     @torch.no_grad()
     def generate(
         self,
@@ -2221,6 +2249,10 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
+        if model_kwargs.get("encoder_outputs") is not None and type(model_kwargs["encoder_outputs"]) == tuple:
+            # wrap the unconditional outputs as a BaseModelOutput for compatibility with the rest of generate
+            model_kwargs["encoder_outputs"] = BaseModelOutput(last_hidden_state=model_kwargs["encoder_outputs"][0])
+
         # 2. Set generation parameters if not already defined
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -2260,9 +2292,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 inputs_tensor, generation_config.pad_token_id, generation_config.eos_token_id
             )
 
-        if "last_hidden_state" in model_kwargs:
-            model_kwargs["encoder_outputs"] = BaseModelOutput(last_hidden_state=model_kwargs.pop("last_hidden_state"))
-        elif "encoder_outputs" not in model_kwargs:
+        if "encoder_outputs" not in model_kwargs:
             # encoder_outputs are created and added to `model_kwargs`
             model_kwargs = self._prepare_text_encoder_kwargs_for_generation(
                 inputs_tensor,
@@ -2466,7 +2496,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         attention_mask = torch.zeros((num_samples, 1), device=self.device, dtype=torch.long)
 
         return MusicgenUnconditionalInput(
-            last_hidden_state=last_hidden_state,
+            encoder_outputs=(last_hidden_state,),
             attention_mask=attention_mask,
             max_new_tokens=max_new_tokens,
             guidance_scale=None,
