@@ -498,14 +498,24 @@ MUSICGEN_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, target_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary. Note that the `decoder_input_ids` will
-            automatically be converted from shape `(batch_size * num_codebooks, target_sequence_length)` to
-            `(batch_size, num_codebooks, target_sequence_length)` in the forward pass.
+            Indices of decoder input sequence tokens in the vocabulary, corresponding to the sequence of audio codes.
 
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            Indices can be obtained by encoding an audio prompt with an audio encoder model to predict audio codes,
+            such as with the [`EncodecModel`]. See [`EncodecModel.encode`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
+
+            <Tip warning={true}>
+
+            The `decoder_input_ids` will automatically be converted from shape `(batch_size * num_codebooks,
+            target_sequence_length)` to `(batch_size, num_codebooks, target_sequence_length)` in the forward pass. If
+            you obtain audio codes from an audio encoding model, such as [`EncodecModel`], ensure that the number of
+            frames is equal to 1, and that you reshape the audio codes from `(frames, batch_size, num_codebooks,
+            target_sequence_length)` to `(batch_size * num_codebooks, target_sequence_length)` prior to passing them as
+            `decoder_input_ids`.
+    
+            </Tip>
+
         decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
@@ -557,6 +567,82 @@ MUSICGEN_INPUTS_DOCSTRING = r"""
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+MUSICGEN_DECODER_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary, corresponding to the sequence of audio codes.
+    
+            Indices can be obtained by encoding an audio prompt with an audio encoder model to predict audio codes,
+            such as with the [`EncodecModel`]. See [`EncodecModel.encode`] for details.
+    
+            [What are input IDs?](../glossary#input-ids)
+    
+            <Tip warning={true}>
+    
+            The `input_ids` will automatically be converted from shape `(batch_size * num_codebooks,
+            target_sequence_length)` to `(batch_size, num_codebooks, target_sequence_length)` in the forward pass. If
+            you obtain audio codes from an audio encoding model, such as [`EncodecModel`], ensure that the number of
+            frames is equal to 1, and that you reshape the audio codes from `(frames, batch_size, num_codebooks,
+            target_sequence_length)` to `(batch_size * num_codebooks, target_sequence_length)` prior to passing them as
+            `input_ids`.
+    
+            </Tip>
+    
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+    
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+    
+            [What are attention masks?](../glossary#attention-mask)
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of
+            the decoder.
+        encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
+            Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
+            selected in `[0, 1]`:
+    
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+    
+            [What are attention masks?](../glossary#attention-mask)
+        head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
+    
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+    
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder to avoid performing
+            cross-attention on hidden heads. Mask values selected in `[0, 1]`:
+    
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+    
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+    
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+    
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
+            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
+            can choose to directly pass an embedded representation. This is useful if you want more control over how to
+            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -629,6 +715,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
 
         return combined_attention_mask
 
+    @add_start_docstrings_to_model_forward(MUSICGEN_DECODER_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -644,72 +731,6 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-        r"""
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it. Note that the input ids will automatically be converted from shape `(batch_size *
-                num_codebooks, sequence_length)` to `(batch_size, num_codebooks, sequence_length)` in the forward pass.
-
-                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
-
-                [What are input IDs?](../glossary#input-ids)
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
-                selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the cross-attention modules in the decoder to avoid performing
-                cross-attention on hidden heads. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
-                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
-                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
-                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-                `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
-                control over how to convert `input_ids` indices into associated vectors than the model's internal
-                embedding lookup matrix.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -873,7 +894,7 @@ class MusicgenModel(MusicgenPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    @add_start_docstrings_to_model_forward(MUSICGEN_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MUSICGEN_DECODER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPastAndCrossAttentions,
@@ -972,7 +993,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         # LM head's' isn't recognised under the traditional weight structure so override
         return True
 
-    @add_start_docstrings_to_model_forward(MUSICGEN_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MUSICGEN_DECODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1118,13 +1139,13 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
 
         # fill the shifted ids with the prompt entries, offset by the codebook idx
         for codebook in range(num_codebooks):
-            input_ids_shifted[:, codebook, codebook: seq_len + codebook] = input_ids[:, codebook]
+            input_ids_shifted[:, codebook, codebook : seq_len + codebook] = input_ids[:, codebook]
 
         # construct a pattern mask that indicates the positions of padding tokens for each codebook
         # first fill the upper triangular part (the EOS padding)
         delay_pattern = torch.triu(
-                torch.ones((num_codebooks, max_length), dtype=torch.bool), diagonal=max_length - num_codebooks + 1
-            )
+            torch.ones((num_codebooks, max_length), dtype=torch.bool), diagonal=max_length - num_codebooks + 1
+        )
         # then fill the lower triangular part (the BOS padding)
         delay_pattern = delay_pattern + torch.tril(torch.ones((num_codebooks, max_length), dtype=torch.bool))
         mask = ~delay_pattern.to(input_ids.device)
@@ -2036,7 +2057,9 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
 
         return model_kwargs
 
-    def _prepare_audio_encoder_kwargs_for_generation(self, input_values, model_kwargs, model_input_name: Optional[str] = None):
+    def _prepare_audio_encoder_kwargs_for_generation(
+        self, input_values, model_kwargs, model_input_name: Optional[str] = None
+    ):
         # 1. get audio encoder
         encoder = self.get_audio_encoder()
         # Compatibility with Accelerate big model inference: we need the encoder to outputs stuff on the same device
@@ -2369,7 +2392,8 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         # TODO(SG): hacks to make the output ids compatible with encodec - add to encodec modelling code
         output_ids = output_ids.unsqueeze(0)
         output_values = self.audio_encoder.decode(
-            output_ids, audio_scales=audio_scales,
+            output_ids,
+            audio_scales=audio_scales,
         )
 
         if generation_config.return_dict_in_generate:
@@ -2395,8 +2419,8 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         >>> from transformers import MusicgenForConditionalGeneration
 
         >>> model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
-
         # get the unconditional (or 'null') inputs for the model
+
         >>> unconditional_inputs = model.get_unconditional_inputs(num_samples=1)
         >>> audio_samples = model.generate(**unconditional_inputs)
         ```"""
