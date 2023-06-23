@@ -496,7 +496,7 @@ def input_processing(func, config, **kwargs):
         kwargs.pop("kwargs_call")
 
     for k, v in kwargs.items():
-        if isinstance(v, allowed_types) or K.is_keras_tensor(v) or v is None:
+        if isinstance(v, allowed_types) or tf.is_tensor(v) or v is None:
             output[k] = v
         else:
             raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
@@ -549,7 +549,7 @@ def input_processing(func, config, **kwargs):
             else:
                 raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
     else:
-        if tf.is_tensor(main_input) or K.is_keras_tensor(main_input) or main_input is None:
+        if tf.is_tensor(main_input) or main_input is None:
             output[main_input_name] = main_input
         else:
             raise ValueError(
