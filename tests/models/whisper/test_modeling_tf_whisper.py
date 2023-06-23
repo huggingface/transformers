@@ -787,7 +787,7 @@ def _test_large_batched_generation(in_queue, out_queue, timeout):
         ]
         # fmt: on
 
-        unittest.TestCase().assertEqual(generated_ids.numpy().tolist(), EXPECTED_IDS)
+        unittest.TestCase().assertEqual(generated_ids.tolist(), EXPECTED_IDS)
 
         # fmt: off
         EXPECTED_TRANSCRIPT = [
