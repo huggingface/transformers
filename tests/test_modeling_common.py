@@ -1644,7 +1644,7 @@ class ModelTesterMixin:
             tied_params = [group for group in tied_params if len(group) > 1]
             self.assertListEqual(tied_params, [])
 
-    def test_model_weights_load_missing_unexpected(self):
+    def test_model_weights_reload_no_missing_weights(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config)
