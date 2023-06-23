@@ -16,7 +16,6 @@
 
 import copy
 import math
-import random
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -793,7 +792,7 @@ class PegasusEncoder(PegasusPreTrainedModel):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None)
             else:
@@ -1074,7 +1073,7 @@ class PegasusDecoder(PegasusPreTrainedModel):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
@@ -1152,6 +1151,7 @@ class PegasusDecoder(PegasusPreTrainedModel):
 )
 class PegasusModel(PegasusPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: PegasusConfig):
         super().__init__(config)
@@ -1312,6 +1312,7 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
         "encoder.embed_tokens.weight",
         "decoder.embed_tokens.weight",
     ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: PegasusConfig):
         super().__init__(config)
@@ -1512,6 +1513,7 @@ class PegasusDecoderWrapper(PegasusPreTrainedModel):
 
 class PegasusForCausalLM(PegasusPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         config = copy.deepcopy(config)

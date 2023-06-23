@@ -14,6 +14,8 @@
 # limitations under the License.
 """ Testing suite for the TensorFlow SegFormer model. """
 
+from __future__ import annotations
+
 import inspect
 import unittest
 from typing import List, Tuple
@@ -184,10 +186,6 @@ class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip("Test was written for TF 1.x and isn't really relevant here")
-    def test_compile_tf_model(self):
-        pass
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -349,6 +347,7 @@ class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
         not is_tf_available() or len(tf.config.list_physical_devices("GPU")) == 0,
         reason="TF does not support backprop for grouped convolutions on CPU.",
     )
+    @slow
     def test_keras_fit(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 

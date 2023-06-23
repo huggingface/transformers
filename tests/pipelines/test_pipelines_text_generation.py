@@ -240,7 +240,11 @@ class TextGenerationPipelineTests(unittest.TestCase):
         # We don't care about infinite range models.
         # They already work.
         # Skip this test for XGLM, since it uses sinusoidal positional embeddings which are resized on-the-fly.
-        if tokenizer.model_max_length < 10000 and "XGLM" not in tokenizer.__class__.__name__:
+        EXTRA_MODELS_CAN_HANDLE_LONG_INPUTS = ["RwkvForCausalLM", "XGLMForCausalLM"]
+        if (
+            tokenizer.model_max_length < 10000
+            and text_generator.model.__class__.__name__ not in EXTRA_MODELS_CAN_HANDLE_LONG_INPUTS
+        ):
             # Handling of large generations
             with self.assertRaises((RuntimeError, IndexError, ValueError, AssertionError)):
                 text_generator("This is a test" * 500, max_new_tokens=20)

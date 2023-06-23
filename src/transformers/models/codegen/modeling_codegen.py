@@ -315,6 +315,7 @@ class CodeGenPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["CodeGenBlock"]
+    _skip_keys_device_placement = "past_key_values"
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -600,6 +601,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
 )
 class CodeGenForCausalLM(CodeGenPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.causal_mask"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)

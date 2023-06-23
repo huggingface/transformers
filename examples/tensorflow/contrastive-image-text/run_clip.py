@@ -51,7 +51,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.29.0.dev0")
+check_min_version("4.31.0.dev0")
 
 require_version(
     "datasets>=1.8.0", "To fix: pip install -r examples/tensorflow/contrastive-image-text/requirements.txt"
@@ -561,6 +561,8 @@ def main():
             weight_decay_rate=training_args.weight_decay,
             adam_global_clipnorm=training_args.max_grad_norm,
         )
+        # Transformers models compute the right loss for their task by default when labels are passed, and will
+        # use this for training unless you specify your own loss function in compile().
         model.compile(optimizer=optimizer, jit_compile=training_args.xla)
 
         if not training_args.do_eval:

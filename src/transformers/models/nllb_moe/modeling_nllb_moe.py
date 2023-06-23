@@ -16,7 +16,6 @@
 
 
 import math
-import random
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -856,7 +855,7 @@ class NllbMoePreTrainedModel(PreTrainedModel):
     config_class = NllbMoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["NllbMoeAttention"]
+    _no_split_modules = ["NllbMoeEncoderLayer", "NllbMoeDecoderLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1143,7 +1142,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None, None)
             else:
@@ -1405,7 +1404,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                 all_hidden_states += (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.layerdrop) else False
             if not skip_the_layer or deepspeed_zero3_is_enabled:
@@ -1509,6 +1508,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         "decoder.embed_positions.weights",
         "decoder.embed_positions.bias",
     ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: NllbMoeConfig):
         super().__init__(config)
@@ -1652,6 +1652,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
         r"decoder.embed_positions.weights",
         r"decoder.embed_positions.bias",
     ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: NllbMoeConfig):
         super().__init__(config)

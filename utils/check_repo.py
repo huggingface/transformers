@@ -73,6 +73,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TimeSeriesTransformerDecoder",  # Building part of bigger (tested) model.
     "InformerEncoder",  # Building part of bigger (tested) model.
     "InformerDecoder",  # Building part of bigger (tested) model.
+    "AutoformerEncoder",  # Building part of bigger (tested) model.
+    "AutoformerDecoder",  # Building part of bigger (tested) model.
     "JukeboxVQVAE",  # Building part of bigger (tested) model.
     "JukeboxPrior",  # Building part of bigger (tested) model.
     "DeformableDetrEncoder",  # Building part of bigger (tested) model.
@@ -223,6 +225,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "GPTSanJapaneseModel",
     "TimeSeriesTransformerForPrediction",
     "InformerForPrediction",
+    "AutoformerForPrediction",
     "JukeboxVQVAE",
     "JukeboxPrior",
     "PegasusXEncoder",
@@ -405,6 +408,7 @@ def get_model_modules():
         "modeling_speech_encoder_decoder",
         "modeling_flax_speech_encoder_decoder",
         "modeling_flax_vision_encoder_decoder",
+        "modeling_timm_backbone",
         "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
         "modeling_tf_encoder_decoder",
@@ -707,6 +711,29 @@ def check_all_auto_mapping_names_in_config_mapping_names():
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
 
+def check_all_auto_mappings_importable():
+    """Check all auto mappings could be imported."""
+    check_missing_backends()
+
+    failures = []
+    mappings_to_check = {}
+    # Each auto modeling files contains multiple mappings. Let's get them in a dynamic way.
+    for module_name in ["modeling_auto", "modeling_tf_auto", "modeling_flax_auto"]:
+        module = getattr(transformers.models.auto, module_name, None)
+        if module is None:
+            continue
+        # all mappings in a single auto modeling file
+        mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES")]
+        mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
+
+    for name, _ in mappings_to_check.items():
+        name = name.replace("_MAPPING_NAMES", "_MAPPING")
+        if not hasattr(transformers, name):
+            failures.append(f"`{name}` should be defined in the main `__init__` file.")
+    if len(failures) > 0:
+        raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
+
+
 _re_decorator = re.compile(r"^\s*@(\S+)\s+$")
 
 
@@ -752,7 +779,7 @@ def find_all_documented_objects():
             content = f.read()
         raw_doc_objs = re.findall(r"(?:autoclass|autofunction):: transformers.(\S+)\s+", content)
         documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
-    for doc_file in Path(PATH_TO_DOC).glob("**/*.mdx"):
+    for doc_file in Path(PATH_TO_DOC).glob("**/*.md"):
         with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
             content = f.read()
         raw_doc_objs = re.findall(r"\[\[autodoc\]\]\s+(\S+)\s+", content)
@@ -843,6 +870,8 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "NatBackbone",
     "ResNetBackbone",
     "SwinBackbone",
+    "TimmBackbone",
+    "TimmBackboneConfig",
 ]
 
 
@@ -902,7 +931,7 @@ def check_all_objects_are_documented():
 def check_model_type_doc_match():
     """Check all doc pages have a corresponding model type."""
     model_doc_folder = Path(PATH_TO_DOC) / "model_doc"
-    model_docs = [m.stem for m in model_doc_folder.glob("*.mdx")]
+    model_docs = [m.stem for m in model_doc_folder.glob("*.md")]
 
     model_types = list(transformers.models.auto.configuration_auto.MODEL_NAMES_MAPPING.keys())
     model_types = [MODEL_TYPE_TO_DOC_MAPPING[m] if m in MODEL_TYPE_TO_DOC_MAPPING else m for m in model_types]
@@ -987,6 +1016,8 @@ def check_repo_quality():
     check_all_auto_object_names_being_defined()
     print("Checking all keys in auto name mappings are defined in `CONFIG_MAPPING_NAMES`.")
     check_all_auto_mapping_names_in_config_mapping_names()
+    print("Checking all auto mappings could be imported.")
+    check_all_auto_mappings_importable()
 
 
 if __name__ == "__main__":

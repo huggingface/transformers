@@ -726,7 +726,7 @@ class RealmReaderOutput(ModelOutput):
             The index of the retrieved span candidates in which the predicted answer is most likely.
         start_pos (`torch.IntTensor` of shape `()`):
             Predicted answer starting position in *RealmReader*'s inputs.
-        end_pos: (`torch.IntTensor` of shape `()`):
+        end_pos (`torch.IntTensor` of shape `()`):
             Predicted answer ending position in *RealmReader*'s inputs.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
@@ -1148,6 +1148,7 @@ class RealmBertModel(RealmPreTrainedModel):
 )
 class RealmEmbedder(RealmPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.bias"]
+    _tied_weights_keys = ["cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1378,6 +1379,7 @@ class RealmScorer(RealmPreTrainedModel):
 )
 class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["cls.predictions.decoder"]
+    _tied_weights_keys = ["cls.predictions.decoder"]
 
     def __init__(self, config):
         super().__init__(config)

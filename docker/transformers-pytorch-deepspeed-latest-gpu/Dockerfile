@@ -1,12 +1,12 @@
-# https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel_22-08.html#rel_22-08
-FROM nvcr.io/nvidia/pytorch:22.08-py3
+# https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-22-12.html#rel-22-12
+FROM nvcr.io/nvidia/pytorch:22.12-py3
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-ARG PYTORCH='2.0.0'
+ARG PYTORCH='2.0.1'
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu117'
+ARG CUDA='cu118'
 
 RUN apt -y update
 RUN apt install -y libaio-dev
@@ -14,6 +14,8 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip
 
 ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
+
+RUN python3 -m pip uninstall -y torch torchvision torchaudio
 
 # Install latest release PyTorch
 # (PyTorch must be installed before pre-compiling any DeepSpeed c++/cuda ops.)
@@ -24,6 +26,9 @@ RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
+# Uninstall `transformer-engine` shipped with the base image
+RUN python3 -m pip uninstall -y transformer-engine
+
 # Uninstall `torch-tensorrt` shipped with the base image
 RUN python3 -m pip uninstall -y torch-tensorrt
 
@@ -31,7 +36,7 @@ RUN python3 -m pip uninstall -y torch-tensorrt
 RUN python3 -m pip uninstall -y apex
 RUN git clone https://github.com/NVIDIA/apex
 #  `MAX_JOBS=1` disables parallel building to avoid cpu memory OOM when building image on GitHub Action (standard) runners
-RUN cd apex && MAX_JOBS=1 python3 -m pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache -v --disable-pip-version-check .
+RUN cd apex && git checkout 82ee367f3da74b4cd62a1fb47aa9806f0f47b58b && MAX_JOBS=1 python3 -m pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache -v --disable-pip-version-check .
 
 # Pre-build **latest** DeepSpeed, so it would be ready for testing (otherwise, the 1st deepspeed test will timeout)
 RUN python3 -m pip uninstall -y deepspeed

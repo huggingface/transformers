@@ -50,6 +50,7 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
     base_model_prefix = "gpt_neox_japanese"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTNeoXJapaneseLayer"]
+    _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -591,6 +592,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
 )
 class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", "embed_out.weight"]
+    _tied_weights_keys = ["embed_out.weight"]
 
     def __init__(self, config):
         super().__init__(config)

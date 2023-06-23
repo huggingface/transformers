@@ -33,18 +33,12 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
-from ...pytorch_utils import find_pruneable_heads_and_indices, is_torch_greater_or_equal_than_1_10, prune_linear_layer
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
 
 
 logger = logging.get_logger(__name__)
-
-if not is_torch_greater_or_equal_than_1_10:
-    logger.warning(
-        f"You are using torch=={torch.__version__}, but torch>=1.10.0 is required to use "
-        "BridgeTowerModel. Please upgrade torch."
-    )
 
 _CONFIG_FOR_DOC = "BridgeTowerConfig"
 _CHECKPOINT_FOR_DOC = "BridgeTower/bridgetower-base"
@@ -982,6 +976,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "bridgetower"
     supports_gradient_checkpointing = False
     _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
+    _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
         if isinstance(module, BridgeTowerVisionModel):
@@ -1263,6 +1258,12 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             )
 
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.text_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.text_model.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward(BRIDGETOWER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BridgeTowerModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1547,6 +1548,8 @@ class BridgeTowerITMHead(nn.Module):
     BRIDGETOWER_START_DOCSTRING,
 )
 class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
+    _tied_weights_keys = ["mlm_score.decoder.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 

@@ -235,6 +235,7 @@ def try_to_load_from_cache(
     filename: str,
     cache_dir: Union[str, Path, None] = None,
     revision: Optional[str] = None,
+    repo_type: Optional[str] = None,
 ) -> Optional[str]:
     """
     Explores the cache to return the latest cached file for a given revision if found.
@@ -251,6 +252,8 @@ def try_to_load_from_cache(
         revision (`str`, *optional*):
             The specific model version to use. Will default to `"main"` if it's not provided and no `commit_hash` is
             provided either.
+        repo_type (`str`, *optional*):
+            The type of the repo.
 
     Returns:
         `Optional[str]` or `_CACHED_NO_EXIST`:
@@ -266,7 +269,9 @@ def try_to_load_from_cache(
         cache_dir = TRANSFORMERS_CACHE
 
     object_id = repo_id.replace("/", "--")
-    repo_cache = os.path.join(cache_dir, f"models--{object_id}")
+    if repo_type is None:
+        repo_type = "model"
+    repo_cache = os.path.join(cache_dir, f"{repo_type}s--{object_id}")
     if not os.path.isdir(repo_cache):
         # No cache for this model
         return None
@@ -303,6 +308,7 @@ def cached_file(
     revision: Optional[str] = None,
     local_files_only: bool = False,
     subfolder: str = "",
+    repo_type: Optional[str] = None,
     user_agent: Optional[Union[str, Dict[str, str]]] = None,
     _raise_exceptions_for_missing_entries: bool = True,
     _raise_exceptions_for_connection_errors: bool = True,
@@ -342,6 +348,8 @@ def cached_file(
         subfolder (`str`, *optional*, defaults to `""`):
             In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
             specify the folder name here.
+        repo_type (`str`, *optional*):
+            Specify the repo type (useful when downloading from a space for instance).
 
     <Tip>
 
@@ -393,7 +401,7 @@ def cached_file(
     if _commit_hash is not None and not force_download:
         # If the file is cached under that commit hash, we return it directly.
         resolved_file = try_to_load_from_cache(
-            path_or_repo_id, full_filename, cache_dir=cache_dir, revision=_commit_hash
+            path_or_repo_id, full_filename, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
         )
         if resolved_file is not None:
             if resolved_file is not _CACHED_NO_EXIST:
@@ -410,6 +418,7 @@ def cached_file(
             path_or_repo_id,
             filename,
             subfolder=None if len(subfolder) == 0 else subfolder,
+            repo_type=repo_type,
             revision=revision,
             cache_dir=cache_dir,
             user_agent=user_agent,
@@ -569,7 +578,7 @@ def download_url(url, proxies=None):
         " that this is not compatible with the caching system (your file will be downloaded at each execution) or"
         " multiple processes (each process will download the file in a different temporary file)."
     )
-    tmp_file = tempfile.mktemp()
+    tmp_file = tempfile.mkstemp()[1]
     with open(tmp_file, "wb") as f:
         http_get(url, f, proxies=proxies)
     return tmp_file
@@ -692,9 +701,30 @@ class PushToHubMixin:
             for f in os.listdir(working_dir)
             if f not in files_timestamps or os.path.getmtime(os.path.join(working_dir, f)) > files_timestamps[f]
         ]
+
+        # filter for actual files + folders at the root level
+        modified_files = [
+            f
+            for f in modified_files
+            if os.path.isfile(os.path.join(working_dir, f)) or os.path.isdir(os.path.join(working_dir, f))
+        ]
+
         operations = []
+        # upload standalone files
         for file in modified_files:
-            operations.append(CommitOperationAdd(path_or_fileobj=os.path.join(working_dir, file), path_in_repo=file))
+            if os.path.isdir(os.path.join(working_dir, file)):
+                # go over individual files of folder
+                for f in os.listdir(os.path.join(working_dir, file)):
+                    operations.append(
+                        CommitOperationAdd(
+                            path_or_fileobj=os.path.join(working_dir, file, f), path_in_repo=os.path.join(file, f)
+                        )
+                    )
+            else:
+                operations.append(
+                    CommitOperationAdd(path_or_fileobj=os.path.join(working_dir, file), path_in_repo=file)
+                )
+
         logger.info(f"Uploading the following files to {repo_id}: {','.join(modified_files)}")
         return create_commit(
             repo_id=repo_id, operations=operations, commit_message=commit_message, token=token, create_pr=create_pr
@@ -709,6 +739,7 @@ class PushToHubMixin:
         use_auth_token: Optional[Union[bool, str]] = None,
         max_shard_size: Optional[Union[int, str]] = "10GB",
         create_pr: bool = False,
+        safe_serialization: bool = False,
         **deprecated_kwargs,
     ) -> str:
         """
@@ -736,6 +767,8 @@ class PushToHubMixin:
                 by a unit (like `"5MB"`).
             create_pr (`bool`, *optional*, defaults to `False`):
                 Whether or not to create a PR with the uploaded files or directly commit.
+            safe_serialization (`bool`, *optional*, defaults to `False`):
+                Whether or not to convert the model weights in safetensors format for safer serialization.
 
         Examples:
 
@@ -778,7 +811,7 @@ class PushToHubMixin:
             files_timestamps = self._get_files_timestamps(work_dir)
 
             # Save all files.
-            self.save_pretrained(work_dir, max_shard_size=max_shard_size)
+            self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
 
             return self._upload_modified_files(
                 work_dir,

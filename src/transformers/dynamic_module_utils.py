@@ -18,6 +18,7 @@ import importlib
 import os
 import re
 import shutil
+import signal
 import sys
 from pathlib import Path
 from typing import Dict, Optional, Union
@@ -115,15 +116,15 @@ def get_relative_import_files(module_file):
     return all_relative_imports
 
 
-def check_imports(filename):
+def get_imports(filename):
     """
-    Check if the current Python environment contains all the libraries that are imported in a file.
+    Extracts all the libraries that are imported in a file.
     """
     with open(filename, "r", encoding="utf-8") as f:
         content = f.read()
 
     # filter out try/except block so in custom code we can have try/except imports
-    content = re.sub(r"\s*try\s*:\s*.*?\s*except\s*:", "", content, flags=re.MULTILINE)
+    content = re.sub(r"\s*try\s*:\s*.*?\s*except\s*.*?:", "", content, flags=re.MULTILINE | re.DOTALL)
 
     # Imports of the form `import xxx`
     imports = re.findall(r"^\s*import\s+(\S+)\s*$", content, flags=re.MULTILINE)
@@ -131,9 +132,14 @@ def check_imports(filename):
     imports += re.findall(r"^\s*from\s+(\S+)\s+import", content, flags=re.MULTILINE)
     # Only keep the top-level module
     imports = [imp.split(".")[0] for imp in imports if not imp.startswith(".")]
+    return list(set(imports))
 
-    # Unique-ify and test we got them all
-    imports = list(set(imports))
+
+def check_imports(filename):
+    """
+    Check if the current Python environment contains all the libraries that are imported in a file.
+    """
+    imports = get_imports(filename)
     missing_packages = []
     for imp in imports:
         try:
@@ -169,6 +175,7 @@ def get_cached_module_file(
     use_auth_token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
+    repo_type: Optional[str] = None,
     _commit_hash: Optional[str] = None,
 ):
     """
@@ -207,6 +214,8 @@ def get_cached_module_file(
             identifier allowed by git.
         local_files_only (`bool`, *optional*, defaults to `False`):
             If `True`, will only try to load the tokenizer configuration from local files.
+        repo_type (`str`, *optional*):
+            Specify the repo type (useful when downloading from a space for instance).
 
     <Tip>
 
@@ -229,7 +238,7 @@ def get_cached_module_file(
     else:
         submodule = pretrained_model_name_or_path.replace("/", os.path.sep)
         cached_module = try_to_load_from_cache(
-            pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=_commit_hash
+            pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
         )
 
     new_files = []
@@ -245,6 +254,7 @@ def get_cached_module_file(
             local_files_only=local_files_only,
             use_auth_token=use_auth_token,
             revision=revision,
+            repo_type=repo_type,
             _commit_hash=_commit_hash,
         )
         if not is_local and cached_module != resolved_module_file:
@@ -307,10 +317,12 @@ def get_cached_module_file(
                 )
                 new_files.append(f"{module_needed}.py")
 
-    if len(new_files) > 0:
+    if len(new_files) > 0 and revision is None:
         new_files = "\n".join([f"- {f}" for f in new_files])
+        repo_type_str = "" if repo_type is None else f"{repo_type}s/"
+        url = f"https://huggingface.co/{repo_type_str}{pretrained_model_name_or_path}"
         logger.warning(
-            f"A new version of the following files was downloaded from {pretrained_model_name_or_path}:\n{new_files}"
+            f"A new version of the following files was downloaded from {url}:\n{new_files}"
             "\n. Make sure to double-check they do not contain any added malicious code. To avoid downloading new "
             "versions of the code file, you can pin a revision."
         )
@@ -328,6 +340,8 @@ def get_class_from_dynamic_module(
     use_auth_token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
+    repo_type: Optional[str] = None,
+    code_revision: Optional[str] = None,
     **kwargs,
 ):
     """
@@ -377,6 +391,12 @@ def get_class_from_dynamic_module(
             identifier allowed by git.
         local_files_only (`bool`, *optional*, defaults to `False`):
             If `True`, will only try to load the tokenizer configuration from local files.
+        repo_type (`str`, *optional*):
+            Specify the repo type (useful when downloading from a space for instance).
+        code_revision (`str`, *optional*, defaults to `"main"`):
+            The specific revision to use for the code on the Hub, if the code leaves in a different repository than the
+            rest of the model. It can be a branch name, a tag name, or a commit id, since we use a git-based system for
+            storing models and other artifacts on huggingface.co, so `revision` can be any identifier allowed by git.
 
     <Tip>
 
@@ -401,12 +421,12 @@ def get_class_from_dynamic_module(
     # Catch the name of the repo if it's specified in `class_reference`
     if "--" in class_reference:
         repo_id, class_reference = class_reference.split("--")
-        # Invalidate revision since it's not relevant for this repo
-        revision = "main"
     else:
         repo_id = pretrained_model_name_or_path
     module_file, class_name = class_reference.split(".")
 
+    if code_revision is None and pretrained_model_name_or_path == repo_id:
+        code_revision = revision
     # And lastly we get the class inside our newly created module
     final_module = get_cached_module_file(
         repo_id,
@@ -416,8 +436,9 @@ def get_class_from_dynamic_module(
         resume_download=resume_download,
         proxies=proxies,
         use_auth_token=use_auth_token,
-        revision=revision,
+        revision=code_revision,
         local_files_only=local_files_only,
+        repo_type=repo_type,
     )
     return get_class_in_module(class_name, final_module.replace(".py", ""))
 
@@ -439,6 +460,7 @@ def custom_object_save(obj, folder, config=None):
             "this code in a separate module so we can include it in the saved folder and make it easier to share via "
             "the Hub."
         )
+        return
 
     def _set_auto_map_in_config(_config):
         module_name = obj.__class__.__module__
@@ -478,12 +500,60 @@ def custom_object_save(obj, folder, config=None):
     elif config is not None:
         _set_auto_map_in_config(config)
 
+    result = []
     # Copy module file to the output folder.
     object_file = sys.modules[obj.__module__].__file__
     dest_file = Path(folder) / (Path(object_file).name)
     shutil.copy(object_file, dest_file)
+    result.append(dest_file)
 
     # Gather all relative imports recursively and make sure they are copied as well.
     for needed_file in get_relative_import_files(object_file):
         dest_file = Path(folder) / (Path(needed_file).name)
         shutil.copy(needed_file, dest_file)
+        result.append(dest_file)
+
+    return result
+
+
+def _raise_timeout_error(signum, frame):
+    raise ValueError(
+        "Loading this model requires you to execute the configuration file in that repo on your local machine. We "
+        "asked if it was okay but did not get an answer. Make sure you have read the code there to avoid malicious "
+        "use, then set the option `trust_remote_code=True` to remove this error."
+    )
+
+
+TIME_OUT_REMOTE_CODE = 15
+
+
+def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has_remote_code):
+    if trust_remote_code is None:
+        if has_local_code:
+            trust_remote_code = False
+        elif has_remote_code and TIME_OUT_REMOTE_CODE > 0:
+            signal.signal(signal.SIGALRM, _raise_timeout_error)
+            signal.alarm(TIME_OUT_REMOTE_CODE)
+            while trust_remote_code is None:
+                answer = input(
+                    f"Loading {model_name} requires to execute some code in that repo, you can inspect the content of "
+                    f"the repository at https://hf.co/{model_name}. You can dismiss this prompt by passing "
+                    "`trust_remote_code=True`.\nDo you accept? [y/N] "
+                )
+                if answer.lower() in ["yes", "y", "1"]:
+                    trust_remote_code = True
+                elif answer.lower() in ["no", "n", "0", ""]:
+                    trust_remote_code = False
+            signal.alarm(0)
+        elif has_remote_code:
+            # For the CI which puts the timeout at 0
+            _raise_timeout_error(None, None)
+
+    if has_remote_code and not has_local_code and not trust_remote_code:
+        raise ValueError(
+            f"Loading {model_name} requires you to execute the configuration file in that"
+            " repo on your local machine. Make sure you have read the code there to avoid malicious use, then"
+            " set the option `trust_remote_code=True` to remove this error."
+        )
+
+    return trust_remote_code

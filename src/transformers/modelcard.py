@@ -279,6 +279,7 @@ TASK_TAG_TO_NAME_MAPPING = {
     "translation": "Translation",
     "zero-shot-classification": "Zero Shot Classification",
     "automatic-speech-recognition": "Automatic Speech Recognition",
+    "audio-classification": "Audio Classification",
 }
 
 

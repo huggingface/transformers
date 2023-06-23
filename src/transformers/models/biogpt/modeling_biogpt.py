@@ -16,7 +16,6 @@
 
 
 import math
-import random
 from typing import Optional, Tuple, Union
 
 import torch
@@ -546,6 +545,12 @@ class BioGptModel(BioGptPreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones(inputs_embeds.shape[:2], dtype=torch.bool, device=inputs_embeds.device)
+        elif attention_mask.shape[1] != past_key_values_length + input_shape[1]:
+            raise ValueError(
+                f"The provided attention mask has length {attention_mask.shape[1]}, but its length should be "
+                f"{past_key_values_length + input_shape[1]} (sum of the lengths of current and past inputs)"
+            )
+
         # embed positions
         positions = self.embed_positions(attention_mask, past_key_values_length)
 
@@ -573,7 +578,7 @@ class BioGptModel(BioGptPreTrainedModel):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
@@ -641,6 +646,7 @@ class BioGptModel(BioGptPreTrainedModel):
 )
 class BioGptForCausalLM(BioGptPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["output_projection.weight"]
+    _tied_weights_keys = ["output_projection.weight"]
 
     def __init__(self, config):
         super().__init__(config)

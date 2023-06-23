@@ -31,8 +31,8 @@ jobs:
         steps:
             - checkout
             - run: pip install --upgrade pip
-            - run: pip install GitPython
-            - run: pip install .
+            - run: pip install -U GitPython
+            - run: pip install -U .
             - run: mkdir -p test_preparation
             - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
             - store_artifacts:
@@ -42,6 +42,24 @@ jobs:
                     cp test_list.txt test_preparation/test_list.txt
                 else
                     touch test_preparation/test_list.txt
+                fi
+            - run: |
+                  if [ -f examples_test_list.txt ]; then
+                      mv examples_test_list.txt test_preparation/examples_test_list.txt
+                  else
+                      touch test_preparation/examples_test_list.txt
+                  fi
+            - run: |
+                  if [ -f filtered_test_list_cross_tests.txt ]; then
+                      mv filtered_test_list_cross_tests.txt test_preparation/filtered_test_list_cross_tests.txt
+                  else
+                      touch test_preparation/filtered_test_list_cross_tests.txt
+                  fi
+            - run: |
+                if [ -f doctest_list.txt ]; then
+                    cp doctest_list.txt test_preparation/doctest_list.txt
+                else
+                    touch test_preparation/doctest_list.txt
                 fi
             - run: |
                 if [ -f test_repo_utils.txt ]; then
@@ -56,21 +74,10 @@ jobs:
                 else
                     touch test_preparation/filtered_test_list.txt
                 fi
-            - run: python utils/tests_fetcher.py --filters tests examples | tee examples_tests_fetched_summary.txt
-            - run: |
-                  if [ -f test_list.txt ]; then
-                      mv test_list.txt test_preparation/examples_test_list.txt
-                  else
-                      touch test_preparation/examples_test_list.txt
-                  fi
-            - run: |
-                  if [ -f filtered_test_list_cross_tests.txt ]; then
-                      mv filtered_test_list_cross_tests.txt test_preparation/filtered_test_list_cross_tests.txt
-                  else
-                      touch test_preparation/filtered_test_list_cross_tests.txt
-                  fi
             - store_artifacts:
                   path: test_preparation/test_list.txt
+            - store_artifacts:
+                  path: test_preparation/doctest_list.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation/filtered_test_list.txt
             - store_artifacts:
@@ -98,12 +105,12 @@ jobs:
         steps:
             - checkout
             - run: pip install --upgrade pip
-            - run: pip install GitPython
-            - run: pip install .
+            - run: pip install -U GitPython
+            - run: pip install -U .
             - run: |
                   mkdir test_preparation
                   echo -n "tests" > test_preparation/test_list.txt
-                  echo -n "tests" > test_preparation/examples_test_list.txt
+                  echo -n "all" > test_preparation/examples_test_list.txt
                   echo -n "tests/repo_utils" > test_preparation/test_repo_utils.txt
             - run: |
                   echo -n "tests" > test_list.txt
@@ -131,12 +138,20 @@ jobs:
                   keys:
                       - v0.6-code_quality-{{ checksum "setup.py" }}
                       - v0.6-code-quality
+            - restore_cache:
+                  keys:
+                      - v0.6-code_quality-{{ checksum "setup.py" }}-site-packages
+                      - v0.6-code-quality-site-packages
             - run: pip install --upgrade pip
-            - run: pip install .[all,quality]
+            - run: pip install -U .[all,quality]
             - save_cache:
-                  key: v0.5-code_quality-{{ checksum "setup.py" }}
+                  key: v0.6-code_quality-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
+            - save_cache:
+                  key: v0.6-code_quality-{{ checksum "setup.py" }}-site-packages
+                  paths:
+                      - '~/.pyenv/versions/'
             - run:
                 name: Show installed libraries and their versions
                 command: pip freeze | tee installed.txt
@@ -164,12 +179,20 @@ jobs:
                   keys:
                       - v0.6-repository_consistency-{{ checksum "setup.py" }}
                       - v0.6-repository_consistency
+            - restore_cache:
+                  keys:
+                      - v0.6-repository_consistency-{{ checksum "setup.py" }}-site-packages
+                      - v0.6-repository_consistency-site-packages
             - run: pip install --upgrade pip
-            - run: pip install .[all,quality]
+            - run: pip install -U .[all,quality]
             - save_cache:
-                  key: v0.5-repository_consistency-{{ checksum "setup.py" }}
+                  key: v0.6-repository_consistency-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
+            - save_cache:
+                  key: v0.6-repository_consistency-{{ checksum "setup.py" }}-site-packages
+                  paths:
+                      - '~/.pyenv/versions/'
             - run:
                 name: Show installed libraries and their versions
                 command: pip freeze | tee installed.txt

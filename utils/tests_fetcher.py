@@ -46,6 +46,7 @@ from git import Repo
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
+PATH_TO_EXAMPLES = PATH_TO_REPO / "examples"
 PATH_TO_TRANFORMERS = PATH_TO_REPO / "src/transformers"
 PATH_TO_TESTS = PATH_TO_REPO / "tests"
 
@@ -116,6 +117,26 @@ def clean_code(content):
     return "\n".join(lines_to_keep)
 
 
+def keep_doc_examples_only(content):
+    """
+    Remove code, docstring that is not code example, empty line or comments from `content`.
+    """
+    # Keep doc examples only by splitting on triple "`"
+    splits = content.split("```")
+    # Add leading and trailing "```" so the navigation is easier when compared to the original input `content`
+    content = "```" + "```".join(splits[1::2]) + "```"
+
+    # Remove empty lines and comments
+    lines_to_keep = []
+    for line in content.split("\n"):
+        # remove anything that is after a # sign.
+        line = re.sub("#.*$", "", line)
+        if len(line) == 0 or line.isspace():
+            continue
+        lines_to_keep.append(line)
+    return "\n".join(lines_to_keep)
+
+
 def get_all_tests():
     """
     Return a list of paths to all test folders and files under `tests`. All paths are rooted at `tests`.
@@ -160,6 +181,24 @@ def diff_is_docstring_only(repo, branching_point, filename):
     new_content_clean = clean_code(new_content)
 
     return old_content_clean == new_content_clean
+
+
+def diff_contains_doc_examples(repo, branching_point, filename):
+    """
+    Check if the diff is only in code in a filename.
+    """
+    folder = Path(repo.working_dir)
+    with checkout_commit(repo, branching_point):
+        with open(folder / filename, "r", encoding="utf-8") as f:
+            old_content = f.read()
+
+    with open(folder / filename, "r", encoding="utf-8") as f:
+        new_content = f.read()
+
+    old_content_clean = keep_doc_examples_only(old_content)
+    new_content_clean = keep_doc_examples_only(new_content)
+
+    return old_content_clean != new_content_clean
 
 
 def get_diff(repo, base_commit, commits):
@@ -216,6 +255,71 @@ def get_modified_python_files(diff_with_last_commit=False):
         return get_diff(repo, repo.head.commit, parent_commits)
 
 
+def get_diff_for_doctesting(repo, base_commit, commits):
+    """
+    Get's the diff between one or several commits and the head of the repository where some doc example(s) are changed.
+    """
+    print("\n### DIFF ###\n")
+    code_diff = []
+    for commit in commits:
+        for diff_obj in commit.diff(base_commit):
+            # We always add new python/md files
+            if diff_obj.change_type in ["A"] and (diff_obj.b_path.endswith(".py") or diff_obj.b_path.endswith(".md")):
+                code_diff.append(diff_obj.b_path)
+            # Now for modified files
+            elif (
+                diff_obj.change_type in ["M", "R"]
+                and diff_obj.b_path.endswith(".py")
+                or diff_obj.b_path.endswith(".md")
+            ):
+                # In case of renames, we'll look at the tests using both the old and new name.
+                if diff_obj.a_path != diff_obj.b_path:
+                    code_diff.extend([diff_obj.a_path, diff_obj.b_path])
+                else:
+                    # Otherwise, we check modifications contain some doc example(s).
+                    if diff_contains_doc_examples(repo, commit, diff_obj.b_path):
+                        code_diff.append(diff_obj.a_path)
+                    else:
+                        print(f"Ignoring diff in {diff_obj.b_path} as it doesn't contain any doc example.")
+
+    return code_diff
+
+
+def get_doctest_files(diff_with_last_commit=False):
+    """
+    Return a list of python and mdx files where some doc example(s) in them have been modified between:
+
+    - the current head and the main branch if `diff_with_last_commit=False` (default)
+    - the current head and its parent commit otherwise.
+    """
+    repo = Repo(PATH_TO_REPO)
+
+    test_files_to_run = []  # noqa
+    if not diff_with_last_commit:
+        print(f"main is at {repo.refs.main.commit}")
+        print(f"Current head is at {repo.head.commit}")
+
+        branching_commits = repo.merge_base(repo.refs.main, repo.head)
+        for commit in branching_commits:
+            print(f"Branching commit: {commit}")
+        test_files_to_run = get_diff_for_doctesting(repo, repo.head.commit, branching_commits)
+    else:
+        print(f"main is at {repo.head.commit}")
+        parent_commits = repo.head.commit.parents
+        for commit in parent_commits:
+            print(f"Parent commit: {commit}")
+        test_files_to_run = get_diff_for_doctesting(repo, repo.head.commit, parent_commits)
+
+    with open("utils/documentation_tests.txt") as fp:
+        documentation_tests = set(fp.read().strip().split("\n"))
+    # So far we don't have 100% coverage for doctest. This line will be removed once we achieve 100%.
+    test_files_to_run = [x for x in test_files_to_run if x in documentation_tests]
+    # Make sure we did not end up with a test file that was removed
+    test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
+
+    return test_files_to_run
+
+
 # (:?^|\n) -> Non-catching group for the beginning of the doc or a new line.
 # \s*from\s+(\.+\S+)\s+import\s+([^\n]+) -> Line only contains from .xxx import yyy and we catch .xxx and yyy
 # (?=\n) -> Look-ahead to a new line. We can't just put \n here or using find_all on this re will only catch every
@@ -249,7 +353,9 @@ def extract_imports(module_fname, cache=None):
         content = f.read()
 
     # Filter out all docstrings to not get imports in code examples.
-    splits = content.split('"""')
+    # fmt: off
+    splits = content.split('\"\"\"')
+    # fmt: on
     content = "".join(splits[::2])
 
     module_parts = str(module_fname).split(os.path.sep)
@@ -409,15 +515,43 @@ def print_tree_deps_of(module, all_edges=None):
         print(line[0])
 
 
+def init_test_examples_dependencies():
+    """
+    The test examples do not import from the examples (which are just scripts, not modules) so we need som extra
+    care initializing the dependency map there.
+    """
+    test_example_deps = {}
+    all_examples = []
+    for framework in ["flax", "pytorch", "tensorflow"]:
+        test_files = list((PATH_TO_EXAMPLES / framework).glob("test_*.py"))
+        all_examples.extend(test_files)
+        examples = [
+            f for f in (PATH_TO_EXAMPLES / framework).glob("**/*.py") if f.parent != PATH_TO_EXAMPLES / framework
+        ]
+        all_examples.extend(examples)
+        for test_file in test_files:
+            with open(test_file, "r", encoding="utf-8") as f:
+                content = f.read()
+            test_example_deps[str(test_file.relative_to(PATH_TO_REPO))] = [
+                str(e.relative_to(PATH_TO_REPO)) for e in examples if e.name in content
+            ]
+            test_example_deps[str(test_file.relative_to(PATH_TO_REPO))].append(
+                str(test_file.relative_to(PATH_TO_REPO))
+            )
+    return test_example_deps, all_examples
+
+
 def create_reverse_dependency_map():
     """
     Create the dependency map from module/test filename to the list of modules/tests that depend on it (even
     recursively).
     """
     cache = {}
-    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py")) + list(PATH_TO_TESTS.glob("**/*.py"))
+    example_deps, examples = init_test_examples_dependencies()
+    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py")) + list(PATH_TO_TESTS.glob("**/*.py")) + examples
     all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
     direct_deps = {m: get_module_dependencies(m, cache=cache) for m in all_modules}
+    direct_deps.update(example_deps)
 
     # This recurses the dependencies
     something_changed = True
@@ -454,7 +588,15 @@ def create_module_to_test_map(reverse_map=None, filter_models=False):
     """
     if reverse_map is None:
         reverse_map = create_reverse_dependency_map()
-    test_map = {module: [f for f in deps if f.startswith("tests")] for module, deps in reverse_map.items()}
+
+    def is_test(fname):
+        if fname.startswith("tests"):
+            return True
+        if fname.startswith("examples") and fname.split(os.path.sep)[-1].startswith("test"):
+            return True
+        return False
+
+    test_map = {module: [f for f in deps if is_test(f)] for module, deps in reverse_map.items()}
 
     if not filter_models:
         return test_map
@@ -524,9 +666,7 @@ def create_json_map(test_files_to_run, json_output_file):
         json.dump(test_map, fp, ensure_ascii=False)
 
 
-def infer_tests_to_run(
-    output_file, diff_with_last_commit=False, filters=None, filter_models=True, json_output_file=None
-):
+def infer_tests_to_run(output_file, diff_with_last_commit=False, filter_models=True, json_output_file=None):
     modified_files = get_modified_python_files(diff_with_last_commit=diff_with_last_commit)
     print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
 
@@ -556,23 +696,22 @@ def infer_tests_to_run(
             if f in test_map:
                 test_files_to_run.extend(test_map[f])
         test_files_to_run = sorted(set(test_files_to_run))
+        # Remove repo utils tests
+        test_files_to_run = [f for f in test_files_to_run if not f.split(os.path.sep)[1] == "repo_utils"]
         # Remove SageMaker tests
         test_files_to_run = [f for f in test_files_to_run if not f.split(os.path.sep)[1] == "sagemaker"]
         # Make sure we did not end up with a test file that was removed
         test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
-        if filters is not None:
-            filtered_files = []
-            for _filter in filters:
-                filtered_files.extend([f for f in test_files_to_run if f.startswith(_filter)])
-            test_files_to_run = filtered_files
 
-        repo_utils_launch = any(f.split(os.path.sep)[1] == "repo_utils" for f in modified_files)
+        repo_utils_launch = any(f.split(os.path.sep)[0] == "utils" for f in modified_files)
 
     if repo_utils_launch:
         repo_util_file = Path(output_file).parent / "test_repo_utils.txt"
         with open(repo_util_file, "w", encoding="utf-8") as f:
             f.write("tests/repo_utils")
 
+    examples_tests_to_run = [f for f in test_files_to_run if f.startswith("examples")]
+    test_files_to_run = [f for f in test_files_to_run if not f.startswith("examples")]
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
     if len(test_files_to_run) > 0:
         with open(output_file, "w", encoding="utf-8") as f:
@@ -586,6 +725,20 @@ def infer_tests_to_run(
             test_files_to_run = get_all_tests()
 
         create_json_map(test_files_to_run, json_output_file)
+
+    print(f"\n### EXAMPLES TEST TO RUN ###\n{_print_list(examples_tests_to_run)}")
+    if len(examples_tests_to_run) > 0:
+        example_file = Path(output_file).parent / "examples_test_list.txt"
+        with open(example_file, "w", encoding="utf-8") as f:
+            f.write(" ".join(examples_tests_to_run))
+
+    doctest_list = get_doctest_files()
+
+    print(f"\n### DOCTEST TO RUN ###\n{_print_list(doctest_list)}")
+    if len(doctest_list) > 0:
+        doctest_file = Path(output_file).parent / "doctest_list.txt"
+        with open(doctest_file, "w", encoding="utf-8") as f:
+            f.write(" ".join(doctest_list))
 
 
 def filter_tests(output_file, filters):
@@ -653,13 +806,6 @@ if __name__ == "__main__":
         help="To fetch the tests between the current commit and the last commit",
     )
     parser.add_argument(
-        "--filters",
-        type=str,
-        nargs="*",
-        default=["tests"],
-        help="Only keep the test files matching one of those filters.",
-    )
-    parser.add_argument(
         "--filter_tests",
         action="store_true",
         help="Will filter the pipeline/repo utils tests outside of the generated list of tests.",
@@ -703,7 +849,6 @@ if __name__ == "__main__":
                 infer_tests_to_run(
                     args.output_file,
                     diff_with_last_commit=diff_with_last_commit,
-                    filters=args.filters,
                     json_output_file=args.json_output_file,
                     filter_models=not commit_flags["no_filter"],
                 )
@@ -714,10 +859,10 @@ if __name__ == "__main__":
 
         if commit_flags["test_all"]:
             with open(args.output_file, "w", encoding="utf-8") as f:
-                if args.filters is None:
-                    f.write("./tests/")
-                else:
-                    f.write(" ".join(args.filters))
+                f.write("tests")
+            example_file = Path(args.output_file).parent / "examples_test_list.txt"
+            with open(example_file, "w", encoding="utf-8") as f:
+                f.write("all")
 
             test_files_to_run = get_all_tests()
             create_json_map(test_files_to_run, args.json_output_file)

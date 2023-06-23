@@ -239,8 +239,8 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             "feature-extraction": GPTNeoXModel,
             "question-answering": GPTNeoXForQuestionAnswering,
             "text-classification": GPTNeoXForSequenceClassification,
-            "token-classification": GPTNeoXForTokenClassification,
             "text-generation": GPTNeoXForCausalLM,
+            "token-classification": GPTNeoXForTokenClassification,
             "zero-shot": GPTNeoXForSequenceClassification,
         }
         if is_torch_available()
@@ -253,7 +253,7 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def setUp(self):
         self.model_tester = GPTNeoXModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GPTNeoXConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=GPTNeoXConfig, hidden_size=64, num_attention_heads=8)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -314,9 +314,9 @@ class GPTNeoXLanguageGenerationTest(unittest.TestCase):
             model.to(torch_device)
 
             inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
-            expected_output = (
-                "My favorite food is the chicken and rice.\n\nI love to cook and bake. I love to cook and bake"
-            )
+            # The hub repo. is updated on 2023-04-04, resulting in poor outputs.
+            # See: https://github.com/huggingface/transformers/pull/24193
+            expected_output = "My favorite food is a good old-fashioned, old-fashioned, old-fashioned.\n\nI'm not sure"
 
             output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
             output_str = tokenizer.batch_decode(output_ids)[0]

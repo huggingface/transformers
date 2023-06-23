@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import torch
 
-from ...audio_utils import get_mel_filter_banks
+from ...audio_utils import mel_filter_bank, optimal_fft_length, spectrogram
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
@@ -110,18 +110,18 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
 
         self.sample_size = win_length * sampling_rate // 1000
         self.sample_stride = hop_length * sampling_rate // 1000
-        self.n_fft = 2 ** int(np.ceil(np.log2(self.sample_size)))
+        self.n_fft = optimal_fft_length(self.sample_size)
         self.n_freqs = (self.n_fft // 2) + 1
 
         window = getattr(torch, self.win_function)(window_length=self.sample_size, periodic=True)
         self.window = window.numpy().astype(np.float64)
 
-        self.mel_filters = get_mel_filter_banks(
-            nb_frequency_bins=self.n_freqs,
-            nb_mel_filters=self.num_mel_bins,
-            frequency_min=self.fmin,
-            frequency_max=self.fmax,
-            sample_rate=self.sampling_rate,
+        self.mel_filters = mel_filter_bank(
+            num_frequency_bins=self.n_freqs,
+            num_mel_filters=self.num_mel_bins,
+            min_frequency=self.fmin,
+            max_frequency=self.fmax,
+            sampling_rate=self.sampling_rate,
             norm="slaney",
             mel_scale="slaney",
         )
@@ -160,31 +160,6 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
 
         return normed_input_values
 
-    @staticmethod
-    def _stft(waveform: np.ndarray, fft_length: int, hop_length: int, window: np.ndarray) -> np.ndarray:
-        """
-        Calculates the magnitude spectrogram over one waveform array.
-        """
-        # center pad the waveform
-        padding = [(int(fft_length // 2), int(fft_length // 2))]
-        waveform = np.pad(waveform, padding, mode="reflect")
-        waveform_size = waveform.size
-
-        # promote to float64, since np.fft uses float64 internally
-        waveform = waveform.astype(np.float64)
-
-        num_frames = int(1 + np.floor((waveform_size - fft_length) / hop_length))
-        num_frequency_bins = (fft_length // 2) + 1
-        spectrogram = np.empty((num_frames, num_frequency_bins))
-
-        start = 0
-        for frame_idx in range(num_frames):
-            frame = waveform[start : start + fft_length] * window
-            spectrogram[frame_idx] = np.abs(np.fft.rfft(frame))
-            start += hop_length
-
-        return spectrogram
-
     def _extract_mel_features(
         self,
         one_waveform: np.ndarray,
@@ -192,14 +167,17 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         """
         Extracts log-mel filterbank features for one waveform array (unbatched).
         """
-        if self.n_fft != self.sample_size:
-            raise NotImplementedError(
-                f"Currently the STFT frame size must be a power of two, but got {self.sample_size} for a window length of {self.win_length} and sampling rate of {self.sampling_rate}. Ensure `win_length * sampling_rate // 1000` is divisible by two."
-            )
-
-        stft_out = self._stft(one_waveform, self.n_fft, self.sample_stride, self.window)
-
-        return np.log10(np.maximum(self.mel_floor, np.dot(stft_out, self.mel_filters)))
+        log_mel_spec = spectrogram(
+            one_waveform,
+            window=self.window,
+            frame_length=self.sample_size,
+            hop_length=self.sample_stride,
+            fft_length=self.n_fft,
+            mel_filters=self.mel_filters,
+            mel_floor=self.mel_floor,
+            log_mel="log10",
+        )
+        return log_mel_spec.T
 
     def __call__(
         self,
@@ -223,7 +201,8 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         Args:
             audio (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, *optional*):
                 The sequence or batch of sequences to be processed. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values. This outputs waveform features.
+                values, a list of numpy arrays or a list of list of float values. This outputs waveform features. Must
+                be mono channel audio, not stereo, i.e. single float per timestep.
             audio_target (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, *optional*):
                 The sequence or batch of sequences to be processed as targets. Each sequence can be a numpy array, a
                 list of float values, a list of numpy arrays or a list of list of float values. This outputs log-mel
@@ -329,9 +308,11 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
-        is_batched = bool(
-            isinstance(speech, (list, tuple))
-            and (isinstance(speech[0], np.ndarray) or isinstance(speech[0], (tuple, list)))
+        is_batched_numpy = isinstance(speech, np.ndarray) and len(speech.shape) > 1
+        if is_batched_numpy and len(speech.shape) > 2:
+            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+        is_batched = is_batched_numpy or (
+            isinstance(speech, (list, tuple)) and (isinstance(speech[0], (np.ndarray, tuple, list)))
         )
 
         if is_batched:

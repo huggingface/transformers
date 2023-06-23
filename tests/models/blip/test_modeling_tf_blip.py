@@ -15,6 +15,8 @@
 """ Testing suite for the TensorFlow Blip model. """
 
 
+from __future__ import annotations
+
 import inspect
 import tempfile
 import unittest
@@ -432,6 +434,13 @@ class TFBlipModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
         super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
+    @unittest.skip("Matt: Re-enable this test when we have a proper export function for TF models.")
+    def test_saved_model_creation(self):
+        # This fails because the if return_loss: conditional can return None or a Tensor and TF hates that.
+        # We could fix that by setting the bool to a constant when exporting, but that requires a dedicated export
+        # function that we don't have yet.
+        pass
+
 
 class BlipTextRetrievalModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
@@ -526,17 +535,71 @@ class BlipTextImageModelsModelTester:
         return config, inputs_dict
 
 
+class BlipVQAModelsModelTester:
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+        if text_kwargs is None:
+            text_kwargs = {}
+        if vision_kwargs is None:
+            vision_kwargs = {}
+
+        self.parent = parent
+        self.text_model_tester = TFBlipTextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = TFBlipVisionModelTester(parent, **vision_kwargs)
+        self.is_training = is_training
+
+    def prepare_config_and_inputs(self):
+        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
+        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+
+        config = self.get_config()
+
+        return config, input_ids, attention_mask, pixel_values
+
+    def get_config(self):
+        return BlipConfig.from_text_vision_configs(
+            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+        )
+
+    def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
+        model = TFBlipModel(config)
+        result = model(input_ids, pixel_values, attention_mask, training=False)
+        self.parent.assertEqual(
+            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
+        )
+        self.parent.assertEqual(
+            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, input_ids, attention_mask, pixel_values = config_and_inputs
+        inputs_dict = {
+            "input_ids": input_ids,
+            "decoder_input_ids": input_ids,
+            "labels": input_ids,
+            "attention_mask": attention_mask,
+            "pixel_values": pixel_values,
+        }
+        return config, inputs_dict
+
+
 @require_tf
 @require_vision
-class BlipVQAModelTest(unittest.TestCase):
+class TFBlipVQAModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFBlipForQuestionAnswering,) if is_tf_available() else ()
+    test_head_masking = False
+    test_pruning = False
+    test_resize_embeddings = False
+    test_attention_outputs = False
+    test_onnx = False
 
     def setUp(self):
-        self.model_tester = TFBlipModelTester(self)
+        self.model_tester = BlipVQAModelsModelTester(self)
 
     def _prepare_inputs_for_vqa(self):
         _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         inputs_dict["labels"] = inputs_dict["input_ids"]
+        inputs_dict["decoder_input_ids"] = inputs_dict["input_ids"]
         inputs_dict.pop("return_loss")
         return inputs_dict
 
@@ -557,9 +620,33 @@ class BlipVQAModelTest(unittest.TestCase):
         """
         for model_class in self.all_model_classes:
             model = model_class(self.model_tester.get_config())
-            loss = model(**self._prepare_inputs_for_vqa(), training=True).loss
+            loss = model(**self.model_tester.prepare_config_and_inputs_for_common()[1], training=True).loss
 
             self.assertIsNotNone(loss, "Loss should not be None")
+
+    @unittest.skip(reason="Hidden_states is tested in individual model tests")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Retain_grad is tested in individual model tests")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="BlipModel does not have input/output embeddings")
+    def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(reason="Tested in individual model tests")
+    def test_compile_tf_model(self):
+        pass
+
+    @unittest.skip("Model doesn't have a clean loss output.")
+    def test_keras_fit(self):
+        pass
 
 
 @require_tf
@@ -643,7 +730,7 @@ class TFBlipTextRetrievalModelTest(TFModelTesterMixin, unittest.TestCase):
 
 @require_tf
 class TFBlipTextImageModelTest(TFModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFBlipForConditionalGeneration, TFBlipForQuestionAnswering) if is_tf_available() else ()
+    all_model_classes = (TFBlipForConditionalGeneration,) if is_tf_available() else ()
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False

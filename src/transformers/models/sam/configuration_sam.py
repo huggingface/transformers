@@ -150,10 +150,6 @@ class SamVisionConfig(PretrainedConfig):
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 6144):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of the projection layer in the Transformer encoder.
         output_channels (`int`, *optional*, defaults to 256):
             Dimensionality of the output channels in the Patch Encoder.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -170,14 +166,10 @@ class SamVisionConfig(PretrainedConfig):
             The non-linear activation function (function or string)
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 1e-10):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for multiplying the initializer range.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to query, key, value projections.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
@@ -200,8 +192,6 @@ class SamVisionConfig(PretrainedConfig):
     def __init__(
         self,
         hidden_size=768,
-        intermediate_size=6144,
-        projection_dim=512,
         output_channels=256,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -210,10 +200,8 @@ class SamVisionConfig(PretrainedConfig):
         patch_size=16,
         hidden_act="gelu",
         layer_norm_eps=1e-06,
-        dropout=0.0,
         attention_dropout=0.0,
         initializer_range=1e-10,
-        initializer_factor=1.0,
         qkv_bias=True,
         mlp_ratio=4.0,
         use_abs_pos=True,
@@ -227,8 +215,6 @@ class SamVisionConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
         self.output_channels = output_channels
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -237,10 +223,8 @@ class SamVisionConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
-        self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
         self.qkv_bias = qkv_bias
         self.mlp_ratio = mlp_ratio
         self.use_abs_pos = use_abs_pos

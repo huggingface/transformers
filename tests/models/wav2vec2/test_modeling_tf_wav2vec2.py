@@ -14,7 +14,10 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import copy
+import gc
 import glob
 import inspect
 import math
@@ -319,7 +322,7 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
         (TFWav2Vec2Model, TFWav2Vec2ForCTC, TFWav2Vec2ForSequenceClassification) if is_tf_available() else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": TFWav2Vec2Model, "audio-classification": TFWav2Vec2ForSequenceClassification}
+        {"audio-classification": TFWav2Vec2ForSequenceClassification, "feature-extraction": TFWav2Vec2Model}
         if is_tf_available()
         else {}
     )
@@ -707,6 +710,11 @@ class TFWav2Vec2UtilsTest(unittest.TestCase):
 @require_tf
 @slow
 class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
