@@ -155,7 +155,9 @@ class MusicgenDecoderTester:
 @require_torch
 class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MusicgenModel, MusicgenForCausalLM) if is_torch_available() else ()
-    greedy_sample_model_classes = (MusicgenForCausalLM,) if is_torch_available() else ()  # we don't want to run all the generation tests, only a specific subset
+    greedy_sample_model_classes = (
+        (MusicgenForCausalLM,) if is_torch_available() else ()
+    )  # we don't want to run all the generation tests, only a specific subset
     pipeline_model_mapping = (
         {
             "text-generation": MusicgenForCausalLM,
@@ -173,6 +175,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    # override since we have to compute the input embeddings over codebooks
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -197,6 +200,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             with torch.no_grad():
                 model(**inputs)[0]
 
+    # override since we have embeddings / LM heads over multiple codebooks
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -247,6 +251,8 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         logits_processor = LogitsProcessorList()
         return process_kwargs, logits_processor
 
+    # override since we don't expect the outputs of `.generate` and `.greedy_search` to be the same, since we perform
+    # additional post-processing in the former
     def test_greedy_generate_dict_outputs(self):
         for model_class in self.greedy_sample_model_classes:
             # disable cache
@@ -269,6 +275,8 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
             self.assertNotIn(config.pad_token_id, output_generate)
 
+    # override since we don't expect the outputs of `.generate` and `.greedy_search` to be the same, since we perform
+    # additional post-processing in the former
     def test_greedy_generate_dict_outputs_use_cache(self):
         for model_class in self.greedy_sample_model_classes:
             # enable cache
@@ -291,6 +299,8 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             self.assertIsInstance(output_greedy, GreedySearchDecoderOnlyOutput)
             self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
 
+    # override since we don't expect the outputs of `.generate` and `.sample` to be the same, since we perform
+    # additional post-processing in the former
     def test_sample_generate(self):
         for model_class in self.greedy_sample_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
@@ -320,6 +330,8 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             self.assertIsInstance(output_sample, torch.Tensor)
             self.assertIsInstance(output_generate, torch.Tensor)
 
+    # override since we don't expect the outputs of `.generate` and `.sample` to be the same, since we perform
+    # additional post-processing in the former
     def test_sample_generate_dict_output(self):
         for model_class in self.greedy_sample_model_classes:
             # disable cache
@@ -654,7 +666,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_tied_weights_keys(self):
         pass
 
-    # override since changing `output_hidden_states` / `output_attentions`from the top-level model config won't work
+    # override since changing `output_hidden_states` / `output_attentions` from the top-level model config won't work
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.text_encoder.output_hidden_states = True
@@ -767,6 +779,16 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                             [0.0, 1.0],
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
+
+    # override since we have embeddings / LM heads over multiple codebooks
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), torch.nn.Embedding)
+            lm_heads = model.get_output_embeddings()
+            self.assertTrue(lm_heads is None or isinstance(lm_heads[0], torch.nn.Linear))
 
     def _get_input_ids_and_config(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1050,12 +1072,3 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             output_ids_generate = model.generate(do_sample=False, max_length=max_length, remove_invalid_values=True)
             self.assertIsNotNone(output_ids_generate)
-
-    def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), torch.nn.Embedding)
-            lm_heads = model.get_output_embeddings()
-            self.assertTrue(lm_heads is None or isinstance(lm_heads[0], torch.nn.Linear))
