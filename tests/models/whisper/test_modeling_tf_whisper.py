@@ -779,7 +779,7 @@ def _test_large_batched_generation(in_queue, out_queue, timeout):
         generated_ids = np.concatenate([generated_ids_1, generated_ids_2])
 
         # fmt: off
-        EXPECTED_LOGITS = tf.convert_to_tensor(
+        EXPECTED_IDS = tf.convert_to_tensor(
             [
                 [50258, 50259, 50358, 50363, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404],
                 [50258, 50259, 50358, 50363, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50257],
@@ -789,7 +789,7 @@ def _test_large_batched_generation(in_queue, out_queue, timeout):
         )
         # fmt: on
 
-        unittest.TestCase().assertTrue(np.allclose(generated_ids, EXPECTED_LOGITS))
+        unittest.TestCase().assertEqual(generated_ids, EXPECTED_IDS)
 
         # fmt: off
         EXPECTED_TRANSCRIPT = [
