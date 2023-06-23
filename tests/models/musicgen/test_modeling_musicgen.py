@@ -15,16 +15,28 @@
 """ Testing suite for the PyTorch Musicgen model. """
 import copy
 import inspect
+import math
 import unittest
 
-from transformers import EncodecConfig, MusicgenConfig, MusicgenDecoderConfig, PretrainedConfig, T5Config
+import numpy as np
+
+from transformers import (
+    EncodecConfig,
+    MusicgenConfig,
+    MusicgenDecoderConfig,
+    MusicgenProcessor,
+    PretrainedConfig,
+    T5Config,
+    set_seed,
+)
 from transformers.generation import (
     GreedySearchDecoderOnlyOutput,
     GreedySearchEncoderDecoderOutput,
     SampleDecoderOnlyOutput,
     SampleEncoderDecoderOutput,
 )
-from transformers.testing_utils import is_torch_available, require_torch, torch_device
+from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
+from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -1072,3 +1084,264 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             output_ids_generate = model.generate(do_sample=False, max_length=max_length, remove_invalid_values=True)
             self.assertIsNotNone(output_ids_generate)
+
+    def test_generate_fp16(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
+
+        for model_class in self.greedy_sample_model_classes:
+            model = model_class(config).eval().to(torch_device)
+            if torch_device == "cuda":
+                model.half()
+            model.generate(**input_dict, max_new_tokens=10)
+            model.generate(**input_dict, do_sample=True, max_new_tokens=10)
+
+
+def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):
+    """Produces a series of 'bip bip' sounds at a given frequency."""
+    timesteps = np.arange(int(duration * sample_rate)) / sample_rate
+    wav = np.cos(2 * math.pi * 440 * timesteps)
+    time_period = (timesteps % (2 * bip_duration)) / (2 * bip_duration)
+    envelope = time_period >= 0.5
+    return wav * envelope
+
+
+def place_dict_on_device(dict_to_place, device):
+    for key in dict_to_place:
+        if dict_to_place[key] is not None and isinstance(dict_to_place[key], torch.Tensor):
+            dict_to_place[key] = dict_to_place[key].to(device)
+    return dict_to_place
+
+
+@require_torch
+class MusicgenIntegrationTests(unittest.TestCase):
+    @cached_property
+    def model(self):
+        # TODO(SG): swap to facebook checkpoints when merged
+        return MusicgenForConditionalGeneration.from_pretrained("sanchit-gandhi/small").to(torch_device)
+
+    @cached_property
+    def processor(self):
+        return MusicgenProcessor.from_pretrained("sanchit-gandhi/small")
+
+    @slow
+    def test_logits_text_prompt(self):
+        model = self.model
+        processor = self.processor
+
+        inputs = processor(text=["80s music", "Club techno"], padding=True, return_tensors="pt")
+
+        # prepare the encoder inputs
+        input_ids = inputs.input_ids.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+
+        # prepare the decoder inputs
+        pad_token_id = model.generation_config.pad_token_id
+        decoder_input_ids = (
+            torch.ones((input_ids.shape[0] * model.decoder.num_codebooks, 1), dtype=torch.long).to(torch_device)
+            * pad_token_id
+        )
+
+        with torch.no_grad():
+            logits = model(
+                input_ids,
+                attention_mask=attention_mask,
+                decoder_input_ids=decoder_input_ids,
+            ).logits
+
+        # fmt: off
+        EXPECTED_LOGITS = torch.tensor(
+            [
+                -0.9708, -3.0149, -4.6415, -1.4754, -0.2786, -2.3523, -2.6049, -6.7467,
+                -1.0206, -3.2984, -3.3968, -1.5108, -1.5786, -3.1493, -1.1503, -0.0545,
+            ]
+        )
+        # fmt: on
+
+        self.assertTrue(logits.shape == (*decoder_input_ids.shape, model.decoder.config.vocab_size))
+        self.assertTrue(torch.allclose(logits[0, 0, :16].cpu(), EXPECTED_LOGITS, atol=1e-4))
+
+    @slow
+    def test_logits_text_audio_prompt(self):
+        model = self.model
+        processor = self.processor
+
+        audio = [get_bip_bip(duration=0.5), get_bip_bip(duration=1.0)]
+        text = ["80s music", "Club techno"]
+
+        inputs = processor(audio=audio, text=text, padding=True, return_tensors="pt")
+
+        # prepare the text encoder inputs
+        input_ids = inputs.input_ids.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+
+        # prepare the audio encoder inputs
+        input_values = inputs.input_values.to(torch_device)
+        padding_mask = inputs.padding_mask.to(torch_device)
+
+        with torch.no_grad():
+            logits = model(
+                input_ids,
+                attention_mask=attention_mask,
+                input_values=input_values,
+                padding_mask=padding_mask,
+            ).logits
+
+        # fmt: off
+        EXPECTED_LOGITS = torch.tensor(
+            [
+                0.1841, -2.9324, -0.7898, 0.1857, 0.4971, -2.8685, -1.6525, -1.6541,
+                2.7757, -2.5942, -3.0959, -1.0120, -1.0147, -0.4605, -0.8885, 0.6820,
+            ]
+        )
+        # fmt: on
+
+        self.assertTrue(logits.shape == (8, 50, 2048))
+        self.assertTrue(torch.allclose(logits[0, -1, :16].cpu(), EXPECTED_LOGITS, atol=1e-4))
+
+    @slow
+    def test_generate_unconditional_greedy(self):
+        model = self.model
+
+        # only generate 1 sample with greedy - since it's deterministic all elements of the batch will be the same
+        unconditional_inputs = model.get_unconditional_inputs(num_samples=1, max_new_tokens=5)
+        unconditional_inputs = place_dict_on_device(unconditional_inputs, device=torch_device)
+
+        output_values = model.generate(**unconditional_inputs)
+
+        # fmt: off
+        EXPECTED_VALUES = torch.tensor(
+            [
+                0.0056, 0.0064, 0.0063, 0.0054, 0.0042, 0.0033, 0.0024, 0.0015,
+                0.0015, 0.0010, 0.0004, -0.0012, -0.0036, -0.0055, -0.0067, -0.0071,
+            ]
+        )
+        # fmt: on
+
+        self.assertTrue(output_values.shape == (1, 1, 3200))
+        self.assertTrue(torch.allclose(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, atol=1e-4))
+
+    @slow
+    def test_generate_unconditional_sampling(self):
+        model = self.model
+
+        # for stochastic sampling we can generate multiple outputs
+        unconditional_inputs = model.get_unconditional_inputs(num_samples=2, max_new_tokens=10)
+        unconditional_inputs = place_dict_on_device(unconditional_inputs, device=torch_device)
+
+        set_seed(0)
+        output_values = model.generate(**unconditional_inputs, do_sample=True)
+
+        # fmt: off
+        EXPECTED_VALUES = torch.tensor(
+            [
+                0.0765, 0.0758, 0.0749, 0.0759, 0.0759, 0.0771, 0.0775, 0.0760,
+                0.0762, 0.0765, 0.0767, 0.0760, 0.0738, 0.0714, 0.0713, 0.0730,
+            ]
+        )
+        # fmt: on
+
+        self.assertTrue(output_values.shape == (2, 1, 4480))
+        self.assertTrue(torch.allclose(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, atol=1e-4))
+
+    @slow
+    def test_generate_text_prompt_greedy(self):
+        model = self.model
+        processor = self.processor
+
+        inputs = processor(text=["80s music", "Club techno"], padding=True, return_tensors="pt")
+
+        # prepare the encoder inputs
+        input_ids = inputs.input_ids.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+
+        output_values = model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=10)
+
+        # fmt: off
+        EXPECTED_VALUES = torch.tensor(
+            [
+                -1.1998e-04, -2.2302e-04, 4.6296e-04, 1.0524e-03, 2.4827e-04,
+                -4.0288e-05, -1.2468e-04, 4.9846e-05, 7.1485e-04, 4.4197e-04,
+            ]
+        )
+        # fmt: on
+
+        self.assertTrue(output_values.shape == (2, 1, 4480))
+        self.assertTrue(torch.allclose(output_values[0, 0, :10].cpu(), EXPECTED_VALUES, atol=1e-4))
+
+    @slow
+    def test_generate_text_prompt_greedy_with_classifier_free_guidance(self):
+        model = self.model
+        processor = self.processor
+
+        inputs = processor(text=["80s music", "Club techno"], padding=True, return_tensors="pt")
+
+        # prepare the encoder inputs
+        input_ids = inputs.input_ids.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+
+        output_values = model.generate(input_ids, attention_mask=attention_mask, guidance_scale=3, max_new_tokens=10)
+
+        # fmt: off
+        EXPECTED_VALUES = torch.tensor(
+            [
+                0.0283, 0.0246, 0.0650, 0.0640, 0.0599, 0.0711, 0.0420, 0.0112,
+                0.0511, 0.0746, 0.1363, 0.1213, 0.0185, -0.0578, -0.0908, 0.0443,
+            ]
+        )
+        # fmt: on
+
+        self.assertTrue(output_values.shape == (2, 1, 4480))
+        self.assertTrue(torch.allclose(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, atol=1e-4))
+
+    @slow
+    def test_generate_text_prompt_sampling(self):
+        model = self.model
+        processor = self.processor
+
+        inputs = processor(text=["80s music", "Club techno"], padding=True, return_tensors="pt")
+
+        # prepare the encoder inputs
+        input_ids = inputs.input_ids.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+
+        set_seed(0)
+        output_values = model.generate(input_ids, attention_mask=attention_mask, do_sample=True, max_new_tokens=10)
+
+        # fmt: off
+        EXPECTED_VALUES = torch.tensor(
+            [
+                -0.0047, -0.0094, -0.0028, -0.0018, -0.0057, -0.0007, -0.0104, -0.0211,
+                -0.0097, -0.0150, -0.0066, -0.0004, -0.0201, -0.0325, -0.0326, -0.0098,
+            ]
+        )
+        # fmt: on
+
+        self.assertTrue(output_values.shape == (2, 1, 4480))
+        self.assertTrue(torch.allclose(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, atol=1e-4))
+
+    @slow
+    def test_generate_text_audio_prompt(self):
+        model = self.model
+        processor = self.processor
+
+        audio = [get_bip_bip(duration=0.5), get_bip_bip(duration=1.0)]
+        text = ["80s music", "Club techno"]
+
+        inputs = processor(audio=audio, text=text, padding=True, return_tensors="pt")
+        inputs = place_dict_on_device(inputs, device=torch_device)
+
+        output_values = model.generate(**inputs, max_new_tokens=10)
+
+        # fmt: off
+        EXPECTED_VALUES = torch.tensor(
+            [
+                -0.0036, -0.0130, -0.0261, -0.0384, -0.0557, -0.0718, -0.0680, -0.0632,
+                -0.0529, -0.0403, -0.0289, -0.0198, -0.0136, -0.0101, -0.0095, -0.0040,
+            ]
+        )
+        # fmt: on
+
+        self.assertTrue(
+            output_values.shape == (2, 1, 36480)
+        )  # input values take shape 32000 and we generate from there
+        self.assertTrue(torch.allclose(output_values[0, 0, -16:].cpu(), EXPECTED_VALUES, atol=1e-4))

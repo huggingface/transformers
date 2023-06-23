@@ -183,7 +183,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pytorch_dump_folder",
-        default="/home/sanchit/convert-musicgen",
+        required=True,
+        default=None,
         type=str,
         help="Path to the output PyTorch model directory.",
     )

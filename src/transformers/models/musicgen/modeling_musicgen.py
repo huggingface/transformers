@@ -1897,7 +1897,14 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 padding_mask=padding_mask,
                 **kwargs_audio_encoder,
             )
-            decoder_input_ids = audio_encoder_outputs[0]
+            audio_codes = audio_encoder_outputs.audio_codes
+            frames, bsz, codebooks, seq_len = audio_codes.shape
+            if frames != 1:
+                raise ValueError(
+                    f"Expected 1 frame in the audio code outputs, got {frames} frames. Ensure chunking is "
+                    "disabled by setting `chunk_length=None` in the audio encoder."
+                )
+            decoder_input_ids = audio_codes[0, ...].reshape(bsz * self.decoder.num_codebooks, seq_len)
 
         # Decode
         decoder_outputs = self.decoder(
@@ -2115,8 +2122,10 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         frames, bsz, codebooks, seq_len = audio_codes.shape
 
         if frames != 1:
-            raise ValueError(f"Expected 1 frame in the audio code outputs, got {frames} frames. Ensure chunking is "
-                             "disabled by setting `chunk_length=None`.")
+            raise ValueError(
+                f"Expected 1 frame in the audio code outputs, got {frames} frames. Ensure chunking is "
+                "disabled by setting `chunk_length=None` in the audio encoder."
+            )
 
         decoder_input_ids = audio_codes[0, ...].reshape(bsz * self.decoder.num_codebooks, seq_len)
 
