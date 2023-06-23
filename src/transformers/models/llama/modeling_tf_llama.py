@@ -452,7 +452,7 @@ class TFLlamaModel(TFLlamaPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = tf.keras.layers.Embedding(config.vocab_size, config.hidden_size, name="embed_tokens")
+        self.embed_tokens = tf.keras.layers.Embedding(self.vocab_size, config.hidden_size, name="embed_tokens")
         # self.layers is a protected TF property, so we can't use that name
         self.layers_ = [TFLlamaDecoderLayer(config, name=f"layers_._{i}") for i in range(config.num_hidden_layers)]
         self.norm = TFLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="norm")
@@ -531,7 +531,7 @@ class TFLlamaModel(TFLlamaPreTrainedModel):
             position_ids = tf.cast(position_ids, dtype=tf.int32)
 
         if inputs_embeds is None:
-            check_embeddings_within_bounds(input_ids, self.config.vocab_size)
+            check_embeddings_within_bounds(input_ids, self.vocab_size)
             inputs_embeds = self.embed_tokens(input_ids)
         # embed positions
         if attention_mask is None:
