@@ -106,19 +106,20 @@ class BarkProcessor(ProcessorMixin):
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             voice_preset (`str`, `Dict[np.ndarray]`):
-                The voice preset, i.e the speaker embeddings. It can either be directly a dictionnary of embeddings for each submodel of `Bark`.
-                Or it can be the file name with or without the ".npz" extension located in 'repo_id/subfolder', defined during initialization.
+                The voice preset, i.e the speaker embeddings. It can either be directly a dictionnary of embeddings for
+                each submodel of `Bark`. Or it can be the file name with or without the ".npz" extension located in
+                'repo_id/subfolder', defined during initialization.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                
+
                 Note that voice_preset are always returned as a dictionnary of `np.ndarray` for now.
 
         Returns:
-            Tuple([`BatchEncoding`], Dict[np.npdarray]): 
-            A tuple composed of a [`BatchEncoding`], i.e the output of the `tokenizer` and a `Dict[np.ndarray], i.e the voice preset.
+            Tuple([`BatchEncoding`], Dict[np.npdarray]): A tuple composed of a [`BatchEncoding`], i.e the output of the
+            `tokenizer` and a `Dict[np.ndarray], i.e the voice preset.
         """
         if voice_preset is None or isinstance(voice_preset, dict):
             pass

@@ -148,7 +148,7 @@ class BarkModuleTester:
 
         input_ids = inputs_dict["input_ids"]
         attention_mask = inputs_dict["attention_mask"]
-        head_mask = inputs_dict["head_mask"]
+        inputs_dict["head_mask"]
 
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
@@ -316,7 +316,7 @@ class BarkFineAcousticsModuleTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     # no model_parallel for now
     test_model_parallel = False
-    
+
     # torchscript disabled for now because forward with an int
     test_torchscript = False
 
