@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MBART model. """
+""" Testing suite for the PyTorch Musicgen model. """
 import copy
 import inspect
 import unittest
@@ -40,7 +40,7 @@ if is_torch_available():
         LogitsProcessorList,
         MusicgenForCausalLM,
         MusicgenForConditionalGeneration,
-        MusicgenModel,  # TODO(SG): swap for automodel
+        MusicgenModel,
     )
 
 
