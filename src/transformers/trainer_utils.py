@@ -667,6 +667,7 @@ def find_executable_batch_size(
         except (RuntimeError, OverflowError, ValueError):
             # Cut the batch size in half and try again
             batch_size //= 2
+            break
 
 
 
