@@ -1034,6 +1034,8 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
 
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+
     def __init__(self, config: Pop2PianoConfig):
         super().__init__(config)
         self.config = config

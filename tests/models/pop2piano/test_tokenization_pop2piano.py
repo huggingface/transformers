@@ -19,6 +19,7 @@ import numpy as np
 from datasets import load_dataset
 
 from transformers.feature_extraction_utils import BatchFeature
+from transformers.generation import GreedySearchEncoderDecoderOutput
 from transformers.testing_utils import (
     is_pretty_midi_available,
     is_torch_available,
@@ -26,8 +27,6 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
-
-from ...generation.test_utils import GreedySearchEncoderDecoderOutput
 
 
 if is_torch_available():

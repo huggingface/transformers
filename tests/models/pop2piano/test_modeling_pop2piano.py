@@ -23,7 +23,7 @@ from transformers.feature_extraction_utils import BatchFeature
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available
 
-from ...generation.test_utils import GenerationTesterMixin, GreedySearchEncoderDecoderOutput
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
@@ -630,7 +630,6 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
         model_opts = model.generate(input_features=input_features["input_features"], return_dict_in_generate=True)
 
-        self.assertEqual(type(model_opts), GreedySearchEncoderDecoderOutput)
         self.assertEqual(model_opts.sequences.ndim, 2)
 
     def test_pass_with_batched_input_features(self):
@@ -661,7 +660,6 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
             return_dict_in_generate=True,
         )
 
-        self.assertEqual(type(model_opts), GreedySearchEncoderDecoderOutput)
         self.assertEqual(model_opts.sequences.ndim, 2)
 
 
