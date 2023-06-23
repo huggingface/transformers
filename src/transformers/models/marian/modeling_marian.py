@@ -17,7 +17,6 @@
 
 import copy
 import math
-import random
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -778,7 +777,7 @@ class MarianEncoder(MarianPreTrainedModel):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None)
             else:
@@ -1024,7 +1023,7 @@ class MarianDecoder(MarianPreTrainedModel):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
