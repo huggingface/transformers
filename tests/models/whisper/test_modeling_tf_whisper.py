@@ -634,6 +634,48 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             generated_ids = output_tokens[:, input_features.shape[-1] :]
             self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
 
+    def test_generate_with_prompt_ids_and_task_and_language(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = TFWhisperForConditionalGeneration(config)
+        input_features = input_dict["input_features"]
+        prompt_ids = np.arange(5)
+        language = "<|de|>"
+        task = "translate"
+        lang_id = 6
+        task_id = 7
+        model.generation_config.__setattr__("lang_to_id", {language: lang_id})
+        model.generation_config.__setattr__("task_to_id", {task: task_id})
+
+        output = model.generate(input_features, max_new_tokens=5, task=task, language=language, prompt_ids=prompt_ids)
+
+        expected_output_start = [
+            *prompt_ids.tolist(),
+            model.generation_config.decoder_start_token_id,
+            lang_id,
+            task_id,
+        ]
+        for row in output.tolist():
+            self.assertListEqual(row[: len(expected_output_start)], expected_output_start)
+
+    def test_generate_with_prompt_ids_and_forced_decoder_ids(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = TFWhisperForConditionalGeneration(config)
+        input_features = input_dict["input_features"]
+        prompt_ids = np.asarray(range(5))
+        forced_decoder_ids = [(1, 6), (2, 7), (3, 8)]
+
+        output = model.generate(
+            input_features, max_new_tokens=5, forced_decoder_ids=forced_decoder_ids, prompt_ids=prompt_ids
+        )
+
+        expected_output_start = [
+            *prompt_ids.tolist(),
+            model.generation_config.decoder_start_token_id,
+            *[token for _rank, token in forced_decoder_ids],
+        ]
+        for row in output.tolist():
+            self.assertListEqual(row[: len(expected_output_start)], expected_output_start)
+
 
 def _load_datasamples(num_samples):
     ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
