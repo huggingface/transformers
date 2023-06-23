@@ -56,6 +56,7 @@ if TYPE_CHECKING:
         BarkFineAcousticsConfig,
         BarkSemanticConfig,
     )
+    from .processing_bark import BarkProcessor
 
     try:
         if not is_torch_available():
