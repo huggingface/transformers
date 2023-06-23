@@ -19,7 +19,6 @@ import numpy as np
 from datasets import load_dataset
 
 from transformers.feature_extraction_utils import BatchFeature
-from transformers.generation import GreedySearchEncoderDecoderOutput
 from transformers.testing_utils import (
     is_pretty_midi_available,
     is_torch_available,
@@ -46,28 +45,24 @@ if requirements:
 class Pop2PianoTokenizerTest(unittest.TestCase):
     def test_call(self):
         tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
-        model_output = GreedySearchEncoderDecoderOutput(sequences=torch.ones([120, 96]))
+        model_output = torch.ones([120, 96])
         input_features = BatchFeature(
             {"beatsteps": torch.ones([1, 955]), "extrapolated_beatstep": torch.ones([1, 1000])}
         )
 
-        output = tokenizer(token_ids=model_output.sequences, feature_extractor_output=input_features)[
-            "pretty_midi_objects"
-        ][0]
+        output = tokenizer(token_ids=model_output, feature_extractor_output=input_features)["pretty_midi_objects"][0]
         self.assertTrue(isinstance(output, pretty_midi.pretty_midi.PrettyMIDI))
 
     def test_call_batched(self):
         tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
-        model_output = GreedySearchEncoderDecoderOutput(
-            sequences=torch.concatenate(
-                [
-                    torch.randint(size=[120, 96], low=0, high=70, dtype=torch.long),
-                    torch.zeros(size=[1, 96], dtype=torch.long),
-                    torch.randint(size=[50, 96], low=0, high=40, dtype=torch.long),
-                    torch.zeros(size=[1, 96], dtype=torch.long),
-                ],
-                axis=0,
-            )
+        model_output = torch.concatenate(
+            [
+                torch.randint(size=[120, 96], low=0, high=70, dtype=torch.long),
+                torch.zeros(size=[1, 96], dtype=torch.long),
+                torch.randint(size=[50, 96], low=0, high=40, dtype=torch.long),
+                torch.zeros(size=[1, 96], dtype=torch.long),
+            ],
+            axis=0,
         )
         input_features = BatchFeature(
             {
@@ -87,9 +82,7 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
             }
         )
 
-        output = tokenizer(token_ids=model_output.sequences, feature_extractor_output=input_features)[
-            "pretty_midi_objects"
-        ]
+        output = tokenizer(token_ids=model_output, feature_extractor_output=input_features)["pretty_midi_objects"]
         # check length
         self.assertTrue(len(output) == 2)
         # check object type
