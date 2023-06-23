@@ -1331,9 +1331,6 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         inputs: Optional[tf.Tensor] = None,
         generation_config=None,
         logits_processor=None,
-        stopping_criteria=None,
-        prefix_allowed_tokens_fn=None,
-        synced_gpus=False,
         return_timestamps=None,
         task=None,
         language=None,
@@ -1462,9 +1459,6 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
             inputs,
             generation_config,
             logits_processor,
-            stopping_criteria,
-            prefix_allowed_tokens_fn,
-            synced_gpus,
             **kwargs,
         )
 
