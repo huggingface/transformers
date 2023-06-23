@@ -2112,8 +2112,12 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         audio_encoder_outputs = encoder.encode(**encoder_kwargs)
 
         audio_codes = audio_encoder_outputs.audio_codes
-        # TODO(SG): hacks to make the output ids compatible with encodec - add to encodec modelling code
-        channels, bsz, codebooks, seq_len = audio_codes.shape
+        frames, bsz, codebooks, seq_len = audio_codes.shape
+
+        if frames != 1:
+            raise ValueError(f"Expected 1 frame in the audio code outputs, got {frames} frames. Ensure chunking is "
+                             "disabled by setting `chunk_length=None`.")
+
         decoder_input_ids = audio_codes[0, ...].reshape(bsz * self.decoder.num_codebooks, seq_len)
 
         model_kwargs["decoder_input_ids"] = decoder_input_ids
@@ -2408,12 +2412,13 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             batch_size, self.decoder.num_codebooks, -1
         )
 
+        # append the frame dimension back to the audio codes
+        output_ids = output_ids[None, ...]
+
         audio_scales = model_kwargs.get("audio_scales")
         if audio_scales is None:
             audio_scales = [None] * batch_size
 
-        # TODO(SG): hacks to make the output ids compatible with encodec - add to encodec modelling code
-        output_ids = output_ids.unsqueeze(0)
         output_values = self.audio_encoder.decode(
             output_ids,
             audio_scales=audio_scales,
