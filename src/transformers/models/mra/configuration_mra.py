@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Mra model configuration"""
+""" MRA model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -27,7 +27,7 @@ MRA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class MraConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MraModel`]. It is used to instantiate an Mra
+    This is the configuration class to store the configuration of a [`MraModel`]. It is used to instantiate an MRA
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Mra
     [uw-madison/mra-base-512-4](https://huggingface.co/uw-madison/mra-base-512-4) architecture.

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Mra checkpoints from the original repository. URL: https://github.com/mlpen/Mra"""
+"""Convert MRA checkpoints from the original repository. URL: https://github.com/mlpen/Mra"""
 
 import argparse
 

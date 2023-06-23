@@ -530,7 +530,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mobilevit", "MobileViT"),
         ("mobilevitv2", "MobileViTV2"),
         ("mpnet", "MPNet"),
-        ("mra", "Mra"),
+        ("mra", "MRA"),
         ("mt5", "MT5"),
         ("mvp", "MVP"),
         ("nat", "NAT"),
