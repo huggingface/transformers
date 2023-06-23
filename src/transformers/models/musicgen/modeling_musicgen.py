@@ -1838,6 +1838,28 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         Returns:
 
         Examples:
+        ```python
+        >>> from transformers import AutoProcessor, MusicgenForConditionalGeneration
+        >>> import torch
+
+        >>> processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
+        >>> model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+
+        >>> inputs = processor(
+        ...     text=["80s pop track with bassy drums and synth", "90s rock song with loud guitars and heavy drums"],
+        ...     padding=True,
+        ...     return_tensors="pt",
+        ... )
+
+        >>> pad_token_id = model.generation_config.pad_token_id
+        >>> decoder_input_ids = (
+        ...     torch.ones((inputs.input_ids.shape[0] * model.decoder.num_codebooks, 1), dtype=torch.long)
+        ...     * pad_token_id
+        ... )
+
+        >>> logits = model(**inputs, decoder_input_ids=decoder_input_ids).logits
+        >>> logits.shape  # (bsz * num_codebooks, tgt_len, vocab_size)
+        torch.Size([8, 1, 2048])
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
