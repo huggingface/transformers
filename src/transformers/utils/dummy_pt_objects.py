@@ -524,6 +524,9 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = None
 MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = None
 
 
+MODEL_FOR_TEXT_ENCODING_MAPPING = None
+
+
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 
 
@@ -720,6 +723,13 @@ class AutoModelForSpeechSeq2Seq(metaclass=DummyObject):
 
 
 class AutoModelForTableQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForTextEncoding(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

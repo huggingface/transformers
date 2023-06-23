@@ -437,6 +437,28 @@ TF_MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
         ("sam", "TFSamModel"),
     ]
 )
+TF_MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
+    [
+        ("albert", "TFAlbertModel"),
+        ("bert", "TFBertModel"),
+        ("convbert", "TFConvBertModel"),
+        ("deberta", "TFDebertaModel"),
+        ("deberta-v2", "TFDebertaV2Model"),
+        ("distilbert", "TFDistilBertModel"),
+        ("electra", "TFElectraModel"),
+        ("flaubert", "TFFlaubertModel"),
+        ("longformer", "TFLongformerModel"),
+        ("mobilebert", "TFMobileBertModel"),
+        ("mt5", "TFMT5EncoderModel"),
+        ("rembert", "TFRemBertModel"),
+        ("roberta", "TFRobertaModel"),
+        ("roberta-prelayernorm", "TFRobertaPreLayerNormModel"),
+        ("roformer", "TFRoFormerModel"),
+        ("t5", "TFT5EncoderModel"),
+        ("xlm", "TFXLMModel"),
+        ("xlm-roberta", "TFXLMRobertaModel"),
+    ]
+)
 
 TF_MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_MAPPING_NAMES)
 TF_MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES)
@@ -491,9 +513,15 @@ TF_MODEL_FOR_MASK_GENERATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_MASK_GENERATION_MAPPING_NAMES
 )
 
+TF_MODEL_FOR_TEXT_ENCODING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES)
+
 
 class TFAutoModelForMaskGeneration(_BaseAutoModelClass):
     _model_mapping = TF_MODEL_FOR_MASK_GENERATION_MAPPING
+
+
+class TFAutoModelForTextEncoding(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_TEXT_ENCODING_MAPPING
 
 
 class TFAutoModel(_BaseAutoModelClass):
