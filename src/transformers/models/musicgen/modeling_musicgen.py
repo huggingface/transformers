@@ -67,11 +67,11 @@ _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 class MusicgenUnconditionalInput(ModelOutput):
     """
     Args:
+        last_hidden_state  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the text encoder model.
         attention_mask (`torch.LongTensor`)  of shape `(batch_size, sequence_length)`, *optional*):
             Encoder attention mask to avoid performing attention on padding token indices. Mask values selected in `[0,
             1]`: 1 for tokens that are **not masked**, 0 for tokens that are **masked**.
-        encoder_outputs (`BaseModelOutput`, *optional*):
-            Outputs of the text encoder model, wrapped as a `BaseModelOutput`.
         max_new_tokens (`int`, *optional*):
             Number of new tokens to generate.
         guidance_scale (`float`, *optional*):
@@ -79,8 +79,8 @@ class MusicgenUnconditionalInput(ModelOutput):
             from the prompts) and the unconditional logits (predicted without prompts).
     """
 
-    attention_mask: torch.FloatTensor = None
-    encoder_outputs: BaseModelOutput = None
+    last_hidden_state: torch.FloatTensor = None
+    attention_mask: torch.LongTensor = None
     max_new_tokens: int = None
     guidance_scale: float = None
 
@@ -2260,7 +2260,9 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 inputs_tensor, generation_config.pad_token_id, generation_config.eos_token_id
             )
 
-        if "encoder_outputs" not in model_kwargs:
+        if "last_hidden_state" in model_kwargs:
+            model_kwargs["encoder_outputs"] = BaseModelOutput(last_hidden_state=model_kwargs.pop("last_hidden_state"))
+        elif "encoder_outputs" not in model_kwargs:
             # encoder_outputs are created and added to `model_kwargs`
             model_kwargs = self._prepare_text_encoder_kwargs_for_generation(
                 inputs_tensor,
@@ -2460,13 +2462,12 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         last_hidden_state = torch.zeros(
             (num_samples, 1, self.config.text_encoder.hidden_size), device=self.device, dtype=self.dtype
         )
-        encoder_outputs = BaseModelOutput(last_hidden_state=last_hidden_state)
 
         attention_mask = torch.zeros((num_samples, 1), device=self.device, dtype=torch.long)
 
         return MusicgenUnconditionalInput(
+            last_hidden_state=last_hidden_state,
             attention_mask=attention_mask,
-            encoder_outputs=encoder_outputs,
             max_new_tokens=max_new_tokens,
             guidance_scale=None,
         )
