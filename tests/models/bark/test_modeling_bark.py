@@ -314,8 +314,11 @@ class BarkFineAcousticsModuleTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False
-    test_model_parallel = False
     # no model_parallel for now
+    test_model_parallel = False
+    
+    # torchscript disabled for now because forward with an int
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = BarkFineAcousticsModuleTester(
