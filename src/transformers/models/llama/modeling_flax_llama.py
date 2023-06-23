@@ -115,7 +115,6 @@ LLAMA_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-
 def create_sinusoidal_positions(num_pos, dim):
     inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2) / dim))
     sinusoid_inp = np.einsum("i , j -> i j", np.arange(num_pos), inv_freq).astype("float32")
@@ -141,6 +140,7 @@ def apply_rotary_pos_emb(tensor, sincos):
     cos_pos = cos_pos[:, :, None, :].repeat(2, 3)
     return (tensor * cos_pos) + (rotate_every_two(tensor) * sin_pos)
 
+
 class FlaxLlamaRMSNorm(nn.Module):
     eps: float = 1e-6
 
@@ -160,19 +160,16 @@ class FlaxLlamaRMSNorm(nn.Module):
 class FlaxLlamaAttention(nn.Module):
     config: LlamaConfig
     dtype: jnp.dtype = jnp.float32
+    causal: bool = True
+    is_cross_attention: bool = False
 
     def setup(self):
         config = self.config
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
-        self.rotary_dim = config.rotary_dim
 
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size} and "
-                f"`num_heads`: {self.num_heads})."
-            )
+        self.rotary_dim = self.head_dim
 
         dense = partial(
             nn.Dense,
@@ -181,7 +178,9 @@ class FlaxLlamaAttention(nn.Module):
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
-        self.q_proj, self.k_proj, self.v_proj, self.o_proj = [dense() for _ in range(4)]
+
+        self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
+        self.o_proj = dense()
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
 
@@ -226,22 +225,40 @@ class FlaxLlamaAttention(nn.Module):
             attention_mask = combine_masks(pad_mask, attention_mask)
         return key, value, attention_mask
 
-    # TODO: update this call to add rotary and any other changes
     def __call__(
         self,
         hidden_states,
-        attention_mask=None,
+        attention_mask,
+        position_ids,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
     ):
-        query = self.q_proj(hidden_states) * jnp.sqrt(self.head_dim).astype(self.dtype)
+        query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
 
         query = self._split_heads(query)
         key = self._split_heads(key)
         value = self._split_heads(value)
+
+        sincos = jnp.take(self.embed_positions, position_ids, axis=0)
+        sincos = jnp.split(sincos, 2, axis=-1)
+        if self.rotary_dim is not None:
+            k_rot = key[:, :, :, : self.rotary_dim]
+            k_pass = key[:, :, :, self.rotary_dim :]
+
+            q_rot = query[:, :, :, : self.rotary_dim]
+            q_pass = query[:, :, :, self.rotary_dim :]
+
+            k_rot = apply_rotary_pos_emb(k_rot, sincos)
+            q_rot = apply_rotary_pos_emb(q_rot, sincos)
+
+            key = jnp.concatenate([k_rot, k_pass], axis=-1)
+            query = jnp.concatenate([q_rot, q_pass], axis=-1)
+        else:
+            key = apply_rotary_pos_emb(key, sincos)
+            query = apply_rotary_pos_emb(query, sincos)
 
         query_length, key_length = query.shape[1], key.shape[1]
 
@@ -260,10 +277,6 @@ class FlaxLlamaAttention(nn.Module):
         attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
         attention_mask = combine_masks(attention_mask, causal_mask)
 
-        dropout_rng = None
-        if not deterministic and self.config.attention_dropout > 0.0:
-            dropout_rng = self.make_rng("dropout")
-
         # During fast autoregressive decoding, we feed one position at a time,
         # and cache the keys and values step by step.
         if self.has_variable("cache", "cached_key") or init_cache:
@@ -281,8 +294,6 @@ class FlaxLlamaAttention(nn.Module):
             query,
             key,
             bias=attention_bias,
-            dropout_rng=dropout_rng,
-            dropout_rate=self.config.attention_dropout,
             deterministic=deterministic,
             dtype=self.dtype,
             precision=None,
@@ -290,8 +301,7 @@ class FlaxLlamaAttention(nn.Module):
 
         attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value)
         attn_output = self._merge_heads(attn_output)
-        attn_output = self.out_proj(attn_output)
-        attn_output = self.resid_dropout(attn_output, deterministic=deterministic)
+        attn_output = self.o_proj(attn_output)
 
         outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
         return outputs
@@ -711,37 +721,47 @@ if __name__ == "__main__":
     import flax
     from flax.traverse_util import flatten_dict
     from .configuration_llama import LlamaConfig
-    from .modeling_llama import LlamaRMSNorm
+    from .modeling_llama import LlamaAttention, _make_causal_mask
     import torch
 
     key = jax.random.PRNGKey(0)
     config = LlamaConfig()
 
-    model = FlaxLlamaRMSNorm(eps=1e-6)
-    pt_model = LlamaRMSNorm(config.hidden_size, eps=1e-6)
+    model = FlaxLlamaAttention(config)
+    pt_model = LlamaAttention(config)
 
     key, subkey = jax.random.split(key)
-    x = jax.random.normal(subkey, (4, 128, config.hidden_size)) * 1.0
+    x = jax.random.normal(subkey, (4, 128, config.hidden_size)) * 0.1
+    mask = jnp.ones((4, 128), dtype=bool)
+    position_ids = jnp.arange(128)[jnp.newaxis, :].repeat(4, axis=0)
 
     key, model_key = jax.random.split(key)
-    params = model.init(model_key, x)
+    params = model.init(model_key, x, mask, position_ids)
 
-    y = model.apply(params, x)
+    y, = model.apply(params, x, mask, position_ids)
 
     params = flatten_dict(params['params'], sep='.')
+    pt_state = pt_model.state_dict()
     pt_model.load_state_dict({
-        'weight': torch.from_numpy(np.asarray(params['weight'])),
+        'q_proj.weight': torch.from_numpy(np.asarray(params['q_proj.kernel'])).T,
+        'k_proj.weight': torch.from_numpy(np.asarray(params['k_proj.kernel'])).T,
+        'v_proj.weight': torch.from_numpy(np.asarray(params['v_proj.kernel'])).T,
+        'o_proj.weight': torch.from_numpy(np.asarray(params['o_proj.kernel'])).T,
+        'rotary_emb.inv_freq': pt_state['rotary_emb.inv_freq']
     })
     x = torch.tensor(np.asarray(x))
-    pt_y = pt_model(x)
+    # import ipdb; ipdb.set_trace()
+    pt_y = pt_model(x, _make_causal_mask((4, 128), torch.float32, device='cpu'), torch.from_numpy(np.asarray(position_ids)))[0]
 
     y = np.asarray(y)
     pt_y = pt_y.detach().numpy()
 
     try:
-        np.testing.assert_allclose(y, pt_y, atol=1e-5, rtol=1e-5)
+        np.testing.assert_allclose(y, pt_y, atol=1e-3, rtol=1e-3)
     except AssertionError as e:
+        print(e)
         import ipdb; ipdb.set_trace()
+
 
     print(config)
     print("done")
