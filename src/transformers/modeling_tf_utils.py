@@ -35,7 +35,7 @@ import tensorflow as tf
 from huggingface_hub import Repository, list_repo_files
 from keras import backend as K
 from packaging.version import parse
-from tensorflow.python.util import keras_deps
+from tensorflow.python.util.keras_deps import get_call_context_function
 
 from . import DataCollatorWithPadding, DefaultDataCollator
 from .activations_tf import get_tf_activation
@@ -1127,7 +1127,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         return "tf"
 
     def build(self, input_shape=None):
-        call_context = keras_deps._KERAS_CALL_CONTEXT_FUNCTION
+        call_context = get_call_context_function()
         if self.built or call_context().in_call:
             self.built = True
         else:
