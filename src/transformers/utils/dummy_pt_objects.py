@@ -819,6 +819,13 @@ class AutoformerPreTrainedModel(metaclass=DummyObject):
 BARK_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class BarkCausalModule(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class BarkCoarseAcousticsModule(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -834,6 +841,13 @@ class BarkFineAcousticsModule(metaclass=DummyObject):
 
 
 class BarkModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BarkModulePreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

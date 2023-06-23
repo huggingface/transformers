@@ -44,6 +44,8 @@ else:
         "BarkCoarseAcousticsModule",
         "BarkModel",
         "BarkPreTrainedModel",
+        "BarkCausalModule",
+        "BarkModulePreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -63,9 +65,11 @@ if TYPE_CHECKING:
     else:
         from .modeling_bark import (
             BARK_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BarkCausalModule,
             BarkCoarseAcousticsModule,
             BarkFineAcousticsModule,
             BarkModel,
+            BarkModulePreTrainedModel,
             BarkPreTrainedModel,
             BarkSemanticModule,
         )

@@ -1130,9 +1130,11 @@ else:
     _import_structure["models.bark"].extend(
         [
             "BARK_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BarkCausalModule",
             "BarkCoarseAcousticsModule",
             "BarkFineAcousticsModule",
             "BarkModel",
+            "BarkModulePreTrainedModel",
             "BarkPreTrainedModel",
             "BarkSemanticModule",
         ]
@@ -4945,9 +4947,11 @@ if TYPE_CHECKING:
         )
         from .models.bark import (
             BARK_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BarkCausalModule,
             BarkCoarseAcousticsModule,
             BarkFineAcousticsModule,
             BarkModel,
+            BarkModulePreTrainedModel,
             BarkPreTrainedModel,
             BarkSemanticModule,
         )
