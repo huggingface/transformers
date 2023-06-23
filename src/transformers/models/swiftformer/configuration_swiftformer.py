@@ -90,6 +90,7 @@ class SwiftFormerConfig(PretrainedConfig):
 
     def __init__(
         self,
+        image_size=224,
         num_channels=3,
         depths=[3, 3, 6, 4],
         embed_dims=[48, 56, 112, 220],
@@ -106,6 +107,7 @@ class SwiftFormerConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.image_size = image_size
         self.num_channels = num_channels
         self.depths = depths
         self.embed_dims = embed_dims

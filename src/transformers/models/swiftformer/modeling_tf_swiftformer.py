@@ -496,8 +496,7 @@ class TFSwiftFormerPreTrainedModel(TFPreTrainedModel):
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
-            # FIXME: In the vit these values come from the config except the batch size, what should I put here?
-            shape=(5, self.config.num_channels, 224, 224),
+            shape=(5, self.config.num_channels, self.config.image_size, self.config.image_size),
             dtype=tf.float32,
         )
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
