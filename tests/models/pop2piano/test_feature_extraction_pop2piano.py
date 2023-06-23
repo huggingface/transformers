@@ -144,7 +144,7 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         input_speech, sampling_rate = [x["array"] for x in speech_samples][0], [
             x["sampling_rate"] for x in speech_samples
         ][0]
-        feaure_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
+        feaure_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
         input_features = feaure_extractor(
             input_speech, sampling_rate=sampling_rate, return_tensors="pt"
         ).input_features

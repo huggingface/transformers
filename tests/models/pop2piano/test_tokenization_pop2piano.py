@@ -46,7 +46,7 @@ if requirements:
 @require_pretty_midi
 class Pop2PianoTokenizerTest(unittest.TestCase):
     def test_call(self):
-        tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
+        tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
         model_output = GreedySearchEncoderDecoderOutput(sequences=torch.ones([120, 96]))
         input_features = BatchFeature(
             {"beatsteps": torch.ones([1, 955]), "extrapolated_beatstep": torch.ones([1, 1000])}
@@ -58,7 +58,7 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         self.assertTrue(isinstance(output, pretty_midi.pretty_midi.PrettyMIDI))
 
     def test_call_batched(self):
-        tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
+        tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
         model_output = GreedySearchEncoderDecoderOutput(
             sequences=torch.concatenate(
                 [
@@ -100,10 +100,10 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
     # This is the test for a real music from K-Pop genre.
     @slow
     def test_real_music(self):
-        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+        model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
         model.eval()
-        feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
-        tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
+        feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
+        tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
         ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
 
         output_fe = feature_extractor(ds["audio"][0]["array"], sampling_rate=ds["audio"][0]["sampling_rate"])

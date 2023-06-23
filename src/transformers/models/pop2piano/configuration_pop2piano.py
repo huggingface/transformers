@@ -22,7 +22,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "susnato/pop2piano_dev": "https://huggingface.co/susnato/pop2piano_dev/blob/main/config.json"  # For now
+    "sweetcocoa/pop2piano": "https://huggingface.co/sweetcocoa/pop2piano/blob/main/config.json"
 }
 
 

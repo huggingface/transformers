@@ -627,7 +627,7 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
                 "extrapolated_beatstep": torch.randint(size=(1, 900), low=0, high=100).type(torch.float32),
             }
         )
-        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+        model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
         model_opts = model.generate(input_features=input_features["input_features"], return_dict_in_generate=True)
 
         self.assertEqual(type(model_opts), GreedySearchEncoderDecoderOutput)
@@ -654,7 +654,7 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
                 "attention_mask_extrapolated_beatstep": torch.ones((5, 900)).type(torch.int32),
             }
         )
-        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+        model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
         model_opts = model.generate(
             input_features=input_features["input_features"],
             attention_mask=input_features["attention_mask"],
@@ -670,7 +670,7 @@ class Pop2PianoModelIntegrationTests(unittest.TestCase):
     @slow
     def test_mel_conditioner_integration(self):
         composer = "composer1"
-        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+        model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
         input_embeds = torch.ones([10, 100, 512])
 
         composer_value = model.generation_config.composer_to_feature_token[composer]
@@ -691,7 +691,7 @@ class Pop2PianoModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_full_model_integration(self):
-        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+        model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
         model.eval()
         input_features = BatchFeature({"input_features": torch.ones([75, 66, 512])})
         outputs = model.generate(

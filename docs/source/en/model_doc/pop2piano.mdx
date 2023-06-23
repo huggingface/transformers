@@ -51,10 +51,10 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 >>> from datasets import load_dataset
 >>> from transformers import Pop2PianoForConditionalGeneration, Pop2PianoTokenizer, Pop2PianoFeatureExtractor
 
->>> model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+>>> model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
 >>> model.eval()
->>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
->>> tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
+>>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
+>>> tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
 >>> ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
 
 >>> feature_extractor_output = feature_extractor(
@@ -74,10 +74,10 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 >>> from transformers import Pop2PianoFeatureExtractor, Pop2PianoForConditionalGeneration, Pop2PianoTokenizer
 
 >>> audio, sr = librosa.load("<your_audio_file_here>", sr=44100)  # feel free to change the sr to a suitable value.
->>> model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+>>> model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
 >>> model.eval()
->>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
->>> tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
+>>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
+>>> tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
 
 >>> feature_extractor_output = feature_extractor(audio=audio, sampling_rate=sr)
 >>> model_output = model.generate(input_features=feature_extractor_output["input_features"], composer="composer1")
@@ -99,10 +99,10 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 >>> audio2, sr2 = librosa.load(
 ...     "<your_second_audio_file_here>", sr=44100
 ... )  # feel free to change the sr to a suitable value.
->>> model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+>>> model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
 >>> model.eval()
->>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
->>> tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
+>>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
+>>> tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
 
 >>> feature_extractor_output = feature_extractor(audio=[audio1, audio2], sampling_rate=[sr1, sr2])
 >>> # Since we now generating in batch(2 audios) we must pass the attention_mask
