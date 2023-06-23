@@ -1500,10 +1500,9 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         super().__init__(config)
 
         if text_encoder is None:
-            # TODO(SG): Swap this for an auto model after https://github.com/huggingface/transformers/pull/24305 is merged
-            from ...models.t5.modeling_t5 import T5EncoderModel
+            from ..auto.modeling_auto import AutoModelForTextEncoding
 
-            text_encoder = T5EncoderModel(config.text_encoder)
+            text_encoder = AutoModelForTextEncoding(config.text_encoder)
 
         if audio_encoder is None:
             from ..auto.modeling_auto import AutoModel
