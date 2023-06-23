@@ -98,29 +98,27 @@ class BarkProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s). This method forwards the `text` and `kwargs`
         arguments to the AutoTokenizer's [`~AutoTokenizer.__call__`] to encode the text. The method also proposes a
         voice preset which is a dictionary of arrays that conditions `Bark`'s output. `kwargs` arguments are forwarded
-        to the tokenizer and to `cached_file` if `voice_preset` ... TODO
+        to the tokenizer and to `cached_file` method if `voice_preset` is not None.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
-
+            voice_preset (`str`, `Dict[np.ndarray]`):
+                The voice preset, i.e the speaker embeddings. It can either be directly a dictionnary of embeddings for each submodel of `Bark`.
+                Or it can be the file name with or without the ".npz" extension located in 'repo_id/subfolder', defined during initialization.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
+                
+                Note that voice_preset are always returned as a dictionnary of `np.ndarray` for now.
 
         Returns:
-            Tuple... [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+            Tuple([`BatchEncoding`], Dict[np.npdarray]): 
+            A tuple composed of a [`BatchEncoding`], i.e the output of the `tokenizer` and a `Dict[np.ndarray], i.e the voice preset.
         """
         if voice_preset is None or isinstance(voice_preset, dict):
             pass
