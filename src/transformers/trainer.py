@@ -2322,7 +2322,7 @@ class Trainer:
                     torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
         elif self.args.should_save and not self.is_deepspeed_enabled:
             # deepspeed.save_checkpoint above saves model/optim/sched
-            if self.fsdp:
+            if self.fsdp and not self.is_fsdp_enabled:
                 torch.save(full_osd, os.path.join(output_dir, OPTIMIZER_NAME))
             else:
                 torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
