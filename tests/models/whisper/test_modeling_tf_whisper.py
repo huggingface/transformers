@@ -654,7 +654,7 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             lang_id,
             task_id,
         ]
-        for row in output.tolist():
+        for row in output.numpy().tolist():
             self.assertListEqual(row[: len(expected_output_start)], expected_output_start)
 
     def test_generate_with_prompt_ids_and_forced_decoder_ids(self):
@@ -673,7 +673,7 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             model.generation_config.decoder_start_token_id,
             *[token for _rank, token in forced_decoder_ids],
         ]
-        for row in output.tolist():
+        for row in output.numpy().tolist():
             self.assertListEqual(row[: len(expected_output_start)], expected_output_start)
 
 
