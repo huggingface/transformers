@@ -1119,6 +1119,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     )
         return dummies
 
+    @classmethod
     @property
     def framework(self) -> str:
         """

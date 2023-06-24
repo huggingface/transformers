@@ -241,6 +241,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         """
         return cls(config, **kwargs)
 
+    @classmethod
     @property
     def framework(self) -> str:
         """
