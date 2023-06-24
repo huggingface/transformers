@@ -286,6 +286,8 @@ class GenerationConfig(PushToHubMixin):
 
         # The remaining attributes do not parametrize `.generate()`, but are informative and/or used by the the hub
         # interface.
+        # TODO (joao): remove `self._from_model_config` and associated code in v4.32, to finalize the transition
+        # from being able to parameterize generation through the model config
         self._from_model_config = kwargs.pop("_from_model_config", False)
         self._commit_hash = kwargs.pop("_commit_hash", None)
         self.transformers_version = kwargs.pop("transformers_version", __version__)

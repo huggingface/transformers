@@ -744,7 +744,7 @@ class TFGenerationMixin:
                 if new_generation_config != self.generation_config:
                     warnings.warn(
                         "You have modified the pretrained model configuration to control generation. This is a"
-                        " deprecated strategy to control generation and will be removed soon, in a future version."
+                        " deprecated strategy to control generation and will be removed soon, in v4.32."
                         " Please use a generation configuration file (see"
                         " https://huggingface.co/docs/transformers/main_classes/text_generation )"
                     )
