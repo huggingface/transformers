@@ -17,6 +17,7 @@
 import unittest
 
 import numpy as np
+from parameterized import parameterized
 
 from transformers import is_flax_available
 from transformers.testing_utils import require_flax
