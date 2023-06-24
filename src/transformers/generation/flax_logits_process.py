@@ -268,6 +268,42 @@ class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
         return scores
 
 
+class FlaxMinTokensLengthLogitsProcessor(FlaxLogitsProcessor):
+    r"""
+    [`FlaxLogitsProcessor`] enforcing a min-length of new tokens by setting EOS (End-Of-Sequence) token probability to 0.
+
+    Args:
+        prompt_length_to_skip (`int`):
+            The input tokens length.
+        min_new_tokens (`int`):
+            The minimum *new* tokens length below which the score of `eos_token_id` is set to `-float("Inf")`.
+        eos_token_id (`int`):
+            The id of the *end-of-sequence* token.
+    """
+
+    def __init__(self, prompt_length_to_skip: int, min_new_tokens: int, eos_token_id: int):
+        for arg_name, arg_value in [
+            ("prompt_length_to_skip", prompt_length_to_skip),
+            ("min_new_tokens", min_new_tokens),
+        ]:
+            if not isinstance(arg_value, int) or arg_value < 0:
+                raise ValueError(f"`{arg_name}` has to be a positive integer, but is {arg_value}")
+
+        if not isinstance(eos_token_id, int) or eos_token_id < 0:
+            raise ValueError(f"`eos_token_id` has to be a positive integer, but is {eos_token_id}")
+
+        self.prompt_length_to_skip = prompt_length_to_skip
+        self.min_new_tokens = min_new_tokens
+        self.eos_token_id = eos_token_id
+
+    def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:
+        # create boolean flag to decide if min new tokens penalty should be applied
+        apply_penalty = 1 - jnp.clip(cur_len - self.prompt_length_to_skip - self.min_new_tokens, 0, 1)
+        scores = jnp.where(apply_penalty, scores.at[:, self.eos_token_id].set(-float("inf")), scores)
+
+        return scores
+
+
 class FlaxSuppressTokensAtBeginLogitsProcessor(FlaxLogitsProcessor):
     r"""
     [`FlaxLogitsProcessor`] supressing a list of tokens as soon as the `generate` function starts generating using
