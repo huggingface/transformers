@@ -40,7 +40,7 @@ from .flax_logits_process import (
     FlaxForceTokensLogitsProcessor,
     FlaxLogitsProcessorList,
     FlaxMinLengthLogitsProcessor,
-	FlaxMinTokensLengthLogitsProcessor,
+    FlaxMinNewTokensLengthLogitsProcessor,
     FlaxSuppressTokensAtBeginLogitsProcessor,
     FlaxSuppressTokensLogitsProcessor,
     FlaxTemperatureLogitsWarper,
@@ -512,7 +512,7 @@ class FlaxGenerationMixin:
             and generation_config.min_new_tokens > 0
         ):
             processors.append(
-                FlaxMinTokensLengthLogitsProcessor(input_ids_seq_length, generation_config.min_new_tokens, generation_config.eos_token_id)
+                FlaxMinNewTokensLengthLogitsProcessor(input_ids_seq_length, generation_config.min_new_tokens, generation_config.eos_token_id)
             )
         if generation_config.forced_bos_token_id is not None:
             processors.append(FlaxForcedBOSTokenLogitsProcessor(generation_config.forced_bos_token_id))

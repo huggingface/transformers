@@ -51,6 +51,13 @@ class FlaxMinLengthLogitsProcessor(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+class FlaxMinNewTokensLengthLogitsProcessor(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxTemperatureLogitsWarper(metaclass=DummyObject):
     _backends = ["flax"]
 

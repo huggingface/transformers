@@ -33,6 +33,7 @@ if is_flax_available():
         FlaxForcedEOSTokenLogitsProcessor,
         FlaxLogitsProcessorList,
         FlaxMinLengthLogitsProcessor,
+        FlaxMinTokensLengthLogitsProcessor,
         FlaxTemperatureLogitsWarper,
         FlaxTopKLogitsWarper,
         FlaxTopPLogitsWarper,
@@ -153,6 +154,73 @@ class LogitsProcessorTest(unittest.TestCase):
         cur_len = 15
         scores_before_min_length = min_dist_processor(input_ids, scores, cur_len=cur_len)
         self.assertFalse(jnp.isinf(scores_before_min_length).any())
+
+
+    @parameterized.expand([(0,), ([0, 18],)])
+    def test_new_min_length_dist_processor(self, eos_token_id: Union[int, List[int]]):
+        vocab_size = 20
+        batch_size = 4
+
+        # check that first input is skipped (min new length applying)
+        input_ids = ids_tensor((batch_size, 5), vocab_size=20)
+        new_min_dist_processor = FlaxMinNewTokensLengthLogitsProcessor(
+            prompt_length_to_skip=input_ids.shape[-1], min_new_tokens=3, eos_token_id=eos_token_id
+        )
+
+        expected_eos_scores_before_min_length = batch_size * [-float("inf")]
+        if isinstance(eos_token_id, list):
+            expected_eos_scores_before_min_length *= len(eos_token_id)
+
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores_before_min_length = min_dist_processor(input_ids, scores, cur_len=cur_len)
+        self.assertListEqual(
+            scores_before_min_length[:, eos_token_id].flatten().tolist(), expected_eos_scores_before_min_length
+        )
+
+        # check that, for skipping, now prompt length is 5, after that we expect first 5 tokens will be skipped
+        self.assertTrue(new_min_dist_processor.prompt_length_to_skip == 5)
+
+        # check that min length is applied at length 2
+        #input_ids = ids_tensor((batch_size, 2), vocab_size=20)
+        cur_len = 2
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores_before_min_length = min_dist_processor(input_ids, scores, cur_len=cur_len)
+        self.assertListEqual(
+            scores_before_min_length[:, eos_token_id].flatten().tolist(), expected_eos_scores_before_min_length
+        )
+
+        # check that min new length is applied at length 6 (because it has only 1 new token)
+        #input_ids = ids_tensor((batch_size, 6), vocab_size=20)
+        cur_len = 6
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores_before_min_length = min_dist_processor(input_ids, scores, cur_len=cur_len)
+        self.assertListEqual(
+            scores_before_min_length[:, eos_token_id].flatten().tolist(), expected_eos_scores_before_min_length
+        )
+
+        # check that min new length is applied at length 7 (because it has only 2 new tokens)
+        #input_ids = ids_tensor((batch_size, 7), vocab_size=20)
+        cur_len = 7
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores_before_min_length = min_dist_processor(input_ids, scores, cur_len=cur_len)
+        self.assertListEqual(
+            scores_before_min_length[:, eos_token_id].flatten().tolist(), expected_eos_scores_before_min_length
+        )
+
+        # check that min new length is not applied anymore at length 8
+        #input_ids = ids_tensor((batch_size, 8), vocab_size=20)
+        cur_len = 8
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores_before_min_length = min_dist_processor(input_ids, scores, cur_len=cur_len)
+        self.assertFalse(jnp.isinf(scores_before_min_length).any())
+
+        # check that min new length is not applied anymore at length 15
+        #input_ids = ids_tensor((batch_size, 15), vocab_size=20)
+        cur_len = 15
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores_before_min_length = min_dist_processor(input_ids, scores, cur_len=cur_len)
+        self.assertFalse(jnp.isinf(scores_before_min_length).any())
+
 
     def test_forced_bos_token_logits_processor(self):
         vocab_size = 20

@@ -268,7 +268,7 @@ class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
         return scores
 
 
-class FlaxMinTokensLengthLogitsProcessor(FlaxLogitsProcessor):
+class FlaxMinNewTokensLengthLogitsProcessor(FlaxLogitsProcessor):
     r"""
     [`FlaxLogitsProcessor`] enforcing a min-length of new tokens by setting EOS (End-Of-Sequence) token probability to 0.
 
