@@ -347,34 +347,21 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         super().__init__(**kwargs)
         self._added_tokens_encoder = {}
         self._added_tokens_decoder = {}
-        # after super is initialized, we have access to all the special tokens (class attributes)
-        # let's add them
-        # added_tokens = 0
-        # for tok in self.all_special_tokens_extended:
-        #     if self._convert_token_to_id(self.unk_token) == self._convert_token_to_id(tok.content) and tok.content != self.unk_token:
-        #         self._added_tokens_encoder[tok.content] =  len(self) + added_tokens 
-        #         self._added_tokens_decoder [len(self) + added_tokens ] = tok
-        #         added_tokens += 1
-        #     else:
-        #         self._added_tokens_encoder[tok.content] = self._convert_token_to_id(tok.content)
-        #         self._added_tokens_decoder [self._convert_token_to_id(tok.content) ] = tok
-        # # Initialized the parsing trie
-        # self._create_trie()
         self._add_tokens(self.all_special_tokens_extended, special_tokens = True)
         self._decode_use_source_tokenizer = False
 
     @property
     def is_fast(self) -> bool:
         return False
-    
+
     @property
     def added_tokens_encoder(self):
         return self._added_tokens_encoder
-    
+
     @property
     def added_tokens_decoder(self):
         return self._added_tokens_decoder
-    
+
     @property
     def vocab_size(self) -> int:
         """
@@ -431,23 +418,27 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
             if isinstance(token, str):
                 token = AddedToken(token)
-                
             if (
                 token.content != self.unk_token
                 and self.convert_tokens_to_ids(token.content) == self.convert_tokens_to_ids(self.unk_token)
             ):
-                new_idx = len(self.get_vocab()) + 1 
+                new_idx = len(self.get_vocab()) + 1
                 if not special_tokens and not token.special and hasattr(self, "do_lower_case") and self.do_lower_case:
                         token.content = token.content.lower()
                 self._added_tokens_encoder[token.content] =  new_idx
                 self._added_tokens_decoder[new_idx] = token
-            elif special_tokens or token.special and token.content not in  self.additional_special_tokens:
-                # token has to be special now
-                token.special = True
-                self._added_tokens_decoder.update({self._convert_token_to_id(token.content):token})
-            else: 
-                self._added_tokens_encoder[token.content] = self._convert_token_to_id(token.content)
-                self._added_tokens_decoder.update({self._convert_token_to_id(token.content):token})
+            # elif special_tokens or token.special and token.content not in self.additional_special_tokens:
+            #     # token has to be special now
+            #     token.special = True
+            #     self._added_tokens_decoder.update({self._convert_token_to_id(token.content):token})
+            #     self._added_tokens_encoder[token.content] = self._convert_token_to_id(token.content)
+            elif self._convert_token_to_id(token.content) is not None:
+                    self._added_tokens_encoder[token.content] = self._convert_token_to_id(token.content)
+                    self._added_tokens_decoder.update({self._convert_token_to_id(token.content):token})
+            else:
+                new_idx = len(self.get_vocab()) + 1
+                self._added_tokens_encoder[token.content] =  new_idx
+                self._added_tokens_decoder[new_idx] = token
             added_tokens += 1
             if self.verbose:
                 logger.info(f"Adding {token} to the vocabulary")
