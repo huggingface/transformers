@@ -251,12 +251,7 @@ def load_pytorch_state_dict_in_tf2_model(
     """Load a pytorch state_dict in a TF 2.0 model. pt_state_dict can be either an actual dict or a lazy-loading
     safetensors archive created with the safe_open() function."""
     import tensorflow as tf
-    from packaging.version import parse
-
-    if parse(tf.__version__) >= parse("2.11.0"):
-        from keras import backend as K
-    else:
-        from tensorflow.python.keras import backend as K
+    from keras import backend as K
 
     if tf_inputs is None:
         tf_inputs = tf_model.dummy_inputs
