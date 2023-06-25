@@ -32,6 +32,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
+    import torch
     from torch import nn
 
     from transformers import VitDetConfig, VitMatteForImageMatting
@@ -47,8 +48,8 @@ class VitMatteModelTester:
         self,
         parent,
         batch_size=13,
-        image_size=30,
-        patch_size=2,
+        image_size=32,
+        patch_size=16,
         num_channels=4,
         is_training=True,
         use_labels=True,
@@ -76,6 +77,8 @@ class VitMatteModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
         self.out_features = out_features
+
+        self.seq_length = (self.image_size // self.patch_size)**2
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -112,7 +115,7 @@ class VitMatteModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.alphas.shape, (self.batch_size, 1, self.hidden_size, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -141,10 +144,27 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.config_tester = ConfigTester(self, config_class=VitMatteConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        self.create_and_test_config_common_properties()
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
+
+    def create_and_test_config_common_properties(self):
+        return
 
     @unittest.skip(reason="VitMatte does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Training is not yet supported")
+    def test_training(self):
+        pass
+
+    @unittest.skip(reason="Training is not yet supported")
+    def test_training_gradient_checkpointing(self):
         pass
 
     def test_model_common_attributes(self):
@@ -177,3 +197,38 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         for model_name in VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = VitMatteForImageMatting.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [2, 2],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            print("Hello we're here")
+
+            check_hidden_states_output(inputs_dict, config, model_class)

@@ -114,11 +114,7 @@ class VitMatteConvStream(nn.Module):
     Simple ConvStream containing a series of basic conv3x3 layers to extract detail features.
     """
 
-    def __init__(
-        self,
-        in_channels=4,
-        out_channels=[48, 96, 192],
-    ):
+    def __init__(self, in_channels=4, out_channels=[48, 96, 192]):
         super().__init__()
         self.convs = nn.ModuleList()
 
@@ -130,12 +126,13 @@ class VitMatteConvStream(nn.Module):
             out_chan_ = self.conv_chans[i + 1]
             self.convs.append(VitMatteBasicConv3x3(in_chan_, out_chan_))
 
-    def forward(self, x):
-        out_dict = {"D0": x}
+    def forward(self, pixel_values):
+        out_dict = {"D0": pixel_values}
+        embeddings = pixel_values
         for i in range(len(self.convs)):
-            x = self.convs[i](x)
+            embeddings = self.convs[i](embeddings)
             name_ = "D" + str(i + 1)
-            out_dict[name_] = x
+            out_dict[name_] = embeddings
 
         return out_dict
 
@@ -149,9 +146,9 @@ class VitMatteFusionBlock(nn.Module):
         super().__init__()
         self.conv = VitMatteBasicConv3x3(in_channels, out_channels, stride=1, padding=1)
 
-    def forward(self, x, D):
-        F_up = nn.functional.interpolate(x, scale_factor=2, mode="bilinear", align_corners=False)
-        out = torch.cat([D, F_up], dim=1)
+    def forward(self, features, D):
+        upscaled_features = nn.functional.interpolate(features, scale_factor=2, mode="bilinear", align_corners=False)
+        out = torch.cat([D, upscaled_features], dim=1)
         out = self.conv(out)
 
         return out
@@ -182,22 +179,16 @@ class VitMatteDetailCaptureModule(nn.Module):
     Simple and lightweight Detail Capture Module for ViT Matting.
     """
 
-    def __init__(
-        self,
-        config,
-        image_channels=4,
-        convstream_out=[48, 96, 192],
-        fusion_out=[256, 128, 64, 32],
-    ):
+    def __init__(self, config):
         super().__init__()
-        if len(fusion_out) != len(convstream_out) + 1:
+        if len(config.fusion_out) != len(config.convstream_out) + 1:
             raise ValueError("The length of fusion_out should be equal to the length of convstream_out + 1.")
 
-        self.convstream = VitMatteConvStream(in_channels=image_channels)
+        self.convstream = VitMatteConvStream(in_channels=config.backbone_config.num_channels, out_channels=config.convstream_out)
         self.conv_chans = self.convstream.conv_chans
 
         self.fusion_blocks = nn.ModuleList()
-        self.fusion_channels = fusion_out
+        self.fusion_channels = config.fusion_out
         in_channels = config.hidden_size
         self.fusion_channels.insert(0, in_channels)
         for i in range(len(self.fusion_channels) - 1):
@@ -208,10 +199,10 @@ class VitMatteDetailCaptureModule(nn.Module):
                 )
             )
 
-        self.matting_head = VitMatteHead(in_channels=fusion_out[-1])
+        self.matting_head = VitMatteHead(in_channels=config.fusion_out[-1])
 
-    def forward(self, features, images):
-        detail_features = self.convstream(images)
+    def forward(self, features, pixel_values):
+        detail_features = self.convstream(pixel_values)
         for i in range(len(self.fusion_blocks)):
             d_name_ = "D" + str(len(self.fusion_blocks) - i - 1)
             features = self.fusion_blocks[i](features, detail_features[d_name_])

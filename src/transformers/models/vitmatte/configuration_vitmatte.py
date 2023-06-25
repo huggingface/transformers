@@ -64,6 +64,8 @@ class VitMatteConfig(PretrainedConfig):
         self,
         backbone_config=None,
         hidden_size=384,
+        convstream_out=[48, 96, 192],
+        fusion_out=[256, 128, 64, 32],
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -78,6 +80,8 @@ class VitMatteConfig(PretrainedConfig):
 
         self.backbone_config = backbone_config
         self.hidden_size = hidden_size
+        self.convstream_out = convstream_out
+        self.fusion_out = fusion_out
 
     def to_dict(self):
         """
