@@ -176,7 +176,7 @@ class FlaxLlamaAttention(nn.Module):
             self.embed_dim,
             use_bias=False,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+            # kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
         self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
@@ -327,32 +327,35 @@ class FlaxLlamaMLP(nn.Module):
         return hidden_states
 
 
-class FlaxLlamaBlock(nn.Module):
+# TODO: make sure attention output format is same as Pytorch
+# for now, we just worry about model numerics
+class FlaxLlamaDecoderLayer(nn.Module):
     config: LlamaConfig
-    layer_id: int = 0
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
         hidden_size = self.config.hidden_size
         inner_dim = self.config.intermediate_size if self.config.intermediate_size is not None else 4 * hidden_size
 
-        self.ln_1 = FlaxLlamaRMSNorm(epsilon=self.config.rms_norm_eps, dtype=self.dtype)
-        self.attn = FlaxLlamaAttention(self.config, dtype=self.dtype)
-        self.ln_2 = FlaxLlamaRMSNorm(epsilon=self.config.rms_norm_eps, dtype=self.dtype)
+        self.input_layernorm = FlaxLlamaRMSNorm(eps=self.config.rms_norm_eps)
+        self.self_attn = FlaxLlamaAttention(self.config, dtype=self.dtype)
+        self.post_attention_layernorm = FlaxLlamaRMSNorm(eps=self.config.rms_norm_eps)
         self.mlp = FlaxLlamaMLP(self.config, inner_dim, dtype=self.dtype)
 
     def __call__(
         self,
         hidden_states,
+        position_ids = None,
         attention_mask=None,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
     ):
         residual = hidden_states
-        hidden_states = self.ln_1(hidden_states)
-        outputs = self.attn(
+        hidden_states = self.input_layernorm(hidden_states)
+        outputs = self.self_attn(
             hidden_states,
+            position_ids=position_ids,
             attention_mask=attention_mask,
             deterministic=deterministic,
             init_cache=init_cache,
@@ -363,10 +366,10 @@ class FlaxLlamaBlock(nn.Module):
         hidden_states = attn_output + residual
 
         residual = hidden_states
-        hidden_states = self.ln_2(hidden_states)
-        feed_forward_hidden_states = self.mlp(hidden_states, deterministic=deterministic)
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        feed_forward_hidden_states = self.mlp(hidden_states)
         # residual connection
-        hidden_states = residual + feed_forward_hidden_states
+        hidden_states = residual + hidden_states
 
         return (hidden_states,) + outputs[1:]
 
@@ -721,14 +724,15 @@ if __name__ == "__main__":
     import flax
     from flax.traverse_util import flatten_dict
     from .configuration_llama import LlamaConfig
-    from .modeling_llama import LlamaAttention, _make_causal_mask
+    from .modeling_llama import LlamaDecoderLayer, _make_causal_mask
     import torch
 
     key = jax.random.PRNGKey(0)
+    torch.manual_seed(0)
     config = LlamaConfig()
 
-    model = FlaxLlamaAttention(config)
-    pt_model = LlamaAttention(config)
+    model = FlaxLlamaDecoderLayer(config)
+    pt_model = LlamaDecoderLayer(config)
 
     key, subkey = jax.random.split(key)
     x = jax.random.normal(subkey, (4, 128, config.hidden_size)) * 0.1
@@ -743,14 +747,18 @@ if __name__ == "__main__":
     params = flatten_dict(params['params'], sep='.')
     pt_state = pt_model.state_dict()
     pt_model.load_state_dict({
-        'q_proj.weight': torch.from_numpy(np.asarray(params['q_proj.kernel'])).T,
-        'k_proj.weight': torch.from_numpy(np.asarray(params['k_proj.kernel'])).T,
-        'v_proj.weight': torch.from_numpy(np.asarray(params['v_proj.kernel'])).T,
-        'o_proj.weight': torch.from_numpy(np.asarray(params['o_proj.kernel'])).T,
-        'rotary_emb.inv_freq': pt_state['rotary_emb.inv_freq']
+        'self_attn.q_proj.weight': torch.from_numpy(np.asarray(params['self_attn.q_proj.kernel'])).T,
+        'self_attn.k_proj.weight': torch.from_numpy(np.asarray(params['self_attn.k_proj.kernel'])).T,
+        'self_attn.v_proj.weight': torch.from_numpy(np.asarray(params['self_attn.v_proj.kernel'])).T,
+        'self_attn.o_proj.weight': torch.from_numpy(np.asarray(params['self_attn.o_proj.kernel'])).T,
+        'self_attn.rotary_emb.inv_freq': pt_state['self_attn.rotary_emb.inv_freq'],
+        'input_layernorm.weight': torch.from_numpy(np.asarray(params['input_layernorm.weight'])),
+        'post_attention_layernorm.weight': torch.from_numpy(np.asarray(params['post_attention_layernorm.weight'])),
+        'mlp.down_proj.weight': torch.from_numpy(np.asarray(params['mlp.down_proj.kernel'])).T,
+        'mlp.up_proj.weight': torch.from_numpy(np.asarray(params['mlp.up_proj.kernel'])).T,
+        'mlp.gate_proj.weight': torch.from_numpy(np.asarray(params['mlp.gate_proj.kernel'])).T,
     })
     x = torch.tensor(np.asarray(x))
-    # import ipdb; ipdb.set_trace()
     pt_y = pt_model(x, _make_causal_mask((4, 128), torch.float32, device='cpu'), torch.from_numpy(np.asarray(position_ids)))[0]
 
     y = np.asarray(y)
