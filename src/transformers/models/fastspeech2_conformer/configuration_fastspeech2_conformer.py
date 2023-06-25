@@ -77,16 +77,13 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         encoder_concat_after=False,
         decoder_concat_after=False,
         reduction_factor=1,
-        # encoder / decoder
         use_macaron_style_in_conformer=True,
         use_cnn_in_conformer=True,
         encoder_kernel_size=7,
         decoder_kernel_size=31,
-        # duration predictor
         duration_predictor_layers=2,
         duration_predictor_channels=256,
         duration_predictor_kernel_size=3,
-        # energy predictor
         energy_predictor_layers=2,
         energy_predictor_channels=256,
         energy_predictor_kernel_size=3,
@@ -94,7 +91,6 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         energy_embed_kernel_size=1,
         energy_embed_dropout=0.0,
         stop_gradient_from_energy_predictor=False,
-        # pitch predictor
         pitch_predictor_layers=5,
         pitch_predictor_channels=256,
         pitch_predictor_kernel_size=5,
@@ -102,7 +98,6 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         pitch_embed_kernel_size=1,
         pitch_embed_dropout=0.0,
         stop_gradient_from_pitch_predictor=True,
-        # training related
         encoder_dropout_rate=0.2,
         encoder_positional_dropout_rate=0.2,
         encoder_attention_dropout_rate=0.2,
@@ -113,21 +108,39 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         speech_decoder_postnet_dropout=0.5,
         use_masking=True,
         use_weighted_masking=False,
-        # additional features
         utt_embed_dim=None,
         lang_embs=None,
         vocab_size=78,
         is_encoder_decoder=True,
         pad_token_id=0,
-        # same token for bos and eos: <sos/eos>
         bos_token_id=77,
         eos_token_id=77,
         **kwargs,
     ):
-        local_vars = locals()
-        for var_name, var_value in local_vars.items():
-            if "kernel_size" in var_name and var_value % 2 == 0:
-                raise ValueError(f"`{var_name}` must be odd, but got {var_value} instead.")
+        if positionwise_conv_kernel_size % 2 == 0:
+            raise ValueError(
+                f"positionwise_conv_kernel_size must be odd, but got {positionwise_conv_kernel_size} instead."
+            )
+        if encoder_kernel_size % 2 == 0:
+            raise ValueError(f"encoder_kernel_size must be odd, but got {encoder_kernel_size} instead.")
+        if decoder_kernel_size % 2 == 0:
+            raise ValueError(f"decoder_kernel_size must be odd, but got {decoder_kernel_size} instead.")
+        if duration_predictor_kernel_size % 2 == 0:
+            raise ValueError(
+                f"duration_predictor_kernel_size must be odd, but got {duration_predictor_kernel_size} instead."
+            )
+        if energy_predictor_kernel_size % 2 == 0:
+            raise ValueError(
+                f"energy_predictor_kernel_size must be odd, but got {energy_predictor_kernel_size} instead."
+            )
+        if energy_embed_kernel_size % 2 == 0:
+            raise ValueError(f"energy_embed_kernel_size must be odd, but got {energy_embed_kernel_size} instead.")
+        if pitch_predictor_kernel_size % 2 == 0:
+            raise ValueError(
+                f"pitch_predictor_kernel_size must be odd, but got {pitch_predictor_kernel_size} instead."
+            )
+        if pitch_embed_kernel_size % 2 == 0:
+            raise ValueError(f"pitch_embed_kernel_size must be odd, but got {pitch_embed_kernel_size} instead.")
         if hidden_size % num_attention_heads != 0:
             raise ValueError("The hidden_size must be evenly divisible by num_attention_heads.")
         if use_masking and use_weighted_masking:
@@ -195,16 +208,6 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
-
-    @property
-    def mel_dim(self):
-        # Dimensionality of the prediced mel-spectrograms.
-        return 80
-
-    @property
-    def var_pred_num_bins(self):
-        # Number of bins in the variance predictors.
-        return 256
 
 
 class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):

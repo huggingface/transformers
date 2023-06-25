@@ -66,10 +66,6 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
         **kwargs,
     ):
         self.init_backend()
-        import g2p_en
-
-        # Not immediately instantiated to keep the tokenizer pickleable
-        self.G2p = g2p_en.G2p
 
         super().__init__(
             bos_token=bos_token,
@@ -88,6 +84,11 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
     def init_backend(self):
         """Initializes the backend."""
         requires_backends(self, "g2p_en")
+
+        import g2p_en
+
+        # Not immediately instantiated to keep the tokenizer pickleable
+        self.G2p = g2p_en.G2p
 
     @property
     def vocab_size(self):

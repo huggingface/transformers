@@ -91,35 +91,35 @@ HIFIGAN_START_DOCSTRING = r"""
 """
 
 
-def pad_list(xs, pad_value):
+def _pad_list(input_tensors, pad_value):
     """
     Perform padding for the list of tensors.
 
     Args:
-        xs (List): List of Tensors [(T_1, `*`), (T_2, `*`), ..., (T_B, `*`)].
+        input_tensors (List): List of Tensors [(T_1, `*`), (T_2, `*`), ..., (T_B, `*`)].
         pad_value (float): Value for padding.
 
     Returns:
         Tensor: Padded tensor (batch_size, max_text_length, `*`).
 
     """
-    n_batch = len(xs)
-    max_len = max(x.size(0) for x in xs)
-    pad = xs[0].new(n_batch, max_len, *xs[0].size()[1:]).fill_(pad_value)
+    batch_size = len(input_tensors)
+    max_len = max(input_tensor.size(0) for input_tensor in input_tensors)
+    pad = input_tensors[0].new(batch_size, max_len, *input_tensors[0].size()[1:]).fill_(pad_value)
 
-    for i in range(n_batch):
-        pad[i, : xs[i].size(0)] = xs[i]
+    for i in range(batch_size):
+        pad[i, : input_tensors[i].size(0)] = input_tensors[i]
 
     return pad
 
 
-def make_pad_mask(lengths, xs=None, length_dim=-1, device=None):
+def _make_pad_mask(lengths, input_tensor=None, length_dim=-1, device=None):
     """
     Make mask tensor containing indices of padded part.
 
     Args:
         lengths (LongTensor or List): Batch of lengths (batch_size,).
-        xs (Tensor, optional): The reference tensor.
+        input_tensor (Tensor, optional): The reference tensor.
             If set, masks will be the same shape as this tensor.
         length_dim (int, optional): Dimension indicator of the above tensor.
             See the example.
@@ -135,10 +135,10 @@ def make_pad_mask(lengths, xs=None, length_dim=-1, device=None):
     if not isinstance(lengths, list):
         lengths = lengths.tolist()
     batch_size = int(len(lengths))
-    if xs is None:
+    if input_tensor is None:
         maxlen = int(max(lengths))
     else:
-        maxlen = xs.size(length_dim)
+        maxlen = input_tensor.size(length_dim)
 
     if device is not None:
         seq_range = torch.arange(0, maxlen, dtype=torch.int64, device=device)
@@ -148,25 +148,25 @@ def make_pad_mask(lengths, xs=None, length_dim=-1, device=None):
     seq_length_expand = seq_range_expand.new(lengths).unsqueeze(-1)
     mask = seq_range_expand >= seq_length_expand
 
-    if xs is not None:
-        if xs.size(0) != batch_size:
-            raise ValueError(f"Size mismatch in `make_pad_mask`: {xs.size(0)} != {batch_size}")
+    if input_tensor is not None:
+        if input_tensor.size(0) != batch_size:
+            raise ValueError(f"Size mismatch in `_make_pad_mask`: {input_tensor.size(0)} != {batch_size}")
 
         if length_dim < 0:
-            length_dim = xs.dim() + length_dim
-        # ind = (:, None, ..., None, :, , None, ..., None)
-        ind = tuple(slice(None) if i in (0, length_dim) else None for i in range(xs.dim()))
-        mask = mask[ind].expand_as(xs).to(xs.device)
+            length_dim = input_tensor.dim() + length_dim
+        # indices = (:, None, ..., None, :, , None, ..., None)
+        indices = tuple(slice(None) if i in (0, length_dim) else None for i in range(input_tensor.dim()))
+        mask = mask[indices].expand_as(input_tensor).to(input_tensor.device)
     return mask
 
 
-def make_non_pad_mask(lengths, xs=None, length_dim=-1, device=None):
+def _make_non_pad_mask(lengths, reference_tensor=None, length_dim=-1, device=None):
     """
     Make mask tensor containing indices of non-padded part.
 
     Args:
         lengths (LongTensor or List): Batch of lengths (batch_size,).
-        xs (Tensor, optional): The reference tensor.
+        reference_tensor (Tensor, optional): The reference tensor.
             If set, masks will be the same shape as this tensor.
         length_dim (int, optional): Dimension indicator of the above tensor.
             See the example.
@@ -176,7 +176,7 @@ def make_non_pad_mask(lengths, xs=None, length_dim=-1, device=None):
                     dtype=torch.uint8 in PyTorch 1.2- dtype=torch.bool in PyTorch 1.2+ (including 1.2)
 
     """
-    return ~make_pad_mask(lengths, xs, length_dim, device=device)
+    return ~_make_pad_mask(lengths, reference_tensor, length_dim, device=device)
 
 
 class FastSpeech2ConformerDurationPredictor(nn.Module):
@@ -195,40 +195,36 @@ class FastSpeech2ConformerDurationPredictor(nn.Module):
 
     """
 
-    def __init__(self, input_dim, n_layers=2, n_chans=384, kernel_size=3, dropout_rate=0.1, log_domain_offset=1.0):
-        """
-        Initialize duration predictor module.
-
-        Args:
-            input_dim (int): Input dimension.
-            n_layers (int, optional): Number of convolutional layers.
-            n_chans (int, optional): Number of channels of convolutional layers.
-            kernel_size (int, optional): Kernel size of convolutional layers.
-            dropout_rate (float, optional): Dropout rate.
-            log_domain_offset (float, optional): Offset value to avoid nan in log domain.
-
-        """
+    def __init__(self, config: FastSpeech2ConformerConfig):
         super().__init__()
-        self.log_domain_offset = log_domain_offset
+
         self.conv_layers = torch.nn.ModuleList()
-        for layer_idx in range(n_layers):
-            input_channels = input_dim if layer_idx == 0 else n_chans
+        self.log_domain_offset = 1.0
+
+        input_dim = config.hidden_size
+        num_layers = config.duration_predictor_layers
+        num_chans = config.duration_predictor_channels
+        kernel_size = config.duration_predictor_kernel_size
+        dropout_rate = config.duration_predictor_dropout_rate
+
+        for layer_idx in range(num_layers):
+            input_channels = input_dim if layer_idx == 0 else num_chans
             layer = torch.nn.ModuleList(
                 [
                     torch.nn.Conv1d(
                         input_channels,
-                        n_chans,
+                        num_chans,
                         kernel_size,
                         stride=1,
                         padding=(kernel_size - 1) // 2,
                     ),
                     torch.nn.ReLU(),
-                    FastSpeech2ConformerLayerNorm(n_chans, dim=1),
+                    FastSpeech2ConformerDimensionalLayerNorm(num_chans, dim=1),
                     torch.nn.Dropout(dropout_rate),
                 ]
             )
             self.conv_layers.append(layer)
-        self.linear = torch.nn.Linear(n_chans, 1)
+        self.linear = torch.nn.Linear(num_chans, 1)
 
     def forward(self, encoder_hidden_states, padding_masks=None, is_inference=False):
         """
@@ -306,19 +302,13 @@ class FastSpeech2ConformerLengthRegulator(nn.Module):
         if target_durations.sum() == 0:
             target_durations[target_durations.sum(dim=1).eq(0)] = 1
 
-        return pad_list(
+        return _pad_list(
             [
-                self._repeat_one_sequence(encoded_embedding, target_duration)
+                torch.repeat_interleave(encoded_embedding, target_duration, dim=0)
                 for encoded_embedding, target_duration in zip(encoded_embeddings, target_durations)
             ],
             self.pad_value,
         )
-
-    def _repeat_one_sequence(self, encoded_embedding, target_duration):
-        """
-        Repeat each frame according to duration
-        """
-        return torch.repeat_interleave(encoded_embedding, target_duration, dim=0)
 
 
 # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5BatchNormConvLayer
@@ -396,33 +386,17 @@ class FastSpeech2ConformerSpeechDecoderPostnet(nn.Module):
         return hidden_states + layer_output.transpose(1, 2)
 
 
-class FastSpeech2ConformerLayerNorm(torch.nn.LayerNorm):
-    """Wrapper for torch.nn.LayerNorm that enables normalization along a specified dimension.
-
-    Args:
-        nout (int): Output dim size.
-        dim (int): Dimension to be normalized.
-
-    """
-
-    def __init__(self, nout, dim=-1):
-        """Construct an FastSpeech2ConformerLayerNorm object."""
-        super().__init__(nout, eps=1e-12)
+class FastSpeech2ConformerDimensionalLayerNorm(nn.Module):
+    def __init__(self, output_dim, dim=-1):
+        super().__init__()
+        self.layer_norm = nn.LayerNorm(output_dim, eps=1e-12)
         self.dim = dim
 
-    def forward(self, x):
-        """Apply layer normalization.
-
-        Args:
-            x (torch.Tensor): Input tensor.
-
-        Returns:
-            torch.Tensor: Normalized tensor.
-
-        """
-        if self.dim == -1:
-            return super().forward(x)
-        return super().forward(x.transpose(self.dim, -1)).transpose(self.dim, -1)
+    def forward(self, predictor_activations):
+        normalized_predictor_activations = predictor_activations.transpose(self.dim, -1)
+        normalized_predictor_activations = self.layer_norm(normalized_predictor_activations)
+        normalized_predictor_activations = normalized_predictor_activations.transpose(self.dim, -1)
+        return normalized_predictor_activations
 
 
 class FastSpeech2ConformerVariancePredictor(nn.Module):
@@ -440,8 +414,8 @@ class FastSpeech2ConformerVariancePredictor(nn.Module):
     def __init__(
         self,
         input_dim,
-        n_layers=2,
-        n_chans=384,
+        num_layers=2,
+        num_chans=384,
         kernel_size=3,
         bias=True,
         dropout_rate=0.5,
@@ -451,32 +425,32 @@ class FastSpeech2ConformerVariancePredictor(nn.Module):
 
         Args:
             input_dim (int): Input dimension.
-            n_layers (int, optional): Number of convolutional layers.
-            n_chans (int, optional): Number of channels of convolutional layers.
+            num_layers (int, optional): Number of convolutional layers.
+            num_chans (int, optional): Number of channels of convolutional layers.
             kernel_size (int, optional): Kernel size of convolutional layers.
             dropout_rate (float, optional): Dropout rate.
         """
         super().__init__()
         self.conv_layers = torch.nn.ModuleList()
-        for idx in range(n_layers):
-            input_channels = input_dim if idx == 0 else n_chans
+        for idx in range(num_layers):
+            input_channels = input_dim if idx == 0 else num_chans
             layer = torch.nn.ModuleList(
                 [
                     torch.nn.Conv1d(
                         input_channels,
-                        n_chans,
+                        num_chans,
                         kernel_size,
                         stride=1,
                         padding=(kernel_size - 1) // 2,
                         bias=bias,
                     ),
                     torch.nn.ReLU(),
-                    FastSpeech2ConformerLayerNorm(n_chans, dim=1),
+                    FastSpeech2ConformerDimensionalLayerNorm(num_chans, dim=1),
                     torch.nn.Dropout(dropout_rate),
                 ]
             )
             self.conv_layers.append(layer)
-        self.linear = torch.nn.Linear(n_chans, 1)
+        self.linear = torch.nn.Linear(num_chans, 1)
 
     def forward(self, encoder_hidden_states, padding_masks=None):
         """
@@ -530,56 +504,12 @@ class FastSpeech2ConformerVarianceEmbedding(nn.Module):
         return hidden_states
 
 
-class FastSpeech2ConformerVarianceDurationPredictorLoss(torch.nn.Module):
-    """
-    Loss function module for duration predictor.
-
-    The loss value is Calculated in log domain to make it Gaussian.
-
-    """
-
-    def __init__(self, log_domain_offset=1.0, reduction="mean"):
-        """
-        Args:
-            log_domain_offset (float, optional): Offset value to avoid nan in log domain.
-            reduction (str): Reduction type in loss calculation.
-
-        """
-        super(FastSpeech2ConformerVarianceDurationPredictorLoss, self).__init__()
-        self.criterion = torch.nn.MSELoss(reduction=reduction)
-        self.log_domain_offset = log_domain_offset
-
-    def forward(self, duration_predictions, target_durations):
-        """
-        Calculate forward propagation.
-
-        Args:
-            duration_predictions (Tensor): Batch of prediction durations in log domain (batch_size, T)
-            target_durations (LongTensor): Batch of groundtruth durations in linear domain (batch_size, T)
-
-        Returns:
-            Tensor: Mean squared error loss value.
-
-        Note:
-            `duration_predictions` is in log domain but `target_durations` is in linear domain.
-
-        """
-        # NOTE: duration_predictions is in log domain while target_durations in linear
-        target_durations = torch.log(target_durations.float() + self.log_domain_offset)
-        loss = self.criterion(duration_predictions, target_durations)
-
-        return loss
-
-
 class FastSpeech2ConformerLoss(torch.nn.Module):
-    def __init__(self, use_masking=True, use_weighted_masking=False):
-        """
-        use_masking (bool):
-            Whether to apply masking for padded part in loss calculation.
-        use_weighted_masking (bool):
-            Whether to weighted masking in loss calculation.
-        """
+    def __init__(self, config: FastSpeech2ConformerConfig):
         super().__init__()
+
+        use_masking = config.use_masking
+        use_weighted_masking = config.use_weighted_masking
 
         if use_masking and use_weighted_masking:
             raise ValueError("Either use_masking or use_weighted_masking can be True, but not both.")
@@ -591,7 +521,8 @@ class FastSpeech2ConformerLoss(torch.nn.Module):
         reduction = "none" if self.use_weighted_masking else "mean"
         self.l1_criterion = torch.nn.L1Loss(reduction=reduction)
         self.mse_criterion = torch.nn.MSELoss(reduction=reduction)
-        self.duration_criterion = FastSpeech2ConformerVarianceDurationPredictorLoss(reduction=reduction)
+        self.duration_criterion = torch.nn.MSELoss(reduction=reduction)
+        self.log_domain_offset = 1.0
 
     def forward(
         self,
@@ -630,15 +561,17 @@ class FastSpeech2ConformerLoss(torch.nn.Module):
         """
         # apply mask to remove padded part
         if self.use_masking:
-            out_masks = make_non_pad_mask(target_lengths).unsqueeze(-1).to(target_spectrograms.device)
+            out_masks = _make_non_pad_mask(target_lengths).unsqueeze(-1).to(target_spectrograms.device)
             outputs_before_postnet = outputs_before_postnet.masked_select(out_masks)
             if outputs_after_postnet is not None:
                 outputs_after_postnet = outputs_after_postnet.masked_select(out_masks)
             target_spectrograms = target_spectrograms.masked_select(out_masks)
-            duration_masks = make_non_pad_mask(input_lengths).to(target_spectrograms.device)
+            duration_masks = _make_non_pad_mask(input_lengths).to(
+                target_spectrograms.device
+            )  # just pass in attention_masks
             duration_outputs = duration_outputs.masked_select(duration_masks)
             target_durations = target_durations.masked_select(duration_masks)
-            pitch_masks = make_non_pad_mask(input_lengths).unsqueeze(-1).to(target_spectrograms.device)
+            pitch_masks = _make_non_pad_mask(input_lengths).unsqueeze(-1).to(target_spectrograms.device)
             pitch_outputs = pitch_outputs.masked_select(pitch_masks)
             energy_outputs = energy_outputs.masked_select(pitch_masks)
             target_pitch = target_pitch.masked_select(pitch_masks)
@@ -648,13 +581,14 @@ class FastSpeech2ConformerLoss(torch.nn.Module):
         l1_loss = self.l1_criterion(outputs_before_postnet, target_spectrograms)
         if outputs_after_postnet is not None:
             l1_loss = l1_loss + self.l1_criterion(outputs_after_postnet, target_spectrograms)
+        target_durations = torch.log(target_durations.float() + self.log_domain_offset)
         duration_loss = self.duration_criterion(duration_outputs, target_durations)
         pitch_loss = self.mse_criterion(pitch_outputs, target_pitch)
         energy_loss = self.mse_criterion(energy_outputs, target_energy)
 
         # make weighted mask and apply it
         if self.use_weighted_masking:
-            out_masks = make_non_pad_mask(target_lengths).unsqueeze(-1).to(target_spectrograms.device)
+            out_masks = _make_non_pad_mask(target_lengths).unsqueeze(-1).to(target_spectrograms.device)
             out_masks = torch.nn.functional.pad(
                 out_masks.transpose(1, 2),
                 [0, target_spectrograms.size(1) - out_masks.size(1), 0, 0, 0, 0],
@@ -663,7 +597,7 @@ class FastSpeech2ConformerLoss(torch.nn.Module):
 
             out_weights = out_masks.float() / out_masks.sum(dim=1, keepdim=True).float()
             out_weights /= target_spectrograms.size(0) * target_spectrograms.size(2)
-            duration_masks = make_non_pad_mask(input_lengths).to(target_spectrograms.device)
+            duration_masks = _make_non_pad_mask(input_lengths).to(target_spectrograms.device)
             duration_weights = duration_masks.float() / duration_masks.sum(dim=1, keepdim=True).float()
             duration_weights /= target_durations.size(0)
 
@@ -698,8 +632,8 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
-                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
+                key = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
+                nn.init.uniform_(module.bias, a=-key, b=key)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_()
             if module.padding_idx is not None:
@@ -729,7 +663,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
 
     """
 
-    def __init__(self, config):
+    def __init__(self, config: FastSpeech2ConformerConfig):
         super().__init__(config)
         self.config = config
 
@@ -766,18 +700,12 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             lang_embs=config.lang_embs,
         )
 
-        self.duration_predictor = FastSpeech2ConformerDurationPredictor(
-            input_dim=self.hidden_size,
-            n_layers=config.duration_predictor_layers,
-            n_chans=config.duration_predictor_channels,
-            kernel_size=config.duration_predictor_kernel_size,
-            dropout_rate=config.duration_predictor_dropout_rate,
-        )
+        self.duration_predictor = FastSpeech2ConformerDurationPredictor(config)
 
         self.pitch_predictor = FastSpeech2ConformerVariancePredictor(
             input_dim=self.hidden_size,
-            n_layers=config.pitch_predictor_layers,
-            n_chans=config.pitch_predictor_channels,
+            num_layers=config.pitch_predictor_layers,
+            num_chans=config.pitch_predictor_channels,
             kernel_size=config.pitch_predictor_kernel_size,
             dropout_rate=config.pitch_predictor_dropout,
         )
@@ -791,8 +719,8 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
 
         self.energy_predictor = FastSpeech2ConformerVariancePredictor(
             input_dim=self.hidden_size,
-            n_layers=config.energy_predictor_layers,
-            n_chans=config.energy_predictor_channels,
+            num_layers=config.energy_predictor_layers,
+            num_chans=config.energy_predictor_channels,
             kernel_size=config.energy_predictor_kernel_size,
             dropout_rate=config.energy_predictor_dropout,
         )
@@ -827,9 +755,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
 
         self.speech_decoder_postnet = FastSpeech2ConformerSpeechDecoderPostnet(config)
 
-        self.criterion = FastSpeech2ConformerLoss(
-            use_masking=config.use_masking, use_weighted_masking=config.use_weighted_masking
-        )
+        self.criterion = FastSpeech2ConformerLoss(config)
 
         self.post_init()
 
@@ -1025,7 +951,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         encoder_last_hidden_state = encoder_outputs.last_hidden_state
 
         # forward duration predictor and variance predictors
-        duration_masks = make_pad_mask(input_lengths, device=input_lengths.device)
+        duration_masks = _make_pad_mask(input_lengths, device=input_lengths.device)
 
         if self.stop_gradient_from_pitch_predictor:
             pitch_predictions = self.pitch_predictor(encoder_last_hidden_state.detach(), duration_masks.unsqueeze(-1))
@@ -1104,34 +1030,37 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             Tensor: Mask tensor for self-attention.
 
         """
-        x_masks = make_non_pad_mask(input_lengths, device=input_lengths.device)
+        x_masks = _make_non_pad_mask(input_lengths, device=input_lengths.device)
         return x_masks.unsqueeze(-2)
 
 
-class FastSpeech2ConformerMultiHeadedAttention(nn.Module):
+class FastSpeech2ConformerRelPositionMultiHeadedAttention(nn.Module):  # FastSpeech2ConformerMultiHeadedAttention
     """
-    Multi-Head Attention layer.
-
     Args:
-        n_head (int): The number of heads.
-        n_feat (int): The number of features.
-        dropout_rate (float): Dropout rate.
+    Multi-Head Attention layer with relative position encoding. Details can be found in
+    https://github.com/espnet/espnet/pull/2816. Paper: https://arxiv.org/abs/1901.02860
+        num_head (int): The number of heads. num_feat (int): The number of features. dropout_rate (float): Dropout
+        rate.
     """
 
-    def __init__(self, n_head, n_feat, dropout_rate):
-        """
-        Construct an FastSpeech2ConformerMultiHeadedAttention object.
-        """
-        super().__init__()
-
-        # We assume d_v always equals d_k
-        self.d_k = n_feat // n_head
-        self.h = n_head
-        self.linear_q = nn.Linear(n_feat, n_feat)
-        self.linear_k = nn.Linear(n_feat, n_feat)
-        self.linear_v = nn.Linear(n_feat, n_feat)
-        self.linear_out = nn.Linear(n_feat, n_feat)
+    def __init__(self, num_attention_heads, num_feat, dropout_rate):
+        """Construct an FastSpeech2ConformerRelPositionMultiHeadedAttention object."""
+        super().__init__()  # num_head, num_feat, dropout_rate
+        # We assume d_v always equals dim_key
+        self.dim_key = num_feat // num_attention_heads
+        self.num_attention_heads = num_attention_heads
+        self.linear_q = nn.Linear(num_feat, num_feat)
+        self.linear_k = nn.Linear(num_feat, num_feat)
+        self.linear_v = nn.Linear(num_feat, num_feat)
+        self.linear_out = nn.Linear(num_feat, num_feat)
         self.dropout = nn.Dropout(p=dropout_rate)
+
+        # linear transformation for positional encoding
+        self.linear_pos = nn.Linear(num_feat, num_feat, bias=False)
+        # these two learnable bias are used in matrix c and matrix d
+        # as described in https://arxiv.org/abs/1901.02860 Section 3.3
+        self.pos_bias_u = nn.Parameter(torch.Tensor(self.num_attention_heads, self.dim_key))
+        self.pos_bias_v = nn.Parameter(torch.Tensor(self.num_attention_heads, self.dim_key))
 
     def forward_qkv(self, query, key, value):
         """
@@ -1143,33 +1072,35 @@ class FastSpeech2ConformerMultiHeadedAttention(nn.Module):
             value (torch.Tensor): Value tensor (batch, time2, size).
 
         Returns:
-            torch.Tensor: Transformed query tensor (batch, n_head, time1, d_k). torch.Tensor: Transformed key tensor
-            (batch, n_head, time2, d_k). torch.Tensor: Transformed value tensor (batch, n_head, time2, d_k).
+            torch.Tensor: Transformed query tensor (batch, num_head, time1, dim_key). torch.Tensor: Transformed key
+            tensor (batch, num_head, time2, dim_key). torch.Tensor: Transformed value tensor (batch, num_head, time2,
+            dim_key).
         """
-        n_batch = query.size(0)
-        q = self.linear_q(query).view(n_batch, -1, self.h, self.d_k)
-        k = self.linear_k(key).view(n_batch, -1, self.h, self.d_k)
-        v = self.linear_v(value).view(n_batch, -1, self.h, self.d_k)
-        q = q.transpose(1, 2)
-        k = k.transpose(1, 2)
-        v = v.transpose(1, 2)
+        batch_size = query.size(0)
+        query = self.linear_q(query).view(batch_size, -1, self.num_attention_heads, self.dim_key)
+        key = self.linear_k(key).view(batch_size, -1, self.num_attention_heads, self.dim_key)
+        value = self.linear_v(value).view(batch_size, -1, self.num_attention_heads, self.dim_key)
 
-        return q, k, v
+        query = query.transpose(1, 2)
+        key = key.transpose(1, 2)
+        value = value.transpose(1, 2)
+
+        return query, key, value
 
     def forward_attention(self, value, scores, mask):
         """
         Compute attention context vector.
 
         Args:
-            value (torch.Tensor): Transformed value (batch, n_head, time2, d_k).
-            scores (torch.Tensor): Attention score (batch, n_head, time1, time2).
+            value (torch.Tensor): Transformed value (batch, num_head, time2, dim_key).
+            scores (torch.Tensor): Attention score (batch, num_head, time1, time2).
             mask (torch.Tensor): Mask (batch, 1, time2) or (batch, time1, time2).
 
         Returns:
             torch.Tensor: Transformed value (batch, time1, d_model)
                 weighted by the attention score (batch, time1, time2).
         """
-        n_batch = value.size(0)
+        batch_size = value.size(0)
         if mask is not None:
             # (batch_size, 1, *, time2)
             mask = mask.unsqueeze(1).eq(0)
@@ -1181,113 +1112,80 @@ class FastSpeech2ConformerMultiHeadedAttention(nn.Module):
             # (batch_size, head, time1, time2)
             attn = torch.softmax(scores, dim=-1)
 
-        p_attn = self.dropout(attn)
-        # (batch_size, head, time1, d_k)
-        x = torch.matmul(p_attn, value)
+        dropout_applied_attn_scores = self.dropout(attn)
+        # (batch_size, head, time1, dim_key)
+        attention_weighted_values = torch.matmul(dropout_applied_attn_scores, value)
         # (batch_size, time1, d_model)
-        x = x.transpose(1, 2).contiguous().view(n_batch, -1, self.h * self.d_k)
+        attention_weighted_values = (
+            attention_weighted_values.transpose(1, 2)
+            .contiguous()
+            .view(batch_size, -1, self.num_attention_heads * self.dim_key)
+        )
 
-        attention_output = self.linear_out(x)
+        attention_output = self.linear_out(attention_weighted_values)
 
         return attention_output, attn
 
-    def forward(self, query, key, value, mask):
+    def rel_shift(self, pos_tensor):
         """
-        Compute scaled dot product attention.
+        Args:
+        Compute relative positional encoding.
+            pos_tensor (torch.Tensor): Input tensor (batch_size, head, time1, 2*time1-1). time1 means the length of
+            query vector.
+        Returns:
+            torch.Tensor: Output tensor.
+        """
+        zero_pad = torch.zeros((*pos_tensor.size()[:3], 1), device=pos_tensor.device, dtype=pos_tensor.dtype)
+        pos_tensor_padded = torch.cat([zero_pad, pos_tensor], dim=-1)
+
+        pos_tensor_padded = pos_tensor_padded.view(*pos_tensor.size()[:2], pos_tensor.size(3) + 1, pos_tensor.size(2))
+        # only keep the positions from 0 to time2
+        pos_tensor = pos_tensor_padded[:, :, 1:].view_as(pos_tensor)[:, :, :, : pos_tensor.size(-1) // 2 + 1]
+
+        return pos_tensor
+
+    def forward(self, query, key, value, pos_emb, mask):
+        """
+        Compute 'Scaled Dot Product Attention' with rel. positional encoding.
 
         Args:
             query (torch.Tensor): Query tensor (batch, time1, size).
             key (torch.Tensor): Key tensor (batch, time2, size).
             value (torch.Tensor): Value tensor (batch, time2, size).
-            mask (torch.Tensor): Mask tensor (batch, 1, time2) or
-                (batch, time1, time2).
-
+            pos_emb (torch.Tensor): Positional embedding tensor (batch, 2*time1-1, size).
+            mask (torch.Tensor): Mask tensor (batch, 1, time2) or (batch, time1, time2).
         Returns:
             torch.Tensor: Output tensor (batch, time1, d_model).
         """
-        q, k, v = self.forward_qkv(query, key, value)
-        scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.d_k)
-        return self.forward_attention(v, scores, mask)
+        query, key, value = self.forward_qkv(query, key, value)
+        # (batch_size, time1, head, dim_key)
+        query = query.transpose(1, 2)
 
+        batch_size_pos = pos_emb.size(0)
+        pos_encoding = self.linear_pos(pos_emb).view(batch_size_pos, -1, self.num_attention_heads, self.dim_key)
+        # (batch_size, head, 2*time1-1, dim_key)
+        pos_encoding = pos_encoding.transpose(1, 2)
 
-class FastSpeech2ConformerRelPositionMultiHeadedAttention(FastSpeech2ConformerMultiHeadedAttention):
-    """
-    Args:
-    Multi-Head Attention layer with relative position encoding. Details can be found in
-    https://github.com/espnet/espnet/pull/2816. Paper: https://arxiv.org/abs/1901.02860
-        n_head (int): The number of heads. n_feat (int): The number of features. dropout_rate (float): Dropout rate.
-    """
-
-    def __init__(self, n_head, n_feat, dropout_rate):
-        """Construct an FastSpeech2ConformerRelPositionMultiHeadedAttention object."""
-        super().__init__(n_head, n_feat, dropout_rate)
-        # linear transformation for positional encoding
-        self.linear_pos = nn.Linear(n_feat, n_feat, bias=False)
-        # these two learnable bias are used in matrix c and matrix d
-        # as described in https://arxiv.org/abs/1901.02860 Section 3.3
-        self.pos_bias_u = nn.Parameter(torch.Tensor(self.h, self.d_k))
-        self.pos_bias_v = nn.Parameter(torch.Tensor(self.h, self.d_k))
-
-    def rel_shift(self, x):
-        """
-        Args:
-        Compute relative positional encoding.
-            x (torch.Tensor): Input tensor (batch_size, head, time1, 2*time1-1). time1 means the length of query
-            vector.
-        Returns:
-            torch.Tensor: Output tensor.
-        """
-        zero_pad = torch.zeros((*x.size()[:3], 1), device=x.device, dtype=x.dtype)
-        x_padded = torch.cat([zero_pad, x], dim=-1)
-
-        x_padded = x_padded.view(*x.size()[:2], x.size(3) + 1, x.size(2))
-        # only keep the positions from 0 to time2
-        x = x_padded[:, :, 1:].view_as(x)[:, :, :, : x.size(-1) // 2 + 1]
-
-        return x
-
-    def forward(self, query, key, value, pos_emb, mask):
-        """
-        Args:
-        Compute 'Scaled Dot Product Attention' with rel. positional encoding.
-            query (torch.Tensor): Query tensor (batch, time1, size). key (torch.Tensor): Key tensor (batch, time2,
-            size). value (torch.Tensor): Value tensor (batch, time2, size). pos_emb (torch.Tensor): Positional
-            embedding tensor
-                (batch, 2*time1-1, size).
-            mask (torch.Tensor): Mask tensor (batch, 1, time2) or
-                (batch, time1, time2).
-        Returns:
-            torch.Tensor: Output tensor (batch, time1, d_model).
-        """
-        q, k, v = self.forward_qkv(query, key, value)
-        # (batch_size, time1, head, d_k)
-        q = q.transpose(1, 2)
-
-        n_batch_pos = pos_emb.size(0)
-        p = self.linear_pos(pos_emb).view(n_batch_pos, -1, self.h, self.d_k)
-        # (batch_size, head, 2*time1-1, d_k)
-        p = p.transpose(1, 2)
-
-        # (batch_size, head, time1, d_k)
-        q_with_bias_u = (q + self.pos_bias_u).transpose(1, 2)
-        # (batch_size, head, time1, d_k)
-        q_with_bias_v = (q + self.pos_bias_v).transpose(1, 2)
+        # (batch_size, head, time1, dim_key)
+        query_with_bias_u = (query + self.pos_bias_u).transpose(1, 2)
+        # (batch_size, head, time1, dim_key)
+        query_with_bias_v = (query + self.pos_bias_v).transpose(1, 2)
 
         # compute attention score
         # first compute matrix a and matrix c
         # as described in https://arxiv.org/abs/1901.02860 Section 3.3
         # (batch_size, head, time1, time2)
-        matrix_ac = torch.matmul(q_with_bias_u, k.transpose(-2, -1))
+        matrix_ac = torch.matmul(query_with_bias_u, key.transpose(-2, -1))
 
         # compute matrix b and matrix d
         # (batch_size, head, time1, 2*time1-1)
-        matrix_bd = torch.matmul(q_with_bias_v, p.transpose(-2, -1))
+        matrix_bd = torch.matmul(query_with_bias_v, pos_encoding.transpose(-2, -1))
         matrix_bd = self.rel_shift(matrix_bd)
 
         # (batch_size, head, time1, time2)
-        scores = (matrix_ac + matrix_bd) / math.sqrt(self.d_k)
+        scores = (matrix_ac + matrix_bd) / math.sqrt(self.dim_key)
 
-        attention_output, attention_scores = self.forward_attention(v, scores, mask)
+        attention_output, attention_scores = self.forward_attention(value, scores, mask)
 
         return attention_output, attention_scores
 
@@ -1409,22 +1307,22 @@ class FastSpeech2ConformerEncoderLayer(nn.Module):
         self.conv_module = conv_module
 
         # for the FNN module
-        self.norm_ff = FastSpeech2ConformerLayerNorm(size)
+        self.norm_ff = nn.LayerNorm(size, eps=1e-12)
 
         # for the MHA module
-        self.norm_mha = FastSpeech2ConformerLayerNorm(size)
+        self.norm_mha = nn.LayerNorm(size, eps=1e-12)
 
         if feed_forward_macaron is not None:
-            self.norm_ff_macaron = FastSpeech2ConformerLayerNorm(size)
+            self.norm_ff_macaron = nn.LayerNorm(size, eps=1e-12)
             self.ff_scale = 0.5
         else:
             self.ff_scale = 1.0
         if self.conv_module is not None:
             # for the CNN module
-            self.norm_conv = FastSpeech2ConformerLayerNorm(size)
+            self.norm_conv = nn.LayerNorm(size, eps=1e-12)
 
             # for the final output of the block
-            self.norm_final = FastSpeech2ConformerLayerNorm(size)
+            self.norm_final = nn.LayerNorm(size, eps=1e-12)
         self.dropout = nn.Dropout(dropout_rate)
         self.size = size
         self.dropout_rate = dropout_rate
@@ -1555,50 +1453,50 @@ class FastSpeech2ConformerRelPositionalEncoding(nn.Module):
     Args:
     Relative positional encoding module (new implementation). Details can be found in
     https://github.com/espnet/espnet/pull/2816. See : Appendix Batch in https://arxiv.org/abs/1901.02860
-        d_model (int): Embedding dimension. dropout_rate (float): Dropout rate. max_len (int): Maximum input length.
+        embed_dim (int): Embedding dimension. dropout_rate (float): Dropout rate. max_len (int): Maximum input length.
     """
 
-    def __init__(self, d_model, dropout_rate, max_len=5000):
+    def __init__(self, embed_dim, dropout_rate, max_len=5000):
         """
         Construct an PositionalEncoding object.
         """
         super().__init__()
-        self.d_model = d_model
-        self.input_scale = math.sqrt(self.d_model)
+        self.embed_dim = embed_dim
+        self.input_scale = math.sqrt(self.embed_dim)
         self.dropout = torch.nn.Dropout(p=dropout_rate)
-        self.pe = None
-        self.extend_pe(torch.tensor(0.0).expand(1, max_len))
+        self.pos_enc = None
+        self.extend_pos_enc(torch.tensor(0.0).expand(1, max_len))
 
-    def extend_pe(self, x):
+    def extend_pos_enc(self, x):
         """Reset the positional encodings."""
-        if self.pe is not None:
-            # self.pe contains both positive and negative parts
-            # the length of self.pe is 2 * input_len - 1
-            if self.pe.size(1) >= x.size(1) * 2 - 1:
-                if self.pe.dtype != x.dtype or self.pe.device != x.device:
-                    self.pe = self.pe.to(dtype=x.dtype, device=x.device)
+        if self.pos_enc is not None:
+            # self.pos_enc contains both positive and negative parts
+            # the length of self.pos_enc is 2 * input_len - 1
+            if self.pos_enc.size(1) >= x.size(1) * 2 - 1:
+                if self.pos_enc.dtype != x.dtype or self.pos_enc.device != x.device:
+                    self.pos_enc = self.pos_enc.to(dtype=x.dtype, device=x.device)
                 return
         # Suppose `i` means to the position of query vecotr and `j` means the
         # position of key vector. We use position relative positions when keys
         # are to the left (i>j) and negative relative positions otherwise (i<j).
-        pe_positive = torch.zeros(x.size(1), self.d_model)
-        pe_negative = torch.zeros(x.size(1), self.d_model)
+        pos_enc_positive = torch.zeros(x.size(1), self.embed_dim)
+        pos_enc_negative = torch.zeros(x.size(1), self.embed_dim)
         position = torch.arange(0, x.size(1), dtype=torch.float32).unsqueeze(1)
         div_term = torch.exp(
-            torch.arange(0, self.d_model, 2, dtype=torch.float32) * -(math.log(10000.0) / self.d_model)
+            torch.arange(0, self.embed_dim, 2, dtype=torch.float32) * -(math.log(10000.0) / self.embed_dim)
         )
-        pe_positive[:, 0::2] = torch.sin(position * div_term)
-        pe_positive[:, 1::2] = torch.cos(position * div_term)
-        pe_negative[:, 0::2] = torch.sin(-1 * position * div_term)
-        pe_negative[:, 1::2] = torch.cos(-1 * position * div_term)
+        pos_enc_positive[:, 0::2] = torch.sin(position * div_term)
+        pos_enc_positive[:, 1::2] = torch.cos(position * div_term)
+        pos_enc_negative[:, 0::2] = torch.sin(-1 * position * div_term)
+        pos_enc_negative[:, 1::2] = torch.cos(-1 * position * div_term)
 
         # Reserve the order of positive indices and concat both positive and
         # negative indices. This is used to support the shifting trick
         # as in https://arxiv.org/abs/1901.02860
-        pe_positive = torch.flip(pe_positive, [0]).unsqueeze(0)
-        pe_negative = pe_negative[1:].unsqueeze(0)
-        pe = torch.cat([pe_positive, pe_negative], dim=1)
-        self.pe = pe.to(device=x.device, dtype=x.dtype)
+        pos_enc_positive = torch.flip(pos_enc_positive, [0]).unsqueeze(0)
+        pos_enc_negative = pos_enc_negative[1:].unsqueeze(0)
+        pos_enc = torch.cat([pos_enc_positive, pos_enc_negative], dim=1)
+        self.pos_enc = pos_enc.to(device=x.device, dtype=x.dtype)
 
     def forward(self, feature_representation):
         """
@@ -1608,10 +1506,10 @@ class FastSpeech2ConformerRelPositionalEncoding(nn.Module):
         Returns:
             torch.Tensor: Encoded tensor (batch_size, time, `*`).
         """
-        self.extend_pe(feature_representation)
+        self.extend_pos_enc(feature_representation)
         hidden_states = feature_representation * self.input_scale
-        center_idx = self.pe.size(1) // 2
-        pos_emb = self.pe[:, center_idx - hidden_states.size(1) + 1 : center_idx + hidden_states.size(1)]
+        center_idx = self.pos_enc.size(1) // 2
+        pos_emb = self.pos_enc[:, center_idx - hidden_states.size(1) + 1 : center_idx + hidden_states.size(1)]
         return self.dropout(hidden_states), self.dropout(pos_emb)
 
 

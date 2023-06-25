@@ -125,6 +125,8 @@ def convert_espnet_state_dict_to_hf(state_dict):
                 new_key = new_key.replace("w_2", "conv2")
             if "predictor.conv" in key:
                 new_key = new_key.replace(".conv", ".conv_layers")
+                new_key = new_key.replace("2.weight", "2.layer_norm.weight")
+                new_key = new_key.replace("2.bias", "2.layer_norm.bias")
             if "pitch_embed" in key or "energy_embed" in key:
                 new_key = new_key.replace("0", "conv")
             if "encoders" in key:
