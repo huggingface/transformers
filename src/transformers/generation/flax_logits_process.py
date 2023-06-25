@@ -298,7 +298,7 @@ class FlaxMinNewTokensLengthLogitsProcessor(FlaxLogitsProcessor):
 
     def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:
         # create boolean flag to decide if min new tokens penalty should be applied
-        apply_penalty = 1 - jnp.clip(cur_len - self.prompt_length_to_skip - self.min_new_tokens, 0, 1)
+        apply_penalty = 1 - jnp.clip(cur_len - self.prompt_length_to_skip - self.min_new_tokens + 1, 0, 1)
         scores = jnp.where(apply_penalty, scores.at[:, self.eos_token_id].set(-float("inf")), scores)
 
         return scores
