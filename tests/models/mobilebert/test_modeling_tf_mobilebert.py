@@ -20,7 +20,7 @@ import unittest
 
 from transformers import MobileBertConfig, is_tf_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_tf, slow, tooslow
+from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
@@ -310,15 +310,6 @@ class TFMobileBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mobilebert_for_token_classification(*config_and_inputs)
-
-    @slow
-    def test_keras_fit(self):
-        # Override as it is a slow test on this model
-        super().test_keras_fit()
-
-    @tooslow
-    def test_saved_model_creation(self):
-        pass
 
     @slow
     def test_model_from_pretrained(self):

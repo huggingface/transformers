@@ -781,19 +781,19 @@ def pipeline(
 
     model_name = model if isinstance(model, str) else None
 
-    # Infer the framework from the model
-    # Forced if framework already defined, inferred if it's None
-    # Will load the correct model if possible
-    model_classes = {"tf": targeted_task["tf"], "pt": targeted_task["pt"]}
-    framework, model = infer_framework_load_model(
-        model,
-        model_classes=model_classes,
-        config=config,
-        framework=framework,
-        task=task,
-        **hub_kwargs,
-        **model_kwargs,
-    )
+    # Load the correct model if possible
+    # Infer the framework from the model if not already defined
+    if isinstance(model, str) or framework is None:
+        model_classes = {"tf": targeted_task["tf"], "pt": targeted_task["pt"]}
+        framework, model = infer_framework_load_model(
+            model,
+            model_classes=model_classes,
+            config=config,
+            framework=framework,
+            task=task,
+            **hub_kwargs,
+            **model_kwargs,
+        )
 
     model_config = model.config
     hub_kwargs["_commit_hash"] = model.config._commit_hash

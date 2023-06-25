@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 
 from transformers import OPTConfig, is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tf, slow, tooslow
+from transformers.testing_utils import require_sentencepiece, require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -218,10 +218,6 @@ class TFOPTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                         if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
                             models_equal = False
                     self.assertTrue(models_equal)
-
-    @tooslow
-    def test_saved_model_creation(self):
-        pass
 
 
 def _long_tensor(tok_lst):

@@ -16,7 +16,7 @@ import unittest
 
 import numpy as np
 
-from transformers import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
+from transformers import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING, TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 from transformers.pipelines import AudioClassificationPipeline, pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
@@ -31,9 +31,9 @@ from .test_pipelines_common import ANY
 
 
 @is_pipeline_test
-@require_torch
 class AudioClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
+    tf_model_mapping = TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor):
         audio_classifier = AudioClassificationPipeline(model=model, feature_extractor=processor)
@@ -101,6 +101,10 @@ class AudioClassificationPipelineTests(unittest.TestCase):
             {"score": 0.0841, "label": "right"},
             {"score": 0.0834, "label": "left"},
         ]
+        self.assertIn(nested_simplify(output, decimals=4), [EXPECTED_OUTPUT, EXPECTED_OUTPUT_PT_2])
+
+        audio_dict = {"array": np.ones((8000,)), "sampling_rate": audio_classifier.feature_extractor.sampling_rate}
+        output = audio_classifier(audio_dict, top_k=4)
         self.assertIn(nested_simplify(output, decimals=4), [EXPECTED_OUTPUT, EXPECTED_OUTPUT_PT_2])
 
     @require_torch
