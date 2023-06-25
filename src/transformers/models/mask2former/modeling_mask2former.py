@@ -15,7 +15,6 @@
 """ PyTorch Mask2Former model."""
 
 import math
-import random
 import warnings
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
@@ -1862,7 +1861,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
 
             if self.training and (dropout_probability < self.layerdrop):
                 continue

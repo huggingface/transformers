@@ -295,7 +295,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 Whether or not to output the offsets of the tokens. This should only be set if the model predicted
                 timestamps.
             decode_with_timestamps (`bool`, *optional*, defaults to `False`):
-                WHether or not to decode with timestamps included in the raw text.
+                Whether or not to decode with timestamps included in the raw text.
         Returns:
             `str`: The decoded sentence.
         """

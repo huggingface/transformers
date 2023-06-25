@@ -33,7 +33,9 @@ import h5py
 import numpy as np
 import tensorflow as tf
 from huggingface_hub import Repository, list_repo_files
+from keras import backend as K
 from packaging.version import parse
+from tensorflow.python.util.keras_deps import get_call_context_function
 
 from . import DataCollatorWithPadding, DefaultDataCollator
 from .activations_tf import get_tf_activation
@@ -71,23 +73,8 @@ from .utils import (
 from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 
 
-if parse(tf.__version__).minor >= 13:
-    from keras import backend as K
-    from keras.__internal__ import KerasTensor
-    from keras.src.engine.base_layer_utils import call_context
-elif parse(tf.__version__).minor >= 11:
-    from keras import backend as K
-    from keras.engine.base_layer_utils import call_context
-    from keras.engine.keras_tensor import KerasTensor
-else:
-    from tensorflow.python.keras import backend as K
-    from tensorflow.python.keras.engine.base_layer_utils import call_context
-    from tensorflow.python.keras.engine.keras_tensor import KerasTensor
-
-
 if is_safetensors_available():
     from safetensors import safe_open
-    from safetensors.tensorflow import load_file as safe_load_file
     from safetensors.tensorflow import save_file as safe_save_file
 
 if TYPE_CHECKING:
@@ -100,13 +87,10 @@ tf_logger = tf.get_logger()
 TFModelInputType = Union[
     List[tf.Tensor],
     List[np.ndarray],
-    List[KerasTensor],
     Dict[str, tf.Tensor],
     Dict[str, np.ndarray],
-    Dict[str, KerasTensor],
     tf.Tensor,
     np.ndarray,
-    KerasTensor,
 ]
 
 
@@ -473,7 +457,7 @@ def input_processing(func, config, **kwargs):
     main_input_name = parameter_names[0]
     main_input = kwargs.pop(main_input_name, None)
     output = {}
-    allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray, KerasTensor)
+    allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray)
 
     if "inputs" in kwargs["kwargs_call"]:
         warnings.warn(
@@ -512,7 +496,7 @@ def input_processing(func, config, **kwargs):
         kwargs.pop("kwargs_call")
 
     for k, v in kwargs.items():
-        if isinstance(v, allowed_types) or v is None:
+        if isinstance(v, allowed_types) or tf.is_tensor(v) or v is None:
             output[k] = v
         else:
             raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
@@ -565,7 +549,7 @@ def input_processing(func, config, **kwargs):
             else:
                 raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
     else:
-        if isinstance(main_input, (tf.Tensor, KerasTensor)) or main_input is None:
+        if tf.is_tensor(main_input) or main_input is None:
             output[main_input_name] = main_input
         else:
             raise ValueError(
@@ -1000,42 +984,33 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
 
 def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
     # Read the safetensors file
-    state_dict = safe_load_file(resolved_archive_file)
+    with safe_open(resolved_archive_file, framework="tf") as safetensors_archive:
+        mismatched_layers = []
+        weight_names = [format_weight_name(w.name, _prefix=_prefix) for w in model.weights]
+        loaded_weight_names = list(safetensors_archive.keys())
+        # Find the missing layers from the high level list of layers
+        missing_layers = list(set(weight_names) - set(loaded_weight_names))
+        # Find the unexpected layers from the high level list of layers
+        unexpected_layers = list(set(loaded_weight_names) - set(weight_names))
 
-    weight_value_tuples = []
-    mismatched_layers = []
+        for weight in model.weights:
+            weight_name = format_weight_name(weight.name, _prefix=_prefix)
+            if weight_name in loaded_weight_names:
+                weight_value = safetensors_archive.get_tensor(weight_name)
+                # Check if the shape of the current weight and the one from the H5 file are different
+                if K.int_shape(weight) != weight_value.shape:
+                    # If yes we reshape the weight from the H5 file accordingly to the current weight
+                    # If the two shapes are not compatible we raise an issue
+                    try:
+                        weight_value = tf.reshape(weight_value, K.int_shape(weight))
+                    except ValueError as e:
+                        if ignore_mismatched_sizes:
+                            mismatched_layers.append((weight_name, weight_value.shape, K.int_shape(weight)))
+                            continue
+                        else:
+                            raise e
 
-    weight_names = [format_weight_name(w.name, _prefix=_prefix) for w in model.weights]
-    loaded_weight_names = list(state_dict.keys())
-
-    # Find the missing layers from the high level list of layers
-    missing_layers = list(set(weight_names) - set(loaded_weight_names))
-    # Find the unexpected layers from the high level list of layers
-    unexpected_layers = list(set(loaded_weight_names) - set(weight_names))
-
-    weight_value_tuples = []
-    for weight in model.weights:
-        weight_name = format_weight_name(weight.name, _prefix=_prefix)
-        if weight_name in state_dict:
-            weight_value = state_dict[weight_name]
-            # Check if the shape of the current weight and the one from the H5 file are different
-            if K.int_shape(weight) != weight_value.shape:
-                # If yes we reshape the weight from the H5 file accordingly to the current weight
-                # If the two shapes are not compatible we raise an issue
-                try:
-                    weight_value = tf.reshape(weight_value, K.int_shape(weight))
-                except ValueError as e:
-                    if ignore_mismatched_sizes:
-                        mismatched_layers.append((weight_name, weight_value.shape, K.int_shape(weight)))
-                        continue
-                    else:
-                        raise e
-
-            weight_value_tuples.append((weight, weight_value))
-
-    # Load all the weights
-    K.batch_set_value(weight_value_tuples)
-
+                K.set_value(weight, weight_value)  # weight.assign() might break if weight is a DTensor
     return missing_layers, unexpected_layers, mismatched_layers
 
 
@@ -1152,6 +1127,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         return "tf"
 
     def build(self, input_shape=None):
+        call_context = get_call_context_function()
         if self.built or call_context().in_call:
             self.built = True
         else:
@@ -2507,7 +2483,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             )
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
+        *model_args,
+        config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None,
+        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        ignore_mismatched_sizes: bool = False,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: Optional[Union[str, bool]] = None,
+        revision: str = "main",
+        **kwargs,
+    ):
         r"""
         Instantiate a pretrained TF 2.0 model from a pre-trained model configuration.
 
@@ -2573,7 +2561,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(`bool`, *optional*, defaults to `False`):
                 Whether or not to only look at local files (e.g., not try doanloading the model).
-            use_auth_token (`str` or `bool`, *optional*):
+            token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
                 the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
@@ -2629,17 +2617,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         >>> config = BertConfig.from_json_file("./pt_model/my_pt_model_config.json")
         >>> model = TFBertModel.from_pretrained("./pt_model/my_pytorch_model.bin", from_pt=True, config=config)
         ```"""
-        config = kwargs.pop("config", None)
-        cache_dir = kwargs.pop("cache_dir", None)
         from_pt = kwargs.pop("from_pt", False)
-        ignore_mismatched_sizes = kwargs.pop("ignore_mismatched_sizes", False)
-        force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
-        local_files_only = kwargs.pop("local_files_only", False)
         use_auth_token = kwargs.pop("use_auth_token", None)
-        revision = kwargs.pop("revision", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         _ = kwargs.pop("mirror", None)
         load_weight_prefix = kwargs.pop("load_weight_prefix", None)
@@ -2648,6 +2630,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         tf_to_pt_weight_rename = kwargs.pop("tf_to_pt_weight_rename", None)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
 
         if trust_remote_code is True:
             logger.warning(
@@ -2674,7 +2666,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 resume_download=resume_download,
                 proxies=proxies,
                 local_files_only=local_files_only,
-                use_auth_token=use_auth_token,
+                token=use_auth_token,
                 revision=revision,
                 _from_auto=from_auto_class,
                 _from_pipeline=from_pipeline,
@@ -2761,7 +2753,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         "proxies": proxies,
                         "resume_download": resume_download,
                         "local_files_only": local_files_only,
-                        "use_auth_token": use_auth_token,
+                        "use_auth_token": token,
                         "user_agent": user_agent,
                         "revision": revision,
                         "subfolder": subfolder,
@@ -2808,7 +2800,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         has_file_kwargs = {
                             "revision": revision,
                             "proxies": proxies,
-                            "use_auth_token": use_auth_token,
+                            "use_auth_token": token,
                         }
                         if has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
                             raise EnvironmentError(
@@ -2855,7 +2847,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 proxies=proxies,
                 resume_download=resume_download,
                 local_files_only=local_files_only,
-                use_auth_token=use_auth_token,
+                use_auth_token=token,
                 user_agent=user_agent,
                 revision=revision,
                 _commit_hash=commit_hash,
@@ -2905,16 +2897,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if safetensors_from_pt:
             from .modeling_tf_pytorch_utils import load_pytorch_state_dict_in_tf2_model
 
-            state_dict = safe_load_file(resolved_archive_file)
-            # Load from a PyTorch checkpoint
-            return load_pytorch_state_dict_in_tf2_model(
-                model,
-                state_dict,
-                allow_missing_keys=True,
-                output_loading_info=output_loading_info,
-                _prefix=load_weight_prefix,
-                ignore_mismatched_sizes=ignore_mismatched_sizes,
-            )
+            with safe_open(resolved_archive_file, framework="tf") as safetensors_archive:
+                # Load from a PyTorch checkpoint
+                # We load in TF format here because PT weights often need to be transposed, and this is much
+                # faster on GPU. Loading as numpy and transposing on CPU adds several seconds to load times.
+                return load_pytorch_state_dict_in_tf2_model(
+                    model,
+                    safetensors_archive,
+                    tf_inputs=False,  # No need to build the model again
+                    allow_missing_keys=True,
+                    output_loading_info=output_loading_info,
+                    _prefix=load_weight_prefix,
+                    ignore_mismatched_sizes=ignore_mismatched_sizes,
+                )
 
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
@@ -3011,7 +3006,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     resume_download=resume_download,
                     proxies=proxies,
                     local_files_only=local_files_only,
-                    use_auth_token=use_auth_token,
+                    token=token,
                     revision=revision,
                     subfolder=subfolder,
                     _from_auto=from_auto_class,

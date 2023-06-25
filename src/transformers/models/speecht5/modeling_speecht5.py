@@ -15,7 +15,6 @@
 """ PyTorch SpeechT5 model."""
 
 import math
-import random
 import warnings
 from typing import List, Optional, Tuple, Union
 
@@ -1381,7 +1380,7 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = np.random.uniform(0, 1)
+            dropout_probability = torch.rand([])
 
             skip_the_layer = self.training and (dropout_probability < self.layerdrop)
             if not skip_the_layer or deepspeed_zero3_is_enabled:
@@ -1706,7 +1705,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
 
             skip_the_layer = self.training and (dropout_probability < self.layerdrop)
             if skip_the_layer and not deepspeed_zero3_is_enabled:
