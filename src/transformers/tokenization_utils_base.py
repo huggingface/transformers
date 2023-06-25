@@ -1992,7 +1992,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Unable to load vocabulary from file. "
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
-        
+
         # Ids are provided. Should we still need to check?????
         if "added_tokens" in init_kwargs:
             print("The `tokenizer_config` will be used to initialise the added_tokens")
