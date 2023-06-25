@@ -117,28 +117,39 @@ LLAMA_INPUTS_DOCSTRING = r"""
 
 def create_sinusoidal_positions(num_pos, dim):
     inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2) / dim))
-    sinusoid_inp = np.einsum("i , j -> i j", np.arange(num_pos), inv_freq).astype("float32")
-    sin, cos = np.sin(sinusoid_inp), np.cos(sinusoid_inp)
+    freqs = np.einsum("i , j -> i j", np.arange(num_pos), inv_freq).astype("float32")
 
-    sentinel = dim // 2 + dim % 2
-    out = np.zeros((num_pos, dim))
-    out[:, 0:sentinel] = sin
-    out[:, sentinel:] = cos
+    # sin, cos = np.sin(freqs), np.cos(freqs)
+    # sentinel = dim // 2 + dim % 2
+    # out = np.zeros((num_pos, dim))
+    # out[:, 0:sentinel] = sin
+    # out[:, sentinel:] = cos
 
-    return jnp.array(out)
+    emb = np.concatenate((freqs, freqs), axis=-1)
+
+    out = np.concatenate((
+        np.sin(emb)[:, None, :],
+        np.cos(emb)[:, None, :]
+    ), axis=-1)
+    return jnp.array(out[:, :, :num_pos]) # TODO: don't think slice is needed
 
 
-def rotate_every_two(tensor):
-    rotate_half_tensor = jnp.stack((-tensor[:, :, :, 1::2], tensor[:, :, :, ::2]), axis=-1)
-    rotate_half_tensor = rotate_half_tensor.reshape(rotate_half_tensor.shape[:-2] + (-1,))
+# def rotate_every_two(tensor):
+    # rotate_half_tensor = jnp.stack((-tensor[:, :, :, 1::2], tensor[:, :, :, ::2]), axis=-1)
+    # rotate_half_tensor = rotate_half_tensor.reshape(rotate_half_tensor.shape[:-2] + (-1,))
+    # return rotate_half_tensor
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    rotate_half_tensor = jnp.concatenate((-x[..., x.shape[-1] // 2:], x[..., :x.shape[-1] // 2]), axis=-1)
+    # rotate_half_tensor = rotate_half_tensor.reshape(rotate_half_tensor.shape[:-2] + (-1,))
     return rotate_half_tensor
 
 
 def apply_rotary_pos_emb(tensor, sincos):
     sin_pos, cos_pos = sincos
-    sin_pos = sin_pos[:, :, None, :].repeat(2, 3)
-    cos_pos = cos_pos[:, :, None, :].repeat(2, 3)
-    return (tensor * cos_pos) + (rotate_every_two(tensor) * sin_pos)
+    # sin_pos = sin_pos[:, :, None, :]
+    return (tensor * cos_pos) + (rotate_half(tensor) * sin_pos)
 
 
 class FlaxLlamaRMSNorm(nn.Module):
@@ -169,8 +180,6 @@ class FlaxLlamaAttention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
 
-        self.rotary_dim = self.head_dim
-
         dense = partial(
             nn.Dense,
             self.embed_dim,
@@ -184,8 +193,7 @@ class FlaxLlamaAttention(nn.Module):
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
 
-        pos_embd_dim = self.rotary_dim or self.embed_dim
-        self.embed_positions = create_sinusoidal_positions(config.max_position_embeddings, pos_embd_dim)
+        self.embed_positions = create_sinusoidal_positions(config.max_position_embeddings, self.head_dim)
 
     def _split_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads, self.head_dim))
@@ -242,23 +250,24 @@ class FlaxLlamaAttention(nn.Module):
         key = self._split_heads(key)
         value = self._split_heads(value)
 
-        sincos = jnp.take(self.embed_positions, position_ids, axis=0)
+        # sincos = jnp.take(self.embed_positions, position_ids, axis=1)
+        sincos = self.embed_positions[position_ids]
         sincos = jnp.split(sincos, 2, axis=-1)
-        if self.rotary_dim is not None:
-            k_rot = key[:, :, :, : self.rotary_dim]
-            k_pass = key[:, :, :, self.rotary_dim :]
+        # if self.rotary_dim is not None:
+            # k_rot = key[:, :, :, : self.rotary_dim]
+            # k_pass = key[:, :, :, self.rotary_dim :]
 
-            q_rot = query[:, :, :, : self.rotary_dim]
-            q_pass = query[:, :, :, self.rotary_dim :]
+            # q_rot = query[:, :, :, : self.rotary_dim]
+            # q_pass = query[:, :, :, self.rotary_dim :]
 
-            k_rot = apply_rotary_pos_emb(k_rot, sincos)
-            q_rot = apply_rotary_pos_emb(q_rot, sincos)
+            # k_rot = apply_rotary_pos_emb(k_rot, sincos)
+            # q_rot = apply_rotary_pos_emb(q_rot, sincos)
 
-            key = jnp.concatenate([k_rot, k_pass], axis=-1)
-            query = jnp.concatenate([q_rot, q_pass], axis=-1)
-        else:
-            key = apply_rotary_pos_emb(key, sincos)
-            query = apply_rotary_pos_emb(query, sincos)
+            # key = jnp.concatenate([k_rot, k_pass], axis=-1)
+            # query = jnp.concatenate([q_rot, q_pass], axis=-1)
+        # else:
+        key = apply_rotary_pos_emb(key, sincos)
+        query = apply_rotary_pos_emb(query, sincos)
 
         query_length, key_length = query.shape[1], key.shape[1]
 
@@ -727,6 +736,22 @@ if __name__ == "__main__":
     from .modeling_llama import LlamaDecoderLayer, _make_causal_mask
     import torch
 
+    # from .modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
+    # x = torch.randn(4, 64, 32)
+    # pt_x = x.view(4, 64, 2, 16).transpose(1, 2)
+    # layer = LlamaRotaryEmbedding(16, max_position_embeddings=64)
+    # cos, sin = layer(x, x.shape[-2])
+    # pt_y = apply_rotary_pos_emb(pt_x, pt_x, cos, sin, None)[0]
+
+    # from .modeling_flax_llama import create_sinusoidal_positions, apply_rotary_pos_emb
+    # sincos = create_sinusoidal_positions(64, 16)
+    
+    # sincos = jnp.split(sincos, 2, axis=-1)
+    # y = apply_rotary_pos_emb(x.detach().numpy().reshape(x.shape[:2] + (2, 16)), sincos)
+
+    # import ipdb; ipdb.set_trace()
+    # exit()
+
     key = jax.random.PRNGKey(0)
     torch.manual_seed(0)
     config = LlamaConfig()
@@ -740,9 +765,9 @@ if __name__ == "__main__":
     position_ids = jnp.arange(128)[jnp.newaxis, :].repeat(4, axis=0)
 
     key, model_key = jax.random.split(key)
-    params = model.init(model_key, x, mask, position_ids)
+    params = model.init(model_key, x, attention_mask=mask, position_ids=position_ids)
 
-    y, = model.apply(params, x, mask, position_ids)
+    y, = model.apply(params, x, attention_mask=mask, position_ids=position_ids)
 
     params = flatten_dict(params['params'], sep='.')
     pt_state = pt_model.state_dict()
@@ -759,7 +784,7 @@ if __name__ == "__main__":
         'mlp.gate_proj.weight': torch.from_numpy(np.asarray(params['mlp.gate_proj.kernel'])).T,
     })
     x = torch.tensor(np.asarray(x))
-    pt_y = pt_model(x, _make_causal_mask((4, 128), torch.float32, device='cpu'), torch.from_numpy(np.asarray(position_ids)))[0]
+    pt_y = pt_model(x, attention_mask=_make_causal_mask((4, 128), torch.float32, device='cpu'), position_ids=torch.from_numpy(np.asarray(position_ids)))[0]
 
     y = np.asarray(y)
     pt_y = pt_y.detach().numpy()
