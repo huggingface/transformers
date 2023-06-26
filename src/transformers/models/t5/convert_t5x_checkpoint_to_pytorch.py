@@ -69,7 +69,7 @@ def t5x_layer_norm_lookup(params, i, prefix, layer_name):
     return params[f"{prefix}/layers_{i}/{layer_name}/scale"]
 
 
-def convert_t5x_to_pytorch(variables: dict, *, num_layers: int, is_encoder_only: bool):
+def convert_t5x_to_pytorch(variables: dict, *, num_layers: int, is_encoder_only: bool, scalable_attention:bool = False):
     """Converts the parameters from T5X-Flax to Transformers-PyTorch."""
     old = traverse_util.flatten_dict(variables["target"])
     old = {"/".join(k): v for k, v in old.items()}
@@ -104,11 +104,22 @@ def convert_t5x_to_pytorch(variables: dict, *, num_layers: int, is_encoder_only:
         else:
             new[f"encoder.block.{i}.layer.1.DenseReluDense.wi.weight"] = wi.T
         new[f"encoder.block.{i}.layer.1.DenseReluDense.wo.weight"] = wo.T
+        if scalable_attention:
+            # convert the rel_embedding of each layer
+            new[f"encoder.block.{i}.layer.0.SelfAttention.relative_attention_bias.weight"] = old[
+                f"encoder/{i}/relpos_bias/rel_embedding"
+                ].T
 
-    new["encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"] = old[
-        "encoder/relpos_bias/rel_embedding"
-    ].T
+
     new["encoder.final_layer_norm.weight"] = old["encoder/encoder_norm/scale"]
+
+    if not scalable_attention:
+        new["encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"] = old[
+            "encoder/relpos_bias/rel_embedding"
+        ].T
+        new["decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"] = old[
+            "decoder/relpos_bias/rel_embedding"
+        ].T
 
     if not is_encoder_only:
         # Decoder.
@@ -142,10 +153,13 @@ def convert_t5x_to_pytorch(variables: dict, *, num_layers: int, is_encoder_only:
                 new[f"encoder.block.{i}.layer.2.DenseReluDense.wi.weight"] = wi.T
             new[f"decoder.block.{i}.layer.2.DenseReluDense.wo.weight"] = wo.T
 
+            if scalable_attention:
+                # convert the rel_embedding of each layer
+                new[f"decoder.block.{i}.layer.0.SelfAttention.relative_attention_bias.weight"] = old[
+                    f"decoder/{i}/relpos_bias/rel_embedding"
+                    ].T
+
         new["decoder.final_layer_norm.weight"] = old["decoder/decoder_norm/scale"]
-        new["decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"] = old[
-            "decoder/relpos_bias/rel_embedding"
-        ].T
 
         # LM Head (only in v1.1 checkpoints, in v1.0 embeddings are used instead)
         if "decoder/logits_dense/kernel" in old:
