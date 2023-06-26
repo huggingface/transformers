@@ -454,6 +454,7 @@ class SpmConverter(Converter):
 
         if self.proto.trainer_spec.byte_fallback:
             if not getattr(self, "handle_byte_fallback", None):
+                # TODO Unigram now also supports bytefallback
                 warnings.warn(
                     "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
                     " which is not implemented in the fast tokenizers. In practice this means that the fast version of the"
@@ -471,9 +472,9 @@ class SpmConverter(Converter):
         model_type = proto.trainer_spec.model_type
         vocab_scores = self.vocab(proto)
         unk_id = self.unk_id(proto)
-
+        byte_fallback = proto.trainer_spec.byte_fallback
         if model_type == 1:
-            tokenizer = Tokenizer(Unigram(vocab_scores, unk_id))
+            tokenizer = Tokenizer(Unigram(vocab_scores, unk_id, byte_fallback))
         elif model_type == 2:
             _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract()
             bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
