@@ -821,8 +821,7 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
             if hasattr(module, "_tie_weights"):
                 module._tie_weights()
 
-    # contrary to the other main module of Bark (BarkCausalModule), it is non-causal, so no need for past key values
-    # And there is an additionnal idx corresponding to the id of the codebook that will be predicted
+    # an additionnal idx corresponding to the id of the codebook that will be predicted
     @add_start_docstrings_to_model_forward(BARK_ACOUSTICS_FINE_INPUTS_DOCSTRING)
     def forward(
         self,
