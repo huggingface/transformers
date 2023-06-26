@@ -222,9 +222,7 @@ class BlipVisionEmbeddings(nn.Module):
         self.image_size = config.image_size
         self.patch_size = config.patch_size
 
-        self.class_embedding = nn.Parameter(
-            torch.randn(1, 1, self.embed_dim),
-        )
+        self.class_embedding = nn.Parameter(torch.randn(1, 1, self.embed_dim))
 
         self.patch_embedding = nn.Conv2d(
             in_channels=3, out_channels=self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size
