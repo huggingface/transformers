@@ -243,7 +243,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
     @classmethod
     @property
-    def framework(self) -> str:
+    def framework(cls) -> str:
         """
         :str: Identifies that this is a Flax model.
         """
