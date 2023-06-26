@@ -311,6 +311,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self.task = task
         self.predict_timestamps = predict_timestamps
 
+        # add the timestamp tokens for encoding
+        # self.sanitize_special_tokens()
+        # timestamps = ["<|%.2f|>" % (i * 0.02) for  i in range(1500 + 1)]
+        # self.add_tokens(timestamps)
+
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)

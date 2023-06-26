@@ -473,3 +473,16 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
         output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
         self.assertEqual(output, [])
+
+    def test_timestamp_tokens(self):
+        multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
+        timestamps = ["<|%.2f|>" % (i * 0.02) for  i in range(1500 + 1)]
+        multilingual_tokenizer.add_tokens(timestamps)
+        input_ids = multilingual_tokenizer.encode("<|0.00|>Hello!<|2.34|>", return_tensors = 'pt')
+        self.assertEqual(input_ids, [[50258, 50363, 50364, 15947,     0, 50481, 50257]])
+
+        multilingual_tokenizer = WhisperTokenizerFast.from_pretrained("openai/whisper-tiny")
+        input_ids = multilingual_tokenizer.encode("<|0.00|>Hello!<|2.34|>", return_tensors = 'pt')
+        timestamps = ["<|%.2f|>" % (i * 0.02) for  i in range(1500 + 1)]
+        multilingual_tokenizer.add_tokens(timestamps)
+        self.assertEqual(input_ids, [50258, 50363, 27, 91, 15, 13, 628, 91, 29, 15947, 0, 27, 91, 17, 13, 12249, 91, 29, 50257])

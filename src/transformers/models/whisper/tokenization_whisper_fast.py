@@ -157,6 +157,8 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
+        # timestamps = ["<|%.2f|>" % (i * 0.02) for  i in range(1500 + 1)]
+        # self.add_tokens(timestamps)
 
         self.add_bos_token = kwargs.pop("add_bos_token", False)
 
