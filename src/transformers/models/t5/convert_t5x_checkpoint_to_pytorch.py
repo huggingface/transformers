@@ -241,6 +241,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--is_encoder_only", action="store_true", help="Check if the model is encoder-decoder model", default=False
     )
+    parser.add_argument(
+        "--scalable_attention", action="store_true", help="Whether the model uses scaled attention (umt5 model)", default=False
+    )
     args = parser.parse_args()
     convert_t5x_checkpoint_to_pytorch(
         args.t5x_checkpoint_path, args.config_file, args.pytorch_dump_path, args.is_encoder_only
