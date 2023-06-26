@@ -281,6 +281,7 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
         r"language_model.decoder.embed_tokens.weight",
         r"language_model.lm_head.weight",
     ]
+    _keep_in_fp32_modules = ["wo"]
     _no_split_modules = [
         "InstructBlipAttention",
         "T5Block",
