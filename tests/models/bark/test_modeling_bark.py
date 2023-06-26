@@ -260,21 +260,13 @@ class BarkSemanticModuleTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
 
-            if not self.is_encoder_decoder:
-                input_ids = inputs["input_ids"]
-                del inputs["input_ids"]
-            else:
-                encoder_input_ids = inputs["input_ids"]
-                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
-                del inputs["input_ids"]
-                inputs.pop("decoder_input_ids", None)
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+
 
             wte = model.get_input_embeddings()
-            if not self.is_encoder_decoder:
-                inputs["input_embeds"] = wte(input_ids)
-            else:
-                inputs["input_embeds"] = wte(encoder_input_ids)
-                inputs["decoder_input_embeds"] = wte(decoder_input_ids)
+            inputs["input_embeds"] = wte(input_ids)
+
 
             with torch.no_grad():
                 model(**inputs)[0]
