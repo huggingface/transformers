@@ -70,7 +70,7 @@ def enable_full_determinism(seed: int):
         # depending on the CUDA version, so we set them both here
         os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
-        torch.use_deterministic_algorithms(True)
+        torch.use_deterministic_algorithms(True, warn_only=True)
 
         # Enable CUDNN deterministic mode
         torch.backends.cudnn.deterministic = True
