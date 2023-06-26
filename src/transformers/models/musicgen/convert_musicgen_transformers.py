@@ -109,7 +109,7 @@ def decoder_config_from_checkpoint(checkpoint: str) -> MusicgenDecoderConfig:
 
 
 @torch.no_grad()
-def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hub=False, device="cpu"):
+def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, repo_id=None, device="cpu"):
     fairseq_model = MusicGen.get_pretrained(checkpoint, device=device)
     decoder_config = decoder_config_from_checkpoint(checkpoint)
 
@@ -167,9 +167,9 @@ def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, push_to_hu
         model.save_pretrained(pytorch_dump_folder)
         processor.save_pretrained(pytorch_dump_folder)
 
-    if push_to_hub:
-        model.push_to_hub(checkpoint)
-        processor.push_to_hub(checkpoint)
+    if repo_id:
+        model.push_to_hub(repo_id)
+        processor.push_to_hub(repo_id)
 
 
 if __name__ == "__main__":
@@ -189,7 +189,7 @@ if __name__ == "__main__":
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
     )
     parser.add_argument(
         "--device", default="cpu", type=str, help="Torch device to run the conversion, either cpu or cuda."
