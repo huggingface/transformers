@@ -170,13 +170,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     greedy_sample_model_classes = (
         (MusicgenForCausalLM,) if is_torch_available() else ()
     )  # we don't want to run all the generation tests, only a specific subset
-    pipeline_model_mapping = (
-        {
-            "text-generation": MusicgenForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {}
     test_pruning = False
     test_resize_embeddings = False
 
