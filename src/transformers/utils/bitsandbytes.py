@@ -6,10 +6,12 @@ from packaging import version
 from ..utils import logging
 from .import_utils import importlib_metadata, is_accelerate_available, is_bitsandbytes_available
 
+
 if is_bitsandbytes_available():
     import bitsandbytes as bnb
     import torch
     import torch.nn as nn
+
     from ..pytorch_utils import Conv1D
 
 if is_accelerate_available():
