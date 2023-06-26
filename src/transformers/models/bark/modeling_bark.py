@@ -1075,10 +1075,6 @@ class BarkModel(BarkPreTrainedModel):
         # take the generated semantic tokens
         semantic_output = semantic_output[:, 257:]
 
-        # replace semantic_pad_token (eos_tok and pad_tok here) with coarse_semantic_pad_token i.e the pad_token used in the next model
-        semantic_output.masked_fill_(
-            semantic_output == self.config.semantic_pad_token, self.config.coarse_semantic_pad_token
-        )
 
         return semantic_output
 
@@ -1090,6 +1086,11 @@ class BarkModel(BarkPreTrainedModel):
         sliding_window_len: int = 60,
         **kwargs,
     ):
+        # replace semantic_pad_token (eos_tok and pad_tok here) with coarse_semantic_pad_token i.e the pad_token used in the next model
+        semantic_output.masked_fill_(
+            semantic_output == self.config.semantic_pad_token, self.config.coarse_semantic_pad_token
+        )
+        
         semantic_to_coarse_ratio = (
             self.config.coarse_rate_hz / self.config.semantic_rate_hz * self.config.n_coarse_codebooks
         )
