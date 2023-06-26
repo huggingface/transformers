@@ -767,6 +767,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertForQuestionAnswering"),
         ("mobilebert", "MobileBertForQuestionAnswering"),
         ("mpnet", "MPNetForQuestionAnswering"),
+        ("mt5", "MT5ForQuestionAnswering"),
         ("mvp", "MvpForQuestionAnswering"),
         ("nezha", "NezhaForQuestionAnswering"),
         ("nystromformer", "NystromformerForQuestionAnswering"),
