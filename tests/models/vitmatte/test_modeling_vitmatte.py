@@ -27,13 +27,12 @@ from transformers.testing_utils import (
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
-    from torch import nn
 
     from transformers import VitDetConfig, VitMatteForImageMatting
     from transformers.models.vitmatte.modeling_vitmatte import VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST
@@ -52,7 +51,7 @@ class VitMatteModelTester:
         patch_size=16,
         num_channels=4,
         is_training=True,
-        use_labels=True,
+        use_labels=False,
         hidden_size=32,
         num_hidden_layers=6,
         num_attention_heads=8,
@@ -78,14 +77,14 @@ class VitMatteModelTester:
         self.scope = scope
         self.out_features = out_features
 
-        self.seq_length = (self.image_size // self.patch_size)**2
+        self.seq_length = (self.image_size // self.patch_size) ** 2
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            raise NotImplementedError("Training is not yet supported")
 
         config = self.get_config()
 
@@ -167,14 +166,9 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(reason="UperNet does not support input and output embeddings")
     def test_model_common_attributes(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
-            x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
+        pass
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

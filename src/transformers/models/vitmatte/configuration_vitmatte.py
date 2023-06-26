@@ -43,6 +43,10 @@ class VitMatteConfig(PretrainedConfig):
             The configuration of the backbone model.
         hidden_size (`int`, *optional*, defaults to 384):
             The number of input channels of the decoder.
+        convstream_out (`List[int]`, *optional*, defaults to `[48, 96, 192]`):
+            ...
+        fusion_out (`List[int]`, *optional*, defaults to `[256, 128, 64, 32]`):
+            ...
 
     Example:
 

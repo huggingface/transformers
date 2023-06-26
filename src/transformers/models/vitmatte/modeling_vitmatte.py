@@ -118,8 +118,7 @@ class VitMatteConvStream(nn.Module):
         super().__init__()
         self.convs = nn.ModuleList()
 
-        self.conv_chans = out_channels
-        self.conv_chans.insert(0, in_channels)
+        self.conv_chans = [in_channels] + out_channels
 
         for i in range(len(self.conv_chans) - 1):
             in_chan_ = self.conv_chans[i]
@@ -181,16 +180,20 @@ class VitMatteDetailCaptureModule(nn.Module):
 
     def __init__(self, config):
         super().__init__()
+        print(config.fusion_out)
+        print(config.convstream_out)
         if len(config.fusion_out) != len(config.convstream_out) + 1:
             raise ValueError("The length of fusion_out should be equal to the length of convstream_out + 1.")
 
-        self.convstream = VitMatteConvStream(in_channels=config.backbone_config.num_channels, out_channels=config.convstream_out)
+        print("Constream out:", config.convstream_out)
+
+        self.convstream = VitMatteConvStream(
+            in_channels=config.backbone_config.num_channels, out_channels=config.convstream_out
+        )
         self.conv_chans = self.convstream.conv_chans
 
         self.fusion_blocks = nn.ModuleList()
-        self.fusion_channels = config.fusion_out
-        in_channels = config.hidden_size
-        self.fusion_channels.insert(0, in_channels)
+        self.fusion_channels = [config.hidden_size] + config.fusion_out
         for i in range(len(self.fusion_channels) - 1):
             self.fusion_blocks.append(
                 VitMatteFusionBlock(
