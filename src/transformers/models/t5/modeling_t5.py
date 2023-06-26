@@ -1957,10 +1957,10 @@ class T5EncoderModel(T5PreTrainedModel):
 
 @add_start_docstrings(
     """
-    T5 Model with a span classification head on top for extractive question-answering tasks like SQuAD (linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    T5 Model with a span classification head on top for extractive question-answering tasks like SQuAD (linear layers
+    on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
-    T5_START_DOCSTRING
+    T5_START_DOCSTRING,
 )
 class T5ForQuestionAnswering(T5PreTrainedModel):
     _keys_to_ignore_on_load_missing = [

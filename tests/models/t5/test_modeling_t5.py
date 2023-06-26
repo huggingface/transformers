@@ -43,9 +43,9 @@ if is_torch_available():
         ByT5Tokenizer,
         T5EncoderModel,
         T5ForConditionalGeneration,
+        T5ForQuestionAnswering,
         T5Model,
         T5Tokenizer,
-        T5ForQuestionAnswering,
     )
     from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
 
