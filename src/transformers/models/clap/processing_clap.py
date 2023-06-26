@@ -39,13 +39,21 @@ class ClapProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    def __call__(self, text=None, audios=None, return_tensors=None, **kwargs):
+    def __call__(
+        self,
+        text=None,
+        audios=None,
+        return_tensors=None,
+        tokenizer_kwargs=None,
+        feature_extractor_kwargs=None,
+        **kwargs,
+    ):
         """
-        Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
-        and `kwargs` arguments to RobertaTokenizerFast's [`~RobertaTokenizerFast.__call__`] if `text` is not `None` to
-        encode the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
-        ClapFeatureExtractor's [`~ClapFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the
-        doctsring of the above two methods for more information.
+        Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`,
+        `tokenizer_kwargs` and `kwargs` arguments to RobertaTokenizerFast's [`~RobertaTokenizerFast.__call__`] if
+        `text` is not `None` to encode the text. To prepare the audio(s), this method forwards the `audios`,
+        `feature_extractor_kwargs` and `kwargs` arguments to ClapFeatureExtractor's [`~ClapFeatureExtractor.__call__`]
+        if `audios` is not `None`. Please refer to the doctsring of the above two methods for more information.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
@@ -56,14 +64,16 @@ class ClapProcessor(ProcessorMixin):
                 The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
                 of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
                 and T the sample length of the audio.
-
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
+            tokenizer_kwargs (`dict`, *optional*):
+                Keyword arguments to be passed only to RobertaTokenizerFast's [`~RobertaTokenizerFast.__call__`].
+            feature_extractor_kwargs (`dict`, *optional*):
+                Keyword arguments to be passed only to ClapFeatureExtractor's [`~ClapFeatureExtractor.__call__`].
 
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
@@ -74,17 +84,21 @@ class ClapProcessor(ProcessorMixin):
               `None`).
             - **audio_features** -- Audio features to be fed to a model. Returned when `audios` is not `None`.
         """
-        sampling_rate = kwargs.pop("sampling_rate", None)
-
         if text is None and audios is None:
             raise ValueError("You have to specify either text or audios. Both cannot be none.")
 
+        if tokenizer_kwargs is None:
+            tokenizer_kwargs = {}
+
+        if feature_extractor_kwargs is None:
+            feature_extractor_kwargs = {}
+
         if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
+            encoding = self.tokenizer(text, return_tensors=return_tensors, **tokenizer_kwargs, **kwargs)
 
         if audios is not None:
             audio_features = self.feature_extractor(
-                audios, sampling_rate=sampling_rate, return_tensors=return_tensors, **kwargs
+                audios, return_tensors=return_tensors, **feature_extractor_kwargs, **kwargs
             )
 
         if text is not None and audios is not None:
