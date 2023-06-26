@@ -336,20 +336,20 @@ class VitsResidualCouplingLayer(nn.Module):
         self.conv_post = nn.Conv1d(config.hidden_size, self.half_channels, 1)
 
     def forward(self, inputs, padding_mask, global_conditioning=None, reverse=False):
-        x0, x1 = torch.split(inputs, [self.half_channels] * 2, dim=1)
-        hidden_states = self.conv_pre(x0) * padding_mask
+        first_half, second_half = torch.split(inputs, [self.half_channels] * 2, dim=1)
+        hidden_states = self.conv_pre(first_half) * padding_mask
         hidden_states = self.wavenet(hidden_states, padding_mask, global_conditioning)
         mean = self.conv_post(hidden_states) * padding_mask
         log_stddev = torch.zeros_like(mean)
 
         if not reverse:
-            x1 = mean + x1 * torch.exp(log_stddev) * padding_mask
-            outputs = torch.cat([x0, x1], dim=1)
+            second_half = mean + second_half * torch.exp(log_stddev) * padding_mask
+            outputs = torch.cat([first_half, second_half], dim=1)
             log_determinant = torch.sum(log_stddev, [1, 2])
             return outputs, log_determinant
         else:
-            x1 = (x1 - mean) * torch.exp(-log_stddev) * padding_mask
-            outputs = torch.cat([x0, x1], dim=1)
+            second_half = (second_half - mean) * torch.exp(-log_stddev) * padding_mask
+            outputs = torch.cat([first_half, second_half], dim=1)
             return outputs
 
 
@@ -387,14 +387,14 @@ class VitsDilatedDepthSeparableConv(nn.Module):
         self.num_layers = num_layers
 
         self.dropout = nn.Dropout(dropout_rate)
-        self.convs_sep = nn.ModuleList()
-        self.convs_1x1 = nn.ModuleList()
+        self.convs_dilated = nn.ModuleList()
+        self.convs_pointwise = nn.ModuleList()
         self.norms_1 = nn.ModuleList()
         self.norms_2 = nn.ModuleList()
         for i in range(num_layers):
             dilation = kernel_size**i
             padding = (kernel_size * dilation - dilation) // 2
-            self.convs_sep.append(
+            self.convs_dilated.append(
                 nn.Conv1d(
                     in_channels=channels,
                     out_channels=channels,
@@ -404,7 +404,7 @@ class VitsDilatedDepthSeparableConv(nn.Module):
                     padding=padding,
                 )
             )
-            self.convs_1x1.append(nn.Conv1d(channels, channels, 1))
+            self.convs_pointwise.append(nn.Conv1d(channels, channels, 1))
             self.norms_1.append(nn.LayerNorm(channels))
             self.norms_2.append(nn.LayerNorm(channels))
 
@@ -413,10 +413,10 @@ class VitsDilatedDepthSeparableConv(nn.Module):
             inputs = inputs + global_conditioning
 
         for i in range(self.num_layers):
-            hidden_states = self.convs_sep[i](inputs * padding_mask)
+            hidden_states = self.convs_dilated[i](inputs * padding_mask)
             hidden_states = self.norms_1[i](hidden_states.transpose(1, -1)).transpose(1, -1)
             hidden_states = nn.functional.gelu(hidden_states)
-            hidden_states = self.convs_1x1[i](hidden_states)
+            hidden_states = self.convs_pointwise[i](hidden_states)
             hidden_states = self.norms_2[i](hidden_states.transpose(1, -1)).transpose(1, -1)
             hidden_states = nn.functional.gelu(hidden_states)
             hidden_states = self.dropout(hidden_states)
@@ -438,21 +438,21 @@ class VitsConvFlow(nn.Module):
         self.conv_proj = nn.Conv1d(filter_channels, self.half_channels * (num_bins * 3 - 1), 1)
 
     def forward(self, inputs, padding_mask, global_conditioning=None, reverse=False):
-        x0, x1 = torch.split(inputs, [self.half_channels] * 2, dim=1)
+        first_half, second_half = torch.split(inputs, [self.half_channels] * 2, dim=1)
 
-        hidden_states = self.conv_pre(x0)
+        hidden_states = self.conv_pre(first_half)
         hidden_states = self.conv_dds(hidden_states, padding_mask, global_conditioning)
         hidden_states = self.conv_proj(hidden_states) * padding_mask
 
-        batch_size, channels, length = x0.shape
+        batch_size, channels, length = first_half.shape
         hidden_states = hidden_states.reshape(batch_size, channels, -1, length).permute(0, 1, 3, 2)
 
         unnormalized_widths = hidden_states[..., : self.num_bins] / math.sqrt(self.filter_channels)
         unnormalized_heights = hidden_states[..., self.num_bins : 2 * self.num_bins] / math.sqrt(self.filter_channels)
         unnormalized_derivatives = hidden_states[..., 2 * self.num_bins :]
 
-        x1, log_abs_det = self._unconstrained_rational_quadratic_spline(
-            x1,
+        second_half, log_abs_det = self._unconstrained_rational_quadratic_spline(
+            second_half,
             unnormalized_widths,
             unnormalized_heights,
             unnormalized_derivatives,
@@ -460,7 +460,7 @@ class VitsConvFlow(nn.Module):
             tail_bound=self.tail_bound,
         )
 
-        outputs = torch.cat([x0, x1], dim=1) * padding_mask
+        outputs = torch.cat([first_half, second_half], dim=1) * padding_mask
         if not reverse:
             log_determinant = torch.sum(log_abs_det * padding_mask, [1, 2])
             return outputs, log_determinant
@@ -616,17 +616,6 @@ class VitsConvFlow(nn.Module):
             return outputs, logabsdet
 
 
-class VitsLog(nn.Module):
-    def forward(self, inputs, padding_mask, reverse=False, **kwargs):
-        if not reverse:
-            outputs = torch.log(torch.clamp_min(inputs, 1e-5)) * padding_mask
-            log_determinant = torch.sum(-outputs, [1, 2])
-            return outputs, log_determinant
-        else:
-            outputs = torch.exp(inputs) * padding_mask
-            return outputs
-
-
 class VitsElementwiseAffine(nn.Module):
     def __init__(self, channels):
         super().__init__()
@@ -666,7 +655,6 @@ class VitsStochasticDurationPredictor(nn.Module):
             self.flows.append(VitsConvFlow(2, filter_channels, kernel_size, num_layers=3))
             self.flows.append(VitsFlip())
 
-        self.log_flow = VitsLog()
         self.post_conv_pre = nn.Conv1d(1, filter_channels, 1)
         self.post_conv_proj = nn.Conv1d(filter_channels, filter_channels, 1)
         self.post_conv_dds = VitsDilatedDepthSeparableConv(
@@ -711,7 +699,9 @@ class VitsStochasticDurationPredictor(nn.Module):
             )
             logq = torch.sum(-0.5 * (math.log(2 * math.pi) + (e_q**2)) * padding_mask, [1, 2]) - logdet_tot_q
 
-            z0, logdet_tot = self.log_flow(z0, padding_mask)
+            z0 = torch.log(torch.clamp_min(z0, 1e-5)) * padding_mask
+            logdet_tot = torch.sum(-z0, [1, 2])
+
             z = torch.cat([z0, z1], dim=1)
             for flow in self.flows:
                 z, logdet = flow(z, padding_mask, global_conditioning=inputs)
@@ -719,7 +709,6 @@ class VitsStochasticDurationPredictor(nn.Module):
 
             nll = torch.sum(0.5 * (math.log(2 * math.pi) + (z**2)) * padding_mask, [1, 2]) - logdet_tot
             return nll + logq
-
         else:
             flows = list(reversed(self.flows))
             flows = flows[:-2] + [flows[-1]]  # remove a useless vflow
@@ -1255,10 +1244,10 @@ VITS_INPUTS_DOCSTRING = r"""
             [What are attention masks?](../glossary#attention-mask)
         speed (`float`, *optional*, defaults to 1.0):
             Speaking rate. Larger values are faster.
-        noise_scale (`float`, *optional*, defaults to 1.0):
-            How random the speech prediction is.
-        noise_scale_duration (`float`, *optional*, defaults to 1.0):
-            How random the duration prediction is.
+        noise_scale (`float`, *optional*, defaults to 0.667):
+            How random the speech prediction is. Larger values create more variation in the predicted speech.
+        noise_scale_duration (`float`, *optional*, defaults to 0.8):
+            How random the duration prediction is. Larger values create more variation in the predicted durations.
         speaker_id (`int`, *optional*):
             Which speaker embedding to use. Only used for multispeaker models.
         return_dict (`bool`, *optional*):
@@ -1302,8 +1291,8 @@ class VitsModel(VitsPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         speed: float = 1.0,
-        noise_scale: float = 1.0,
-        noise_scale_duration: float = 1.0,
+        noise_scale: float = 0.667,
+        noise_scale_duration: float = 0.8,
         speaker_id: Optional[int] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.FloatTensor] = None,
@@ -1378,7 +1367,13 @@ class VitsModel(VitsPreTrainedModel):
 
         # Reconstruct an attention tensor of shape (batch, 1, out_length, in_length)
         attn_mask = torch.unsqueeze(input_padding_mask, 2) * torch.unsqueeze(output_padding_mask, -1)
-        attn = self._generate_path(duration, attn_mask)
+        batch_size, _, output_length, input_length = attn_mask.shape
+        cum_duration = torch.cumsum(duration, -1).view(batch_size * input_length, 1)
+        indices = torch.arange(output_length, dtype=duration.dtype, device=duration.device)
+        path = indices.unsqueeze(0) < cum_duration
+        path = path.to(attn_mask.dtype).view(batch_size, input_length, output_length)
+        path = path - nn.functional.pad(path, [0, 0, 1, 0, 0, 0])[:, :-1]
+        attn = path.unsqueeze(1).transpose(2, 3) * attn_mask
 
         # Expand prior
         means_prior = torch.matmul(attn.squeeze(1), means_prior).transpose(1, 2)
@@ -1389,19 +1384,9 @@ class VitsModel(VitsPreTrainedModel):
 
         predicted_audio = self.decoder((z * output_padding_mask), speaker_embeddings)
         predicted_audio = predicted_audio.squeeze(1)
-        sequence_lengths = predicted_lengths * 256
+        sequence_lengths = predicted_lengths * np.prod(self.config.upsample_rates)
 
         if return_dict:
             return VitsModelOutput(audio=predicted_audio, sequence_lengths=sequence_lengths)
 
         return (predicted_audio, sequence_lengths)
-
-    def _generate_path(self, duration, mask):
-        batch_size, _, output_length, input_length = mask.shape
-        cum_duration = torch.cumsum(duration, -1).view(batch_size * input_length, 1)
-        indices = torch.arange(output_length, dtype=duration.dtype, device=duration.device)
-        path = indices.unsqueeze(0) < cum_duration
-        path = path.to(mask.dtype).view(batch_size, input_length, output_length)
-        path = path - nn.functional.pad(path, [0, 0, 1, 0, 0, 0])[:, :-1]
-        path = path.unsqueeze(1).transpose(2, 3) * mask
-        return path
