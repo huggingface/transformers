@@ -57,6 +57,7 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "InstructBlipQFormerModel",  # Building part of bigger (tested) model.
     "NllbMoeDecoder",
     "NllbMoeEncoder",
     "LlamaDecoder",  # Building part of bigger (tested) model.
@@ -282,6 +283,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "FlavaMultimodalModel",
     "GPT2DoubleHeadsModel",
     "GPTSw3DoubleHeadsModel",
+    "InstructBlipVisionModel",
+    "InstructBlipQFormerModel",
     "LayoutLMForQuestionAnswering",
     "LukeForMaskedLM",
     "LukeForEntityClassification",
