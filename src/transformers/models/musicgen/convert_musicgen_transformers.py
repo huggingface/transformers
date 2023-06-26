@@ -89,20 +89,25 @@ def rename_state_dict(state_dict: OrderedDict, hidden_size: int) -> Tuple[Dict, 
 
 def decoder_config_from_checkpoint(checkpoint: str) -> MusicgenDecoderConfig:
     if checkpoint == "small":
+        # default config values
         hidden_size = 1024
         num_hidden_layers = 24
+        num_attention_heads = 16
     elif checkpoint == "medium":
         hidden_size = 1536
         num_hidden_layers = 48
+        num_attention_heads = 24
     elif checkpoint == "large":
         hidden_size = 2048
         num_hidden_layers = 48
+        num_attention_heads = 32
     else:
         raise ValueError(f"Checkpoint should be one of `['small', 'medium', 'large']`, got {checkpoint}.")
     config = MusicgenDecoderConfig(
         hidden_size=hidden_size,
         ffn_dim=hidden_size * 4,
         num_hidden_layers=num_hidden_layers,
+        num_attention_heads=num_attention_heads,
         tie_word_embeddings=False,
     )
     return config
@@ -168,6 +173,7 @@ def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, repo_id=No
         processor.save_pretrained(pytorch_dump_folder)
 
     if repo_id:
+        logger.info(f"Pushing model {checkpoint} to {repo_id}")
         model.push_to_hub(repo_id)
         processor.push_to_hub(repo_id)
 
