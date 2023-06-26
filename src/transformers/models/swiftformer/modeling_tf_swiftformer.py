@@ -91,7 +91,6 @@ class TFSwiftFormerPatchEmbedding(tf.keras.layers.Layer):
         )
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
-        x = tf.transpose(x, perm=(0, 2, 3, 1))
         return self.patch_embedding(x, training=training)
 
 
@@ -382,10 +381,10 @@ class TFSwiftFormerEncoderBlock(tf.keras.layers.Layer):
     def call(self, x: tf.Tensor, training: bool = False):
         x = self.local_representation(x, training=training)
         batch_size, height, width, channels = x.shape
-        # FIXME: pytorch -> b c h w -> b h w c (tensorflow, keep same order)
-        # Attention layer uses channels last why? should I go for channels first?
-        res = self.attn(tf.reshape(x, (batch_size, height * width, channels)))
-        res = tf.reshape(res, (batch_size, height, width, channels))
+
+        res = tf.reshape(x, [-1, height * width, channels])
+        res = self.attn(res)
+        res = tf.reshape(res, [-1, height, width, channels])
         if self.use_layer_scale:
             x = x + self.drop_path(self.layer_scale_1 * res, training=training)
             x = x + self.drop_path(self.layer_scale_2 * self.linear(x), training=training)
@@ -423,7 +422,9 @@ class TFSwiftFormerStage(tf.keras.layers.Layer):
                 self.blocks.append(TFSwiftFormerConvEncoder(config, dim=dim))
 
     def call(self, input: tf.Tensor, training: bool = False) -> tf.Tensor:
-        for block in self.blocks:
+        for i, block in enumerate(self.blocks):
+            print(f"SwiftFormerStage {i+1}/{len(self.blocks)}, {block}", end="... ")
+            print(input.shape)
             input = block(input, training=training)
         return input
 
@@ -463,7 +464,10 @@ class TFSwiftFormerEncoder(tf.keras.layers.Layer):
 
         all_hidden_states = (hidden_states,) if output_hidden_states else None
 
-        for block in self.network:
+        print(self.network)
+        for i, block in enumerate(self.network):
+            print(f"SwiftFormerEncoder {i+1}/{len(self.network)}, {block}", end="... ")
+            print(hidden_states.shape)
             hidden_states = block(hidden_states)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -571,6 +575,11 @@ class TFSwiftFormerMainLayer(tf.keras.layers.Layer):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # TF 2.0 image layers can't use NCHW format when running on CPU.
+        # We transpose to NHWC format and then transpose back after the full forward pass.
+        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
+        pixel_values = tf.transpose(pixel_values, perm=[0, 2, 3, 1])
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
