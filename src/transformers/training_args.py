@@ -1561,7 +1561,10 @@ class TrainingArguments:
                 " `--debug tpu_metrics_debug` instead",
                 FutureWarning,
             )
-            self.debug += " tpu_metrics_debug"
+            if self.debug is None:
+                self.debug = " tpu_metrics_debug"
+            else:
+                self.debug += " tpu_metrics_debug"
             self.tpu_metrics_debug = False
 
         if isinstance(self.debug, str):
