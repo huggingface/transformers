@@ -305,7 +305,7 @@ to indicate which pixels are real (1) and which are padding (0).
 ```py
 >>> def collate_fn(batch):
 ...     pixel_values = [item["pixel_values"] for item in batch]
-...     encoding = image_processor.pad_and_create_pixel_mask(pixel_values, return_tensors="pt")
+...     encoding = image_processor.pad(pixel_values, return_tensors="pt")
 ...     labels = [item["labels"] for item in batch]
 ...     batch = {}
 ...     batch["pixel_values"] = encoding["pixel_values"]
