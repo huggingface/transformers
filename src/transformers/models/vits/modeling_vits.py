@@ -270,9 +270,7 @@ class VitsHifiGan(nn.Module):
         for i in range(len(self.upsampler)):
             channels = config.upsample_initial_channel // (2 ** (i + 1))
             for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes):
-                self.resblocks.append(
-                    HifiGanResidualBlock(channels, kernel_size, dilation, config.leaky_relu_slope)
-                )
+                self.resblocks.append(HifiGanResidualBlock(channels, kernel_size, dilation, config.leaky_relu_slope))
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3, bias=False)
 
@@ -1341,7 +1339,9 @@ class VitsModel(VitsPreTrainedModel):
 
         if self.config.num_speakers > 1:
             if speaker_id is None:
-                raise ValueError(f"Expected input `speaker_id` for a multispeaker model, set `speaker_id` in the range 0-{self.config.num_speakers - 1}.")
+                raise ValueError(
+                    f"Expected input `speaker_id` for a multispeaker model, set `speaker_id` in the range 0-{self.config.num_speakers - 1}."
+                )
             speaker_embeddings = self.embed_speaker(torch.tensor([speaker_id])).unsqueeze(-1)
         else:
             speaker_embeddings = None
