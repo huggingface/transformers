@@ -95,9 +95,6 @@ class BarkModuleTester:
         self.config_class = config_class
         self.model_class = model_class
 
-    def get_large_model_config(self):
-        return self.config_class.from_pretrained("ylacombe/bark-large")
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
