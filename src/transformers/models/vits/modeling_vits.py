@@ -1052,6 +1052,7 @@ class VitsEncoder(nn.Module):
         self.config = config
         self.layers = nn.ModuleList([VitsEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.gradient_checkpointing = False
+        self.layerdrop = config.encoder_layerdrop
 
     def forward(
         self,
@@ -1081,7 +1082,7 @@ class VitsEncoder(nn.Module):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = np.random.uniform(0, 1)
 
-            skip_the_layer = self.training and (dropout_probability < self.config.layerdrop)
+            skip_the_layer = self.training and (dropout_probability < self.layerdrop)
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
@@ -1187,7 +1188,7 @@ class VitsPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+        elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):

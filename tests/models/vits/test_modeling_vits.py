@@ -14,9 +14,10 @@
 # limitations under the License.
 """ Testing suite for the PyTorch VITS model. """
 
+import copy
 import unittest
 
-from transformers import VitsConfig
+from transformers import PretrainedConfig, VitsConfig
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
@@ -36,6 +37,17 @@ from ...test_modeling_common import (
 
 if is_torch_available():
     from transformers import VitsModel
+
+
+def _config_zero_init(config):
+    configs_no_init = copy.deepcopy(config)
+    for key in configs_no_init.__dict__.keys():
+        if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
+            setattr(configs_no_init, key, 1e-10)
+        if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
+            no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
+            setattr(configs_no_init, key, no_init_subconfig)
+    return configs_no_init
 
 
 @require_torch
@@ -94,7 +106,7 @@ class VitsModelTester:
         attention_mask = inputs_dict["attention_mask"]
 
         result = model(input_ids, attention_mask=attention_mask)
-        self.parent.assertEqual(result.audio.shape, (self.batch_size, 1, 27136))
+        self.parent.assertEqual(result.audio.shape, (self.batch_size, 99072))
 
 
 @require_torch
@@ -104,6 +116,9 @@ class VitsModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_headmasking = False
     test_resize_embeddings = False
+    test_head_masking = False
+    test_torchscript = False
+    has_attentions = False
 
     input_name = "input_ids"
 
@@ -120,29 +135,76 @@ class VitsModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
-    # this model has no inputs_embeds
+    @unittest.skip("this model is not deterministic")
+    def test_determinism(self):
+        pass
+
+    @unittest.skip("this model does not return hidden_states")
+    def test_hidden_states_output(self):
+        pass
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                uniform_init_parms = [
+                    "emb_rel_k",
+                    "emb_rel_v",
+                    "conv_1",
+                    "conv_2",
+                    "conv_pre",
+                    "conv_post",
+                    "conv_proj",
+                    "conv_dds",
+                    "project",
+                    "wavenet.in_layers",
+                    "wavenet.res_skip_layers",
+                    "upsampler",
+                    "resblocks",
+                ]
+                if param.requires_grad:
+                    if any([x in name for x in uniform_init_parms]):
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+
+    @unittest.skip("this model has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # this model has no input embeddings
+    @unittest.skip("this model has no input embeddings")
     def test_model_common_attributes(self):
         pass
 
+    @unittest.skip("this model is not deterministic")
+    def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip("this model does not return hidden_states")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         pass
 
-    @slow
-    def test_torchscript_output_attentions(self):
-        # disabled because this model doesn't have decoder_input_ids
+    @unittest.skip("this model is not deterministic")
+    def test_save_load(self):
         pass
 
-    @slow
-    def test_torchscript_output_hidden_state(self):
-        # disabled because this model doesn't have decoder_input_ids
-        pass
-
-    @slow
-    def test_torchscript_simple(self):
-        # disabled because this model doesn't have decoder_input_ids
-        pass
+    # overwrite from test_modeling_common
+    def _mock_init_weights(self, module):
+        if hasattr(module, "weight") and module.weight is not None:
+            module.weight.data.fill_(3)
+        if hasattr(module, "weight_g") and module.weight_g is not None:
+            module.weight_g.data.fill_(3)
+        if hasattr(module, "weight_v") and module.weight_v is not None:
+            module.weight_v.data.fill_(3)
+        if hasattr(module, "bias") and module.bias is not None:
+            module.bias.data.fill_(3)

@@ -48,6 +48,9 @@ class VitsConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         encoder_ffn_dim (`int`, *optional*, defaults to 768):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        encoder_layerdrop (`float`, *optional*, defaults to 0.1):
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
         ffn_kernel_size (`int`, *optional*, defaults to 3):
             Kernel size of the 1D convolution layers used by the feed-forward network in the Transformer encoder.
         flow_size (`int`, *optional*, defaults to 192):
@@ -132,6 +135,7 @@ class VitsConfig(PretrainedConfig):
         encoder_layers=6,
         encoder_attention_heads=2,
         encoder_ffn_dim=768,
+        encoder_layerdrop=0.1,
         ffn_kernel_size=3,
         flow_size=192,
         spectrogram_bins=513,
@@ -163,8 +167,9 @@ class VitsConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.encoder_layers = encoder_layers
-        self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_attention_heads = encoder_attention_heads
+        self.encoder_ffn_dim = encoder_ffn_dim
+        self.encoder_layerdrop = encoder_layerdrop
         self.ffn_kernel_size = ffn_kernel_size
         self.flow_size = flow_size
         self.spectrogram_bins = spectrogram_bins
