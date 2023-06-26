@@ -1563,7 +1563,6 @@ class ModelTesterMixin:
     @require_safetensors
     def test_can_use_safetensors(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.tie_word_embeddings = True
         for model_class in self.all_model_classes:
             model_tied = model_class(config)
             with tempfile.TemporaryDirectory() as d:
