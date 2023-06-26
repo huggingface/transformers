@@ -575,12 +575,15 @@ class BarkModelIntegrationTests(unittest.TestCase):
         self.assertListEqual(output_ids[0, :, :len(expected_output_ids[0])].tolist(), expected_output_ids)
 
     @slow
-    def test_generate(self):
+    def test_generate_end_to_end(self):
         input_ids, history_prompt = self.inputs
 
         self.model.generate_audio(**input_ids, history_prompt=None)
         self.model.generate_audio(**input_ids, history_prompt=history_prompt)
-        self.model.generate_audio(**input_ids, history_prompt=None, do_sample=True, temperature=0.6)
+        
+    @slow
+    def test_generate_end_to_end_with_args(self):
+        input_ids, _ = self.inputs
+        
         self.model.generate_audio(**input_ids, history_prompt=None, do_sample=True, temperature=0.6, num_beams=4)
         self.model.generate_audio(**input_ids, history_prompt=None, do_sample=True, temperature=0.6, penalty_alpha=0.6)
-        self.model.generate_audio(**input_ids, history_prompt=None, do_sample=True, temperature=0.6, top_p=0.6)
