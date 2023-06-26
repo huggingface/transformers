@@ -21,7 +21,6 @@ from transformers import PretrainedConfig, VitsConfig
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
-    slow,
     torch_device,
 )
 from transformers.trainer_utils import set_seed
