@@ -28,10 +28,10 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from ..encodec import EncodecModel
 from .configuration_bark import (
-    BarkCoarseAcousticsConfig,
+    BarkCoarseConfig,
     BarkConfig,
-    BarkFineAcousticsConfig,
-    BarkModuleConfig,
+    BarkFineConfig,
+    BarkSubModelConfig,
     BarkSemanticConfig,
 )
 
@@ -59,7 +59,7 @@ BARK_MODULE_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`BarkModuleConfig`]):
+        config ([`BarkSubModelConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -404,20 +404,20 @@ class BarkPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
 
     def _init_weights(self, module):
-        if isinstance(module, BarkCausalModule) or isinstance(module, BarkFineAcousticsModule):
+        if isinstance(module, BarkCausalModel) or isinstance(module, BarkFineModel):
             module.apply(module._init_weights)
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
 
 
-class BarkModulePreTrainedModel(PreTrainedModel):
+class BarkSubModelPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = BarkModuleConfig
+    config_class = BarkSubModelConfig
     # supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
@@ -437,12 +437,12 @@ class BarkModulePreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BarkCausalModule) or isinstance(module, BarkFineAcousticsModule):
+        if isinstance(module, BarkCausalModel) or isinstance(module, BarkFineModel):
             module.gradient_checkpointing = value
 
 
 # GPT2-like autoregressive model
-class BarkCausalModule(BarkModulePreTrainedModel):
+class BarkCausalModel(BarkSubModelPreTrainedModel):
     # TODO: add code sample when checkpoint is added
     #
     # @add_code_sample_docstrings(
@@ -709,7 +709,7 @@ class BarkCausalModule(BarkModulePreTrainedModel):
     "Bark sub-module at the core of the semantic sub-model. It shares the same architecture than the coarse model. It is a GPT-2 like autoregressive model with a language modeling head on top.",
     BARK_MODULE_START_DOCSTRING,
 )
-class BarkSemanticModule(BarkCausalModule):
+class BarkSemanticModel(BarkCausalModel):
     base_model_prefix = "semantic"
     config_class = BarkSemanticConfig
 
@@ -718,18 +718,18 @@ class BarkSemanticModule(BarkCausalModule):
     "Bark sub-module at the core of the coarse acoustics sub-model. It shares the same architecture than the semantic model. It is a GPT-2 like autoregressive model with a language modeling head on top.",
     BARK_MODULE_START_DOCSTRING,
 )
-class BarkCoarseAcousticsModule(BarkCausalModule):
+class BarkCoarseModel(BarkCausalModel):
     base_model_prefix = "coarse_acoustics"
-    config_class = BarkCoarseAcousticsConfig
+    config_class = BarkCoarseConfig
 
 
 @add_start_docstrings(
     "Bark sub-module at the core of the fine acoustics sub-model. It is a non-causal GPT-like model with 8 embedding layers and language modeling heads, one for each codebook.",
     BARK_MODULE_START_DOCSTRING,
 )
-class BarkFineAcousticsModule(BarkModulePreTrainedModel):
+class BarkFineModel(BarkSubModelPreTrainedModel):
     base_model_prefix = "fine_acoustics"
-    config_class = BarkFineAcousticsConfig
+    config_class = BarkFineConfig
     main_input_name = "codebook_idx"
     _tied_weights_keys = []
     _keys_to_ignore_on_load_missing = []
@@ -953,9 +953,9 @@ class BarkModel(BarkPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.semantic = BarkSemanticModule(config.semantic_config)
-        self.coarse_acoustics = BarkCoarseAcousticsModule(config.coarse_acoustics_config)
-        self.fine_acoustics = BarkFineAcousticsModule(config.fine_acoustics_config)
+        self.semantic = BarkSemanticModel(config.semantic_config)
+        self.coarse_acoustics = BarkCoarseModel(config.coarse_acoustics_config)
+        self.fine_acoustics = BarkFineModel(config.fine_acoustics_config)
 
         self.codec_model = EncodecModel.from_pretrained(config.pretrained_encodec_name_or_path)
 

@@ -161,9 +161,9 @@ _import_structure = {
         "AutoformerConfig",
     ],
     "models.bark": [
-        "BarkCoarseAcousticsConfig",
+        "BarkCoarseConfig",
         "BarkConfig",
-        "BarkFineAcousticsConfig",
+        "BarkFineConfig",
         "BarkProcessor",
         "BarkSemanticConfig",
     ],
@@ -1130,11 +1130,11 @@ else:
     _import_structure["models.bark"].extend(
         [
             "BARK_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "BarkCausalModule",
-            "BarkCoarseAcousticsModule",
-            "BarkFineAcousticsModule",
+            "BarkCausalModel",
+            "BarkCoarseModel",
+            "BarkFineModel",
             "BarkModel",
-            "BarkModulePreTrainedModel",
+            "BarkSubModelPreTrainedModel",
             "BarkPreTrainedModel",
             "BarkSemanticModule",
         ]
@@ -4071,9 +4071,9 @@ if TYPE_CHECKING:
         AutoformerConfig,
     )
     from .models.bark import (
-        BarkCoarseAcousticsConfig,
+        BarkCoarseConfig,
         BarkConfig,
-        BarkFineAcousticsConfig,
+        BarkFineConfig,
         BarkProcessor,
         BarkSemanticConfig,
     )
@@ -4947,11 +4947,11 @@ if TYPE_CHECKING:
         )
         from .models.bark import (
             BARK_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BarkCausalModule,
-            BarkCoarseAcousticsModule,
-            BarkFineAcousticsModule,
+            BarkCausalModel,
+            BarkCoarseModel,
+            BarkFineModel,
             BarkModel,
-            BarkModulePreTrainedModel,
+            BarkSubModelPreTrainedModel,
             BarkPreTrainedModel,
             BarkSemanticModule,
         )

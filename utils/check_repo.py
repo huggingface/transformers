@@ -167,7 +167,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "SpeechT5SpeechEncoder",  # Building part of bigger (tested) model.
     "SpeechT5TextDecoder",  # Building part of bigger (tested) model.
     "SpeechT5TextEncoder",  # Building part of bigger (tested) model.
-    "BarkCausalModule",  # Building part of bigger (tested) model.
+    "BarkCausalModel",  # Building part of bigger (tested) model.
     "BarkModel",  # Does not have a forward signature - generation tested with integration tests
 ]
 
@@ -338,9 +338,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SpeechT5ForSpeechToSpeech",
     "SpeechT5ForTextToSpeech",
     "SpeechT5HifiGan",
-    "BarkCausalModule",
-    "BarkCoarseAcousticsModule",
-    "BarkFineAcousticsModule",
+    "BarkCausalModel",
+    "BarkCoarseModel",
+    "BarkFineModel",
     "BarkSemanticModule",
     "MusicgenModel",
     "MusicgenForConditionalGeneration",

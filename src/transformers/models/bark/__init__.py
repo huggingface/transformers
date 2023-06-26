@@ -23,9 +23,9 @@ from ...utils import (
 _import_structure = {
     "configuration_bark": [
         "BARK_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BarkCoarseAcousticsConfig",
+        "BarkCoarseConfig",
         "BarkConfig",
-        "BarkFineAcousticsConfig",
+        "BarkFineConfig",
         "BarkSemanticConfig",
     ],
     "processing_bark": ["BarkProcessor"],
@@ -39,21 +39,21 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_bark"] = [
         "BARK_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "BarkFineAcousticsModule",
+        "BarkFineModel",
         "BarkSemanticModule",
-        "BarkCoarseAcousticsModule",
+        "BarkCoarseModel",
         "BarkModel",
         "BarkPreTrainedModel",
-        "BarkCausalModule",
-        "BarkModulePreTrainedModel",
+        "BarkCausalModel",
+        "BarkSubModelPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
     from .configuration_bark import (
         BARK_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        BarkCoarseAcousticsConfig,
+        BarkCoarseConfig,
         BarkConfig,
-        BarkFineAcousticsConfig,
+        BarkFineConfig,
         BarkSemanticConfig,
     )
     from .processing_bark import BarkProcessor
@@ -66,11 +66,11 @@ if TYPE_CHECKING:
     else:
         from .modeling_bark import (
             BARK_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BarkCausalModule,
-            BarkCoarseAcousticsModule,
-            BarkFineAcousticsModule,
+            BarkCausalModel,
+            BarkCoarseModel,
+            BarkFineModel,
             BarkModel,
-            BarkModulePreTrainedModel,
+            BarkSubModelPreTrainedModel,
             BarkPreTrainedModel,
             BarkSemanticModule,
         )

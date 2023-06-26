@@ -31,7 +31,7 @@ BARK_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class BarkModuleConfig(PretrainedConfig):
+class BarkSubModelConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BartModule`]. It is used to instantiate Bark
     sub-models according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -48,11 +48,11 @@ class BarkModuleConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048). Defaults to 1024.
         input_vocab_size (_type_, optional): _description_.
         Vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`BarkModule`]. Defaults to 10_048 but should be carefully thought with
+            `inputs_ids` passed when calling [`BarkSubModel`]. Defaults to 10_048 but should be carefully thought with
             regards to the chosen sub-model.
         output_vocab_size (_type_, optional):
         Output vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented by the:
-            `output_ids` when passing forward a [`BarkModule`]. Defaults to 10_048 but should be carefully thought with
+            `output_ids` when passing forward a [`BarkSubModel`]. Defaults to 10_048 but should be carefully thought with
             regards to the chosen sub-model.
         num_layers (int, optional):
             Number of layers. Defaults to 12.
@@ -78,13 +78,13 @@ class BarkModuleConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BarkModuleConfig, BarkModule
+    >>> from transformers import BarkSubModelConfig, BarkSubModel
 
     >>> # Initializing a Bark sub-module style configuration
-    >>> configuration = BarkModuleConfig()
+    >>> configuration = BarkSubModelConfig()
 
     >>> # Initializing a model (with random weights) from the suno/bark style configuration
-    >>> model = BarkModule(configuration)
+    >>> model = BarkSubModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -110,8 +110,8 @@ class BarkModuleConfig(PretrainedConfig):
         hidden_size=768,
         dropout=0.0,
         bias=True,  # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
-        n_codes_total=8,  # for BarkFineAcousticsModel
-        n_codes_given=1,  # for BarkFineAcousticsModel
+        n_codes_total=8,  # for BarkFineModel
+        n_codes_given=1,  # for BarkFineModel
         initializer_range=0.02,
         use_cache=True,
         **kwargs,
@@ -148,15 +148,15 @@ class BarkModuleConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class BarkSemanticConfig(BarkModuleConfig):
+class BarkSemanticConfig(BarkSubModelConfig):
     model_type = "semantic"
 
 
-class BarkCoarseAcousticsConfig(BarkModuleConfig):
+class BarkCoarseConfig(BarkSubModelConfig):
     model_type = "coarse_acoustics"
 
 
-class BarkFineAcousticsConfig(BarkModuleConfig):
+class BarkFineConfig(BarkSubModelConfig):
     model_type = "fine_acoustics"
 
     def __init__(self, *args, tie_word_embeddings=True, **kwargs):
@@ -174,11 +174,11 @@ class BarkConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-    semantic_config (BarkModuleConfig, optional):
+    semantic_config (BarkSubModelConfig, optional):
         Configuration of the underlying semantic sub-model. Defaults to None.
-    coarse_acoustics_config (BarkModuleConfig, optional):
+    coarse_acoustics_config (BarkSubModelConfig, optional):
         Configuration of the underlying coarse acoustics sub-model. Defaults to None.
-    fine_acoustics_config (BarkModuleConfig, optional):
+    fine_acoustics_config (BarkSubModelConfig, optional):
         Configuration of the underlying fine acoustics sub-model. Defaults to None.
     pretrained_encodec_name_or_path (str, optional):
         Name or path to the underlying pretrained [`encodec`] model. Defaults to "facebook/encodec_24khz".
@@ -186,12 +186,12 @@ class BarkConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BarkModuleConfig, Bark, BarkConfig
+    >>> from transformers import BarkSubModelConfig, Bark, BarkConfig
 
     >>> # Initializing Bark sub-modules configurations.
-    >>> semantic_config = BarkModuleConfig()
-    >>> coarse_acoustics_config = BarkModuleConfig()
-    >>> fine_acoustics_config = BarkModuleConfig()
+    >>> semantic_config = BarkSubModelConfig()
+    >>> coarse_acoustics_config = BarkSubModelConfig()
+    >>> fine_acoustics_config = BarkSubModelConfig()
 
 
     >>> # Initializing a Bark module style configuration
@@ -211,8 +211,8 @@ class BarkConfig(PretrainedConfig):
     def __init__(
         self,
         semantic_config: BarkSemanticConfig = None,
-        coarse_acoustics_config: BarkCoarseAcousticsConfig = None,
-        fine_acoustics_config: BarkFineAcousticsConfig = None,
+        coarse_acoustics_config: BarkCoarseConfig = None,
+        fine_acoustics_config: BarkFineConfig = None,
         pretrained_encodec_name_or_path: str = "facebook/encodec_24khz",
         **kwargs,
     ):
@@ -231,8 +231,8 @@ class BarkConfig(PretrainedConfig):
             logger.info("fine_acoustics_config is None. initializing the Fine Acoustics module with default values.")
 
         self.semantic_config = BarkSemanticConfig(**semantic_config)
-        self.coarse_acoustics_config = BarkCoarseAcousticsConfig(**coarse_acoustics_config)
-        self.fine_acoustics_config = BarkFineAcousticsConfig(**fine_acoustics_config)
+        self.coarse_acoustics_config = BarkCoarseConfig(**coarse_acoustics_config)
+        self.fine_acoustics_config = BarkFineConfig(**fine_acoustics_config)
         self.pretrained_encodec_name_or_path = pretrained_encodec_name_or_path
 
         # TODO: check if right place
@@ -258,8 +258,8 @@ class BarkConfig(PretrainedConfig):
     def from_configs(
         cls,
         semantic_config: BarkSemanticConfig,
-        coarse_acoustics_config: BarkCoarseAcousticsConfig,
-        fine_acoustics_config: BarkFineAcousticsConfig,
+        coarse_acoustics_config: BarkCoarseConfig,
+        fine_acoustics_config: BarkFineConfig,
         **kwargs,
     ):
         r"""

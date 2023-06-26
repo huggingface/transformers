@@ -21,8 +21,8 @@ import tempfile
 import unittest
 
 from transformers import (
-    BarkCoarseAcousticsConfig,
-    BarkFineAcousticsConfig,
+    BarkCoarseConfig,
+    BarkFineConfig,
     BarkSemanticConfig,
     is_torch_available,
 )
@@ -38,15 +38,15 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        BarkCoarseAcousticsModule,
-        BarkFineAcousticsModule,
+        BarkCoarseModel,
+        BarkFineModel,
         BarkModel,
         BarkProcessor,
         BarkSemanticModule,
     )
 
 
-class BarkModuleTester:
+class BarkSubModelTester:
     def __init__(
         self,
         parent,
@@ -64,8 +64,8 @@ class BarkModuleTester:
         dropout=0.1,
         window_size=256,
         initializer_range=0.02,
-        n_codes_total=8,  # for BarkFineAcousticsModel
-        n_codes_given=1,  # for BarkFineAcousticsModel
+        n_codes_total=8,  # for BarkFineModel
+        n_codes_given=1,  # for BarkFineModel
         config_class=None,
         model_class=None,
     ):
@@ -189,7 +189,7 @@ class BarkModuleTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
 
-class BarkFineAcousticsModuleTester(BarkModuleTester):
+class BarkFineModelTester(BarkSubModelTester):
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length, self.n_codes_total], self.vocab_size)
 
@@ -230,7 +230,7 @@ class BarkSemanticModuleTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
     # no model_parallel for now
 
     def setUp(self):
-        self.model_tester = BarkModuleTester(self, config_class=BarkSemanticConfig, model_class=BarkSemanticModule)
+        self.model_tester = BarkSubModelTester(self, config_class=BarkSemanticConfig, model_class=BarkSemanticModule)
         self.config_tester = ConfigTester(self, config_class=BarkSemanticConfig, n_embd=37)
 
     def test_config(self):
@@ -283,21 +283,21 @@ class BarkSemanticModuleTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
 
 
 @require_torch
-class BarkCoarseAcousticsModuleTest(BarkSemanticModuleTest):
+class BarkCoarseModelTest(BarkSemanticModuleTest):
     # Same tester as BarkSemanticModuleTest, except for model_class and config_class
-    all_model_classes = (BarkCoarseAcousticsModule,) if is_torch_available() else ()
-    all_generative_model_classes = (BarkCoarseAcousticsModule,) if is_torch_available() else ()
+    all_model_classes = (BarkCoarseModel,) if is_torch_available() else ()
+    all_generative_model_classes = (BarkCoarseModel,) if is_torch_available() else ()
 
     def setUp(self):
-        self.model_tester = BarkModuleTester(
-            self, config_class=BarkCoarseAcousticsConfig, model_class=BarkCoarseAcousticsModule
+        self.model_tester = BarkSubModelTester(
+            self, config_class=BarkCoarseConfig, model_class=BarkCoarseModel
         )
-        self.config_tester = ConfigTester(self, config_class=BarkCoarseAcousticsConfig, n_embd=37)
+        self.config_tester = ConfigTester(self, config_class=BarkCoarseConfig, n_embd=37)
 
 
 @require_torch
-class BarkFineAcousticsModuleTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (BarkFineAcousticsModule,) if is_torch_available() else ()
+class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (BarkFineModel,) if is_torch_available() else ()
 
     is_encoder_decoder = False
     fx_compatible = False
@@ -310,10 +310,10 @@ class BarkFineAcousticsModuleTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
 
     def setUp(self):
-        self.model_tester = BarkFineAcousticsModuleTester(
-            self, config_class=BarkFineAcousticsConfig, model_class=BarkFineAcousticsModule
+        self.model_tester = BarkFineModelTester(
+            self, config_class=BarkFineConfig, model_class=BarkFineModel
         )
-        self.config_tester = ConfigTester(self, config_class=BarkFineAcousticsConfig, n_embd=37)
+        self.config_tester = ConfigTester(self, config_class=BarkFineConfig, n_embd=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -11,14 +11,14 @@ from transformers import set_seed
 
 # TODO : how to import directly?
 from transformers.models.bark.configuration_bark import (
-    BarkCoarseAcousticsConfig,
-    BarkFineAcousticsConfig,
+    BarkCoarseConfig,
+    BarkFineConfig,
     BarkSemanticConfig,
 )
 from transformers.models.bark.modeling_bark import (
-    BarkCoarseAcousticsModule,
-    BarkFineAcousticsModule,
-    BarkSemanticModule,
+    BarkCoarseModel,
+    BarkFineModel,
+    BarkSemanticModel,
 )
 from transformers.utils import logging
 
@@ -82,14 +82,14 @@ def _download(from_hf_path, file_name):
 
 def _load_model(ckpt_path, device, use_small=False, model_type="text"):
     if model_type == "text":
-        ModelClass = BarkSemanticModule
+        ModelClass = BarkSemanticModel
         ConfigClass = BarkSemanticConfig
     elif model_type == "coarse":
-        ModelClass = BarkCoarseAcousticsModule
-        ConfigClass = BarkCoarseAcousticsConfig
+        ModelClass = BarkCoarseModel
+        ConfigClass = BarkCoarseConfig
     elif model_type == "fine":
-        ModelClass = BarkFineAcousticsModule
-        ConfigClass = BarkFineAcousticsConfig
+        ModelClass = BarkFineModel
+        ConfigClass = BarkFineConfig
     else:
         raise NotImplementedError()
     model_key = f"{model_type}_small" if use_small else model_type
