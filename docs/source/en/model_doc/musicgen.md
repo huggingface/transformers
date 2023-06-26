@@ -164,13 +164,28 @@ Below, we demonstrate how to construct the composite [`MusicgenForConditionalGen
 parts, as would typically be done following training of the MusicGen decoder LM:
 
 ```python
->>> from transformers import AutoModelForTextEncoding, AutoModel, MusicgenForCausalLM, MusicgenForConditionalGeneration
+>>> from transformers import AutoConfig, AutoModelForTextEncoding, AutoModel, MusicgenForCausalLM, MusicgenForConditionalGeneration
 
 >>> text_encoder = AutoModelForTextEncoding.from_pretrained("t5-base")
 >>> audio_encoder = AutoModel.from_pretrained("facebook/encodec_32khz")
->>> decoder = MusicgenForCausalLM.from_pretrained("facebook/musicgen-small")
+>>> decoder_config = AutoConfig.from_pretrained("facebook/musicgen-small").decoder
+>>> decoder = MusicgenForCausalLM.from_pretrained("facebook/musicgen-small", **decoder_config)
 
 >>> model = MusicgenForConditionalGeneration.from_sub_models_pretrained(text_encoder, audio_encoder, decoder)
+```
+
+If only the decoder needs to be loaded from the pre-trained checkpoint for the composite model, it can be loaded by first 
+specifying the correct config, or be accessed through the `.decoder` attribute of the composite model:
+
+```python
+>>> from transformers import AutoConfig, MusicgenForCausalLM, MusicgenForConditionalGeneration
+
+>>> # Option 1: get decoder config and pass to `.from_pretrained`
+>>> decoder_config = AutoConfig.from_pretrained("facebook/musicgen-small").decoder
+>>> decoder = MusicgenForCausalLM.from_pretrained("facebook/musicgen-small", **decoder_config)
+
+>>> # Option 2: load the entire composite model, but only return the decoder
+>>> decoder = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small").decoder
 ```
 
 Tips:
