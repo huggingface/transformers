@@ -86,7 +86,7 @@ BARK_START_DOCSTRING = r"""
 BARK_ACOUSTICS_FINE_INPUTS_DOCSTRING = r"""
     Args:
         codebook_idx (`int`):
-            Indice of the codebook that will be predicted.
+            Index of the codebook that will be predicted.
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, number_of_codebooks)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it. Initially, indices of the first two codebooks are obtained from the `coarse` sub-model. The rest is
@@ -674,7 +674,7 @@ class BarkCausalModule(BarkModulePreTrainedModel):
 
         loss = None
         if labels is not None:
-            raise NotImplementedError("Training is not implemented yet")
+            raise NotImplementedError("Training is not implemented yet for Bark - ensure you do not pass `labels` to the model.")
 
         if not return_dict:
             return tuple(
@@ -844,7 +844,7 @@ class BarkFineAcousticsModule(BarkModulePreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if codebook_idx == 0:
-            raise ValueError("cannot predict 0th codebook")
+            raise ValueError("Cannot predict 0th codebook - 0th codebook should be predicted by the coarse model")
 
         if input_ids is not None and input_embeds is not None:
             raise ValueError("You cannot specify both input_ids and input_embeds at the same time")

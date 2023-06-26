@@ -509,7 +509,7 @@ class BarkFineAcousticsModuleTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class BarkModelTest(unittest.TestCase):
+class BarkModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
         return BarkModel.from_pretrained("ylacombe/bark-large").to(torch_device)
