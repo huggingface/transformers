@@ -567,6 +567,31 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
+    def test_for_warning_if_no_attention_mask_when_pad_token_in_input_ids(self):
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = self.model_tester.prepare_config_and_inputs()
+
+        # Set some pad tokens in the input_ids
+        input_ids[0] = config.pad_token_id
+
+        # Check for warnings if the attention_mask is missing.
+        with self.assertLogs("transformers.modeling_utils", level="WARNING") as cm:
+            model = BertModel(config=config)
+            model.to(torch_device)
+            model.eval()
+            model(input_ids, attention_mask=None, token_type_ids=token_type_ids)
+            self.assertTrue(
+                any("We strongly recommend passing in an `attention_mask`" in record.message for record in cm.records),
+                msg="Expecting warning from missing `attention_mask` when the input_ids contain `pad_token_id`.",
+            )
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
