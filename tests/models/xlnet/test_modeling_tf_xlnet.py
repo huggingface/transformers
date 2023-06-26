@@ -413,6 +413,10 @@ class TFXLNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             model = TFXLNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skip("Some of the XLNet models misbehave with flexible input shapes.")
+    def test_compile_tf_model(self):
+        pass
+
     # overwrite since `TFXLNetLMHeadModel` doesn't cut logits/labels
     def test_loss_computation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

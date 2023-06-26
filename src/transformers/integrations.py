@@ -177,15 +177,6 @@ def hp_params(trial):
     raise RuntimeError(f"Unknown type for trial {trial.__class__}")
 
 
-def default_hp_search_backend():
-    if is_optuna_available():
-        return "optuna"
-    elif is_ray_tune_available():
-        return "ray"
-    elif is_sigopt_available():
-        return "sigopt"
-
-
 def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     import optuna
 
