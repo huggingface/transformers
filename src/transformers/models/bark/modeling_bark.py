@@ -83,7 +83,7 @@ BARK_START_DOCSTRING = r"""
 """
 
 
-BARK_ACOUSTICS_FINE_INPUTS_DOCSTRING = r"""
+BARK_ACOUSTICS_INPUTS_DOCSTRING = r"""
     Args:
         codebook_idx (`int`):
             Index of the codebook that will be predicted.
@@ -821,7 +821,7 @@ class BarkFineModel(BarkSubModelPreTrainedModel):
                 module._tie_weights()
 
     # an additionnal idx corresponding to the id of the codebook that will be predicted
-    @add_start_docstrings_to_model_forward(BARK_ACOUSTICS_FINE_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BARK_ACOUSTICS_INPUTS_DOCSTRING)
     def forward(
         self,
         codebook_idx: int,
