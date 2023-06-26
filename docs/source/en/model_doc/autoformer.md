@@ -29,6 +29,9 @@ The abstract from the paper is the following:
 This model was contributed by [elisim](https://huggingface.co/elisim) and [kashif](https://huggingface.co/kashif).
 The original code can be found [here](https://github.com/thuml/Autoformer).
 
+Tips:
+- Check out the Autoformer blog-post in HuggingFace blog: [Yes, Transformers are Effective for Time Series Forecasting (+ Autoformer)](https://huggingface.co/blog/autoformer)
+
 ## AutoformerConfig
 
 [[autodoc]] AutoformerConfig
