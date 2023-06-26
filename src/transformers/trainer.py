@@ -2739,11 +2739,9 @@ class Trainer:
                 if self.args.should_save:
                     self._save(output_dir, state_dict=state_dict)
         elif self.is_deepspeed_enabled:
-            from deepspeed.runtime.utils import clone_tensors_for_torch_save
-
             # this takes care of everything as long as we aren't under zero3
-            if self.args.should_save:
-                state_dict = clone_tensors_for_torch_save(self.deepspeed.module.state_dict())
+            if self.args.should_save and not is_deepspeed_zero3_enabled():
+                state_dict = self.accelerator.get_state_dict(self.deepspeed)
                 self._save(output_dir, state_dict=state_dict)
 
             if is_deepspeed_zero3_enabled():
