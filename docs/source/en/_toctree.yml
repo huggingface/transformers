@@ -608,6 +608,8 @@
         title: GIT
       - local: model_doc/groupvit
         title: GroupViT
+      - local: model_doc/instructblip
+        title: InstructBLIP
       - local: model_doc/layoutlm
         title: LayoutLM
       - local: model_doc/layoutlmv2

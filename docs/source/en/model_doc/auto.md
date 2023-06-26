@@ -214,6 +214,14 @@ The following auto classes are available for the following natural language proc
 
 [[autodoc]] FlaxAutoModelForQuestionAnswering
 
+### AutoModelForTextEncoding
+
+[[autodoc]] AutoModelForTextEncoding
+
+### TFAutoModelForTextEncoding
+
+[[autodoc]] TFAutoModelForTextEncoding
+
 ## Computer vision
 
 The following auto classes are available for the following computer vision tasks.
