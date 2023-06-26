@@ -97,7 +97,7 @@ See [`T5TokenizerFast`] for all details.
 
 ## MT5ForQuestionAnswering
 
-[[autodoc]] MT5EncoderModel
+[[autodoc]] MT5ForQuestionAnswering
 
 ## TFMT5Model
 
