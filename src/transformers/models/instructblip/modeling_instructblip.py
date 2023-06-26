@@ -281,8 +281,8 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
         r"language_model.decoder.embed_tokens.weight",
         r"language_model.lm_head.weight",
     ]
-    _keep_in_fp32_modules = ["wo"]
     _no_split_modules = ["InstructBlipAttention", "InstructBlipQFormerMultiHeadAttention"]
+    _keep_in_fp32_modules = []
 
     # Copied from transformers.models.blip_2.modeling_blip_2.Blip2PreTrainedModel._init_weights with Blip2->InstructBlip
     def _init_weights(self, module):
@@ -1274,6 +1274,9 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
 
         if language_model._no_split_modules is not None:
             self._no_split_modules.extend(language_model._no_split_modules)
+
+        if language_model._keep_in_fp32_modules is not None:
+            self._keep_in_fp32_modules.extend(language_model._keep_in_fp32_modules)
 
         self.language_model = language_model
 
