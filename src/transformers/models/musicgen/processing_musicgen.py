@@ -82,3 +82,17 @@ class MusicgenProcessor(ProcessorMixin):
             if "padding_mask" in audio_inputs:
                 inputs["padding_mask"] = audio_inputs["padding_mask"]
             return inputs
+
+    def batch_decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to T5Tokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer to
+        the docstring of this method for more information.
+        """
+        return self.tokenizer.batch_decode(*args, **kwargs)
+
+    def decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to T5Tokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
+        docstring of this method for more information.
+        """
+        return self.tokenizer.decode(*args, **kwargs)
