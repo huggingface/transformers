@@ -1997,8 +1997,6 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-        # Model parallel
-        self.model_parallel = False
         self.device_map = None
 
     def get_input_embeddings(self):
