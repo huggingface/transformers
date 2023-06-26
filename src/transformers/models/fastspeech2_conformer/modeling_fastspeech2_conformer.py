@@ -113,72 +113,6 @@ def _pad_list(input_tensors, pad_value):
     return pad
 
 
-def _make_pad_mask(lengths, input_tensor=None, length_dim=-1, device=None):
-    """
-    Make mask tensor containing indices of padded part.
-
-    Args:
-        lengths (LongTensor or List): Batch of lengths (batch_size,).
-        input_tensor (Tensor, optional): The reference tensor.
-            If set, masks will be the same shape as this tensor.
-        length_dim (int, optional): Dimension indicator of the above tensor.
-            See the example.
-
-    Returns:
-        Tensor: Mask tensor containing indices of padded part.
-                dtype=torch.uint8 in PyTorch 1.2- dtype=torch.bool in PyTorch 1.2+ (including 1.2)
-
-    """
-    if length_dim == 0:
-        raise ValueError("length_dim cannot be 0: {}".format(length_dim))
-
-    if not isinstance(lengths, list):
-        lengths = lengths.tolist()
-    batch_size = int(len(lengths))
-    if input_tensor is None:
-        maxlen = int(max(lengths))
-    else:
-        maxlen = input_tensor.size(length_dim)
-
-    if device is not None:
-        seq_range = torch.arange(0, maxlen, dtype=torch.int64, device=device)
-    else:
-        seq_range = torch.arange(0, maxlen, dtype=torch.int64)
-    seq_range_expand = seq_range.unsqueeze(0).expand(batch_size, maxlen)
-    seq_length_expand = seq_range_expand.new(lengths).unsqueeze(-1)
-    mask = seq_range_expand >= seq_length_expand
-
-    if input_tensor is not None:
-        if input_tensor.size(0) != batch_size:
-            raise ValueError(f"Size mismatch in `_make_pad_mask`: {input_tensor.size(0)} != {batch_size}")
-
-        if length_dim < 0:
-            length_dim = input_tensor.dim() + length_dim
-        # indices = (:, None, ..., None, :, , None, ..., None)
-        indices = tuple(slice(None) if i in (0, length_dim) else None for i in range(input_tensor.dim()))
-        mask = mask[indices].expand_as(input_tensor).to(input_tensor.device)
-    return mask
-
-
-def _make_non_pad_mask(lengths, reference_tensor=None, length_dim=-1, device=None):
-    """
-    Make mask tensor containing indices of non-padded part.
-
-    Args:
-        lengths (LongTensor or List): Batch of lengths (batch_size,).
-        reference_tensor (Tensor, optional): The reference tensor.
-            If set, masks will be the same shape as this tensor.
-        length_dim (int, optional): Dimension indicator of the above tensor.
-            See the example.
-
-    Returns:
-        ByteTensor: mask tensor containing indices of padded part.
-                    dtype=torch.uint8 in PyTorch 1.2- dtype=torch.bool in PyTorch 1.2+ (including 1.2)
-
-    """
-    return ~_make_pad_mask(lengths, reference_tensor, length_dim, device=device)
-
-
 class FastSpeech2ConformerDurationPredictor(nn.Module):
     """
     Duration predictor module.
@@ -280,14 +214,14 @@ class FastSpeech2ConformerLengthRegulator(nn.Module):
         super().__init__()
         self.pad_value = pad_value
 
-    def forward(self, encoded_embeddings, target_durations, alpha=1.0):
+    def forward(self, encoded_embeddings, duration_labels, alpha=1.0):
         """
         Calculate forward propagation.
 
         Args:
             encoded_embeddings (Tensor):
                 Batch of sequences of char or phoneme embeddings (batch_size, max_text_length, embedding_dim).
-            target_durations (LongTensor): Batch of durations of each frame (batch_size, T).
+            duration_labels (LongTensor): Batch of durations of each frame (batch_size, T).
             alpha (float, optional): Alpha value to control speed of speech.
 
         Returns:
@@ -297,15 +231,15 @@ class FastSpeech2ConformerLengthRegulator(nn.Module):
         if alpha <= 0:
             raise ValueError("Alpha must be greater than 0.")
         elif alpha != 1.0:
-            target_durations = torch.round(target_durations.float() * alpha).long()
+            duration_labels = torch.round(duration_labels.float() * alpha).long()
 
-        if target_durations.sum() == 0:
-            target_durations[target_durations.sum(dim=1).eq(0)] = 1
+        if duration_labels.sum() == 0:
+            duration_labels[duration_labels.sum(dim=1).eq(0)] = 1
 
         return _pad_list(
             [
                 torch.repeat_interleave(encoded_embedding, target_duration, dim=0)
-                for encoded_embedding, target_duration in zip(encoded_embeddings, target_durations)
+                for encoded_embedding, target_duration in zip(encoded_embeddings, duration_labels)
             ],
             self.pad_value,
         )
@@ -531,12 +465,12 @@ class FastSpeech2ConformerLoss(torch.nn.Module):
         duration_outputs,
         pitch_outputs,
         energy_outputs,
-        target_spectrograms,
-        target_durations,
-        target_pitch,
-        target_energy,
-        input_lengths,
-        target_lengths,
+        spectrogram_labels,
+        duration_labels,
+        pitch_labels,
+        energy_labels,
+        attention_mask,
+        out_mask,
     ):
         """
         Args:
@@ -547,62 +481,59 @@ class FastSpeech2ConformerLoss(torch.nn.Module):
             duration_outputs (LongTensor): Batch of outputs of duration predictor (batch_size, max_text_length).
             pitch_outputs (Tensor): Batch of outputs of pitch predictor (batch_size, max_text_length, 1).
             energy_outputs (Tensor): Batch of outputs of energy predictor (batch_size, max_text_length, 1).
-            target_spectrograms (Tensor): Batch of target features (batch_size, max_spectrogram_length, num_mel_bins).
-            target_durations (LongTensor): Batch of durations (batch_size, max_text_length).
-            target_pitch (Tensor): Batch of target token-averaged pitch (batch_size, max_text_length, 1).
-            target_energy (Tensor): Batch of target token-averaged energy (batch_size, max_text_length, 1).
-            input_lengths (LongTensor): Batch of the lengths of each input (batch_size,).
-            target_lengths (LongTensor): Batch of the lengths of each target (batch_size,).
+            spectrogram_labels (Tensor): Batch of target features (batch_size, max_spectrogram_length, num_mel_bins).
+            duration_labels (LongTensor): Batch of durations (batch_size, max_text_length).
+            pitch_labels (Tensor): Batch of target token-averaged pitch (batch_size, max_text_length, 1).
+            energy_labels (Tensor): Batch of target token-averaged energy (batch_size, max_text_length, 1).
+            attention_mask (LongTensor): Attention mask used to discern which values loss should be calculated for.
+            out_mask (LongTensor): Output mask used to discern which values loss should be calculated for
 
         Returns:
             Tensor: L1 loss value. Tensor: Duration predictor loss value. Tensor: Pitch predictor loss value. Tensor:
             Energy predictor loss value.
 
         """
+        out_mask.unsqueeze(-1)
+
         # apply mask to remove padded part
         if self.use_masking:
-            out_masks = _make_non_pad_mask(target_lengths).unsqueeze(-1).to(target_spectrograms.device)
-            outputs_before_postnet = outputs_before_postnet.masked_select(out_masks)
+            outputs_before_postnet = outputs_before_postnet.masked_select(out_mask)
             if outputs_after_postnet is not None:
-                outputs_after_postnet = outputs_after_postnet.masked_select(out_masks)
-            target_spectrograms = target_spectrograms.masked_select(out_masks)
-            duration_masks = _make_non_pad_mask(input_lengths).to(
-                target_spectrograms.device
-            )  # just pass in attention_masks
-            duration_outputs = duration_outputs.masked_select(duration_masks)
-            target_durations = target_durations.masked_select(duration_masks)
-            pitch_masks = _make_non_pad_mask(input_lengths).unsqueeze(-1).to(target_spectrograms.device)
+                outputs_after_postnet = outputs_after_postnet.masked_select(out_mask)
+            spectrogram_labels = spectrogram_labels.masked_select(out_mask)
+            duration_outputs = duration_outputs.masked_select(attention_mask)
+            duration_labels = duration_labels.masked_select(attention_mask)
+            pitch_masks = attention_mask.unsqueeze(-1)
             pitch_outputs = pitch_outputs.masked_select(pitch_masks)
             energy_outputs = energy_outputs.masked_select(pitch_masks)
-            target_pitch = target_pitch.masked_select(pitch_masks)
-            target_energy = target_energy.masked_select(pitch_masks)
+            pitch_labels = pitch_labels.masked_select(pitch_masks)
+            energy_labels = energy_labels.masked_select(pitch_masks)
 
         # calculate loss
-        l1_loss = self.l1_criterion(outputs_before_postnet, target_spectrograms)
+        l1_loss = self.l1_criterion(outputs_before_postnet, spectrogram_labels)
         if outputs_after_postnet is not None:
-            l1_loss = l1_loss + self.l1_criterion(outputs_after_postnet, target_spectrograms)
-        target_durations = torch.log(target_durations.float() + self.log_domain_offset)
-        duration_loss = self.duration_criterion(duration_outputs, target_durations)
-        pitch_loss = self.mse_criterion(pitch_outputs, target_pitch)
-        energy_loss = self.mse_criterion(energy_outputs, target_energy)
+            l1_loss = l1_loss + self.l1_criterion(outputs_after_postnet, spectrogram_labels)
+        duration_labels = torch.log(duration_labels.float() + self.log_domain_offset)
+        duration_loss = self.duration_criterion(duration_outputs, duration_labels)
+        pitch_loss = self.mse_criterion(pitch_outputs, pitch_labels)
+        energy_loss = self.mse_criterion(energy_outputs, energy_labels)
 
         # make weighted mask and apply it
         if self.use_weighted_masking:
-            out_masks = _make_non_pad_mask(target_lengths).unsqueeze(-1).to(target_spectrograms.device)
-            out_masks = torch.nn.functional.pad(
-                out_masks.transpose(1, 2),
-                [0, target_spectrograms.size(1) - out_masks.size(1), 0, 0, 0, 0],
+            out_mask = torch.nn.functional.pad(
+                out_mask.transpose(1, 2),
+                [0, spectrogram_labels.size(1) - out_mask.size(1), 0, 0, 0, 0],
                 value=False,
             ).transpose(1, 2)
 
-            out_weights = out_masks.float() / out_masks.sum(dim=1, keepdim=True).float()
-            out_weights /= target_spectrograms.size(0) * target_spectrograms.size(2)
-            duration_masks = _make_non_pad_mask(input_lengths).to(target_spectrograms.device)
+            out_weights = out_mask.float() / out_mask.sum(dim=1, keepdim=True).float()
+            out_weights /= spectrogram_labels.size(0) * spectrogram_labels.size(2)
+            duration_masks = attention_mask
             duration_weights = duration_masks.float() / duration_masks.sum(dim=1, keepdim=True).float()
-            duration_weights /= target_durations.size(0)
+            duration_weights /= duration_labels.size(0)
 
             # apply weight
-            l1_loss = l1_loss.mul(out_weights).masked_select(out_masks).sum()
+            l1_loss = l1_loss.mul(out_weights).masked_select(out_mask).sum()
             duration_loss = duration_loss.mul(duration_weights).masked_select(duration_masks).sum()
             pitch_masks = duration_masks.unsqueeze(-1)
             pitch_weights = duration_weights.unsqueeze(-1)
@@ -763,12 +694,11 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor,
-        input_lengths: Optional[torch.LongTensor] = None,
-        target_spectrograms: Optional[torch.FloatTensor] = None,
-        spectrogram_lengths: Optional[torch.LongTensor] = None,
-        target_durations: Optional[torch.LongTensor] = None,
-        target_pitch: Optional[torch.FloatTensor] = None,
-        target_energy: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        spectrogram_labels: Optional[torch.FloatTensor] = None,
+        duration_labels: Optional[torch.LongTensor] = None,
+        pitch_labels: Optional[torch.FloatTensor] = None,
+        energy_labels: Optional[torch.FloatTensor] = None,
         utterance_embedding: Optional[torch.FloatTensor] = None,
         alpha: Optional[float] = 1.0,
         lang_id: Optional[torch.LongTensor] = None,
@@ -780,17 +710,16 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Input sequence of text vectors.
-            input_lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Batch of lengths of each input sequence.
-            target_spectrograms (`torch.FloatTensor` of shape `(batch_size, max_spectrogram_length, num_mel_bins)`, *optional*):
+            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing convolution and attention on padding token indices. Mask values selected in
+                `[0, 1]`: 0 for tokens that are **masked**, 1 for tokens that are **not masked**.
+            spectrogram_labels (`torch.FloatTensor` of shape `(batch_size, max_spectrogram_length, num_mel_bins)`, *optional*):
                 Batch of padded target features.
-            spectrogram_lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Batch of the lengths of each target spectrogram.
-            target_durations (`torch.LongTensor` of shape `(batch_size, sequence_length + 1)`, *optional*):
+            duration_labels (`torch.LongTensor` of shape `(batch_size, sequence_length + 1)`, *optional*):
                 Batch of padded durations.
-            target_pitch (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*):
+            pitch_labels (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*):
                 Batch of padded token-averaged pitch.
-            target_energy (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*):
+            energy_labels (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*):
                 Batch of padded token-averaged energy.
             utterance_embedding (`torch.FloatTensor` of shape `(batch_size, embedding_dim)`, *optional*):
                 Tensor containing the utterance embeddings.
@@ -838,22 +767,27 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        input_lengths = torch.tensor([input_ids.shape[1]], dtype=torch.long, device=input_ids.device)
-
         if lang_id is not None:
             lang_id = lang_id.unsqueeze(0)
         if utterance_embedding is not None:
             utterance_embedding.unsqueeze(0)
+        if attention_mask is None:
+            attention_mask = torch.ones(input_ids.shape)
 
-        is_inference = target_spectrograms is None
-        # Texts include EOS token from the teacher model already in this version
+        is_inference = spectrogram_labels is None
+
+        spectrogram_mask = spectrogram_labels != -100
+        if self.reduction_factor > 1:
+            length_dim = spectrogram_mask.shape[1] - spectrogram_mask.shape[1] % self.reduction_factor
+            spectrogram_mask = spectrogram_mask[:, :length_dim]
+
         outputs = self._forward(
             input_ids,
-            input_lengths,
-            spectrogram_lengths,
-            target_durations=target_durations,
-            target_pitch=target_pitch,
-            target_energy=target_pitch,
+            attention_mask,
+            spectrogram_mask=spectrogram_mask,
+            duration_labels=duration_labels,
+            pitch_labels=pitch_labels,
+            energy_labels=pitch_labels,
             utterance_embedding=utterance_embedding,
             is_inference=is_inference,
             lang_ids=lang_id,
@@ -875,12 +809,6 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             energy_outputs,
         ) = outputs
 
-        # modify mod part of groundtruth (speaking pace)
-        if self.reduction_factor > 1:
-            spectrogram_lengths = spectrogram_lengths.new(
-                [original_length - original_length % self.reduction_factor for original_length in spectrogram_lengths]
-            )
-
         loss = None
         if not is_inference:
             # calculate loss
@@ -890,12 +818,12 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
                 duration_outputs=duration_outputs,
                 pitch_outputs=pitch_outputs,
                 energy_outputs=energy_outputs,
-                target_spectrograms=target_spectrograms,
-                target_durations=target_durations,
-                target_pitch=target_pitch,
-                target_energy=target_energy,
-                input_lengths=input_lengths,
-                target_lengths=spectrogram_lengths,
+                spectrogram_labels=spectrogram_labels,
+                duration_labels=duration_labels,
+                pitch_labels=pitch_labels,
+                energy_labels=energy_labels,
+                attention_mask=attention_mask,
+                out_mask=spectrogram_mask,
             )
             loss = l1_loss + duration_loss + pitch_loss + energy_loss
 
@@ -919,11 +847,11 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
     def _forward(
         self,
         input_ids,
-        input_lengths,
-        spectrogram_lengths=None,
-        target_durations=None,
-        target_pitch=None,
-        target_energy=None,
+        attention_mask,
+        spectrogram_mask=None,
+        duration_labels=None,
+        pitch_labels=None,
+        energy_labels=None,
         is_inference=False,
         alpha=1.0,
         utterance_embedding=None,
@@ -938,7 +866,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             utterance_embedding = None
 
         # forward encoder
-        text_masks = self._source_mask(input_lengths)
+        text_masks = attention_mask.unsqueeze(-2)
 
         encoder_outputs = self.encoder(
             input_ids,
@@ -951,7 +879,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         encoder_last_hidden_state = encoder_outputs.last_hidden_state
 
         # forward duration predictor and variance predictors
-        duration_masks = _make_pad_mask(input_lengths, device=input_lengths.device)
+        duration_masks = ~attention_mask.bool()
 
         if self.stop_gradient_from_pitch_predictor:
             pitch_predictions = self.pitch_predictor(encoder_last_hidden_state.detach(), duration_masks.unsqueeze(-1))
@@ -977,26 +905,20 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             encoder_last_hidden_state = self.length_regulator(encoder_last_hidden_state, duration_predictions, alpha)
         else:
             # use groundtruth in training
-            embedded_pitch_curve = self.pitch_embed(target_pitch)
-            embedded_energy_curve = self.energy_embed(target_energy)
+            embedded_pitch_curve = self.pitch_embed(pitch_labels)
+            embedded_energy_curve = self.energy_embed(energy_labels)
             encoder_last_hidden_state = encoder_last_hidden_state + embedded_energy_curve + embedded_pitch_curve
-            encoder_last_hidden_state = self.length_regulator(encoder_last_hidden_state, target_durations)
+            encoder_last_hidden_state = self.length_regulator(encoder_last_hidden_state, duration_labels)
 
         # forward decoder
-        if spectrogram_lengths is not None and not is_inference:
-            if self.reduction_factor > 1:
-                target_lengths_in = spectrogram_lengths.new(
-                    [original_length // self.reduction_factor for original_length in spectrogram_lengths]
-                )
-            else:
-                target_lengths_in = spectrogram_lengths
-            h_masks = self._source_mask(target_lengths_in)
+        if spectrogram_mask is not None and not is_inference:
+            hidden_masks = spectrogram_mask.unsqueeze(-2)
         else:
-            h_masks = None
+            hidden_masks = None
 
         decoder_outputs = self.decoder(
             encoder_last_hidden_state,
-            h_masks,
+            hidden_masks,
             utterance_embedding,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
@@ -1018,20 +940,6 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             pitch_predictions,
             energy_predictions,
         )
-
-    def _source_mask(self, input_lengths):
-        """
-        Make masks for self-attention.
-
-        Args:
-            input_lengths (LongTensor): Batch of lengths (batch_size,).
-
-        Returns:
-            Tensor: Mask tensor for self-attention.
-
-        """
-        x_masks = _make_non_pad_mask(input_lengths, device=input_lengths.device)
-        return x_masks.unsqueeze(-2)
 
 
 class FastSpeech2ConformerRelPositionMultiHeadedAttention(nn.Module):  # FastSpeech2ConformerMultiHeadedAttention
@@ -1609,11 +1517,20 @@ class FastSpeech2ConformerEncoder(nn.Module):
         """
         Args:
         Encode input sequence.
-            input_tensor (torch.Tensor): Input tensor (batch, time, input_dim). masks (torch.Tensor): Mask tensor
-            (batch, time). utterance_embedding: embedding containing lots of conditioning signals lang_ids: ids of the
-            languages per sample in the batch output_hidden_states (`bool`, *optional*):
+            input_tensor (torch.Tensor):
+                Input tensor (batch, time, input_dim).
+            masks (torch.Tensor):
+                Mask tensor (batch, time).
+            utterance_embedding:
+                Embedding containing lots of conditioning signals
+            lang_ids:
+                IDs of the languages per sample in the batch
+            output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
         Returns:
             torch.Tensor: Output tensor (batch, time, attention_dim). torch.Tensor: Mask tensor (batch, time).
         """

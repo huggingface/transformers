@@ -197,12 +197,11 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
 
         expected_arg_names = [
             "input_ids",
-            "input_lengths",
-            "target_spectrograms",
-            "spectrogram_lengths",
-            "target_durations",
-            "target_pitch",
-            "target_energy",
+            "attention_mask",
+            "spectrogram_labels",
+            "duration_labels",
+            "pitch_labels",
+            "energy_labels",
             "utterance_embedding",
             "alpha",
             "lang_id",
@@ -337,9 +336,8 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
         tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("connor-henderson/fastspeech2_conformer")
         text = "Test that this generates speech"
         inputs = tokenizer(text, return_tensors="pt").to(torch_device)
-        input_ids = inputs["input_ids"]
 
-        outputs_dict = model(input_ids, return_dict=True)
+        outputs_dict = model(**inputs, return_dict=True)
         spectrogram = outputs_dict["spectrogram"]
 
         # mel-spectrogram is too large (1, 205, 80), so only check top-left 100 elements

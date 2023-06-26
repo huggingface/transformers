@@ -360,8 +360,6 @@ class SpeechT5HifiGanConfig(PretrainedConfig):
     Args:
         model_in_dim (`int`, *optional*, defaults to 80):
             The number of frequency bins in the input log-mel spectrogram.
-        sampling_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate at which the output audio will be generated, expressed in hertz (Hz).
         upsample_initial_channel (`int`, *optional*, defaults to 512):
             The number of input channels into the upsampling network.
         upsample_rates (`Tuple[int]` or `List[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
@@ -405,7 +403,6 @@ class SpeechT5HifiGanConfig(PretrainedConfig):
     def __init__(
         self,
         model_in_dim=80,
-        sampling_rate=16000,
         upsample_initial_channel=512,
         upsample_rates=[4, 4, 4, 4],
         upsample_kernel_sizes=[8, 8, 8, 8],
@@ -417,7 +414,6 @@ class SpeechT5HifiGanConfig(PretrainedConfig):
         **kwargs,
     ):
         self.model_in_dim = model_in_dim
-        self.sampling_rate = sampling_rate
         self.upsample_initial_channel = upsample_initial_channel
         self.upsample_rates = upsample_rates
         self.upsample_kernel_sizes = upsample_kernel_sizes

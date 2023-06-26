@@ -73,50 +73,6 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), ids)
         self.assertListEqual(tokenizer.convert_ids_to_tokens(ids), tokens)
 
-    # Custom since FastSpeech2Conformer does not use `attention_mask`
-    def test_prepare_seq2seq_batch(self):
-        tokenizers = self.get_tokenizers()
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                # Longer text that will definitely require truncation.
-                src_text = [
-                    " UN Chief Says There Is No Military Solution in Syria",
-                    " Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for"
-                    " Syria is that 'there is no military solution' to the nearly five-year conflict and more weapons"
-                    " will only worsen the violence and misery for millions of people.",
-                ]
-                tgt_text = [
-                    "Şeful ONU declară că nu există o soluţie militară în Siria",
-                    "Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al"
-                    ' Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi'
-                    " că noi arme nu vor face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.",
-                ]
-                try:
-                    batch = tokenizer.prepare_seq2seq_batch(
-                        src_texts=src_text,
-                        tgt_texts=tgt_text,
-                        max_length=3,
-                        max_target_length=10,
-                        return_tensors="pt",
-                        src_lang="en_XX",  # this should be ignored (for all but mbart) but not cause an error
-                    )
-                except NotImplementedError:
-                    return
-                self.assertEqual(batch.input_ids.shape[1], 3)
-                self.assertEqual(batch.labels.shape[1], 10)
-                # max_target_length will default to max_length if not specified
-                batch = tokenizer.prepare_seq2seq_batch(
-                    src_text, tgt_texts=tgt_text, max_length=3, return_tensors="pt"
-                )
-                self.assertEqual(batch.input_ids.shape[1], 3)
-                self.assertEqual(batch.labels.shape[1], 3)
-
-                batch_encoder_only = tokenizer.prepare_seq2seq_batch(
-                    src_texts=src_text, max_length=3, max_target_length=10, return_tensors="pt"
-                )
-                self.assertEqual(batch_encoder_only.input_ids.shape[1], 3)
-                self.assertNotIn("decoder_input_ids", batch_encoder_only)
-
     @slow
     def test_tokenizer_integration(self):
         # Use custom sequence because this tokenizer does not handle numbers, and
@@ -142,11 +98,17 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
                 [4, 7, 60, 3, 6, 22, 30, 7, 14, 21, 11, 22, 30, 7, 14, 21, 8, 29, 3, 34, 3, 18, 11, 17, 12, 4, 21, 10, 4, 7, 60, 3, 6, 22, 30, 7, 14, 21, 11, 2, 3, 5, 17, 12, 4, 21, 10, 17, 7, 29, 4, 7, 31, 3, 5, 25, 38, 4, 17, 7, 2, 20, 32, 5, 11, 40, 15, 3, 21, 2, 8, 17, 38, 17, 2, 6, 24, 7, 10, 2, 4, 45, 10, 39, 21, 11, 25, 38, 4, 23, 37, 15, 4, 6, 23, 7, 2, 25, 38, 4, 2, 23, 11, 8, 15, 14, 11, 23, 5, 13, 6, 4, 12, 8, 4, 21, 25, 23, 11, 8, 15, 3, 39, 2, 8, 1, 22, 30, 7, 3, 18, 39, 21, 2, 8, 8, 18, 36, 37, 16, 2, 40, 62, 3, 5, 21, 6, 4, 18, 3, 5, 13, 36, 3, 8, 28, 2, 3, 5, 3, 18, 39, 21, 2, 8, 8, 18, 36, 37, 16, 2, 40, 40, 45, 3, 21, 31, 35, 2, 3, 15, 8, 36, 16, 12, 9, 34, 20, 21, 43, 38, 5, 29, 4, 28, 17, 7, 29, 4, 7, 31, 3, 5, 14, 24, 5, 2, 8, 11, 13, 3, 16, 19, 3, 26, 19, 3, 5, 7, 2, 5, 17, 8, 19, 6, 8, 18, 36, 37, 16, 2, 40, 2, 11, 2, 3, 5, 5, 27, 17, 49, 3, 4, 21, 2, 17, 21, 25, 12, 8, 2, 4, 29, 25, 13, 4, 16, 27, 3, 40, 18, 10, 6, 23, 17, 12, 4, 21, 10, 2, 3, 5, 4, 15, 3, 6, 21, 8, 46, 22, 33, 77],
                 [25, 38, 4, 12, 11, 5, 13, 11, 32, 3, 5, 4, 28, 17, 7, 27, 4, 7, 31, 3, 5, 27, 17, 25, 51, 5, 13, 7, 15, 10, 35, 2, 3, 2, 8, 7, 45, 17, 7, 2, 11, 2, 3, 4, 31, 35, 2, 3, 11, 22, 7, 19, 14, 2, 3, 8, 31, 25, 2, 8, 5, 4, 15, 10, 6, 4, 25, 32, 40, 55, 3, 4, 8, 29, 10, 2, 3, 5, 12, 35, 2, 3, 13, 36, 24, 3, 25, 34, 43, 8, 15, 22, 4, 2, 3, 5, 7, 32, 4, 10, 24, 3, 4, 54, 10, 6, 4, 13, 3, 30, 8, 8, 31, 21, 11, 33, 77],
                 [9, 2, 10, 16, 12, 10, 25, 7, 42, 3, 22, 24, 10, 6, 40, 19, 14, 17, 6, 34, 20, 21, 9, 2, 8, 31, 11, 29, 5, 30, 37, 33, 77]
+            ],
+            'attention_mask': [
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
             ]
         }
         # fmt: on
 
         self.assertListEqual(actual_encoding["input_ids"], expected_encoding["input_ids"])
+        self.assertListEqual(actual_encoding["attention_mask"], expected_encoding["attention_mask"])
 
     @unittest.skip(
         reason="FastSpeech2Conformer tokenizer does not support adding tokens as they can't be added to the g2p_en backend"
