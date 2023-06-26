@@ -793,9 +793,10 @@ class FSMTDecoder(nn.Module):
                 x = x.transpose(0, 1)
                 all_hidden_states += (x,)
                 x = x.transpose(0, 1)
-            dropout_probability = torch.rand([])
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    continue
 
             layer_state = past_key_values[idx] if past_key_values is not None else None
 
