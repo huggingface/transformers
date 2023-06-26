@@ -79,7 +79,7 @@ class VisualBertEmbeddings(nn.Module):
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=True
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
 
         # For Visual Features
