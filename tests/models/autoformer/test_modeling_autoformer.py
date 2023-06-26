@@ -21,7 +21,7 @@ import unittest
 from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -380,41 +380,9 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             [self.model_tester.num_attention_heads, encoder_seq_length, dim],
         )
 
+    @is_flaky()
     def test_retain_grad_hidden_states_attentions(self):
-        # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        config.output_attentions = True
-
-        # no need to test all models as different heads yield the same functionality
-        model_class = self.all_model_classes[0]
-        model = model_class(config)
-        model.to(torch_device)
-
-        inputs = self._prepare_for_class(inputs_dict, model_class)
-
-        outputs = model(**inputs)
-
-        output = outputs[0]
-
-        encoder_hidden_states = outputs.encoder_hidden_states[0]
-        encoder_attentions = outputs.encoder_attentions[0]
-        encoder_hidden_states.retain_grad()
-        encoder_attentions.retain_grad()
-
-        decoder_attentions = outputs.decoder_attentions[0]
-        decoder_attentions.retain_grad()
-
-        cross_attentions = outputs.cross_attentions[0]
-        cross_attentions.retain_grad()
-
-        output.flatten()[0].backward(retain_graph=True)
-
-        self.assertIsNotNone(encoder_hidden_states.grad)
-        self.assertIsNotNone(encoder_attentions.grad)
-        self.assertIsNotNone(decoder_attentions.grad)
-        self.assertIsNotNone(cross_attentions.grad)
+        super().test_retain_grad_hidden_states_attentions()
 
 
 def prepare_batch(filename="train-batch.pt"):
