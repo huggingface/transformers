@@ -1269,10 +1269,11 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
 
         if config.use_decoder_only_language_model:
             language_model = AutoModelForCausalLM.from_config(config.text_config)
-            self._no_split_modules.append("LlamaDecoderLayer")
         else:
             language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
-            self._no_split_modules.append("T5Block")
+
+        if language_model._no_split_modules is not None:
+            self._no_split_modules.extend(language_model._no_split_modules)
 
         self.language_model = language_model
 
