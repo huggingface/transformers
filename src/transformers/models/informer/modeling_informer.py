@@ -1429,7 +1429,6 @@ class InformerDecoder(InformerPreTrainedModel):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-
             if self.training:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
