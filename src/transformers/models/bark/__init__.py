@@ -40,7 +40,7 @@ else:
     _import_structure["modeling_bark"] = [
         "BARK_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BarkFineModel",
-        "BarkSemanticModule",
+        "BarkSemanticModel",
         "BarkCoarseModel",
         "BarkModel",
         "BarkPreTrainedModel",
@@ -72,7 +72,7 @@ if TYPE_CHECKING:
             BarkModel,
             BarkSubModelPreTrainedModel,
             BarkPreTrainedModel,
-            BarkSemanticModule,
+            BarkSemanticModel,
         )
 
 else:

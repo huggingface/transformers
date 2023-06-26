@@ -341,7 +341,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BarkCausalModel",
     "BarkCoarseModel",
     "BarkFineModel",
-    "BarkSemanticModule",
+    "BarkSemanticModel",
     "MusicgenModel",
     "MusicgenForConditionalGeneration",
 ]

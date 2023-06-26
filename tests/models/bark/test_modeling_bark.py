@@ -42,7 +42,7 @@ if is_torch_available():
         BarkFineModel,
         BarkModel,
         BarkProcessor,
-        BarkSemanticModule,
+        BarkSemanticModel,
     )
 
 
@@ -218,9 +218,9 @@ class BarkFineModelTester(BarkSubModelTester):
 
 
 @require_torch
-class BarkSemanticModuleTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (BarkSemanticModule,) if is_torch_available() else ()
-    all_generative_model_classes = (BarkSemanticModule,) if is_torch_available() else ()
+class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (BarkSemanticModel,) if is_torch_available() else ()
+    all_generative_model_classes = (BarkSemanticModel,) if is_torch_available() else ()
 
     is_encoder_decoder = False
     fx_compatible = False
@@ -230,7 +230,7 @@ class BarkSemanticModuleTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
     # no model_parallel for now
 
     def setUp(self):
-        self.model_tester = BarkSubModelTester(self, config_class=BarkSemanticConfig, model_class=BarkSemanticModule)
+        self.model_tester = BarkSubModelTester(self, config_class=BarkSemanticConfig, model_class=BarkSemanticModel)
         self.config_tester = ConfigTester(self, config_class=BarkSemanticConfig, n_embd=37)
 
     def test_config(self):
@@ -283,8 +283,8 @@ class BarkSemanticModuleTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
 
 
 @require_torch
-class BarkCoarseModelTest(BarkSemanticModuleTest):
-    # Same tester as BarkSemanticModuleTest, except for model_class and config_class
+class BarkCoarseModelTest(BarkSemanticModelTest):
+    # Same tester as BarkSemanticModelTest, except for model_class and config_class
     all_model_classes = (BarkCoarseModel,) if is_torch_available() else ()
     all_generative_model_classes = (BarkCoarseModel,) if is_torch_available() else ()
 

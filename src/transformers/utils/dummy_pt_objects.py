@@ -861,7 +861,7 @@ class BarkPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class BarkSemanticModule(metaclass=DummyObject):
+class BarkSemanticModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

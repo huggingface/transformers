@@ -1136,7 +1136,7 @@ else:
             "BarkModel",
             "BarkSubModelPreTrainedModel",
             "BarkPreTrainedModel",
-            "BarkSemanticModule",
+            "BarkSemanticModel",
         ]
     )
     _import_structure["models.bart"].extend(
@@ -4953,7 +4953,7 @@ if TYPE_CHECKING:
             BarkModel,
             BarkSubModelPreTrainedModel,
             BarkPreTrainedModel,
-            BarkSemanticModule,
+            BarkSemanticModel,
         )
         from .models.bart import (
             BART_PRETRAINED_MODEL_ARCHIVE_LIST,
