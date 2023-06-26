@@ -2506,8 +2506,8 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         >>> from transformers import MusicgenForConditionalGeneration
 
         >>> model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
-        # get the unconditional (or 'null') inputs for the model
 
+        >>> # get the unconditional (or 'null') inputs for the model
         >>> unconditional_inputs = model.get_unconditional_inputs(num_samples=1)
         >>> audio_samples = model.generate(**unconditional_inputs)
         ```"""
