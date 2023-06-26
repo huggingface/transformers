@@ -169,7 +169,7 @@ BARK_CAUSAL_MODULE_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
             Here, due to `Bark` particularities, if `past_key_values` is used, `input_embeds` will be ignored and you
             have to use `input_ids`. If `past_key_values` is not used, `input_embeds` is used in priority instead of
-            `input_embeds`
+            `input_ids`
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -492,12 +492,12 @@ class BarkCausalModel(BarkSubModelPreTrainedModel):
                 # input_embeds have already been used and is not required anymore
                 input_embeds = None
         else:
-            if input_embeds is not None:
+            if input_embeds is not None and kwargs.get("use_cache"):
                 seq_len = input_embeds.shape[1]
             else:
                 seq_len = input_ids.shape[1]
 
-    # ensure that attention_mask and position_ids shapes are aligned with the weird Bark hack of reducing sequence length on the first forward pass
+        # ensure that attention_mask and position_ids shapes are aligned with the weird Bark hack of reducing sequence length on the first forward pass
         if attention_mask is not None:
             attention_mask = attention_mask[:, :seq_len]
         if position_ids is not None:
@@ -512,7 +512,7 @@ class BarkCausalModel(BarkSubModelPreTrainedModel):
         else:
             position_ids = None
 
-        if input_embeds is not None:
+        if input_embeds is not None and kwargs.get("use_cache"):
             return {
                 "input_ids": None,
                 "input_embeds": input_embeds,
