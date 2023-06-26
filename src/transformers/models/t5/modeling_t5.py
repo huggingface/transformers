@@ -1997,7 +1997,6 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-        self.device_map = None
 
     def get_input_embeddings(self):
         return self.shared
