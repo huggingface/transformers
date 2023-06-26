@@ -281,6 +281,12 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
         r"language_model.decoder.embed_tokens.weight",
         r"language_model.lm_head.weight",
     ]
+    _no_split_modules = [
+        "InstructBlipAttention",
+        "T5Block",
+        "OPTDecoderLayer",
+        "InstructBlipQFormerMultiHeadAttention",
+    ]
 
     # Copied from transformers.models.blip_2.modeling_blip_2.Blip2PreTrainedModel._init_weights with Blip2->InstructBlip
     def _init_weights(self, module):
@@ -1422,7 +1428,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
-        attention_mask = torch.cat([language_model_attention_mask, attention_mask], dim=1)
+        attention_mask = torch.cat([language_model_attention_mask.to(attention_mask.device), attention_mask], dim=1)
 
         if self.config.use_decoder_only_language_model:
             outputs = self.language_model(
