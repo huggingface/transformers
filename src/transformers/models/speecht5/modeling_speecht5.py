@@ -2728,7 +2728,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         >>> # generate speech
         >>> speech = model.generate_speech(inputs["input_ids"], speaker_embeddings, vocoder=vocoder)
         >>> speech.shape
-        torch.Size([15872])
+        torch.Size([16384])
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2956,7 +2956,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         >>> # generate speech
         >>> speech = model.generate_speech(inputs["input_values"], speaker_embeddings, vocoder=vocoder)
         >>> speech.shape
-        torch.Size([77824])
+        torch.Size([78336])
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
