@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The Fairseq Authors, Microsoft Research, and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The VITS Authors and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -107,8 +107,6 @@ class VitsConfig(PretrainedConfig):
             Dilation rates of the dilated 1D convolutional layers used in the WaveNet model.
         wavenet_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the WaveNet layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
 
     Example:
 
@@ -160,7 +158,6 @@ class VitsConfig(PretrainedConfig):
         duration_predictor_dropout=0.5,
         duration_predictor_num_flows=4,
         duration_predictor_filter_channels=256,
-        use_cache=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -194,6 +191,5 @@ class VitsConfig(PretrainedConfig):
         self.duration_predictor_dropout = duration_predictor_dropout
         self.duration_predictor_num_flows = duration_predictor_num_flows
         self.duration_predictor_filter_channels = duration_predictor_filter_channels
-        self.use_cache = use_cache
 
         super().__init__(**kwargs)

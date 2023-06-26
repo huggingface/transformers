@@ -53,7 +53,7 @@ class VitsModelOutput(ModelOutput):
     Describes the outputs for the VITS model.
 
     Args:
-        audio (`torch.FloatTensor` of shape `(batch_size, 1, sequence_length)`):
+        audio (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Audio waveform predicted by the model.
         sequence_lengths  (`torch.FloatTensor` of shape `(batch_size,)`):
             The length in samples of each element in the `audio` batch.
@@ -88,6 +88,81 @@ def fused_add_tanh_sigmoid_multiply(input_a, input_b, num_channels):
     return acts
 
 
+class VitsWaveNet(torch.nn.Module):
+    def __init__(self, config: VitsConfig, num_layers: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.num_layers = num_layers
+
+        self.in_layers = torch.nn.ModuleList()
+        self.res_skip_layers = torch.nn.ModuleList()
+        self.dropout = nn.Dropout(config.wavenet_dropout)
+
+        if config.speaker_embedding_size != 0:
+            cond_layer = torch.nn.Conv1d(config.speaker_embedding_size, 2 * config.hidden_size * num_layers, 1)
+            self.cond_layer = torch.nn.utils.weight_norm(cond_layer, name="weight")
+
+        for i in range(num_layers):
+            dilation = config.wavenet_dilation_rate**i
+            padding = (config.wavenet_kernel_size * dilation - dilation) // 2
+            in_layer = torch.nn.Conv1d(
+                in_channels=config.hidden_size,
+                out_channels=2 * config.hidden_size,
+                kernel_size=config.wavenet_kernel_size,
+                dilation=dilation,
+                padding=padding,
+            )
+            in_layer = torch.nn.utils.weight_norm(in_layer, name="weight")
+            self.in_layers.append(in_layer)
+
+            # last one is not necessary
+            if i < num_layers - 1:
+                res_skip_channels = 2 * config.hidden_size
+            else:
+                res_skip_channels = config.hidden_size
+
+            res_skip_layer = torch.nn.Conv1d(config.hidden_size, res_skip_channels, 1)
+            res_skip_layer = torch.nn.utils.weight_norm(res_skip_layer, name="weight")
+            self.res_skip_layers.append(res_skip_layer)
+
+    def forward(self, inputs, padding_mask, global_conditioning=None):
+        outputs = torch.zeros_like(inputs)
+        num_channels_tensor = torch.IntTensor([self.hidden_size])
+
+        if global_conditioning is not None:
+            global_conditioning = self.cond_layer(global_conditioning)
+
+        for i in range(self.num_layers):
+            hidden_states = self.in_layers[i](inputs)
+
+            if global_conditioning is not None:
+                cond_offset = i * 2 * self.hidden_size
+                global_states = global_conditioning[:, cond_offset : cond_offset + 2 * self.hidden_size, :]
+            else:
+                global_states = torch.zeros_like(hidden_states)
+
+            acts = fused_add_tanh_sigmoid_multiply(hidden_states, global_states, num_channels_tensor)
+            acts = self.dropout(acts)
+
+            res_skip_acts = self.res_skip_layers[i](acts)
+            if i < self.num_layers - 1:
+                res_acts = res_skip_acts[:, : self.hidden_size, :]
+                inputs = (inputs + res_acts) * padding_mask
+                outputs = outputs + res_skip_acts[:, self.hidden_size :, :]
+            else:
+                outputs = outputs + res_skip_acts
+
+        return outputs * padding_mask
+
+    def remove_weight_norm(self):
+        if self.speaker_embedding_size != 0:
+            torch.nn.utils.remove_weight_norm(self.cond_layer)
+        for layer in self.in_layers:
+            torch.nn.utils.remove_weight_norm(layer)
+        for layer in self.res_skip_layers:
+            torch.nn.utils.remove_weight_norm(layer)
+
+
 class VitsPosteriorEncoder(nn.Module):
     def __init__(self, config: VitsConfig):
         super().__init__()
@@ -106,7 +181,8 @@ class VitsPosteriorEncoder(nn.Module):
         return z, mean, log_stddev
 
 
-class VitsHifiGanResidualBlock(nn.Module):
+# Copied from transformers.models.speecht5.modeling_speecht5.HifiGanResidualBlock
+class HifiGanResidualBlock(nn.Module):
     def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5), leaky_relu_slope=0.1):
         super().__init__()
         self.leaky_relu_slope = leaky_relu_slope
@@ -195,7 +271,7 @@ class VitsHifiGan(nn.Module):
             channels = config.upsample_initial_channel // (2 ** (i + 1))
             for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes):
                 self.resblocks.append(
-                    VitsHifiGanResidualBlock(channels, kernel_size, dilation, config.leaky_relu_slope)
+                    HifiGanResidualBlock(channels, kernel_size, dilation, config.leaky_relu_slope)
                 )
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3, bias=False)
@@ -250,102 +326,21 @@ class VitsHifiGan(nn.Module):
         return waveform
 
 
-class VitsWaveNet(torch.nn.Module):
-    def __init__(self, config: VitsConfig, num_layers: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.num_layers = num_layers
-
-        self.in_layers = torch.nn.ModuleList()
-        self.res_skip_layers = torch.nn.ModuleList()
-        self.dropout = nn.Dropout(config.wavenet_dropout)
-
-        if config.speaker_embedding_size != 0:
-            cond_layer = torch.nn.Conv1d(config.speaker_embedding_size, 2 * config.hidden_size * num_layers, 1)
-            self.cond_layer = torch.nn.utils.weight_norm(cond_layer, name="weight")
-
-        for i in range(num_layers):
-            dilation = config.wavenet_dilation_rate**i
-            padding = (config.wavenet_kernel_size * dilation - dilation) // 2
-            in_layer = torch.nn.Conv1d(
-                in_channels=config.hidden_size,
-                out_channels=2 * config.hidden_size,
-                kernel_size=config.wavenet_kernel_size,
-                dilation=dilation,
-                padding=padding,
-            )
-            in_layer = torch.nn.utils.weight_norm(in_layer, name="weight")
-            self.in_layers.append(in_layer)
-
-            # last one is not necessary
-            if i < num_layers - 1:
-                res_skip_channels = 2 * config.hidden_size
-            else:
-                res_skip_channels = config.hidden_size
-
-            res_skip_layer = torch.nn.Conv1d(config.hidden_size, res_skip_channels, 1)
-            res_skip_layer = torch.nn.utils.weight_norm(res_skip_layer, name="weight")
-            self.res_skip_layers.append(res_skip_layer)
-
-    def forward(self, inputs, padding_mask, global_conditioning=None):
-        outputs = torch.zeros_like(inputs)
-        num_channels_tensor = torch.IntTensor([self.hidden_size])
-
-        if global_conditioning is not None:
-            global_conditioning = self.cond_layer(global_conditioning)
-
-        for i in range(self.num_layers):
-            hidden_states = self.in_layers[i](inputs)
-
-            if global_conditioning is not None:
-                cond_offset = i * 2 * self.hidden_size
-                global_states = global_conditioning[:, cond_offset : cond_offset + 2 * self.hidden_size, :]
-            else:
-                global_states = torch.zeros_like(hidden_states)
-
-            acts = fused_add_tanh_sigmoid_multiply(hidden_states, global_states, num_channels_tensor)
-            acts = self.dropout(acts)
-
-            res_skip_acts = self.res_skip_layers[i](acts)
-            if i < self.num_layers - 1:
-                res_acts = res_skip_acts[:, : self.hidden_size, :]
-                inputs = (inputs + res_acts) * padding_mask
-                outputs = outputs + res_skip_acts[:, self.hidden_size :, :]
-            else:
-                outputs = outputs + res_skip_acts
-
-        return outputs * padding_mask
-
-    def remove_weight_norm(self):
-        if self.speaker_embedding_size != 0:
-            torch.nn.utils.remove_weight_norm(self.cond_layer)
-        for layer in self.in_layers:
-            torch.nn.utils.remove_weight_norm(layer)
-        for layer in self.res_skip_layers:
-            torch.nn.utils.remove_weight_norm(layer)
-
-
 class VitsResidualCouplingLayer(nn.Module):
-    def __init__(self, config: VitsConfig, mean_only: bool = False):
+    def __init__(self, config: VitsConfig):
         super().__init__()
         self.half_channels = config.flow_size // 2
-        self.mean_only = mean_only
 
         self.conv_pre = nn.Conv1d(self.half_channels, config.hidden_size, 1)
         self.wavenet = VitsWaveNet(config, num_layers=4)
-        self.conv_post = nn.Conv1d(config.hidden_size, self.half_channels * (2 - mean_only), 1)
+        self.conv_post = nn.Conv1d(config.hidden_size, self.half_channels, 1)
 
     def forward(self, inputs, padding_mask, global_conditioning=None, reverse=False):
         x0, x1 = torch.split(inputs, [self.half_channels] * 2, dim=1)
-        h = self.conv_pre(x0) * padding_mask
-        h = self.wavenet(h, padding_mask, global_conditioning)
-        stats = self.conv_post(h) * padding_mask
-
-        if self.mean_only:
-            mean = stats
-            log_stddev = torch.zeros_like(mean)
-        else:
-            mean, log_stddev = torch.split(stats, [self.half_channels] * 2, dim=1)
+        hidden_states = self.conv_pre(x0) * padding_mask
+        hidden_states = self.wavenet(hidden_states, padding_mask, global_conditioning)
+        mean = self.conv_post(hidden_states) * padding_mask
+        log_stddev = torch.zeros_like(mean)
 
         if not reverse:
             x1 = mean + x1 * torch.exp(log_stddev) * padding_mask
@@ -358,12 +353,22 @@ class VitsResidualCouplingLayer(nn.Module):
             return outputs
 
 
+class VitsFlip(nn.Module):
+    def forward(self, inputs, *args, reverse=False, **kwargs):
+        outputs = torch.flip(inputs, [1])
+        if not reverse:
+            log_determinant = torch.zeros(outputs.size(0)).to(dtype=outputs.dtype, device=outputs.device)
+            return outputs, log_determinant
+        else:
+            return outputs
+
+
 class VitsResidualCouplingBlock(nn.Module):
     def __init__(self, config: VitsConfig):
         super().__init__()
         self.flows = nn.ModuleList()
         for _ in range(config.prior_encoder_num_flows):
-            self.flows.append(VitsResidualCouplingLayer(config, mean_only=True))
+            self.flows.append(VitsResidualCouplingLayer(config))
             self.flows.append(VitsFlip())
 
     def forward(self, inputs, padding_mask, global_conditioning=None, reverse=False):
@@ -429,7 +434,7 @@ class VitsConvFlow(nn.Module):
         self.half_channels = in_channels // 2
 
         self.conv_pre = nn.Conv1d(self.half_channels, filter_channels, 1)
-        self.conv_dds = VitsDilatedDepthSeparableConv(filter_channels, kernel_size, num_layers, dropout_rate=0.0)
+        self.conv_dds = VitsDilatedDepthSeparableConv(filter_channels, kernel_size, num_layers)
         self.conv_proj = nn.Conv1d(filter_channels, self.half_channels * (num_bins * 3 - 1), 1)
 
     def forward(self, inputs, padding_mask, global_conditioning=None, reverse=False):
@@ -462,14 +467,14 @@ class VitsConvFlow(nn.Module):
         else:
             return outputs
 
+    @staticmethod
     def _unconstrained_rational_quadratic_spline(
-        self,
         inputs,
         unnormalized_widths,
         unnormalized_heights,
         unnormalized_derivatives,
         inverse=False,
-        tail_bound=1.0,
+        tail_bound=5.0,
         min_bin_width=1e-3,
         min_bin_height=1e-3,
         min_derivative=1e-3,
@@ -488,37 +493,36 @@ class VitsConvFlow(nn.Module):
         outputs[outside_interval_mask] = inputs[outside_interval_mask]
         logabsdet[outside_interval_mask] = 0.0
 
-        outputs[inside_interval_mask], logabsdet[inside_interval_mask] = self._rational_quadratic_spline(
+        outputs[inside_interval_mask], logabsdet[inside_interval_mask] = VitsConvFlow._rational_quadratic_spline(
             inputs=inputs[inside_interval_mask],
             unnormalized_widths=unnormalized_widths[inside_interval_mask, :],
             unnormalized_heights=unnormalized_heights[inside_interval_mask, :],
             unnormalized_derivatives=unnormalized_derivatives[inside_interval_mask, :],
             inverse=inverse,
-            left=-tail_bound,
-            right=tail_bound,
-            bottom=-tail_bound,
-            top=tail_bound,
+            tail_bound=tail_bound,
             min_bin_width=min_bin_width,
             min_bin_height=min_bin_height,
             min_derivative=min_derivative,
         )
         return outputs, logabsdet
 
+    @staticmethod
     def _rational_quadratic_spline(
-        self,
         inputs,
         unnormalized_widths,
         unnormalized_heights,
         unnormalized_derivatives,
         inverse,
-        left,
-        right,
-        bottom,
-        top,
+        tail_bound,
         min_bin_width,
         min_bin_height,
         min_derivative,
     ):
+        left = -tail_bound
+        right = tail_bound
+        bottom = -tail_bound
+        top = tail_bound
+
         if torch.min(inputs) < left or torch.max(inputs) > right:
             raise ValueError("Input to a transform is not within its domain")
 
@@ -620,16 +624,6 @@ class VitsLog(nn.Module):
             return outputs, log_determinant
         else:
             outputs = torch.exp(inputs) * padding_mask
-            return outputs
-
-
-class VitsFlip(nn.Module):
-    def forward(self, inputs, *args, reverse=False, **kwargs):
-        outputs = torch.flip(inputs, [1])
-        if not reverse:
-            log_determinant = torch.zeros(outputs.size(0)).to(dtype=outputs.dtype, device=outputs.device)
-            return outputs, log_determinant
-        else:
             return outputs
 
 
@@ -1334,7 +1328,6 @@ class VitsModel(VitsPreTrainedModel):
 
         >>> set_seed(555)  # make deterministic
 
-        >>> # generate speech
         >>> outputs = model(inputs["input_ids"])
         >>> outputs.audio.shape
         torch.Size([1, 1, 33280])
@@ -1359,7 +1352,7 @@ class VitsModel(VitsPreTrainedModel):
 
         if self.config.num_speakers > 1:
             if speaker_id is None:
-                raise ValueError("Expected speaker_id")
+                raise ValueError(f"Expected input `speaker_id` for a multispeaker model, set `speaker_id` in the range 0-{self.config.num_speakers - 1}.")
             speaker_embeddings = self.embed_speaker(torch.tensor([speaker_id])).unsqueeze(-1)
         else:
             speaker_embeddings = None
@@ -1395,6 +1388,7 @@ class VitsModel(VitsPreTrainedModel):
         z = self.flow(z_p, output_padding_mask, speaker_embeddings, reverse=True)
 
         predicted_audio = self.decoder((z * output_padding_mask), speaker_embeddings)
+        predicted_audio = predicted_audio.squeeze(1)
         sequence_lengths = predicted_lengths * 256
 
         if return_dict:
