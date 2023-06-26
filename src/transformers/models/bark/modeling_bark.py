@@ -480,25 +480,24 @@ class BarkCausalModel(BarkSubModelPreTrainedModel):
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
         input_embeds = kwargs.get("input_embeds", None)
 
-        # only last token for inputs_ids if past is defined in kwargs
-        if past_key_values:
+        attention_mask = kwargs.get("attention_mask", None)
+        position_ids = kwargs.get("position_ids", None)
+        
+        if past_key_values is not None:
+            # only last token for inputs_ids if past is defined in kwargs
             seq_len = input_ids.shape[1]
             input_ids = input_ids[:, [-1]]
 
             if input_embeds is not None:
                 # input_embeds have already been used and is not required anymore
                 input_embeds = None
-
-        attention_mask = kwargs.get("attention_mask", None)
-        position_ids = kwargs.get("position_ids", None)
-
-        # ensure that attention_mask and position_ids shapes are aligned with the weird Bark hack of reducing sequence length on the first forward pass
-        if past_key_values is None:
+        else:
             if input_embeds is not None:
                 seq_len = input_embeds.shape[1]
             else:
                 seq_len = input_ids.shape[1]
 
+    # ensure that attention_mask and position_ids shapes are aligned with the weird Bark hack of reducing sequence length on the first forward pass
         if attention_mask is not None:
             attention_mask = attention_mask[:, :seq_len]
         if position_ids is not None:
