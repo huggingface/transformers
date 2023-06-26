@@ -31,8 +31,8 @@ jobs:
         steps:
             - checkout
             - run: pip install --upgrade pip
-            - run: pip install GitPython
-            - run: pip install .
+            - run: pip install -U GitPython
+            - run: pip install -U .
             - run: mkdir -p test_preparation
             - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
             - store_artifacts:
@@ -105,8 +105,8 @@ jobs:
         steps:
             - checkout
             - run: pip install --upgrade pip
-            - run: pip install GitPython
-            - run: pip install .
+            - run: pip install -U GitPython
+            - run: pip install -U .
             - run: |
                   mkdir test_preparation
                   echo -n "tests" > test_preparation/test_list.txt
@@ -138,12 +138,20 @@ jobs:
                   keys:
                       - v0.6-code_quality-{{ checksum "setup.py" }}
                       - v0.6-code-quality
+            - restore_cache:
+                  keys:
+                      - v0.6-code_quality-{{ checksum "setup.py" }}-site-packages
+                      - v0.6-code-quality-site-packages
             - run: pip install --upgrade pip
-            - run: pip install .[all,quality]
+            - run: pip install -U .[all,quality]
             - save_cache:
-                  key: v0.5-code_quality-{{ checksum "setup.py" }}
+                  key: v0.6-code_quality-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
+            - save_cache:
+                  key: v0.6-code_quality-{{ checksum "setup.py" }}-site-packages
+                  paths:
+                      - '~/.pyenv/versions/'
             - run:
                 name: Show installed libraries and their versions
                 command: pip freeze | tee installed.txt
@@ -171,12 +179,20 @@ jobs:
                   keys:
                       - v0.6-repository_consistency-{{ checksum "setup.py" }}
                       - v0.6-repository_consistency
+            - restore_cache:
+                  keys:
+                      - v0.6-repository_consistency-{{ checksum "setup.py" }}-site-packages
+                      - v0.6-repository_consistency-site-packages
             - run: pip install --upgrade pip
-            - run: pip install .[all,quality]
+            - run: pip install -U .[all,quality]
             - save_cache:
-                  key: v0.5-repository_consistency-{{ checksum "setup.py" }}
+                  key: v0.6-repository_consistency-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
+            - save_cache:
+                  key: v0.6-repository_consistency-{{ checksum "setup.py" }}-site-packages
+                  paths:
+                      - '~/.pyenv/versions/'
             - run:
                 name: Show installed libraries and their versions
                 command: pip freeze | tee installed.txt

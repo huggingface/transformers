@@ -903,7 +903,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = np.random.uniform(0, 1)
+            dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
             if not skip_the_layer or deepspeed_zero3_is_enabled:
@@ -1610,6 +1610,8 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
         self.wav2vec2_conformer = Wav2Vec2ConformerModel(config)
         self.dropout = nn.Dropout(config.final_dropout)
 
+        self.target_lang = target_lang
+
         if config.vocab_size is None:
             raise ValueError(
                 f"You are trying to instantiate {self.__class__} with a configuration that "
@@ -1621,13 +1623,6 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
             config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
         )
         self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
-
-        if target_lang is not None and getattr(self.config, "adapter_attn_dim", None) is None:
-            raise ValueError(f"Cannot pass `target_lang`: {target_lang} if `config.adapter_attn_dim` is not defined.")
-        elif target_lang is None and getattr(self.config, "adapter_attn_dim", None) is not None:
-            logger.info("By default `target_lang` is set to 'eng'.")
-        elif target_lang is not None:
-            self.load_adapter(target_lang)
 
         # Initialize weights and apply final processing
         self.post_init()
