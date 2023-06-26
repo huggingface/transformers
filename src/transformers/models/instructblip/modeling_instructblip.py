@@ -282,12 +282,7 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
         r"language_model.lm_head.weight",
     ]
     _keep_in_fp32_modules = ["wo"]
-    _no_split_modules = [
-        "InstructBlipAttention",
-        "T5Block",
-        "OPTDecoderLayer",
-        "InstructBlipQFormerMultiHeadAttention",
-    ]
+    _no_split_modules = ["InstructBlipAttention", "InstructBlipQFormerMultiHeadAttention"]
 
     # Copied from transformers.models.blip_2.modeling_blip_2.Blip2PreTrainedModel._init_weights with Blip2->InstructBlip
     def _init_weights(self, module):
@@ -1271,10 +1266,13 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         self.qformer = InstructBlipQFormerModel(config.qformer_config)
 
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
+
         if config.use_decoder_only_language_model:
             language_model = AutoModelForCausalLM.from_config(config.text_config)
+            self._no_split_modules.append("LlamaDecoderLayer")
         else:
             language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
+            self._no_split_modules.append("T5Block")
 
         self.language_model = language_model
 
