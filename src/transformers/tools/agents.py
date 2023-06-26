@@ -48,6 +48,7 @@ _tools_are_initialized = False
 
 BASE_PYTHON_TOOLS = {
     "print": print,
+    "range": range,
     "float": float,
     "int": int,
     "bool": bool,
