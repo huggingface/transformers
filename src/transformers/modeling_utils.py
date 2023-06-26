@@ -3477,47 +3477,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return BetterTransformer.reverse(self)
 
-    def warn_if_no_attention_mask_when_pad_token_in_input_ids(self, input_ids, attention_mask):
-        if attention_mask is not None:
-            # No issues with attention_mask is defined.
-            return
-
-        if not hasattr(self, "warnings_issued"):
-            self.warnings_issued = {}
-
-        if self.warnings_issued.get("no_attention_mask_when_pad_token_in_input_ids", False):
-            # If warning has already been shown don't show again.
-            return
-
-        is_pad_token_in_input_ids = self.config.pad_token_id is not None and self.config.pad_token_id in input_ids
-        if is_pad_token_in_input_ids:
-            warn_string = (
-                "We strongly recommend passing in an `attention_mask` as one or more `pad_token_id`s were found in the "
-                "input IDs. Otherwise, the resulting attention weights may be incorrect."
-            )
-
-            # If <pad> is equal to either BOS, EOS, or SEP, we do not know whether the user should use an
-            # attention_mask or not. In this case, we should still show a warning because most models don't have
-            # <pad> == EOS or <pad> == BOS or <pad> == SEP.
-            if self.config.bos_token_id is not None and self.config.bos_token_id == self.config.pad_token_id:
-                warn_string += (
-                    f"\nYou may ignore this warning if your `pad_token_id` ({self.config.pad_token_id}) is identical "
-                    f"to your `bos_token_id` ({self.config.bos_token_id}) and your input is not padded."
-                )
-            if self.config.eos_token_id is not None and self.config.eos_token_id == self.config.pad_token_id:
-                warn_string += (
-                    f"\nYou may ignore this warning if your `pad_token_id` ({self.config.pad_token_id}) is identical "
-                    f"to your `eos_token_id` ({self.config.eos_token_id}) and your input is not padded."
-                )
-            if self.config.sep_token_id is not None and self.config.sep_token_id == self.config.pad_token_id:
-                warn_string += (
-                    f"\nYou may ignore this warning if your `pad_token_id` ({self.config.pad_token_id}) is identical "
-                    f"to your `sep_token_id` ({self.config.sep_token_id}) and your input is not padded."
-                )
-
-            logger.warning(warn_string)
-            self.warnings_issued["no_attention_mask_when_pad_token_in_input_ids"] = True
-
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
 if PreTrainedModel.push_to_hub.__doc__ is not None:
