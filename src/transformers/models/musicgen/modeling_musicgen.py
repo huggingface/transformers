@@ -25,10 +25,10 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
 
-from ... import StoppingCriteriaList
 from ...activations import ACT2FN
 from ...generation.configuration_utils import GenerationConfig
 from ...generation.logits_process import LogitsProcessorList
+from ...generation.stopping_criteria import StoppingCriteriaList
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
