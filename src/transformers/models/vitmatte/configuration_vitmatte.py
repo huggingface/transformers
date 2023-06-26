@@ -43,6 +43,8 @@ class VitMatteConfig(PretrainedConfig):
             The configuration of the backbone model.
         hidden_size (`int`, *optional*, defaults to 384):
             The number of input channels of the decoder.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         convstream_out (`List[int]`, *optional*, defaults to `[48, 96, 192]`):
             ...
         fusion_out (`List[int]`, *optional*, defaults to `[256, 128, 64, 32]`):
@@ -68,6 +70,7 @@ class VitMatteConfig(PretrainedConfig):
         self,
         backbone_config=None,
         hidden_size=384,
+        initializer_range=0.02,
         convstream_out=[48, 96, 192],
         fusion_out=[256, 128, 64, 32],
         **kwargs,
@@ -84,6 +87,7 @@ class VitMatteConfig(PretrainedConfig):
 
         self.backbone_config = backbone_config
         self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
         self.convstream_out = convstream_out
         self.fusion_out = fusion_out
 
