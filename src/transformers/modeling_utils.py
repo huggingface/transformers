@@ -320,8 +320,9 @@ def shard_checkpoint(
 
         weight_size = weight.numel() * dtype_byte_size(weight.dtype)
 
-        # If this weight is going to tip up over the maximal size, we split.
-        if last_block_size + weight_size > max_shard_size:
+        # If this weight is going to tip up over the maximal size, we split, but only if we have put at least one
+        # weight in the current shard.
+        if last_block_size + weight_size > max_shard_size and len(sharded_state_dicts[-1]) > 0:
             sharded_state_dicts.append({})
             last_block_size = 0
 
@@ -3044,15 +3045,30 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             expected_keys = [".".join([prefix, s]) for s in expected_keys]
 
         missing_keys = list(set(expected_keys) - set(loaded_keys))
-        unexpected_keys = list(set(loaded_keys) - set(expected_keys))
+        unexpected_keys = set(loaded_keys) - set(expected_keys)
+        # Remove nonpersistent buffers from unexpected keys: they are not in the state dict but will be in the model
+        # buffers
+        model_buffers = {n for n, _ in model.named_buffers()}
+        if remove_prefix_from_model:
+            model_buffers = {key[len(_prefix) :] if key.startswith(_prefix) else key for key in model_buffers}
+        elif add_prefix_to_model:
+            model_buffers = {".".join([prefix, key]) for key in model_buffers}
+        unexpected_keys = list(unexpected_keys - model_buffers)
 
-        if is_accelerate_available():
-            model.tie_weights()
-            tied_params = find_tied_parameters(model)
-        else:
-            tied_params = []
+        model.tie_weights()
+        ptrs = collections.defaultdict(list)
+        for name, tensor in model.state_dict().items():
+            id_tensor = id_tensor_storage(tensor) if tensor.device != torch.device("meta") else id(tensor)
+            ptrs[id_tensor].append(name)
+
+        # These are all the pointers of shared tensors.
+        tied_params = [names for _, names in ptrs.items() if len(names) > 1]
 
         for group in tied_params:
+            if remove_prefix_from_model:
+                group = [key[len(_prefix) :] if key.startswith(_prefix) else key for key in group]
+            elif add_prefix_to_model:
+                group = [".".join([prefix, key]) for key in group]
             missing_in_group = [k for k in missing_keys if k in group]
             if len(missing_in_group) > 0 and len(missing_in_group) < len(group):
                 missing_keys = [k for k in missing_keys if k not in missing_in_group]

@@ -158,7 +158,9 @@ class RemBertEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
 
     def forward(
         self,
@@ -654,7 +656,6 @@ class RemBertPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_rembert
     base_model_prefix = "rembert"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1016,7 +1017,6 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
     """RemBERT Model with a `language modeling` head on top for CLM fine-tuning.""", REMBERT_START_DOCSTRING
 )
 class RemBertForCausalLM(RemBertPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
     _tied_weights_keys = ["cls.predictions.decoder.weight"]
 
     def __init__(self, config):

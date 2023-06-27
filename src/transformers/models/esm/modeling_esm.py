@@ -96,7 +96,7 @@ class RotaryEmbedding(torch.nn.Module):
         # Generate and save the inverse frequency buffer (non trainable)
         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2).float() / dim))
         inv_freq = inv_freq
-        self.register_buffer("inv_freq", inv_freq)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         self._seq_len_cached = None
         self._cos_cached = None
@@ -178,7 +178,9 @@ class EsmEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
 
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
@@ -783,7 +785,6 @@ class EsmModel(EsmPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
     supports_gradient_checkpointing = False
 
     def __init__(self, config, add_pooling_layer=True):
@@ -960,8 +961,6 @@ class EsmModel(EsmPreTrainedModel):
 
 @add_start_docstrings("""ESM Model with a `language modeling` head on top.""", ESM_START_DOCSTRING)
 class EsmForMaskedLM(EsmPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids", "lm_head.decoder.weight"]
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _tied_weights_keys = ["lm_head.decoder.weight"]
 
     def __init__(self, config):
@@ -1081,8 +1080,6 @@ class EsmLMHead(nn.Module):
     ESM_START_DOCSTRING,
 )
 class EsmForSequenceClassification(EsmPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1177,9 +1174,6 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
     ESM_START_DOCSTRING,
 )
 class EsmForTokenClassification(EsmPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

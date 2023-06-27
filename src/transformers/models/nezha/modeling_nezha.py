@@ -163,7 +163,7 @@ class NezhaRelativePositionsEncoding(nn.Module):
         my_shape = list(final_mat.size())
         my_shape.append(depth)
         positions_encoding = positions_encoding.view(my_shape)
-        self.register_buffer("positions_encoding", positions_encoding)
+        self.register_buffer("positions_encoding", positions_encoding, persistent=False)
 
     def forward(self, length):
         return self.positions_encoding[:length, :length, :]
@@ -735,7 +735,6 @@ class NezhaPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_nezha
     base_model_prefix = "nezha"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"positions_encoding"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1037,7 +1036,6 @@ class NezhaModel(NezhaPreTrainedModel):
     NEZHA_START_DOCSTRING,
 )
 class NezhaForPreTraining(NezhaPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder"]
     _tied_weights_keys = ["cls.predictions.decoder"]
 
     def __init__(self, config):
@@ -1140,8 +1138,6 @@ class NezhaForPreTraining(NezhaPreTrainedModel):
 
 @add_start_docstrings("""Nezha Model with a `language modeling` head on top.""", NEZHA_START_DOCSTRING)
 class NezhaForMaskedLM(NezhaPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"cls.predictions.decoder", r"positions_encoding"]
     _tied_weights_keys = ["cls.predictions.decoder"]
 
     def __init__(self, config):
@@ -1542,8 +1538,6 @@ class NezhaForMultipleChoice(NezhaPreTrainedModel):
     NEZHA_START_DOCSTRING,
 )
 class NezhaForTokenClassification(NezhaPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1623,8 +1617,6 @@ class NezhaForTokenClassification(NezhaPreTrainedModel):
     NEZHA_START_DOCSTRING,
 )
 class NezhaForQuestionAnswering(NezhaPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
