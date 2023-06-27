@@ -60,8 +60,6 @@ class MusicgenDecoderConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        classifier_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for classifier.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically, set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -95,7 +93,6 @@ class MusicgenDecoderConfig(PretrainedConfig):
         attention_dropout=0.0,
         activation_dropout=0.0,
         initializer_factor=0.02,
-        classifier_dropout=0.0,
         scale_embedding=False,
         num_codebooks=4,
         pad_token_id=2048,
@@ -115,7 +112,6 @@ class MusicgenDecoderConfig(PretrainedConfig):
         self.activation_function = activation_function
         self.initializer_factor = initializer_factor
         self.layerdrop = layerdrop
-        self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.num_codebooks = num_codebooks
