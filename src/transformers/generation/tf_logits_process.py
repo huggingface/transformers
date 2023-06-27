@@ -318,7 +318,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
         self.bad_word_seqs_ids = tf.ragged.constant(bad_words_ids).to_tensor(default_value=-1)
         # 2. a tensor with the unpadded length of each forbidden sequence, for quick length comparisons
         bad_word_seqs_len = [len(bad_words) for bad_words in bad_words_ids]
-        if any([word_len == 0 for word_len in bad_word_seqs_len]):
+        if any(word_len == 0 for word_len in bad_word_seqs_len):
             raise ValueError(f"Banned words token sequences {bad_words_ids} cannot have an empty list")
         self.bad_word_seqs_len = tf.convert_to_tensor(bad_word_seqs_len, dtype=tf.int32)
         # 3. a tensor containing the last token for each sequence, for easy access to the tokens that may be banned

@@ -362,7 +362,7 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
     model_keys = [re.search(r"\*\*\[([^\]]*)", line).groups()[0] for line in model_list.strip().split("\n")]
 
     # We exclude keys in localized README not in the main one.
-    readmes_match = not any([k not in model_keys for k in localized_model_index])
+    readmes_match = not any(k not in model_keys for k in localized_model_index)
     localized_model_index = {k: v for k, v in localized_model_index.items() if k in model_keys}
 
     for model in model_list.strip().split("\n"):

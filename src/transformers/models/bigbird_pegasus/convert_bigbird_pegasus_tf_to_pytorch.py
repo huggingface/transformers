@@ -104,7 +104,7 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
         new_k = rename_state_dict_key(k, patterns)
         if new_k not in state_dict:
             raise ValueError(f"could not find new key {new_k} in state dict. (converted from {k})")
-        if any([True if i in k else False for i in ["dense", "query", "key", "value"]]):
+        if any(True if i in k else False for i in ["dense", "query", "key", "value"]):
             v = v.T
         mapping[new_k] = torch.from_numpy(v)
         assert v.shape == state_dict[new_k].shape, f"{new_k}, {k}, {v.shape}, {state_dict[new_k].shape}"
@@ -117,7 +117,7 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
         new_k = rename_state_dict_key(k, patterns)
         if new_k not in state_dict and k != "pegasus/embeddings/position_embeddings":
             raise ValueError(f"could not find new key {new_k} in state dict. (converted from {k})")
-        if any([True if i in k else False for i in ["dense", "query", "key", "value"]]):
+        if any(True if i in k else False for i in ["dense", "query", "key", "value"]):
             v = v.T
         mapping[new_k] = torch.from_numpy(v)
         if k != "pegasus/embeddings/position_embeddings":
@@ -147,7 +147,7 @@ def get_tf_weights_as_numpy(path) -> Dict:
     tf_weights = {}
     ignore_name = ["global_step"]
     for name, shape in tqdm(init_vars, desc="converting tf checkpoint to dict"):
-        skip_key = any([pat in name for pat in ignore_name])
+        skip_key = any(pat in name for pat in ignore_name)
         if skip_key:
             continue
         array = tf.train.load_variable(path, name)

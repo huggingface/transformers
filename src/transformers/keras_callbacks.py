@@ -144,7 +144,7 @@ class KerasMetricCallback(Callback):
     @staticmethod
     def _concatenate_batches(batches, padding_index=-100):
         # If all batches are unidimensional or same length, do a simple concatenation
-        if batches[0].ndim == 1 or all([batch.shape[1] == batches[0].shape[1] for batch in batches]):
+        if batches[0].ndim == 1 or all(batch.shape[1] == batches[0].shape[1] for batch in batches):
             return np.concatenate(batches, axis=0)
 
         # Welp, they're not the same length. Let's do some padding
