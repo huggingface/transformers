@@ -117,7 +117,7 @@ class CircleCIJob:
         ]
         steps.extend([{"run": l} for l in self.install_steps])
         # TODO (ydshieh): Remove this line after the next release (the one after 2023/06/19) of `huggingface_hub`
-        steps.append({"run": {"name": "Split tests", "command": "pip uninstall -y huggingface_hub && pip install -U git+https://github.com/huggingface/huggingface_hub.git@c36817701ecd4694b290178846176da2e195d838"}})
+        steps.append({"run": {"name": "Split tests", "command": "pip uninstall -y huggingface_hub && pip install -U git+https://github.com/huggingface/huggingface_hub.git@e4a419bf6bbaa95d14704cc781d3e81a49cef413"}})
         steps.append(
             {
                 "save_cache": {
