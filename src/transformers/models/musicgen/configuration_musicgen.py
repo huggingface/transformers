@@ -62,9 +62,9 @@ class MusicgenDecoderConfig(PretrainedConfig):
             The dropout ratio for activations inside the fully connected layer.
         classifier_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for classifier.
-        max_position_embeddings (`int`, *optional*, defaults to 1024):
+        max_position_embeddings (`int`, *optional*, defaults to 1500):
             The maximum sequence length that this model might ever be used with. Typically, set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
+            just in case (e.g., 750 or 1500).
         initializer_factor (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layerdrop (`float`, *optional*, defaults to 0.0):
@@ -83,7 +83,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=2048,
-        max_position_embeddings=1024,
+        max_position_embeddings=1500,
         num_hidden_layers=24,
         ffn_dim=4096,
         num_attention_heads=16,
