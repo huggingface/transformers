@@ -242,7 +242,7 @@ class SwitchTransformersLayerNorm(nn.Module):
 
     def forward(self, hidden_states):
         # SwitchTransformers uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
-        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus variance is calculated
+        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
         # half-precision inputs is done in fp32
 
