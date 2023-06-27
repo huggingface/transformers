@@ -36,7 +36,6 @@ from ...utils import (
 from ...utils.hub import get_file_from_repo
 
 
-# TODO: add tokenizer to hub + add loading/saving methods + update specs
 class BarkProcessor(ProcessorMixin):
     r"""
     Constructs a Bark processor which wraps a Bark voice preset and a text tokenizer into a single processor.
