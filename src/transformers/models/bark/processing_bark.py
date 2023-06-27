@@ -16,16 +16,12 @@
 Processor class for Bark
 """
 import os
-from typing import Optional, Union
 import warnings
+from typing import Optional, Union
 
 import numpy as np
 
-
-from ..auto import AutoTokenizer
-
 from ...processing_utils import ProcessorMixin
-
 from ...utils import (
     TensorType,
     is_flax_available,
@@ -35,6 +31,7 @@ from ...utils import (
     is_torch_available,
 )
 from ...utils.hub import get_file_from_repo
+from ..auto import AutoTokenizer
 
 
 class BarkProcessor(ProcessorMixin):
@@ -47,8 +44,9 @@ class BarkProcessor(ProcessorMixin):
         speaker_embeddings_dict (`Dict[np.ndarray]`, *optional*, defaults to `None`):
             Optional speaker embeddings dictionary. The keys follow the following pattern:
             `"{voice_preset_name}_{prompt_key}"`. For example: `"en_speaker_1_semantic_prompt"` or
-            `"en_speaker_1_coarse_prompt"`.
-            See [here](https://suno-ai.notion.site/8b8e8749ed514b0cbf3f699013548683?v=bc67cff786b04b50b3ceb756fd05f68c) for a list of `voice_preset_names`.
+            `"en_speaker_1_coarse_prompt"`. See
+            [here](https://suno-ai.notion.site/8b8e8749ed514b0cbf3f699013548683?v=bc67cff786b04b50b3ceb756fd05f68c) for
+            a list of `voice_preset_names`.
 
     """
     tokenizer_class = "AutoTokenizer"
@@ -106,7 +104,9 @@ class BarkProcessor(ProcessorMixin):
                     f"`{os.path.join(pretrained_processor_name_or_path,speaker_embeddings_file_name)}` does not exists, no preloaded speaker embeddings will be used - Make sure to provide a correct path if wanted, otherwise set `speaker_embeddings_file_name=None`."
                 )
             else:
-                speaker_embeddings_dict = np.load(speaker_embeddings_dict) if speaker_embeddings_dict is not None else None
+                speaker_embeddings_dict = (
+                    np.load(speaker_embeddings_dict) if speaker_embeddings_dict is not None else None
+                )
         else:
             speaker_embeddings_dict = None
 

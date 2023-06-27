@@ -25,7 +25,7 @@ from ...generation.logits_process import LogitsProcessor
 from ...generation.stopping_criteria import StoppingCriteria
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, add_code_sample_docstrings, logging
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
@@ -162,8 +162,8 @@ BARK_CAUSAL_MODEL_INPUTS_DOCSTRING = r"""
         input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
             Here, due to `Bark` particularities, if `past_key_values` is used, `input_embeds` will be ignored and you
-            have to use `input_ids`. If `past_key_values` is not used and `use_cache` is set to `True`, `input_embeds` is used in priority instead of
-            `input_ids`.
+            have to use `input_ids`. If `past_key_values` is not used and `use_cache` is set to `True`, `input_embeds`
+            is used in priority instead of `input_ids`.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -1263,7 +1263,7 @@ class BarkModel(BarkPreTrainedModel):
         emb = self.codec_model.quantizer.decode(fine_output)
         out = self.codec_model.decoder(emb)
         audio_arr = out.squeeze(1)  # squeeze the codebook dimension
-        
+
         # TODO: del or no del?
         # del fine_output, emb, out
 
@@ -1297,7 +1297,7 @@ class BarkModel(BarkPreTrainedModel):
                 The coarse generation step uses a sliding window to generate raw audio. Defaults to 60.
         Returns:
             torch.LongTensor: Output generated audio.
-            
+
         Example:
 
         ```python
@@ -1316,14 +1316,14 @@ class BarkModel(BarkPreTrainedModel):
 
         ```python
         >>> # To add a voice preset, you can pass `voice_preset` to `BarkProcessor.__call__(...)`
-        
-        >>> voice_preset = "v2/en_speaker_6"
-        
-        >>> inputs, history_prompt = processor("Hello, my dog is cute", voice_preset = voice_preset)
 
-        >>> audio_array = model(**inputs, history_prompt = history_prompt)
+        >>> voice_preset = "v2/en_speaker_6"
+
+        >>> inputs, history_prompt = processor("Hello, my dog is cute", voice_preset=voice_preset)
+
+        >>> audio_array = model(**inputs, history_prompt=history_prompt)
         >>> audio_array = audio_array.detach().cpu().numpy()
-        
+
         >>> # save audio to disk, but first take the sample rate from the model config
         >>> sample_rate = model.config.sample_rate
         >>> write_wav("bark_generation.wav", sample_rate, audio_array)
