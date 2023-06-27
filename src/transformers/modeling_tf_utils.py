@@ -983,6 +983,13 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
 
 
 def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
+    # TODO Matt:
+    #      Implement the torch logic so we stop needing MainLayer
+    #         1) Read model.base_model_prefix, which is set for all classes.
+    #         2) Determine if a model or checkpoint is derived if it has any weights that begin with this prefix.
+    #         3) If one of (model, checkpoint) is derived but the other isn't, then key surgery is needed.
+    #         4) If the model is derived but the checkpoint isn't, we need to add prefixes
+    #         5) If the checkpoint is derived but the model isn't, we need to remove prefixes
     # Read the safetensors file
     with safe_open(resolved_archive_file, framework="tf") as safetensors_archive:
         mismatched_layers = []
