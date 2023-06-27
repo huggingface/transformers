@@ -183,7 +183,7 @@ class NllbMoeSinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.register_buffer("weights", emb_weights)
+        self.register_buffer("weights", emb_weights, persistent=False)
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
@@ -1500,14 +1500,6 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
     NLLB_MOE_START_DOCSTRING,
 )
 class NllbMoeModel(NllbMoePreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        "encoder.embed_tokens.weight",
-        "decoder.embed_tokens.weight",
-        "encoder.embed_positions.weights",
-        "encoder.embed_positions.bias",
-        "decoder.embed_positions.weights",
-        "decoder.embed_positions.bias",
-    ]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: NllbMoeConfig):
@@ -1641,17 +1633,6 @@ class NllbMoeModel(NllbMoePreTrainedModel):
 )
 class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.version",
-        r"decoder.version",
-        r"lm_head.weight",
-        r"encoder.embed_tokens.weight",
-        r"decoder.embed_tokens.weight",
-        r"encoder.embed_positions.weights",
-        r"encoder.embed_positions.bias",
-        r"decoder.embed_positions.weights",
-        r"decoder.embed_positions.bias",
-    ]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: NllbMoeConfig):

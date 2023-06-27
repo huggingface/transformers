@@ -378,8 +378,6 @@ class FlaubertPreTrainedModel(PreTrainedModel):
 
 
 class FlaubertModel(FlaubertPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):  # , dico, is_encoder, with_output):
         super().__init__(config)
 
@@ -448,7 +446,6 @@ class FlaubertModel(FlaubertPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
         self.layerdrop = getattr(config, "layerdrop", 0.0)
         self.pre_norm = getattr(config, "pre_norm", False)
@@ -654,7 +651,6 @@ class FlaubertModel(FlaubertPreTrainedModel):
 )
 # Copied transformers.models.xlm.modeling_xlm.XLMWithLMHeadModel with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertWithLMHeadModel(FlaubertPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["pred_layer.proj.weight"]
     _tied_weights_keys = ["pred_layer.proj.weight"]
 
     def __init__(self, config):

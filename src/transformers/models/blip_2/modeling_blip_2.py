@@ -273,12 +273,6 @@ class Blip2PreTrainedModel(PreTrainedModel):
     config_class = Blip2Config
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [
-        r"position_ids",
-        r"language_model.encoder.embed_tokens.weight",
-        r"language_model.decoder.embed_tokens.weight",
-        r"language_model.lm_head.weight",
-    ]
     _no_split_modules = ["Blip2Attention", "T5Block", "OPTDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _keep_in_fp32_modules = ["wo"]

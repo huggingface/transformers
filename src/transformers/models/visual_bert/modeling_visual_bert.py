@@ -78,7 +78,9 @@ class VisualBertEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
 
         # For Visual Features
         # Token type and position embedding for image features
@@ -531,7 +533,6 @@ class VisualBertPreTrainedModel(PreTrainedModel):
     config_class = VisualBertConfig
     base_model_prefix = "visual_bert"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -871,7 +872,6 @@ class VisualBertModel(VisualBertPreTrainedModel):
     VISUAL_BERT_START_DOCSTRING,
 )
 class VisualBertForPreTraining(VisualBertPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     def __init__(self, config):
@@ -1462,7 +1462,6 @@ class VisualBertRegionToPhraseAttention(nn.Module):
     VISUAL_BERT_START_DOCSTRING,
 )
 class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.bias"]
     _tied_weights_keys = ["cls.predictions.decoder.bias"]
 
     def __init__(self, config):

@@ -1166,7 +1166,9 @@ class ClapTextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=True
+        )
         self.register_buffer(
             "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=True
         )
@@ -1677,7 +1679,6 @@ class ClapPreTrainedModel(PreTrainedModel):
     config_class = ClapConfig
     base_model_prefix = "clap"
     supports_gradient_checkpointing = False
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"logit_scale_a", r"logit_scale_t"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1781,7 +1782,6 @@ class ClapTextModel(ClapPreTrainedModel):
     """
 
     config_class = ClapTextConfig
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->ClapText
     def __init__(self, config, add_pooling_layer=True):
@@ -1936,7 +1936,6 @@ class ClapTextModel(ClapPreTrainedModel):
 @add_start_docstrings(CLAP_START_DOCSTRING)
 class ClapModel(ClapPreTrainedModel):
     config_class = ClapConfig
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config: ClapConfig):
         super().__init__(config)

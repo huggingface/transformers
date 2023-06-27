@@ -1387,15 +1387,6 @@ class MegaPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def update_keys_to_ignore(self, config, del_keys_to_ignore):
-        """Remove some keys from ignore list"""
-        if not config.tie_word_embeddings:
-            # must make a new list, or the class variable gets modified!
-            self._keys_to_ignore_on_save = [k for k in self._keys_to_ignore_on_save if k not in del_keys_to_ignore]
-            self._keys_to_ignore_on_load_missing = [
-                k for k in self._keys_to_ignore_on_load_missing if k not in del_keys_to_ignore
-            ]
-
 
 MEGA_START_DOCSTRING = r"""
 
@@ -1473,8 +1464,6 @@ class MegaModel(MegaPreTrainedModel):
     .. _*Mega: Moving Average Equipped Gated Attention*: https://arxiv.org/abs/2209.10655
 
     """
-
-    _keys_to_ignore_on_load_missing = []
 
     def __init__(self, config: MegaConfig, add_pooling_layer=True):
         super().__init__(config)
@@ -1656,9 +1645,6 @@ class MegaModel(MegaPreTrainedModel):
     """MEGA Model with a `language modeling` head on top for CLM fine-tuning.""", MEGA_START_DOCSTRING
 )
 class MegaForCausalLM(MegaPreTrainedModel):
-    _keys_to_ignore_on_save = [r"lm_head.weight", r"lm_head.bias"]
-    _keys_to_ignore_on_load_missing = [r"lm_head.weight", r"lm_head.bias"]
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: MegaConfig):
@@ -1677,9 +1663,6 @@ class MegaForCausalLM(MegaPreTrainedModel):
             self.hidden_activation = None
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
-
-        # The LM head weights require special treatment only when they are tied with the word embeddings
-        self.update_keys_to_ignore(config, ["lm_head.weight"])
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1821,9 +1804,6 @@ class MegaForCausalLM(MegaPreTrainedModel):
 
 @add_start_docstrings("""MEGA Model with a `language modeling` head on top.""", MEGA_START_DOCSTRING)
 class MegaForMaskedLM(MegaPreTrainedModel):
-    _keys_to_ignore_on_save = [r"mlm_head.weight", r"mlm_head.bias"]
-    _keys_to_ignore_on_load_missing = [r"mlm_head.weight", r"mlm_head.bias"]
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _tied_weights_keys = ["mlm_head.weight"]
 
     def __init__(self, config: MegaConfig):
@@ -1844,9 +1824,6 @@ class MegaForMaskedLM(MegaPreTrainedModel):
             self.hidden_activation = None
         self.mlm_head = nn.Linear(config.hidden_size, config.vocab_size)
         self.dropout = nn.Dropout(config.dropout_prob)
-
-        # The LM head weights require special treatment only when they are tied with the word embeddings
-        self.update_keys_to_ignore(config, ["mlm_head.weight"])
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1931,8 +1908,6 @@ class MegaForMaskedLM(MegaPreTrainedModel):
     MEGA_START_DOCSTRING,
 )
 class MegaForSequenceClassification(MegaPreTrainedModel):
-    _keys_to_ignore_on_load_missing = []
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -2024,8 +1999,6 @@ class MegaForSequenceClassification(MegaPreTrainedModel):
     MEGA_START_DOCSTRING,
 )
 class MegaForMultipleChoice(MegaPreTrainedModel):
-    _keys_to_ignore_on_load_missing = []
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -2111,9 +2084,6 @@ class MegaForMultipleChoice(MegaPreTrainedModel):
     MEGA_START_DOCSTRING,
 )
 class MegaForTokenClassification(MegaPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = []
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -2214,9 +2184,6 @@ class MegaClassificationHead(nn.Module):
     MEGA_START_DOCSTRING,
 )
 class MegaForQuestionAnswering(MegaPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = []
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

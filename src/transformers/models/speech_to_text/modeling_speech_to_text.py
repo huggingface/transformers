@@ -1266,17 +1266,6 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
 )
 class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.version",
-        r"decoder.version",
-        r"model.encoder.embed_positions.weights",
-        r"model.decoder.embed_positions.weights",
-        r"lm_head.weight",
-    ]
-    _keys_to_ignore_on_save = [
-        r"model.encoder.embed_positions.weights",
-        r"model.decoder.embed_positions.weights",
-    ]
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: Speech2TextConfig):
