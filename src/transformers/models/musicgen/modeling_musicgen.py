@@ -44,7 +44,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto.configuration_auto import AutoConfig
-from ..auto.modeling_auto import AutoModel, AutoModelForCausalLM
+from ..auto.modeling_auto import AutoModel
 from .configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig
 
 
@@ -1775,6 +1775,9 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                     decoder_pretrained_model_name_or_path, **kwargs_decoder, return_unused_kwargs=True
                 )
 
+                if isinstance(decoder_config, MusicgenConfig):
+                    decoder_config = decoder_config.decoder
+
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
                         f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention"
@@ -1795,7 +1798,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                     "`decoder_config` to `.from_sub_models_pretrained(...)`"
                 )
 
-            decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+            decoder = MusicgenForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
         # instantiate config with corresponding kwargs
         config = MusicgenConfig.from_sub_models_config(
