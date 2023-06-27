@@ -850,9 +850,9 @@ class MT5Stack(MT5PreTrainedModel):
 
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
-        scalable_attention = config.scalable_attention if hasattr(config, scalable_attention) else False
+        scalable_attention = config.scalable_attention if hasattr(config, "scalable_attention") else False
         self.block = nn.ModuleList(
-            [MT5Block(config, has_relative_attention_bias= (i==0) if scalable_attention else True) for i in range(config.num_layers)]
+            [MT5Block(config, has_relative_attention_bias= (i==0) if not scalable_attention else True) for i in range(config.num_layers)]
         )
         self.final_layer_norm = MT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
