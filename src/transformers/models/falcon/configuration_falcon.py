@@ -57,7 +57,7 @@ class FalconConfig(PretrainedConfig):
             The dropout probability for MLP layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for attention layers.
-        n_head_kv (`int`, *optional*, defaults to `None`):
+        n_head_kv (`int`, *optional*):
             Number of key-value heads to use per attention layer. If `None`, defaults to the same value as
             `num_attention_heads`.
         alibi (`bool`, *optional*, defaults to `False`):
