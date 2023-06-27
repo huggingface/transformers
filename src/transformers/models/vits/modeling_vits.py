@@ -1318,7 +1318,7 @@ class VitsModel(VitsPreTrainedModel):
 
         >>> outputs = model(inputs["input_ids"])
         >>> outputs.audio.shape
-        torch.Size([1, 1, 33280])
+        torch.Size([1, 13312])
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
