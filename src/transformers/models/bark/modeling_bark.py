@@ -763,9 +763,6 @@ class BarkFineModel(BarkSubModelPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-        if self.config.tie_word_embeddings:
-            self.tie_weights()
-
     def get_input_embeddings(self):
         # one embedding layers for each codebook
         return self.wtes
