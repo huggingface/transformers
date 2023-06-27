@@ -15,31 +15,39 @@
 """
 Processor class for Bark
 """
-from typing import Optional
+import os
+from typing import Optional, Union
 
 import numpy as np
 
-from ...processing_utils import ProcessorMixin
-from ...utils.hub import cached_file
-from ..auto import AutoTokenizer
+from transformers import (
+    AutoTokenizer,
+    ProcessorMixin,
+    TensorType,
+)
+
+from ...utils import (
+    is_flax_available,
+    is_jax_tensor,
+    is_numpy_array,
+    is_tf_available,
+    is_torch_available,
+)
+from ...utils.hub import get_file_from_repo
 
 
+# TODO: add tokenizer to hub + add loading/saving methods + update specs
 class BarkProcessor(ProcessorMixin):
     r"""
     Constructs a Bark processor which wraps a Bark voice preset and a text tokenizer into a single processor.
 
     Args:
-        tokenizer ([`PreTrainedTokenizer`], *optional*):
-            An instance of [`PreTrainedTokenizer`]. The tokenizer is optional. By default, it will instantiated as
-            "bert-base-multilingual-cased".
-        repo_id (`str`, *optional*, defaults to ""):
-            This can be either:
-
-            - a string, the *model id* of a model repo on huggingface.co.
-            - a path to a *directory* potentially containing the file.
-        subfolder (`str`, *optional*, defaults to `""`):
-            In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
-            specify the folder name here.
+        tokenizer ([`PreTrainedTokenizer`]):
+            An instance of [`PreTrainedTokenizer`].
+        speaker_embeddings_dict (`Dict[np.ndarray]`, *optional*, defaults to `None`):
+            Optional speaker embeddings dictionary. The keys follow the following pattern: 
+            `"{voice_preset_name}_{prompt_key}"`. For example: `"en_speaker_1_semantic_prompt"`
+            or `"en_speaker_1_coarse_prompt"`.
     """
     tokenizer_class = "AutoTokenizer"
     attributes = ["tokenizer"]
@@ -50,25 +58,76 @@ class BarkProcessor(ProcessorMixin):
         "fine_prompt": 2,
     }
 
-    def __init__(self, tokenizer: Optional[AutoTokenizer] = None, repo_id="", subfolder="", **kwargs):
-        if tokenizer is None:
-            tokenizer = AutoTokenizer.from_pretrained("bert-base-multilingual-cased")
+    def __init__(self, tokenizer, speaker_embeddings_dict=None):
         super().__init__(tokenizer)
 
-        self.repo_id = repo_id
-        self.subfolder = subfolder
+        self.speaker_embeddings_dict = speaker_embeddings_dict
 
     @classmethod
-    def from_pretrained(
-        cls, pretrained_tokenizer_name_or_path, repo_id=None, subfolder="speaker_embeddings", **kwargs
-    ):
-        """Same initialization than __init__ except that you can specify the tokenizer name or path instead of passing a
-        [`PreTrainedTokenizer`].
+    def from_pretrained(cls, pretrained_processor_name_or_path, speaker_embeddings_file_name=None, **kwargs):
+        r"""
+        Instantiate a Bark processor associated with a pretrained model.
+        Args:
+            pretrained_model_name_or_path (`str` or `os.PathLike`):
+                This can be either:
+
+                - a string, the *model id* of a pretrained [`BarkProcessor`] hosted inside a model repo on
+                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
+                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                - a path to a *directory* containing a processor saved using the
+                  [`~BarkProcessor.save_pretrained`] method, e.g., `./my_model_directory/`.
+            speaker_embeddings_file_name (`str`, *optional*, defaults to `None`):
+                The name of the `.npz` file containing the speaker_embeddings (e.g `"speaker_embeddings.npz"`) located in `pretrained_model_name_or_path`.
+            **kwargs
+                Additional keyword arguments passed along to both
+                [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`].
         """
 
-        tokenizer = AutoTokenizer.from_pretrained(pretrained_tokenizer_name_or_path, **kwargs)
+        if speaker_embeddings_file_name is not None:
+            speaker_embeddings_dict = get_file_from_repo(
+                pretrained_processor_name_or_path,
+                speaker_embeddings_file_name,
+                subfolder=kwargs.pop("subfolder", None),
+                cache_dir=kwargs.pop("cache_dir", None),
+                force_download=kwargs.pop("force_download", False),
+                proxies=kwargs.pop("proxies", None),
+                resume_download=kwargs.pop("resume_download", False),
+                local_files_only=kwargs.pop("local_files_only", False),
+                use_auth_token=kwargs.pop("use_auth_token", None),
+                revision=kwargs.pop("revision", None),
+            )
 
-        return cls(tokenizer=tokenizer, repo_id=repo_id, subfolder=subfolder, **kwargs)
+            speaker_embeddings_dict = np.load(speaker_embeddings_dict)
+        else:
+            speaker_embeddings_dict = None
+
+        tokenizer = AutoTokenizer.from_pretrained(pretrained_processor_name_or_path, **kwargs)
+
+        return cls(tokenizer=tokenizer, speaker_embeddings_dict=speaker_embeddings_dict)
+
+    def save_pretrained(self, save_directory, speaker_embeddings_file_name = "speaker_embeddings.npz", push_to_hub: bool = False, **kwargs):
+        """
+        Saves the attributes of this processor (tokenizer...) in the specified directory so that it
+        can be reloaded using the [`~BarkProcessor.from_pretrained`] method.
+        
+        Args:
+            save_directory (`str` or `os.PathLike`):
+                Directory where the feature extractor JSON file and the tokenizer files will be saved (directory will
+                be created if it does not exist).
+            speaker_embeddings_file_name (`str`, *optional*, defaults to `"speaker_embeddings.npz"`):
+                The name of the `.npz` file that will contains the speaker_embeddings, if it exists, and that will be located in `pretrained_model_name_or_path`.
+            push_to_hub (`bool`, *optional*, defaults to `False`):
+                Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
+                repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
+                namespace).
+            kwargs:
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
+        """
+        if self.speaker_embeddings_dict is not None:
+            os.makedirs(save_directory, exist_ok=True)
+            np.savez(os.path.join(save_directory, speaker_embeddings_file_name), **self.speaker_embeddings_dict)
+
+        super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
     def _validate_voice_preset_dict(cls, voice_preset: Optional[dict] = None):
         if voice_preset is None:
@@ -98,7 +157,7 @@ class BarkProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s). This method forwards the `text` and `kwargs`
         arguments to the AutoTokenizer's [`~AutoTokenizer.__call__`] to encode the text. The method also proposes a
         voice preset which is a dictionary of arrays that conditions `Bark`'s output. `kwargs` arguments are forwarded
-        to the tokenizer and to `cached_file` method if `voice_preset` is not None.
+        to the tokenizer and to `cached_file` method if `voice_preset` is a valid filename.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
@@ -106,45 +165,39 @@ class BarkProcessor(ProcessorMixin):
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             voice_preset (`str`, `Dict[np.ndarray]`):
-                The voice preset, i.e the speaker embeddings. It can either be directly a dictionnary of embeddings for
-                each submodel of `Bark`. Or it can be the file name with or without the ".npz" extension located in
-                'repo_id/subfolder', defined during initialization.
+                The voice preset, i.e the speaker embeddings. It can either be a valid voice_preset name, e.g `"en_speaker_1"`, 
+                or a directly a dictionnary of embeddings for each submodel of `Bark`. Or it can be a valid file name of a local `.npz` single voice preset.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
 
-                Note that voice_preset are always returned as a dictionnary of `np.ndarray` for now.
-
         Returns:
-            Tuple([`BatchEncoding`], Dict[np.npdarray]): A tuple composed of a [`BatchEncoding`], i.e the output of the
-            `tokenizer` and a `Dict[np.ndarray], i.e the voice preset.
+            Tuple([`BatchEncoding`], Dict[~utils.TensorType]): A tuple composed of a [`BatchEncoding`], i.e the output of the
+            `tokenizer` and a `Dict[~utils.TensorType`]`, i.e the voice preset with the right tensors type.
         """
         if voice_preset is None or isinstance(voice_preset, dict):
             pass
         else:
-            # if not dict, either
-            if isinstance(voice_preset, str) and not voice_preset.endswith(".npz"):
-                voice_preset = voice_preset + ".npz"
+            voice_preset_key = voice_preset.replace("/", "_")
+            if isinstance(voice_preset, str) and f"{voice_preset_key}_semantic_prompt" in self.speaker_embeddings_dict:
+                voice_preset = {}
+                for prompt_type in [
+                    "semantic_prompt",
+                    "coarse_prompt",
+                    "fine_prompt",
+                ]:
+                    voice_preset[prompt_type] = self.speaker_embeddings_dict[f"{voice_preset_key}_{prompt_type}"]
 
-            file_path = cached_file(
-                self.repo_id,
-                voice_preset,
-                subfolder=self.subfolder,
-                cache_dir=kwargs.pop("cache_dir", None),
-                force_download=kwargs.pop("force_download", False),
-                proxies=kwargs.pop("proxies", None),
-                resume_download=kwargs.pop("resume_download", False),
-                local_files_only=kwargs.pop("local_files_only", False),
-                use_auth_token=kwargs.pop("use_auth_token", None),
-                user_agent=kwargs.pop("user_agent", None),
-                revision=kwargs.pop("revision", None),
-                repo_type=kwargs.pop("repo_type", None),
-            )
-            voice_preset = np.load(file_path)
+            else:
+                if isinstance(voice_preset, str) and not voice_preset.endswith(".npz"):
+                    voice_preset = voice_preset + ".npz"
+
+                voice_preset = np.load(voice_preset)
 
         self._validate_voice_preset_dict(voice_preset)
+        voice_preset = convert_dict_to_tensors(voice_preset, return_tensors)
         encoded_text = self.tokenizer(
             text,
             return_tensors=return_tensors,
@@ -157,3 +210,73 @@ class BarkProcessor(ProcessorMixin):
         )
 
         return encoded_text, voice_preset
+
+
+def convert_dict_to_tensors(tensor_dict, tensor_type: Optional[Union[str, TensorType]] = None):
+
+    if tensor_type is None or tensor_dict is None:
+        return tensor_dict
+
+    # Convert to TensorType
+    if not isinstance(tensor_type, TensorType):
+        tensor_type = TensorType(tensor_type)
+
+    # Get a function reference for the correct framework
+    if tensor_type == TensorType.TENSORFLOW:
+        if not is_tf_available():
+            raise ImportError(
+                "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
+            )
+        import tensorflow as tf
+
+        as_tensor = tf.constant
+        is_tensor = tf.is_tensor
+    elif tensor_type == TensorType.PYTORCH:
+        if not is_torch_available():
+            raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
+        import torch
+
+        as_tensor = torch.tensor
+        is_tensor = torch.is_tensor
+    elif tensor_type == TensorType.JAX:
+        if not is_flax_available():
+            raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
+        import jax.numpy as jnp  # noqa: F811
+
+        as_tensor = jnp.array
+        is_tensor = is_jax_tensor
+    else:
+
+        def as_tensor(value, dtype=None):
+            if isinstance(value, (list, tuple)) and isinstance(value[0], (list, tuple, np.ndarray)):
+                value_lens = [len(val) for val in value]
+                if len(set(value_lens)) > 1 and dtype is None:
+                    # we have a ragged list so handle explicitly
+                    value = as_tensor([np.asarray(val) for val in value], dtype=object)
+            return np.asarray(value, dtype=dtype)
+
+        is_tensor = is_numpy_array
+
+    new_tensor_dict = {}
+    # Do the tensor conversion in batch
+    for key, value in tensor_dict.items():
+        try:
+            if not is_tensor(value):
+                tensor = as_tensor(value)
+
+
+                new_tensor_dict[key] = tensor
+        except Exception as e:
+            if key == "overflowing_tokens":
+                raise ValueError(
+                    "Unable to create tensor returning overflowing tokens of different lengths. "
+                    "Please see if a fast version of this tokenizer is available to have this feature available."
+                ) from e
+            raise ValueError(
+                "Unable to create tensor, you should probably activate truncation and/or padding with"
+                " 'padding=True' 'truncation=True' to have batched tensors with the same length. Perhaps your"
+                f" features (`{key}` in this case) have excessive nesting (inputs type `list` where type `int` is"
+                " expected)."
+            ) from e
+
+    return new_tensor_dict
