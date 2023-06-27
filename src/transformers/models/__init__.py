@@ -77,6 +77,7 @@ from . import (
     ernie,
     ernie_m,
     esm,
+    falcon,
     flaubert,
     flava,
     fnet,
