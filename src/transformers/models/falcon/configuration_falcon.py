@@ -63,7 +63,7 @@ class FalconConfig(PretrainedConfig):
         alibi (`bool`, *optional*, defaults to `False`):
             Whether to use ALiBi positional biases during self-attention.
 
-        Example:
+    Example:
 
     ```python
     >>> from transformers import FalconModel, FalconConfig
