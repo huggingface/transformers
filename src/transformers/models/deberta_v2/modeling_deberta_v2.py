@@ -862,7 +862,9 @@ class DebertaV2Embeddings(nn.Module):
         self.config = config
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, mask=None, inputs_embeds=None):
         if input_ids is not None:
@@ -920,7 +922,6 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
 
     config_class = DebertaV2Config
     base_model_prefix = "deberta"
-    _keys_to_ignore_on_load_missing = ["position_ids"]
     _keys_to_ignore_on_load_unexpected = ["position_embeddings"]
     supports_gradient_checkpointing = True
 
@@ -1120,8 +1121,6 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
 
 @add_start_docstrings("""DeBERTa Model with a `language modeling` head on top.""", DEBERTA_START_DOCSTRING)
 class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", "cls.predictions.decoder.weight"]
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     def __init__(self, config):
@@ -1380,8 +1379,6 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
 )
 # Copied from transformers.models.deberta.modeling_deberta.DebertaForTokenClassification with Deberta->DebertaV2
 class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1455,8 +1452,6 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
     DEBERTA_START_DOCSTRING,
 )
 class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
