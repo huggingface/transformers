@@ -301,8 +301,9 @@ the `num_beams` greater than 1, and set `do_sample=True` to use this decoding st
 
 The diverse beam search decoding strategy is an extension of the beam search strategy that allows for generating a more diverse
 set of beam sequences to choose from. To learn how it works, refer to [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models](https://arxiv.org/pdf/1610.02424.pdf).
-This approach has two main parameters: `num_beams` and `num_beam_groups`.
-The groups are selected to ensure they are distinct enough compared to the others, and regular beam search is used within each group.
+This approach has three main parameters: `num_beams`, `num_beam_groups`, and `diversity_penalty`.
+The diversily penalty ensures the outputs are distinct across groups, and beam search is used within each group.
+
 
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
@@ -328,9 +329,9 @@ The groups are selected to ensure they are distinct enough compared to the other
 
 >>> model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint)
 
->>> outputs = model.generate(**inputs, num_beams=5, num_beam_groups=5, max_new_tokens=30)
+>>> outputs = model.generate(**inputs, num_beams=5, num_beam_groups=5, max_new_tokens=30, diversity_penalty=1.0)
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
-'The Design Principles are a set of universal design principles that can be applied to any location, climate and culture, and they allow us to design the most efficient and sustainable human habitation and food production systems.'
+'The aim of this project is to create a new type of living system, one that is more sustainable and efficient than the current one.'
 ```
 
 This guide illustrates the main parameters that enable various decoding strategies. More advanced parameters exist for the
