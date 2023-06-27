@@ -34,7 +34,7 @@ BARK_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class BarkSubModelConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`BartModule`]. It is used to instantiate Bark
+    This is the configuration class to store the configuration of a [`BarkModule`]. It is used to instantiate Bark
     sub-models according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Bark
     [suno/bark](https://huggingface.co/suno/bark) architecture.
@@ -181,24 +181,25 @@ class BarkConfig(PretrainedConfig):
         Configuration of the underlying coarse acoustics sub-model. Defaults to None.
     fine_acoustics_config (BarkSubModelConfig, optional):
         Configuration of the underlying fine acoustics sub-model. Defaults to None.
-    pretrained_encodec_name_or_path (str, optional):
-        Name or path to the underlying pretrained [`encodec`] model. Defaults to "facebook/encodec_24khz".
+    codec_config (EncodecConfig, optional):
+        Configuration of the underlying codec sub-model. Defaults to None.
 
     Example:
 
     ```python
-    >>> from transformers import BarkSubModelConfig, Bark, BarkConfig
+    >>> from transformers import BarkSubModelConfig, Bark, BarkConfig, EncodecConfig
 
     >>> # Initializing Bark sub-modules configurations.
     >>> semantic_config = BarkSubModelConfig()
     >>> coarse_acoustics_config = BarkSubModelConfig()
     >>> fine_acoustics_config = BarkSubModelConfig()
+    >>> codec_config = EncodecConfig()
 
 
     >>> # Initializing a Bark module style configuration
-    >>> configuration = BarkConfig(semantic_config, coarse_acoustics_config, fine_acoustics_config)
+    >>> configuration = BarkConfig(semantic_config, coarse_acoustics_config, fine_acoustics_config, codec_config)
 
-    >>> # Initializing a model (with random weights) from the suno/bark style configuration
+    >>> # Initializing a model (with random weights)
     >>> model = Bark(configuration)
 
     >>> # Accessing the model configuration
@@ -214,7 +215,7 @@ class BarkConfig(PretrainedConfig):
         semantic_config: BarkSemanticConfig = None,
         coarse_acoustics_config: BarkCoarseConfig = None,
         fine_acoustics_config: BarkFineConfig = None,
-        codec_config: PretrainedConfig = None,
+        codec_config: EncodecConfig = None,
         **kwargs,
     ):
         if semantic_config is None:
@@ -267,7 +268,7 @@ class BarkConfig(PretrainedConfig):
         **kwargs,
     ):
         r"""
-        Instantiate a [`BarkConfig`] (or a derived class) from bark modules configuration configuration.
+        Instantiate a [`BarkConfig`] (or a derived class) from bark sub-models configuration.
 
         Returns:
             [`BarkConfig`]: An instance of a configuration object

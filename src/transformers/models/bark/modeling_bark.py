@@ -50,7 +50,7 @@ BARK_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-BARK_MODULE_START_DOCSTRING = r"""
+BARK_MODEL_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -84,7 +84,7 @@ BARK_START_DOCSTRING = r"""
 """
 
 
-BARK_ACOUSTICS_INPUTS_DOCSTRING = r"""
+BARK_FINE_INPUTS_DOCSTRING = r"""
     Args:
         codebook_idx (`int`):
             Index of the codebook that will be predicted.
@@ -116,9 +116,6 @@ BARK_ACOUSTICS_INPUTS_DOCSTRING = r"""
             `past_key_values` is used, optionally only the last `input_embeds` have to be input (see
             `past_key_values`). This is useful if you want more control over how to convert `input_ids` indices into
             associated vectors than the model's internal embedding lookup matrix.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -129,8 +126,7 @@ BARK_ACOUSTICS_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-# TODO: correct the part on indices once we decide how to do it
-BARK_CAUSAL_MODULE_INPUTS_DOCSTRING = r"""
+BARK_CAUSAL_MODEL_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -145,10 +141,7 @@ BARK_CAUSAL_MODULE_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `input_ids` of shape `(batch_size, sequence_length)`. input_embeds (`torch.FloatTensor` of shape
-            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
-            can choose to directly pass an embedded representation. This is useful if you want more control over how to
-            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+            `input_ids` of shape `(batch_size, sequence_length)`.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -169,8 +162,8 @@ BARK_CAUSAL_MODULE_INPUTS_DOCSTRING = r"""
         input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
             Here, due to `Bark` particularities, if `past_key_values` is used, `input_embeds` will be ignored and you
-            have to use `input_ids`. If `past_key_values` is not used, `input_embeds` is used in priority instead of
-            `input_ids`
+            have to use `input_ids`. If `past_key_values` is not used and `use_cache` is set to `True`, `input_embeds` is used in priority instead of
+            `input_ids`.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -522,7 +515,7 @@ class BarkCausalModel(BarkPreTrainedModel):
             "attention_mask": attention_mask,
         }
 
-    @add_start_docstrings_to_model_forward(BARK_CAUSAL_MODULE_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BARK_CAUSAL_MODEL_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -700,8 +693,8 @@ class BarkCausalModel(BarkPreTrainedModel):
 
 
 @add_start_docstrings(
-    "Bark sub-module at the core of the semantic sub-model. It shares the same architecture than the coarse model. It is a GPT-2 like autoregressive model with a language modeling head on top.",
-    BARK_MODULE_START_DOCSTRING,
+    "Bark semantic (or text) model. It shares the same architecture as the coarse model. It is a GPT-2 like autoregressive model with a language modeling head on top.",
+    BARK_MODEL_START_DOCSTRING,
 )
 class BarkSemanticModel(BarkCausalModel):
     base_model_prefix = "semantic"
@@ -709,8 +702,8 @@ class BarkSemanticModel(BarkCausalModel):
 
 
 @add_start_docstrings(
-    "Bark sub-module at the core of the coarse acoustics sub-model. It shares the same architecture than the semantic model. It is a GPT-2 like autoregressive model with a language modeling head on top.",
-    BARK_MODULE_START_DOCSTRING,
+    "Bark coarse acoustics model. It shares the same architecture as the semantic (or text) model. It is a GPT-2 like autoregressive model with a language modeling head on top.",
+    BARK_MODEL_START_DOCSTRING,
 )
 class BarkCoarseModel(BarkCausalModel):
     base_model_prefix = "coarse_acoustics"
@@ -718,8 +711,8 @@ class BarkCoarseModel(BarkCausalModel):
 
 
 @add_start_docstrings(
-    "Bark sub-module at the core of the fine acoustics sub-model. It is a non-causal GPT-like model with 8 embedding layers and language modeling heads, one for each codebook.",
-    BARK_MODULE_START_DOCSTRING,
+    "Bark fine acoustics model. It is a non-causal GPT-like model with `config.n_codes_total` embedding layers and language modeling heads, one for each codebook.",
+    BARK_MODEL_START_DOCSTRING,
 )
 class BarkFineModel(BarkPreTrainedModel):
     base_model_prefix = "fine_acoustics"
@@ -813,7 +806,7 @@ class BarkFineModel(BarkPreTrainedModel):
                 module._tie_weights()
 
     # an additionnal idx corresponding to the id of the codebook that will be predicted
-    @add_start_docstrings_to_model_forward(BARK_ACOUSTICS_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BARK_FINE_INPUTS_DOCSTRING)
     def forward(
         self,
         codebook_idx: int,
