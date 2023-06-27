@@ -953,7 +953,7 @@ class BarkModel(BarkPreTrainedModel):
         self.coarse_acoustics = BarkCoarseModel(config.coarse_acoustics_config)
         self.fine_acoustics = BarkFineModel(config.fine_acoustics_config)
 
-        self.codec_model = EncodecModel.from_pretrained(config.pretrained_encodec_name_or_path)
+        self.codec_model = AutoModel.from_config(config.codec_config)
 
         self.config = config
 

@@ -18,6 +18,7 @@ import copy
 import os
 from typing import Union
 
+from ..auto import AutoConfig
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -52,8 +53,8 @@ class BarkSubModelConfig(PretrainedConfig):
             regards to the chosen sub-model.
         output_vocab_size (_type_, optional):
         Output vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented by the:
-            `output_ids` when passing forward a [`BarkSubModel`]. Defaults to 10_048 but should be carefully thought with
-            regards to the chosen sub-model.
+            `output_ids` when passing forward a [`BarkSubModel`]. Defaults to 10_048 but should be carefully thought
+            with regards to the chosen sub-model.
         num_layers (int, optional):
             Number of layers. Defaults to 12.
         num_heads (int, optional):
@@ -213,27 +214,31 @@ class BarkConfig(PretrainedConfig):
         semantic_config: BarkSemanticConfig = None,
         coarse_acoustics_config: BarkCoarseConfig = None,
         fine_acoustics_config: BarkFineConfig = None,
-        pretrained_encodec_name_or_path: str = "facebook/encodec_24khz",
+        codec_config: PretrainedConfig = None,
         **kwargs,
     ):
         if semantic_config is None:
             semantic_config = {}
-            logger.info("semantic_config is None. initializing the Semantic module with default values.")
+            logger.info("semantic_config is None. initializing the semantic model with default values.")
 
         if coarse_acoustics_config is None:
             coarse_acoustics_config = {}
             logger.info(
-                "coarse_acoustics_config is None. initializing the Coarse Acoustics module with default values."
+                "coarse_acoustics_config is None. initializing the coarse model with default values."
             )
 
         if fine_acoustics_config is None:
             fine_acoustics_config = {}
-            logger.info("fine_acoustics_config is None. initializing the Fine Acoustics module with default values.")
+            logger.info("fine_acoustics_config is None. initializing the fine model with default values.")
+            
+        if codec_config is None:
+            codec_config = {}
+            logger.info("codec_config is None. initializing the codec model with default values.")
 
         self.semantic_config = BarkSemanticConfig(**semantic_config)
         self.coarse_acoustics_config = BarkCoarseConfig(**coarse_acoustics_config)
         self.fine_acoustics_config = BarkFineConfig(**fine_acoustics_config)
-        self.pretrained_encodec_name_or_path = pretrained_encodec_name_or_path
+        self.codec_config = AutoConfig(**codec_config)        
 
         # TODO: check if right place
         # some of these configs are linked to the config of the submodels
@@ -260,6 +265,7 @@ class BarkConfig(PretrainedConfig):
         semantic_config: BarkSemanticConfig,
         coarse_acoustics_config: BarkCoarseConfig,
         fine_acoustics_config: BarkFineConfig,
+        codec_config: PretrainedConfig,
         **kwargs,
     ):
         r"""
@@ -272,6 +278,7 @@ class BarkConfig(PretrainedConfig):
             semantic_config=semantic_config.to_dict(),
             coarse_acoustics_config=coarse_acoustics_config.to_dict(),
             fine_acoustics_config=fine_acoustics_config.to_dict(),
+            codec_config=codec_config.to_dict(),
             **kwargs,
         )
 
@@ -287,6 +294,8 @@ class BarkConfig(PretrainedConfig):
         output["semantic_config"] = self.semantic_config.to_dict()
         output["coarse_acoustics_config"] = self.coarse_acoustics_config.to_dict()
         output["fine_acoustics_config"] = self.fine_acoustics_config.to_dict()
+        output["codec_config"] = self.codec_config.to_dict()
 
         output["model_type"] = self.__class__.model_type
         return output
+
