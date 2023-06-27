@@ -203,7 +203,7 @@ parts, as would typically be done following training of the MusicGen decoder LM:
 >>> decoder_config = AutoConfig.from_pretrained("facebook/musicgen-small").decoder
 >>> decoder = MusicgenForCausalLM.from_pretrained("facebook/musicgen-small", **decoder_config)
 
->>> model = MusicgenForConditionalGeneration.from_sub_models_pretrained(text_encoder, audio_encoder, decoder)
+>>> model = MusicgenForConditionalGeneration.from_sub_model_pretrained(text_encoder, audio_encoder, decoder)
 ```
 
 If only the decoder needs to be loaded from the pre-trained checkpoint for the composite model, it can be loaded by first 
