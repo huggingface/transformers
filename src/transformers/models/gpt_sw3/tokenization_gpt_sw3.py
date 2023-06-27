@@ -381,7 +381,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
                 Input ids for the conversation.
         """
         all_responses = [
-            f"User:\n{text}{self.eos_token}" if is_user else f"Bot:\n{text}"
+            f"User:\n{text}" if is_user else f"Bot:\n{text}"
             for is_user, text in conversation.iter_texts()
         ]
         prompt = (
