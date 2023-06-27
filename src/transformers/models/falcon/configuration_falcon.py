@@ -63,10 +63,6 @@ class FalconConfig(PretrainedConfig):
         alibi (`bool`, *optional*, defaults to `False`):
             Whether to use ALiBi positional biases during self-attention.
 
-        hidden_dropout
-        attention_dropout
-        n_head_kv
-        alibi
         Example:
 
     ```python
