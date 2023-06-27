@@ -1553,7 +1553,7 @@ class Trainer:
         # number of training epochs: num_train_epochs
         # number of training steps per epoch: num_update_steps_per_epoch
         # total number of training steps to execute: max_steps
-        total_train_batch_size = args.train_batch_size * args.gradient_accumulation_steps * args.world_size
+        total_train_batch_size = self._train_batch_size * args.gradient_accumulation_steps * args.world_size
 
         len_dataloader = None
         if has_length(train_dataloader):
