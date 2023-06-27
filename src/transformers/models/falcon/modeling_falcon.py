@@ -202,24 +202,14 @@ class FalconAttention(nn.Module):
         """
         batch, seq_len, _ = fused_qkv.shape
         qkv = fused_qkv.view(batch, seq_len, -1, self.num_heads // self.num_kv + 2, 64)
-        q = qkv[:, :, :, :-2]
-        k = qkv[:, :, :, [-2]]
-        v = qkv[:, :, :, [-1]]
-        k = torch.broadcast_to(k, q.shape)
-        v = torch.broadcast_to(v, q.shape)
+        query = qkv[:, :, :, :-2]
+        key = qkv[:, :, :, [-2]]
+        value = qkv[:, :, :, [-1]]
+        key = torch.broadcast_to(key, query.shape)
+        value = torch.broadcast_to(value, query.shape)
 
-        # Original einops code:
-        # q, k, v = [
-        #     rearrange(
-        #         x,
-        #         "batch seq_len group num_heads head_dim ->\
-        #         batch seq_len (group num_heads) head_dim",
-        #         head_dim=self.head_dim,
-        #     )
-        #     for x in [q, k, v]
-        # ]
-        q, k, v = [x.flatten(2, 3) for x in (q, k, v)]
-        return q, k, v
+        query, key, value = [x.flatten(2, 3) for x in (query, key, value)]
+        return query, key, value
 
     def _merge_heads(self, x: torch.Tensor) -> torch.Tensor:
         """
