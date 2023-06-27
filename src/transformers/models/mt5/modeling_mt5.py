@@ -209,6 +209,7 @@ class MT5Attention(nn.Module):
     def __init__(self, config: MT5Config, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
+        self.scalable_attention = config.scalable_attention if hasattr(config, "scalable_attention") else False
         self.has_relative_attention_bias = has_relative_attention_bias
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.relative_attention_max_distance = config.relative_attention_max_distance
@@ -392,6 +393,18 @@ class MT5Attention(nn.Module):
             query_states, key_states.transpose(3, 2)
         )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
 
+        # re-compute bias for umt5
+        if self.scalable_attention and self.has_relative_attention_bias:
+            position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
+
+            # if key and values are already calculated
+            # we want only the last query position bias
+            if past_key_value is not None:
+                position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
+
+            if mask is not None:
+                position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
+                
         if position_bias is None:
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
