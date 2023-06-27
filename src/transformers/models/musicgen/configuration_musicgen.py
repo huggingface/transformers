@@ -174,11 +174,11 @@ class MusicgenConfig(PretrainedConfig):
     >>> config_decoder = model.config.decoder
 
     >>> # Saving the model, including its configuration
-    >>> model.save_pretrained("my-model")
+    >>> model.save_pretrained("musicgen-model")
 
     >>> # loading model and config from pretrained folder
-    >>> encoder_decoder_config = MusicgenConfig.from_pretrained("my-model")
-    >>> model = MusicgenForConditionalGeneration.from_pretrained("my-model", config=encoder_decoder_config)
+    >>> encoder_decoder_config = MusicgenConfig.from_pretrained("musicgen-model")
+    >>> model = MusicgenForConditionalGeneration.from_pretrained("musicgen-model", config=encoder_decoder_config)
     ```"""
 
     model_type = "musicgen"
