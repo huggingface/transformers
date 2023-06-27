@@ -321,7 +321,7 @@ def shard_checkpoint(
         weight_size = weight.numel() * dtype_byte_size(weight.dtype)
 
         # If this weight is going to tip up over the maximal size, we split.
-        if last_block_size + weight_size > max_shard_size:
+        if last_block_size + weight_size > max_shard_size and len(sharded_state_dicts[-1]) > 0:
             sharded_state_dicts.append({})
             last_block_size = 0
 
