@@ -283,6 +283,8 @@ def convert_checkpoint(
         config.speaker_embedding_size = 256
 
     if checkpoint_path is None:
+        logger.info(f"***Converting model: facebook/mms-tts {language}***")
+
         vocab_path = hf_hub_download(
             repo_id="facebook/mms-tts",
             filename="vocab.txt",
@@ -306,6 +308,8 @@ def convert_checkpoint(
         is_uroman = hps["data"]["training_files"].split(".")[-1] == "uroman"
         if is_uroman:
             logger.warning("For this checkpoint, you should use `uroman` to convert input text before tokenizing it!")
+    else:
+        logger.info(f"***Converting model: {checkpoint_path}***")
 
     # Save vocab as temporary json file
     symbols = [line.replace("\n", "") for line in open(vocab_path, encoding="utf-8").readlines()]
