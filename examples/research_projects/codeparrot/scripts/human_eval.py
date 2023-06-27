@@ -60,7 +60,7 @@ class EndOfFunctionCriteria(StoppingCriteria):
         decoded_generations = self.tokenizer.batch_decode(input_ids[:, self.start_length :])
         done = []
         for decoded_generation in decoded_generations:
-            done.append(any([stop_string in decoded_generation for stop_string in self.eof_strings]))
+            done.append(any(stop_string in decoded_generation for stop_string in self.eof_strings))
         return all(done)
 
 

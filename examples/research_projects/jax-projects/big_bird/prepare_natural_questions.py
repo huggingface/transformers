@@ -50,7 +50,7 @@ def _get_single_answer(example):
         answer["remove_it"] = False
 
     cols = ["start_token", "end_token", "start_byte", "end_byte", "text"]
-    if not all([isinstance(answer[k], list) for k in cols]):
+    if not all(isinstance(answer[k], list) for k in cols):
         raise ValueError("Issue in ID", example["id"])
 
     return answer

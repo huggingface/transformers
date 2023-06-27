@@ -28,6 +28,7 @@ from pathlib import Path
 
 import datasets
 import evaluate
+import numpy as np
 import torch
 from accelerate import Accelerator
 from accelerate.logging import get_logger
@@ -777,6 +778,12 @@ def main():
             if args.with_tracking:
                 all_results.update({"train_loss": total_loss.item() / len(train_dataloader)})
             with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+                # Convert all float64 & int64 type numbers to float & int for json serialization
+                for key, value in all_results.items():
+                    if isinstance(value, np.float64):
+                        all_results[key] = float(value)
+                    elif isinstance(value, np.int64):
+                        all_results[key] = int(value)
                 json.dump(all_results, f)
 
 
