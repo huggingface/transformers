@@ -18,9 +18,9 @@ import copy
 import os
 from typing import Union
 
-from ..auto import AutoConfig
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..encodec import EncodecConfig
 
 
 logger = logging.get_logger(__name__)
@@ -223,14 +223,12 @@ class BarkConfig(PretrainedConfig):
 
         if coarse_acoustics_config is None:
             coarse_acoustics_config = {}
-            logger.info(
-                "coarse_acoustics_config is None. initializing the coarse model with default values."
-            )
+            logger.info("coarse_acoustics_config is None. initializing the coarse model with default values.")
 
         if fine_acoustics_config is None:
             fine_acoustics_config = {}
             logger.info("fine_acoustics_config is None. initializing the fine model with default values.")
-            
+
         if codec_config is None:
             codec_config = {}
             logger.info("codec_config is None. initializing the codec model with default values.")
@@ -238,7 +236,7 @@ class BarkConfig(PretrainedConfig):
         self.semantic_config = BarkSemanticConfig(**semantic_config)
         self.coarse_acoustics_config = BarkCoarseConfig(**coarse_acoustics_config)
         self.fine_acoustics_config = BarkFineConfig(**fine_acoustics_config)
-        self.codec_config = AutoConfig(**codec_config)        
+        self.codec_config = EncodecConfig(**codec_config)
 
         # TODO: check if right place
         # some of these configs are linked to the config of the submodels
@@ -265,7 +263,7 @@ class BarkConfig(PretrainedConfig):
         semantic_config: BarkSemanticConfig,
         coarse_acoustics_config: BarkCoarseConfig,
         fine_acoustics_config: BarkFineConfig,
-        codec_config: PretrainedConfig,
+        codec_config: EncodecConfig,
         **kwargs,
     ):
         r"""
@@ -298,4 +296,3 @@ class BarkConfig(PretrainedConfig):
 
         output["model_type"] = self.__class__.model_type
         return output
-

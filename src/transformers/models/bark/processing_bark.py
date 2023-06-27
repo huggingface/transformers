@@ -45,9 +45,9 @@ class BarkProcessor(ProcessorMixin):
         tokenizer ([`PreTrainedTokenizer`]):
             An instance of [`PreTrainedTokenizer`].
         speaker_embeddings_dict (`Dict[np.ndarray]`, *optional*, defaults to `None`):
-            Optional speaker embeddings dictionary. The keys follow the following pattern: 
-            `"{voice_preset_name}_{prompt_key}"`. For example: `"en_speaker_1_semantic_prompt"`
-            or `"en_speaker_1_coarse_prompt"`.
+            Optional speaker embeddings dictionary. The keys follow the following pattern:
+            `"{voice_preset_name}_{prompt_key}"`. For example: `"en_speaker_1_semantic_prompt"` or
+            `"en_speaker_1_coarse_prompt"`.
     """
     tokenizer_class = "AutoTokenizer"
     attributes = ["tokenizer"]
@@ -64,20 +64,23 @@ class BarkProcessor(ProcessorMixin):
         self.speaker_embeddings_dict = speaker_embeddings_dict
 
     @classmethod
-    def from_pretrained(cls, pretrained_processor_name_or_path, speaker_embeddings_file_name=None, **kwargs):
+    def from_pretrained(
+        cls, pretrained_processor_name_or_path, speaker_embeddings_file_name="speaker_embeddings.npz", **kwargs
+    ):
         r"""
-        Instantiate a Bark processor associated with a pretrained model.
         Args:
+        Instantiate a Bark processor associated with a pretrained model.
             pretrained_model_name_or_path (`str` or `os.PathLike`):
                 This can be either:
 
                 - a string, the *model id* of a pretrained [`BarkProcessor`] hosted inside a model repo on
                   huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
                   namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
-                - a path to a *directory* containing a processor saved using the
-                  [`~BarkProcessor.save_pretrained`] method, e.g., `./my_model_directory/`.
-            speaker_embeddings_file_name (`str`, *optional*, defaults to `None`):
-                The name of the `.npz` file containing the speaker_embeddings (e.g `"speaker_embeddings.npz"`) located in `pretrained_model_name_or_path`.
+                - a path to a *directory* containing a processor saved using the [`~BarkProcessor.save_pretrained`]
+                  method, e.g., `./my_model_directory/`.
+            speaker_embeddings_file_name (`str`, *optional*, defaults to `"speaker_embeddings.npz"`):
+                The name of the `.npz` file containing the speaker_embeddings (e.g `"speaker_embeddings.npz"`) located
+                in `pretrained_model_name_or_path`. If `None`, no speaker_embeddings is loaded.
             **kwargs
                 Additional keyword arguments passed along to both
                 [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`].
@@ -105,17 +108,24 @@ class BarkProcessor(ProcessorMixin):
 
         return cls(tokenizer=tokenizer, speaker_embeddings_dict=speaker_embeddings_dict)
 
-    def save_pretrained(self, save_directory, speaker_embeddings_file_name = "speaker_embeddings.npz", push_to_hub: bool = False, **kwargs):
+    def save_pretrained(
+        self,
+        save_directory,
+        speaker_embeddings_file_name="speaker_embeddings.npz",
+        push_to_hub: bool = False,
+        **kwargs,
+    ):
         """
-        Saves the attributes of this processor (tokenizer...) in the specified directory so that it
-        can be reloaded using the [`~BarkProcessor.from_pretrained`] method.
-        
+        Saves the attributes of this processor (tokenizer...) in the specified directory so that it can be reloaded
+        using the [`~BarkProcessor.from_pretrained`] method.
+
         Args:
             save_directory (`str` or `os.PathLike`):
                 Directory where the feature extractor JSON file and the tokenizer files will be saved (directory will
                 be created if it does not exist).
             speaker_embeddings_file_name (`str`, *optional*, defaults to `"speaker_embeddings.npz"`):
-                The name of the `.npz` file that will contains the speaker_embeddings, if it exists, and that will be located in `pretrained_model_name_or_path`.
+                The name of the `.npz` file that will contains the speaker_embeddings, if it exists, and that will be
+                located in `pretrained_model_name_or_path`.
             push_to_hub (`bool`, *optional*, defaults to `False`):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
@@ -175,8 +185,8 @@ class BarkProcessor(ProcessorMixin):
                 - `'np'`: Return NumPy `np.ndarray` objects.
 
         Returns:
-            Tuple([`BatchEncoding`], Dict[~utils.TensorType]): A tuple composed of a [`BatchEncoding`], i.e the output of the
-            `tokenizer` and a `Dict[~utils.TensorType`]`, i.e the voice preset with the right tensors type.
+            Tuple([`BatchEncoding`], Dict[~utils.TensorType]): A tuple composed of a [`BatchEncoding`], i.e the output
+            of the `tokenizer` and a `Dict[~utils.TensorType`]`, i.e the voice preset with the right tensors type.
         """
         if voice_preset is None or isinstance(voice_preset, dict):
             pass
@@ -214,7 +224,6 @@ class BarkProcessor(ProcessorMixin):
 
 
 def convert_dict_to_tensors(tensor_dict, tensor_type: Optional[Union[str, TensorType]] = None):
-
     if tensor_type is None or tensor_dict is None:
         return tensor_dict
 
@@ -225,9 +234,7 @@ def convert_dict_to_tensors(tensor_dict, tensor_type: Optional[Union[str, Tensor
     # Get a function reference for the correct framework
     if tensor_type == TensorType.TENSORFLOW:
         if not is_tf_available():
-            raise ImportError(
-                "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
-            )
+            raise ImportError("Unable to convert output to TensorFlow tensors format, TensorFlow is not installed.")
         import tensorflow as tf
 
         as_tensor = tf.constant
@@ -264,7 +271,6 @@ def convert_dict_to_tensors(tensor_dict, tensor_type: Optional[Union[str, Tensor
         try:
             if not is_tensor(value):
                 tensor = as_tensor(value)
-
 
                 new_tensor_dict[key] = tensor
         except Exception as e:

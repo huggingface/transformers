@@ -1134,7 +1134,6 @@ else:
             "BarkCoarseModel",
             "BarkFineModel",
             "BarkModel",
-            "BarkSubModelPreTrainedModel",
             "BarkPreTrainedModel",
             "BarkSemanticModel",
         ]
@@ -4951,7 +4950,6 @@ if TYPE_CHECKING:
             BarkCoarseModel,
             BarkFineModel,
             BarkModel,
-            BarkSubModelPreTrainedModel,
             BarkPreTrainedModel,
             BarkSemanticModel,
         )

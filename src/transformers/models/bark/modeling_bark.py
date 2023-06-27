@@ -26,19 +26,20 @@ from ...generation.stopping_criteria import StoppingCriteria
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from ..encodec import EncodecModel
+from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
     BarkConfig,
     BarkFineConfig,
-    BarkSubModelConfig,
     BarkSemanticConfig,
+    BarkSubModelConfig,
 )
 
 
 logger = logging.get_logger(__name__)
 
 
+# TODO: change checkpoint
 _CHECKPOINT_FOR_DOC = "suno/bark"
 _CONFIG_FOR_DOC = "BarkConfig"
 
@@ -404,25 +405,12 @@ class BarkPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
 
     def _init_weights(self, module):
-        if isinstance(module, BarkCausalModel) or isinstance(module, BarkFineModel):
-            module.apply(module._init_weights)
-
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
-
-
-class BarkSubModelPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = BarkSubModelConfig
-    # supports_gradient_checkpointing = True
-
-    def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, (nn.Linear,)):
+        if isinstance(module, BarkCausalModel) and not isinstance(self, BarkCausalModel):
+            module.apply(module._init_weights)
+        if isinstance(module, BarkFineModel) and not isinstance(self, BarkFineModel):
+            module.apply(module._init_weights)
+        elif isinstance(module, (nn.Linear,)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -436,13 +424,16 @@ class BarkSubModelPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+    def __init__(self, *inputs, **kwargs):
+        super().__init__(*inputs, **kwargs)
+
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BarkCausalModel) or isinstance(module, BarkFineModel):
+        if isinstance(module, BarkCausalModel) or isinstance(module, BarkFineModel) or isinstance(module, BarkModel):
             module.gradient_checkpointing = value
 
 
 # GPT2-like autoregressive model
-class BarkCausalModel(BarkSubModelPreTrainedModel):
+class BarkCausalModel(BarkPreTrainedModel):
     # TODO: add code sample when checkpoint is added
     #
     # @add_code_sample_docstrings(
@@ -451,6 +442,8 @@ class BarkCausalModel(BarkSubModelPreTrainedModel):
     #    config_class=_CONFIG_FOR_DOC,
     # )
 
+    config_class = BarkSubModelConfig
+
     def __init__(self, config):
         super().__init__(config)
         self.config = config
@@ -458,11 +451,11 @@ class BarkCausalModel(BarkSubModelPreTrainedModel):
         # initialize as an autoregressive GPT-like model
         self.wte = nn.Embedding(config.input_vocab_size, config.hidden_size)
         self.wpe = nn.Embedding(config.block_size, config.hidden_size)
-        
+
         self.drop = nn.Dropout(config.dropout)
-        
+
         self.layers = nn.ModuleList([BarkBlock(config, is_causal=True) for _ in range(config.num_layers)])
-        
+
         self.ln_f = LayerNorm(config.hidden_size, bias=config.bias)
 
         self.lm_head = nn.Linear(config.hidden_size, config.output_vocab_size, bias=False)
@@ -482,7 +475,7 @@ class BarkCausalModel(BarkSubModelPreTrainedModel):
 
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
-        
+
         if past_key_values is not None:
             # only last token for inputs_ids if past is defined in kwargs
             seq_len = input_ids.shape[1]
@@ -673,7 +666,9 @@ class BarkCausalModel(BarkSubModelPreTrainedModel):
 
         loss = None
         if labels is not None:
-            raise NotImplementedError("Training is not implemented yet for Bark - ensure you do not pass `labels` to the model.")
+            raise NotImplementedError(
+                "Training is not implemented yet for Bark - ensure you do not pass `labels` to the model."
+            )
 
         if not return_dict:
             return tuple(
@@ -726,7 +721,7 @@ class BarkCoarseModel(BarkCausalModel):
     "Bark sub-module at the core of the fine acoustics sub-model. It is a non-causal GPT-like model with 8 embedding layers and language modeling heads, one for each codebook.",
     BARK_MODULE_START_DOCSTRING,
 )
-class BarkFineModel(BarkSubModelPreTrainedModel):
+class BarkFineModel(BarkPreTrainedModel):
     base_model_prefix = "fine_acoustics"
     config_class = BarkFineConfig
     main_input_name = "codebook_idx"
@@ -744,11 +739,11 @@ class BarkFineModel(BarkSubModelPreTrainedModel):
             [nn.Embedding(config.input_vocab_size, config.hidden_size) for _ in range(config.n_codes_total)]
         )
         self.wpe = nn.Embedding(config.block_size, config.hidden_size)
-        
+
         self.drop = nn.Dropout(config.dropout)
-        
+
         self.layers = nn.ModuleList([BarkBlock(config, is_causal=False) for _ in range(config.num_layers)])
-        
+
         self.ln_f = nn.LayerNorm(config.hidden_size)
 
         self.lm_heads = nn.ModuleList(
@@ -961,15 +956,13 @@ class BarkModel(BarkPreTrainedModel):
         self, history_prompt, max_coarse_history, semantic_to_coarse_ratio, batch_size
     ):
         if history_prompt is not None:
-            x_semantic_history = np.repeat(
-                history_prompt["semantic_prompt"][None], batch_size, axis=0
-            )  # TODO: already used before
+            x_semantic_history = torch.repeat_interleave(history_prompt["semantic_prompt"][None], batch_size, dim=0)
             x_coarse_history = history_prompt["coarse_prompt"]
 
             x_coarse_history = (
                 _flatten_codebooks(x_coarse_history, self.config.codebook_size) + self.config.semantic_vocab_size
             )
-            x_coarse_history = np.repeat(x_coarse_history[None], batch_size, axis=0)
+            x_coarse_history = torch.repeat_interleave(x_coarse_history[None], batch_size, dim=0)
             # e.g: after SEMANTIC_VOCAB_SIZE (10000), 1024 tokens dedicated to first codebook, 1024 next tokens dedicated to second codebook.
 
             max_semantic_history = int(np.floor(max_coarse_history / semantic_to_coarse_ratio))
@@ -984,25 +977,25 @@ class BarkModel(BarkPreTrainedModel):
 
             n_coarse_hist_provided = int(round(n_semantic_hist_provided * semantic_to_coarse_ratio))
 
-            x_semantic_history = x_semantic_history[:, -n_semantic_hist_provided:].astype(np.int32)
-            x_coarse_history = x_coarse_history[:, -n_coarse_hist_provided:].astype(np.int32)
+            x_semantic_history = x_semantic_history[:, -n_semantic_hist_provided:].int()
+            x_coarse_history = x_coarse_history[:, -n_coarse_hist_provided:].int()
             # bit of a hack for time alignment (sounds better) - from Bark original implementation
             x_coarse_history = x_coarse_history[:, :-2]
 
         else:
             # shape: (batch_size, 0)
-            x_semantic_history = np.array([[]] * batch_size, dtype=np.int32)
-            x_coarse_history = np.array([[]] * batch_size, dtype=np.int32)
+            x_semantic_history = torch.tensor([[]] * batch_size, dtype=torch.int)
+            x_coarse_history = torch.tensor([[]] * batch_size, dtype=torch.int)
 
-        x_semantic_history = torch.from_numpy(x_semantic_history).to(self.device)
-        x_coarse_history = torch.from_numpy(x_coarse_history).to(self.device)
+        x_semantic_history = x_semantic_history.to(self.device)
+        x_coarse_history = x_coarse_history.to(self.device)
 
         return x_semantic_history, x_coarse_history
 
     def generate_text_semantic(
         self,
         input_ids: torch.Tensor,
-        history_prompt: Optional[Dict[str, np.ndarray]] = None,
+        history_prompt: Optional[Dict[str, torch.Tensor]] = None,
         **kwargs,
     ) -> torch.LongTensor:
         # TODO: add a max_gen_duration_s early stop
@@ -1021,24 +1014,23 @@ class BarkModel(BarkPreTrainedModel):
 
         if history_prompt is not None:
             semantic_history = history_prompt["semantic_prompt"][-256:]
-            semantic_history = np.pad(
+            semantic_history = nn.functional.pad(
                 semantic_history,
                 (0, 256 - len(semantic_history)),
-                constant_values=self.config.semantic_pad_token,
+                value=self.config.semantic_pad_token,
                 mode="constant",
             )
         else:
-            semantic_history = np.array([self.config.semantic_pad_token] * 256)
+            semantic_history = torch.tensor([self.config.semantic_pad_token] * 256, dtype=torch.int)
 
-        semantic_history = np.repeat(semantic_history[None], batch_size, axis=0)
-        semantic_history = torch.from_numpy(semantic_history).to(self.device)
+        semantic_history = torch.repeat_interleave(semantic_history[None], batch_size, dim=0)
+        semantic_history = semantic_history.to(self.device)
 
-        infer_array = torch.from_numpy(np.array([[self.config.semantic_infer_token]] * batch_size)).to(self.device)
+        infer_array = torch.tensor([[self.config.semantic_infer_token]] * batch_size, dtype=torch.int).to(self.device)
 
         input_embeds = torch.cat(
             [
-                self.semantic.wte(input_ids[:, :256])
-                + self.semantic.wte(semantic_history[:, :257]),
+                self.semantic.wte(input_ids[:, :256]) + self.semantic.wte(semantic_history[:, :257]),
                 self.semantic.wte(infer_array),
             ],
             dim=1,
@@ -1072,13 +1064,12 @@ class BarkModel(BarkPreTrainedModel):
         # take the generated semantic tokens
         semantic_output = semantic_output[:, 257:]
 
-
         return semantic_output
 
     def generate_coarse(
         self,
         semantic_output: torch.Tensor,
-        history_prompt: Optional[Dict[str, np.ndarray]] = None,
+        history_prompt: Optional[Dict[str, torch.Tensor]] = None,
         max_coarse_history: int = 630,
         sliding_window_len: int = 60,
         **kwargs,
@@ -1087,7 +1078,7 @@ class BarkModel(BarkPreTrainedModel):
         semantic_output.masked_fill_(
             semantic_output == self.config.semantic_pad_token, self.config.coarse_semantic_pad_token
         )
-        
+
         semantic_to_coarse_ratio = (
             self.config.coarse_rate_hz / self.config.semantic_rate_hz * self.config.n_coarse_codebooks
         )
@@ -1168,7 +1159,7 @@ class BarkModel(BarkPreTrainedModel):
     def generate_fine(
         self,
         coarse_output: torch.Tensor,
-        history_prompt: Optional[Dict[str, np.ndarray]] = None,
+        history_prompt: Optional[Dict[str, torch.Tensor]] = None,
         temperature: Optional[float] = None,
         **kwargs,
     ):
@@ -1181,8 +1172,8 @@ class BarkModel(BarkPreTrainedModel):
         batch_size = coarse_output.shape[0]
 
         if history_prompt is not None:
-            x_fine_history = np.repeat(history_prompt["fine_prompt"].T[None], batch_size, axis=0)
-            x_fine_history = torch.from_numpy(x_fine_history).to(self.device)
+            x_fine_history = torch.repeat_interleave(history_prompt["fine_prompt"].T[None], batch_size, dim=0)
+            x_fine_history = x_fine_history.to(self.device)
             # transpose to get to shape (seq_len, n_fine_codebooks)
         else:
             x_fine_history = None
@@ -1261,7 +1252,6 @@ class BarkModel(BarkPreTrainedModel):
         if fine_input.shape[-1] != coarse_output.shape[-2]:
             raise ValueError("input and output should have the same seq_len")
 
-        # TODO: _clear_cuda_cache() ??
         return fine_input
 
     def codec_decode(self, fine_output):
@@ -1280,7 +1270,7 @@ class BarkModel(BarkPreTrainedModel):
     def generate_audio(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        history_prompt: Optional[Dict[str, np.ndarray]] = None,
+        history_prompt: Optional[Dict[str, torch.Tensor]] = None,
         max_coarse_history: int = 630,
         sliding_window_len: int = 60,
         **kwargs,
@@ -1293,7 +1283,7 @@ class BarkModel(BarkPreTrainedModel):
                 Input ids. Will be truncated up to 256 tokens. Note that the output audios will be as long as the
                 longest generation among the batch.
             The last token is `semantic_infer_token`. Note that batch_size is set to 1 to generate one audio per audio. Defaults to None.:
-            history_prompt (Optional[Dict[str,np.ndarray]], optional):
+            history_prompt (Optional[Dict[str,torch.Tensor]], optional):
                 Optional `Bark` speaker prompt. Defaults to None. Note that for now, this model takes only one speaker
                 prompt per batch.
             max_coarse_history (int, optional):
@@ -1317,8 +1307,6 @@ class BarkModel(BarkPreTrainedModel):
             semantic_output, history_prompt, max_coarse_history, sliding_window_len, **kwargs
         )
 
-        # TODO: _clear_cuda_cache() ??
-
         ##### 3. "generate" from the fine model
 
         output = self.generate_fine(coarse_output, history_prompt, temperature=kwargs.get("temperature", None))
@@ -1332,13 +1320,13 @@ class BarkModel(BarkPreTrainedModel):
 
 # TODO: (maybe do it in the preprocessor)
 def _flatten_codebooks(arr, offset_size):
-    if len(arr.shape) != 2:
-        raise ValueError("codebook array should be a 2D array")
-    arr = arr.copy()
+    # input 2D array
     if offset_size is not None:
         for n in range(1, arr.shape[0]):
             arr[n, :] += offset_size * n
-    flat_arr = arr.ravel("F")
+    # TODO: maybe .contiguous() before view(-1)
+    # ravel("F")
+    flat_arr = torch.transpose(arr, 0, 1).view(-1)
     return flat_arr
 
 

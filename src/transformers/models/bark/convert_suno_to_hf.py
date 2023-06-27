@@ -33,6 +33,8 @@ new_layer_name_dict = {
     "c_attn": "att_proj",
     "c_proj": "out_proj",
     "c_fc": "in_proj",
+    "transformer.": "",
+    "h.": "layers.",
 }
 
 
