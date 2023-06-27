@@ -26,12 +26,11 @@ from transformers.testing_utils import require_torch
 @require_torch
 class BarkProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "bert-base-multilingual-cased"
+        self.checkpoint = "ylacombe/bark-small"
         self.tmpdirname = tempfile.mkdtemp()
-        self.repo_id = "ylacombe/bark-small"
-        self.subfolder = "speaker_embeddings"
         self.voice_preset = "en_speaker_1"
         self.input_string = "This is a test string"
+        self.speaker_embeddings_file_name = "speaker_embeddings.npz"
 
     def get_tokenizer(self, **kwargs):
         return AutoTokenizer.from_pretrained(self.checkpoint, **kwargs)
@@ -50,13 +49,17 @@ class BarkProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
 
     def test_save_load_pretrained_additional_features(self):
-        processor = BarkProcessor(tokenizer=self.get_tokenizer(), repo_id=self.repo_id, subfolder=self.subfolder)
-        processor.save_pretrained(self.tmpdirname)
+        processor = BarkProcessor.from_pretrained(
+            pretrained_processor_name_or_path=self.checkpoint,
+            speaker_embeddings_file_name=self.speaker_embeddings_file_name,
+        )
+        processor.save_pretrained(self.tmpdirname, self.speaker_embeddings_file_name)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
 
         processor = BarkProcessor.from_pretrained(
             self.tmpdirname,
+            self.speaker_embeddings_file_name,
             bos_token="(BOS)",
             eos_token="(EOS)",
         )
@@ -64,9 +67,10 @@ class BarkProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
 
     def test_speaker_embeddings(self):
-        tokenizer = self.get_tokenizer()
-
-        processor = BarkProcessor(tokenizer=tokenizer, repo_id=self.tmpdirname)
+        processor = BarkProcessor.from_pretrained(
+            pretrained_processor_name_or_path=self.checkpoint,
+            speaker_embeddings_file_name=self.speaker_embeddings_file_name,
+        )
 
         seq_len = 35
         nb_codebooks_coarse = 2
@@ -83,18 +87,15 @@ class BarkProcessorTest(unittest.TestCase):
         for key in voice_preset:
             self.assertListEqual(voice_preset[key].tolist(), processed_voice_preset.get(key, np.array([])).tolist())
 
+        # test loading voice preset from npz file
         tmpfilename = os.path.join(self.tmpdirname, "file.npz")
         np.savez(tmpfilename, **voice_preset)
-        _, processed_voice_preset = processor(text=self.input_string, voice_preset="file.npz")
+        _, processed_voice_preset = processor(text=self.input_string, voice_preset=tmpfilename)
         for key in voice_preset:
             self.assertListEqual(voice_preset[key].tolist(), processed_voice_preset.get(key, np.array([])).tolist())
 
-        # test loading voice preset from npz file
-
-        processor = BarkProcessor(tokenizer=tokenizer, repo_id=self.repo_id, subfolder=self.subfolder)
-
         # test loading voice preset from the hub
-        processor(text=self.input_string, voice_preset=self.voice_preset)
+        _, processed_voice_preset = processor(text=self.input_string, voice_preset=self.voice_preset)
 
     def test_tokenizer(self):
         tokenizer = self.get_tokenizer()
