@@ -102,7 +102,6 @@ class CircleCIJob:
                 "restore_cache": {
                     "keys": [
                         f"v{self.cache_version}-{self.cache_name}-" + '{{ checksum "setup.py" }}',
-                        f"v{self.cache_version}-{self.cache_name}-",
                     ]
                 }
             },
@@ -110,7 +109,6 @@ class CircleCIJob:
                 "restore_cache": {
                     "keys": [
                         f"v{self.cache_version}-{self.cache_name}-" + '{{ checksum "setup.py" }}-site-packages',
-                        f"v{self.cache_version}-{self.cache_name}-site-packages",
                     ]
                 }
             },
