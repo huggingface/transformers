@@ -764,10 +764,13 @@ class Pipeline(_ScikitCompat):
         device: Union[int, "torch.device"] = None,
         torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         binary_output: bool = False,
+        load_in_4bit: bool = False,
         **kwargs,
     ):
         if framework is None:
-            framework, model = infer_framework_load_model(model, config=model.config)
+            framework, model = infer_framework_load_model(
+                model, config=model.config, load_in_4bit=load_in_4bit
+            )
 
         self.task = task
         self.model = model
