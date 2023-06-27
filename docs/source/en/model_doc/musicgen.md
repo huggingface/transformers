@@ -137,11 +137,43 @@ pip install datasets[audio]
 >>> inputs = processor(
 ...     audio=sample["array"],
 ...     sampling_rate=sample["sampling_rate"],
-...     text=["80s pop track with bassy drums and synth"],
+...     text=["80s blues track with groovy saxophone"],
 ...     padding=True,
 ...     return_tensors="pt",
 ... )
->>> audio_values = model.generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=512)
+>>> audio_values = model.generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=256)
+```
+
+For batched audio-prompted generation, the generated `audio_values` can be post-processed to remove padding by using the
+[`MusicgenProcessor`] class:
+
+```python
+>>> from transformers import AutoProcessor, MusicgenForConditionalGeneration
+>>> from datasets import load_dataset
+
+>>> processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
+>>> model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+
+>>> dataset = load_dataset("sanchit-gandhi/gtzan", split="train", streaming=True)
+>>> sample = next(iter(dataset))["audio"]
+
+>>> # take the first quarter of the audio sample
+>>> sample_1 = sample["array"][: len(sample["array"]) // 4]
+
+>>> # take the first half of the audio sample
+>>> sample_2 = sample["array"][: len(sample["array"]) // 2]
+
+>>> inputs = processor(
+...     audio=[sample_1, sample_2],
+...     sampling_rate=sample["sampling_rate"],
+...     text=["80s blues track with groovy saxophone", "90s rock song with loud guitars and heavy drums"],
+...     padding=True,
+...     return_tensors="pt",
+... )
+>>> audio_values = model.generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=256)
+
+>>> # post-process to remove padding from the batched audio
+>>> audio_values = processor.decode_audio(audio_values, padding_mask=inputs.padding_mask)
 ```
 
 ## Model Structure
