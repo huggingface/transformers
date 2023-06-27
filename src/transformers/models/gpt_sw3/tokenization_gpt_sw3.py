@@ -1,3 +1,5 @@
+"""The tokenizer used by the GPT-SW3 models."""
+
 import os
 import re
 import unicodedata
@@ -15,6 +17,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ... pipelines import Conversation
 
 
 logger = logging.get_logger(__name__)
@@ -40,11 +43,13 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 
 class GPTSw3Tokenizer(PreTrainedTokenizer):
-    """
-    Construct an GPTSw3 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
+    """Construct an GPTSw3 tokenizer.
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
-    this superclass for more information regarding those methods.
+    Based on [SentencePiece](https://github.com/google/sentencepiece).
+
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the
+    main methods. Users should refer to this superclass for more information regarding
+    those methods.
 
     Example usage:
     ```python
@@ -57,48 +62,59 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
 
     Args:
         vocab_file (`str`):
-            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
-            contains the vocabulary necessary to instantiate a tokenizer.
+            [SentencePiece](https://github.com/google/sentencepiece) file (generally
+            has a *.spm* extension) that contains the vocabulary necessary to
+            instantiate a tokenizer.
         do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to lowercase the input when tokenizing.
         remove_space (`bool`, *optional*, defaults to `False`):
-            Whether or not to strip the text when tokenizing (removing excess spaces before and after the string).
+            Whether or not to strip the text when tokenizing (removing excess spaces
+            before and after the string).
         keep_accents (`bool`, *optional*, defaults to `False`):
             Whether or not to keep accents when tokenizing.
         bos_token (`str`, *optional*):
-            The beginning of sequence token that can be used for downstream task, was not seen during pretraining. If
-            not provided, will default to '<s>' or '<|endoftext|>', depending on model size.
+            The beginning of sequence token that can be used for downstream task, was
+            not seen during pretraining. If not provided, will default to '<s>' or
+            '<|endoftext|>', depending on model size.
         eos_token (`str`, *optional*):
-            The end of sequence token seen during pretraining. If not provided, will default to '<|endoftext|>'
+            The end of sequence token seen during pretraining. If not provided, will
+            default to '<|endoftext|>'
         unk_token (`str`, *optional*):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead. If not provided, will default to '<unk>'.
+            The unknown token. A token that is not in the vocabulary cannot be
+            converted to an ID and is set to be this token instead. If not provided,
+            will default to '<unk>'.
         pad_token (`str`, *optional*):
-            The token used for padding, for example when batching sequences of different lengths. If not provided, will
-            default to '<pad>' or '<unk>' depending on model size.
+            The token used for padding, for example when batching sequences of
+            different lengths. If not provided, will default to '<pad>' or '<unk>'
+            depending on model size.
         sp_model_kwargs (`dict`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
-            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
-            to set:
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The
+            [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python)
+            can be used, among other things, to set:
 
             - `enable_sampling`: Enable subword regularization.
             - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
 
               - `nbest_size = {0,1}`: No sampling is performed.
               - `nbest_size > 1`: samples from the nbest_size results.
-              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
-                using forward-filtering-and-backward-sampling algorithm.
+              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from
+                the all hypothesis (lattice) using
+                forward-filtering-and-backward-sampling algorithm.
 
-            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
-              BPE-dropout.
+            - `alpha`: Smoothing parameter for unigram sampling, and dropout
+              probability of merge operations for BPE-dropout.
 
     Attributes:
         sp_model (`SentencePieceProcessor`):
-            The *SentencePiece* processor that is used for every conversion (string, tokens and IDs).
+            The *SentencePiece* processor that is used for every conversion (string,
+            tokens and IDs).
         whitespaces (`set`):
-            The whitespaces that are replaced in the whitespace normalization in preprocessing.
+            The whitespaces that are replaced in the whitespace normalization in
+            preprocessing.
         non_printing_characters_re (`Pattern`):
-            The compiled regular expression to remove non-printing characters in preprocessing.
+            The compiled regular expression to remove non-printing characters in
+            preprocessing.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -123,12 +139,14 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         name_or_path = kwargs.get("name_or_path")
         if name_or_path is None:
             logger.warning(
-                "name_or_path not provided, will work for all GPTSw3 models except gpt-sw3-7b,"
-                " you are testing the model, this can safely be ignored"
+                "name_or_path not provided. This will work for all GPT-SW3 models "
+                "except gpt-sw3-7b. If you are just testing the model, this can "
+                "safely be ignored."
             )
             name_or_path = "None"
 
-        # Default definitions for our 2 tokenizer versions, with None-checks to enable proper testing
+        # Default definitions for our 2 tokenizer versions, with None-checks to enable
+        # proper testing
         eos_token = "<|endoftext|>" if eos_token is None else eos_token
         unk_token = "<unk>" if unk_token is None else unk_token
         if "gpt-sw3-7b" in name_or_path:
@@ -160,21 +178,32 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
 
         # Used for whitespace normalization in input texts
         # fmt : off
-        self.whitespaces = {" ", " ", " ", " ", " ", "　", " ", " ", " ", " ", "￼", ""}
+        self.whitespaces = {
+            " ", " ", " ", " ", " ", "　", " ", " ", " ", " ", "￼", ""
+        }
         # fmt : on
 
-        # Regular expression to remove non-printing characters (e.g. some unicode control chars) in preprocessing
-        self.non_printing_characters_re = re.compile(
-            f"[{''.join(map(chr, list(range(0, 9)) + list(range(11, 32)) + list(range(127, 160)) + [160, 173, 8203]))}]"
+        # Regular expression to remove non-printing characters (e.g. some unicode
+        # control chars) in preprocessing
+        non_printing_characters = ''.join(
+            map(chr,
+                list(range(0, 9)) +
+                list(range(11, 32)) +
+                list(range(127, 160)) +
+                [160, 173, 8203]
+            )
         )
+        self.non_printing_characters_re = re.compile(f"[{non_printing_characters}]")
 
-    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.__getstate__
+    # Copied from
+    # transformers.models.albert.tokenization_albert.AlbertTokenizer.__getstate__
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None
         return state
 
-    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.__setstate__
+    # Copied from
+    # transformers.models.albert.tokenization_albert.AlbertTokenizer.__setstate__
     def __setstate__(self, d):
         self.__dict__ = d
 
@@ -186,13 +215,15 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         self.sp_model.Load(self.vocab_file)
 
     @property
-    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.vocab_size
+    # Copied from
+    # transformers.models.albert.tokenization_albert.AlbertTokenizer.vocab_size
     def vocab_size(self) -> int:
         return len(self.sp_model)
 
     def preprocess_text(self, text: str) -> str:
-        """
-        Returns the preprocessed text. This procedure is identical to what was used when training the tokenizer.
+        """Returns the preprocessed text.
+
+        This procedure is identical to what was used when training the tokenizer.
         """
 
         # Remove non-printing characters
@@ -219,11 +250,17 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
 
     @staticmethod
     def clean_up_tokenization(out_string: str) -> str:
-        """Returns the input string, this function is overridden to remove the default clean up."""
+        """Returns the input string.
+
+        This function is overridden to remove the default clean up.
+        """
         return out_string
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """Converts a sequence of tokens (strings) to a single string. Special tokens remain intact."""
+        """Converts a sequence of tokens (strings) to a single string.
+
+        Special tokens remain intact.
+        """
         current_sub_tokens = []
         out_string = ""
         prev_is_special = False
@@ -242,22 +279,33 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
 
         return out_string
 
-    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.get_vocab
+    # Copied from
+    # transformers.models.albert.tokenization_albert.AlbertTokenizer.get_vocab
     def get_vocab(self) -> Dict[str, int]:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    # Copied from
+    # transformers.models.albert.tokenization_albert.AlbertTokenizer.save_vocabulary
+    def save_vocabulary(
+        self,
+        save_directory: str,
+        filename_prefix: Optional[str] = None,
+    ) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"]
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
+        if (
+                os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file)
+                and os.path.isfile(self.vocab_file)
+        ):
             copyfile(self.vocab_file, out_vocab_file)
         elif not os.path.isfile(self.vocab_file):
             with open(out_vocab_file, "wb") as fi:
@@ -269,22 +317,27 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
     def encode_fast(
         self, text: Union[str, List[str]], return_tensors: Union[str, bool] = False
     ) -> Union[List[int], List[List[int]], "torch.Tensor"]:
-        """
-        Encodes a text or batch of texts to token ids using preprocessing and the raw SP tokenizer. This has reduced
+        """Encodes a text or batch of texts to token IDs.
+
+        This uses preprocessing and the raw SP tokenizer. This has reduced
         functionality but is often much faster.
 
-        Does NOT handle special tokens correctly, these can manually be added as ids afterwards.
+        Does NOT handle special tokens correctly, these can manually be added as ids
+        afterwards.
 
         Does NOT support padding, these can manually be added as ids afterwards.
 
         Use default HuggingFace tokenization methods for full functionality.
 
         Args:
-            text (`str` or `List[str]`): One or several text(s) to convert to token ids.
-            return_tensors (`str` or `bool`): Returns PyTorch tensors if set to True or "pt"
+            text (`str` or `List[str]`):
+                One or several text(s) to convert to token ids.
+            return_tensors (`str` or `bool`):
+                Returns PyTorch tensors if set to True or "pt"
 
         Returns:
-            `List[int]`, `List[List[int]]`, or `torch.Tensor`: The encoded text(s) as token ids.
+            `List[int]`, `List[List[int]]`, or `torch.Tensor`:
+                The encoded text(s) as token ids.
         """
 
         if isinstance(text, str):
@@ -300,15 +353,40 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         return token_ids
 
     def decode_fast(self, token_ids: Union[int, List[int]]) -> str:
-        """
-        Encodes a text or batch of texts to token ids using preprocessing and the raw SP tokenizer. This has reduced
+        """Decodes token IDs to text.
+
+        This uses preprocessing and the raw SP tokenizer. This has reduced
         functionality but is often much faster.
 
         Args:
-            token_ids (`int` or `List[int]`): Encoded token or text as token id(s).
+            token_ids (`int` or `List[int]`):
+                Encoded token or text as token id(s).
 
         Returns:
-            `str`: Decoded text
+            `str`:
+                Decoded text.
         """
 
         return self.sp_model.decode(token_ids)
+
+    def _build_conversation_input_ids(self, conversation: Conversation) -> List[int]:
+        """Builds the input ids for a conversation.
+
+        Args:
+            conversation (`Conversation`):
+                Conversation to build input ids for.
+
+        Returns:
+            `List[int]`:
+                Input ids for the conversation.
+        """
+        all_responses = [
+            f"User:\n{text}{self.eos_token}" if is_user else f"Bot:\n{text}"
+            for is_user, text in conversation.iter_texts()
+        ]
+        prompt = (
+            "{self.eos_token}{self.bos_token}\n"
+            + "\n{self.bos_token}\n".join(all_responses)
+            + "\n{self.bos_token}\nBot:\n"
+        )
+        return self.encode(text=prompt)
