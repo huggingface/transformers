@@ -336,7 +336,6 @@ class FlaxLlamaMLP(nn.Module):
 
 
 # TODO: make sure attention output format is same as Pytorch
-# for now, we just worry about model numerics
 class FlaxLlamaDecoderLayer(nn.Module):
     config: LlamaConfig
     dtype: jnp.dtype = jnp.float32
@@ -382,6 +381,7 @@ class FlaxLlamaDecoderLayer(nn.Module):
         return (hidden_states,) + outputs[1:]
 
 
+# TODO: check this is ported
 class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -514,6 +514,7 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         return outputs
 
 
+# TODO: implement
 class FlaxLlamaBlockCollection(nn.Module):
     config: LlamaConfig
     dtype: jnp.dtype = jnp.float32
@@ -559,6 +560,7 @@ class FlaxLlamaBlockCollection(nn.Module):
         return outputs
 
 
+# TODO: implement
 class FlaxLlamaModule(nn.Module):
     config: LlamaConfig
     dtype: jnp.dtype = jnp.float32
@@ -568,11 +570,6 @@ class FlaxLlamaModule(nn.Module):
         embedding_init = jax.nn.initializers.normal(stddev=self.config.initializer_range)
         self.wte = nn.Embed(
             self.config.vocab_size,
-            self.embed_dim,
-            embedding_init=embedding_init,
-        )
-        self.wpe = nn.Embed(
-            self.config.max_position_embeddings,
             self.embed_dim,
             embedding_init=embedding_init,
         )
@@ -636,10 +633,10 @@ class FlaxLlamaModule(nn.Module):
 class FlaxLlamaModel(FlaxLlamaPreTrainedModel):
     module_class = FlaxLlamaModule
 
-
 # append_call_sample_docstring(FlaxLlamaModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC)
 
 
+# TODO: implement
 class FlaxLlamaForCausalLMModule(nn.Module):
     config: LlamaConfig
     dtype: jnp.dtype = jnp.float32
