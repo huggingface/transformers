@@ -263,10 +263,8 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
             input_ids = inputs["input_ids"]
             del inputs["input_ids"]
 
-
             wte = model.get_input_embeddings()
             inputs["input_embeds"] = wte(input_ids)
-
 
             with torch.no_grad():
                 model(**inputs)[0]
@@ -289,9 +287,7 @@ class BarkCoarseModelTest(BarkSemanticModelTest):
     all_generative_model_classes = (BarkCoarseModel,) if is_torch_available() else ()
 
     def setUp(self):
-        self.model_tester = BarkSubModelTester(
-            self, config_class=BarkCoarseConfig, model_class=BarkCoarseModel
-        )
+        self.model_tester = BarkSubModelTester(self, config_class=BarkCoarseConfig, model_class=BarkCoarseModel)
         self.config_tester = ConfigTester(self, config_class=BarkCoarseConfig, n_embd=37)
 
 
@@ -310,9 +306,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
 
     def setUp(self):
-        self.model_tester = BarkFineModelTester(
-            self, config_class=BarkFineConfig, model_class=BarkFineModel
-        )
+        self.model_tester = BarkFineModelTester(self, config_class=BarkFineConfig, model_class=BarkFineModel)
         self.config_tester = ConfigTester(self, config_class=BarkFineConfig, n_embd=37)
 
     def test_config(self):
@@ -505,7 +499,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
     @cached_property
     def processor(self):
-        return BarkProcessor(repo_id="ylacombe/bark-large", subfolder="speaker_embeddings")
+        return BarkProcessor.from_pretrained("ylacombe/bark-large")
 
     @cached_property
     def inputs(self):
@@ -521,8 +515,10 @@ class BarkModelIntegrationTests(unittest.TestCase):
     def test_generate_text_semantic(self):
         input_ids, history_prompt = self.inputs
 
+        # fmt: off
         # check first ids
         expected_output_ids = [7363, 321, 41, 1461, 6915, 952, 326, 41, 41, 927,]
+        # fmt: on
 
         # greedy decoding
         output_ids = self.model.generate_text_semantic(**input_ids, history_prompt=history_prompt, do_sample=False)
@@ -533,8 +529,10 @@ class BarkModelIntegrationTests(unittest.TestCase):
     def test_generate_coarse(self):
         input_ids, history_prompt = self.inputs
 
+        # fmt: off
         # check first ids
         expected_output_ids = [11018, 11391, 10651, 11418, 10857, 11620, 10642, 11366, 10312, 11528, 10531, 11516, 10474, 11051, 10524, 11051, ]
+        # fmt: on
 
         output_ids = self.model.generate_text_semantic(**input_ids, history_prompt=history_prompt, do_sample=False)
 
@@ -542,12 +540,13 @@ class BarkModelIntegrationTests(unittest.TestCase):
             output_ids, history_prompt=history_prompt, max_coarse_history=630, sliding_window_len=60, do_sample=False
         )
 
-        self.assertListEqual(output_ids[0, :len(expected_output_ids)].tolist(), expected_output_ids)
+        self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
     @slow
     def test_generate_fine(self):
         input_ids, history_prompt = self.inputs
 
+        # fmt: off
         expected_output_ids = [
             [1018, 651, 857, 642, 312, 531, 474, 524, 524, 776,],
             [367, 394, 596, 342, 504, 492, 27, 27, 822, 822,],
@@ -558,6 +557,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
             [244, 358, 123, 356, 586, 520, 499, 877, 542, 637,],
             [806, 685, 905, 848, 803, 810, 921, 208, 625, 203,],
         ]
+        # fmt: on
 
         output_ids = self.model.generate_text_semantic(**input_ids, history_prompt=history_prompt, do_sample=False)
 
@@ -572,7 +572,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
             temperature=None,
         )
 
-        self.assertListEqual(output_ids[0, :, :len(expected_output_ids[0])].tolist(), expected_output_ids)
+        self.assertListEqual(output_ids[0, :, : len(expected_output_ids[0])].tolist(), expected_output_ids)
 
     @slow
     def test_generate_end_to_end(self):
@@ -580,10 +580,10 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
         self.model.generate_audio(**input_ids, history_prompt=None)
         self.model.generate_audio(**input_ids, history_prompt=history_prompt)
-        
+
     @slow
     def test_generate_end_to_end_with_args(self):
         input_ids, _ = self.inputs
-        
+
         self.model.generate_audio(**input_ids, history_prompt=None, do_sample=True, temperature=0.6, num_beams=4)
         self.model.generate_audio(**input_ids, history_prompt=None, do_sample=True, temperature=0.6, penalty_alpha=0.6)
