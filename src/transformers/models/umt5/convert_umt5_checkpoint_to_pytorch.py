@@ -37,47 +37,43 @@ from t5x import checkpoints
 
 from transformers import MT5Config, MT5EncoderModel, MT5ForConditionalGeneration
 from transformers.utils import logging
-
+import numpy as np
 
 logging.set_verbosity_info()
 
 
 def t5x_relpos_bias_lookup(params, i, prefix):
     """Returns the Relative Position Bias parameters of a layer. Does not transpose."""
-    return params[f"{prefix}/{prefix}/relpos_bias/rel_embedding"].transpose(1, 0, 2)[i]
-
-
-
+    return params[f"{prefix}/{prefix}/relpos_bias/rel_embedding"][:,i,:]
 
 def t5x_attention_lookup(params, i, prefix, layer_name="attention"):
     """Returns the KOQV parameters of (self-)attention. Does not transpose."""
-    k_tmp = params[f"{prefix}/{prefix}/{layer_name}/key/kernel"].transpose(1, 0, 2, 3)[i]
+    k_tmp = k_tmp = np.ascontiguousarray(params[f"{prefix}/{prefix}/{layer_name}/key/kernel"][:,i,:,:])
     k = k_tmp.reshape(k_tmp.shape[0], k_tmp.shape[1] * k_tmp.shape[2])
-    o_tmp = params[f"{prefix}/{prefix}/{layer_name}/out/kernel"].transpose(1, 0, 2, 3)[i]
+    o_tmp = np.ascontiguousarray(params[f"{prefix}/{prefix}/{layer_name}/out/kernel"][:,i,:,:])
     o = o_tmp.reshape(o_tmp.shape[0] * o_tmp.shape[1], o_tmp.shape[2])
-    q_tmp = params[f"{prefix}/{prefix}/{layer_name}/query/kernel"].transpose(1, 0, 2, 3)[i]
+    q_tmp = np.ascontiguousarray(params[f"{prefix}/{prefix}/{layer_name}/query/kernel"][:,i,:,:])
     q = q_tmp.reshape(q_tmp.shape[0], q_tmp.shape[1] * q_tmp.shape[2])
-    v_tmp = params[f"{prefix}/{prefix}/{layer_name}/value/kernel"].transpose(1, 0, 2, 3)[i]
+    v_tmp = np.ascontiguousarray(params[f"{prefix}/{prefix}/{layer_name}/value/kernel"][:,i,:,:])
     v = v_tmp.reshape(v_tmp.shape[0], v_tmp.shape[1] * v_tmp.shape[2])
     return k, o, q, v
-
 
 def t5x_mlp_lookup(params, i, prefix, split_mlp_wi=False):
     """Returns the MLP parameters of a layer. Does not transpose."""
     if split_mlp_wi:
-        wi_0 = params[f"{prefix}/{prefix}/mlp/wi_0/kernel"].transpose(1, 0, 2)[i]
-        wi_1 = params[f"{prefix}/{prefix}/mlp/wi_1/kernel"].transpose(1, 0, 2)[i]
+        wi_0 = params[f"{prefix}/{prefix}/mlp/wi_0/kernel"][:,i,:]
+        wi_1 = params[f"{prefix}/{prefix}/mlp/wi_1/kernel"][:,i,:]
         wi = (wi_0, wi_1)
     else:
-        wi = params[f"{prefix}/{prefix}/mlp/wi/kernel"].transpose(1, 0, 2)[i]
+        wi = params[f"{prefix}/{prefix}/mlp/wi/kernel"][:,i,:]
 
-    wo = params[f"{prefix}/{prefix}/mlp/wo/kernel"].transpose(1, 0, 2)[i]
+    wo = params[f"{prefix}/{prefix}/mlp/wo/kernel"][:,i,:]
     return wi, wo
 
 
 def t5x_layer_norm_lookup(params, i, prefix, layer_name):
     """Returns the layer norm param of a layer."""
-    return params[f"{prefix}/{prefix}/{layer_name}/scale"].transpose(1, 0)[i]
+    return params[f"{prefix}/{prefix}/{layer_name}/scale"][:,i]
 
 
 def convert_t5x_to_pytorch(variables: dict, *, num_layers: int, is_encoder_only: bool, scalable_attention:bool = False):
