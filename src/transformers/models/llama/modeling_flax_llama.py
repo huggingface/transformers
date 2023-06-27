@@ -305,7 +305,6 @@ class FlaxLlamaAttention(nn.Module):
             bias=attention_bias,
             deterministic=deterministic,
             dtype=self.dtype,
-            precision=None,
         )
 
         attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value)
@@ -355,7 +354,7 @@ class FlaxLlamaDecoderLayer(nn.Module):
         self,
         hidden_states,
         position_ids = None,
-        attention_mask=None,
+        attention_mask = None,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -372,14 +371,14 @@ class FlaxLlamaDecoderLayer(nn.Module):
         )
         # residual connection
         attn_output = outputs[0]
-        hidden_states = attn_output + residual
+        hidden_states = residual + attn_output
 
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        feed_forward_hidden_states = self.mlp(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         # residual connection
         hidden_states = residual + hidden_states
-
+        
         return (hidden_states,) + outputs[1:]
 
 
@@ -765,9 +764,9 @@ if __name__ == "__main__":
     position_ids = jnp.arange(128)[jnp.newaxis, :].repeat(4, axis=0)
 
     key, model_key = jax.random.split(key)
-    params = model.init(model_key, x, attention_mask=mask, position_ids=position_ids)
+    y, params = model.init_with_output(model_key, x, attention_mask=mask, position_ids=position_ids)
 
-    y, = model.apply(params, x, attention_mask=mask, position_ids=position_ids)
+    # y, = model.apply(params, x, attention_mask=mask, position_ids=position_ids)
 
     params = flatten_dict(params['params'], sep='.')
     pt_state = pt_model.state_dict()
@@ -786,7 +785,7 @@ if __name__ == "__main__":
     x = torch.tensor(np.asarray(x))
     pt_y = pt_model(x, attention_mask=_make_causal_mask((4, 128), torch.float32, device='cpu'), position_ids=torch.from_numpy(np.asarray(position_ids)))[0]
 
-    y = np.asarray(y)
+    y = np.asarray(y[0])
     pt_y = pt_y.detach().numpy()
 
     try:
