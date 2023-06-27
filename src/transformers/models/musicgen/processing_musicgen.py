@@ -15,9 +15,12 @@
 """
 Text/audio processor class for MusicGen
 """
+from typing import List, Optional
 
+import numpy as np
 
 from ...processing_utils import ProcessorMixin
+from ...utils import to_numpy
 
 
 class MusicgenProcessor(ProcessorMixin):
@@ -96,3 +99,30 @@ class MusicgenProcessor(ProcessorMixin):
         docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+    def decode_audio(self, audio_values, padding_mask: Optional = None) -> List[np.ndarray]:
+        """
+        This method strips any padding from the audio values to return a list of numpy audio arrays.
+        """
+        bsz, channels, seq_len = audio_values.shape
+        audio_values = to_numpy(audio_values)
+
+        if padding_mask is None:
+            return list(audio_values)
+
+        padding_mask = to_numpy(padding_mask)
+
+        # match the sequence length of the padding mask to the generated audio arrays by padding with the **non-padding**
+        # token (so that the generated audio values are **not** treated as padded tokens)
+        difference = seq_len - padding_mask.shape[-1]
+        padding_value = 1 - self.feature_extractor.padding_value
+        padding_mask = np.pad(padding_mask, ((0, 0), (0, difference)), "constant", constant_values=padding_value)
+
+        audio_values = audio_values.tolist()
+        for i in range(bsz):
+            sliced_audio = np.asarray(audio_values[i])[
+                padding_mask[i][None, :] != self.feature_extractor.padding_value
+            ]
+            audio_values[i] = sliced_audio.reshape(channels, -1)
+
+        return audio_values

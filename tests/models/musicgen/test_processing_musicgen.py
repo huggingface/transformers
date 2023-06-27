@@ -18,12 +18,17 @@ import shutil
 import tempfile
 import unittest
 
+import numpy as np
+
 from transformers import T5Tokenizer, T5TokenizerFast
 from transformers.testing_utils import require_sentencepiece, require_torch
 from transformers.utils.import_utils import is_speech_available, is_torch_available
 
 
-if is_speech_available() and is_torch_available():
+if is_torch_available():
+    pass
+
+if is_speech_available():
     from transformers import EncodecFeatureExtractor, MusicgenProcessor
 
 
@@ -146,3 +151,24 @@ class MusicgenProcessorTest(unittest.TestCase):
             feature_extractor.model_input_names,
             msg="`processor` and `feature_extractor` model input names do not match",
         )
+
+    def test_decode_audio(self):
+        feature_extractor = self.get_feature_extractor(padding_side="left")
+        tokenizer = self.get_tokenizer()
+
+        processor = MusicgenProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+
+        raw_speech = [floats_list((1, x))[0] for x in range(5, 20, 5)]
+        padding_mask = processor(raw_speech).padding_mask
+
+        generated_speech = np.asarray(floats_list((3, 20)))[:, None, :]
+        decoded_audios = processor.decode_audio(generated_speech, padding_mask)
+
+        self.assertIsInstance(decoded_audios, list)
+
+        for audio in decoded_audios:
+            self.assertIsInstance(audio, np.ndarray)
+
+        self.assertTrue(decoded_audios[0].shape == (1, 10))
+        self.assertTrue(decoded_audios[1].shape == (1, 15))
+        self.assertTrue(decoded_audios[2].shape == (1, 20))
