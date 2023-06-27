@@ -1669,6 +1669,11 @@ class GenerationMixin:
             if generation_config.num_beams % generation_config.num_beam_groups != 0:
                 raise ValueError("`num_beams` should be divisible by `num_beam_groups` for group beam search.")
 
+            if generation_config.diversity_penalty == 0.0:
+                raise ValueError(
+                    "`diversity_penalty` should be greater than `0.0`, otherwise your beam groups will be identical."
+                )
+
             if stopping_criteria.max_length is None:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
 
