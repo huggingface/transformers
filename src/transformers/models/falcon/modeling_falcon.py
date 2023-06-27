@@ -185,9 +185,10 @@ class FalconAttention(nn.Module):
             (config.n_head_kv * 2 + config.num_attention_heads) * self.head_dim,
             bias=config.bias,
         )
+        self.multi_query = config.multi_query
         self.dense = FalconLinear(self.hidden_size, self.hidden_size, bias=config.bias)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
-        self.num_kv = config.n_head_kv
+        self.num_kv = config.n_head_kv if not self.multi_query else 1
 
     def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -200,16 +201,21 @@ class FalconAttention(nn.Module):
             query: [batch_size, seq_length, num_heads, head_dim] key: [batch_size, seq_length, num_heads, head_dim]
             value: [batch_size, seq_length, num_heads, head_dim]
         """
-        batch, seq_len, _ = fused_qkv.shape
-        qkv = fused_qkv.view(batch, seq_len, -1, self.num_heads // self.num_kv + 2, 64)
-        query = qkv[:, :, :, :-2]
-        key = qkv[:, :, :, [-2]]
-        value = qkv[:, :, :, [-1]]
-        key = torch.broadcast_to(key, query.shape)
-        value = torch.broadcast_to(value, query.shape)
+        if self.multi_query:
+            batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
+            fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads + 2, self.head_dim)
+            return fused_qkv[..., :-2, :], fused_qkv[..., [-2], :], fused_qkv[..., [-1], :]
+        else:
+            batch, seq_len, _ = fused_qkv.shape
+            qkv = fused_qkv.view(batch, seq_len, -1, self.num_heads // self.num_kv + 2, 64)
+            query = qkv[:, :, :, :-2]
+            key = qkv[:, :, :, [-2]]
+            value = qkv[:, :, :, [-1]]
+            key = torch.broadcast_to(key, query.shape)
+            value = torch.broadcast_to(value, query.shape)
 
-        query, key, value = [x.flatten(2, 3) for x in (query, key, value)]
-        return query, key, value
+            query, key, value = [x.flatten(2, 3) for x in (query, key, value)]
+            return query, key, value
 
     def _merge_heads(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -355,18 +361,19 @@ class FalconDecoderLayer(nn.Module):
     def __init__(self, config: FalconConfig):
         super().__init__()
         hidden_size = config.hidden_size
-
-        self.ln_attn = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.ln_mlp = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-
         self.num_heads = config.num_attention_heads
         self.self_attention = FalconAttention(config)
-
         self.mlp = FalconMLP(config)
-
         self.hidden_dropout = config.hidden_dropout
-
         self.config = config
+
+        if config.separate_layernorms:
+            self.ln_attn = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+            self.ln_mlp = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        else:
+            self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+
+
 
     def forward(
         self,
@@ -378,10 +385,15 @@ class FalconDecoderLayer(nn.Module):
         use_cache: bool = False,
         output_attentions: bool = False,
     ):
-        ln_attn = self.ln_attn(hidden_states)
-        ln_mlp = self.ln_mlp(hidden_states)
-
         residual = hidden_states
+
+        if self.config.new_decoder_architecture:
+            ln_attn = self.ln_attn(hidden_states)
+            ln_mlp = self.ln_mlp(hidden_states)
+        else:
+            ln_attn = self.input_layernorm(hidden_states)
+            ln_mlp = ln_attn
+
 
         # Self attention.
         attn_outputs = self.self_attention(
