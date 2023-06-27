@@ -45,7 +45,7 @@ rendered properly in your Markdown viewer.
 - **概念指南** 对🤗 Transformers的模型, 任务和设计理念背后的基本概念和思想做了更多的讨论和解释.
 - **API介绍** 描述了所有的类和函数:
 
-  - **MAIN CLASSES** 详述了配置(configuration)、模型(model)、分词器(tokenizer)和流水线(pipeline)这几个最重要的类.
+  - **MAIN CLASSES** 详述了配置(configuration)、模型(model)、分词器 (Tokenizer)和流水线(pipeline)这几个最重要的类.
   - **MODELS** 详述了在这个库中和每个模型实现有关的类和函数.
   - **INTERNAL HELPERS** 详述了内部使用的工具类和函数.
 
@@ -229,7 +229,7 @@ rendered properly in your Markdown viewer.
 
 ### 支持的框架
 
-下表展示了库中对每个模型的支持情况, 是否具有Python分词器 (表中的"Tokenizer slow"). 是否具有由🤗 Tokenizers库支持的快速分词器(表中的"Tokenizer fast"), 是否支持Jax (通过
+下表展示了库中对每个模型的支持情况, 是否具有Python分词器 (Tokenizer) (表中的"Tokenizer slow"). 是否具有由🤗 Tokenizers库支持的快速分词器 (Tokenizer)(表中的"Tokenizer fast"), 是否支持Jax (通过
 Flax), PyTorch, 和/或者 TensorFlow.
 
 <!--This table is updated automatically from the auto modules with _make fix-copies_. Do not update manually!-->
