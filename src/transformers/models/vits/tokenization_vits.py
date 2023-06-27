@@ -114,6 +114,11 @@ class VitsMmsTokenizer(PreTrainedTokenizer):
             text = text.replace("ț", "ţ")
         return text
 
+    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+        if self.add_blank and len(tokens) > 1:
+            tokens = tokens[1::2]
+        return "".join(tokens)
+
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         return self.encoder.get(token, self.encoder.get(self.unk_token))
