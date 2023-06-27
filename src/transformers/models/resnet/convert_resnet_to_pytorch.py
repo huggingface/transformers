@@ -28,7 +28,7 @@ import torch.nn as nn
 from huggingface_hub import hf_hub_download
 from torch import Tensor
 
-from transformers import AutoFeatureExtractor, ResNetConfig, ResNetForImageClassification
+from transformers import AutoImageProcessor, ResNetConfig, ResNetForImageClassification
 from transformers.utils import logging
 
 
@@ -113,8 +113,8 @@ def convert_weight_and_push(name: str, config: ResNetConfig, save_directory: Pat
         )
 
         # we can use the convnext one
-        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
-        feature_extractor.push_to_hub(
+        image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-base-224-22k-1k")
+        image_processor.push_to_hub(
             repo_path_or_name=save_directory / checkpoint_name,
             commit_message="Add feature extractor",
             use_temp_dir=True,

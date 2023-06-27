@@ -27,9 +27,9 @@ from PIL import Image
 
 from transformers import (
     SegformerConfig,
-    SegformerFeatureExtractor,
     SegformerForImageClassification,
     SegformerForSemanticSegmentation,
+    SegformerImageProcessor,
 )
 from transformers.utils import logging
 
@@ -180,13 +180,13 @@ def convert_segformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
         raise ValueError(f"Size {size} not supported")
 
     # load feature extractor (only resize + normalize)
-    feature_extractor = SegformerFeatureExtractor(
+    image_processor = SegformerImageProcessor(
         image_scale=(512, 512), keep_ratio=False, align=False, do_random_crop=False
     )
 
     # prepare image
     image = prepare_img()
-    pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+    pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
 
     logger.info(f"Converting model {model_name}...")
 
@@ -366,7 +366,7 @@ def convert_segformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path)
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

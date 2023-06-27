@@ -53,8 +53,8 @@ Dann übergeben Sie Ihren Satz an den Tokenizer:
 ```py
 >>> encoded_input = tokenizer("Do not meddle in the affairs of wizards, for they are subtle and quick to anger.")
 >>> print(encoded_input)
-{'input_ids': [101, 2079, 2025, 19960, 10362, 1999, 1996, 3821, 1997, 16657, 1010, 2005, 2027, 2024, 11259, 1998, 4248, 2000, 4963, 1012, 102], 
- 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
+{'input_ids': [101, 2079, 2025, 19960, 10362, 1999, 1996, 3821, 1997, 16657, 1010, 2005, 2027, 2024, 11259, 1998, 4248, 2000, 4963, 1012, 102],
+ 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
  'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 ```
 
@@ -84,14 +84,14 @@ Wenn Sie mehrere Sätze verarbeiten wollen, übergeben Sie die Sätze als Liste 
 ... ]
 >>> encoded_inputs = tokenizer(batch_sentences)
 >>> print(encoded_inputs)
-{'input_ids': [[101, 1252, 1184, 1164, 1248, 6462, 136, 102], 
-               [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102], 
-               [101, 1327, 1164, 5450, 23434, 136, 102]], 
- 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0], 
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-                    [0, 0, 0, 0, 0, 0, 0]], 
- 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1], 
-                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
+{'input_ids': [[101, 1252, 1184, 1164, 1248, 6462, 136, 102],
+               [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102],
+               [101, 1327, 1164, 5450, 23434, 136, 102]],
+ 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0]],
+ 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1],
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                     [1, 1, 1, 1, 1, 1, 1]]}
 ```
 
@@ -109,14 +109,14 @@ Setzen Sie den Parameter "padding" auf "true", um die kürzeren Sequenzen im Sta
 ... ]
 >>> encoded_input = tokenizer(batch_sentences, padding=True)
 >>> print(encoded_input)
-{'input_ids': [[101, 1252, 1184, 1164, 1248, 6462, 136, 102, 0, 0, 0, 0, 0, 0, 0], 
-               [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102], 
-               [101, 1327, 1164, 5450, 23434, 136, 102, 0, 0, 0, 0, 0, 0, 0, 0]], 
- 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 
- 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], 
-                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
+{'input_ids': [[101, 1252, 1184, 1164, 1248, 6462, 136, 102, 0, 0, 0, 0, 0, 0, 0],
+               [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102],
+               [101, 1327, 1164, 5450, 23434, 136, 102, 0, 0, 0, 0, 0, 0, 0, 0]],
+ 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+ 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                     [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]]}
 ```
 
@@ -136,14 +136,14 @@ Setzen Sie den Parameter "truncation" auf "true", um eine Sequenz auf die vom Mo
 ... ]
 >>> encoded_input = tokenizer(batch_sentences, padding=True, truncation=True)
 >>> print(encoded_input)
-{'input_ids': [[101, 1252, 1184, 1164, 1248, 6462, 136, 102, 0, 0, 0, 0, 0, 0, 0], 
-               [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102], 
-               [101, 1327, 1164, 5450, 23434, 136, 102, 0, 0, 0, 0, 0, 0, 0, 0]], 
- 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 
- 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], 
-                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
+{'input_ids': [[101, 1252, 1184, 1164, 1248, 6462, 136, 102, 0, 0, 0, 0, 0, 0, 0],
+               [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102],
+               [101, 1327, 1164, 5450, 23434, 136, 102, 0, 0, 0, 0, 0, 0, 0, 0]],
+ 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+ 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                     [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]]}
 ```
 
@@ -166,10 +166,10 @@ Setzen Sie den Parameter `return_tensors` entweder auf `pt` für PyTorch, oder `
 >>> print(encoded_input)
 {'input_ids': tensor([[101, 1252, 1184, 1164, 1248, 6462, 136, 102, 0, 0, 0, 0, 0, 0, 0],
                       [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102],
-                      [101, 1327, 1164, 5450, 23434, 136, 102, 0, 0, 0, 0, 0, 0, 0, 0]]), 
+                      [101, 1327, 1164, 5450, 23434, 136, 102, 0, 0, 0, 0, 0, 0, 0, 0]]),
  'token_type_ids': tensor([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]), 
+                           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]),
  'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
                            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                            [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]])}
@@ -188,11 +188,11 @@ Setzen Sie den Parameter `return_tensors` entweder auf `pt` für PyTorch, oder `
 array([[101, 1252, 1184, 1164, 1248, 6462, 136, 102, 0, 0, 0, 0, 0, 0, 0],
        [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102],
        [101, 1327, 1164, 5450, 23434, 136, 102, 0, 0, 0, 0, 0, 0, 0, 0]],
-      dtype=int32)>, 
+      dtype=int32)>,
  'token_type_ids': <tf.Tensor: shape=(2, 9), dtype=int32, numpy=
 array([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=int32)>, 
+       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=int32)>,
  'attention_mask': <tf.Tensor: shape=(2, 9), dtype=int32, numpy=
 array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -235,7 +235,7 @@ Dies gibt drei Elemente zurück:
 
 ### Resample
 
-Für dieses Tutorial werden Sie das Modell [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) verwenden. Wie Sie aus der Modellkarte ersehen können, ist das Wav2Vec2-Modell auf 16kHz abgetastetes Sprachaudio vortrainiert. Es ist wichtig, dass die Abtastrate Ihrer Audiodaten mit der Abtastrate des Datensatzes übereinstimmt, der für das Pre-Training des Modells verwendet wurde. Wenn die Abtastrate Ihrer Daten nicht dieselbe ist, müssen Sie Ihre Audiodaten neu abtasten. 
+Für dieses Tutorial werden Sie das Modell [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) verwenden. Wie Sie aus der Modellkarte ersehen können, ist das Wav2Vec2-Modell auf 16kHz abgetastetes Sprachaudio vortrainiert. Es ist wichtig, dass die Abtastrate Ihrer Audiodaten mit der Abtastrate des Datensatzes übereinstimmt, der für das Pre-Training des Modells verwendet wurde. Wenn die Abtastrate Ihrer Daten nicht dieselbe ist, müssen Sie Ihre Audiodaten neu abtasten.
 
 Der Datensatz [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) hat zum Beispiel eine Abtastrate von 8000 kHz. Um das Wav2Vec2-Modell mit diesem Datensatz verwenden zu können, müssen Sie die Abtastrate auf 16 kHz erhöhen:
 
@@ -354,12 +354,12 @@ Als Nächstes sehen Sie sich das Bild mit dem Merkmal 🤗 Datensätze [Bild] (h
 
 ### Merkmalsextraktor
 
-Laden Sie den Merkmalsextraktor mit [`AutoFeatureExtractor.from_pretrained`]:
+Laden Sie den Merkmalsextraktor mit [`AutoImageProcessor.from_pretrained`]:
 
 ```py
->>> from transformers import AutoFeatureExtractor
+>>> from transformers import AutoImageProcessor
 
->>> feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
+>>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 ```
 
 ### Datenerweiterung
@@ -371,9 +371,9 @@ Bei Bildverarbeitungsaufgaben ist es üblich, den Bildern als Teil der Vorverarb
 ```py
 >>> from torchvision.transforms import Compose, Normalize, RandomResizedCrop, ColorJitter, ToTensor
 
->>> normalize = Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std)
+>>> normalize = Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
 >>> _transforms = Compose(
-...     [RandomResizedCrop(feature_extractor.size), ColorJitter(brightness=0.5, hue=0.5), ToTensor(), normalize]
+...     [RandomResizedCrop(image_processor.size), ColorJitter(brightness=0.5, hue=0.5), ToTensor(), normalize]
 ... )
 ```
 
@@ -404,7 +404,7 @@ Bei Bildverarbeitungsaufgaben ist es üblich, den Bildern als Teil der Vorverarb
           [ 0.0275,  0.0745,  0.0510,  ..., -0.1137, -0.1216, -0.0824],
           [ 0.0667,  0.0824,  0.0667,  ..., -0.0588, -0.0745, -0.0980],
           [ 0.0353,  0.0353,  0.0431,  ..., -0.0039, -0.0039, -0.0588]],
- 
+
          [[ 0.2078,  0.2471,  0.2863,  ..., -0.9451, -0.9373, -0.9451],
           [ 0.1608,  0.2471,  0.3098,  ..., -0.9373, -0.9451, -0.9373],
           [ 0.2078,  0.2706,  0.3020,  ..., -0.9608, -0.9373, -0.8275],
@@ -412,7 +412,7 @@ Bei Bildverarbeitungsaufgaben ist es üblich, den Bildern als Teil der Vorverarb
           [-0.0353,  0.0118, -0.0039,  ..., -0.2392, -0.2471, -0.2078],
           [ 0.0196,  0.0353,  0.0196,  ..., -0.1843, -0.2000, -0.2235],
           [-0.0118, -0.0039, -0.0039,  ..., -0.0980, -0.0980, -0.1529]],
- 
+
          [[ 0.3961,  0.4431,  0.4980,  ..., -0.9216, -0.9137, -0.9216],
           [ 0.3569,  0.4510,  0.5216,  ..., -0.9059, -0.9137, -0.9137],
           [ 0.4118,  0.4745,  0.5216,  ..., -0.9137, -0.8902, -0.7804],

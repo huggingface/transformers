@@ -25,7 +25,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import DetrConfig, DetrFeatureExtractor, DetrForObjectDetection, DetrForSegmentation
+from transformers import DetrConfig, DetrForObjectDetection, DetrForSegmentation, DetrImageProcessor
 from transformers.utils import logging
 
 
@@ -203,11 +203,11 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
 
     # load feature extractor
     format = "coco_panoptic" if is_panoptic else "coco_detection"
-    feature_extractor = DetrFeatureExtractor(format=format)
+    image_processor = DetrImageProcessor(format=format)
 
     # prepare image
     img = prepare_img()
-    encoding = feature_extractor(images=img, return_tensors="pt")
+    encoding = image_processor(images=img, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
     logger.info(f"Converting model {model_name}...")
@@ -262,7 +262,7 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
     logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path)
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

@@ -276,7 +276,7 @@ En este punto, solo quedan tres pasos:
 ...     args=training_args,
 ...     train_dataset=encoded_minds["train"],
 ...     eval_dataset=encoded_minds["test"],
-...     tokenizer=processor.feature_extractor,
+...     tokenizer=processor.image_processor,
 ...     data_collator=data_collator,
 ...     compute_metrics=compute_metrics,
 ... )

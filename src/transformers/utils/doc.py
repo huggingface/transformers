@@ -449,7 +449,7 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> # audio file is decoded on the fly
-    >>> inputs = feature_extractor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+    >>> inputs = image_processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
 
     >>> with torch.no_grad():
     ...     logits = model(**inputs).logits

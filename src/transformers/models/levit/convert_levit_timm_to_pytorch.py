@@ -25,7 +25,7 @@ import timm
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers import LevitConfig, LevitFeatureExtractor, LevitForImageClassificationWithTeacher
+from transformers import LevitConfig, LevitForImageClassificationWithTeacher, LevitImageProcessor
 from transformers.utils import logging
 
 
@@ -74,8 +74,8 @@ def convert_weight_and_push(
 
     if push_to_hub:
         our_model.save_pretrained(save_directory / checkpoint_name)
-        feature_extractor = LevitFeatureExtractor()
-        feature_extractor.save_pretrained(save_directory / checkpoint_name)
+        image_processor = LevitImageProcessor()
+        image_processor.save_pretrained(save_directory / checkpoint_name)
 
         print(f"Pushed {checkpoint_name}")
 

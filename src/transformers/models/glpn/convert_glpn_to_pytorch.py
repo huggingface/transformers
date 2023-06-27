@@ -23,7 +23,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import GLPNConfig, GLPNFeatureExtractor, GLPNForDepthEstimation
+from transformers import GLPNConfig, GLPNForDepthEstimation, GLPNImageProcessor
 from transformers.utils import logging
 
 
@@ -132,11 +132,11 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
     config = GLPNConfig(hidden_sizes=[64, 128, 320, 512], decoder_hidden_size=64, depths=[3, 8, 27, 3])
 
     # load feature extractor (only resize + rescale)
-    feature_extractor = GLPNFeatureExtractor()
+    image_processor = GLPNImageProcessor()
 
     # prepare image
     image = prepare_img()
-    pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+    pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
 
     logger.info("Converting model...")
 
@@ -186,7 +186,7 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
             commit_message="Add model",
             use_temp_dir=True,
         )
-        feature_extractor.push_to_hub(
+        image_processor.push_to_hub(
             repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
             organization="nielsr",
             commit_message="Add feature extractor",

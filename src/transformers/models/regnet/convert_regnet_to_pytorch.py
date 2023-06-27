@@ -30,7 +30,7 @@ from huggingface_hub import cached_download, hf_hub_url
 from torch import Tensor
 from vissl.models.model_helpers import get_trunk_forward_outputs
 
-from transformers import AutoFeatureExtractor, RegNetConfig, RegNetForImageClassification, RegNetModel
+from transformers import AutoImageProcessor, RegNetConfig, RegNetForImageClassification, RegNetModel
 from transformers.utils import logging
 
 
@@ -209,8 +209,8 @@ def convert_weight_and_push(
 
         size = 224 if "seer" not in name else 384
         # we can use the convnext one
-        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k", size=size)
-        feature_extractor.push_to_hub(
+        image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-base-224-22k-1k", size=size)
+        image_processor.push_to_hub(
             repo_path_or_name=save_directory / name,
             commit_message="Add feature extractor",
             use_temp_dir=True,
