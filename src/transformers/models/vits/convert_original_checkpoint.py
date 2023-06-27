@@ -20,6 +20,7 @@ import tempfile
 
 import torch
 
+from huggingface_hub import hf_hub_download
 from transformers import (
     VitsConfig,
     VitsMmsTokenizer,
@@ -261,8 +262,8 @@ def recursively_load_weights(fairseq_dict, hf_model):
 
 @torch.no_grad()
 def convert_checkpoint(
-    checkpoint_path,
     pytorch_dump_folder_path,
+    checkpoint_path=None,
     config_path=None,
     vocab_path=None,
     language=None,
@@ -280,6 +281,31 @@ def convert_checkpoint(
     if num_speakers:
         config.num_speakers = num_speakers
         config.speaker_embedding_size = 256
+
+    if checkpoint_path is None:
+        vocab_path = hf_hub_download(
+            repo_id="facebook/mms-tts",
+            filename="vocab.txt",
+            subfolder=f"models/{language}",
+        )
+        config_file = hf_hub_download(
+            repo_id="facebook/mms-tts",
+            filename="config.json",
+            subfolder=f"models/{language}",
+        )
+        checkpoint_path = hf_hub_download(
+            repo_id="facebook/mms-tts",
+            filename="G_100000.pth",
+            subfolder=f"models/{language}",
+        )
+
+        with open(config_file, "r") as f:
+            data = f.read()
+            hps = json.loads(data)
+
+        is_uroman = hps["data"]["training_files"].split(".")[-1] == "uroman"
+        if is_uroman:
+            logger.warning("For this checkpoint, you should use `uroman` to convert input text before tokenizing it!")
 
     # Save vocab as temporary json file
     symbols = [line.replace("\n", "") for line in open(vocab_path, encoding="utf-8").readlines()]
@@ -313,10 +339,10 @@ def convert_checkpoint(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
-    parser.add_argument("--vocab_path", required=True, default=None, type=str, help="Path to vocab.txt")
+    parser.add_argument("--checkpoint_path", default=None, type=str, help="Local path to original checkpoint")
+    parser.add_argument("--vocab_path", default=None, type=str, help="Path to vocab.txt")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
-    parser.add_argument("--language", default=None, type=str, help="Tokenizer language")
+    parser.add_argument("--language", default=None, type=str, help="Tokenizer language (three-letter code)")
     parser.add_argument("--num_speakers", default=None, type=int, help="Number of speakers")
     parser.add_argument(
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
@@ -327,8 +353,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     convert_checkpoint(
-        args.checkpoint_path,
         args.pytorch_dump_folder_path,
+        args.checkpoint_path,
         args.config_path,
         args.vocab_path,
         args.language,
