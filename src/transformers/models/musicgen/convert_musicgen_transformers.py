@@ -108,7 +108,6 @@ def decoder_config_from_checkpoint(checkpoint: str) -> MusicgenDecoderConfig:
         ffn_dim=hidden_size * 4,
         num_hidden_layers=num_hidden_layers,
         num_attention_heads=num_attention_heads,
-        tie_word_embeddings=False,
     )
     return config
 

@@ -74,6 +74,8 @@ class MusicgenDecoderConfig(PretrainedConfig):
             Whether the model should return the last key/values attentions (not used by all models)
         num_codebooks (`int`, *optional*, defaults to 4):
             The number of parallel codebooks forwarded to the model.
+        tie_word_embeddings(`bool`, *optional*, defaults to `False`):
+            Whether input and output word embeddings should be tied.
     """
     model_type = "musicgen_decoder"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -98,6 +100,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
         pad_token_id=2048,
         bos_token_id=2048,
         eos_token_id=None,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -119,6 +122,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
 
@@ -148,6 +152,7 @@ class MusicgenConfig(PretrainedConfig):
     ```python
     >>> from transformers import (
     ...     MusicgenConfig,
+    ...     MusicgenDecoderConfig,
     ...     T5Config,
     ...     EncodecConfig,
     ...     MusicgenForConditionalGeneration,
@@ -175,8 +180,8 @@ class MusicgenConfig(PretrainedConfig):
     >>> model.save_pretrained("musicgen-model")
 
     >>> # loading model and config from pretrained folder
-    >>> encoder_decoder_config = MusicgenConfig.from_pretrained("musicgen-model")
-    >>> model = MusicgenForConditionalGeneration.from_pretrained("musicgen-model", config=encoder_decoder_config)
+    >>> musicgen_config = MusicgenConfig.from_pretrained("musicgen-model")
+    >>> model = MusicgenForConditionalGeneration.from_pretrained("musicgen-model", config=musicgen_config)
     ```"""
 
     model_type = "musicgen"
