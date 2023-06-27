@@ -426,7 +426,7 @@ class ClapAudioSelfAttention(nn.Module):
         relative_coords[:, :, 1] += self.window_size[1] - 1
         relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
         relative_position_index = relative_coords.sum(-1)
-        self.register_buffer("relative_position_index", relative_position_index, persistent=False)
+        self.register_buffer("relative_position_index", relative_position_index)
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
