@@ -60,10 +60,11 @@ class VitsModelTester:
         batch_size=13,
         seq_length=7,
         is_training=False,
-        hidden_size=24,
-        num_hidden_layers=4,
+        hidden_size=192,
+        num_hidden_layers=6,
         num_attention_heads=2,
-        intermediate_size=4,
+        intermediate_size=768,
+        flow_size=192,
         vocab_size=38,
     ):
         self.parent = parent
@@ -74,6 +75,7 @@ class VitsModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
+        self.flow_size = flow_size
         self.vocab_size = vocab_size
 
     def prepare_config_and_inputs(self):
@@ -97,7 +99,7 @@ class VitsModelTester:
             encoder_layers=self.num_hidden_layers,
             encoder_attention_heads=self.num_attention_heads,
             encoder_ffn_dim=self.intermediate_size,
-            inter_channels=self.intermediate_size,
+            flow_size=self.flow_size,
             vocab_size=self.vocab_size,
         )
 
@@ -108,7 +110,7 @@ class VitsModelTester:
         attention_mask = inputs_dict["attention_mask"]
 
         result = model(input_ids, attention_mask=attention_mask)
-        self.parent.assertEqual(result.audio.shape, (self.batch_size, 99072))
+        self.parent.assertEqual(result.audio.shape, (self.batch_size, 13056))
 
 
 @require_torch
@@ -216,6 +218,9 @@ class VitsModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class VitsModelIntegrationTests(unittest.TestCase):
     def test_generation(self):
+        # GPU gives different results than CPU
+        torch_device = "cpu"
+
         model = VitsModel.from_pretrained("Matthijs/mms-tts-eng")
         model.to(torch_device)
 
