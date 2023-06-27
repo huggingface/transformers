@@ -1640,6 +1640,7 @@ class Trainer:
 
         # prepare using `accelerator` prepare
         if use_accelerator_prepare:
+            self.model.train()
             if hasattr(self.lr_scheduler, "step"):
                 if self.use_apex:
                     model = self.accelerator.prepare(self.model)
