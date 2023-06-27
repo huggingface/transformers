@@ -25,7 +25,7 @@ from ...generation.logits_process import LogitsProcessor
 from ...generation.stopping_criteria import StoppingCriteria
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, add_code_sample_docstrings, logging
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
@@ -516,6 +516,11 @@ class BarkCausalModel(BarkPreTrainedModel):
         }
 
     @add_start_docstrings_to_model_forward(BARK_CAUSAL_MODEL_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=CausalLMOutputWithPast,
+        config_class=BarkSubModelConfig,
+    )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -805,11 +810,15 @@ class BarkFineModel(BarkPreTrainedModel):
             if hasattr(module, "_tie_weights"):
                 module._tie_weights()
 
-    # an additionnal idx corresponding to the id of the codebook that will be predicted
     @add_start_docstrings_to_model_forward(BARK_FINE_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=MaskedLMOutput,
+        config_class=BarkFineConfig,
+    )
     def forward(
         self,
-        codebook_idx: int,
+        codebook_idx: int,  # an additionnal idx corresponding to the id of the codebook that will be predicted
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -1253,8 +1262,10 @@ class BarkModel(BarkPreTrainedModel):
         fine_output = fine_output.transpose(0, 1)
         emb = self.codec_model.quantizer.decode(fine_output)
         out = self.codec_model.decoder(emb)
-        audio_arr = out.detach().cpu().numpy().squeeze(1)  # squeeze the codebook dimension
-        del fine_output, emb, out
+        audio_arr = out.squeeze(1)  # squeeze the codebook dimension
+        
+        # TODO: del or no del?
+        # del fine_output, emb, out
 
         return audio_arr
 
@@ -1268,7 +1279,7 @@ class BarkModel(BarkPreTrainedModel):
         sliding_window_len: int = 60,
         **kwargs,
     ) -> torch.LongTensor:
-        """
+        f"""
         Generates audio from an input prompt and an additional optional `Bark` speaker prompt.
 
         Args:
@@ -1286,6 +1297,37 @@ class BarkModel(BarkPreTrainedModel):
                 The coarse generation step uses a sliding window to generate raw audio. Defaults to 60.
         Returns:
             torch.LongTensor: Output generated audio.
+            
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, BarkModel
+        >>> from scipy.io.wavfile import write as write_wav
+
+
+        >>> processor = AutoProcessor.from_pretrained("{_CHECKPOINT_FOR_DOC}")
+        >>> model = BarkModel.from_pretrained("{_CHECKPOINT_FOR_DOC}")
+
+        >>> inputs, _ = processor("Hello, my dog is cute")
+
+        >>> audio_array = model(**inputs)
+        >>> audio_array = audio_array.detach().cpu().numpy()
+        ```
+
+        ```python
+        >>> # To add a voice preset, you can pass `voice_preset` to `BarkProcessor.__call__(...)`
+        
+        >>> voice_preset = "v2/en_speaker_6"
+        
+        >>> inputs, history_prompt = processor("Hello, my dog is cute", voice_preset = voice_preset)
+
+        >>> audio_array = model(**inputs, history_prompt = history_prompt)
+        >>> audio_array = audio_array.detach().cpu().numpy()
+        
+        >>> # save audio to disk, but first take the sample rate from the model config
+        >>> sample_rate = model.config.sample_rate
+        >>> write_wav("bark_generation.wav", sample_rate, audio_array)
+        ```
         """
 
         ##### 1. Generate from the semantic model
