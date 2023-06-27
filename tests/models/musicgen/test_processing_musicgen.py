@@ -53,8 +53,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 @require_sentencepiece
 class MusicgenProcessorTest(unittest.TestCase):
     def setUp(self):
-        # TODO(SG): update checkpoint when Hub PR is merged
-        self.checkpoint = "sanchit-gandhi/musicgen-small"
+        self.checkpoint = "facebook/musicgen-small"
         self.tmpdirname = tempfile.mkdtemp()
 
     def get_tokenizer(self, **kwargs):

@@ -1110,12 +1110,11 @@ def place_dict_on_device(dict_to_place, device):
 class MusicgenIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
-        # TODO(SG): push to facebook org when PR is approved
-        return MusicgenForConditionalGeneration.from_pretrained("sanchit-gandhi/musicgen-small").to(torch_device)
+        return MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small").to(torch_device)
 
     @cached_property
     def processor(self):
-        return MusicgenProcessor.from_pretrained("sanchit-gandhi/musicgen-small")
+        return MusicgenProcessor.from_pretrained("facebook/musicgen-small")
 
     @slow
     def test_logits_text_prompt(self):
