@@ -89,6 +89,8 @@
       title: Amazon SageMaker에서 학습 실행하기
     - local: serialization
       title: ONNX로 내보내기
+    - local: tflite
+      title: TFLite로 내보내기
     - local: torchscript
       title: TorchScript로 내보내기
     - local: in_translation
