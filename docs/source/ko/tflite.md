@@ -32,13 +32,13 @@ pip install optimum[exporters-tf]
 ```
 
 모든 사용 가능한 인수를 확인하려면, [🤗 Optimum 문서](https://huggingface.co/docs/optimum/main/en/exporters/tflite/usage_guides/export_a_model)를 참고하거나 
-명령줄에서 도움말을 살펴보세요:
+터미널에서 도움말을 살펴보세요:
 
 ```bash
 optimum-cli export tflite --help
 ```
 
-예를 들어 🤗 Hub에서 `bert-base-uncased` 모델의 체크포인트를 내보내려면, 다음 명령을 실행하세요:
+예를 들어 🤗 Hub에서의 `bert-base-uncased` 모델 체크포인트를 내보내려면, 다음 명령을 실행하세요:
 
 ```bash
 optimum-cli export tflite --model bert-base-uncased --sequence_length 128 bert_tflite/
