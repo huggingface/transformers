@@ -234,7 +234,7 @@ def get_cached_module_file(
     pretrained_model_name_or_path = str(pretrained_model_name_or_path)
     is_local = os.path.isdir(pretrained_model_name_or_path)
     if is_local:
-        submodule = pretrained_model_name_or_path.split(os.path.sep)[-1]
+        submodule = os.path.basename(pretrained_model_name_or_path)
     else:
         submodule = pretrained_model_name_or_path.replace("/", os.path.sep)
         cached_module = try_to_load_from_cache(
