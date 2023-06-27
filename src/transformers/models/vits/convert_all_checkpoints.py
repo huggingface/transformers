@@ -6,7 +6,6 @@
 # Run this script from transformers/src/transformers/models/vits/
 #     python convert_all_checkpoints.py 2>logs.txt
 
-import os
 
 repo_id = "Matthijs/"
 dump_path = "EXPORTED/"
@@ -1159,19 +1158,19 @@ languages = {
 }
 
 readme = """
----
-license: cc-by-nc-4.0
-tags:
+--- license: cc-by-nc-4.0 tags:
 - mms
 - vits
-pipeline_tag: text-to-speech
----
+pipeline_tag: text-to-speech ---
 
 # Massively Multilingual Speech (MMS) : Text-to-Speech Models
 
 This repository contains the **{language} ({lang_code})** language text-to-speech (TTS) model checkpoint.
 
-This model is part of Facebook's [Massively Multilingual Speech](https://arxiv.org/abs/2305.13516) project, aiming to provide speech technology across a diverse range of languages. You can find more details about the supported languages and their ISO 639-3 codes in the [MMS Language Coverage Overview](https://dl.fbaipublicfiles.com/mms/misc/language_coverage_mms.html).
+This model is part of Facebook's [Massively Multilingual Speech](https://arxiv.org/abs/2305.13516) project, aiming to
+provide speech technology across a diverse range of languages. You can find more details about the supported languages
+and their ISO 639-3 codes in the [MMS Language Coverage
+Overview](https://dl.fbaipublicfiles.com/mms/misc/language_coverage_mms.html).
 
 ## Usage
 
@@ -1191,25 +1190,33 @@ with torch.no_grad():
     output = model(**inputs)
 
 from IPython.display import Audio
+
 Audio(output.audio[0], rate=16000)
 ```
 
-Note: For certain checkpoints, the input text must be converted to the Latin alphabet first using the [uroman](https://github.com/isi-nlp/uroman) tool.
+Note: For certain checkpoints, the input text must be converted to the Latin alphabet first using the
+[uroman](https://github.com/isi-nlp/uroman) tool.
 
 ## Model credits
 
 This model was developed by Vineel Pratap et al. and is licensed as **CC-BY-NC 4.0**
 
     @article{pratap2023mms,
-        title={Scaling Speech Technology to 1,000+ Languages},
-        author={Vineel Pratap and Andros Tjandra and Bowen Shi and Paden Tomasello and Arun Babu and Sayani Kundu and Ali Elkahky and Zhaoheng Ni and Apoorv Vyas and Maryam Fazel-Zarandi and Alexei Baevski and Yossi Adi and Xiaohui Zhang and Wei-Ning Hsu and Alexis Conneau and Michael Auli},
-        journal={arXiv},
-        year={2023}
+        title={Scaling Speech Technology to 1,000+ Languages}, author={Vineel Pratap and Andros Tjandra and Bowen Shi
+        and Paden Tomasello and Arun Babu and Sayani Kundu and Ali Elkahky and Zhaoheng Ni and Apoorv Vyas and Maryam
+        Fazel-Zarandi and Alexei Baevski and Yossi Adi and Xiaohui Zhang and Wei-Ning Hsu and Alexis Conneau and
+        Michael Auli}, journal={arXiv}, year={2023}
     }
 """
 
 for lang_code, lang_name in languages.items():
-    cmd = "python3 convert_original_checkpoint.py --pytorch_dump_folder_path " + dump_path + lang_code + " --language " + lang_code
+    cmd = (
+        "python3 convert_original_checkpoint.py --pytorch_dump_folder_path "
+        + dump_path
+        + lang_code
+        + " --language "
+        + lang_code
+    )
     if push_to_hub:
         cmd += " --push_to_hub " + repo_id + "mms-tts-" + lang_code
 
@@ -1227,4 +1234,3 @@ for lang_code, lang_name in languages.items():
             f.write(txt)
 
         # TODO: push the README to the hub as well
-

@@ -80,12 +80,12 @@ class VitsConfig(PretrainedConfig):
             The number of input channels into the HiFi-GAN upsampling network.
         upsample_rates (`Tuple[int]` or `List[int]`, *optional*, defaults to `[8, 8, 2, 2]`):
             A tuple of integers defining the stride of each 1D convolutional layer in the HiFi-GAN upsampling network.
-            The length of *upsample_rates* defines the number of convolutional layers and has to match the length of
-            *upsample_kernel_sizes*.
+            The length of `upsample_rates` defines the number of convolutional layers and has to match the length of
+            `upsample_kernel_sizes`.
         upsample_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[16, 16, 4, 4]`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the HiFi-GAN upsampling
-            network. The length of *upsample_kernel_sizes* defines the number of convolutional layers and has to match
-            the length of *upsample_rates*.
+            network. The length of `upsample_kernel_sizes` defines the number of convolutional layers and has to match
+            the length of `upsample_rates`.
         resblock_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 7, 11]`):
             A tuple of integers defining the kernel sizes of the 1D convolutional layers in the HiFi-GAN
             multi-receptive field fusion (MRF) module.
@@ -164,6 +164,11 @@ class VitsConfig(PretrainedConfig):
         duration_predictor_filter_channels=256,
         **kwargs,
     ):
+        if len(upsample_kernel_sizes) != len(upsample_rates):
+            raise ValueError(
+                f"The length of `upsample_kernel_sizes` ({len(upsample_kernel_sizes)}) must match the length of `upsample_rates` ({len(upsample_rates)})"
+            )
+
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.encoder_layers = encoder_layers
