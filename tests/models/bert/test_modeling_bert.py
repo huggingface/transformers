@@ -573,6 +573,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config.pad_token_id = 0
 
         logger = logging.getLogger("transformers.models.bert.modeling_bert")
+        logger.warning_once.cache_clear()
 
         # Check for no warnings if the attention_mask is present.
         with CaptureLogger(logger) as cl:
