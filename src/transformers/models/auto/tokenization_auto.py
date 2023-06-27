@@ -215,6 +215,10 @@ else:
             ("mobilebert", ("MobileBertTokenizer", "MobileBertTokenizerFast" if is_tokenizers_available() else None)),
             ("mpnet", ("MPNetTokenizer", "MPNetTokenizerFast" if is_tokenizers_available() else None)),
             (
+                "mra",
+                ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None),
+            ),
+            (
                 "mt5",
                 (
                     "MT5Tokenizer" if is_sentencepiece_available() else None,

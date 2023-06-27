@@ -401,6 +401,7 @@ _import_structure = {
     "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mobilevitv2": ["MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTV2Config"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
+    "models.mra": ["MRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MraConfig"],
     "models.mt5": ["MT5Config"],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
     "models.nat": ["NAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NatConfig"],
@@ -2129,6 +2130,18 @@ else:
             "MPNetLayer",
             "MPNetModel",
             "MPNetPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mra"].extend(
+        [
+            "MRA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MraForMaskedLM",
+            "MraForMultipleChoice",
+            "MraForQuestionAnswering",
+            "MraForSequenceClassification",
+            "MraForTokenClassification",
+            "MraModel",
+            "MraPreTrainedModel",
         ]
     )
     _import_structure["models.mt5"].extend(
@@ -4247,6 +4260,7 @@ if TYPE_CHECKING:
     from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
     from .models.mobilevitv2 import MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTV2Config
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
+    from .models.mra import MRA_PRETRAINED_CONFIG_ARCHIVE_MAP, MraConfig
     from .models.mt5 import MT5Config
     from .models.mvp import MvpConfig, MvpTokenizer
     from .models.nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NatConfig
@@ -5700,6 +5714,16 @@ if TYPE_CHECKING:
             MPNetLayer,
             MPNetModel,
             MPNetPreTrainedModel,
+        )
+        from .models.mra import (
+            MRA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MraForMaskedLM,
+            MraForMultipleChoice,
+            MraForQuestionAnswering,
+            MraForSequenceClassification,
+            MraForTokenClassification,
+            MraModel,
+            MraPreTrainedModel,
         )
         from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model, MT5PreTrainedModel
         from .models.mvp import (
