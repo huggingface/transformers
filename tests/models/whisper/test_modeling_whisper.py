@@ -1442,6 +1442,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
+        model.generation_config.alignment_heads = [[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]]
 
         input_speech = self._load_datasamples(4)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
@@ -1534,7 +1535,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         text = processor.decode(output[0])
 
         self.assertTrue(prompt in text)
-        self.assertTrue(all([token in text for token in expected_tokens]))
+        self.assertTrue(all(token in text for token in expected_tokens))
 
     @slow
     def test_generate_with_prompt_ids_and_no_non_prompt_forced_decoder_ids(self):
