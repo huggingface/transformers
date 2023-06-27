@@ -59,10 +59,6 @@ MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Musicgen models at https://huggingface.co/models?filter=musicgen
 ]
 
-# Base model docstring
-_EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
-
-
 @dataclass
 class MusicgenUnconditionalInput(ModelOutput):
     """
@@ -919,12 +915,6 @@ class MusicgenModel(MusicgenPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(MUSICGEN_DECODER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
