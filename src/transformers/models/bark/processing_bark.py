@@ -20,13 +20,13 @@ from typing import Optional, Union
 
 import numpy as np
 
-from transformers import (
-    AutoTokenizer,
-    ProcessorMixin,
-    TensorType,
-)
+
+from ..auto import AutoTokenizer
+
+from ...processing_utils import ProcessorMixin
 
 from ...utils import (
+    TensorType,
     is_flax_available,
     is_jax_tensor,
     is_numpy_array,
