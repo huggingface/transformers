@@ -142,7 +142,6 @@ _deps = [
     "packaging>=20.0",
     "parameterized",
     "phonemizer",
-    "protobuf<=3.20.3",
     "psutil",
     "pyyaml>=5.1",
     "pydantic",
