@@ -21,6 +21,7 @@ from transformers import PretrainedConfig, VitsConfig
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
+    slow,
     torch_device,
 )
 from transformers.trainer_utils import set_seed
@@ -35,7 +36,9 @@ from ...test_modeling_common import (
 
 
 if is_torch_available():
-    from transformers import VitsModel
+    import torch
+
+    from transformers import VitsMmsTokenizer, VitsModel
 
 
 def _config_zero_init(config):
@@ -207,3 +210,33 @@ class VitsModelTest(ModelTesterMixin, unittest.TestCase):
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
             module.bias.data.fill_(3)
+
+
+@require_torch
+@slow
+class VitsModelIntegrationTests(unittest.TestCase):
+    def test_generation(self):
+        model = VitsModel.from_pretrained("Matthijs/mms-tts-eng")
+        model.to(torch_device)
+
+        tokenizer = VitsMmsTokenizer.from_pretrained("Matthijs/mms-tts-eng")
+
+        set_seed(555)  # make deterministic
+
+        input_text = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
+        input_ids = tokenizer(text=input_text, return_tensors="pt").input_ids.to(torch_device)
+
+        outputs = model(input_ids)
+        self.assertEqual(outputs.audio.shape, (1, 87040))
+
+        # fmt: off
+        EXPECTED_LOGITS = torch.tensor(
+            [
+                -0.0042,  0.0176,  0.0354,  0.0504,  0.0621,  0.0777,  0.0980,  0.1224,
+                 0.1475,  0.1679,  0.1817,  0.1832,  0.1713,  0.1542,  0.1384,  0.1256,
+                 0.1147,  0.1066,  0.1026,  0.0958,  0.0823,  0.0610,  0.0340,  0.0022,
+                -0.0337, -0.0677, -0.0969, -0.1178, -0.1311, -0.1363
+            ]
+        )
+        # fmt: on
+        self.assertTrue(torch.allclose(outputs.audio[0, 10000:10030].cpu(), EXPECTED_LOGITS, atol=1e-4))
