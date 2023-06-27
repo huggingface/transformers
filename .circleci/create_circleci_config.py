@@ -98,20 +98,20 @@ class CircleCIJob:
         steps = [
             "checkout",
             {"attach_workspace": {"at": "~/transformers/test_preparation"}},
-            {
-                "restore_cache": {
-                    "keys": [
-                        f"v{self.cache_version}-{self.cache_name}-" + '{{ checksum "setup.py" }}',
-                    ]
-                }
-            },
-            {
-                "restore_cache": {
-                    "keys": [
-                        f"v{self.cache_version}-{self.cache_name}-" + '{{ checksum "setup.py" }}-site-packages',
-                    ]
-                }
-            },
+            # {
+            #     "restore_cache": {
+            #         "keys": [
+            #             f"v{self.cache_version}-{self.cache_name}-" + '{{ checksum "setup.py" }}',
+            #         ]
+            #     }
+            # },
+            # {
+            #     "restore_cache": {
+            #         "keys": [
+            #             f"v{self.cache_version}-{self.cache_name}-" + '{{ checksum "setup.py" }}-site-packages',
+            #         ]
+            #     }
+            # },
         ]
         steps.extend([{"run": l} for l in self.install_steps])
         # TODO (ydshieh): Remove this line after the next release (the one after 2023/06/19) of `huggingface_hub`
