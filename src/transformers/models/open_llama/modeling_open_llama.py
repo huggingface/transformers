@@ -249,9 +249,6 @@ class OpenLlamaAttention(nn.Module):
                 attn_weights = attn_weights + attention_mask
                 attn_weights = torch.max(
                     attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
-                )
-                attn_weights = torch.max(
-                    attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
                 ).to(torch.float16)
 
             # upcast attention to fp32
