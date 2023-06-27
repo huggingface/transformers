@@ -385,7 +385,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
             for is_user, text in conversation.iter_texts()
         ]
         prompt = (
-            "{self.eos_token}{self.bos_token}\n"
+            f"{self.eos_token}{self.bos_token}\n"
             + "\n{self.bos_token}\n".join(all_responses)
             + "\n{self.bos_token}\nBot:\n"
         )
