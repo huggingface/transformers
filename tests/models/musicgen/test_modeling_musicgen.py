@@ -490,7 +490,7 @@ class MusicgenTester:
             num_codebooks=self.num_codebooks,
             tie_word_embeddings=False,
         )
-        config = MusicgenConfig.from_sub_model_configs(text_encoder_config, audio_encoder_config, decoder_config)
+        config = MusicgenConfig.from_sub_models_config(text_encoder_config, audio_encoder_config, decoder_config)
         return config
 
     def prepare_config_and_inputs_for_common(self):

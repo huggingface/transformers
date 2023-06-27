@@ -163,7 +163,7 @@ class MusicgenConfig(PretrainedConfig):
     >>> audio_encoder_config = EncodecConfig()
     >>> decoder_config = MusicgenDecoderConfig()
 
-    >>> configuration = MusicgenConfig.from_sub_model_configs(
+    >>> configuration = MusicgenConfig.from_sub_models_config(
     ...     text_encoder_config, audio_encoder_config, decoder_config
     ... )
 
@@ -206,7 +206,7 @@ class MusicgenConfig(PretrainedConfig):
         self.is_encoder_decoder = True
 
     @classmethod
-    def from_sub_model_configs(
+    def from_sub_models_config(
         cls,
         text_encoder_config: PretrainedConfig,
         audio_encoder_config: PretrainedConfig,
