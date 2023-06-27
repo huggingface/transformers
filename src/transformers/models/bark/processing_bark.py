@@ -129,7 +129,7 @@ class BarkProcessor(ProcessorMixin):
 
         super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
-    def _validate_voice_preset_dict(cls, voice_preset: Optional[dict] = None):
+    def _validate_voice_preset_dict(self, voice_preset: Optional[dict] = None):
         if voice_preset is None:
             return
         for key in ["semantic_prompt", "coarse_prompt", "fine_prompt"]:
@@ -137,10 +137,10 @@ class BarkProcessor(ProcessorMixin):
                 raise ValueError(f"Voice preset unrecognized, missing {key} as a key.")
 
             if not isinstance(voice_preset[key], np.ndarray):
-                raise ValueError(f"{key} voice preset must be a {str(cls.preset_shape[key])}D ndarray.")
+                raise ValueError(f"{key} voice preset must be a {str(self.preset_shape[key])}D ndarray.")
 
-            if len(voice_preset[key].shape) != cls.preset_shape[key]:
-                raise ValueError(f"{key} voice preset must be a {str(cls.preset_shape[key])}D ndarray.")
+            if len(voice_preset[key].shape) != self.preset_shape[key]:
+                raise ValueError(f"{key} voice preset must be a {str(self.preset_shape[key])}D ndarray.")
 
     def __call__(
         self,
@@ -165,8 +165,9 @@ class BarkProcessor(ProcessorMixin):
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             voice_preset (`str`, `Dict[np.ndarray]`):
-                The voice preset, i.e the speaker embeddings. It can either be a valid voice_preset name, e.g `"en_speaker_1"`, 
-                or a directly a dictionnary of embeddings for each submodel of `Bark`. Or it can be a valid file name of a local `.npz` single voice preset.
+                The voice preset, i.e the speaker embeddings. It can either be a valid voice_preset name, e.g
+                `"en_speaker_1"`, or a directly a dictionnary of embeddings for each submodel of `Bark`. Or it can be a
+                valid file name of a local `.npz` single voice preset.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
