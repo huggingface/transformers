@@ -454,7 +454,7 @@ class VitsConvFlow(nn.Module):
             unnormalized_widths,
             unnormalized_heights,
             unnormalized_derivatives,
-            inverse=reverse,
+            reverse=reverse,
             tail_bound=self.tail_bound,
         )
 
@@ -471,7 +471,7 @@ class VitsConvFlow(nn.Module):
         unnormalized_widths,
         unnormalized_heights,
         unnormalized_derivatives,
-        inverse=False,
+        reverse=False,
         tail_bound=5.0,
         min_bin_width=1e-3,
         min_bin_height=1e-3,
@@ -481,7 +481,7 @@ class VitsConvFlow(nn.Module):
         outside_interval_mask = ~inside_interval_mask
 
         outputs = torch.zeros_like(inputs)
-        logabsdet = torch.zeros_like(inputs)
+        log_abs_det = torch.zeros_like(inputs)
         constant = np.log(np.exp(1 - min_derivative) - 1)
 
         unnormalized_derivatives = nn.functional.pad(unnormalized_derivatives, pad=(1, 1))
@@ -489,20 +489,20 @@ class VitsConvFlow(nn.Module):
         unnormalized_derivatives[..., -1] = constant
 
         outputs[outside_interval_mask] = inputs[outside_interval_mask]
-        logabsdet[outside_interval_mask] = 0.0
+        log_abs_det[outside_interval_mask] = 0.0
 
-        outputs[inside_interval_mask], logabsdet[inside_interval_mask] = VitsConvFlow._rational_quadratic_spline(
+        outputs[inside_interval_mask], log_abs_det[inside_interval_mask] = VitsConvFlow._rational_quadratic_spline(
             inputs=inputs[inside_interval_mask],
             unnormalized_widths=unnormalized_widths[inside_interval_mask, :],
             unnormalized_heights=unnormalized_heights[inside_interval_mask, :],
             unnormalized_derivatives=unnormalized_derivatives[inside_interval_mask, :],
-            inverse=inverse,
+            reverse=reverse,
             tail_bound=tail_bound,
             min_bin_width=min_bin_width,
             min_bin_height=min_bin_height,
             min_derivative=min_derivative,
         )
-        return outputs, logabsdet
+        return outputs, log_abs_det
 
     @staticmethod
     def _rational_quadratic_spline(
@@ -510,7 +510,7 @@ class VitsConvFlow(nn.Module):
         unnormalized_widths,
         unnormalized_heights,
         unnormalized_derivatives,
-        inverse,
+        reverse,
         tail_bound,
         min_bin_width,
         min_bin_height,
@@ -551,7 +551,7 @@ class VitsConvFlow(nn.Module):
         cumheights[..., -1] = top
         heights = cumheights[..., 1:] - cumheights[..., :-1]
 
-        bin_locations = cumheights if inverse else cumwidths
+        bin_locations = cumheights if reverse else cumwidths
         bin_locations[..., -1] += 1e-6
         bin_idx = torch.sum(inputs[..., None] >= bin_locations, dim=-1) - 1
         bin_idx = bin_idx[..., None]
@@ -568,14 +568,29 @@ class VitsConvFlow(nn.Module):
 
         input_heights = heights.gather(-1, bin_idx)[..., 0]
 
-        if inverse:
-            a = (inputs - input_cumheights) * (
-                input_derivatives + input_derivatives_plus_one - 2 * input_delta
-            ) + input_heights * (input_delta - input_derivatives)
-            b = input_heights * input_derivatives - (inputs - input_cumheights) * (
-                input_derivatives + input_derivatives_plus_one - 2 * input_delta
+        intermediate1 = input_derivatives + input_derivatives_plus_one - 2 * input_delta
+        if not reverse:
+            theta = (inputs - input_cumwidths) / input_bin_widths
+            theta_one_minus_theta = theta * (1 - theta)
+
+            numerator = input_heights * (input_delta * theta.pow(2) + input_derivatives * theta_one_minus_theta)
+            denominator = input_delta + intermediate1 * theta_one_minus_theta
+            outputs = input_cumheights + numerator / denominator
+
+            derivative_numerator = input_delta.pow(2) * (
+                input_derivatives_plus_one * theta.pow(2)
+                + 2 * input_delta * theta_one_minus_theta
+                + input_derivatives * (1 - theta).pow(2)
             )
-            c = -input_delta * (inputs - input_cumheights)
+            log_abs_det = torch.log(derivative_numerator) - 2 * torch.log(denominator)
+            return outputs, log_abs_det
+        else:
+            # find the roots of a quadratic equation
+            intermediate2 = inputs - input_cumheights
+            intermediate3 = intermediate2 * intermediate1
+            a = input_heights * (input_delta - input_derivatives) + intermediate3
+            b = input_heights * input_derivatives - intermediate3
+            c = -input_delta * intermediate2
 
             discriminant = b.pow(2) - 4 * a * c
             if not (discriminant >= 0).all():
@@ -585,33 +600,14 @@ class VitsConvFlow(nn.Module):
             outputs = root * input_bin_widths + input_cumwidths
 
             theta_one_minus_theta = root * (1 - root)
-            denominator = input_delta + (
-                (input_derivatives + input_derivatives_plus_one - 2 * input_delta) * theta_one_minus_theta
-            )
+            denominator = input_delta + intermediate1 * theta_one_minus_theta
             derivative_numerator = input_delta.pow(2) * (
                 input_derivatives_plus_one * root.pow(2)
                 + 2 * input_delta * theta_one_minus_theta
                 + input_derivatives * (1 - root).pow(2)
             )
-            logabsdet = torch.log(derivative_numerator) - 2 * torch.log(denominator)
-            return outputs, -logabsdet
-        else:
-            theta = (inputs - input_cumwidths) / input_bin_widths
-            theta_one_minus_theta = theta * (1 - theta)
-
-            numerator = input_heights * (input_delta * theta.pow(2) + input_derivatives * theta_one_minus_theta)
-            denominator = input_delta + (
-                (input_derivatives + input_derivatives_plus_one - 2 * input_delta) * theta_one_minus_theta
-            )
-            outputs = input_cumheights + numerator / denominator
-
-            derivative_numerator = input_delta.pow(2) * (
-                input_derivatives_plus_one * theta.pow(2)
-                + 2 * input_delta * theta_one_minus_theta
-                + input_derivatives * (1 - theta).pow(2)
-            )
-            logabsdet = torch.log(derivative_numerator) - 2 * torch.log(denominator)
-            return outputs, logabsdet
+            log_abs_det = torch.log(derivative_numerator) - 2 * torch.log(denominator)
+            return outputs, -log_abs_det
 
 
 class VitsElementwiseAffine(nn.Module):
