@@ -50,17 +50,62 @@ VITS_PRETRAINED_MODEL_ARCHIVE_LIST = [
 @dataclass
 class VitsModelOutput(ModelOutput):
     """
-    Describes the outputs for the VITS model.
+    Describes the outputs for the VITS model, with potential hidden states and attentions.
 
     Args:
         audio (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Audio waveform predicted by the model.
         sequence_lengths  (`torch.FloatTensor` of shape `(batch_size,)`):
             The length in samples of each element in the `audio` batch.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
     """
 
     audio: torch.FloatTensor = None
     sequence_lengths: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class VitsTextEncoderOutput(ModelOutput):
+    """
+    Describes the outputs for the VITS text encoder model, with potential hidden states and attentions.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        means (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            The predicted mean values.
+        log_variances (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            The predicted log-variance values.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    means: torch.FloatTensor = None
+    log_variances: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
@@ -1148,21 +1193,46 @@ class VitsTextEncoder(nn.Module):
         input_ids: torch.Tensor,
         padding_mask: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
-    ):
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = True,
+    ) -> Union[Tuple[torch.FloatTensor], VitsTextEncoderOutput]:
         hidden_states = self.embed_tokens(input_ids) * math.sqrt(self.config.hidden_size)
 
         encoder_outputs = self.encoder(
             hidden_states=hidden_states,
             padding_mask=padding_mask,
             attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
 
         stats = self.project(last_hidden_state.transpose(1, 2)).transpose(1, 2) * padding_mask
         means, log_variances = torch.split(stats, self.config.flow_size, dim=2)
 
-        return (last_hidden_state, means, log_variances)
+        if return_dict:
+            return VitsTextEncoderOutput(
+                last_hidden_state=last_hidden_state,
+                means=means,
+                log_variances=log_variances,
+                hidden_states=encoder_outputs.hidden_states,
+                attentions=encoder_outputs.attentions,
+            )
+
+        return tuple(
+            v
+            for v in [
+                last_hidden_state,
+                means,
+                log_variances,
+                encoder_outputs.hidden_states,
+                encoder_outputs.attentions,
+            ]
+            if v is not None
+        )
 
 
 class VitsPreTrainedModel(PreTrainedModel):
@@ -1245,6 +1315,12 @@ VITS_INPUTS_DOCSTRING = r"""
             How random the duration prediction is. Larger values create more variation in the predicted durations.
         speaker_id (`int`, *optional*):
             Which speaker embedding to use. Only used for multispeaker models.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -1289,6 +1365,8 @@ class VitsModel(VitsPreTrainedModel):
         noise_scale: float = 0.667,
         noise_scale_duration: float = 0.8,
         speaker_id: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.FloatTensor] = None,
     ) -> Union[Tuple[torch.FloatTensor], VitsModelOutput]:
@@ -1317,6 +1395,10 @@ class VitsModel(VitsPreTrainedModel):
         torch.Size([1, 33280])
         ```
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if attention_mask is not None:
@@ -1327,12 +1409,18 @@ class VitsModel(VitsPreTrainedModel):
         # Workaround for tokenizer: filter out padding tokens.
         input_ids[input_ids >= self.config.vocab_size] = 0
 
-        hidden_states, means_prior, log_variances_prior = self.text_encoder(
-            input_ids, input_padding_mask, attention_mask
+        text_encoder_output = self.text_encoder(
+            input_ids=input_ids,
+            padding_mask=input_padding_mask,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
         )
-
-        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = text_encoder_output.last_hidden_state.transpose(1, 2)
         input_padding_mask = input_padding_mask.transpose(1, 2)
+        means_prior = text_encoder_output.means
+        log_variances_prior = text_encoder_output.log_variances
 
         if self.config.num_speakers > 1:
             if speaker_id is None:
@@ -1384,6 +1472,20 @@ class VitsModel(VitsPreTrainedModel):
         sequence_lengths = predicted_lengths * np.prod(self.config.upsample_rates)
 
         if return_dict:
-            return VitsModelOutput(audio=predicted_audio, sequence_lengths=sequence_lengths)
+            return VitsModelOutput(
+                audio=predicted_audio,
+                sequence_lengths=sequence_lengths,
+                hidden_states=text_encoder_output.hidden_states,
+                attentions=text_encoder_output.attentions,
+            )
 
-        return (predicted_audio, sequence_lengths)
+        return tuple(
+            v
+            for v in [
+                predicted_audio,
+                sequence_lengths,
+                text_encoder_output.hidden_states,
+                text_encoder_output.attentions,
+            ]
+            if v is not None
+        )
