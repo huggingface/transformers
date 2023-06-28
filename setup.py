@@ -107,7 +107,7 @@ _deps = [
     "dataclasses",
     "datasets!=2.5.0",
     "decord==0.6.0",
-    "deepspeed>=0.8.3",
+    "deepspeed>=0.9.3",
     "diffusers",
     "dill<0.3.5",
     "evaluate>=0.2.0",
