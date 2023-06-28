@@ -12,6 +12,8 @@ if is_bitsandbytes_available():
     import torch
     import torch.nn as nn
 
+    from ..pytorch_utils import Conv1D
+
 if is_accelerate_available():
     from accelerate import init_empty_weights
     from accelerate.utils import find_tied_parameters
@@ -84,6 +86,11 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
             else:
                 new_value = torch.tensor(value, device="cpu")
 
+            # Support models using `Conv1D` in place of `nn.Linear` (e.g. gpt2) by transposing the weight matrix prior to quantization.
+            # Since weights are saved in the correct "orientation", we skip transposing when loading.
+            if issubclass(module.source_cls, Conv1D) and fp16_statistics is None:
+                new_value = new_value.T
+
             kwargs = old_value.__dict__
             if is_8bit:
                 new_value = bnb.nn.Int8Params(new_value, requires_grad=False, **kwargs).to(device)
@@ -122,14 +129,20 @@ def _replace_with_bnb_linear(
             current_key_name = []
         current_key_name.append(name)
 
-        if isinstance(module, nn.Linear) and name not in modules_to_not_convert:
+        if (isinstance(module, nn.Linear) or isinstance(module, Conv1D)) and name not in modules_to_not_convert:
             # Check if the current key is not in the `modules_to_not_convert`
             if not any(key in ".".join(current_key_name) for key in modules_to_not_convert):
                 with init_empty_weights():
+                    if isinstance(module, Conv1D):
+                        in_features, out_features = module.weight.shape
+                    else:
+                        in_features = module.in_features
+                        out_features = module.out_features
+
                     if quantization_config.quantization_method() == "llm_int8":
                         model._modules[name] = bnb.nn.Linear8bitLt(
-                            module.in_features,
-                            module.out_features,
+                            in_features,
+                            out_features,
                             module.bias is not None,
                             has_fp16_weights=quantization_config.llm_int8_has_fp16_weight,
                             threshold=quantization_config.llm_int8_threshold,
@@ -143,14 +156,16 @@ def _replace_with_bnb_linear(
                             pass
                         else:
                             model._modules[name] = bnb.nn.Linear4bit(
-                                module.in_features,
-                                module.out_features,
+                                in_features,
+                                out_features,
                                 module.bias is not None,
                                 quantization_config.bnb_4bit_compute_dtype,
                                 compress_statistics=quantization_config.bnb_4bit_use_double_quant,
                                 quant_type=quantization_config.bnb_4bit_quant_type,
                             )
                             has_been_replaced = True
+                    # Store the module class in case we need to transpose the weight later
+                    model._modules[name].source_cls = type(module)
                     # Force requires grad to False to avoid unexpected errors
                     model._modules[name].requires_grad_(False)
         if len(list(module.children())) > 0:
@@ -200,7 +215,6 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
     if not has_been_replaced:
         logger.warning(
             "You are loading your model in 8bit or 4bit but no linear modules were found in your model."
-            " this can happen for some architectures such as gpt2 that uses Conv1D instead of Linear layers."
             " Please double check your model architecture, or submit an issue on github if you think this is"
             " a bug."
         )
