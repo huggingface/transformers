@@ -372,6 +372,20 @@ class EncodecEuclideanCodebook(nn.Module):
         quantize = nn.functional.embedding(embed_ind, self.embed)
         return quantize
 
+    def forward(self, hidden_states):
+        shape = hidden_states.shape
+
+        hidden_states = hidden_states.reshape((-1, shape[-1]))
+
+        embed_ind = self.quantize(hidden_states)
+        embed_ind = embed_ind.view(*shape[:-1])
+
+        quantize = nn.functional.embedding(embed_ind, self.embed)
+
+        # TODO: Implement code expiration and exponential moving average updates for training.
+
+        return embed_ind, quantize
+
 
 class EncodecVectorQuantization(nn.Module):
     """
@@ -392,6 +406,25 @@ class EncodecVectorQuantization(nn.Module):
         quantize = quantize.permute(0, 2, 1)
         return quantize
 
+    def forward(self, hidden_states):
+        device = hidden_states.device
+
+        hidden_states = hidden_states.permute(0, 2, 1)
+
+        embed_ind, quantize = self.codebook(hidden_states)
+
+        loss = torch.tensor([0.0], device=device, requires_grad=self.training)
+
+        if self.training:
+            # Pass the gradients straight through the quantization, by directly linking the gradients of the input
+            # embed_ind with the output quantize in the computation graph.
+            quantize = embed_ind + (quantize - embed_ind).detach()
+
+            commitment_loss = nn.functional.mse_loss(quantize.detach(), embed_ind)
+            loss = loss + commitment_loss
+
+        quantize = quantize.permute(0, 2, 1)
+        return loss, embed_ind, quantize
 
 class EncodecResidualVectorQuantizer(nn.Module):
     """Residual Vector Quantizer."""
@@ -436,6 +469,23 @@ class EncodecResidualVectorQuantizer(nn.Module):
             quantized_out = quantized_out + quantized
         return quantized_out
 
+    def forward(self, embeddings: torch.Tensor, bandwidth: Optional[float] = None):
+        residual = embeddings
+        num_quantizers = self.get_num_quantizers_for_bandwidth(bandwidth)
+
+        quantized_out = 0.0
+        all_losses = []
+        all_indices = []
+
+        for layer in self.layers[:num_quantizers]:
+            quantized, embed_ind, loss = layer(residual)
+            residual = residual - quantized.detach()
+            quantized_out = quantized_out + quantized
+            all_indices.append(embed_ind)
+            all_losses.append(loss)
+
+        out_losses, out_indices = map(torch.stack, (all_losses, all_indices))
+        return out_losses, out_indices, quantized_out
 
 class EncodecPreTrainedModel(PreTrainedModel):
     """
