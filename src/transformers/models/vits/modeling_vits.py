@@ -177,8 +177,8 @@ class VitsPosteriorEncoder(nn.Module):
         inputs = self.wavenet(inputs, padding_mask, global_conditioning)
         stats = self.conv_proj(inputs) * padding_mask
         mean, log_stddev = torch.split(stats, self.out_channels, dim=1)
-        z = (mean + torch.randn_like(mean) * torch.exp(log_stddev)) * padding_mask
-        return z, mean, log_stddev
+        sampled = (mean + torch.randn_like(mean) * torch.exp(log_stddev)) * padding_mask
+        return sampled, mean, log_stddev
 
 
 # Copied from transformers.models.speecht5.modeling_speecht5.HifiGanResidualBlock
@@ -1380,10 +1380,10 @@ class VitsModel(VitsPreTrainedModel):
         means_prior = torch.matmul(attn.squeeze(1), means_prior).transpose(1, 2)
         log_variances_prior = torch.matmul(attn.squeeze(1), log_variances_prior).transpose(1, 2)
 
-        z_p = means_prior + torch.randn_like(means_prior) * torch.exp(log_variances_prior) * noise_scale
-        z = self.flow(z_p, output_padding_mask, speaker_embeddings, reverse=True)
+        latents_prior = means_prior + torch.randn_like(means_prior) * torch.exp(log_variances_prior) * noise_scale
+        latents = self.flow(latents_prior, output_padding_mask, speaker_embeddings, reverse=True)
 
-        predicted_audio = self.decoder((z * output_padding_mask), speaker_embeddings)
+        predicted_audio = self.decoder((latents * output_padding_mask), speaker_embeddings)
         predicted_audio = predicted_audio.squeeze(1)
         sequence_lengths = predicted_lengths * np.prod(self.config.upsample_rates)
 
