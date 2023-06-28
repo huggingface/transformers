@@ -17,7 +17,9 @@
 """
 
 import os
+import warnings
 from pathlib import Path
+from typing import Optional, Union
 
 from .dynamic_module_utils import custom_object_save
 from .tokenization_utils_base import PreTrainedTokenizerBase
@@ -151,7 +153,16 @@ class ProcessorMixin(PushToHubMixin):
             )
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Union[str, os.PathLike],
+        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: Optional[Union[str, bool]] = None,
+        revision: str = "main",
+        **kwargs,
+    ):
         r"""
         Instantiate a processor associated with a pretrained model.
 
@@ -181,6 +192,26 @@ class ProcessorMixin(PushToHubMixin):
                 [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] and
                 [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`].
         """
+        kwargs["cache_dir"] = cache_dir
+        kwargs["force_download"] = force_download
+        kwargs["local_files_only"] = local_files_only
+        kwargs["revision"] = revision
+
+        use_auth_token = kwargs.pop("use_auth_token", None)
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
+
+        if token is not None:
+            # change to `token` in a follow-up PR
+            kwargs["use_auth_token"] = token
+
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         return cls(*args)
 

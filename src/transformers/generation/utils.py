@@ -56,6 +56,7 @@ from .logits_process import (
     NoRepeatNGramLogitsProcessor,
     PrefixConstrainedLogitsProcessor,
     RepetitionPenaltyLogitsProcessor,
+    SequenceBiasLogitsProcessor,
     SuppressTokensAtBeginLogitsProcessor,
     SuppressTokensLogitsProcessor,
     TemperatureLogitsWarper,
@@ -842,8 +843,9 @@ class GenerationMixin:
         # instantiate processors list
         processors = LogitsProcessorList()
 
-        # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
-        # all samplers can be found in `generation_utils_samplers.py`
+        if generation_config.sequence_bias is not None:
+            processors.append(SequenceBiasLogitsProcessor(sequence_bias=generation_config.sequence_bias))
+
         if generation_config.diversity_penalty is not None and generation_config.diversity_penalty > 0.0:
             processors.append(
                 HammingDiversityLogitsProcessor(
@@ -1666,6 +1668,11 @@ class GenerationMixin:
 
             if generation_config.num_beams % generation_config.num_beam_groups != 0:
                 raise ValueError("`num_beams` should be divisible by `num_beam_groups` for group beam search.")
+
+            if generation_config.diversity_penalty == 0.0:
+                raise ValueError(
+                    "`diversity_penalty` should be greater than `0.0`, otherwise your beam groups will be identical."
+                )
 
             if stopping_criteria.max_length is None:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
@@ -3520,10 +3527,10 @@ class GenerationMixin:
             else self.generation_config.return_dict_in_generate
         )
 
-        batch_size = len(beam_scorer._beam_hyps)
         num_beams = beam_scorer.num_beams
         num_beam_groups = beam_scorer.num_beam_groups
         num_sub_beams = num_beams // num_beam_groups
+        batch_size = len(beam_scorer._beam_hyps) // num_beam_groups
         device = input_ids.device
 
         batch_beam_size, cur_len = input_ids.shape
@@ -3646,6 +3653,7 @@ class GenerationMixin:
                     pad_token_id=pad_token_id,
                     eos_token_id=eos_token_id,
                     beam_indices=process_beam_indices,
+                    group_index=beam_group_idx,
                 )
                 beam_scores[batch_group_indices] = beam_outputs["next_beam_scores"]
                 beam_next_tokens = beam_outputs["next_beam_tokens"]

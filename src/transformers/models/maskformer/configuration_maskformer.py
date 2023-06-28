@@ -129,19 +129,18 @@ class MaskFormerConfig(PretrainedConfig):
                 drop_path_rate=0.3,
                 out_features=["stage1", "stage2", "stage3", "stage4"],
             )
-        else:
-            # verify that the backbone is supported
-            backbone_model_type = (
-                backbone_config.pop("model_type") if isinstance(backbone_config, dict) else backbone_config.model_type
+
+        if isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.pop("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
+
+        # verify that the backbone is supported
+        if backbone_config.model_type not in self.backbones_supported:
+            logger.warning_once(
+                f"Backbone {backbone_config.model_type} is not a supported model and may not be compatible with MaskFormer. "
+                f"Supported model types: {','.join(self.backbones_supported)}"
             )
-            if backbone_model_type not in self.backbones_supported:
-                raise ValueError(
-                    f"Backbone {backbone_model_type} not supported, please use one of"
-                    f" {','.join(self.backbones_supported)}"
-                )
-            if isinstance(backbone_config, dict):
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
 
         if decoder_config is None:
             # fall back to https://huggingface.co/facebook/detr-resnet-50

@@ -425,6 +425,8 @@
         title: Transformer XL
       - local: model_doc/ul2
         title: UL2
+      - local: model_doc/umt5
+        title: UMT5
       - local: model_doc/xmod
         title: X-MOD
       - local: model_doc/xglm
@@ -608,6 +610,8 @@
         title: GIT
       - local: model_doc/groupvit
         title: GroupViT
+      - local: model_doc/instructblip
+        title: InstructBLIP
       - local: model_doc/layoutlm
         title: LayoutLM
       - local: model_doc/layoutlmv2

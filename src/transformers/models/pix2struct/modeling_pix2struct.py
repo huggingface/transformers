@@ -1597,14 +1597,6 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
     config_class = Pix2StructConfig
     main_input_name = "flattened_patches"
-
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.embed_tokens.weight",
-        r"decoder.embed_tokens.weight",
-    ]
-    _keys_to_ignore_on_load_unexpected = [
-        r"decoder.layer.0.layer.1.EncDecAttention.relative_attention_bias.weight",
-    ]
     _tied_weights_keys = ["decoder.lm_head.weight"]
 
     def __init__(self, config: Pix2StructConfig):

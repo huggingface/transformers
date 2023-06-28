@@ -92,7 +92,7 @@ Choose from 1, 2 [1]:
 
 Once the command has finished, you should have a total of 7 new files spread across the repository:
 ```
-docs/source/model_doc/<model_name>.mdx
+docs/source/model_doc/<model_name>.md
 src/transformers/models/<model_name>/configuration_<model_name>.py
 src/transformers/models/<model_name>/modeling_<model_name>.py
 src/transformers/models/<model_name>/modeling_tf_<model_name>.py
@@ -242,7 +242,7 @@ make fix-copies
 ```
 
 and then you can start tweaking your model. You should:
-- fill the doc file at `docs/source/model_doc/model_name.mdx`
+- fill the doc file at `docs/source/model_doc/model_name.md`
 - tweak the configuration and modeling files to your need
 
 Once you're done, you can run the tests to ensure that they all pass:

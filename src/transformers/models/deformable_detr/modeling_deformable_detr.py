@@ -1823,7 +1823,6 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
 )
 class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _keys_to_ignore_on_load_missing = [r"bbox_embed\.[1-9]\d*", r"class_embed\.[1-9]\d*"]
     _tied_weights_keys = [r"bbox_embed\.[1-9]\d*", r"class_embed\.[1-9]\d*"]
 
     def __init__(self, config: DeformableDetrConfig):
