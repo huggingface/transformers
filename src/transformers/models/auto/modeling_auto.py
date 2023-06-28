@@ -573,6 +573,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertForMaskedLM"),
         ("mobilebert", "MobileBertForMaskedLM"),
         ("mpnet", "MPNetForMaskedLM"),
+        ("mra", "MraForMaskedLM"),
         ("mvp", "MvpForConditionalGeneration"),
         ("nezha", "NezhaForMaskedLM"),
         ("nystromformer", "NystromformerForMaskedLM"),
