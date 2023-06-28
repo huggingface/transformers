@@ -419,10 +419,11 @@ class FalconDecoderLayer(nn.Module):
         attention_output = attn_outputs[0]
 
         if not self.config.new_decoder_architecture:
-            residual = dropout_add(attention_output, residual, self.config.attention_dropout, training=self.training)
             if self.config.parallel_attn:
                 ln_mlp = ln_attn
             else:
+                residual = dropout_add(attention_output, residual, self.config.attention_dropout,
+                                       training=self.training)
                 ln_mlp = self.post_attention_layernorm(residual)
 
 
