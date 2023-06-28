@@ -17,6 +17,7 @@
 import copy
 import json
 import os
+import warnings
 from typing import Any, Dict, Optional, Union
 
 from .. import __version__
@@ -142,9 +143,8 @@ class GenerationConfig(PushToHubMixin):
         no_repeat_ngram_size (`int`, *optional*, defaults to 0):
             If set to int > 0, all ngrams of that size can only occur once.
         bad_words_ids(`List[List[int]]`, *optional*):
-            List of token ids that are not allowed to be generated. In order to get the token ids of the words that
-            should not appear in the generated text, use `tokenizer(bad_words, add_prefix_space=True,
-            add_special_tokens=False).input_ids`.
+            List of list of token ids that are not allowed to be generated. Check
+            [`~generation.NoBadWordsLogitsProcessor`] for further documentation and examples.
         force_words_ids(`List[List[int]]` or `List[List[List[int]]]`, *optional*):
             List of token ids that must be generated. If given a `List[List[int]]`, this is treated as a simple list of
             words that must be included, the opposite to `bad_words_ids`. If given `List[List[List[int]]]`, this
@@ -181,6 +181,10 @@ class GenerationConfig(PushToHubMixin):
             A list of pairs of integers which indicates a mapping from generation indices to token indices that will be
             forced before sampling. For example, `[[1, 123]]` means the second generated token will always be a token
             of index 123.
+        sequence_bias (`Dict[Tuple[int], float]`, *optional*)):
+            Dictionary that maps a sequence of tokens to its bias term. Positive biases increase the odds of the
+            sequence being selected, while negative biases do the opposite. Check
+            [`~generation.SequenceBiasLogitsProcessor`] for further documentation and examples.
 
         > Parameters that define the output variables of `generate`
 
@@ -260,6 +264,7 @@ class GenerationConfig(PushToHubMixin):
         self.suppress_tokens = kwargs.pop("suppress_tokens", None)
         self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
         self.forced_decoder_ids = kwargs.pop("forced_decoder_ids", None)
+        self.sequence_bias = kwargs.pop("sequence_bias", None)
 
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
@@ -378,6 +383,11 @@ class GenerationConfig(PushToHubMixin):
         cls,
         pretrained_model_name: Union[str, os.PathLike],
         config_file_name: Optional[Union[str, os.PathLike]] = None,
+        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: Optional[Union[str, bool]] = None,
+        revision: str = "main",
         **kwargs,
     ) -> "GenerationConfig":
         r"""
@@ -406,7 +416,7 @@ class GenerationConfig(PushToHubMixin):
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            use_auth_token (`str` or `bool`, *optional*):
+            token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
                 the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
@@ -466,17 +476,23 @@ class GenerationConfig(PushToHubMixin):
         ```"""
         config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
 
-        cache_dir = kwargs.pop("cache_dir", None)
-        force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
-        local_files_only = kwargs.pop("local_files_only", False)
-        revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
 
         user_agent = {"file_type": "config", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -505,7 +521,7 @@ class GenerationConfig(PushToHubMixin):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
-                    use_auth_token=use_auth_token,
+                    use_auth_token=token,
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,

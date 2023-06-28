@@ -17,7 +17,6 @@
 
 import copy
 import math
-import random
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -1933,8 +1932,13 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
+            to_drop = False
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    to_drop = True
+
+            if to_drop:
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
@@ -2276,9 +2280,10 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
@@ -2353,7 +2358,6 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
     BIGBIRD_PEGASUS_START_DOCSTRING,
 )
 class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: BigBirdPegasusConfig):
@@ -2486,12 +2490,7 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
 class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
     base_model_prefix = "model"
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
-    _keys_to_ignore_on_load_missing = [
-        "final_logits_bias",
-        "lm_head.weight",
-        "encoder.embed_tokens.weight",
-        "decoder.embed_tokens.weight",
-    ]
+    _keys_to_ignore_on_load_missing = ["final_logits_bias"]
 
     def __init__(self, config: BigBirdPegasusConfig):
         super().__init__(config)
@@ -2664,7 +2663,6 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
     BIGBIRD_PEGASUS_START_DOCSTRING,
 )
 class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: BigBirdPegasusConfig, **kwargs):
@@ -2794,7 +2792,6 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
     BIGBIRD_PEGASUS_START_DOCSTRING,
 )
 class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config):
@@ -2927,7 +2924,6 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
 
 
 class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

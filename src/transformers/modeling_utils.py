@@ -15,6 +15,7 @@
 # limitations under the License.
 import collections
 import gc
+import importlib.metadata
 import inspect
 import json
 import os
@@ -73,7 +74,7 @@ from .utils import (
     replace_return_docstrings,
 )
 from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
-from .utils.import_utils import ENV_VARS_TRUE_VALUES, importlib_metadata, is_sagemaker_mp_enabled
+from .utils.import_utils import ENV_VARS_TRUE_VALUES, is_sagemaker_mp_enabled
 from .utils.quantization_config import BitsAndBytesConfig
 from .utils.versions import require_version_core
 
@@ -305,7 +306,12 @@ def shard_checkpoint(
     storage_id_to_block = {}
 
     for key, weight in state_dict.items():
-        storage_id = id_tensor_storage(weight)
+        # when bnb serialization is used the weights in the state dict can be strings
+        # check: https://github.com/huggingface/transformers/pull/24416 for more details
+        if isinstance(weight, str):
+            continue
+        else:
+            storage_id = id_tensor_storage(weight)
 
         # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
         if storage_id in storage_id_to_block:
@@ -315,8 +321,9 @@ def shard_checkpoint(
 
         weight_size = weight.numel() * dtype_byte_size(weight.dtype)
 
-        # If this weight is going to tip up over the maximal size, we split.
-        if last_block_size + weight_size > max_shard_size:
+        # If this weight is going to tip up over the maximal size, we split, but only if we have put at least one
+        # weight in the current shard.
+        if last_block_size + weight_size > max_shard_size and len(sharded_state_dicts[-1]) > 0:
             sharded_state_dicts.append({})
             last_block_size = 0
 
@@ -1914,7 +1921,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return super().float(*args)
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
+        *model_args,
+        config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None,
+        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        ignore_mismatched_sizes: bool = False,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: Optional[Union[str, bool]] = None,
+        revision: str = "main",
+        use_safetensors: bool = None,
+        **kwargs,
+    ):
         r"""
         Instantiate a pretrained pytorch model from a pre-trained model configuration.
 
@@ -1995,7 +2015,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(`bool`, *optional*, defaults to `False`):
                 Whether or not to only look at local files (i.e., do not try to download the model).
-            use_auth_token (`str` or `bool`, *optional*):
+            token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
                 the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
@@ -2085,6 +2105,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             variant (`str`, *optional*):
                 If specified load weights from `variant` filename, *e.g.* pytorch_model.<variant>.bin. `variant` is
                 ignored when using `from_tf` or `from_flax`.
+            use_safetensors (`bool`, *optional*, defaults to `None`):
+                Whether or not to use `safetensors` checkpoints. Defaults to `None`. If not specified and `safetensors`
+                is not installed, it will be set to `False`.
 
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
@@ -2142,19 +2165,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Currently, it can't handle deepspeed ZeRO stage 3 and ignores loading errors
 
         """
-        config = kwargs.pop("config", None)
         state_dict = kwargs.pop("state_dict", None)
-        cache_dir = kwargs.pop("cache_dir", None)
         from_tf = kwargs.pop("from_tf", False)
         from_flax = kwargs.pop("from_flax", False)
-        ignore_mismatched_sizes = kwargs.pop("ignore_mismatched_sizes", False)
-        force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
-        local_files_only = kwargs.pop("local_files_only", False)
         use_auth_token = kwargs.pop("use_auth_token", None)
-        revision = kwargs.pop("revision", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         _ = kwargs.pop("mirror", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
@@ -2172,10 +2189,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
-        use_safetensors = kwargs.pop("use_safetensors", None if is_safetensors_available() else False)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
+
+        if use_safetensors is None and not is_safetensors_available():
+            use_safetensors = False
 
         if is_bitsandbytes_available():
-            is_8bit_serializable = version.parse(importlib_metadata.version("bitsandbytes")) > version.parse("0.37.2")
+            is_8bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) > version.parse("0.37.2")
         else:
             is_8bit_serializable = False
 
@@ -2302,7 +2331,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 resume_download=resume_download,
                 proxies=proxies,
                 local_files_only=local_files_only,
-                use_auth_token=use_auth_token,
+                token=token,
                 revision=revision,
                 subfolder=subfolder,
                 _from_auto=from_auto_class,
@@ -2481,7 +2510,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         "proxies": proxies,
                         "resume_download": resume_download,
                         "local_files_only": local_files_only,
-                        "use_auth_token": use_auth_token,
+                        "use_auth_token": token,
                         "user_agent": user_agent,
                         "revision": revision,
                         "subfolder": subfolder,
@@ -2526,7 +2555,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         has_file_kwargs = {
                             "revision": revision,
                             "proxies": proxies,
-                            "use_auth_token": use_auth_token,
+                            "use_auth_token": token,
                         }
                         if has_file(pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **has_file_kwargs):
                             raise EnvironmentError(
@@ -2587,7 +2616,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 proxies=proxies,
                 resume_download=resume_download,
                 local_files_only=local_files_only,
-                use_auth_token=use_auth_token,
+                use_auth_token=token,
                 user_agent=user_agent,
                 revision=revision,
                 subfolder=subfolder,
@@ -2710,7 +2739,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 modules_to_not_convert.extend(keys_on_cpu)
 
-            supports_4bit = version.parse(importlib_metadata.version("bitsandbytes")) >= version.parse("0.39.0")
+            supports_4bit = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.39.0")
 
             if load_in_4bit and not supports_4bit:
                 raise ValueError(
@@ -2723,7 +2752,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
             # training in 8-bit is only available in 0.37.0+
             model._is_quantized_training_enabled = version.parse(
-                importlib_metadata.version("bitsandbytes")
+                importlib.metadata.version("bitsandbytes")
             ) >= version.parse("0.37.0")
 
             model.config.quantization_config = quantization_config
@@ -2758,7 +2787,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             target_dtype = torch_dtype
 
             if load_in_4bit:
-                if version.parse(importlib_metadata.version("accelerate")) > version.parse("0.19.0"):
+                if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.19.0"):
                     from accelerate.utils import CustomDtype
 
                     target_dtype = CustomDtype.INT4
@@ -2910,7 +2939,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     resume_download=resume_download,
                     proxies=proxies,
                     local_files_only=local_files_only,
-                    use_auth_token=use_auth_token,
+                    token=token,
                     revision=revision,
                     subfolder=subfolder,
                     _from_auto=from_auto_class,
@@ -3017,15 +3046,30 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             expected_keys = [".".join([prefix, s]) for s in expected_keys]
 
         missing_keys = list(set(expected_keys) - set(loaded_keys))
-        unexpected_keys = list(set(loaded_keys) - set(expected_keys))
+        unexpected_keys = set(loaded_keys) - set(expected_keys)
+        # Remove nonpersistent buffers from unexpected keys: they are not in the state dict but will be in the model
+        # buffers
+        model_buffers = {n for n, _ in model.named_buffers()}
+        if remove_prefix_from_model:
+            model_buffers = {key[len(_prefix) :] if key.startswith(_prefix) else key for key in model_buffers}
+        elif add_prefix_to_model:
+            model_buffers = {".".join([prefix, key]) for key in model_buffers}
+        unexpected_keys = list(unexpected_keys - model_buffers)
 
-        if is_accelerate_available():
-            model.tie_weights()
-            tied_params = find_tied_parameters(model)
-        else:
-            tied_params = []
+        model.tie_weights()
+        ptrs = collections.defaultdict(list)
+        for name, tensor in model.state_dict().items():
+            id_tensor = id_tensor_storage(tensor) if tensor.device != torch.device("meta") else id(tensor)
+            ptrs[id_tensor].append(name)
+
+        # These are all the pointers of shared tensors.
+        tied_params = [names for _, names in ptrs.items() if len(names) > 1]
 
         for group in tied_params:
+            if remove_prefix_from_model:
+                group = [key[len(_prefix) :] if key.startswith(_prefix) else key for key in group]
+            elif add_prefix_to_model:
+                group = [".".join([prefix, key]) for key in group]
             missing_in_group = [k for k in missing_keys if k in group]
             if len(missing_in_group) > 0 and len(missing_in_group) < len(group):
                 missing_keys = [k for k in missing_keys if k not in missing_in_group]

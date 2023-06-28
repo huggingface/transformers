@@ -15,7 +15,6 @@
 """ PyTorch MBART model."""
 import copy
 import math
-import random
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -819,8 +818,13 @@ class MBartEncoder(MBartPreTrainedModel):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
+            to_drop = False
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    to_drop = True
+
+            if to_drop:
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
@@ -1074,9 +1078,10 @@ class MBartDecoder(MBartPreTrainedModel):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
@@ -1151,7 +1156,6 @@ class MBartDecoder(MBartPreTrainedModel):
     MBART_START_DOCSTRING,
 )
 class MBartModel(MBartPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: MBartConfig):
@@ -1272,14 +1276,7 @@ class MBartModel(MBartPreTrainedModel):
 )
 class MBartForConditionalGeneration(MBartPreTrainedModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [
-        r"final_logits_bias",
-        r"encoder.version",
-        r"decoder.version",
-        r"lm_head.weight",
-        "encoder.embed_tokens.weight",
-        "decoder.embed_tokens.weight",
-    ]
+    _keys_to_ignore_on_load_missing = ["final_logits_bias"]
     _tied_weights_keys = ["model.encoder.embed_tokens.weight", "model.decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: MBartConfig):
@@ -1447,7 +1444,6 @@ class MBartForConditionalGeneration(MBartPreTrainedModel):
     MBART_START_DOCSTRING,
 )
 class MBartForSequenceClassification(MBartPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
     _tied_weights_keys = ["model.encoder.embed_tokens.weight", "model.decoder.embed_tokens.weight"]
 
     def __init__(self, config: MBartConfig, **kwargs):
@@ -1577,7 +1573,6 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
     MBART_START_DOCSTRING,
 )
 class MBartForQuestionAnswering(MBartPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
     _tied_weights_keys = ["model.encoder.embed_tokens.weight", "model.decoder.embed_tokens.weight"]
 
     def __init__(self, config):
@@ -1711,7 +1706,6 @@ class MBartDecoderWrapper(MBartPreTrainedModel):
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->MBart, facebook/bart-base->facebook/mbart-large-cc25
 class MBartForCausalLM(MBartPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
