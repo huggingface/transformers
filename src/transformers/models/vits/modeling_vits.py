@@ -1237,8 +1237,7 @@ class VitsPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vits"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
-
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = []
 
     def _init_weights(self, module):
         """Initialize the weights"""
