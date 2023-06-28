@@ -695,7 +695,7 @@ class VitsStochasticDurationPredictor(nn.Module):
         for _ in range(config.duration_predictor_num_flows):
             self.post_flows.append(VitsConvFlow(2, filter_channels, kernel_size, num_layers=3))
 
-    def forward(self, inputs, padding_mask, global_conditioning=None, w=None, reverse=False, noise_scale=1.0):
+    def forward(self, inputs, padding_mask, global_conditioning=None, durations=None, reverse=False, noise_scale=1.0):
         inputs = torch.detach(inputs)
         inputs = self.conv_pre(inputs)
 
@@ -707,52 +707,61 @@ class VitsStochasticDurationPredictor(nn.Module):
         inputs = self.conv_proj(inputs) * padding_mask
 
         if not reverse:
-            h_w = self.post_conv_pre(w)
-            h_w = self.post_conv_dds(h_w, padding_mask)
-            h_w = self.post_conv_proj(h_w) * padding_mask
+            hidden_states = self.post_conv_pre(durations)
+            hidden_states = self.post_conv_dds(hidden_states, padding_mask)
+            hidden_states = self.post_conv_proj(hidden_states) * padding_mask
 
-            e_q = torch.randn(w.size(0), 2, w.size(2)).to(device=inputs.device, dtype=inputs.dtype) * padding_mask
-            z_q = e_q
-            logdet_tot_q = 0
-            for flow in self.post_flows:
-                z_q, logdet_q = flow(z_q, padding_mask, global_conditioning=inputs + h_w)
-                z_q = torch.flip(z_q, [1])
-                logdet_tot_q += logdet_q
-
-            z_u, z1 = torch.split(z_q, [1, 1], dim=1)
-            u = torch.sigmoid(z_u) * padding_mask
-            z0 = (w - u) * padding_mask
-
-            logdet_tot_q += torch.sum(
-                (nn.functional.logsigmoid(z_u) + nn.functional.logsigmoid(-z_u)) * padding_mask, [1, 2]
+            random_posterior = (
+                torch.randn(durations.size(0), 2, durations.size(2)).to(device=inputs.device, dtype=inputs.dtype)
+                * padding_mask
             )
-            logq = torch.sum(-0.5 * (math.log(2 * math.pi) + (e_q**2)) * padding_mask, [1, 2]) - logdet_tot_q
+            log_determinant_posterior_sum = 0
+            latents_posterior = random_posterior
+            for flow in self.post_flows:
+                latents_posterior, log_determinant = flow(
+                    latents_posterior, padding_mask, global_conditioning=inputs + hidden_states
+                )
+                latents_posterior = torch.flip(latents_posterior, [1])
+                log_determinant_posterior_sum += log_determinant
 
-            z0 = torch.log(torch.clamp_min(z0, 1e-5)) * padding_mask
-            logdet_tot = torch.sum(-z0, [1, 2])
+            first_half, second_half = torch.split(latents_posterior, [1, 1], dim=1)
 
-            z = torch.cat([z0, z1], dim=1)
+            log_determinant_posterior_sum += torch.sum(
+                (nn.functional.logsigmoid(first_half) + nn.functional.logsigmoid(-first_half)) * padding_mask, [1, 2]
+            )
+            logq = (
+                torch.sum(-0.5 * (math.log(2 * math.pi) + (random_posterior**2)) * padding_mask, [1, 2])
+                - log_determinant_posterior_sum
+            )
+
+            first_half = (durations - torch.sigmoid(first_half)) * padding_mask
+            first_half = torch.log(torch.clamp_min(first_half, 1e-5)) * padding_mask
+            log_determinant_sum = torch.sum(-first_half, [1, 2])
+
+            latents = torch.cat([first_half, second_half], dim=1)
             for flow in self.flows:
-                z, logdet = flow(z, padding_mask, global_conditioning=inputs)
-                z = torch.flip(z, [1])
-                logdet_tot = logdet_tot + logdet
+                latents, log_determinant = flow(latents, padding_mask, global_conditioning=inputs)
+                latents = torch.flip(latents, [1])
+                log_determinant_sum += log_determinant
 
-            nll = torch.sum(0.5 * (math.log(2 * math.pi) + (z**2)) * padding_mask, [1, 2]) - logdet_tot
+            nll = (
+                torch.sum(0.5 * (math.log(2 * math.pi) + (latents**2)) * padding_mask, [1, 2]) - log_determinant_sum
+            )
             return nll + logq
         else:
             flows = list(reversed(self.flows))
             flows = flows[:-2] + [flows[-1]]  # remove a useless vflow
 
-            z = (
+            latents = (
                 torch.randn(inputs.size(0), 2, inputs.size(2)).to(device=inputs.device, dtype=inputs.dtype)
                 * noise_scale
             )
             for flow in flows:
-                z = torch.flip(z, [1])
-                z = flow(z, padding_mask, global_conditioning=inputs, reverse=True)
+                latents = torch.flip(latents, [1])
+                latents = flow(latents, padding_mask, global_conditioning=inputs, reverse=True)
 
-            logw, _ = torch.split(z, [1, 1], dim=1)
-            return logw
+            log_duration, _ = torch.split(latents, [1, 1], dim=1)
+            return log_duration
 
 
 class VitsDurationPredictor(nn.Module):
