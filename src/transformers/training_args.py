@@ -944,7 +944,7 @@ class TrainingArguments:
             )
         },
     )
-    sharded_ddp: Optional[Union[str], bool, List[ShardedDDPOption]] = field(
+    sharded_ddp: Optional[Union[str, bool, List[ShardedDDPOption]]] = field(
         default="",
         metadata={
             "help": (
@@ -955,7 +955,7 @@ class TrainingArguments:
             ),
         },
     )
-    fsdp: Optional[Union[str], bool, List[FSDPOption]] = field(
+    fsdp: Optional[Union[str, bool, List[FSDPOption]]] = field(
         default="",
         metadata={
             "help": (
@@ -976,7 +976,7 @@ class TrainingArguments:
             )
         },
     )
-    fsdp_config: Union[Optional[str], Dict] = field(
+    fsdp_config: Optional[Union[str, Dict]] = field(
         default=None,
         metadata={
             "help": (
