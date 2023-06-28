@@ -664,16 +664,6 @@ class VitsElementwiseAffine(nn.Module):
             return outputs
 
 
-class VitsFlip(nn.Module):
-    def forward(self, inputs, *args, reverse=False, **kwargs):
-        outputs = torch.flip(inputs, [1])
-        if not reverse:
-            log_determinant = torch.zeros(outputs.size(0)).to(dtype=outputs.dtype, device=outputs.device)
-            return outputs, log_determinant
-        else:
-            return outputs
-
-
 class VitsStochasticDurationPredictor(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -693,7 +683,6 @@ class VitsStochasticDurationPredictor(nn.Module):
         self.flows.append(VitsElementwiseAffine(2))
         for _ in range(config.duration_predictor_num_flows):
             self.flows.append(VitsConvFlow(2, filter_channels, kernel_size, num_layers=3))
-            self.flows.append(VitsFlip())
 
         self.post_conv_pre = nn.Conv1d(1, filter_channels, 1)
         self.post_conv_proj = nn.Conv1d(filter_channels, filter_channels, 1)
@@ -705,7 +694,6 @@ class VitsStochasticDurationPredictor(nn.Module):
         self.post_flows.append(VitsElementwiseAffine(2))
         for _ in range(config.duration_predictor_num_flows):
             self.post_flows.append(VitsConvFlow(2, filter_channels, kernel_size, num_layers=3))
-            self.post_flows.append(VitsFlip())
 
     def forward(self, inputs, padding_mask, global_conditioning=None, w=None, reverse=False, noise_scale=1.0):
         inputs = torch.detach(inputs)
@@ -728,6 +716,7 @@ class VitsStochasticDurationPredictor(nn.Module):
             logdet_tot_q = 0
             for flow in self.post_flows:
                 z_q, logdet_q = flow(z_q, padding_mask, global_conditioning=inputs + h_w)
+                z_q = torch.flip(z_q, [1])
                 logdet_tot_q += logdet_q
 
             z_u, z1 = torch.split(z_q, [1, 1], dim=1)
@@ -745,6 +734,7 @@ class VitsStochasticDurationPredictor(nn.Module):
             z = torch.cat([z0, z1], dim=1)
             for flow in self.flows:
                 z, logdet = flow(z, padding_mask, global_conditioning=inputs)
+                z = torch.flip(z, [1])
                 logdet_tot = logdet_tot + logdet
 
             nll = torch.sum(0.5 * (math.log(2 * math.pi) + (z**2)) * padding_mask, [1, 2]) - logdet_tot
@@ -758,6 +748,7 @@ class VitsStochasticDurationPredictor(nn.Module):
                 * noise_scale
             )
             for flow in flows:
+                z = torch.flip(z, [1])
                 z = flow(z, padding_mask, global_conditioning=inputs, reverse=True)
 
             logw, _ = torch.split(z, [1, 1], dim=1)
