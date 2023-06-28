@@ -31,52 +31,57 @@ Steps:
 import argparse
 import collections
 
+import numpy as np
 import torch
 from flax import traverse_util
 from t5x import checkpoints
 
 from transformers import MT5Config, MT5EncoderModel, MT5ForConditionalGeneration
 from transformers.utils import logging
-import numpy as np
+
 
 logging.set_verbosity_info()
 
 
 def t5x_relpos_bias_lookup(params, i, prefix):
     """Returns the Relative Position Bias parameters of a layer. Does not transpose."""
-    return params[f"{prefix}/{prefix}/relpos_bias/rel_embedding"][:,i,:]
+    return params[f"{prefix}/{prefix}/relpos_bias/rel_embedding"][:, i, :]
+
 
 def t5x_attention_lookup(params, i, prefix, layer_name="attention"):
     """Returns the KOQV parameters of (self-)attention. Does not transpose."""
-    k_tmp = k_tmp = np.ascontiguousarray(params[f"{prefix}/{prefix}/{layer_name}/key/kernel"][:,i,:,:])
+    k_tmp = k_tmp = np.ascontiguousarray(params[f"{prefix}/{prefix}/{layer_name}/key/kernel"][:, i, :, :])
     k = k_tmp.reshape(k_tmp.shape[0], k_tmp.shape[1] * k_tmp.shape[2])
-    o_tmp = np.ascontiguousarray(params[f"{prefix}/{prefix}/{layer_name}/out/kernel"][:,i,:,:])
+    o_tmp = np.ascontiguousarray(params[f"{prefix}/{prefix}/{layer_name}/out/kernel"][:, i, :, :])
     o = o_tmp.reshape(o_tmp.shape[0] * o_tmp.shape[1], o_tmp.shape[2])
-    q_tmp = np.ascontiguousarray(params[f"{prefix}/{prefix}/{layer_name}/query/kernel"][:,i,:,:])
+    q_tmp = np.ascontiguousarray(params[f"{prefix}/{prefix}/{layer_name}/query/kernel"][:, i, :, :])
     q = q_tmp.reshape(q_tmp.shape[0], q_tmp.shape[1] * q_tmp.shape[2])
-    v_tmp = np.ascontiguousarray(params[f"{prefix}/{prefix}/{layer_name}/value/kernel"][:,i,:,:])
+    v_tmp = np.ascontiguousarray(params[f"{prefix}/{prefix}/{layer_name}/value/kernel"][:, i, :, :])
     v = v_tmp.reshape(v_tmp.shape[0], v_tmp.shape[1] * v_tmp.shape[2])
     return k, o, q, v
+
 
 def t5x_mlp_lookup(params, i, prefix, split_mlp_wi=False):
     """Returns the MLP parameters of a layer. Does not transpose."""
     if split_mlp_wi:
-        wi_0 = params[f"{prefix}/{prefix}/mlp/wi_0/kernel"][:,i,:]
-        wi_1 = params[f"{prefix}/{prefix}/mlp/wi_1/kernel"][:,i,:]
+        wi_0 = params[f"{prefix}/{prefix}/mlp/wi_0/kernel"][:, i, :]
+        wi_1 = params[f"{prefix}/{prefix}/mlp/wi_1/kernel"][:, i, :]
         wi = (wi_0, wi_1)
     else:
-        wi = params[f"{prefix}/{prefix}/mlp/wi/kernel"][:,i,:]
+        wi = params[f"{prefix}/{prefix}/mlp/wi/kernel"][:, i, :]
 
-    wo = params[f"{prefix}/{prefix}/mlp/wo/kernel"][:,i,:]
+    wo = params[f"{prefix}/{prefix}/mlp/wo/kernel"][:, i, :]
     return wi, wo
 
 
 def t5x_layer_norm_lookup(params, i, prefix, layer_name):
     """Returns the layer norm param of a layer."""
-    return params[f"{prefix}/{prefix}/{layer_name}/scale"][:,i]
+    return params[f"{prefix}/{prefix}/{layer_name}/scale"][:, i]
 
 
-def convert_t5x_to_pytorch(variables: dict, *, num_layers: int, is_encoder_only: bool, scalable_attention:bool = False):
+def convert_t5x_to_pytorch(
+    variables: dict, *, num_layers: int, is_encoder_only: bool, scalable_attention: bool = False
+):
     """Converts the parameters from T5X-Flax to Transformers-PyTorch."""
     old = traverse_util.flatten_dict(variables["target"])
     old = {"/".join(k): v for k, v in old.items()}
@@ -113,16 +118,19 @@ def convert_t5x_to_pytorch(variables: dict, *, num_layers: int, is_encoder_only:
         new[f"encoder.block.{i}.layer.1.DenseReluDense.wo.weight"] = wo.T
         if scalable_attention:
             # convert the rel_embedding of each layer
-            new[f"encoder.block.{i}.layer.0.SelfAttention.relative_attention_bias.weight"] = t5x_relpos_bias_lookup(old, i, "encoder").T
-
-
+            new[f"encoder.block.{i}.layer.0.SelfAttention.relative_attention_bias.weight"] = t5x_relpos_bias_lookup(
+                old, i, "encoder"
+            ).T
 
     new["encoder.final_layer_norm.weight"] = old["encoder/encoder_norm/scale"]
-    
-    if not scalable_attention:
-        new[f"encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"] = t5x_relpos_bias_lookup(old, 0, "encoder").T
-        new[f"decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"] = t5x_relpos_bias_lookup(old, 0, "decoder").T
 
+    if not scalable_attention:
+        new["encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"] = t5x_relpos_bias_lookup(
+            old, 0, "encoder"
+        ).T
+        new["decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"] = t5x_relpos_bias_lookup(
+            old, 0, "decoder"
+        ).T
 
     if not is_encoder_only:
         # Decoder.
@@ -158,7 +166,9 @@ def convert_t5x_to_pytorch(variables: dict, *, num_layers: int, is_encoder_only:
 
             if scalable_attention:
                 # convert the rel_embedding of each layer
-                new[f"decoder.block.{i}.layer.0.SelfAttention.relative_attention_bias.weight"] = t5x_relpos_bias_lookup(old, i, "decoder").T
+                new[
+                    f"decoder.block.{i}.layer.0.SelfAttention.relative_attention_bias.weight"
+                ] = t5x_relpos_bias_lookup(old, i, "decoder").T
 
         new["decoder.final_layer_norm.weight"] = old["decoder/decoder_norm/scale"]
 
@@ -192,13 +202,19 @@ def make_state_dict(converted_params, is_encoder_only: bool):
 def load_t5x_weights_in_t5(model, config, t5x_checkpoint_path, is_encoder_only, scalable_attention):
     """Replaces the params in model witht the T5X converted params."""
     variables = checkpoints.load_t5x_checkpoint(t5x_checkpoint_path)
-    converted = convert_t5x_to_pytorch(variables, num_layers=config.num_layers, is_encoder_only=is_encoder_only, scalable_attention = scalable_attention)
+    converted = convert_t5x_to_pytorch(
+        variables, num_layers=config.num_layers, is_encoder_only=is_encoder_only, scalable_attention=scalable_attention
+    )
     state_dict = make_state_dict(converted, is_encoder_only)
     model.load_state_dict(state_dict, strict=True)
 
 
 def convert_t5x_checkpoint_to_pytorch(
-    t5x_checkpoint_path, config_file, pytorch_dump_path, is_encoder_only: bool = False, scalable_attention:bool = False
+    t5x_checkpoint_path,
+    config_file,
+    pytorch_dump_path,
+    is_encoder_only: bool = False,
+    scalable_attention: bool = False,
 ):
     """Loads the config and model, converts the T5X checkpoint, and saves a PyTorch checkpoint."""
     # Initialise PyTorch model
@@ -243,9 +259,16 @@ if __name__ == "__main__":
         "--is_encoder_only", action="store_true", help="Check if the model is encoder-decoder model", default=False
     )
     parser.add_argument(
-        "--scalable_attention", action="store_true", help="Whether the model uses scaled attention (umt5 model)", default=False
+        "--scalable_attention",
+        action="store_true",
+        help="Whether the model uses scaled attention (umt5 model)",
+        default=False,
     )
     args = parser.parse_args()
     convert_t5x_checkpoint_to_pytorch(
-        args.t5x_checkpoint_path, args.config_file, args.pytorch_dump_path, args.is_encoder_only, args.scalable_attention
+        args.t5x_checkpoint_path,
+        args.config_file,
+        args.pytorch_dump_path,
+        args.is_encoder_only,
+        args.scalable_attention,
     )
