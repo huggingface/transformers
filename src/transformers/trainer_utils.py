@@ -55,7 +55,7 @@ def seed_worker(_):
     set_seed(worker_seed)
 
 
-def enable_full_determinism(seed: int):
+def enable_full_determinism(seed: int, warn_only: bool = False):
     """
     Helper function for reproducible behavior during distributed training. See
     - https://pytorch.org/docs/stable/notes/randomness.html for pytorch
@@ -70,7 +70,7 @@ def enable_full_determinism(seed: int):
         # depending on the CUDA version, so we set them both here
         os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
-        torch.use_deterministic_algorithms(True)
+        torch.use_deterministic_algorithms(True, warn_only=warn_only)
 
         # Enable CUDNN deterministic mode
         torch.backends.cudnn.deterministic = True
