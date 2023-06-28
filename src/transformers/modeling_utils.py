@@ -15,6 +15,7 @@
 # limitations under the License.
 import collections
 import gc
+import importlib.metadata
 import inspect
 import json
 import os
@@ -73,7 +74,7 @@ from .utils import (
     replace_return_docstrings,
 )
 from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
-from .utils.import_utils import ENV_VARS_TRUE_VALUES, importlib_metadata, is_sagemaker_mp_enabled
+from .utils.import_utils import ENV_VARS_TRUE_VALUES, is_sagemaker_mp_enabled
 from .utils.quantization_config import BitsAndBytesConfig
 from .utils.versions import require_version_core
 
@@ -2203,7 +2204,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             use_safetensors = False
 
         if is_bitsandbytes_available():
-            is_8bit_serializable = version.parse(importlib_metadata.version("bitsandbytes")) > version.parse("0.37.2")
+            is_8bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) > version.parse("0.37.2")
         else:
             is_8bit_serializable = False
 
@@ -2738,7 +2739,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 modules_to_not_convert.extend(keys_on_cpu)
 
-            supports_4bit = version.parse(importlib_metadata.version("bitsandbytes")) >= version.parse("0.39.0")
+            supports_4bit = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.39.0")
 
             if load_in_4bit and not supports_4bit:
                 raise ValueError(
@@ -2751,7 +2752,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
             # training in 8-bit is only available in 0.37.0+
             model._is_quantized_training_enabled = version.parse(
-                importlib_metadata.version("bitsandbytes")
+                importlib.metadata.version("bitsandbytes")
             ) >= version.parse("0.37.0")
 
             model.config.quantization_config = quantization_config
@@ -2786,7 +2787,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             target_dtype = torch_dtype
 
             if load_in_4bit:
-                if version.parse(importlib_metadata.version("accelerate")) > version.parse("0.19.0"):
+                if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.19.0"):
                     from accelerate.utils import CustomDtype
 
                     target_dtype = CustomDtype.INT4

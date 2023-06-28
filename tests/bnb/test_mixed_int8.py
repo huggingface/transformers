@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
+import importlib.metadata
 import tempfile
 import unittest
 
@@ -38,7 +39,6 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
-from transformers.utils.versions import importlib_metadata
 
 
 def get_some_linear_layer(model):
@@ -722,7 +722,7 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
         super().setUp()
 
     def test_training(self):
-        if version.parse(importlib_metadata.version("bitsandbytes")) < version.parse("0.37.0"):
+        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.37.0"):
             return
 
         # Step 1: freeze all parameters
