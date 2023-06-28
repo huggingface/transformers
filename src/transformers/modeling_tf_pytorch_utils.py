@@ -273,6 +273,17 @@ def load_pytorch_state_dict_in_tf2_model(
             new_key = key.replace("running_var", "moving_variance")
         if "running_mean" in key:
             new_key = key.replace("running_mean", "moving_mean")
+
+        key_components = key.split(".")
+        _name = None
+        if key_components[-3::2] == ["parametrizations", "original0"]:
+            _name = key_components[-2] + "_g"
+        elif key_components[-3::2] == ["parametrizations", "original1"]:
+            _name = key_components[-2] + "_v"
+        if _name is not None:
+            key_components = key_components[:-3] + [_name]
+            new_key = ".".join(key_components)
+
         if new_key is None:
             new_key = key
         tf_keys_to_pt_keys[new_key] = key
