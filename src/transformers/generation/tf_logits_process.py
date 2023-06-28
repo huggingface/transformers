@@ -160,8 +160,8 @@ class TFTopPLogitsWarper(TFLogitsWarper):
     def __init__(self, top_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         if not isinstance(top_p, float) or (top_p < 0 or top_p > 1.0):
             raise ValueError(f"`top_p` has to be a float > 0 and < 1, but is {top_p}")
-        if not isinstance(min_tokens_to_keep, int) or (min_tokens_to_keep < 0):
-            raise ValueError(f"`min_tokens_to_keep` has to be a non-negative integer, but is {min_tokens_to_keep}")
+        if not isinstance(min_tokens_to_keep, int) or (min_tokens_to_keep < 1):
+            raise ValueError(f"`min_tokens_to_keep` has to be a positive integer, but is {min_tokens_to_keep}")
 
         self.top_p = top_p
         self.filter_value = filter_value
@@ -318,7 +318,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
         self.bad_word_seqs_ids = tf.ragged.constant(bad_words_ids).to_tensor(default_value=-1)
         # 2. a tensor with the unpadded length of each forbidden sequence, for quick length comparisons
         bad_word_seqs_len = [len(bad_words) for bad_words in bad_words_ids]
-        if any([word_len == 0 for word_len in bad_word_seqs_len]):
+        if any(word_len == 0 for word_len in bad_word_seqs_len):
             raise ValueError(f"Banned words token sequences {bad_words_ids} cannot have an empty list")
         self.bad_word_seqs_len = tf.convert_to_tensor(bad_word_seqs_len, dtype=tf.int32)
         # 3. a tensor containing the last token for each sequence, for easy access to the tokens that may be banned
