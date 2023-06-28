@@ -396,30 +396,21 @@ class VitsResidualCouplingLayer(nn.Module):
             return outputs
 
 
-class VitsFlip(nn.Module):
-    def forward(self, inputs, *args, reverse=False, **kwargs):
-        outputs = torch.flip(inputs, [1])
-        if not reverse:
-            log_determinant = torch.zeros(outputs.size(0)).to(dtype=outputs.dtype, device=outputs.device)
-            return outputs, log_determinant
-        else:
-            return outputs
-
-
 class VitsResidualCouplingBlock(nn.Module):
     def __init__(self, config: VitsConfig):
         super().__init__()
         self.flows = nn.ModuleList()
         for _ in range(config.prior_encoder_num_flows):
             self.flows.append(VitsResidualCouplingLayer(config))
-            self.flows.append(VitsFlip())
 
     def forward(self, inputs, padding_mask, global_conditioning=None, reverse=False):
         if not reverse:
             for flow in self.flows:
                 inputs, _ = flow(inputs, padding_mask, global_conditioning)
+                inputs = torch.flip(inputs, [1])
         else:
             for flow in reversed(self.flows):
+                inputs = torch.flip(inputs, [1])
                 inputs = flow(inputs, padding_mask, global_conditioning, reverse=True)
         return inputs
 
@@ -670,6 +661,16 @@ class VitsElementwiseAffine(nn.Module):
             return outputs, log_determinant
         else:
             outputs = (inputs - self.translate) * torch.exp(-self.log_scale) * padding_mask
+            return outputs
+
+
+class VitsFlip(nn.Module):
+    def forward(self, inputs, *args, reverse=False, **kwargs):
+        outputs = torch.flip(inputs, [1])
+        if not reverse:
+            log_determinant = torch.zeros(outputs.size(0)).to(dtype=outputs.dtype, device=outputs.device)
+            return outputs, log_determinant
+        else:
             return outputs
 
 

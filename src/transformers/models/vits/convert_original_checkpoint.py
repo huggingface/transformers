@@ -235,6 +235,11 @@ def recursively_load_weights(fairseq_dict, hf_model):
                     mapped_key = mapped_key.replace("*", layer_index)
                 elif "*" in mapped_key:
                     layer_index = name.split(key)[0].split(".")[-2]
+
+                    # remap the layer index since we removed the Flip layers
+                    if "flow.flows" in name:
+                        layer_index = str(int(layer_index) // 2)
+
                     mapped_key = mapped_key.replace("*", layer_index)
                 if "weight_g" in name:
                     weight_type = "weight_g"
