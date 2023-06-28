@@ -17,21 +17,12 @@ Processor class for Bark
 """
 import os
 import warnings
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-
 from ...processing_utils import ProcessorMixin
-from ...utils import (
-    TensorType,
-    is_flax_available,
-    is_jax_tensor,
-    is_numpy_array,
-    is_tf_available,
-    is_torch_available,
-)
 from ...utils.hub import get_file_from_repo
 from ..auto import AutoTokenizer
 
@@ -70,8 +61,9 @@ class BarkProcessor(ProcessorMixin):
         cls, pretrained_processor_name_or_path, speaker_embeddings_file_name="speaker_embeddings.npz", **kwargs
     ):
         r"""
-        Args:
         Instantiate a Bark processor associated with a pretrained model.
+
+        Args:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
                 This can be either:
 
@@ -129,8 +121,8 @@ class BarkProcessor(ProcessorMixin):
 
         Args:
             save_directory (`str` or `os.PathLike`):
-                Directory where the feature extractor JSON file and the tokenizer files will be saved (directory will
-                be created if it does not exist).
+                Directory where the tokenizer files will and the speaker embeddings be saved (directory will be created
+                if it does not exist).
             speaker_embeddings_file_name (`str`, *optional*, defaults to `"speaker_embeddings.npz"`):
                 The name of the `.npz` file that will contains the speaker_embeddings, if it exists, and that will be
                 located in `pretrained_model_name_or_path`.
@@ -193,8 +185,8 @@ class BarkProcessor(ProcessorMixin):
                 - `'np'`: Return NumPy `np.ndarray` objects.
 
         Returns:
-            Tuple([`BatchEncoding`], [`BatchFeature`]): A tuple composed of a [`BatchEncoding`], i.e the output
-            of the `tokenizer` and a [`BatchFeature`], i.e the voice preset with the right tensors type.
+            Tuple([`BatchEncoding`], [`BatchFeature`]): A tuple composed of a [`BatchEncoding`], i.e the output of the
+            `tokenizer` and a [`BatchFeature`], i.e the voice preset with the right tensors type.
         """
         if voice_preset is not None and not isinstance(voice_preset, dict):
             voice_preset_key = voice_preset.replace("/", "_")
@@ -214,7 +206,7 @@ class BarkProcessor(ProcessorMixin):
                 voice_preset = np.load(voice_preset)
 
         self._validate_voice_preset_dict(voice_preset)
-        voice_preset = BatchFeature(data = voice_preset, tensor_type = return_tensors)
+        voice_preset = BatchFeature(data=voice_preset, tensor_type=return_tensors)
 
         encoded_text = self.tokenizer(
             text,
@@ -228,4 +220,3 @@ class BarkProcessor(ProcessorMixin):
         )
 
         return encoded_text, voice_preset
-

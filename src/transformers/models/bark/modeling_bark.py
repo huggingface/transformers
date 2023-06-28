@@ -926,11 +926,18 @@ class BarkFineModel(BarkPreTrainedModel):
 
 @add_start_docstrings(
     """
-    HugginFace implementation of `Bark`, a text-to-speech model composed of 3 sub-models:
-    1. A semantic model, that refines the input information.
-    2. A coarse acoustics model, that generates a raw version of the audio with the two first codebooks of `Encodec`.
-    3. A fine acoustics model, that refines the raw audio by generating the last 6 codebooks of `Encodec`, following
-       `Bark` original implementation.
+    HugginFace implementation of Bark, a text-to-speech model composed of 4 sub-models:
+- [`BarkSemanticModel`] (also referred to as the 'text' model): a causal auto-regressive transformer model that takes
+  as input tokenized text, and predicts semantic text tokens that capture the meaning of the text.
+- [`BarkCoarseModel`] (also reffered to as the 'coarse acoustics' model`), also a causal autoregressive transformer,
+  that takes into input the results of the last model. It aims at regressing the first two audio codebooks necessary to
+  `encodec`.
+- [`BarkFineModel`] (the 'fine acoustics' model`), this time a non-causal autoencoder transformer, which iteratively
+  predicts the last codebooks based on the sum of the previous codebooks embeddings.
+- having predicted all the codebook channels from the [`EncodecModel`], Bark uses it to decode the output audio array.
+
+It should be noted that each of the first three modules can support conditional speaker embeddings to condition the
+output sound according to specific predefined voice.
     """,
     BARK_START_DOCSTRING,
 )
@@ -1271,6 +1278,7 @@ class BarkModel(BarkPreTrainedModel):
 
     # @torch.no_grad
     # _inference_mode()
+
     def generate_audio(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1279,7 +1287,7 @@ class BarkModel(BarkPreTrainedModel):
         sliding_window_len: int = 60,
         **kwargs,
     ) -> torch.LongTensor:
-        f"""
+        """
         Generates audio from an input prompt and an additional optional `Bark` speaker prompt.
 
         Args:
@@ -1305,8 +1313,8 @@ class BarkModel(BarkPreTrainedModel):
         >>> from scipy.io.wavfile import write as write_wav
 
 
-        >>> processor = AutoProcessor.from_pretrained("{_CHECKPOINT_FOR_DOC}")
-        >>> model = BarkModel.from_pretrained("{_CHECKPOINT_FOR_DOC}")
+        >>> processor = AutoProcessor.from_pretrained("suno/bark")
+        >>> model = BarkModel.from_pretrained("suno/bark")
 
         >>> inputs, _ = processor("Hello, my dog is cute")
 
@@ -1329,7 +1337,7 @@ class BarkModel(BarkPreTrainedModel):
         >>> write_wav("bark_generation.wav", sample_rate, audio_array)
         ```
         """
-
+        
         ##### 1. Generate from the semantic model
 
         semantic_output = self.generate_text_semantic(
