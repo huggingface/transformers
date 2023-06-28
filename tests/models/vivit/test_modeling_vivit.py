@@ -53,7 +53,7 @@ class VivitModelTester:
         num_labels=10,
         image_size=10,
         num_frames=8,  # decreased, because default 32 takes too much RAM at inference
-        tubelet_size=[2, 16, 16],
+        tubelet_size=[2, 4, 4],
         num_channels=3,
         hidden_size=768,
         num_hidden_layers=5,
