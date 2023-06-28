@@ -17,8 +17,8 @@
 
 import unittest
 
-from transformers import FalconConfig, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers import FalconConfig, is_torch_available, AutoTokenizer
+from transformers.testing_utils import require_torch, torch_device, slow
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -262,7 +262,7 @@ class FalconModelTester:
 
 
 @require_torch
-class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             FalconModel,
@@ -347,5 +347,19 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
+@require_torch
+class FalconLanguageGenerationTest(unittest.TestCase):
+    @slow
+    def test_lm_generate_falcon(self):
+        tokenizer = AutoTokenizer.from_pretrained("Rocketknight1/falcon-rw-1b")
+        model = FalconForCausalLM.from_pretrained("Rocketknight1/falcon-rw-1b")
+        model.eval()
+        model.to(torch_device)
+        inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
 
-# TODO Matt: Add some kind of integration test
+        expected_output = "My favorite food is pizza. I love it so much that I have a pizza party every year for my birthday."
+
+        output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=19)
+        output_str = tokenizer.batch_decode(output_ids)[0]
+
+        self.assertEqual(output_str, expected_output)

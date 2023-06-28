@@ -102,6 +102,7 @@ class FalconConfig(PretrainedConfig):
         new_decoder_architecture=False,
         multi_query=True,
         parallel_attn=True,
+        bias=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -123,6 +124,7 @@ class FalconConfig(PretrainedConfig):
         self.new_decoder_architecture = new_decoder_architecture
         self.multi_query = multi_query
         self.parallel_attn = parallel_attn
+        self.bias = bias
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
