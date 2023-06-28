@@ -274,6 +274,7 @@ def load_pytorch_state_dict_in_tf2_model(
         if "running_mean" in key:
             new_key = key.replace("running_mean", "moving_mean")
 
+        # New `weight_norm` from https://github.com/huggingface/transformers/pull/24030
         key_components = key.split(".")
         _name = None
         if key_components[-3::2] == ["parametrizations", "original0"]:
@@ -510,15 +511,27 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
             new_pt_params_dict[pt_weight_name] = loaded_pt_weights_data_ptr[pt_weight.data_ptr()]
             continue
 
+        _pt_weight_name = pt_weight_name
+        # New `weight_norm` from https://github.com/huggingface/transformers/pull/24030
+        key_components = pt_weight_name.split(".")
+        _name = None
+        if key_components[-3::2] == ["parametrizations", "original0"]:
+            _name = key_components[-2] + "_g"
+        elif key_components[-3::2] == ["parametrizations", "original1"]:
+            _name = key_components[-2] + "_v"
+        if _name is not None:
+            key_components = key_components[:-3] + [_name]
+            _pt_weight_name = ".".join(key_components)
+
         # Find associated numpy array in pytorch model state dict
-        if pt_weight_name not in tf_weights_map:
+        if _pt_weight_name not in tf_weights_map:
             if allow_missing_keys:
                 missing_keys_pt.append(pt_weight_name)
                 continue
 
             raise AttributeError(f"{pt_weight_name} not found in TF 2.0 model")
 
-        array, transpose = tf_weights_map[pt_weight_name]
+        array, transpose = tf_weights_map[_pt_weight_name]
 
         array = apply_transpose(transpose, array, pt_weight.shape, pt_to_tf=False)
 
