@@ -99,6 +99,9 @@ class FalconConfig(PretrainedConfig):
         attention_dropout=0.0,
         n_head_kv=None,
         alibi=False,
+        new_decoder_architecture=False,
+        multi_query=True,
+        parallel_attn=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -117,6 +120,9 @@ class FalconConfig(PretrainedConfig):
         self.eos_token_id = eos_token_id
         self.n_head_kv = num_attention_heads if n_head_kv is None else n_head_kv
         self.alibi = alibi
+        self.new_decoder_architecture = new_decoder_architecture
+        self.multi_query = multi_query
+        self.parallel_attn = parallel_attn
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

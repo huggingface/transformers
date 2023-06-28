@@ -179,16 +179,23 @@ class FalconAttention(nn.Module):
         # Layer-wise attention scaling
         self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
         self.beta = self.inv_norm_factor
-
-        self.query_key_value = FalconLinear(
-            self.hidden_size,
-            (config.n_head_kv * 2 + config.num_attention_heads) * self.head_dim,
-            bias=config.bias,
-        )
+        if config.new_decoder_architecture:
+            self.query_key_value = FalconLinear(
+                self.hidden_size,
+                (config.n_head_kv * 2 + config.num_attention_heads) * self.head_dim,
+                bias=config.bias,
+            )
+        else:
+            self.query_key_value = FalconLinear(
+                self.hidden_size,
+                3 * self.hidden_size if not config.multi_query else (self.hidden_size + 2 * self.head_dim),
+                bias=config.bias,
+            )
+        self.new_decoder_architecture = config.new_decoder_architecture
         self.multi_query = config.multi_query
         self.dense = FalconLinear(self.hidden_size, self.hidden_size, bias=config.bias)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
-        self.num_kv = config.n_head_kv if not self.multi_query else 1
+        self.num_kv = config.n_head_kv if (self.new_decoder_architecture or not self.multi_query) else 1
 
     def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -201,11 +208,7 @@ class FalconAttention(nn.Module):
             query: [batch_size, seq_length, num_heads, head_dim] key: [batch_size, seq_length, num_heads, head_dim]
             value: [batch_size, seq_length, num_heads, head_dim]
         """
-        if self.multi_query:
-            batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
-            fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads + 2, self.head_dim)
-            return fused_qkv[..., :-2, :], fused_qkv[..., [-2], :], fused_qkv[..., [-1], :]
-        else:
+        if self.new_decoder_architecture:
             batch, seq_len, _ = fused_qkv.shape
             qkv = fused_qkv.view(batch, seq_len, -1, self.num_heads // self.num_kv + 2, 64)
             query = qkv[:, :, :, :-2]
@@ -216,6 +219,15 @@ class FalconAttention(nn.Module):
 
             query, key, value = [x.flatten(2, 3) for x in (query, key, value)]
             return query, key, value
+        elif not self.multi_query:
+            batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
+            fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads, 3, self.head_dim)
+            return fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :]
+        else:
+            batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
+            fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads + 2, self.head_dim)
+            return fused_qkv[..., :-2, :], fused_qkv[..., [-2], :], fused_qkv[..., [-1], :]
+
 
     def _merge_heads(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -253,7 +265,7 @@ class FalconAttention(nn.Module):
         output_attentions: bool = False,
     ):
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
-
+        n_head_kv = self.num_heads if self.new_decoder_architecture else self.num_kv
         # 3 x [batch_size, seq_length, num_heads, head_dim]
         (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
 
@@ -261,11 +273,11 @@ class FalconAttention(nn.Module):
 
         query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
         key_layer = key_layer.transpose(1, 2).reshape(
-            batch_size * self.num_heads,
+            batch_size * n_head_kv,
             q_length,
             self.head_dim,
         )
-        value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
+        value_layer = value_layer.transpose(1, 2).reshape(batch_size * n_head_kv, q_length, self.head_dim)
 
         query_layer, key_layer = self.maybe_rotary(query_layer, key_layer)
 
@@ -286,8 +298,8 @@ class FalconAttention(nn.Module):
 
         if alibi is None:
             query_layer_ = query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim)
-            key_layer_ = key_layer.reshape(batch_size, self.num_heads, -1, self.head_dim)
-            value_layer_ = value_layer.reshape(batch_size, self.num_heads, -1, self.head_dim)
+            key_layer_ = key_layer.reshape(batch_size, n_head_kv, -1, self.head_dim)
+            value_layer_ = value_layer.reshape(batch_size, n_head_kv, -1, self.head_dim)
 
             attn_output = F.scaled_dot_product_attention(
                 query_layer_, key_layer_, value_layer_, None, 0.0, is_causal=True
@@ -367,13 +379,13 @@ class FalconDecoderLayer(nn.Module):
         self.hidden_dropout = config.hidden_dropout
         self.config = config
 
-        if config.separate_layernorms:
+        if config.new_decoder_architecture:
             self.ln_attn = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
             self.ln_mlp = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         else:
             self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-
-
+            if not config.parallel_attn:
+                self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
     def forward(
         self,
@@ -392,8 +404,6 @@ class FalconDecoderLayer(nn.Module):
             ln_mlp = self.ln_mlp(hidden_states)
         else:
             ln_attn = self.input_layernorm(hidden_states)
-            ln_mlp = ln_attn
-
 
         # Self attention.
         attn_outputs = self.self_attention(
@@ -408,14 +418,23 @@ class FalconDecoderLayer(nn.Module):
 
         attention_output = attn_outputs[0]
 
+        if not self.config.new_decoder_architecture:
+            residual = dropout_add(attention_output, residual, self.config.attention_dropout, training=self.training)
+            if self.config.parallel_attn:
+                ln_mlp = ln_attn
+            else:
+                ln_mlp = self.post_attention_layernorm(residual)
+
+
         outputs = attn_outputs[1:]
 
         # MLP.
         mlp_output = self.mlp(ln_mlp)
 
-        output = dropout_add(
-            mlp_output + attention_output, residual, self.config.hidden_dropout, training=self.training
-        )
+        if self.config.new_decoder_architecture or self.config.parallel_attn:
+            mlp_output += attention_output
+
+        output = dropout_add(mlp_output, residual, self.config.hidden_dropout, training=self.training)
 
         if use_cache:
             outputs = (output,) + outputs
