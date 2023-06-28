@@ -16,7 +16,6 @@
 
 
 import math
-import random
 import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -1871,7 +1870,7 @@ class LEDEncoder(LEDPreTrainedModel):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
 
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None, None)
@@ -2135,9 +2134,10 @@ class LEDDecoder(LEDPreTrainedModel):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
@@ -2209,7 +2209,6 @@ class LEDDecoder(LEDPreTrainedModel):
     LED_START_DOCSTRING,
 )
 class LEDModel(LEDPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
     _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
 
     def __init__(self, config: LEDConfig):
@@ -2335,14 +2334,7 @@ class LEDModel(LEDPreTrainedModel):
 )
 class LEDForConditionalGeneration(LEDPreTrainedModel):
     base_model_prefix = "led"
-    _keys_to_ignore_on_load_missing = [
-        r"final_logits_bias",
-        r"encoder.version",
-        r"decoder.version",
-        r"lm_head.weight",
-        "decoder.embed_tokens.weight",
-        "encoder.embed_tokens.weight",
-    ]
+    _keys_to_ignore_on_load_missing = ["final_logits_bias"]
     _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: LEDConfig):
@@ -2530,7 +2522,6 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
     LED_START_DOCSTRING,
 )
 class LEDForSequenceClassification(LEDPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
     _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
 
     def __init__(self, config: LEDConfig, **kwargs):
@@ -2667,7 +2658,6 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
     LED_START_DOCSTRING,
 )
 class LEDForQuestionAnswering(LEDPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
     _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
 
     def __init__(self, config):

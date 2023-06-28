@@ -216,6 +216,9 @@ class TFAlbertPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = None
+
+
 TF_MODEL_FOR_CAUSAL_LM_MAPPING = None
 
 
@@ -223,6 +226,9 @@ TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING = None
 
 
 TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
+
+
+TF_MODEL_FOR_MASK_GENERATION_MAPPING = None
 
 
 TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING = None
@@ -256,6 +262,9 @@ TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = None
 
 
 TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = None
+
+
+TF_MODEL_FOR_TEXT_ENCODING_MAPPING = None
 
 
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
@@ -365,6 +374,13 @@ class TFAutoModelForSpeechSeq2Seq(metaclass=DummyObject):
 
 
 class TFAutoModelForTableQuestionAnswering(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFAutoModelForTextEncoding(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):

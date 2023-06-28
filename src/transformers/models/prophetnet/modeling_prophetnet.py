@@ -1744,7 +1744,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
     PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetModel(ProphetNetPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["decoder.word_embeddings.weight", "encoder.word_embeddings.weight"]
     _tied_weights_keys = ["encoder.word_embeddings.weight", "decoder.word_embeddings.weight"]
 
     def __init__(self, config: ProphetNetConfig):
@@ -1874,11 +1873,6 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
     PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        "decoder.word_embeddings.weight",
-        "encoder.word_embeddings.weight",
-        "lm_head.weight",
-    ]
     _tied_weights_keys = ["encoder.word_embeddings.weight", "decoder.word_embeddings.weight", "lm_head.weight"]
 
     def __init__(self, config: ProphetNetConfig):
@@ -2091,7 +2085,6 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: ProphetNetConfig):

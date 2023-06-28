@@ -537,7 +537,6 @@ class CpmAntPreTrainedModel(PreTrainedModel):
     config_class = CpmAntConfig
     base_model_prefix = "cpmant"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -749,7 +748,6 @@ class CpmAntModel(CpmAntPreTrainedModel):
     CPMANT_START_DOCSTRING,
 )
 class CpmAntForCausalLM(CpmAntPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: CpmAntConfig):

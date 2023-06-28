@@ -117,7 +117,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_pruning = False
     test_headmasking = False
     test_resize_embeddings = False
-    pipeline_model_mapping = {}
+    pipeline_model_mapping = {"feature-extraction": EncodecModel} if is_torch_available() else {}
     input_name = "input_values"
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -373,12 +373,12 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 uniform_init_parms = ["conv"]
                 ignore_init = ["lstm"]
                 if param.requires_grad:
-                    if any([x in name for x in uniform_init_parms]):
+                    if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
-                    elif not any([x in name for x in ignore_init]):
+                    elif not any(x in name for x in ignore_init):
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),
                             [0.0, 1.0],

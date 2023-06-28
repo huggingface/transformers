@@ -329,7 +329,7 @@ if __name__ == "__main__":
     docs = collections.OrderedDict(
         [
             ("*.py", "API Examples"),
-            ("*.mdx", "MDX Examples"),
+            ("*.md", "MD Examples"),
         ]
     )
 
