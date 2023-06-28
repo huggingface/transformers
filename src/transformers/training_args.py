@@ -956,7 +956,7 @@ class TrainingArguments:
         },
     )
     fsdp: Optional[Union[str, bool, List[FSDPOption]]] = field(
-        default="",
+        default=False,
         metadata={
             "help": (
                 "Whether or not to use PyTorch Fully Sharded Data Parallel (FSDP) training (in distributed training"
