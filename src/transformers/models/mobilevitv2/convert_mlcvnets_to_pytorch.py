@@ -276,7 +276,7 @@ def convert_mobilevitv2_checkpoint(task_name, checkpoint_path, orig_config_path,
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {task_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
     image_processor.save_pretrained(pytorch_dump_folder_path)
 
 

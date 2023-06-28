@@ -141,7 +141,7 @@ def convert_poolformer_checkpoint(model_name, checkpoint_path, pytorch_dump_fold
     else:
         raise ValueError(f"Size {size} not supported")
 
-    # load feature extractor
+    # load image processor
     image_processor = PoolFormerImageProcessor(crop_pct=crop_pct)
 
     # Prepare image
@@ -161,7 +161,7 @@ def convert_poolformer_checkpoint(model_name, checkpoint_path, pytorch_dump_fold
     model.load_state_dict(state_dict)
     model.eval()
 
-    # Define feature extractor
+    # Define image processor
     image_processor = PoolFormerImageProcessor(crop_pct=crop_pct)
     pixel_values = image_processor(images=prepare_img(), return_tensors="pt").pixel_values
 
@@ -187,11 +187,11 @@ def convert_poolformer_checkpoint(model_name, checkpoint_path, pytorch_dump_fold
     assert logits.shape == expected_shape
     assert torch.allclose(logits[0, :3], expected_slice, atol=1e-2)
 
-    # finally, save model and feature extractor
-    logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
+    # finally, save model and image processor
+    logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
     image_processor.save_pretrained(pytorch_dump_folder_path)
 
 

@@ -233,7 +233,7 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
     image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
@@ -247,7 +247,7 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
         image_processor.push_to_hub(
             repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
             organization="nielsr",
-            commit_message="Add feature extractor",
+            commit_message="Add image processor",
             use_temp_dir=True,
         )
 

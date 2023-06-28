@@ -288,7 +288,7 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_
         print("Loss ok!")
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model and feature extractor to {pytorch_dump_folder_path}")
+        print(f"Saving model and image processor to {pytorch_dump_folder_path}")
         image_processor.save_pretrained(pytorch_dump_folder_path)
         model.save_pretrained(pytorch_dump_folder_path)
 

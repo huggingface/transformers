@@ -152,7 +152,7 @@ def convert_swin_checkpoint(swin_name, pytorch_dump_folder_path):
     print(f"Saving model {swin_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
 
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
     image_processor.save_pretrained(pytorch_dump_folder_path)
 
 

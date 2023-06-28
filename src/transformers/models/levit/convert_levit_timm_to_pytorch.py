@@ -167,12 +167,12 @@ if __name__ == "__main__":
         required=False,
         help="Path to the output PyTorch model directory.",
     )
-    parser.add_argument("--push_to_hub", action="store_true", help="Push model and feature extractor to the hub")
+    parser.add_argument("--push_to_hub", action="store_true", help="Push model and image processor to the hub")
     parser.add_argument(
         "--no-push_to_hub",
         dest="push_to_hub",
         action="store_false",
-        help="Do not push model and feature extractor to the hub",
+        help="Do not push model and image processor to the hub",
     )
 
     args = parser.parse_args()

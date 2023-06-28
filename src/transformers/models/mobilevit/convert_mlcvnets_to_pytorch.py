@@ -265,7 +265,7 @@ def convert_movilevit_checkpoint(mobilevit_name, checkpoint_path, pytorch_dump_f
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {mobilevit_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
     image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:

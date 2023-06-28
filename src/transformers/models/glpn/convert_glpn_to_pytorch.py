@@ -131,7 +131,7 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
     # load GLPN configuration (Segformer-B4 size)
     config = GLPNConfig(hidden_sizes=[64, 128, 320, 512], decoder_hidden_size=64, depths=[3, 8, 27, 3])
 
-    # load feature extractor (only resize + rescale)
+    # load image processor (only resize + rescale)
     image_processor = GLPNImageProcessor()
 
     # prepare image
@@ -179,7 +179,7 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
 
     # finally, push to hub if required
     if push_to_hub:
-        logger.info("Pushing model and feature extractor to the hub...")
+        logger.info("Pushing model and image processor to the hub...")
         model.push_to_hub(
             repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
             organization="nielsr",
@@ -189,7 +189,7 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
         image_processor.push_to_hub(
             repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
             organization="nielsr",
-            commit_message="Add feature extractor",
+            commit_message="Add image processor",
             use_temp_dir=True,
         )
 

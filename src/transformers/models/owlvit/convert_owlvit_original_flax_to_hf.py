@@ -350,7 +350,7 @@ def convert_owlvit_checkpoint(pt_backbone, flax_params, attn_params, pytorch_dum
     # Save HF model
     hf_model.save_pretrained(repo.local_dir)
 
-    # Initialize feature extractor
+    # Initialize image processor
     image_processor = OwlViTImageProcessor(
         size=config.vision_config.image_size, crop_size=config.vision_config.image_size
     )

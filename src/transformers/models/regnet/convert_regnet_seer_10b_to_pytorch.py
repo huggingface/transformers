@@ -265,7 +265,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-base-224-22k-1k", size=size)
         image_processor.push_to_hub(
             repo_path_or_name=save_directory / model_name,
-            commit_message="Add feature extractor",
+            commit_message="Add image processor",
             output_dir=save_directory / model_name,
         )
 
@@ -294,7 +294,7 @@ if __name__ == "__main__":
         default=True,
         type=bool,
         required=False,
-        help="If True, push model and feature extractor to the hub.",
+        help="If True, push model and image processor to the hub.",
     )
 
     args = parser.parse_args()

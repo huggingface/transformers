@@ -277,8 +277,8 @@ def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_pat
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
-        # Save model and feature extractor
-        logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
+        # Save model and image processor
+        logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         model.save_pretrained(pytorch_dump_folder_path)
         image_processor.save_pretrained(pytorch_dump_folder_path)

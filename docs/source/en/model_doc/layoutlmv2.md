@@ -150,7 +150,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## Usage: LayoutLMv2Processor
 
 The easiest way to prepare data for the model is to use [`LayoutLMv2Processor`], which internally
-combines a feature extractor ([`LayoutLMv2ImageProcessor`]) and a tokenizer
+combines a image processor ([`LayoutLMv2ImageProcessor`]) and a tokenizer
 ([`LayoutLMv2Tokenizer`] or [`LayoutLMv2TokenizerFast`]). The image processor
 handles the image modality, while the tokenizer handles the text modality. A processor combines both, which is ideal
 for a multi-modal model like LayoutLMv2. Note that you can still use both separately, if you only want to handle one
@@ -205,7 +205,7 @@ print(encoding.keys())
 
 **Use case 2: document image classification (training, inference) + token classification (inference), apply_ocr=False**
 
-In case one wants to do OCR themselves, one can initialize the feature extractor with `apply_ocr` set to
+In case one wants to do OCR themselves, one can initialize the image processor with `apply_ocr` set to
 `False`. In that case, one should provide the words and corresponding (normalized) bounding boxes themselves to
 the processor.
 

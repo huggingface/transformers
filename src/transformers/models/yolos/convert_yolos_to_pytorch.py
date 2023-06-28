@@ -224,7 +224,7 @@ def convert_yolos_checkpoint(
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {yolos_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
     image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:

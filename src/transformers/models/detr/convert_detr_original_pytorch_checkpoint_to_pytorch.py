@@ -201,7 +201,7 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
 
-    # load feature extractor
+    # load image processor
     format = "coco_panoptic" if is_panoptic else "coco_detection"
     image_processor = DetrImageProcessor(format=format)
 
@@ -258,8 +258,8 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
     if is_panoptic:
         assert torch.allclose(outputs.pred_masks, original_outputs["pred_masks"], atol=1e-4)
 
-    # Save model and feature extractor
-    logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
+    # Save model and image processor
+    logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path)
     image_processor.save_pretrained(pytorch_dump_folder_path)

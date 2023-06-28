@@ -146,11 +146,11 @@ def convert_swin_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
 
-        print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+        print(f"Saving image processor to {pytorch_dump_folder_path}")
         image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print(f"Pushing model and feature extractor for {model_name} to hub")
+        print(f"Pushing model and image processor for {model_name} to hub")
         model.push_to_hub(f"microsoft/{model_name}")
         image_processor.push_to_hub(f"microsoft/{model_name}")
 

@@ -340,13 +340,13 @@ def convert_maskformer_checkpoint(
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model and feature extractor of {model_name} to {pytorch_dump_folder_path}")
+        print(f"Saving model and image processor of {model_name} to {pytorch_dump_folder_path}")
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         model.save_pretrained(pytorch_dump_folder_path)
         image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print(f"Pushing model and feature extractor of {model_name} to the hub...")
+        print(f"Pushing model and image processor of {model_name} to the hub...")
         model.push_to_hub(f"facebook/{model_name}")
         image_processor.push_to_hub(f"facebook/{model_name}")
 
