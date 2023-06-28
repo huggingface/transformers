@@ -35,7 +35,6 @@ These presets are also uploaded in the hub [here](https://huggingface.co/ylacomb
 
 ```python
 >>> from transformers import AutoProcessor, BarkModel
->>> from scipy.io.wavfile import write as write_wav
 
 >>> processor = AutoProcessor.from_pretrained("{_CHECKPOINT_FOR_DOC}")
 >>> model = BarkModel.from_pretrained("{_CHECKPOINT_FOR_DOC}")
@@ -44,12 +43,9 @@ These presets are also uploaded in the hub [here](https://huggingface.co/ylacomb
 
 >>> inputs, history_prompt = processor("Hello, my dog is cute", voice_preset=voice_preset)
 
->>> audio_array = model(**inputs, history_prompt=history_prompt)
+>>> audio_array = model.generate_audio(**inputs, history_prompt=history_prompt)
 >>> audio_array = audio_array.detach().cpu().numpy()
 
->>> # save audio to disk, but first take the sample rate from the model config
->>> sample_rate = model.config.sample_rate
->>> write_wav("bark_generation.wav", sample_rate, audio_array)
 ```
 
 Bark can generate highly realistic, **multilingual** speech as well as other audio - including music, background noise and simple sound effects. 
@@ -64,8 +60,8 @@ Bark can generate highly realistic, **multilingual** speech as well as other aud
 >>> # Bark can also generate music. You can help it out by adding music notes around your lyrics.
 >>> inputs, history_prompt = processor("♪ Hello, my dog is cute ♪")
 
->>> audio_array = model(**inputs, history_prompt=history_prompt)
->>> audio_array = audio_array.detach().cpu().numpy()
+>>> audio_array = model.generate_audio(**inputs, history_prompt=history_prompt)
+>>> audio_array = audio_array.detach().cpu().numpy().squeeze()
 ```
 
 The model can also produce **nonverbal communications** like laughing, sighing and crying.
@@ -75,8 +71,18 @@ The model can also produce **nonverbal communications** like laughing, sighing a
 >>> # Adding non-speech cues to the input text
 >>> inputs, history_prompt = processor("Hello uh ... [clears throat], my dog is cute [laughter]")
 
->>> audio_array = model(**inputs, history_prompt=history_prompt)
->>> audio_array = audio_array.detach().cpu().numpy()
+>>> audio_array = model.generate_audio(**inputs, history_prompt=history_prompt)
+>>> audio_array = audio_array.detach().cpu().numpy().squeeze()
+```
+
+To save the audio, simply take the sample rate from the model config and some scipy utility:
+
+```python
+>>> from scipy.io.wavfile import write as write_wav
+
+>>> # save audio to disk, but first take the sample rate from the model config
+>>> sample_rate = model.config.sample_rate
+>>> write_wav("bark_generation.wav", sample_rate, audio_array)
 ```
 
 </Tip>
