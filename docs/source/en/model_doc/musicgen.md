@@ -82,7 +82,7 @@ Or save them as a `.wav` file using a third-party library, e.g. `scipy`:
 >>> import scipy
 
 >>> sampling_rate = model.config.audio_encoder.sampling_rate
->>> scipy.io.wavfile.write("musicgen_out.wav", rate=sampling_rate, data=audio_values[0].numpy())
+>>> scipy.io.wavfile.write("musicgen_out.wav", rate=sampling_rate, data=audio_values[0, 0].numpy())
 ```
 
 ### Text-Conditional Generation
