@@ -862,7 +862,6 @@ class MraPreTrainedModel(PreTrainedModel):
     config_class = MraConfig
     base_model_prefix = "mra"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1064,11 +1063,6 @@ class MraModel(MraPreTrainedModel):
 @add_start_docstrings("""MRA Model with a `language modeling` head on top.""", MRA_START_DOCSTRING)
 # Copied from transformers.models.yoso.modeling_yoso.YosoForMaskedLM with YOSO->MRA,Yoso->Mra,yoso->mra
 class MraForMaskedLM(MraPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        "cls.predictions.decoder.bias",
-        "cls.predictions.decoder.weight",
-        "embeddings.position_ids",
-    ]
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     def __init__(self, config):
