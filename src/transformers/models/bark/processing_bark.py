@@ -34,7 +34,7 @@ class BarkProcessor(ProcessorMixin):
     Args:
         tokenizer ([`PreTrainedTokenizer`]):
             An instance of [`PreTrainedTokenizer`].
-        speaker_embeddings_dict (`Dict[np.ndarray]`, *optional*, defaults to `None`):
+        speaker_embeddings (`Dict[np.ndarray]`, *optional*, defaults to `None`):
             Optional nested speaker embeddings dictionary. The first level contains voice preset names (e.g `"en_speaker_4"`).
             The second level contains `"semantic_prompt"`, `"coarse_prompt"` and `"fine_prompt"` embeddings. 
             See [here](https://suno-ai.notion.site/8b8e8749ed514b0cbf3f699013548683?v=bc67cff786b04b50b3ceb756fd05f68c) for
@@ -50,10 +50,10 @@ class BarkProcessor(ProcessorMixin):
         "fine_prompt": 2,
     }
 
-    def __init__(self, tokenizer, speaker_embeddings_dict=None):
+    def __init__(self, tokenizer, speaker_embeddings=None):
         super().__init__(tokenizer)
 
-        self.speaker_embeddings_dict = speaker_embeddings_dict
+        self.speaker_embeddings = speaker_embeddings
 
     @classmethod
     def from_pretrained(
@@ -80,7 +80,7 @@ class BarkProcessor(ProcessorMixin):
         """
 
         if speaker_embeddings_file_name is not None:
-            speaker_embeddings_dict = get_file_from_repo(
+            speaker_embeddings = get_file_from_repo(
                 pretrained_processor_name_or_path,
                 speaker_embeddings_file_name,
                 subfolder=kwargs.pop("subfolder", None),
@@ -92,26 +92,26 @@ class BarkProcessor(ProcessorMixin):
                 use_auth_token=kwargs.pop("use_auth_token", None),
                 revision=kwargs.pop("revision", None),
             )
-            if speaker_embeddings_dict is None:
+            if speaker_embeddings is None:
                 warnings.warn(
                     f"`{os.path.join(pretrained_processor_name_or_path,speaker_embeddings_file_name)}` does not exists, no preloaded speaker embeddings will be used - Make sure to provide a correct path if wanted, otherwise set `speaker_embeddings_file_name=None`."
                 )
             else:
                 # TODO: not sure this is the safest way to load/save speaker_embeddings
-                speaker_embeddings_dict = np.load(speaker_embeddings_dict, allow_pickle=True)
+                speaker_embeddings = np.load(speaker_embeddings, allow_pickle=True)
                 
-                if len(speaker_embeddings_dict.keys()) != 1:
-                    raise ValueError(f"`speaker_embeddings` doesn't follow the required format - uses a speaker_embeddings file saved via `np.savez(speaker_embeddings_file_name, speaker_embeddings_dict)`.")
+                if len(speaker_embeddings.keys()) != 1:
+                    raise ValueError(f"`speaker_embeddings` doesn't follow the required format - uses a speaker_embeddings file saved via `np.savez(speaker_embeddings_file_name, speaker_embeddings)`.")
                 
-                key_dict = list(speaker_embeddings_dict.keys())[0]
-                speaker_embeddings_dict = speaker_embeddings_dict[key_dict].item()
+                key_dict = list(speaker_embeddings.keys())[0]
+                speaker_embeddings = speaker_embeddings[key_dict].item()
                 
         else:
-            speaker_embeddings_dict = None
+            speaker_embeddings = None
 
         tokenizer = AutoTokenizer.from_pretrained(pretrained_processor_name_or_path, **kwargs)
 
-        return cls(tokenizer=tokenizer, speaker_embeddings_dict=speaker_embeddings_dict)
+        return cls(tokenizer=tokenizer, speaker_embeddings=speaker_embeddings)
 
     def save_pretrained(
         self,
@@ -138,9 +138,9 @@ class BarkProcessor(ProcessorMixin):
             kwargs:
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        if self.speaker_embeddings_dict is not None:
+        if self.speaker_embeddings is not None:
             os.makedirs(save_directory, exist_ok=True)
-            np.savez(os.path.join(save_directory, speaker_embeddings_file_name), self.speaker_embeddings_dict)
+            np.savez(os.path.join(save_directory, speaker_embeddings_file_name), self.speaker_embeddings)
 
         super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
@@ -195,8 +195,8 @@ class BarkProcessor(ProcessorMixin):
         """
         if voice_preset is not None and not isinstance(voice_preset, dict):
 
-            if isinstance(voice_preset, str) and voice_preset in self.speaker_embeddings_dict:
-                voice_preset = self.speaker_embeddings_dict[voice_preset]
+            if isinstance(voice_preset, str) and voice_preset in self.speaker_embeddings:
+                voice_preset = self.speaker_embeddings[voice_preset]
 
             else:
                 if isinstance(voice_preset, str) and not voice_preset.endswith(".npz"):
