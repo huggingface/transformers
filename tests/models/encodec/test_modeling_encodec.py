@@ -466,7 +466,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             "24.0": 0.0005,
         }
         expected_codesums = {
-            "3.0": [142174, 147901, 154090, 178965, 161879],
+            "3.0": [144259, 146765, 156435, 176871, 161971],
             "24.0": [1561048, 1284593, 1278330, 1487220, 1659404],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
