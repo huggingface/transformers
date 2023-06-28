@@ -551,7 +551,6 @@ class MvpPreTrainedModel(PreTrainedModel):
     config_class = MvpConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_unexpected = [r"encoder.version", r"decoder.version"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1300,8 +1299,7 @@ class MvpDecoder(MvpPreTrainedModel):
     MVP_START_DOCSTRING,
 )
 class MvpModel(MvpPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"final_logits_bias", r"lm_head.weight"]
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _keys_to_ignore_on_load_unexpected = ["final_logits_bias"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: MvpConfig):
@@ -1438,7 +1436,6 @@ class MvpModel(MvpPreTrainedModel):
     "The MVP Model with a language modeling head. Can be used for various text generation tasks.", MVP_START_DOCSTRING
 )
 class MvpForConditionalGeneration(MvpPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: MvpConfig):
@@ -1611,8 +1608,6 @@ class MvpForConditionalGeneration(MvpPreTrainedModel):
     MVP_START_DOCSTRING,
 )
 class MvpForSequenceClassification(MvpPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"final_logits_bias", r"lm_head.weight"]
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: MvpConfig, **kwargs):
@@ -1740,8 +1735,6 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
     MVP_START_DOCSTRING,
 )
 class MvpForQuestionAnswering(MvpPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"final_logits_bias", r"lm_head.weight"]
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config):
@@ -1873,7 +1866,6 @@ class MvpDecoderWrapper(MvpPreTrainedModel):
 
 
 class MvpForCausalLM(MvpPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

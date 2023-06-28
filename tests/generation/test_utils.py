@@ -2366,6 +2366,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             num_beams=2,
             num_beam_groups=2,
             num_return_sequences=2,
+            diversity_penalty=1.0,
             eos_token_id=None,
             return_dict_in_generate=True,
             output_scores=True,

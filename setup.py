@@ -107,7 +107,7 @@ _deps = [
     "dataclasses",
     "datasets!=2.5.0",
     "decord==0.6.0",
-    "deepspeed>=0.8.3",
+    "deepspeed>=0.9.3",
     "diffusers",
     "dill<0.3.5",
     "evaluate>=0.2.0",
@@ -149,7 +149,7 @@ _deps = [
     "pytest>=7.2.0",
     "pytest-timeout",
     "pytest-xdist",
-    "python>=3.7.0",
+    "python>=3.8.0",
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
@@ -413,7 +413,6 @@ extras["agents"] = deps_list(
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
-    deps["importlib_metadata"] + ";python_version<'3.8'",  # importlib_metadata for Python versions that don't have it
     deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
     deps["huggingface-hub"],
     deps["numpy"],
@@ -444,7 +443,7 @@ setup(
     zip_safe=False,
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
-    python_requires=">=3.7.0",
+    python_requires=">=3.8.0",
     install_requires=install_requires,
     classifiers=[
         "Development Status :: 5 - Production/Stable",
@@ -454,7 +453,6 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",

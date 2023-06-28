@@ -1775,7 +1775,6 @@ class DetaModel(DetaPreTrainedModel):
 )
 class DetaForObjectDetection(DetaPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _keys_to_ignore_on_load_missing = [r"bbox_embed\.[1-9]\d*", r"class_embed\.[1-9]\d*"]
     _tied_weights_keys = [r"bbox_embed\.\d+"]
 
     # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrForObjectDetection.__init__ with DeformableDetr->Deta
@@ -2485,9 +2484,9 @@ class DetaMatcher(object):
         thresholds.insert(0, -float("inf"))
         thresholds.append(float("inf"))
         # Currently torchscript does not support all + generator
-        if not all([low <= high for (low, high) in zip(thresholds[:-1], thresholds[1:])]):
+        if not all(low <= high for (low, high) in zip(thresholds[:-1], thresholds[1:])):
             raise ValueError("Thresholds should be sorted.")
-        if not all([l in [-1, 0, 1] for l in labels]):
+        if not all(l in [-1, 0, 1] for l in labels):
             raise ValueError("All labels should be either -1, 0 or 1")
         if len(labels) != len(thresholds) - 1:
             raise ValueError("Number of labels should be equal to number of thresholds - 1")

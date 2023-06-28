@@ -178,7 +178,9 @@ class RealmEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
         self.register_buffer(
             "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
         )
@@ -968,7 +970,6 @@ class RealmPreTrainedModel(PreTrainedModel):
     config_class = RealmConfig
     load_tf_weights = load_tf_weights_in_realm
     base_model_prefix = "realm"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1147,7 +1148,6 @@ class RealmBertModel(RealmPreTrainedModel):
     REALM_START_DOCSTRING,
 )
 class RealmEmbedder(RealmPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.bias"]
     _tied_weights_keys = ["cls.predictions.decoder.bias"]
 
     def __init__(self, config):
@@ -1378,7 +1378,6 @@ class RealmScorer(RealmPreTrainedModel):
     REALM_START_DOCSTRING,
 )
 class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder"]
     _tied_weights_keys = ["cls.predictions.decoder"]
 
     def __init__(self, config):
@@ -1529,8 +1528,6 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
 
 @add_start_docstrings("The reader of REALM.", REALM_START_DOCSTRING)
 class RealmReader(RealmPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler", "cls"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
