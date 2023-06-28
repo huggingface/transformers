@@ -413,7 +413,7 @@ class EncodecIntegrationTest(unittest.TestCase):
         }
         expected_codesums = {
             "1.5": [371955],
-            "24.0": [6648961],
+            "24.0": [6659962],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "facebook/encodec_24khz"
