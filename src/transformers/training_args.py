@@ -976,7 +976,7 @@ class TrainingArguments:
             )
         },
     )
-    fsdp_config: Optional[Union[str, dict]] = field(
+    fsdp_config: Optional[Union[str, Dict]] = field(
         default=None,
         metadata={
             "help": (
@@ -994,7 +994,7 @@ class TrainingArguments:
             )
         },
     )
-    deepspeed: Optional[Union[str, dict]] = field(
+    deepspeed: Optional[Union[str, Dict]] = field(
         default=None,
         metadata={
             "help": (
