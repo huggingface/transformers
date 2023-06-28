@@ -765,5 +765,5 @@ class MixedInt8GPT2Test(MixedInt8Test):
     EXPECTED_OUTPUT = "Hello my name is John Doe, and I am a member of the"
 
     def test_int8_from_pretrained(self):
-        # TODO: Test loading quantized gpt2 model from the hub.
+        # TODO @younesbelkada: Test loading quantized gpt2 model from the hub.
         pass
