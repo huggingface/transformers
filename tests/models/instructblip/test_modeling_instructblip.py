@@ -521,18 +521,16 @@ def prepare_img():
 @require_torch
 @slow
 class InstructBlipModelIntegrationTest(unittest.TestCase):
-    # TODO (@Younes): Re-enable this when 8-bit or 4-bit is implemented.
-    @unittest.skip(reason="GPU OOM")
     def test_inference_vicuna_7b(self):
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
-        model = InstructBlipForConditionalGeneration.from_pretrained("Salesforce/instructblip-vicuna-7b").to(
-            torch_device
+        model = InstructBlipForConditionalGeneration.from_pretrained(
+            "Salesforce/instructblip-vicuna-7b", load_in_8bit=True
         )
 
         url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
         image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
         prompt = "What is unusual about this image?"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
 
         # verify logits
         with torch.no_grad():
