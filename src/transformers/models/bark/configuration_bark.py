@@ -16,12 +16,11 @@
 
 import copy
 import os
-from typing import Union, Dict
+from typing import Dict, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from ...utils import add_start_docstrings, logging
 from ..encodec import EncodecConfig
-from ...utils import add_start_docstrings
 
 
 logger = logging.get_logger(__name__)
@@ -33,11 +32,14 @@ BARK_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 BARK_SUBMODELCONFIG_START_DOCSTRING = """
-    This is the configuration class to store the configuration of a [`{model}`]. It is used to instantiate the model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`{model}`]. It is used to instantiate the model
+    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the Bark
+    [ylacombe/bark-large](https://huggingface.co/ylacombe/bark-large) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-    
+
     Args:
         block_size (int, optional):
         The maximum sequence length that this model might ever be used with. Typically set this to something large
@@ -48,8 +50,8 @@ BARK_SUBMODELCONFIG_START_DOCSTRING = """
             regards to the chosen sub-model.
         output_vocab_size (_type_, optional):
         Output vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented by the:
-            `output_ids` when passing forward a [`{model}`]. Defaults to 10_048 but should be carefully thought
-            with regards to the chosen sub-model.
+            `output_ids` when passing forward a [`{model}`]. Defaults to 10_048 but should be carefully thought with
+            regards to the chosen sub-model.
         num_layers (int, optional):
             Number of layers. Defaults to 12.
         num_heads (int, optional):
@@ -71,22 +73,6 @@ BARK_SUBMODELCONFIG_START_DOCSTRING = """
         n_codes_given (`int`, *optional*, defaults to 8):
             The number of [`Encodec`] codebooks predicted in the coarse acoustics sub-model. Use in the acoustics
             sub-models.
-            
-
-    Example:
-
-    ```python
-    >>> from transformers import {config}, {model}
-
-    >>> # Initializing a Bark sub-module style configuration
-    >>> configuration = {config}()
-
-    >>> # Initializing a model (with random weights) from the suno/bark style configuration
-    >>> model = {model}(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
 """
 
 
@@ -149,21 +135,67 @@ class BarkSubModelConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-
 @add_start_docstrings(
-    BARK_SUBMODELCONFIG_START_DOCSTRING.format(config  = "BarkSemanticConfig", model = "BarkSemanticModel")
+    BARK_SUBMODELCONFIG_START_DOCSTRING.format(config="BarkSemanticConfig", model="BarkSemanticModel"),
+    """
+    Example:
+
+    ```python
+    >>> from transformers import BarkSemanticConfig, BarkSemanticModel
+
+    >>> # Initializing a Bark sub-module style configuration
+    >>> configuration = BarkSemanticConfig()
+
+    >>> # Initializing a model (with random weights) from the suno/bark style configuration
+    >>> model = BarkSemanticModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```""",
 )
 class BarkSemanticConfig(BarkSubModelConfig):
     model_type = "semantic"
 
+
 @add_start_docstrings(
-    BARK_SUBMODELCONFIG_START_DOCSTRING.format(config  = "BarkCoarseConfig", model = "BarkCoarseModel")
+    BARK_SUBMODELCONFIG_START_DOCSTRING.format(config="BarkCoarseConfig", model="BarkCoarseModel"),
+    """
+    Example:
+
+    ```python
+    >>> from transformers import BarkCoarseConfig, BarkCoarseModel
+
+    >>> # Initializing a Bark sub-module style configuration
+    >>> configuration = BarkCoarseConfig()
+
+    >>> # Initializing a model (with random weights) from the suno/bark style configuration
+    >>> model = BarkCoarseModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```""",
 )
 class BarkCoarseConfig(BarkSubModelConfig):
     model_type = "coarse_acoustics"
 
+
 @add_start_docstrings(
-    BARK_SUBMODELCONFIG_START_DOCSTRING.format(config  = "BarkFineConfig", model = "BarkFineModel")
+    BARK_SUBMODELCONFIG_START_DOCSTRING.format(config="BarkFineConfig", model="BarkFineModel"),
+    """
+    Example:
+
+    ```python
+    >>> from transformers import BarkFineConfig, BarkFineModel
+
+    >>> # Initializing a Bark sub-module style configuration
+    >>> configuration = BarkFineConfig()
+
+    >>> # Initializing a model (with random weights) from the suno/bark style configuration
+    >>> model = BarkFineModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```""",
 )
 class BarkFineConfig(BarkSubModelConfig):
     model_type = "fine_acoustics"
@@ -176,6 +208,9 @@ class BarkConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`BarkModel`]. It is used to instantiate a Bark
     model according to the specified sub-models configurations, defining the model architecture.
+
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Bark
+    [ylacombe/bark-large](https://huggingface.co/ylacombe/bark-large) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -193,7 +228,14 @@ class BarkConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BarkSemanticConfig, BarkCoarseConfig, BarkFineConfig, BarkModel, BarkConfig, EncodecConfig
+    >>> from transformers import (
+    ...     BarkSemanticConfig,
+    ...     BarkCoarseConfig,
+    ...     BarkFineConfig,
+    ...     BarkModel,
+    ...     BarkConfig,
+    ...     EncodecConfig,
+    ... )
 
     >>> # Initializing Bark sub-modules configurations.
     >>> semantic_config = BarkSemanticConfig()
@@ -203,7 +245,9 @@ class BarkConfig(PretrainedConfig):
 
 
     >>> # Initializing a Bark module style configuration
-    >>> configuration = BarkConfig.from_configs(semantic_config, coarse_acoustics_config, fine_acoustics_config, codec_config)
+    >>> configuration = BarkConfig.from_configs(
+    ...     semantic_config, coarse_acoustics_config, fine_acoustics_config, codec_config
+    ... )
 
     >>> # Initializing a model (with random weights)
     >>> model = BarkModel(configuration)
