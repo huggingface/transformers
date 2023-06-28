@@ -21,6 +21,8 @@ from typing import Optional, Union
 
 import numpy as np
 
+from ...feature_extraction_utils import BatchFeature
+
 from ...processing_utils import ProcessorMixin
 from ...utils import (
     TensorType,
@@ -191,12 +193,10 @@ class BarkProcessor(ProcessorMixin):
                 - `'np'`: Return NumPy `np.ndarray` objects.
 
         Returns:
-            Tuple([`BatchEncoding`], Dict[~utils.TensorType]): A tuple composed of a [`BatchEncoding`], i.e the output
-            of the `tokenizer` and a `Dict[~utils.TensorType`]`, i.e the voice preset with the right tensors type.
+            Tuple([`BatchEncoding`], [`BatchFeature`]): A tuple composed of a [`BatchEncoding`], i.e the output
+            of the `tokenizer` and a [`BatchFeature`], i.e the voice preset with the right tensors type.
         """
-        if voice_preset is None or isinstance(voice_preset, dict):
-            pass
-        else:
+        if voice_preset is not None and not isinstance(voice_preset, dict):
             voice_preset_key = voice_preset.replace("/", "_")
             if isinstance(voice_preset, str) and f"{voice_preset_key}_semantic_prompt" in self.speaker_embeddings_dict:
                 voice_preset = {}
@@ -214,7 +214,8 @@ class BarkProcessor(ProcessorMixin):
                 voice_preset = np.load(voice_preset)
 
         self._validate_voice_preset_dict(voice_preset)
-        voice_preset = convert_dict_to_tensors(voice_preset, return_tensors)
+        voice_preset = BatchFeature(data = voice_preset, tensor_type = return_tensors)
+
         encoded_text = self.tokenizer(
             text,
             return_tensors=return_tensors,
@@ -228,68 +229,3 @@ class BarkProcessor(ProcessorMixin):
 
         return encoded_text, voice_preset
 
-
-def convert_dict_to_tensors(tensor_dict, tensor_type: Optional[Union[str, TensorType]] = None):
-    if tensor_type is None or tensor_dict is None:
-        return tensor_dict
-
-    # Convert to TensorType
-    if not isinstance(tensor_type, TensorType):
-        tensor_type = TensorType(tensor_type)
-
-    # Get a function reference for the correct framework
-    if tensor_type == TensorType.TENSORFLOW:
-        if not is_tf_available():
-            raise ImportError("Unable to convert output to TensorFlow tensors format, TensorFlow is not installed.")
-        import tensorflow as tf
-
-        as_tensor = tf.constant
-        is_tensor = tf.is_tensor
-    elif tensor_type == TensorType.PYTORCH:
-        if not is_torch_available():
-            raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
-        import torch
-
-        as_tensor = torch.tensor
-        is_tensor = torch.is_tensor
-    elif tensor_type == TensorType.JAX:
-        if not is_flax_available():
-            raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
-        import jax.numpy as jnp  # noqa: F811
-
-        as_tensor = jnp.array
-        is_tensor = is_jax_tensor
-    else:
-
-        def as_tensor(value, dtype=None):
-            if isinstance(value, (list, tuple)) and isinstance(value[0], (list, tuple, np.ndarray)):
-                value_lens = [len(val) for val in value]
-                if len(set(value_lens)) > 1 and dtype is None:
-                    # we have a ragged list so handle explicitly
-                    value = as_tensor([np.asarray(val) for val in value], dtype=object)
-            return np.asarray(value, dtype=dtype)
-
-        is_tensor = is_numpy_array
-
-    new_tensor_dict = {}
-    # Do the tensor conversion in batch
-    for key, value in tensor_dict.items():
-        try:
-            if not is_tensor(value):
-                tensor = as_tensor(value)
-
-                new_tensor_dict[key] = tensor
-        except Exception as e:
-            if key == "overflowing_tokens":
-                raise ValueError(
-                    "Unable to create tensor returning overflowing tokens of different lengths. "
-                    "Please see if a fast version of this tokenizer is available to have this feature available."
-                ) from e
-            raise ValueError(
-                "Unable to create tensor, you should probably activate truncation and/or padding with"
-                " 'padding=True' 'truncation=True' to have batched tensors with the same length. Perhaps your"
-                f" features (`{key}` in this case) have excessive nesting (inputs type `list` where type `int` is"
-                " expected)."
-            ) from e
-
-    return new_tensor_dict
