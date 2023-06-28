@@ -6,6 +6,10 @@
 # Run this script from transformers/src/transformers/models/vits/
 #     python convert_all_checkpoints.py 2>logs.txt
 
+import os
+
+from huggingface_hub import HfApi
+
 
 repo_id = "Matthijs/"
 dump_path = "EXPORTED/"
@@ -1157,11 +1161,15 @@ languages = {
     "zza": "Zaza",
 }
 
+# fmt: off
 readme = """
---- license: cc-by-nc-4.0 tags:
+---
+license: cc-by-nc-4.0
+tags:
 - mms
 - vits
-pipeline_tag: text-to-speech ---
+pipeline_tag: text-to-speech
+---
 
 # Massively Multilingual Speech (MMS) : Text-to-Speech Models
 
@@ -1190,7 +1198,6 @@ with torch.no_grad():
     output = model(**inputs)
 
 from IPython.display import Audio
-
 Audio(output.audio[0], rate=16000)
 ```
 
@@ -1202,12 +1209,16 @@ Note: For certain checkpoints, the input text must be converted to the Latin alp
 This model was developed by Vineel Pratap et al. and is licensed as **CC-BY-NC 4.0**
 
     @article{pratap2023mms,
-        title={Scaling Speech Technology to 1,000+ Languages}, author={Vineel Pratap and Andros Tjandra and Bowen Shi
-        and Paden Tomasello and Arun Babu and Sayani Kundu and Ali Elkahky and Zhaoheng Ni and Apoorv Vyas and Maryam
-        Fazel-Zarandi and Alexei Baevski and Yossi Adi and Xiaohui Zhang and Wei-Ning Hsu and Alexis Conneau and
-        Michael Auli}, journal={arXiv}, year={2023}
+        title={Scaling Speech Technology to 1,000+ Languages},
+        author={Vineel Pratap and Andros Tjandra and Bowen Shi and Paden Tomasello and Arun Babu and Sayani Kundu and Ali Elkahky and Zhaoheng Ni and Apoorv Vyas and Maryam Fazel-Zarandi and Alexei Baevski and Yossi Adi and Xiaohui Zhang and Wei-Ning Hsu and Alexis Conneau and Michael Auli},
+        journal={arXiv},
+        year={2023}
     }
 """
+# fmt: on
+
+if push_to_hub:
+    api = HfApi()
 
 for lang_code, lang_name in languages.items():
     cmd = (
@@ -1221,7 +1232,7 @@ for lang_code, lang_name in languages.items():
         cmd += " --push_to_hub " + repo_id + "mms-tts-" + lang_code
 
     print(cmd)
-    # os.system(cmd)
+    os.system(cmd)
 
     if push_to_hub:
         checkpoint = repo_id + "mms-tts-" + lang_code
@@ -1233,4 +1244,13 @@ for lang_code, lang_name in languages.items():
         with open(dump_path + lang_code + "/README.md", "w") as f:
             f.write(txt)
 
-        # TODO: push the README to the hub as well
+        api.upload_file(
+            path_or_fileobj=dump_path + lang_code + "/README.md",
+            path_in_repo="README.md",
+            repo_id=repo_id + "mms-tts-" + lang_code,
+            repo_type="model",
+        )
+
+    # for testing
+    #if lang_code == "abp":
+    #    break
