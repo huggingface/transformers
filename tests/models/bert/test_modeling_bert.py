@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import logging
 import os
 import tempfile
 import unittest
@@ -41,6 +40,7 @@ if is_torch_available():
         BertForTokenClassification,
         BertLMHeadModel,
         BertModel,
+        logging,
     )
     from transformers.models.bert.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -568,37 +568,28 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
-    def test_for_warning_if_no_attention_mask_and_pad_token_is_present(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.pad_token_id = 0
+    def test_for_warning_if_padding_and_no_attention_mask(self):
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = self.model_tester.prepare_config_and_inputs()
 
-        logger = logging.getLogger("transformers.models.bert.modeling_bert")
-        logger.warning_once.cache_clear()
-
-        # Check for no warnings if the attention_mask is present.
-        with CaptureLogger(logger) as cl:
-            model = BertModel(config=config)
-            model.to(torch_device)
-            model.eval()
-            model(**input_dict)
-        self.assertFalse(
-            "We strongly recommend passing in an `attention_mask`" in cl.out,
-            msg="Expecting no warnings when attention_mask is present",
-        )
+        # Set pad tokens in the input_ids
+        input_ids[0, 0] = config.pad_token_id
 
         # Check for warnings if the attention_mask is missing.
+        logger = logging.get_logger("transformers.modeling_utils")
         with CaptureLogger(logger) as cl:
             model = BertModel(config=config)
             model.to(torch_device)
             model.eval()
-            input_dict["attention_mask"] = None
-            model(**input_dict)
-            model(**input_dict)
-        self.assertEqual(
-            1,
-            cl.out.count("We strongly recommend passing in an `attention_mask`"),
-            msg="Expecting a single warning from missing `attention_mask` when `pad_token_id` is not None.",
-        )
+            model(input_ids, attention_mask=None, token_type_ids=token_type_ids)
+        self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
     @slow
     def test_model_from_pretrained(self):
