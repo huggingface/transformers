@@ -169,7 +169,7 @@ class VitsPosteriorEncoder(nn.Module):
         self.out_channels = config.flow_size
 
         self.conv_pre = nn.Conv1d(config.spectrogram_bins, config.hidden_size, 1)
-        self.wavenet = VitsWaveNet(config, num_layers=16)
+        self.wavenet = VitsWaveNet(config, num_layers=config.posterior_encoder_num_wavenet_layers)
         self.conv_proj = nn.Conv1d(config.hidden_size, self.out_channels * 2, 1)
 
     def forward(self, inputs, padding_mask, global_conditioning=None):
@@ -330,7 +330,7 @@ class VitsResidualCouplingLayer(nn.Module):
         self.half_channels = config.flow_size // 2
 
         self.conv_pre = nn.Conv1d(self.half_channels, config.hidden_size, 1)
-        self.wavenet = VitsWaveNet(config, num_layers=4)
+        self.wavenet = VitsWaveNet(config, num_layers=config.prior_encoder_num_wavenet_layers)
         self.conv_post = nn.Conv1d(config.hidden_size, self.half_channels, 1)
 
     def forward(self, inputs, padding_mask, global_conditioning=None, reverse=False):

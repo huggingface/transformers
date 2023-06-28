@@ -104,6 +104,10 @@ class VitsConfig(PretrainedConfig):
             Number of channels for the convolution layers used in the duration predictor model.
         prior_encoder_num_flows (`int`, *optional*, defaults to 4):
             Number of flow stages used by the prior encoder flow model.
+        prior_encoder_num_wavenet_layers (`int`, *optional*, defaults to 4):
+            Number of WaveNet layers used by the prior encoder flow model.
+        posterior_encoder_num_wavenet_layers (`int`, *optional*, defaults to 16):
+            Number of WaveNet layers used by the posterior encoder model.
         wavenet_kernel_size (`int`, *optional*, defaults to 5):
             Kernel size of the 1D convolution layers used in the WaveNet model.
         wavenet_dilation_rate (`int`, *optional*, defaults to 1):
@@ -155,6 +159,8 @@ class VitsConfig(PretrainedConfig):
         resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
         leaky_relu_slope=0.1,
         prior_encoder_num_flows=4,
+        prior_encoder_num_wavenet_layers=4,
+        posterior_encoder_num_wavenet_layers=16,
         wavenet_kernel_size=5,
         wavenet_dilation_rate=1,
         wavenet_dropout=0.0,
@@ -194,6 +200,8 @@ class VitsConfig(PretrainedConfig):
         self.resblock_dilation_sizes = resblock_dilation_sizes
         self.leaky_relu_slope = leaky_relu_slope
         self.prior_encoder_num_flows = prior_encoder_num_flows
+        self.prior_encoder_num_wavenet_layers = prior_encoder_num_wavenet_layers
+        self.posterior_encoder_num_wavenet_layers = posterior_encoder_num_wavenet_layers
         self.wavenet_kernel_size = wavenet_kernel_size
         self.wavenet_dilation_rate = wavenet_dilation_rate
         self.wavenet_dropout = wavenet_dropout
