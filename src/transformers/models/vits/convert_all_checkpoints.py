@@ -6,14 +6,15 @@
 # Run this script from transformers/src/transformers/models/vits/
 #     python convert_all_checkpoints.py 2>logs.txt
 
+import json
 import os
 
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, hf_hub_download
 
 
 repo_id = "Matthijs/"
 dump_path = "EXPORTED/"
-push_to_hub = False
+push_to_hub = True
 
 languages = {
     "abi": "Abidji",
@@ -1201,8 +1202,7 @@ from IPython.display import Audio
 Audio(output.audio[0], rate=16000)
 ```
 
-Note: For certain checkpoints, the input text must be converted to the Latin alphabet first using the
-[uroman](https://github.com/isi-nlp/uroman) tool.
+{uroman_note}
 
 ## Model credits
 
@@ -1241,6 +1241,21 @@ for lang_code, lang_name in languages.items():
         txt = txt.replace("{lang_code}", lang_code)
         txt = txt.replace("{checkpoint}", checkpoint)
 
+        config_file = hf_hub_download(
+            repo_id="facebook/mms-tts",
+            filename="config.json",
+            subfolder=f"models/{lang_code}",
+        )
+        with open(config_file, "r") as f:
+            data = f.read()
+            hps = json.loads(data)
+        is_uroman = hps["data"]["training_files"].split(".")[-1] == "uroman"
+        if is_uroman:
+            msg = "Note: For this checkpoint, the input text must be converted to the Latin alphabet first using the [uroman](https://github.com/isi-nlp/uroman) tool."
+        else:
+            msg = ""
+        txt = txt.replace("{uroman_note}", msg)
+
         with open(dump_path + lang_code + "/README.md", "w") as f:
             f.write(txt)
 
@@ -1250,7 +1265,3 @@ for lang_code, lang_name in languages.items():
             repo_id=repo_id + "mms-tts-" + lang_code,
             repo_type="model",
         )
-
-    # for testing
-    #if lang_code == "abp":
-    #    break
