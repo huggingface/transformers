@@ -73,7 +73,7 @@ Cada clase de alimento - o label - corresponde a un número; `79` indica una cos
 
 ## Preprocesa
 
-Carga el feature image proc de ViT para procesar la imagen en un tensor:
+Carga el image processor de ViT para procesar la imagen en un tensor:
 
 ```py
 >>> from transformers import AutoImageProcessor
@@ -87,7 +87,7 @@ Aplica varias transformaciones de imagen al dataset para hacer el modelo más ro
 >>> from torchvision.transforms import RandomResizedCrop, Compose, Normalize, ToTensor
 
 >>> normalize = Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
->>> _transforms = Compose([RandomResizedCrop(image_processor.size), ToTensor(), normalize])
+>>> _transforms = Compose([RandomResizedCrop(image_processor.size["height"]), ToTensor(), normalize])
 ```
 
 Crea una función de preprocesamiento que aplique las transformaciones y devuelva los `pixel_values` - los inputs al modelo - de la imagen:

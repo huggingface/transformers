@@ -159,14 +159,14 @@ modality.
 ```python
 from transformers import LayoutLMv2ImageProcessor, LayoutLMv2TokenizerFast, LayoutLMv2Processor
 
-image_processor_type = LayoutLMv2ImageProcessor()  # apply_ocr is set to True by default
+image_processor = LayoutLMv2ImageProcessor()  # apply_ocr is set to True by default
 tokenizer = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
-processor = LayoutLMv2Processor(image_processor_type, tokenizer)
+processor = LayoutLMv2Processor(image_processor, tokenizer)
 ```
 
 In short, one can provide a document image (and possibly additional data) to [`LayoutLMv2Processor`],
 and it will create the inputs expected by the model. Internally, the processor first uses
-[`LayoutLMv2mageProcessor`] to apply OCR on the image to get a list of words and normalized
+[`LayoutLMv2ImageProcessor`] to apply OCR on the image to get a list of words and normalized
 bounding boxes, as well to resize the image to a given size in order to get the `image` input. The words and
 normalized bounding boxes are then provided to [`LayoutLMv2Tokenizer`] or
 [`LayoutLMv2TokenizerFast`], which converts them to token-level `input_ids`,
@@ -176,7 +176,7 @@ which are turned into token-level `labels`.
 [`LayoutLMv2Processor`] uses [PyTesseract](https://pypi.org/project/pytesseract/), a Python
 wrapper around Google's Tesseract OCR engine, under the hood. Note that you can still use your own OCR engine of
 choice, and provide the words and normalized boxes yourself. This requires initializing
-[`LayoutLMv2mageProcessor`] with `apply_ocr` set to `False`.
+[`LayoutLMv2ImageProcessor`] with `apply_ocr` set to `False`.
 
 In total, there are 5 use cases that are supported by the processor. Below, we list them all. Note that each of these
 use cases work for both batched and non-batched inputs (we illustrate them for non-batched inputs).

@@ -373,7 +373,7 @@ Bei Bildverarbeitungsaufgaben ist es üblich, den Bildern als Teil der Vorverarb
 
 >>> normalize = Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
 >>> _transforms = Compose(
-...     [RandomResizedCrop(image_processor.size), ColorJitter(brightness=0.5, hue=0.5), ToTensor(), normalize]
+...     [RandomResizedCrop(image_processor.size["height"]), ColorJitter(brightness=0.5, hue=0.5), ToTensor(), normalize]
 ... )
 ```
 
