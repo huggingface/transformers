@@ -6,9 +6,7 @@ class MyTrainingArguments(TrainingArguments):
         super().__init__(**kwargs)
         self.my_arg = "my_arg"
 
-
 class MyModel(BaseModel):
     training_args: MyTrainingArguments
 
-
-model = MyModel(training_args=MyTrainingArguments(output_dir=""))
+model = MyModel(training_args=MyTrainingArguments(output_dir="./"))
