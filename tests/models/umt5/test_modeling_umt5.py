@@ -37,10 +37,10 @@ class Umt5IntegrationTest(unittest.TestCase):
         model = AutoModelForSeq2SeqLM.from_pretrained("google/umt5-small", return_dict=True).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("google/umt5-small")
         input_text = [
-            'Bonjour monsieur <extra_id_0> bien <extra_id_1>.</s>',
-            'No se como puedo <extra_id_0>.</s>',
-            'This is the reason why we <extra_id_0> them.</s>',
-            'Sie <extra_id_0> schönen Film erstellen.</s>'
+            'Bonjour monsieur <extra_id_0> bien <extra_id_1>.',
+            'No se como puedo <extra_id_0>.',
+            'This is the reason why we <extra_id_0> them.',
+            'Sie <extra_id_0> schönen Film erstellen.'
         ]
         input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
         labels = tokenizer("Hi I am", return_tensors="pt").input_ids
