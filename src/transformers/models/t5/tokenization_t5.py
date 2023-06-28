@@ -304,7 +304,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             match = re.match(r"<extra_id_(\d+)>", token)
             num = int(match.group(1))
             return self.vocab_size - num - 1
-        return self.sp_model.piece_to_id(token)
+        return self.sp_model.PieceToId(token)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
