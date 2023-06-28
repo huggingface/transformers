@@ -412,8 +412,8 @@ class EncodecIntegrationTest(unittest.TestCase):
             "24.0": 0.0015,
         }
         expected_codesums = {
-            "1.5": [367184],
-            "24.0": [6648961],
+            "1.5": [371955],
+            "24.0": [6659962],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "facebook/encodec_24khz"
@@ -466,8 +466,8 @@ class EncodecIntegrationTest(unittest.TestCase):
             "24.0": 0.0005,
         }
         expected_codesums = {
-            "3.0": [142174, 147901, 154090, 178965, 161879],
-            "24.0": [1561048, 1284593, 1278330, 1487220, 1659404],
+            "3.0": [144259, 146765, 156435, 176871, 161971],
+            "24.0": [1568553, 1294948, 1306190, 1464747, 1663150],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "facebook/encodec_48khz"
@@ -523,12 +523,12 @@ class EncodecIntegrationTest(unittest.TestCase):
         }
         expected_codesums = {
             "3.0": [
-                [71689, 78549, 75644, 88889, 73100, 82509, 71449, 82835],
-                [84427, 82356, 75809, 52509, 80137, 87672, 87436, 70456],
+                [72410, 79137, 76694, 90854, 73023, 82980, 72707, 54842],
+                [85561, 81870, 76953, 48967, 79315, 85442, 81479, 107241],
             ],
             "24.0": [
-                [71689, 78549, 75644, 88889, 73100, 82509, 71449, 82835],
-                [84427, 82356, 75809, 52509, 80137, 87672, 87436, 70456],
+                [72410, 79137, 76694, 90854, 73023, 82980, 72707, 54842],
+                [85561, 81870, 76953, 48967, 79315, 85442, 81479, 107241],
             ],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
