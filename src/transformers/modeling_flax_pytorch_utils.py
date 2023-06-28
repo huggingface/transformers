@@ -122,9 +122,9 @@ def rename_key_and_reshape_tensor(
 
     # New `weight_norm` from https://github.com/huggingface/transformers/pull/24030
     name = None
-    if pt_tuple_key[-3::2] == ["parametrizations", "original0"]:
+    if pt_tuple_key[-3::2] == ("parametrizations", "original0"):
         name = pt_tuple_key[-2] + "_g"
-    elif pt_tuple_key[-3::2] == ["parametrizations", "original1"]:
+    elif pt_tuple_key[-3::2] == ("parametrizations", "original1"):
         name = pt_tuple_key[-2] + "_v"
     if name is not None:
         renamed_pt_tuple_key = pt_tuple_key[:-3] + (name,)
