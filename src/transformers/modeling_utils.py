@@ -3484,13 +3484,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if (attention_mask is not None) or (self.config.pad_token_id is None):
             return
 
-        if not hasattr(self, "warnings_issued"):
-            self.warnings_issued = {}
-        if self.warnings_issued.get("padding_and_no_attention_mask", False):
-            return
-
         # Check only the first and last input IDs to reduce overhead.
-        if self.config.pad_token_id in input_ids[:, -1] or self.config.pad_token_id in input_ids[:, 1]:
+        if self.config.pad_token_id in input_ids[:, [-1, 0]]:
             warn_string = (
                 "We strongly recommend passing in an `attention_mask` since your input_ids may be padded. See "
                 "https://huggingface.co/docs/transformers/troubleshooting"
@@ -3510,8 +3505,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     f"or the `sep_token_id` ({self.config.sep_token_id}), and your input is not padded."
                 )
 
-            logger.warning(warn_string)
-            self.warnings_issued["padding_and_no_attention_mask"] = True
+            logger.warning_once(warn_string)
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)

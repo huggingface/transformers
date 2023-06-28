@@ -942,6 +942,7 @@ class ModelUtilsTest(TestCasePlus):
         logger = logging.get_logger("transformers.modeling_utils")
 
         with self.subTest("Ensure no warnings when pad_token_id is None."):
+            logger.warning_once.cache_clear()
             with CaptureLogger(logger) as cl:
                 config_no_pad_token = PretrainedConfig()
                 config_no_pad_token.pad_token_id = None
@@ -951,6 +952,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
         with self.subTest("Ensure no warnings when there is an attention_mask."):
+            logger.warning_once.cache_clear()
             with CaptureLogger(logger) as cl:
                 config = PretrainedConfig()
                 config.pad_token_id = 0
@@ -961,6 +963,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
         with self.subTest("Ensure no warnings when there are no pad_token_ids in the input_ids."):
+            logger.warning_once.cache_clear()
             with CaptureLogger(logger) as cl:
                 config = PretrainedConfig()
                 config.pad_token_id = 0
@@ -969,16 +972,28 @@ class ModelUtilsTest(TestCasePlus):
                 model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
-        with self.subTest("Ensure warnings when there are pad_token_ids inside the input_ids."):
+        with self.subTest("Ensure a warning is shown when the input_ids start with a pad_token_id."):
+            logger.warning_once.cache_clear()
             with CaptureLogger(logger) as cl:
                 config = PretrainedConfig()
                 config.pad_token_id = 0
                 model = ModelWithHead(config)
-                input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
+                input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 432, 5232]])
                 model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
-        with self.subTest("Ensure warnings are only shown once."):
+        with self.subTest("Ensure a warning is shown when the input_ids end with a pad_token_id."):
+            logger.warning_once.cache_clear()
+            with CaptureLogger(logger) as cl:
+                config = PretrainedConfig()
+                config.pad_token_id = 0
+                model = ModelWithHead(config)
+                input_ids = torch.tensor([[432, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
+
+        with self.subTest("Ensure that the warning is shown at most once."):
+            logger.warning_once.cache_clear()
             with CaptureLogger(logger) as cl:
                 config = PretrainedConfig()
                 config.pad_token_id = 0
@@ -988,7 +1003,8 @@ class ModelUtilsTest(TestCasePlus):
                 model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertEqual(cl.out.count("We strongly recommend passing in an `attention_mask`"), 1)
 
-        with self.subTest("Ensure different warning when the pad_token_id is equal to the bos_token_id."):
+        with self.subTest("Ensure a different warning is shown when the pad_token_id is equal to the bos_token_id."):
+            logger.warning_once.cache_clear()
             with CaptureLogger(logger) as cl:
                 config = PretrainedConfig()
                 config.pad_token_id = 0
