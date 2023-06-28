@@ -204,7 +204,6 @@ class MT5LayerFF(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5Attention with T5->MT5
 class MT5Attention(nn.Module):
     def __init__(self, config: MT5Config, has_relative_attention_bias=False):
         super().__init__()
@@ -433,7 +432,7 @@ class MT5Attention(nn.Module):
         scores += position_bias_masked
         # (batch_size, n_heads, seq_length, key_length)
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)  
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
         # Mask heads if we want to
         if layer_head_mask is not None:
@@ -853,7 +852,6 @@ class MT5PreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-# Copied from transformers.models.t5.modeling_t5.T5Stack with T5->MT5
 class MT5Stack(MT5PreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
@@ -862,7 +860,10 @@ class MT5Stack(MT5PreTrainedModel):
         self.is_decoder = config.is_decoder
         scalable_attention = config.scalable_attention if hasattr(config, "scalable_attention") else False
         self.block = nn.ModuleList(
-            [MT5Block(config, has_relative_attention_bias= (i==0) if not scalable_attention else True) for i in range(config.num_layers)]
+            [
+                MT5Block(config, has_relative_attention_bias=(i == 0) if not scalable_attention else True)
+                for i in range(config.num_layers)
+            ]
         )
         self.final_layer_norm = MT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
