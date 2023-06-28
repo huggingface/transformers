@@ -176,6 +176,14 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_tied_model_weights_key_ignore(self):
         pass
 
+    @unittest.skip("Only checkpoints on timm can be loaded into TimmBackbone")
+    def test_load_save_without_tied_weights(self):
+        pass
+
+    @unittest.skip("Only checkpoints on timm can be loaded into TimmBackbone")
+    def test_model_weights_reload_no_missing_tied_weights(self):
+        pass
+
     @unittest.skip("TimmBackbone doesn't have hidden size info in its configuration.")
     def test_channels(self):
         pass
