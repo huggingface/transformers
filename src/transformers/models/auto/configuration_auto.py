@@ -589,6 +589,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("trocr", "TrOCR"),
         ("tvlt", "TVLT"),
         ("ul2", "UL2"),
+        ("umt5", "UMT5"),
         ("unispeech", "UniSpeech"),
         ("unispeech-sat", "UniSpeechSat"),
         ("upernet", "UPerNet"),
