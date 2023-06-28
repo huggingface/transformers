@@ -945,7 +945,7 @@ class TrainingArguments:
         },
     )
     sharded_ddp: Optional[Union[str, bool, List[ShardedDDPOption]]] = field(
-        default="",
+        default=False,
         metadata={
             "help": (
                 "Whether or not to use sharded DDP training (in distributed training only). The base option should be"

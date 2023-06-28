@@ -1,0 +1,39 @@
+===================================================== warnings summary (final) =====================================================
+../../../../../usr/lib/python3/dist-packages/requests/__init__.py:87
+../../../../../usr/lib/python3/dist-packages/requests/__init__.py:87
+../../../../../usr/lib/python3/dist-packages/requests/__init__.py:87
+../../../../../usr/lib/python3/dist-packages/requests/__init__.py:87
+../../../../../usr/lib/python3/dist-packages/requests/__init__.py:87
+../../../../../usr/lib/python3/dist-packages/requests/__init__.py:87
+../../../../../usr/lib/python3/dist-packages/requests/__init__.py:87
+../../../../../usr/lib/python3/dist-packages/requests/__init__.py:87
+../../../../../usr/lib/python3/dist-packages/requests/__init__.py:87
+  /usr/lib/python3/dist-packages/requests/__init__.py:87: RequestsDependencyWarning: urllib3 (2.0.3) or chardet (4.0.0) doesn't match a supported version!
+    warnings.warn("urllib3 ({}) or chardet ({}) doesn't match a supported "
+
+../../../.local/lib/python3.10/site-packages/accelerate/utils/dataclasses.py:29
+../../../.local/lib/python3.10/site-packages/accelerate/utils/dataclasses.py:29
+../../../.local/lib/python3.10/site-packages/accelerate/utils/dataclasses.py:29
+../../../.local/lib/python3.10/site-packages/accelerate/utils/dataclasses.py:29
+../../../.local/lib/python3.10/site-packages/accelerate/utils/dataclasses.py:29
+../../../.local/lib/python3.10/site-packages/accelerate/utils/dataclasses.py:29
+../../../.local/lib/python3.10/site-packages/accelerate/utils/dataclasses.py:29
+../../../.local/lib/python3.10/site-packages/accelerate/utils/dataclasses.py:29
+../../../.local/lib/python3.10/site-packages/accelerate/utils/dataclasses.py:29
+  /home/taylo/.local/lib/python3.10/site-packages/accelerate/utils/dataclasses.py:29: DeprecationWarning: The distutils package is deprecated and slated for removal in Python 3.12. Use setuptools or check PEP 632 for potential alternatives
+    from distutils.util import strtobool
+
+../../../.local/lib/python3.10/site-packages/_pytest/config/__init__.py:1302
+../../../.local/lib/python3.10/site-packages/_pytest/config/__init__.py:1302
+../../../.local/lib/python3.10/site-packages/_pytest/config/__init__.py:1302
+../../../.local/lib/python3.10/site-packages/_pytest/config/__init__.py:1302
+../../../.local/lib/python3.10/site-packages/_pytest/config/__init__.py:1302
+../../../.local/lib/python3.10/site-packages/_pytest/config/__init__.py:1302
+../../../.local/lib/python3.10/site-packages/_pytest/config/__init__.py:1302
+../../../.local/lib/python3.10/site-packages/_pytest/config/__init__.py:1302
+../../../.local/lib/python3.10/site-packages/_pytest/config/__init__.py:1302
+  /home/taylo/.local/lib/python3.10/site-packages/_pytest/config/__init__.py:1302: PytestConfigWarning: Unknown config option: doctest_glob
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
