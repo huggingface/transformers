@@ -40,9 +40,9 @@ These presets are also uploaded in the hub [here](https://huggingface.co/ylacomb
 
 >>> voice_preset = "v2/en_speaker_6"
 
->>> inputs, history_prompt = processor("Hello, my dog is cute", voice_preset=voice_preset)
+>>> inputs = processor("Hello, my dog is cute", voice_preset=voice_preset)
 
->>> audio_array = model.generate_audio(**inputs, history_prompt=history_prompt)
+>>> audio_array = model.generate_audio(**inputs)
 >>> audio_array = audio_array.cpu().numpy().squeeze()
 ```
 
@@ -50,15 +50,15 @@ Bark can generate highly realistic, **multilingual** speech as well as other aud
 
 ```python
 >>> # Multilingual speech - simplified Chinese
->>> inputs, history_prompt = processor("惊人的！我会说中文")
+>>> inputs = processor("惊人的！我会说中文")
 
 >>> # Multilingual speech - French - let's use a voice_preset as well
->>> inputs, history_prompt = processor("Incroyable! Je peux générer du son.", voice_preset="fr_speaker_5")
+>>> inputs = processor("Incroyable! Je peux générer du son.", voice_preset="fr_speaker_5")
 
 >>> # Bark can also generate music. You can help it out by adding music notes around your lyrics.
->>> inputs, history_prompt = processor("♪ Hello, my dog is cute ♪")
+>>> inputs = processor("♪ Hello, my dog is cute ♪")
 
->>> audio_array = model.generate_audio(**inputs, history_prompt=history_prompt)
+>>> audio_array = model.generate_audio(**inputs)
 >>> audio_array = audio_array.cpu().numpy().squeeze()
 ```
 
@@ -67,9 +67,9 @@ The model can also produce **nonverbal communications** like laughing, sighing a
 
 ```python
 >>> # Adding non-speech cues to the input text
->>> inputs, history_prompt = processor("Hello uh ... [clears throat], my dog is cute [laughter]")
+>>> inputs = processor("Hello uh ... [clears throat], my dog is cute [laughter]")
 
->>> audio_array = model.generate_audio(**inputs, history_prompt=history_prompt)
+>>> audio_array = model.generate_audio(**inputs)
 >>> audio_array = audio_array.cpu().numpy().squeeze()
 ```
 

@@ -17,8 +17,8 @@
 import copy
 from typing import Dict
 
-from ...generation.configuration_utils import GenerationConfig
-from ...utils import logging
+from .generation.configuration_utils import GenerationConfig
+from .utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -46,24 +46,27 @@ class BarkSemanticGenerationConfig(GenerationConfig):
         semantic_rate_hz=49.9,
         **kwargs,
     ):
-        """_summary_
+        """Class that holds a generation configuration for [`BarkSemanticModel`].
+        
+        This configuration inherit from [`GenerationConfig`] and can be used to control the model generation. Read the
+        documentation from [`GenerationConfig`] for more information.
 
         Args:
-            renormalize_logits (bool, optional): _description_. Defaults to True.
-            max_new_tokens (int, optional): _description_. Defaults to 768.
-            output_scores (bool, optional): _description_. Defaults to False.
-            return_dict_in_generate (bool, optional): _description_. Defaults to False.
-            output_hidden_states (bool, optional): _description_. Defaults to False.
-            output_attentions (bool, optional): _description_. Defaults to False.
-            temperature (float, optional): _description_. Defaults to 0.7.
-            do_sample (bool, optional): _description_. Defaults to True.
-            text_encoding_offset (_type_, optional): _description_. Defaults to 10_048.
-            text_pad_token (_type_, optional): _description_. Defaults to 129_595.
-            semantic_pad_token (_type_, optional): _description_. Defaults to 10_000.
-            semantic_infer_token (_type_, optional): _description_. Defaults to 129_599.
-            semantic_vocab_size (_type_, optional): _description_. Defaults to 10_000.
-            max_input_semantic_length (int, optional): _description_. Defaults to 256.
-            semantic_rate_hz (float, optional): _description_. Defaults to 49.9.
+            eos_token_id (`int`, *optional*, defaults to 10_000): Same function as [`GenerationConfig`].
+            renormalize_logits (`bool`, *optional*, defaults to True): Same function as [`GenerationConfig`].
+            max_new_tokens (`int`, *optional*, defaults to 768): Same function as [`GenerationConfig`].
+            output_scores (`bool`, *optional*, defaults to False): Same function as [`GenerationConfig`].
+            return_dict_in_generate (`bool`, *optional*, defaults to False): Same function as [`GenerationConfig`].
+            output_hidden_states (`bool`, *optional*, defaults to False): Same function as [`GenerationConfig`].
+            output_attentions (`bool`, *optional*, defaults to False): Same function as [`GenerationConfig`].
+            temperature (`float`, *optional*, defaults to 0.7): Same function as [`GenerationConfig`].
+            do_sample (`bool`, *optional*, defaults to True): Same function as [`GenerationConfig`].
+            text_encoding_offset (`int`, *optional*, defaults to 10_048): Text encoding offset.
+            text_pad_token (`int`, *optional*, defaults to 129_595): Text pad token.
+            semantic_infer_token (`int`, *optional*, defaults to 129_599): Semantic infer token.
+            semantic_vocab_size (`int`, *optional*, defaults to 10_000): Semantic vocab size.
+            max_input_semantic_length (`int`, *optional*, defaults to 256): Max lenght of semantic input vector.
+            semantic_rate_hz (`float`, *optional*, defaults to 49.9): Semantic rate in Hertz.
         """
         super().__init__(
             temperature=temperature,
@@ -114,20 +117,20 @@ class BarkCoarseGenerationConfig(GenerationConfig):
         """_summary_
 
         Args:
-            renormalize_logits (bool, optional): _description_. Defaults to True.
-            output_scores (bool, optional): _description_. Defaults to False.
-            return_dict_in_generate (bool, optional): _description_. Defaults to False.
-            output_hidden_states (bool, optional): _description_. Defaults to False.
-            output_attentions (bool, optional): _description_. Defaults to False.
-            temperature (float, optional): _description_. Defaults to 0.7.
-            do_sample (bool, optional): _description_. Defaults to True.
-            coarse_semantic_pad_token (_type_, optional): _description_. Defaults to 12_048.
-            coarse_rate_hz (int, optional): _description_. Defaults to 75.
-            n_coarse_codebooks (int, optional): _description_. Defaults to 2.
-            coarse_infer_token (_type_, optional): _description_. Defaults to 12_050.
-            max_coarse_input_length (int, optional): _description_. Defaults to 256.
-            max_coarse_history (int, optional): _description_. Defaults to 630.
-            sliding_window_len (int, optional): _description_. Defaults to 60.
+            renormalize_logits (`bool`, *optional*, defaults to True): Same function as [`GenerationConfig`].
+            output_scores (`bool`, *optional*, defaults to False): Same function as [`GenerationConfig`].
+            return_dict_in_generate (`bool`, *optional*, defaults to False): Same function as [`GenerationConfig`].
+            output_hidden_states (`bool`, *optional*, defaults to False): Same function as [`GenerationConfig`].
+            output_attentions (`bool`, *optional*, defaults to False): Same function as [`GenerationConfig`].
+            temperature (`float`, *optional*, defaults to 0.): Same function as [`GenerationConfig`].
+            do_sample (`bool`, *optional*, defaults to True): Same function as [`GenerationConfig`].
+            coarse_semantic_pad_token (`int`, *optional*, defaults to 12_048): Coarse semantic pad token.
+            coarse_rate_hz (`int`, *optional*, defaults to 75): Coarse rate in Hertz.
+            n_coarse_codebooks (`int`, *optional*, defaults to 2): Number of coarse codebooks.
+            coarse_infer_token (`int`, *optional*, defaults to 12_050): Coarse infer token.
+            max_coarse_input_length (`int`, *optional*, defaults to 256): Max length of input coarse vector.
+            max_coarse_history (`int`, *optional*, defaults to 630): Max length of the output of the coarse acoustics model used in the fine generation step.
+            sliding_window_len (`int`, *optional*, defaults to 60): The coarse generation step uses a sliding window to generate raw audio.
         """
         super().__init__(
             temperature=temperature,
@@ -165,10 +168,10 @@ class BarkFineGenerationConfig(GenerationConfig):
         """_summary_
 
         Args:
-            temperature (float, optional): _description_. Defaults to 0.5.
-            max_fine_history_length (int, optional): _description_. Defaults to 512.
-            max_fine_input_length (int, optional): _description_. Defaults to 1024.
-            n_fine_codebooks (int, optional): _description_. Defaults to 8.
+            temperature (`float`, *optional*, defaults to 0.5): Same function as [`GenerationConfig`].
+            max_fine_history_length (`int`, *optional*, defaults to 512): Max length of the fine history vector.
+            max_fine_input_length (`int`, *optional*, defaults to 1024): Max length of fine input vector.
+            n_fine_codebooks (`int`, *optional*, defaults to 8): Number of codebooks used.
         """
         super().__init__(temperature=temperature)
 
@@ -181,7 +184,7 @@ class BarkGenerationConfig(GenerationConfig):
     model_type = "bark"
     is_composition = True
 
-    # TODO: nested from_dict
+    # TODO (joao): nested from_dict
 
     def __init__(
         self,
@@ -195,11 +198,11 @@ class BarkGenerationConfig(GenerationConfig):
         """_summary_
 
         Args:
-            semantic_config (Dict, optional): _description_. Defaults to None.
-            coarse_acoustics_config (Dict, optional): _description_. Defaults to None.
-            fine_acoustics_config (Dict, optional): _description_. Defaults to None.
-            sample_rate (_type_, optional): _description_. Defaults to 24_000.
-            codebook_size (int, optional): _description_. Defaults to 1024.
+            semantic_config (`Dict`, *optional*, defaults to None): Semantic generation configuration.
+            coarse_acoustics_config (`Dict`, *optional*, defaults to None): Coarse generation configuration.
+            fine_acoustics_config (`Dict`, *optional*, defaults to None): Fine generation configuration.
+            sample_rate (`int`, *optional*, defaults to 24_000): Sample rate.
+            codebook_size (`int`, *optional*, defaults to 1024): Vector length for each codebook.
         """
         if semantic_config is None:
             semantic_config = {}

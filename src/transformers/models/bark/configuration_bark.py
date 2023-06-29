@@ -41,36 +41,34 @@ BARK_SUBMODELCONFIG_START_DOCSTRING = """
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        block_size (int, optional):
+        block_size (`int`, *optional*, defaults to 1024):
         The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048). Defaults to 1024.
-        input_vocab_size (_type_, optional): _description_.
+            just in case (e.g., 512 or 1024 or 2048).
+        input_vocab_size (`int`,, *optional*, defaults to 10_048): 
         Vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`{model}`]. Defaults to 10_048 but should be carefully thought with
             regards to the chosen sub-model.
-        output_vocab_size (_type_, optional):
+        output_vocab_size (`int`, *optional*, defaults to 10_048):
         Output vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented by the:
             `output_ids` when passing forward a [`{model}`]. Defaults to 10_048 but should be carefully thought with
             regards to the chosen sub-model.
-        num_layers (int, optional):
-            Number of layers. Defaults to 12.
-        num_heads (int, optional):
-            Number of attention heads for each attention layer in the Transformer architecture. Defaults to 12.
-        hidden_size (int, optional):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the architecture. Defaults to 768.
-        dropout (float, optional):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler. Defaults to
-            0.0.
-        bias (bool, optional):
+        num_layers (`int`, *optional*, defaults to 12):
+            Number of layers.
+        num_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer architecture.
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in the architecture.
+        dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        bias (`bool`, *optional*, defaults to ):
             True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster. Defaults to True.
-        use_cache (bool, optional):
-            Whether or not the model should return the last key/values attentions (not used by all models). Defaults to
-            True.
+        use_cache (`bool`, *optional*, defaults to True):
+            Whether or not the model should return the last key/values attentions (not used by all models).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         n_codes_total (`int`, *optional*, defaults to 8):
             The total number of [`Encodec`] codebooks. Used in the fine acoustics sub-model.
-        n_codes_given (`int`, *optional*, defaults to 8):
+        n_codes_given (`int`, *optional*, defaults to 1):
             The number of [`Encodec`] codebooks predicted in the coarse acoustics sub-model. Use in the acoustics
             sub-models.
 """
@@ -216,14 +214,14 @@ class BarkConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-    semantic_config (BarkSemanticConfig, optional):
-        Configuration of the underlying semantic sub-model. Defaults to None.
-    coarse_acoustics_config (BarkCoarseConfig, optional):
-        Configuration of the underlying coarse acoustics sub-model. Defaults to None.
-    fine_acoustics_config (BarkFineConfig, optional):
-        Configuration of the underlying fine acoustics sub-model. Defaults to None.
-    codec_config (EncodecConfig, optional):
-        Configuration of the underlying codec sub-model. Defaults to None.
+    semantic_config ([`BarkSemanticConfig`], *optional*, defaults to None):
+        Configuration of the underlying semantic sub-model.
+    coarse_acoustics_config ([`BarkCoarseConfig`], *optional*, defaults to None):
+        Configuration of the underlying coarse acoustics sub-model.
+    fine_acoustics_config ([`BarkFineConfig`], *optional*, defaults to None):
+        Configuration of the underlying fine acoustics sub-model.
+    codec_config ([`EncodecConfig`], *optional*, defaults to None):
+        Configuration of the underlying codec sub-model.
 
     Example:
 
@@ -288,23 +286,6 @@ class BarkConfig(PretrainedConfig):
         self.coarse_acoustics_config = BarkCoarseConfig(**coarse_acoustics_config)
         self.fine_acoustics_config = BarkFineConfig(**fine_acoustics_config)
         self.codec_config = EncodecConfig(**codec_config)
-
-        # TODO: check if right place
-        # some of these configs are linked to the config of the submodels
-        self.text_encoding_offset = 10_048
-        self.semantic_pad_token = 10_000
-        self.text_pad_token = 129_595
-        self.semantic_infer_token = 129_599
-        self.coarse_semantic_pad_token = 12_048
-        self.coarse_infer_token = 12_050
-        self.context_window_size = 1024
-        self.semantic_rate_hz = 49.9
-        self.semantic_vocab_size = 10_000
-        self.codebook_size = 1024
-        self.n_coarse_codebooks = 2  # fixed for now
-        self.n_fine_codebooks = 8  # fixed for now
-        self.coarse_rate_hz = 75
-        self.sample_rate = 24_000
 
         super().__init__(**kwargs)
 

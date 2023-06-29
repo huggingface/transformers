@@ -21,7 +21,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from ...generation.logits_process import SemanticLogitsProcessor
+from ...generation.logits_process import SemanticLogitsProcessor, AlternatingCodebooksLogitsProcessor
 from ...generation.stopping_criteria import StoppingCriteria
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
@@ -1005,16 +1005,9 @@ class BarkModel(BarkPreTrainedModel):
         **kwargs,
     ) -> torch.LongTensor:
         if semantic_generation_config is None:
-            # workaround until nested generation config is compatible with PreTrained Model
+            # TODO (joao): workaround until nested generation config is compatible with PreTrained Model
             semantic_generation_config = BarkSemanticGenerationConfig(**self.generation_config.semantic_config)
 
-        # TODO: add a max_gen_duration_s early stop
-
-        # TODO: Not used for now. where to set the default value ?
-        # min_eos_p = kwargs.get("min_eos_p", 0.2)
-
-        # TODO: input_ids[:,256:256+256] (to verify) corresponds to history_prompt["semantic_prompt"], maybe use that
-        # input_ids should be of shape (batch_size, seq_len) where seq_len = 513
         batch_size = input_ids.shape[0]
 
         max_input_semantic_length = semantic_generation_config.max_input_semantic_length
@@ -1063,7 +1056,8 @@ class BarkModel(BarkPreTrainedModel):
         # TODO: for now, it is not implemented yet as long as StoppingCriteria issue is not dealt with
         # https://github.com/huggingface/transformers/issues/23674
         # semantic_stopping_criteria = SemanticStoppingCriteria(min_eos_p , semantic_generation_config.semantic_pad_token)
-
+        # TODO: add a max_gen_duration_s early stop
+        
         # pass input_ids in order to stay consistent with the transformers generate method even though it is not used (except to get the input seq_len - that's why we keep the first 257 tokens)
         semantic_output = self.semantic.generate(
             torch.ones((batch_size, max_input_semantic_length + 1), dtype=torch.int).to(self.device),
@@ -1073,7 +1067,6 @@ class BarkModel(BarkPreTrainedModel):
             # stopping_criteria=[semantic_stopping_criteria],
             **kwargs,
         )  # size: 10048
-        # TODO: there is also a max_gen_duration_s early stop if the duration depass a certain duration
 
         # take the generated semantic tokens
         semantic_output = semantic_output[:, max_input_semantic_length + 1 :]
@@ -1089,11 +1082,11 @@ class BarkModel(BarkPreTrainedModel):
         **kwargs,
     ) -> torch.LongTensor:
         if semantic_generation_config is None:
-            # workaround until nested generation config is compatible with PreTrained Model
+            # TODO (joao): workaround until nested generation config is compatible with PreTrained Model
             semantic_generation_config = BarkSemanticGenerationConfig(**self.generation_config.semantic_config)
 
         if coarse_acoustics_config is None:
-            # workaround until nested generation config is compatible with PreTrained Model
+            # TODO (joao): workaround until nested generation config is compatible with PreTrained Model
             coarse_acoustics_config = BarkCoarseGenerationConfig(**self.generation_config.coarse_acoustics_config)
 
         max_coarse_input_length = coarse_acoustics_config.max_coarse_input_length
@@ -1192,15 +1185,15 @@ class BarkModel(BarkPreTrainedModel):
         **kwargs,
     ) -> torch.LongTensor:
         if semantic_generation_config is None:
-            # workaround until nested generation config is compatible with PreTrained Model
+            # TODO (joao): workaround until nested generation config is compatible with PreTrained Model
             semantic_generation_config = BarkSemanticGenerationConfig(**self.generation_config.semantic_config)
 
         if coarse_acoustics_config is None:
-            # workaround until nested generation config is compatible with PreTrained Model
+            # TODO (joao): workaround until nested generation config is compatible with PreTrained Model
             coarse_acoustics_config = BarkCoarseGenerationConfig(**self.generation_config.coarse_acoustics_config)
 
         if fine_acoustics_config is None:
-            # workaround until nested generation config is compatible with PreTrained Model
+            # TODO (joao): workaround until nested generation config is compatible with PreTrained Model
             fine_acoustics_config = BarkFineGenerationConfig(**self.generation_config.fine_acoustics_config)
 
         # since we don't really use GenerationConfig through the fine model (autoencoder)
@@ -1329,18 +1322,13 @@ class BarkModel(BarkPreTrainedModel):
         Generates audio from an input prompt and an additional optional `Bark` speaker prompt.
 
         Args:
-            input_ids (Optional[torch.Tensor] of shape (batch_size, seq_len), optional):
+            input_ids (`Optional[torch.Tensor]` of shape (batch_size, seq_len), *optional*, defaults to None):
                 Input ids. Will be truncated up to 256 tokens. Note that the output audios will be as long as the
                 longest generation among the batch.
             The last token is `semantic_infer_token`. Note that batch_size is set to 1 to generate one audio per audio. Defaults to None.:
-            history_prompt (Optional[Dict[str,torch.Tensor]], optional):
+            history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*, defaults to None):
                 Optional `Bark` speaker prompt. Defaults to None. Note that for now, this model takes only one speaker
                 prompt per batch.
-            max_coarse_history (int, optional):
-                Max length of the output of the coarse acoustics model used in the fine generation step. Defaults to
-                630.
-            sliding_window_len (int, optional):
-                The coarse generation step uses a sliding window to generate raw audio. Defaults to 60.
         Returns:
             torch.LongTensor: Output generated audio.
 
@@ -1391,7 +1379,6 @@ class BarkModel(BarkPreTrainedModel):
         BarkGenerationConfig.
         """
         return True
-
 
 
 

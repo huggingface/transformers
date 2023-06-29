@@ -503,17 +503,17 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
     @cached_property
     def inputs(self):
-        input_ids, history_prompt = self.processor(
+        input_ids = self.processor(
             "In the light of the moon, a little egg lay on a leaf", voice_preset="en_speaker_6"
         )
 
-        input_ids = {key: input_ids[key].to(torch_device) for key in input_ids}
+        input_ids = input_ids.to(torch_device)
 
-        return input_ids, history_prompt
+        return input_ids
 
     @slow
     def test_generate_text_semantic(self):
-        input_ids, history_prompt = self.inputs
+        input_ids = self.inputs
 
         # fmt: off
         # check first ids
@@ -521,20 +521,22 @@ class BarkModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         # greedy decoding
-        output_ids = self.model.generate_text_semantic(**input_ids, history_prompt=history_prompt, do_sample=False)
+        output_ids = self.model.generate_text_semantic(**input_ids, do_sample=False)
 
         self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
     @slow
     def test_generate_coarse(self):
-        input_ids, history_prompt = self.inputs
-
+        input_ids = self.inputs
+        
         # fmt: off
         # check first ids
         expected_output_ids = [11018, 11391, 10651, 11418, 10857, 11620, 10642, 11366, 10312, 11528, 10531, 11516, 10474, 11051, 10524, 11051, ]
         # fmt: on
 
-        output_ids = self.model.generate_text_semantic(**input_ids, history_prompt=history_prompt, do_sample=False)
+        output_ids = self.model.generate_text_semantic(**input_ids, do_sample=False)
+        
+        history_prompt = input_ids["history_prompt"]
 
         output_ids = self.model.generate_coarse(output_ids, history_prompt=history_prompt, do_sample=False)
 
@@ -542,7 +544,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_generate_fine(self):
-        input_ids, history_prompt = self.inputs
+        input_ids = self.inputs
 
         # fmt: off
         expected_output_ids = [
@@ -557,7 +559,9 @@ class BarkModelIntegrationTests(unittest.TestCase):
         ]
         # fmt: on
 
-        output_ids = self.model.generate_text_semantic(**input_ids, history_prompt=history_prompt, do_sample=False)
+        output_ids = self.model.generate_text_semantic(**input_ids, do_sample=False)
+        
+        history_prompt = input_ids["history_prompt"]
 
         output_ids = self.model.generate_coarse(output_ids, history_prompt=history_prompt, do_sample=False)
 
@@ -572,14 +576,14 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_generate_end_to_end(self):
-        input_ids, history_prompt = self.inputs
-
-        self.model.generate_audio(**input_ids, history_prompt=None)
-        self.model.generate_audio(**input_ids, history_prompt=history_prompt)
+        input_ids = self.inputs
+        
+        self.model.generate_audio(**input_ids)
+        self.model.generate_audio(**{key:val for (key,val) in input_ids.items() if key != "history_prompt"})
 
     @slow
     def test_generate_end_to_end_with_args(self):
-        input_ids, _ = self.inputs
+        input_ids = self.inputs
 
-        self.model.generate_audio(**input_ids, history_prompt=None, do_sample=True, temperature=0.6, num_beams=4)
-        self.model.generate_audio(**input_ids, history_prompt=None, do_sample=True, temperature=0.6, penalty_alpha=0.6)
+        self.model.generate_audio(**input_ids, do_sample=True, temperature=0.6, num_beams=4)
+        self.model.generate_audio(**input_ids, do_sample=True, temperature=0.6, penalty_alpha=0.6)

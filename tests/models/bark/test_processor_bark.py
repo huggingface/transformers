@@ -83,26 +83,30 @@ class BarkProcessorTest(unittest.TestCase):
         }
 
         # test providing already loaded voice_preset
-        _, processed_voice_preset = processor(text=self.input_string, voice_preset=voice_preset)
+        inputs = processor(text=self.input_string, voice_preset=voice_preset)
+        
+        processed_voice_preset = inputs["history_prompt"]
         for key in voice_preset:
             self.assertListEqual(voice_preset[key].tolist(), processed_voice_preset.get(key, np.array([])).tolist())
 
         # test loading voice preset from npz file
         tmpfilename = os.path.join(self.tmpdirname, "file.npz")
         np.savez(tmpfilename, **voice_preset)
-        _, processed_voice_preset = processor(text=self.input_string, voice_preset=tmpfilename)
+        inputs = processor(text=self.input_string, voice_preset=tmpfilename)
+        processed_voice_preset = inputs["history_prompt"]
+
         for key in voice_preset:
             self.assertListEqual(voice_preset[key].tolist(), processed_voice_preset.get(key, np.array([])).tolist())
 
         # test loading voice preset from the hub
-        _, processed_voice_preset = processor(text=self.input_string, voice_preset=self.voice_preset)
+        inputs = processor(text=self.input_string, voice_preset=self.voice_preset)
 
     def test_tokenizer(self):
         tokenizer = self.get_tokenizer()
 
         processor = BarkProcessor(tokenizer=tokenizer)
 
-        encoded_processor, _ = processor(text=self.input_string)
+        encoded_processor = processor(text=self.input_string)
 
         encoded_tok = tokenizer(
             self.input_string,
