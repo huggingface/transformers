@@ -52,7 +52,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "t5-11b": 512,
 }
 
-SPIECE_UNDERLINE =  "▁"
+SPIECE_UNDERLINE = "▁"
+
 
 class T5Tokenizer(PreTrainedTokenizer):
     """
@@ -297,14 +298,14 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model.Load(self.vocab_file)
 
     def tokenize(self, text: TextInput, **kwargs) -> List[str]:
-        if not text.startswith(' '):
-            text = ' ' + text
-        return super().tokenize(text, *kwargs)
-    
+        if not text.startswith(" "):
+            text = " " + text
+        return super().tokenize(text, **kwargs)
+
     def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
-        tokens = self.sp_model.encode(text, out_type=str) 
-        if not text.startswith(' ') and tokens[0] == SPIECE_UNDERLINE:
+        tokens = self.sp_model.encode(text, out_type=str)
+        if not text.startswith(" ") and tokens[0] == SPIECE_UNDERLINE:
             tokens = tokens[1:]
         return tokens
 
