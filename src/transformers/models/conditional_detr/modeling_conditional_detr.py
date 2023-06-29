@@ -795,7 +795,7 @@ class ConditionalDetrEncoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.

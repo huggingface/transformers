@@ -544,7 +544,7 @@ class DetaImageProcessor(BaseImageProcessor):
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare
     def prepare(self, image, target, return_segmentation_masks=None, masks_path=None):
         logger.warning_once(
-            "The `prepare` method is deprecated and will be removed in a future version. "
+            "The `prepare` method is deprecated and will be removed in a v4.33. "
             "Please use `prepare_annotation` instead. Note: the `prepare_annotation` method "
             "does not return the image anymore.",
         )
@@ -553,23 +553,17 @@ class DetaImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.convert_coco_poly_to_mask
     def convert_coco_poly_to_mask(self, *args, **kwargs):
-        logger.warning_once(
-            "The `convert_coco_poly_to_mask` method is deprecated and will be removed in a future version. "
-        )
+        logger.warning_once("The `convert_coco_poly_to_mask` method is deprecated and will be removed in v4.33. ")
         return convert_coco_poly_to_mask(*args, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_detection
     def prepare_coco_detection(self, *args, **kwargs):
-        logger.warning_once(
-            "The `prepare_coco_detection` method is deprecated and will be removed in a future version. "
-        )
+        logger.warning_once("The `prepare_coco_detection` method is deprecated and will be removed in v4.33. ")
         return prepare_coco_detection_annotation(*args, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_panoptic
     def prepare_coco_panoptic(self, *args, **kwargs):
-        logger.warning_once(
-            "The `prepare_coco_panoptic` method is deprecated and will be removed in a future version. "
-        )
+        logger.warning_once("The `prepare_coco_panoptic` method is deprecated and will be removed in v4.33. ")
         return prepare_coco_panoptic_annotation(*args, **kwargs)
 
     def resize(
@@ -640,40 +634,6 @@ class DetaImageProcessor(BaseImageProcessor):
         `[center_x, center_y, width, height]` format.
         """
         return normalize_annotation(annotation, image_size=image_size)
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad_and_create_pixel_mask
-    def pad_and_create_pixel_mask(
-        self,
-        pixel_values_list: List[ImageInput],
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = None,
-    ) -> BatchFeature:
-        """
-        Pads a batch of images with zeros to the size of largest height and width in the batch and returns their
-        corresponding pixel mask.
-
-        Args:
-            images (`List[np.ndarray]`):
-                Batch of images to pad.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        logger.warning_once("This method is deprecated and will be removed in v4.27.0. Please use pad instead.")
-        # pad expects a list of np.ndarray, but the previous feature extractors expected torch tensors
-        images = [to_numpy_array(image) for image in pixel_values_list]
-        return self.pad(
-            images=images,
-            return_pixel_mask=True,
-            return_tensors=return_tensors,
-            data_format=data_format,
-        )
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_image
     def _pad_image(

@@ -38,6 +38,7 @@ from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .configuration_utils import GenerationConfig
 from .logits_process import (
+    ClassifierFreeGuidanceLogitsProcessor,
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
     EpsilonLogitsWarper,
@@ -940,6 +941,8 @@ class GenerationMixin:
             )
         if generation_config.forced_decoder_ids is not None:
             processors.append(ForceTokensLogitsProcessor(generation_config.forced_decoder_ids))
+        if generation_config.guidance_scale is not None and generation_config.guidance_scale > 1:
+            processors.append(ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale))
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
