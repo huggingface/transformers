@@ -1380,10 +1380,10 @@ class VitsModel(VitsPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import VitsMmsTokenizer, VitsModel, set_seed
+        >>> from transformers import VitsTokenizer, VitsModel, set_seed
         >>> import torch
 
-        >>> tokenizer = VitsMmsTokenizer.from_pretrained("Matthijs/mms-tts-eng")
+        >>> tokenizer = VitsTokenizer.from_pretrained("Matthijs/mms-tts-eng")
         >>> model = VitsModel.from_pretrained("Matthijs/mms-tts-eng")
 
         >>> inputs = tokenizer(text="Hello, my dog is cute", return_tensors="pt")

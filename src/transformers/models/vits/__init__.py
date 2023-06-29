@@ -27,7 +27,7 @@ _import_structure = {
         "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VitsConfig",
     ],
-    "tokenization_vits": ["VitsMmsTokenizer"],
+    "tokenization_vits": ["VitsTokenizer"],
 }
 
 try:
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
         VITS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         VitsConfig,
     )
-    from .tokenization_vits import VitsMmsTokenizer
+    from .tokenization_vits import VitsTokenizer
 
     try:
         if not is_torch_available():

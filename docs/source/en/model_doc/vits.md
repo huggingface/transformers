@@ -28,9 +28,9 @@ This model was contributed by [Matthijs](https://huggingface.co/Matthijs). The o
 
 [[autodoc]] VitsConfig
 
-## VitsMmsTokenizer
+## VitsTokenizer
 
-[[autodoc]] VitsMmsTokenizer
+[[autodoc]] VitsTokenizer
     - __call__
     - save_vocabulary
 

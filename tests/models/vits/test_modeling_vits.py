@@ -38,7 +38,7 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from transformers import VitsMmsTokenizer, VitsModel
+    from transformers import VitsModel, VitsTokenizer
 
 
 def _config_zero_init(config):
@@ -216,7 +216,7 @@ class VitsModelIntegrationTests(unittest.TestCase):
         model = VitsModel.from_pretrained("Matthijs/mms-tts-eng")
         model.to(torch_device)
 
-        tokenizer = VitsMmsTokenizer.from_pretrained("Matthijs/mms-tts-eng")
+        tokenizer = VitsTokenizer.from_pretrained("Matthijs/mms-tts-eng")
 
         set_seed(555)  # make deterministic
 

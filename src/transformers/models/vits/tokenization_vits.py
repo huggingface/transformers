@@ -17,10 +17,15 @@
 
 import json
 import os
+import re
 from typing import List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
+from ...utils import is_phonemizer_available, logging
+
+
+if is_phonemizer_available():
+    import phonemizer
 
 
 logger = logging.get_logger(__name__)
@@ -39,9 +44,9 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-class VitsMmsTokenizer(PreTrainedTokenizer):
+class VitsTokenizer(PreTrainedTokenizer):
     """
-    Construct a VITS tokenizer for MMS-TTS.
+    Construct a VITS tokenizer. Also supports MMS-TTS.
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
@@ -53,6 +58,8 @@ class VitsMmsTokenizer(PreTrainedTokenizer):
             Language identifier.
         add_blank (`bool`, *optional*, defaults to `True`):
             Whether to insert token id 0 in between the other tokens.
+        phonemize (`bool`, *optional*, defaults to `True`):
+            Whether to convert the input text into phonemes.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -67,9 +74,17 @@ class VitsMmsTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         language=None,
         add_blank=True,
+        phonemize=True,
         **kwargs,
     ) -> None:
-        super().__init__(pad_token=pad_token, unk_token=unk_token, language=language, add_blank=add_blank, **kwargs)
+        super().__init__(
+            pad_token=pad_token,
+            unk_token=unk_token,
+            language=language,
+            add_blank=add_blank,
+            phonemize=phonemize,
+            **kwargs,
+        )
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -85,6 +100,7 @@ class VitsMmsTokenizer(PreTrainedTokenizer):
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.language = language
         self.add_blank = add_blank
+        self.phonemize = phonemize
 
     @property
     def vocab_size(self):
@@ -97,9 +113,16 @@ class VitsMmsTokenizer(PreTrainedTokenizer):
     def _tokenize(self, text: str) -> List[str]:
         """Tokenize a string."""
         text = self._preprocess_char(text.lower())
-        valid_chars = self.encoder
-        filtered_text = "".join(list(filter(lambda char: char in valid_chars, text)))
-        tokens = list(filtered_text.strip())
+
+        if self.phonemize:
+            filtered_text = phonemizer.phonemize(
+                text, language="en-us", backend="espeak", strip=True, preserve_punctuation=True, with_stress=True
+            )
+            filtered_text = re.sub(r"\s+", " ", filtered_text)
+        else:
+            filtered_text = "".join(list(filter(lambda char: char in self.encoder, text))).strip()
+
+        tokens = list(filtered_text)
 
         if self.add_blank:
             interspersed = [self._convert_id_to_token(0)] * (len(tokens) * 2 + 1)

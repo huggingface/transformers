@@ -23,8 +23,8 @@ from huggingface_hub import hf_hub_download
 
 from transformers import (
     VitsConfig,
-    VitsMmsTokenizer,
     VitsModel,
+    VitsTokenizer,
     logging,
 )
 
@@ -318,17 +318,27 @@ def convert_checkpoint(
     else:
         logger.info(f"***Converting model: {checkpoint_path}***")
 
-    # Save vocab as temporary json file
-    symbols = [line.replace("\n", "") for line in open(vocab_path, encoding="utf-8").readlines()]
-    symbol_to_id = {s: i for i, s in enumerate(symbols)}
+    # original VITS checkpoint?
+    if vocab_path is None:
+        _pad = "_"
+        _punctuation = ';:,.!?¡¿—…"«»“” '
+        _letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+        _letters_ipa = "ɑɐɒæɓʙβɔɕçɗɖðʤəɘɚɛɜɝɞɟʄɡɠɢʛɦɧħɥʜɨɪʝɭɬɫɮʟɱɯɰŋɳɲɴøɵɸθœɶʘɹɺɾɻʀʁɽʂʃʈʧʉʊʋⱱʌɣɤʍχʎʏʑʐʒʔʡʕʢǀǁǂǃˈˌːˑʼʴʰʱʲʷˠˤ˞↓↑→↗↘'̩'ᵻ"
+        symbols = [_pad] + list(_punctuation) + list(_letters) + list(_letters_ipa)
+        symbol_to_id = {s: i for i, s in enumerate(symbols)}
+        phonemize = True
+    else:
+        # Save vocab as temporary json file
+        symbols = [line.replace("\n", "") for line in open(vocab_path, encoding="utf-8").readlines()]
+        symbol_to_id = {s: i for i, s in enumerate(symbols)}
+        phonemize = False
 
     with tempfile.NamedTemporaryFile() as tf:
         with open(tf.name, "w", encoding="utf-8") as f:
             f.write(json.dumps(symbol_to_id, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
-        tokenizer = VitsMmsTokenizer(tf.name)
+        tokenizer = VitsTokenizer(tf.name, language=language, phonemize=phonemize)
 
-    tokenizer.language = language
     config.vocab_size = len(symbols)
     model = VitsModel(config)
 
