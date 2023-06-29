@@ -229,10 +229,10 @@ class BarkGenerationConfig(GenerationConfig):
         **kwargs,
     ):
         r"""
-        Instantiate a [`BarkConfig`] (or a derived class) from bark sub-models configuration.
+        Instantiate a [`BarkGenerationConfig`] (or a derived class) from bark sub-models generation configuration.
 
         Returns:
-            [`BarkConfig`]: An instance of a configuration object
+            [`BarkGenerationConfig`]: An instance of a configuration object
         """
         return cls(
             semantic_config=semantic_config.to_dict(),

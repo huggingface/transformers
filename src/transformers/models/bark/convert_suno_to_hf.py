@@ -8,12 +8,15 @@ from bark.generation import _load_model as _bark_load_model
 from huggingface_hub import hf_hub_download
 
 from transformers import set_seed
-
-# TODO : how to import directly?
 from transformers.models.bark.configuration_bark import (
     BarkCoarseConfig,
     BarkFineConfig,
     BarkSemanticConfig,
+)
+from transformers.models.bark.generation_configuration_bark import (
+    BarkCoarseGenerationConfig,
+    BarkFineGenerationConfig,
+    BarkSemanticGenerationConfig,
 )
 from transformers.models.bark.modeling_bark import (
     BarkCoarseModel,
@@ -86,12 +89,15 @@ def _load_model(ckpt_path, device, use_small=False, model_type="text"):
     if model_type == "text":
         ModelClass = BarkSemanticModel
         ConfigClass = BarkSemanticConfig
+        GenerationConfigClass = BarkSemanticGenerationConfig
     elif model_type == "coarse":
         ModelClass = BarkCoarseModel
         ConfigClass = BarkCoarseConfig
+        GenerationConfigClass = BarkCoarseGenerationConfig
     elif model_type == "fine":
         ModelClass = BarkFineModel
         ConfigClass = BarkFineConfig
+        GenerationConfigClass = BarkFineGenerationConfig
     else:
         raise NotImplementedError()
     model_key = f"{model_type}_small" if use_small else model_type
@@ -114,6 +120,9 @@ def _load_model(ckpt_path, device, use_small=False, model_type="text"):
 
     model_config = ConfigClass(**checkpoint["model_args"])
     model = ModelClass(config=model_config)
+    model_generation_config = GenerationConfigClass()
+
+    model.generation_config = model_generation_config
     state_dict = checkpoint["model"]
     # fixup checkpoint
     unwanted_prefix = "_orig_mod."

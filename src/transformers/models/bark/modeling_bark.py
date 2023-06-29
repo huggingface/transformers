@@ -37,7 +37,6 @@ from .configuration_bark import (
 from .generation_configuration_bark import (
     BarkCoarseGenerationConfig,
     BarkFineGenerationConfig,
-    BarkGenerationConfig,
     BarkSemanticGenerationConfig,
 )
 
@@ -911,6 +910,13 @@ class BarkFineModel(BarkPreTrainedModel):
             attentions=all_self_attentions,
         )
 
+    def can_generate(self) -> bool:
+        """
+        Returns True. Despite being an autoencoder, BarkFineModel shares some characteristics with generative models
+        due to the way audio are generated.
+        """
+        return True
+
 
 @add_start_docstrings(
     """
@@ -942,14 +948,6 @@ class BarkModel(BarkPreTrainedModel):
         self.codec_model = AutoModel.from_config(config.codec_config)
 
         self.config = config
-
-        # manually create generation config
-        # override from_model_config (not) called during super().__init__
-        # TODO: ideally would call it again during from_pretrained
-        # self.generation_config = BarkGenerationConfig.from_model_config(config)
-
-        # TODO: for now, default values - have to find the link between BarkConfig and BarkGenerationConfig
-        self.generation_config = BarkGenerationConfig({}, {}, {})
 
     def preprocess_histories_before_coarse(
         self, history_prompt, max_coarse_history, semantic_to_coarse_ratio, batch_size, semantic_generation_config
@@ -1000,7 +998,8 @@ class BarkModel(BarkPreTrainedModel):
         **kwargs,
     ) -> torch.LongTensor:
         if semantic_generation_config is None:
-            semantic_generation_config = self.generation_config.semantic_config
+            # workaround until nested generation config is compatible with PreTrained Model
+            semantic_generation_config = BarkSemanticGenerationConfig(**self.generation_config.semantic_config)
 
         # TODO: add a max_gen_duration_s early stop
 
@@ -1084,10 +1083,12 @@ class BarkModel(BarkPreTrainedModel):
         **kwargs,
     ) -> torch.LongTensor:
         if semantic_generation_config is None:
-            semantic_generation_config = self.generation_config.semantic_config
+            # workaround until nested generation config is compatible with PreTrained Model
+            semantic_generation_config = BarkSemanticGenerationConfig(**self.generation_config.semantic_config)
 
         if coarse_acoustics_config is None:
-            coarse_acoustics_config = self.generation_config.coarse_acoustics_config
+            # workaround until nested generation config is compatible with PreTrained Model
+            coarse_acoustics_config = BarkCoarseGenerationConfig(**self.generation_config.coarse_acoustics_config)
 
         max_coarse_input_length = coarse_acoustics_config.max_coarse_input_length
         max_coarse_history = coarse_acoustics_config.max_coarse_history
@@ -1188,13 +1189,16 @@ class BarkModel(BarkPreTrainedModel):
         **kwargs,
     ) -> torch.LongTensor:
         if semantic_generation_config is None:
-            semantic_generation_config = self.generation_config.semantic_config
+            # workaround until nested generation config is compatible with PreTrained Model
+            semantic_generation_config = BarkSemanticGenerationConfig(**self.generation_config.semantic_config)
 
         if coarse_acoustics_config is None:
-            coarse_acoustics_config = self.generation_config.coarse_acoustics_config
+            # workaround until nested generation config is compatible with PreTrained Model
+            coarse_acoustics_config = BarkCoarseGenerationConfig(**self.generation_config.coarse_acoustics_config)
 
         if fine_acoustics_config is None:
-            fine_acoustics_config = self.generation_config.fine_acoustics_config
+            # workaround until nested generation config is compatible with PreTrained Model
+            fine_acoustics_config = BarkFineGenerationConfig(**self.generation_config.fine_acoustics_config)
 
         # since we don't really use GenerationConfig through the fine model (autoencoder)
         # and since only temperature is used from the classic GenerationConfig parameters
@@ -1407,6 +1411,13 @@ class BarkModel(BarkPreTrainedModel):
         audio = self.codec_decode(output)
 
         return audio
+
+    def can_generate(self) -> bool:
+        """
+        Returns True. Despite not having a `self.generate` method, this model can `generate_audio` and thus needs a
+        BarkGenerationConfig.
+        """
+        return True
 
 
 # TODO: (maybe do it in the preprocessor)
