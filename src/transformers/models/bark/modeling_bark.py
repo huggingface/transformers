@@ -947,10 +947,9 @@ class BarkModel(BarkPreTrainedModel):
         # override from_model_config (not) called during super().__init__
         # TODO: ideally would call it again during from_pretrained
         # self.generation_config = BarkGenerationConfig.from_model_config(config)
-        
+
         # TODO: for now, default values - have to find the link between BarkConfig and BarkGenerationConfig
         self.generation_config = BarkGenerationConfig({}, {}, {})
-        
 
     def preprocess_histories_before_coarse(
         self, history_prompt, max_coarse_history, semantic_to_coarse_ratio, batch_size, semantic_generation_config

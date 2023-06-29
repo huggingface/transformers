@@ -16,15 +16,16 @@
 Processor class for Bark
 """
 import os
-from ...utils import logging
 from typing import Optional
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
+from ...utils import logging
 from ...utils.hub import get_file_from_repo
 from ..auto import AutoTokenizer
+
 
 logger = logging.get_logger(__name__)
 
@@ -104,7 +105,9 @@ class BarkProcessor(ProcessorMixin):
                 speaker_embeddings = np.load(speaker_embeddings, allow_pickle=True)
 
                 if len(speaker_embeddings.keys()) != 1:
-                    raise ValueError(f"`speaker_embeddings` doesn't follow the required format - ensure that speaker embeddings are saved in a nested format, where the first level contains voice preset names (e.g `en_speaker_4`), and the second level contains `semantic_prompt`, `coarse_prompt` and `fine_prompt` embeddings, then save the speaker embeddings via `np.savez('speaker_embeddings.npz', speaker_embeddings)`.")
+                    raise ValueError(
+                        "`speaker_embeddings` doesn't follow the required format - ensure that speaker embeddings are saved in a nested format, where the first level contains voice preset names (e.g `en_speaker_4`), and the second level contains `semantic_prompt`, `coarse_prompt` and `fine_prompt` embeddings, then save the speaker embeddings via `np.savez('speaker_embeddings.npz', speaker_embeddings)`."
+                    )
 
                 key_dict = list(speaker_embeddings.keys())[0]
                 speaker_embeddings = speaker_embeddings[key_dict].item()

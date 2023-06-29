@@ -180,7 +180,7 @@ class BarkFineGenerationConfig(GenerationConfig):
 class BarkGenerationConfig(GenerationConfig):
     model_type = "bark"
     is_composition = True
-    
+
     # TODO: nested from_dict
 
     def __init__(
