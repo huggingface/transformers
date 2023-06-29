@@ -61,7 +61,9 @@ The conversion script is also different because the model was save in t5x's late
 >>> model = AutoModelForSeq2SeqLM.from_pretrained("google/umt5-small")
 >>> tokenizer = AutoTokenizer.from_pretrained("google/umt5-small")
 
->>> inputs = tokenizer("A <extra_id_0> walks in <extra_id_1>, order a <extra_id_1> and drinks it.", return_tensors="pt")
+>>> inputs = tokenizer(
+...     "A <extra_id_0> walks in <extra_id_1>, order a <extra_id_1> and drinks it.", return_tensors="pt"
+... )
 >>> outputs = model.generate(**inputs)
 >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ['Pour a cup of bolognese into a large bowl and add the pasta']
