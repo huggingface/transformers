@@ -407,7 +407,8 @@ def center_crop(
 
     if return_numpy is not None:
         warnings.warn("return_numpy is deprecated and will be removed in v.4.33", FutureWarning)
-        return_numpy = True
+
+    return_numpy = True if return_numpy is None else return_numpy
 
     if not isinstance(image, np.ndarray):
         raise ValueError(f"Input image must be of type np.ndarray, got {type(image)}")

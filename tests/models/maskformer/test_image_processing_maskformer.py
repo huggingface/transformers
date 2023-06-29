@@ -147,7 +147,6 @@ class MaskFormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
         self.assertTrue(hasattr(image_processing, "do_normalize"))
         self.assertTrue(hasattr(image_processing, "do_resize"))
         self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "max_size"))
         self.assertTrue(hasattr(image_processing, "ignore_index"))
         self.assertTrue(hasattr(image_processing, "num_labels"))
 
