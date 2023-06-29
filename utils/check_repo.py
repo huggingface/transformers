@@ -1061,6 +1061,8 @@ def check_repo_quality():
     check_all_auto_mapping_names_in_config_mapping_names()
     print("Checking all auto mappings could be imported.")
     check_all_auto_mappings_importable()
+    print("Checking all objects are equally (across frameworks) in the main __init__.")
+    check_objects_being_equally_in_main_init()
 
 
 if __name__ == "__main__":
