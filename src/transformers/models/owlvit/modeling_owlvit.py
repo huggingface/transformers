@@ -1294,8 +1294,8 @@ class OwlViTClassPredictionHead(nn.Module):
             return (pred_logits, image_class_embeds)
 
         # Normalize image and text features
-        image_class_embeds /= torch.linalg.norm(image_class_embeds, dim=-1, keepdim=True) + 1e-6
-        query_embeds /= torch.linalg.norm(query_embeds, dim=-1, keepdim=True) + 1e-6
+        image_class_embeds = image_class_embeds / (torch.linalg.norm(image_class_embeds, dim=-1, keepdim=True) + 1e-6)
+        query_embeds = query_embeds / (torch.linalg.norm(query_embeds, dim=-1, keepdim=True) + 1e-6)
 
         # Get class predictions
         pred_logits = torch.einsum("...pd,...qd->...pq", image_class_embeds, query_embeds)
