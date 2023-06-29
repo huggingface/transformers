@@ -296,8 +296,10 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
-        return self.sp_model.encode(text, out_type=str)
-
+        tokens = self.sp_model.encode(text, out_type=str) 
+        if not text.startswith(' ') and tokens[0] == '▁':
+            tokens = tokens[1:]
+        return tokens
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         if token.startswith("<extra_id_"):
