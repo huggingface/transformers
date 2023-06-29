@@ -173,7 +173,7 @@ For batched audio-prompted generation, the generated `audio_values` can be post-
 >>> audio_values = model.generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=256)
 
 >>> # post-process to remove padding from the batched audio
->>> audio_values = processor.decode_audio(audio_values, padding_mask=inputs.padding_mask)
+>>> audio_values = processor.batch_decode(audio_values, padding_mask=inputs.padding_mask)
 ```
 
 ## Model Structure
