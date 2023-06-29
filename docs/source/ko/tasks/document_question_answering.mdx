@@ -198,15 +198,13 @@ DatasetDict({
 
 위에서 언급한 전처리 외에도 모델에 대한 레이블을 추가해야 합니다. 🤗 Transformers의 `xxxForQuestionAnswering` 모델의 경우, 레이블은 `start_positions`와 `end_positions`로 구성되며 어떤 토큰이 답변의 시작과 끝에 있는지를 나타냅니다.
 
-방금 말한 레이블 추가를 시작해보겠습니다. 
-Let's start with that. Define a helper function that can find a sublist (the answer split into words) in a larger list (the words list).
+레이블 추가를 위해서, 먼저 더 큰 리스트(단어 리스트)에서 하위 리스트(단어로 분할된 답변)을 찾을 수 있는 헬퍼 함수를 정의합니다.
 
-This function will take two lists as input, `words_list` and `answer_list`. It will then iterate over the `words_list` and check
-if the current word in the `words_list` (words_list[i]) is equal to the first word of answer_list (answer_list[0]) and if
-the sublist of `words_list` starting from the current word and of the same length as `answer_list` is equal `to answer_list`.
-If this condition is true, it means that a match has been found, and the function will record the match, its starting index (idx),
-and its ending index (idx + len(answer_list) - 1). If more than one match was found, the function will return only the first one.
-If no match is found, the function returns (`None`, 0, and 0).
+이 함수는 `words_list`와 `answer_list`, 이렇게 두 리스트를 입력으로 받습니다. 
+그런 다음 `words_list`를 반복하고 `words_list`의 현재 단어(words_list[i])가 `answer_list`의 첫 번째 단어(answer_list[0])와 같은지, 
+현재 단어에서 시작해 `answer_list`와 같은 길이만큼의 `words_list`의 하위 리스트가 `answer_list`와 일치하는지 확인합니다.
+이 조건이 참이라면 일치하는 항목을 발견했음을 의미하며, 함수는 일치 항목, 시작 인덱스(idx) 및 종료 인덱스(idx + len(answer_list) - 1)를 기록합니다.
+일치하는 항목이 두 개 이상 발견되면 함수는 첫 번째 항목만 반환합니다. 일치하는 항목이 없다면 함수는 (None, 0, 0)을 반환합니다.
 
 ```py
 >>> def subfinder(words_list, answer_list):
@@ -224,7 +222,7 @@ If no match is found, the function returns (`None`, 0, and 0).
 ...         return None, 0, 0
 ```
 
-To illustrate how this function finds the position of the answer, let's use it on an example:
+이 함수가 어떻게 정답의 위치를 찾는지 설명하기 위해 다음 예제에서 사용해 보겠습니다.
 
 ```py
 >>> example = dataset_with_ocr["train"][1]
@@ -242,7 +240,7 @@ start_index 17
 end_index 18
 ```
 
-Once examples are encoded, however, they will look like this:
+한편, 위 예제가 인코딩되면 다음과 같이 표시됩니다:
 
 ```py
 >>> encoding = tokenizer(example["question"], example["words"], example["boxes"])
@@ -250,13 +248,12 @@ Once examples are encoded, however, they will look like this:
 [CLS] who is in cc in this letter? [SEP] wie baw brown & williamson tobacco corporation research & development ...
 ```
 
-We'll need to find the position of the answer in the encoded input.
-* `token_type_ids` tells us which tokens are part of the question, and which ones are part of the document's words.
-* `tokenizer.cls_token_id` will help find the special token at the beginning of the input.
-* `word_ids` will help match the answer found in the original `words` to the same answer in the full encoded input and determine
-the start/end position of the answer in the encoded input.
+이제 인코딩된 입력에서 정답의 위치를 찾아야 합니다.
+* `token_type_ids`는 어떤 토큰이 질문에 속하는지, 그리고 어떤 토큰이 문서 단어의 일부인지를 알려줍니다.
+* `tokenizer.cls_token_id` 입력의 시작 부분에 있는 특수 토큰을 찾는 데 도움을 줍니다.
+* `word_ids`는 원본 `words`에서 찾은 답변을 전체 인코딩된 입력의 동일한 답과 일치시키고 인코딩된 입력에서 답변의 시작/끝 위치를 결정합니다.
 
-With that in mind, let's create a function to encode a batch of examples in the dataset:
+위 내용들을 염두에 두고 데이터 세트의 예제 배치를 인코딩하는 함수를 만들어 보겠습니다:
 
 ```py
 >>> def encode_dataset(examples, max_length=512):
@@ -265,22 +262,22 @@ With that in mind, let's create a function to encode a batch of examples in the 
 ...     boxes = examples["boxes"]
 ...     answers = examples["answer"]
 
-...     # encode the batch of examples and initialize the start_positions and end_positions
+...     # 예제 배치를 인코딩하고 start_positions와 end_positions를 초기화합니다
 ...     encoding = tokenizer(questions, words, boxes, max_length=max_length, padding="max_length", truncation=True)
 ...     start_positions = []
 ...     end_positions = []
 
-...     # loop through the examples in the batch
+...     # 배치의 예제를 반복합니다
 ...     for i in range(len(questions)):
 ...         cls_index = encoding["input_ids"][i].index(tokenizer.cls_token_id)
 
-...         # find the position of the answer in example's words
+...         # 예제의 words에서 답변의 위치를 찾습니다
 ...         words_example = [word.lower() for word in words[i]]
 ...         answer = answers[i]
 ...         match, word_idx_start, word_idx_end = subfinder(words_example, answer.lower().split())
 
 ...         if match:
-...             # if match is found, use `token_type_ids` to find where words start in the encoding
+...             # 일치하는 항목을 발견하면, `token_type_ids`를 사용해 인코딩에서 단어가 시작하는 위치를 찾습니다
 ...             token_type_ids = encoding["token_type_ids"][i]
 ...             token_start_index = 0
 ...             while token_type_ids[token_start_index] != 1:
@@ -294,15 +291,15 @@ With that in mind, let's create a function to encode a batch of examples in the 
 ...             start_position = cls_index
 ...             end_position = cls_index
 
-...             # loop over word_ids and increase `token_start_index` until it matches the answer position in words
-...             # once it matches, save the `token_start_index` as the `start_position` of the answer in the encoding
+...             # words의 답변 위치와 일치할 때까지 word_ids를 반복하고 `token_start_index`를 늘립니다
+...             # 일치하면 `token_start_index`를 인코딩에서 답변의 `start_position`으로 저장합니다
 ...             for id in word_ids:
 ...                 if id == word_idx_start:
 ...                     start_position = token_start_index
 ...                 else:
 ...                     token_start_index += 1
 
-...             # similarly loop over `word_ids` starting from the end to find the `end_position` of the answer
+...             # 마찬가지로 끝에서 시작해 `word_ids`를 반복하며 답변의 `end_position`을 찾습니다
 ...             for id in word_ids[::-1]:
 ...                 if id == word_idx_end:
 ...                     end_position = token_end_index
@@ -323,7 +320,7 @@ With that in mind, let's create a function to encode a batch of examples in the 
 ...     return encoding
 ```
 
-Now that we have this preprocessing function, we can encode the entire dataset:
+이제 이 전처리 함수가 있으니 전체 데이터 세트를 인코딩할 수 있습니다:
 
 ```py
 >>> encoded_train_dataset = dataset_with_ocr["train"].map(
@@ -334,7 +331,7 @@ Now that we have this preprocessing function, we can encode the entire dataset:
 ... )
 ```
 
-Let's check what the features of the encoded dataset look like:
+인코딩된 데이터 세트의 특성이 어떻게 생겼는지 확인해 보겠습니다:
 
 ```py
 >>> encoded_train_dataset.features
@@ -347,23 +344,22 @@ Let's check what the features of the encoded dataset look like:
  'end_positions': Value(dtype='int64', id=None)}
 ```
 
-## Evaluation
+## 평가하기 [[evaluation]]
 
-Evaluation for document question answering requires a significant amount of postprocessing. To avoid taking up too much
-of your time, this guide skips the evaluation step. The [`Trainer`] still calculates the evaluation loss during training so
-you're not completely in the dark about your model's performance. Extractive question answering is typically evaluated using F1/exact match.
-If you'd like to implement it yourself, check out the [Question Answering chapter](https://huggingface.co/course/chapter7/7?fw=pt#postprocessing)
-of the Hugging Face course for inspiration.
+문서 질의 응답을 평가하려면 상당한 양의 후처리가 필요합니다. 시간이 너무 많이 걸리지 않도록 이 가이드에서는 평가 단계를 생략합니다.
+[`Trainer`]가 훈련 과정에서 평가 손실(evaluation loss)을 계속 계산하기 때문에 모델의 성능을 대략적으로 알 수 있습니다.
+추출적(Extractive) 질의 응답은 보통 F1/exact match 방법을 사용해 평가됩니다.
+직접 구현해보고 싶으시다면, Hugging Face course의 [Question Answering chapter](https://huggingface.co/course/chapter7/7?fw=pt#postprocessing)을 참고하세요.
 
-## Train
+## 학습하기 [[train]]
 
-Congratulations! You've successfully navigated the toughest part of this guide and now you are ready to train your own model.
-Training involves the following steps:
-* Load the model with [`AutoModelForDocumentQuestionAnswering`] using the same checkpoint as in the preprocessing.
-* Define your training hyperparameters in [`TrainingArguments`].
-* Define a function to batch examples together, here the [`DefaultDataCollator`] will do just fine
-* Pass the training arguments to [`Trainer`] along with the model, dataset, and data collator.
-* Call [`~Trainer.train`] to finetune your model.
+축하합니다! 이 가이드의 가장 어려운 부분을 성공적으로 처리했으니 이제 나만의 모델을 훈련할 준비가 되었습니다. 
+훈련은 다음과 같은 단계를 포함합니다:
+* 전처리에서의 동일한 체크포인트를 사용하기 위해 [`AutoModelForDocumentQuestionAnswering`]으로 모델을 로드합니다.
+* [`TrainingArguments`]로 훈련 하이퍼파라미터를 정합니다.
+* 예제를 배치 처리하는 함수를 정의합니다. 여기서는 [`DefaultDataCollator`]가 적당합니다.
+* 모델, 데이터 세트, 데이터 콜레이터(Data collator)와 함께 [`Trainer`]에 훈련 인수들을 전달합니다.
+* [`~Trainer.train`]을 호출해서 모델을 미세 조정합니다.
 
 ```py
 >>> from transformers import AutoModelForDocumentQuestionAnswering
@@ -371,14 +367,14 @@ Training involves the following steps:
 >>> model = AutoModelForDocumentQuestionAnswering.from_pretrained(model_checkpoint)
 ```
 
-In the [`TrainingArguments`] use `output_dir` to specify where to save your model, and configure hyperparameters as you see fit.
-If you wish to share your model with the community, set `push_to_hub` to `True` (you must be signed in to Hugging Face to upload your model).
-In this case the `output_dir` will also be the name of the repo where your model checkpoint will be pushed.
+[`TrainingArguments`]에서 `output_dir`을 사용하여 모델을 저장할 위치를 지정하고, 적절한 하이퍼파라미터를 설정합니다.
+모델을 커뮤니티와 공유하려면 `push_to_hub`를 `True`로 설정하세요 (모델을 업로드하려면 Hugging Face에 로그인해야 합니다).
+이 경우 `output_dir`은 모델의 체크포인트를 푸시할 레포지토리의 이름이 됩니다.
 
 ```py
 >>> from transformers import TrainingArguments
 
->>> # REPLACE THIS WITH YOUR REPO ID
+>>> # 본인의 레포지토리 ID로 바꾸세요
 >>> repo_id = "MariaK/layoutlmv2-base-uncased_finetuned_docvqa"
 
 >>> training_args = TrainingArguments(
@@ -395,7 +391,7 @@ In this case the `output_dir` will also be the name of the repo where your model
 ... )
 ```
 
-Define a simple data collator to batch examples together.
+간단한 데이터 콜레이터를 정의하여 예제를 함께 배치합니다.
 
 ```py
 >>> from transformers import DefaultDataCollator
@@ -403,7 +399,7 @@ Define a simple data collator to batch examples together.
 >>> data_collator = DefaultDataCollator()
 ```
 
-Finally, bring everything together, and call [`~Trainer.train`]:
+마지막으로, 모든 것을 한 곳에 모아 [`~Trainer.train`]을 호출합니다:
 
 ```py
 >>> from transformers import Trainer
@@ -420,19 +416,19 @@ Finally, bring everything together, and call [`~Trainer.train`]:
 >>> trainer.train()
 ```
 
-To add the final model to 🤗 Hub, create a model card and call `push_to_hub`:
+최종 모델을 🤗 Hub에 추가하려면, 모델 카드를 생성하고 `push_to_hub`를 호출합니다:
 
 ```py
 >>> trainer.create_model_card()
 >>> trainer.push_to_hub()
 ```
 
-## Inference
+## 추론하기 [[inference]]
 
-Now that you have finetuned a LayoutLMv2 model, and uploaded it to the 🤗 Hub, you can use it for inference. The simplest
-way to try out your finetuned model for inference is to use it in a [`Pipeline`].
+이제 LayoutLMv2 모델을 미세조정하고 🤗 Hub에 업로드했으므로 추론에 사용할 수 있습니다. 
+추론을 위해 미세조정된 모델을 사용해 보는 가장 간단한 방법은 [`Pipeline`]을 사용하는 것 입니다.
 
-Let's take an example:
+예를 들어 보겠습니다:
 ```py
 >>> example = dataset["test"][2]
 >>> question = example["query"]["en"]
@@ -443,8 +439,7 @@ Let's take an example:
 ['TRRF Vice President', 'lee a. waller']
 ```
 
-Next, instantiate a pipeline for
-document question answering with your model, and pass the image + question combination to it.
+그런 다음, 모델로 문서 질의 응답을 하기 위해 파이프라인을 인스턴스화하고 이미지 + 질문 조합을 전달합니다.
 
 ```py
 >>> from transformers import pipeline
@@ -457,13 +452,12 @@ document question answering with your model, and pass the image + question combi
   'end': 57}]
 ```
 
-You can also manually replicate the results of the pipeline if you'd like:
-1. Take an image and a question, prepare them for the model using the processor from your model.
-2. Forward the result or preprocessing through the model.
-3. The model returns `start_logits` and `end_logits`, which indicate which token is at the start of the answer and
-which token is at the end of the answer. Both have shape (batch_size, sequence_length).
-4. Take an argmax on the last dimension of both the `start_logits` and `end_logits` to get the predicted `start_idx` and `end_idx`.
-5. Decode the answer with the tokenizer.
+원한다면 파이프라인의 결과를 수동으로 복제할 수도 있습니다:
+1. 이미지와 질문을 가져와 모델의 프로세서를 사용해 모델에 맞게 준비합니다.
+2. 모델을 통해 결과 또는 전처리를 전달합니다.
+3. 모델은 어떤 토큰이 답변의 시작에 있는지, 어떤 토큰이 답변이 끝에 있는지를 나타내는 `start_logits`와 `end_logits`를 반환합니다. 둘 다 (batch_size, sequence_length) 형태를 갖습니다.
+4. `start_logits`와 `end_logits`의 마지막 차원을 최대로 만드는 값을 찾아 예상 `start_idx`와 `end_idx`를 얻습니다.
+5. 토크나이저로 답변을 디코딩합니다.
 
 ```py
 >>> import torch
