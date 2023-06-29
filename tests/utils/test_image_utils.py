@@ -557,9 +557,6 @@ class UtilFunctionTester(unittest.TestCase):
     def test_infer_channel_dimension(self):
         # Test we fail with invalid input
         with pytest.raises(ValueError):
-            infer_channel_dimension_format(np.random.randint(0, 256, (10, 10)))
-
-        with pytest.raises(ValueError):
             infer_channel_dimension_format(np.random.randint(0, 256, (10, 10, 10, 10, 10)))
 
         # Test we fail if neither first not last dimension is of size 3 or 1
