@@ -56,7 +56,7 @@ Note that this feature can also be used in a multi GPU setup.
 - Install latest `accelerate` from source
 `pip install git+https://github.com/huggingface/accelerate.git`
 
-- Install latest `transformers` from source 
+- Install latest `transformers` from source
 `pip install git+https://github.com/huggingface/transformers.git`
 
 ### Running FP4 models - single GPU setup - Quickstart
@@ -67,29 +67,29 @@ You can quickly run a FP4 model on a single GPU by running the following code:
 from transformers import AutoModelForCausalLM
 
 model_name = "bigscience/bloom-2b5"
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_4bit=True)
+model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_4bit=True)
 ```
 Note that `device_map` is optional but setting `device_map = 'auto'` is prefered for inference as it will dispatch efficiently the model on the available ressources.
 
-### Running FP4 models - multi GPU setup 
+### Running FP4 models - multi GPU setup
 
-The way to load your mixed 8-bit model in multiple GPUs is as follows (same command as single GPU setup):
+The way to load your mixed 4-bit model in multiple GPUs is as follows (same command as single GPU setup):
 ```py
 model_name = "bigscience/bloom-2b5"
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_4bit=True)
+model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_4bit=True)
 ```
 But you can control the GPU RAM you want to allocate on each GPU using `accelerate`. Use the `max_memory` argument as follows:
 
 ```py
 max_memory_mapping = {0: "600MB", 1: "1GB"}
 model_name = "bigscience/bloom-3b"
-model_8bit = AutoModelForCausalLM.from_pretrained(
+model_4bit = AutoModelForCausalLM.from_pretrained(
     model_name, device_map="auto", load_in_4bit=True, max_memory=max_memory_mapping
 )
 ```
 In this example, the first GPU will use 600MB of memory and the second 1GB.
 
-### Advanced usage 
+### Advanced usage
 
 For more advanced usage of this method, please have a look at the [quantization](main_classes/quantization) documentation page.
 
@@ -111,7 +111,7 @@ For more details regarding the method, check out the [paper](https://arxiv.org/a
 
 ![MixedInt8.gif](https://s3.amazonaws.com/moonup/production/uploads/1660567469965-62441d1d9fdefb55a0b7d12c.gif)
 
-Note, that you would require a GPU to run mixed-8bit models as the kernels have been compiled for GPUs only. Make sure that you have enough GPU memory to store the quarter (or half if your model weights are in half precision) of the model before using this feature. 
+Note, that you would require a GPU to run mixed-8bit models as the kernels have been compiled for GPUs only. Make sure that you have enough GPU memory to store the quarter (or half if your model weights are in half precision) of the model before using this feature.
 Below are some notes to help you use this module, or follow the demos on [Google colab](#colab-demos).
 
 ### Requirements
@@ -174,7 +174,7 @@ In this example, the first GPU will use 1GB of memory and the second 2GB.
 
 ### Colab demos
 
-With this method you can infer on models that were not possible to infer on a Google Colab before. 
+With this method you can infer on models that were not possible to infer on a Google Colab before.
 Check out the demo for running T5-11b (42GB in fp32)! Using 8-bit quantization on Google Colab:
 
 [![Open In Colab: T5-11b demo](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1YORPWx4okIHXnjW7MSAidXN29mPVNT7F?usp=sharing)
