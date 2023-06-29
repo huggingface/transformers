@@ -43,28 +43,31 @@ class Umt5IntegrationTest(unittest.TestCase):
             "No se como puedo <extra_id_0>.",
             "This is the reason why we <extra_id_0> them.",
             "The <extra_id_0> walks in <extra_id_1>, seats",
-            "A <extra_id_0> walks into a bar a orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>.",
+            "A <extra_id_0> walks into a bar and orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>.",
         ]
         input_ids = tokenizer(input_text, return_tensors="pt", padding=True).input_ids
+        # fmt: off
         EXPECTED_INPUT_IDS = torch.tensor(
             [
-                [38530, 210703, 256299, 1410, 256298, 274, 1, 0, 0, 0],
-                [826, 321, 671, 25922, 256299, 274, 1, 0, 0, 0][
-                    1460, 339, 312, 19014, 10620, 758, 256299, 2355, 274, 1
-                ][517, 256299, 14869, 281, 301, 256298, 275, 9433, 281, 1],
+                [ 38530, 210703, 256299, 1410, 256298, 274, 1, 0,0, 0, 0, 0, 0, 0, 0, 0,0, 0],
+                [   826, 321, 671, 25922, 256299, 274, 1, 0,0, 0, 0, 0, 0, 0, 0, 0,0, 0],
+                [  1460, 339, 312, 19014, 10620, 758, 256299, 2355,274, 1, 0, 0, 0, 0, 0, 0,0, 0],
+                [   517, 256299, 14869, 281, 301, 256298, 275, 119983,1, 0, 0, 0, 0, 0, 0, 0,0, 0],
+                [   320, 256299, 14869, 281, 2234, 289, 2275, 333,61391, 289, 256298, 543, 256297, 168714, 329, 256296,274, 1],
             ]
         )
+        # fmt: on
+
         self.assertEqual(input_ids, EXPECTED_INPUT_IDS)
         torch.tensor([[], [], [], []])
         generated_ids = model.generate(input_ids.to(torch_device))
         self.assertTrue(
             generated_ids,
         )
-        EXPECTED_FILLING = """<pad><extra_id_0> et<extra_id_1> [eod] <extra_id_2><extra_id_55>.. [eod] 💐 💐 💐 💐 💐 💐 💐 💐 💐 💐 💐 <extra_id_56> ajšietosto<extra_id_56> lleux<extra_id_19><extra_id_6> ajšie</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>
-<pad><extra_id_0>.<extra_id_1>.,\n...spech \n<extra_id_20> <extra_id_21></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>
-<pad><extra_id_0> are not going to be a part of the world. We are not going to be a part of<extra_id_1> and<extra_id_2> \n<extra_id_48>.<extra_id_48></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>
-<pad><extra_id_0> city<extra_id_1> the city<extra_id_2> verkarzekł<extra_id_3>..,,<extra_id_4><extra_id_56>ajšie\n海外取寄せ品lleuxlleuxmogulleuxajšieM Loadingüentlleuxчинностіonomy嵋ABRmnázilleuxajšiewaнуарajšielemba嵋zdrowi Issumnázi\nmmersciedad泷嵋 https Httpajšiealulleuxlleuxambiquemündeijstajšiequippedrakutenblogzytelni seanwaitajšie
-<pad><extra_id_0> man<extra_id_1> drink<extra_id_2> a<extra_id_3> salt<extra_id_4> jerk<extra_id_5> a<extra_id_6>.\nA man<extra_id_7>
-"""
+        EXPECTED_FILLING =['<pad><extra_id_0> et<extra_id_1> [eod] <extra_id_2><extra_id_55>.. [eod] 💐 💐 💐 💐 💐 💐 💐 💐 💐 💐 💐 <extra_id_56>ajšietosto<extra_id_56>lleux<extra_id_19><extra_id_6>ajšie</s>',
+ '<pad><extra_id_0>.<extra_id_1>.,<0x0A>...spech <0x0A><extra_id_20> <extra_id_21></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>',
+ '<pad><extra_id_0> are not going to be a part of the world. We are not going to be a part of<extra_id_1> and<extra_id_2><0x0A><extra_id_48>.<extra_id_48></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>',
+ '<pad><extra_id_0> door<extra_id_1>, the door<extra_id_2> 피해[/</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>',
+ '<pad><extra_id_0>nyone who<extra_id_1> drink<extra_id_2> a<extra_id_3> alcohol<extra_id_4> A<extra_id_5> A. This<extra_id_6> I<extra_id_7><extra_id_52><extra_id_53></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>']
         filling = tokenizer.batch_decode(generated_ids)
         self.assertTrue(filling, EXPECTED_FILLING)
