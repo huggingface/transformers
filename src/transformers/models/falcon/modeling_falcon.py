@@ -859,7 +859,6 @@ class FalconForCausalLM(FalconPreTrainedModel):
 
 
 class FalconForSequenceClassification(FalconPreTrainedModel):
-
     def __init__(self, config: FalconConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -973,7 +972,6 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
 
 
 class FalconForTokenClassification(FalconPreTrainedModel):
-
     def __init__(self, config: FalconConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1060,7 +1058,6 @@ class FalconForTokenClassification(FalconPreTrainedModel):
 
 
 class FalconForQuestionAnswering(FalconPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.transformer = FalconModel(config)
