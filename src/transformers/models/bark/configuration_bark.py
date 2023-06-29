@@ -245,7 +245,7 @@ class BarkConfig(PretrainedConfig):
 
 
     >>> # Initializing a Bark module style configuration
-    >>> configuration = BarkConfig.from_configs(
+    >>> configuration = BarkConfig.from_sub_model_configs(
     ...     semantic_config, coarse_acoustics_config, fine_acoustics_config, codec_config
     ... )
 
@@ -309,7 +309,7 @@ class BarkConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
     @classmethod
-    def from_configs(
+    def from_sub_model_configs(
         cls,
         semantic_config: BarkSemanticConfig,
         coarse_acoustics_config: BarkCoarseConfig,

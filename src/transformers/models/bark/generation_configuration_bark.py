@@ -221,7 +221,7 @@ class BarkGenerationConfig(GenerationConfig):
         self.codebook_size = codebook_size
 
     @classmethod
-    def from_configs(
+    def from_sub_model_configs(
         cls,
         semantic_config: BarkSemanticGenerationConfig,
         coarse_acoustics_config: BarkCoarseGenerationConfig,

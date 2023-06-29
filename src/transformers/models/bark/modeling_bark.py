@@ -920,18 +920,22 @@ class BarkFineModel(BarkPreTrainedModel):
 
 @add_start_docstrings(
     """
-    HugginFace implementation of Bark, a text-to-speech model composed of 4 sub-models:
-- [`BarkSemanticModel`] (also referred to as the 'text' model): a causal auto-regressive transformer model that takes
-  as input tokenized text, and predicts semantic text tokens that capture the meaning of the text.
-- [`BarkCoarseModel`] (also reffered to as the 'coarse acoustics' model`), also a causal autoregressive transformer,
-  that takes into input the results of the last model. It aims at regressing the first two audio codebooks necessary to
-  `encodec`.
-- [`BarkFineModel`] (the 'fine acoustics' model`), this time a non-causal autoencoder transformer, which iteratively
-  predicts the last codebooks based on the sum of the previous codebooks embeddings.
-- having predicted all the codebook channels from the [`EncodecModel`], Bark uses it to decode the output audio array.
+    The full Bark model, a text-to-speech model composed of 4 sub-models:
+    - [`BarkSemanticModel`] (also referred to as the 'text' model): a causal auto-regressive transformer model that
+      takes
+    as input tokenized text, and predicts semantic text tokens that capture the meaning of the text.
+    - [`BarkCoarseModel`] (also reffered to as the 'coarse acoustics' model`), also a causal autoregressive
+      transformer,
+    that takes into input the results of the last model. It aims at regressing the first two audio codebooks necessary
+    to `encodec`.
+    - [`BarkFineModel`] (the 'fine acoustics' model`), this time a non-causal autoencoder transformer, which
+      iteratively
+    predicts the last codebooks based on the sum of the previous codebooks embeddings.
+    - having predicted all the codebook channels from the [`EncodecModel`], Bark uses it to decode the output audio
+      array.
 
-It should be noted that each of the first three modules can support conditional speaker embeddings to condition the
-output sound according to specific predefined voice.
+    It should be noted that each of the first three modules can support conditional speaker embeddings to condition the
+    output sound according to specific predefined voice.
     """,
     BARK_START_DOCSTRING,
 )
@@ -956,10 +960,16 @@ class BarkModel(BarkPreTrainedModel):
             x_semantic_history = torch.repeat_interleave(history_prompt["semantic_prompt"][None], batch_size, dim=0)
             x_coarse_history = history_prompt["coarse_prompt"]
 
-            x_coarse_history = (
-                _flatten_codebooks(x_coarse_history, self.generation_config.codebook_size)
-                + semantic_generation_config.semantic_vocab_size
-            )
+            # offset x_coarse_history
+            if self.generation_config.codebook_size is not None:
+                for n in range(1, x_coarse_history.shape[0]):
+                    # offset
+                    x_coarse_history[n, :] += self.generation_config.codebook_size * n
+
+            # flatten x_coarse_history
+            # ravel("F")
+            x_coarse_history = torch.transpose(x_coarse_history, 0, 1).view(-1)
+
             x_coarse_history = torch.repeat_interleave(x_coarse_history[None], batch_size, dim=0)
             # e.g: after SEMANTIC_VOCAB_SIZE (10000), 1024 tokens dedicated to first codebook, 1024 next tokens dedicated to second codebook.
 
@@ -982,11 +992,8 @@ class BarkModel(BarkPreTrainedModel):
 
         else:
             # shape: (batch_size, 0)
-            x_semantic_history = torch.tensor([[]] * batch_size, dtype=torch.int)
-            x_coarse_history = torch.tensor([[]] * batch_size, dtype=torch.int)
-
-        x_semantic_history = x_semantic_history.to(self.device)
-        x_coarse_history = x_coarse_history.to(self.device)
+            x_semantic_history = torch.tensor([[]] * batch_size, dtype=torch.int).to(self.device)
+            x_coarse_history = torch.tensor([[]] * batch_size, dtype=torch.int).to(self.device)
 
         return x_semantic_history, x_coarse_history
 
@@ -1032,10 +1039,9 @@ class BarkModel(BarkPreTrainedModel):
         else:
             semantic_history = torch.tensor(
                 [semantic_generation_config.semantic_pad_token] * max_input_semantic_length, dtype=torch.int
-            )
+            ).to(self.device)
 
         semantic_history = torch.repeat_interleave(semantic_history[None], batch_size, dim=0)
-        semantic_history = semantic_history.to(self.device)
 
         infer_array = torch.tensor(
             [[semantic_generation_config.semantic_infer_token]] * batch_size, dtype=torch.int
@@ -1107,16 +1113,13 @@ class BarkModel(BarkPreTrainedModel):
         )
         max_semantic_history = int(np.floor(max_coarse_history / semantic_to_coarse_ratio))
 
-        # beware, depends on the seq_len of the longest sequence of the batch. Also, the seq_len might be one token too long because of an added pad_token as compared to Bark original implementation.
+        # beware, depends on the seq_len of the longest sequence of the batch.
+        # Also, the seq_len might be one token too long because of an added pad_token as compared to Bark original implementation.
         # TODO: do a dynamic max_generated_len. Pad it with self.generation_config.codebook_size ?
-        max_generated_len = int(
-            round(
-                np.floor(
-                    semantic_output.shape[1] * semantic_to_coarse_ratio / coarse_acoustics_config.n_coarse_codebooks
-                )
-                * coarse_acoustics_config.n_coarse_codebooks
-            )
+        max_generated_len = np.floor(
+            semantic_output.shape[1] * semantic_to_coarse_ratio / coarse_acoustics_config.n_coarse_codebooks
         )
+        max_generated_len = int(round(max_generated_len * coarse_acoustics_config.n_coarse_codebooks))
 
         batch_size = semantic_output.shape[0]
 
@@ -1220,7 +1223,6 @@ class BarkModel(BarkPreTrainedModel):
 
         if history_prompt is not None:
             x_fine_history = torch.repeat_interleave(history_prompt["fine_prompt"].T[None], batch_size, dim=0)
-            x_fine_history = x_fine_history.to(self.device)
             # transpose to get to shape (seq_len, n_fine_codebooks)
         else:
             x_fine_history = None
@@ -1262,21 +1264,10 @@ class BarkModel(BarkPreTrainedModel):
         # seems that coarse_output.shape[1] - (max_fine_input_length - n_history) is equal to minus n_remove_from_end
         # So if we needed to pad because too short, n_loops is always 1 (because n_remove_from_end > 0)
         # If not, we loop over at least twice.
-        n_loops = (
-            np.max(
-                [
-                    0,
-                    int(
-                        np.ceil(
-                            (coarse_output.shape[1] - (max_fine_input_length - n_history)) / max_fine_history_length
-                        )
-                    ),
-                ]
-            )
-            + 1
-        )
 
-        # with _inference_mode() ?
+        n_loops = (coarse_output.shape[1] - (max_fine_input_length - n_history)) / max_fine_history_length
+        n_loops = int(np.ceil(n_loops))
+        n_loops = max(0, n_loops) + 1
 
         for n_outer in range(n_loops):
             start_idx = np.min([n_outer * max_fine_history_length, fine_input.shape[1] - max_fine_input_length])
@@ -1325,12 +1316,7 @@ class BarkModel(BarkPreTrainedModel):
         out = self.codec_model.decoder(emb)
         audio_arr = out.squeeze(1)  # squeeze the codebook dimension
 
-        # TODO: del or no del?
-        # del fine_output, emb, out
-
         return audio_arr
-
-    # _inference_mode()
 
     @torch.no_grad()
     def generate_audio(
@@ -1362,21 +1348,12 @@ class BarkModel(BarkPreTrainedModel):
 
         ```python
         >>> from transformers import AutoProcessor, BarkModel
-        >>> from scipy.io.wavfile import write as write_wav
 
 
         >>> processor = AutoProcessor.from_pretrained("ylacombe/bark-small")
         >>> model = BarkModel.from_pretrained("ylacombe/bark-small")
 
-        >>> inputs, _ = processor("Hello, my dog is cute, I need him in my life")
-
-        >>> audio_array = model.generate_audio(**inputs)
-        >>> audio_array = audio_array.detach().cpu().numpy()
-        ```
-
-        ```python
         >>> # To add a voice preset, you can pass `voice_preset` to `BarkProcessor.__call__(...)`
-
         >>> voice_preset = "v2/en_speaker_6"
 
         >>> inputs, history_prompt = processor(
@@ -1385,28 +1362,24 @@ class BarkModel(BarkPreTrainedModel):
 
         >>> audio_array = model.generate_audio(**inputs, history_prompt=history_prompt)
         >>> audio_array = audio_array.detach().cpu().numpy().squeeze()
-
-        >>> # save audio to disk, but first take the sample rate from the model config
-        >>> sample_rate = model.config.sample_rate
-        >>> write_wav("bark_generation.wav", sample_rate, audio_array)
         ```
         """
 
-        ##### 1. Generate from the semantic model
+        # 1. Generate from the semantic model
 
         semantic_output = self.generate_text_semantic(
             input_ids, history_prompt, attention_mask=kwargs.pop("attention_mask", None), **kwargs
         )
 
-        ##### 2. Generate from the coarse model
+        # 2. Generate from the coarse model
 
         coarse_output = self.generate_coarse(semantic_output, history_prompt, **kwargs)
 
-        ##### 3. "generate" from the fine model
+        # 3. "generate" from the fine model
 
         output = self.generate_fine(coarse_output, history_prompt, **kwargs)
 
-        #### 4. Decode the output and generate audio array
+        # 4. Decode the output and generate audio array
 
         audio = self.codec_decode(output)
 
@@ -1418,18 +1391,6 @@ class BarkModel(BarkPreTrainedModel):
         BarkGenerationConfig.
         """
         return True
-
-
-# TODO: (maybe do it in the preprocessor)
-def _flatten_codebooks(arr, offset_size):
-    # input 2D array
-    if offset_size is not None:
-        for n in range(1, arr.shape[0]):
-            arr[n, :] += offset_size * n
-    # TODO: maybe .contiguous() before view(-1)
-    # ravel("F")
-    flat_arr = torch.transpose(arr, 0, 1).view(-1)
-    return flat_arr
 
 
 class AlternatingCodebooksLogitsProcessor(LogitsProcessor):

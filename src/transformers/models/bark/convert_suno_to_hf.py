@@ -168,9 +168,9 @@ def load_model(pytorch_dump_folder_path, use_small=False, model_type="text"):
 
     if model_type == "text":
         bark_model = bark_model["model"]
-        
+
     if model.num_parameters(exclude_embeddings=True) != bark_model.get_num_params():
-        raise ValueError( "initial and new models don't have the same number of parameters")
+        raise ValueError("initial and new models don't have the same number of parameters")
 
     # check if same output as the bark model
     batch_size = 5
@@ -197,9 +197,9 @@ def load_model(pytorch_dump_folder_path, use_small=False, model_type="text"):
 
     # output difference should come from the difference of self-attention implementation design
     if output_new_model.shape != output_old_model.shape:
-        raise ValueError( "initial and new outputs don't have the same shape")
+        raise ValueError("initial and new outputs don't have the same shape")
     if ((output_new_model - output_old_model).abs() < 1e-4).all().item():
-        raise ValueError( "initial and new outputs are not equal")
+        raise ValueError("initial and new outputs are not equal")
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path)
