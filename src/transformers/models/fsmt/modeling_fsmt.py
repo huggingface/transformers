@@ -770,7 +770,7 @@ class FSMTDecoder(nn.Module):
         x += positions
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
 
-        # Convert to FSMT output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
+        # Convert to FSMT output format: (BS, seq_len, model_dim) -> (seq_len, BS, model_dim)
         x = x.transpose(0, 1)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
