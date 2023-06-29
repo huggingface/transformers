@@ -115,8 +115,8 @@ class MusicgenProcessor(ProcessorMixin):
         """
         This method strips any padding from the audio values to return a list of numpy audio arrays.
         """
-        bsz, channels, seq_len = audio_values.shape
         audio_values = to_numpy(audio_values)
+        bsz, channels, seq_len = audio_values.shape
 
         if padding_mask is None:
             return list(audio_values)
