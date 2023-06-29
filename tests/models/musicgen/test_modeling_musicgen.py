@@ -1247,7 +1247,9 @@ class MusicgenIntegrationTests(unittest.TestCase):
         input_ids = inputs.input_ids.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
 
-        output_values = model.generate(input_ids, attention_mask=attention_mask, do_sample=False, guidance_scale=None, max_new_tokens=10)
+        output_values = model.generate(
+            input_ids, attention_mask=attention_mask, do_sample=False, guidance_scale=None, max_new_tokens=10
+        )
 
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
@@ -1272,7 +1274,9 @@ class MusicgenIntegrationTests(unittest.TestCase):
         input_ids = inputs.input_ids.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
 
-        output_values = model.generate(input_ids, attention_mask=attention_mask, do_sample=False, guidance_scale=3, max_new_tokens=10)
+        output_values = model.generate(
+            input_ids, attention_mask=attention_mask, do_sample=False, guidance_scale=3, max_new_tokens=10
+        )
 
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
@@ -1298,7 +1302,9 @@ class MusicgenIntegrationTests(unittest.TestCase):
         attention_mask = inputs.attention_mask.to(torch_device)
 
         set_seed(0)
-        output_values = model.generate(input_ids, attention_mask=attention_mask, do_sample=True, guidance_scale=None, max_new_tokens=10)
+        output_values = model.generate(
+            input_ids, attention_mask=attention_mask, do_sample=True, guidance_scale=None, max_new_tokens=10
+        )
 
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
