@@ -1330,9 +1330,9 @@ class BarkModel(BarkPreTrainedModel):
 
         return audio_arr
 
-    # @torch.no_grad
     # _inference_mode()
 
+    @torch.no_grad()
     def generate_audio(
         self,
         input_ids: Optional[torch.Tensor] = None,
