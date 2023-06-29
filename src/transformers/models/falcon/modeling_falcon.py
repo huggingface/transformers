@@ -32,7 +32,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-
 from .configuration_falcon import FalconConfig
 
 
@@ -228,7 +227,6 @@ class FalconAttention(nn.Module):
             fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads + 2, self.head_dim)
             return fused_qkv[..., :-2, :], fused_qkv[..., [-2], :], fused_qkv[..., [-1], :]
 
-
     def _merge_heads(self, x: torch.Tensor) -> torch.Tensor:
         """
         Merge heads together over the last dimenstion
@@ -311,7 +309,9 @@ class FalconAttention(nn.Module):
                 attention_scores = torch.softmax(attention_scores, dim=-1)
                 attn_output = attention_scores @ value_layer_
             else:
-                attn_output = F.scaled_dot_product_attention(query_layer_, key_layer_, value_layer_, None, 0.0, is_causal=True)
+                attn_output = F.scaled_dot_product_attention(
+                    query_layer_, key_layer_, value_layer_, None, 0.0, is_causal=True
+                )
                 attention_scores = None
 
             x = attn_output.view(batch_size, self.num_heads, q_length, self.head_dim)
@@ -338,7 +338,9 @@ class FalconAttention(nn.Module):
             if input_dtype == torch.float16 or input_dtype == torch.bfloat16:
                 attention_scores = attention_scores.to(torch.float32)
             # attn_weights = torch.masked_fill(attention_scores, attention_mask, torch.finfo(attention_scores.dtype).min)
-            attention_logits = (attention_scores + alibi.view(batch_size, self.num_heads, 1, -1)) * self.inv_norm_factor
+            attention_logits = (
+                attention_scores + alibi.view(batch_size, self.num_heads, 1, -1)
+            ) * self.inv_norm_factor
             attention_probs = F.softmax(attention_logits + attention_mask_float, dim=-1, dtype=hidden_states.dtype)
             # [batch_size, num_heads, q_length, kv_length]
             attention_probs = self.attention_dropout(attention_probs)
@@ -433,10 +435,10 @@ class FalconDecoderLayer(nn.Module):
             if self.config.parallel_attn:
                 ln_mlp = ln_attn
             else:
-                residual = dropout_add(attention_output, residual, self.config.attention_dropout,
-                                       training=self.training)
+                residual = dropout_add(
+                    attention_output, residual, self.config.attention_dropout, training=self.training
+                )
                 ln_mlp = self.post_attention_layernorm(residual)
-
 
         outputs = attn_outputs[1:]
 

@@ -17,8 +17,8 @@
 
 import unittest
 
-from transformers import FalconConfig, is_torch_available, AutoTokenizer
-from transformers.testing_utils import require_torch, torch_device, slow
+from transformers import AutoTokenizer, FalconConfig, is_torch_available
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -348,6 +348,7 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
+
 @require_torch
 class FalconLanguageGenerationTest(unittest.TestCase):
     @slow
@@ -358,7 +359,9 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         model.to(torch_device)
         inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
 
-        expected_output = "My favorite food is pizza. I love it so much that I have a pizza party every year for my birthday."
+        expected_output = (
+            "My favorite food is pizza. I love it so much that I have a pizza party every year for my birthday."
+        )
 
         output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=19)
         output_str = tokenizer.batch_decode(output_ids)[0]
