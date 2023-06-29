@@ -454,9 +454,9 @@ COCO 데이터 세트를 빌드하는 API는 데이터를 특정 형식으로 �
 
 
 >>> class CocoDetection(torchvision.datasets.CocoDetection):
-...     def __init__(self, img_folder, feature_extractor, ann_file):
+...     def __init__(self, img_folder, image_processor, ann_file):
 ...         super().__init__(img_folder, ann_file)
-...         self.feature_extractor = feature_extractor
+...         self.image_processor = image_processor
 
 ...     def __getitem__(self, idx):
 ...         # read in PIL image and target in COCO format
@@ -466,7 +466,7 @@ COCO 데이터 세트를 빌드하는 API는 데이터를 특정 형식으로 �
 ...         # resizing + normalization of both image and target)
 ...         image_id = self.ids[idx]
 ...         target = {"image_id": image_id, "annotations": target}
-...         encoding = self.feature_extractor(images=img, annotations=target, return_tensors="pt")
+...         encoding = self.image_processor(images=img, annotations=target, return_tensors="pt")
 ...         pixel_values = encoding["pixel_values"].squeeze()  # remove batch dimension
 ...         target = encoding["labels"][0]  # remove batch dimension
 
@@ -586,4 +586,3 @@ Detected Mask with confidence 0.584 at location [2449.06, 823.19, 3256.43, 1413.
 <div class="flex justify-center">
     <img src="https://i.imgur.com/4QZnf9A.png" alt="Object detection result on a new image"/>
 </div>
-

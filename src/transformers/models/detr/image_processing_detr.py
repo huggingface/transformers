@@ -1341,8 +1341,7 @@ class DetrImageProcessor(BaseImageProcessor):
 
         Args:
             results (`List[Dict]`):
-                Results list obtained by [`~DetrFeatureExtractor.post_process`], to which "masks" results will be
-                added.
+                Results list obtained by [`~DetrImageProcessor.post_process`], to which "masks" results will be added.
             outputs ([`DetrSegmentationOutput`]):
                 Raw outputs of the model.
             orig_target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):

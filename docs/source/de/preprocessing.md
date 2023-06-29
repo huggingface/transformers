@@ -354,12 +354,12 @@ Als Nächstes sehen Sie sich das Bild mit dem Merkmal 🤗 Datensätze [Bild] (h
 
 ### Merkmalsextraktor
 
-Laden Sie den Merkmalsextraktor mit [`AutoFeatureExtractor.from_pretrained`]:
+Laden Sie den Merkmalsextraktor mit [`AutoImageProcessor.from_pretrained`]:
 
 ```py
->>> from transformers import AutoFeatureExtractor
+>>> from transformers import AutoImageProcessor
 
->>> feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
+>>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 ```
 
 ### Datenerweiterung
@@ -371,9 +371,9 @@ Bei Bildverarbeitungsaufgaben ist es üblich, den Bildern als Teil der Vorverarb
 ```py
 >>> from torchvision.transforms import Compose, Normalize, RandomResizedCrop, ColorJitter, ToTensor
 
->>> normalize = Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std)
+>>> normalize = Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
 >>> _transforms = Compose(
-...     [RandomResizedCrop(feature_extractor.size), ColorJitter(brightness=0.5, hue=0.5), ToTensor(), normalize]
+...     [RandomResizedCrop(image_processor.size["height"]), ColorJitter(brightness=0.5, hue=0.5), ToTensor(), normalize]
 ... )
 ```
 
