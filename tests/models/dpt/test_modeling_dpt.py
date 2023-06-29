@@ -39,7 +39,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DPTFeatureExtractor
+    from transformers import DPTImageProcessor
 
 
 class DPTModelTester:
@@ -293,11 +293,11 @@ def prepare_img():
 @slow
 class DPTModelIntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
-        feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-large")
+        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large")
         model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large").to(torch_device)
 
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -315,11 +315,11 @@ class DPTModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
 
     def test_inference_semantic_segmentation(self):
-        feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-large-ade")
+        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large-ade")
         model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade").to(torch_device)
 
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -336,11 +336,11 @@ class DPTModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4))
 
     def test_post_processing_semantic_segmentation(self):
-        feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-large-ade")
+        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large-ade")
         model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade").to(torch_device)
 
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -348,10 +348,10 @@ class DPTModelIntegrationTest(unittest.TestCase):
 
         outputs.logits = outputs.logits.detach().cpu()
 
-        segmentation = feature_extractor.post_process_semantic_segmentation(outputs=outputs, target_sizes=[(500, 300)])
+        segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs, target_sizes=[(500, 300)])
         expected_shape = torch.Size((500, 300))
         self.assertEqual(segmentation[0].shape, expected_shape)
 
-        segmentation = feature_extractor.post_process_semantic_segmentation(outputs=outputs)
+        segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs)
         expected_shape = torch.Size((480, 480))
         self.assertEqual(segmentation[0].shape, expected_shape)

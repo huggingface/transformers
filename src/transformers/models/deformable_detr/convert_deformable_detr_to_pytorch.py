@@ -24,7 +24,7 @@ import torch
 from huggingface_hub import cached_download, hf_hub_url
 from PIL import Image
 
-from transformers import DeformableDetrConfig, DeformableDetrFeatureExtractor, DeformableDetrForObjectDetection
+from transformers import DeformableDetrConfig, DeformableDetrForObjectDetection, DeformableDetrImageProcessor
 from transformers.utils import logging
 
 
@@ -115,12 +115,12 @@ def convert_deformable_detr_checkpoint(
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
 
-    # load feature extractor
-    feature_extractor = DeformableDetrFeatureExtractor(format="coco_detection")
+    # load image processor
+    image_processor = DeformableDetrImageProcessor(format="coco_detection")
 
     # prepare image
     img = prepare_img()
-    encoding = feature_extractor(images=img, return_tensors="pt")
+    encoding = image_processor(images=img, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
     logger.info("Converting model...")
@@ -185,11 +185,11 @@ def convert_deformable_detr_checkpoint(
 
     print("Everything ok!")
 
-    # Save model and feature extractor
-    logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
+    # Save model and image processor
+    logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path)
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
     # Push to hub
     if push_to_hub:

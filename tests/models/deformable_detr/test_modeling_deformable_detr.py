@@ -39,7 +39,7 @@ if is_timm_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
 class DeformableDetrModelTester:
@@ -563,15 +563,15 @@ def prepare_img():
 @slow
 class DeformableDetrModelIntegrationTests(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("SenseTime/deformable-detr") if is_vision_available() else None
+    def default_image_processor(self):
+        return AutoImageProcessor.from_pretrained("SenseTime/deformable-detr") if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
         model = DeformableDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
         pixel_values = encoding["pixel_values"].to(torch_device)
         pixel_mask = encoding["pixel_mask"].to(torch_device)
 
@@ -595,7 +595,7 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
 
         # verify postprocessing
-        results = feature_extractor.post_process_object_detection(
+        results = image_processor.post_process_object_detection(
             outputs, threshold=0.3, target_sizes=[image.size[::-1]]
         )[0]
         expected_scores = torch.tensor([0.7999, 0.7894, 0.6331, 0.4720, 0.4382]).to(torch_device)
@@ -612,9 +612,9 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
             "SenseTime/deformable-detr-with-box-refine-two-stage"
         ).to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
         pixel_values = encoding["pixel_values"].to(torch_device)
         pixel_mask = encoding["pixel_mask"].to(torch_device)
 
@@ -639,9 +639,9 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
 
     @require_torch_gpu
     def test_inference_object_detection_head_equivalence_cpu_gpu(self):
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt")
+        encoding = image_processor(images=image, return_tensors="pt")
         pixel_values = encoding["pixel_values"]
         pixel_mask = encoding["pixel_mask"]
 

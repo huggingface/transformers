@@ -49,7 +49,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ImageGPTFeatureExtractor
+    from transformers import ImageGPTImageProcessor
 
 
 class ImageGPTModelTester:
@@ -535,16 +535,16 @@ def prepare_img():
 @require_vision
 class ImageGPTModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return ImageGPTFeatureExtractor.from_pretrained("openai/imagegpt-small") if is_vision_available() else None
+    def default_image_processor(self):
+        return ImageGPTImageProcessor.from_pretrained("openai/imagegpt-small") if is_vision_available() else None
 
     @slow
     def test_inference_causal_lm_head(self):
         model = ImageGPTForCausalImageModeling.from_pretrained("openai/imagegpt-small").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
