@@ -1076,7 +1076,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         past_key_values=None,
         use_cache=True,
         delay_pattern_mask=None,
-        guidance_scale=1.0,
+        guidance_scale=None,
         **kwargs,
     ):
         if delay_pattern_mask is None:
@@ -1963,7 +1963,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         use_cache=None,
         encoder_outputs=None,
         decoder_delay_pattern_mask=None,
-        guidance_scale=1.0,
+        guidance_scale=None,
         **kwargs,
     ):
         if decoder_delay_pattern_mask is None:
@@ -2508,5 +2508,5 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         return MusicgenUnconditionalInput(
             encoder_outputs=(last_hidden_state,),
             attention_mask=attention_mask,
-            guidance_scale=None,
+            guidance_scale=1.0,
         )
