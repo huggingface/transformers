@@ -334,6 +334,21 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SpeechT5HifiGan",
 ]
 
+# DO NOT edit this list!
+# (The corresponding pytorch objects should never be in the main `__init__`, but it's too late to remove)
+OBJECT_TO_SKIP_IN_MAIN_INIT_CHECK = [
+    "FlaxBertLayer",
+    "FlaxBigBirdLayer",
+    "FlaxRoFormerLayer",
+    "TFBertLayer",
+    "TFLxmertEncoder",
+    "TFLxmertXLayer",
+    "TFMPNetLayer",
+    "TFMobileBertLayer",
+    "TFSegformerLayer",
+    "TFViTMAELayer",
+]
+
 # Update this list for models that have multiple model types for the same
 # model doc
 MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
@@ -733,7 +748,7 @@ def check_all_auto_mappings_importable():
     for name, _ in mappings_to_check.items():
         name = name.replace("_MAPPING_NAMES", "_MAPPING")
         if not hasattr(transformers, name):
-            failures.append(f"`{name}` should be defined in the main `__init__` file.")
+            failures.append(f"`{name}`")
     if len(failures) > 0:
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
@@ -769,10 +784,12 @@ def check_objects_being_equally_in_main_init():
                         other_module = getattr(parent_module, other_module_name)
                         if hasattr(other_module, f"{framework}{attr}"):
                             if not hasattr(transformers, f"{framework}{attr}"):
-                                failures.append(f"{framework}{attr} should be defined in the main `__init__` file.")
+                                if f"{framework}{attr}" not in OBJECT_TO_SKIP_IN_MAIN_INIT_CHECK:
+                                    failures.append(f"{framework}{attr}")
                         if hasattr(other_module, f"{framework}_{attr}"):
                             if not hasattr(transformers, f"{framework}_{attr}"):
-                                failures.append(f"{framework}_{attr} should be defined in the main `__init__` file.")
+                                if f"{framework}_{attr}" not in OBJECT_TO_SKIP_IN_MAIN_INIT_CHECK:
+                                    failures.append(f"{framework}_{attr}")
     if len(failures) > 0:
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
