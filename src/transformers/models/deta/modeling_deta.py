@@ -851,7 +851,7 @@ class DetaDecoderLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(seq_len, batch, embed_dim)`.
+                Input to the layer of shape `(batch, seq_len, embed_dim)`.
             position_embeddings (`torch.FloatTensor`, *optional*):
                 Position embeddings that are added to the queries and keys in the self-attention layer.
             reference_points (`torch.FloatTensor`, *optional*):
