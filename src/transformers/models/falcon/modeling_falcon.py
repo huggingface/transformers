@@ -301,9 +301,18 @@ class FalconAttention(nn.Module):
             key_layer_ = key_layer.reshape(batch_size, n_head_kv, -1, self.head_dim)
             value_layer_ = value_layer.reshape(batch_size, n_head_kv, -1, self.head_dim)
 
-            attn_output = F.scaled_dot_product_attention(
-                query_layer_, key_layer_, value_layer_, None, 0.0, is_causal=True
-            )
+            if output_attentions:
+                # F.scaled_dot_product_attention doesn't return the attention weights, so we have
+                # to do it by hand if we want them
+                attention_scores = query_layer_ @ key_layer_.transpose(-1, -2)
+                attention_scores /= math.sqrt(self.head_dim)
+                attn_mask = torch.ones_like(attention_scores, dtype=torch.bool).tril()
+                attention_scores = attention_scores.masked_fill(~attn_mask, float("-inf"))
+                attention_scores = torch.softmax(attention_scores, dim=-1)
+                attn_output = attention_scores @ value_layer_
+            else:
+                attn_output = F.scaled_dot_product_attention(query_layer_, key_layer_, value_layer_, None, 0.0, is_causal=True)
+                attention_scores = None
 
             x = attn_output.view(batch_size, self.num_heads, q_length, self.head_dim)
             x = x.permute(0, 2, 1, 3)
@@ -312,7 +321,9 @@ class FalconAttention(nn.Module):
             output_tensor = self.dense(attn_output)
 
             outputs = (output_tensor, present)
-            assert not output_attentions  # not supported.
+            if output_attentions:
+                outputs += (attention_scores,)
+
             return outputs
         else:
             attention_mask_float = (attention_mask * 1.0).masked_fill(attention_mask, -1e9).to(torch.bfloat16)
