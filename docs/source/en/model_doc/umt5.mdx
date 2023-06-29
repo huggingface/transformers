@@ -62,10 +62,10 @@ The conversion script is also different because the model was save in t5x's late
 >>> tokenizer = AutoTokenizer.from_pretrained("google/umt5-small")
 
 >>> inputs = tokenizer(
-...     "A <extra_id_0> walks in <extra_id_1>, order a <extra_id_1> and drinks it.", return_tensors="pt"
+...     "A <extra_id_0> walks into a bar and orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>.", return_tensors="pt"
 ... )
 >>> outputs = model.generate(**inputs)
->>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
-['Pour a cup of bolognese into a large bowl and add the pasta']
+>>> print(tokenizer.batch_decode(outputs))
+['<pad><extra_id_0>nyone who<extra_id_1> drink<extra_id_2> a<extra_id_3> alcohol<extra_id_4> A<extra_id_5> A. This<extra_id_6> I<extra_id_7><extra_id_52><extra_id_53></s>']
 ```
 
