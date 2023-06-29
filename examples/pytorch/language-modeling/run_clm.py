@@ -474,10 +474,9 @@ def main():
         if block_size > 1024:
             logger.warning(
                 "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
-                " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
-                " override this default with `--block_size xxx`."
+                " of 1024. If you would like to use the default `block_size=1024`, you can"
+                " override the `tokenizer.model_max_length` with `--block_size 1024`."
             )
-            block_size = 1024
     else:
         if data_args.block_size > tokenizer.model_max_length:
             logger.warning(
