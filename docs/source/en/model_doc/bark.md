@@ -43,7 +43,7 @@ These presets are also uploaded in the hub [here](https://huggingface.co/ylacomb
 >>> inputs, history_prompt = processor("Hello, my dog is cute", voice_preset=voice_preset)
 
 >>> audio_array = model.generate_audio(**inputs, history_prompt=history_prompt)
->>> audio_array = audio_array.detach().cpu().numpy().squeeze()
+>>> audio_array = audio_array.cpu().numpy().squeeze()
 ```
 
 Bark can generate highly realistic, **multilingual** speech as well as other audio - including music, background noise and simple sound effects. 
@@ -59,7 +59,7 @@ Bark can generate highly realistic, **multilingual** speech as well as other aud
 >>> inputs, history_prompt = processor("♪ Hello, my dog is cute ♪")
 
 >>> audio_array = model.generate_audio(**inputs, history_prompt=history_prompt)
->>> audio_array = audio_array.detach().cpu().numpy().squeeze()
+>>> audio_array = audio_array.cpu().numpy().squeeze()
 ```
 
 The model can also produce **nonverbal communications** like laughing, sighing and crying.
@@ -70,7 +70,7 @@ The model can also produce **nonverbal communications** like laughing, sighing a
 >>> inputs, history_prompt = processor("Hello uh ... [clears throat], my dog is cute [laughter]")
 
 >>> audio_array = model.generate_audio(**inputs, history_prompt=history_prompt)
->>> audio_array = audio_array.detach().cpu().numpy().squeeze()
+>>> audio_array = audio_array.cpu().numpy().squeeze()
 ```
 
 To save the audio, simply take the sample rate from the model config and some scipy utility:

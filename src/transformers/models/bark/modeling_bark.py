@@ -21,7 +21,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from ...generation.logits_process import LogitsProcessor
+from ...generation.logits_process import SemanticLogitsProcessor
 from ...generation.stopping_criteria import StoppingCriteria
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
@@ -1361,7 +1361,7 @@ class BarkModel(BarkPreTrainedModel):
         ... )
 
         >>> audio_array = model.generate_audio(**inputs, history_prompt=history_prompt)
-        >>> audio_array = audio_array.detach().cpu().numpy().squeeze()
+        >>> audio_array = audio_array.cpu().numpy().squeeze()
         ```
         """
 
@@ -1425,32 +1425,6 @@ class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
             scores[:, self.semantic_vocab_size + self.codebook_size :] = -float("inf")
         else:
             scores[:, : self.semantic_vocab_size + self.codebook_size] = -float("inf")
-
-        return scores
-
-
-class SemanticLogitsProcessor(LogitsProcessor):
-    r"""
-    [`LogitsProcessor`] enforcing that logits from the semantic model observe Bark original logic.
-
-    Args:
-        semantic_vocab_size (`int`):
-            The size of the semantic vocabulary size. Has to be lower than the output vocabulary size of the semantic
-            model.
-        semantic_pad_token (`int`):
-            Token id of the semantic pad token.
-    """
-
-    def __init__(self, semantic_vocab_size: int, semantic_pad_token: int):
-        if semantic_vocab_size > semantic_pad_token:
-            raise ValueError("`semantic_vocab_size` has to be lower or equal than `semantic_pad_token`")
-
-        self.semantic_vocab_size = semantic_vocab_size
-        self.semantic_pad_token = semantic_pad_token
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        scores[:, self.semantic_vocab_size : self.semantic_pad_token] = -float("inf")
-        scores[:, self.semantic_pad_token + 1 :] = -float("inf")
 
         return scores
 
