@@ -17,8 +17,8 @@
 import copy
 from typing import Dict
 
-from .generation.configuration_utils import GenerationConfig
-from .utils import logging
+from ...generation.configuration_utils import GenerationConfig
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -47,7 +47,7 @@ class BarkSemanticGenerationConfig(GenerationConfig):
         **kwargs,
     ):
         """Class that holds a generation configuration for [`BarkSemanticModel`].
-        
+
         This configuration inherit from [`GenerationConfig`] and can be used to control the model generation. Read the
         documentation from [`GenerationConfig`] for more information.
 
@@ -129,8 +129,10 @@ class BarkCoarseGenerationConfig(GenerationConfig):
             n_coarse_codebooks (`int`, *optional*, defaults to 2): Number of coarse codebooks.
             coarse_infer_token (`int`, *optional*, defaults to 12_050): Coarse infer token.
             max_coarse_input_length (`int`, *optional*, defaults to 256): Max length of input coarse vector.
-            max_coarse_history (`int`, *optional*, defaults to 630): Max length of the output of the coarse acoustics model used in the fine generation step.
-            sliding_window_len (`int`, *optional*, defaults to 60): The coarse generation step uses a sliding window to generate raw audio.
+            max_coarse_history (`int`, *optional*, defaults to 630):
+                Max length of the output of the coarse acoustics model used in the fine generation step.
+            sliding_window_len (`int`, *optional*, defaults to 60):
+                The coarse generation step uses a sliding window to generate raw audio.
         """
         super().__init__(
             temperature=temperature,

@@ -21,7 +21,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from ...generation.logits_process import SemanticLogitsProcessor, AlternatingCodebooksLogitsProcessor
+from ...generation.logits_process import AlternatingCodebooksLogitsProcessor, SemanticLogitsProcessor
 from ...generation.stopping_criteria import StoppingCriteria
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
@@ -965,6 +965,8 @@ class BarkModel(BarkPreTrainedModel):
                 for n in range(1, x_coarse_history.shape[0]):
                     # offset
                     x_coarse_history[n, :] += self.generation_config.codebook_size * n
+                    
+            x_coarse_history = x_coarse_history + semantic_generation_config.semantic_vocab_size
 
             # flatten x_coarse_history
             # ravel("F")
@@ -1057,7 +1059,7 @@ class BarkModel(BarkPreTrainedModel):
         # https://github.com/huggingface/transformers/issues/23674
         # semantic_stopping_criteria = SemanticStoppingCriteria(min_eos_p , semantic_generation_config.semantic_pad_token)
         # TODO: add a max_gen_duration_s early stop
-        
+
         # pass input_ids in order to stay consistent with the transformers generate method even though it is not used (except to get the input seq_len - that's why we keep the first 257 tokens)
         semantic_output = self.semantic.generate(
             torch.ones((batch_size, max_input_semantic_length + 1), dtype=torch.int).to(self.device),
@@ -1225,7 +1227,7 @@ class BarkModel(BarkPreTrainedModel):
         # pad the last 6th codebooks
         fine_input = F.pad(
             coarse_output,
-            (0, self.config.n_fine_codebooks - n_coarse),
+            (0, fine_acoustics_config.n_fine_codebooks - n_coarse),
             "constant",
             self.generation_config.codebook_size,
         )
@@ -1270,7 +1272,7 @@ class BarkModel(BarkPreTrainedModel):
             )
             rel_start_fill_idx = start_fill_idx - start_idx
             input_buffer = fine_input[:, start_idx : start_idx + max_fine_input_length, :]
-            for n_inner in range(n_coarse, self.config.n_fine_codebooks):
+            for n_inner in range(n_coarse, fine_acoustics_config.n_fine_codebooks):
                 logits = self.fine_acoustics(n_inner, input_buffer).logits
                 if temperature is None:
                     relevant_logits = logits[0, rel_start_fill_idx:, : self.generation_config.codebook_size]
@@ -1286,7 +1288,7 @@ class BarkModel(BarkPreTrainedModel):
                 del logits, codebook_preds
 
             # transfer over info into model_in and convert to numpy
-            for n_inner in range(n_coarse, self.config.n_fine_codebooks):
+            for n_inner in range(n_coarse, fine_acoustics_config.n_fine_codebooks):
                 fine_input[
                     :, start_fill_idx : start_fill_idx + (max_fine_input_length - rel_start_fill_idx), n_inner
                 ] = input_buffer[:, rel_start_fill_idx:, n_inner]
@@ -1344,9 +1346,7 @@ class BarkModel(BarkPreTrainedModel):
         >>> # To add a voice preset, you can pass `voice_preset` to `BarkProcessor.__call__(...)`
         >>> voice_preset = "v2/en_speaker_6"
 
-        >>> inputs = processor(
-        ...     "Hello, my dog is cute, I need him in my life", voice_preset=voice_preset
-        ... )
+        >>> inputs = processor("Hello, my dog is cute, I need him in my life", voice_preset=voice_preset)
 
         >>> audio_array = model.generate_audio(**inputs)
         >>> audio_array = audio_array.cpu().numpy().squeeze()
@@ -1379,7 +1379,6 @@ class BarkModel(BarkPreTrainedModel):
         BarkGenerationConfig.
         """
         return True
-
 
 
 class SemanticStoppingCriteria(StoppingCriteria):

@@ -1127,8 +1127,6 @@ class SemanticLogitsProcessor(LogitsProcessor):
         scores[:, self.semantic_pad_token + 1 :] = -float("inf")
 
         return scores
-    
-    
 
 
 class AlternatingCodebooksLogitsProcessor(LogitsProcessor):

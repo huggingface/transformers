@@ -221,7 +221,7 @@ class BarkProcessor(ProcessorMixin):
             add_special_tokens=add_special_tokens,
             **kwargs,
         )
-         
+
         if voice_preset is not None:
             encoded_text["history_prompt"] = voice_preset
 
