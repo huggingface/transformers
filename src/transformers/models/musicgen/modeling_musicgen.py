@@ -2497,7 +2497,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
 
         >>> # get the unconditional (or 'null') inputs for the model
         >>> unconditional_inputs = model.get_unconditional_inputs(num_samples=1)
-        >>> audio_samples = model.generate(**unconditional_inputs)
+        >>> audio_samples = model.generate(**unconditional_inputs, max_new_tokens=256)
         ```"""
         last_hidden_state = torch.zeros(
             (num_samples, 1, self.config.text_encoder.hidden_size), device=self.device, dtype=self.dtype
