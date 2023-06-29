@@ -143,6 +143,9 @@ def convert_t5x_to_pytorch(variables: dict, *, num_layers: int, is_encoder_only:
             new[f"decoder.block.{i}.layer.2.DenseReluDense.wo.weight"] = wo.T
 
         new["decoder.final_layer_norm.weight"] = old["decoder/decoder_norm/scale"]
+        new["decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"] = old[
+            "decoder/relpos_bias/rel_embedding"
+        ].T
 
         # LM Head (only in v1.1 checkpoints, in v1.0 embeddings are used instead)
         if "decoder/logits_dense/kernel" in old:
