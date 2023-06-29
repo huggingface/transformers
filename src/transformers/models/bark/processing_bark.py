@@ -16,7 +16,7 @@
 Processor class for Bark
 """
 import os
-import warnings
+from ...utils import logging
 from typing import Optional
 
 import numpy as np
@@ -25,6 +25,8 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...utils.hub import get_file_from_repo
 from ..auto import AutoTokenizer
+
+logger = logging.get_logger(__name__)
 
 
 class BarkProcessor(ProcessorMixin):
@@ -35,9 +37,10 @@ class BarkProcessor(ProcessorMixin):
         tokenizer ([`PreTrainedTokenizer`]):
             An instance of [`PreTrainedTokenizer`].
         speaker_embeddings (`Dict[np.ndarray]`, *optional*, defaults to `None`):
-            Optional nested speaker embeddings dictionary. The first level contains voice preset names (e.g `"en_speaker_4"`).
-            The second level contains `"semantic_prompt"`, `"coarse_prompt"` and `"fine_prompt"` embeddings. 
-            See [here](https://suno-ai.notion.site/8b8e8749ed514b0cbf3f699013548683?v=bc67cff786b04b50b3ceb756fd05f68c) for
+            Optional nested speaker embeddings dictionary. The first level contains voice preset names (e.g
+            `"en_speaker_4"`). The second level contains `"semantic_prompt"`, `"coarse_prompt"` and `"fine_prompt"`
+            embeddings. See
+            [here](https://suno-ai.notion.site/8b8e8749ed514b0cbf3f699013548683?v=bc67cff786b04b50b3ceb756fd05f68c) for
             a list of `voice_preset_names`.
 
     """
@@ -93,19 +96,19 @@ class BarkProcessor(ProcessorMixin):
                 revision=kwargs.pop("revision", None),
             )
             if speaker_embeddings is None:
-                warnings.warn(
+                logger.warning(
                     f"`{os.path.join(pretrained_processor_name_or_path,speaker_embeddings_file_name)}` does not exists, no preloaded speaker embeddings will be used - Make sure to provide a correct path if wanted, otherwise set `speaker_embeddings_file_name=None`."
                 )
             else:
                 # TODO: not sure this is the safest way to load/save speaker_embeddings
                 speaker_embeddings = np.load(speaker_embeddings, allow_pickle=True)
-                
+
                 if len(speaker_embeddings.keys()) != 1:
-                    raise ValueError(f"`speaker_embeddings` doesn't follow the required format - uses a speaker_embeddings file saved via `np.savez(speaker_embeddings_file_name, speaker_embeddings)`.")
-                
+                    raise ValueError(f"`speaker_embeddings` doesn't follow the required format - ensure that speaker embeddings are saved in a nested format, where the first level contains voice preset names (e.g `en_speaker_4`), and the second level contains `semantic_prompt`, `coarse_prompt` and `fine_prompt` embeddings, then save the speaker embeddings via `np.savez('speaker_embeddings.npz', speaker_embeddings)`.")
+
                 key_dict = list(speaker_embeddings.keys())[0]
                 speaker_embeddings = speaker_embeddings[key_dict].item()
-                
+
         else:
             speaker_embeddings = None
 
@@ -145,8 +148,6 @@ class BarkProcessor(ProcessorMixin):
         super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
     def _validate_voice_preset_dict(self, voice_preset: Optional[dict] = None):
-        if voice_preset is None:
-            return
         for key in ["semantic_prompt", "coarse_prompt", "fine_prompt"]:
             if key not in voice_preset:
                 raise ValueError(f"Voice preset unrecognized, missing {key} as a key.")
@@ -194,7 +195,6 @@ class BarkProcessor(ProcessorMixin):
             `tokenizer` and a [`BatchFeature`], i.e the voice preset with the right tensors type.
         """
         if voice_preset is not None and not isinstance(voice_preset, dict):
-
             if isinstance(voice_preset, str) and voice_preset in self.speaker_embeddings:
                 voice_preset = self.speaker_embeddings[voice_preset]
 
@@ -204,7 +204,8 @@ class BarkProcessor(ProcessorMixin):
 
                 voice_preset = np.load(voice_preset)
 
-        self._validate_voice_preset_dict(voice_preset)
+        if voice_preset is not None:
+            self._validate_voice_preset_dict(voice_preset)
         voice_preset = BatchFeature(data=voice_preset, tensor_type=return_tensors)
 
         encoded_text = self.tokenizer(
