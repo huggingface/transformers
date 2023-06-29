@@ -115,6 +115,9 @@ class VitsTokenizer(PreTrainedTokenizer):
         text = self._preprocess_char(text.lower())
 
         if self.phonemize:
+            if not is_phonemizer_available():
+                raise ImportError("Please install the `phonemizer` Python package to use this tokenizer.")
+
             filtered_text = phonemizer.phonemize(
                 text, language="en-us", backend="espeak", strip=True, preserve_punctuation=True, with_stress=True
             )
