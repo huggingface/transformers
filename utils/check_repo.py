@@ -16,6 +16,7 @@
 import inspect
 import os
 import re
+import sys
 import warnings
 from collections import OrderedDict
 from difflib import get_close_matches
@@ -733,6 +734,45 @@ def check_all_auto_mappings_importable():
         name = name.replace("_MAPPING_NAMES", "_MAPPING")
         if not hasattr(transformers, name):
             failures.append(f"`{name}` should be defined in the main `__init__` file.")
+    if len(failures) > 0:
+        raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
+
+
+def check_objects_being_equally_in_main_init():
+    """Check if an object is in the main __init__ if its counterpart in PyTorch is."""
+    attrs = dir(transformers)
+
+    failures = []
+    for attr in attrs:
+        obj = getattr(transformers, attr)
+        if hasattr(obj, "__module__"):
+            module_path = obj.__module__
+            module_name = module_path.split(".")[-1]
+            module_dir = ".".join(module_path.split(".")[:-1])
+            if (
+                module_name.startswith("modeling_")
+                and not module_name.startswith("modeling_tf_")
+                and not module_name.startswith("modeling_flax_")
+            ):
+                parent_module = sys.modules[module_dir]
+
+                frameworks = []
+                if is_tf_available():
+                    frameworks.append("TF")
+                if is_flax_available():
+                    frameworks.append("Flax")
+
+                for framework in frameworks:
+                    other_module_path = module_path.replace("modeling_", f"modeling_{framework.lower()}_")
+                    if os.path.isfile("src/" + other_module_path.replace(".", "/") + ".py"):
+                        other_module_name = module_name.replace("modeling_", f"modeling_{framework.lower()}_")
+                        other_module = getattr(parent_module, other_module_name)
+                        if hasattr(other_module, f"{framework}{attr}"):
+                            if not hasattr(transformers, f"{framework}{attr}"):
+                                failures.append(f"{framework}{attr} should be defined in the main `__init__` file.")
+                        if hasattr(other_module, f"{framework}_{attr}"):
+                            if not hasattr(transformers, f"{framework}_{attr}"):
+                                failures.append(f"{framework}_{attr} should be defined in the main `__init__` file.")
     if len(failures) > 0:
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
