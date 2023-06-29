@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -75,8 +75,11 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
 
     @slow
     def test_tokenizer_integration(self):
-        # Use custom sequence because this tokenizer does not handle numbers, and
-        # because it does not decode (phonemes cannot be converted to text with complete accuracy)
+        # Custom test since:
+        # 1) This tokenizer does not decode (phonemes cannot be converted to text with complete accuracy)
+        # 2) Uses a sequence without numbers since espnet has different, custom number conversion.
+        # This tokenizer can phonemize numbers, but where in espnet "32" is phonemized as "thirty two",
+        # here "32" is phonemized as "thirty-two" because we haven't implemented the custom number handling.
 
         sequences = [
             "Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides "

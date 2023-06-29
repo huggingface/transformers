@@ -114,17 +114,17 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
         return tokens
 
     def _clean_text(self, text):
-        # strip whitespaces
-        text = regex.sub(r"\s+", " ", text)
-
         # expand symbols
-        text = regex.sub("\\;", ",", text)
-        text = regex.sub("\\:", ",", text)
-        text = regex.sub("\\-", " ", text)
-        text = regex.sub("\\&", "and", text)
+        text = regex.sub(";", ",", text)
+        text = regex.sub(":", ",", text)
+        text = regex.sub("-", " ", text)
+        text = regex.sub("&", "and", text)
 
         # strip unnecessary symbols
         text = regex.sub(r"[\(\)\[\]\<\>\"]+", "", text)
+
+        # strip whitespaces
+        text = regex.sub(r"\s+", " ", text)
 
         text = text.upper()
 
