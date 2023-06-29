@@ -312,8 +312,9 @@ class FalconAttention(nn.Module):
                 attention_scores = torch.softmax(attention_scores, dim=-1)
                 attn_output = attention_scores @ value_layer_
             else:
+                use_causal_attention = attention_mask is None
                 attn_output = F.scaled_dot_product_attention(
-                    query_layer_, key_layer_, value_layer_, attention_mask, 0.0, is_causal=True
+                    query_layer_, key_layer_, value_layer_, attention_mask, 0.0, is_causal=use_causal_attention
                 )
                 attention_scores = None
 
