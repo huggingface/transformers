@@ -161,7 +161,7 @@ class MusicgenProcessorTest(unittest.TestCase):
         padding_mask = processor(raw_speech).padding_mask
 
         generated_speech = np.asarray(floats_list((3, 20)))[:, None, :]
-        decoded_audios = processor.decode_audio(generated_speech, padding_mask)
+        decoded_audios = processor.batch_decode(generated_speech, padding_mask=padding_mask)
 
         self.assertIsInstance(decoded_audios, list)
 

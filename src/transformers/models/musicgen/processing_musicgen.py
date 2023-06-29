@@ -88,10 +88,21 @@ class MusicgenProcessor(ProcessorMixin):
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to T5Tokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer to
-        the docstring of this method for more information.
+        This method is used to decode either batches of audio outputs from the MusicGen model, or batches of token ids
+        from the tokenizer. In the case of decoding token ids, this method forwards all its arguments to T5Tokenizer's
+        [`~PreTrainedTokenizer.batch_decode`]. Please refer to the docstring of this method for more information.
         """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+        audio_values = kwargs.pop("audio", None)
+        padding_mask = kwargs.pop("padding_mask", None)
+
+        if len(args) > 0:
+            audio_values = args[0]
+            args = args[1:]
+
+        if audio_values is not None:
+            return self._decode_audio(audio_values, padding_mask=padding_mask)
+        else:
+            return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
@@ -100,7 +111,7 @@ class MusicgenProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    def decode_audio(self, audio_values, padding_mask: Optional = None) -> List[np.ndarray]:
+    def _decode_audio(self, audio_values, padding_mask: Optional = None) -> List[np.ndarray]:
         """
         This method strips any padding from the audio values to return a list of numpy audio arrays.
         """
