@@ -53,6 +53,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 SPIECE_UNDERLINE = "▁"
 
+
 class T5Tokenizer(PreTrainedTokenizer):
     """
     Construct a T5 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -297,8 +298,8 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
-        tokens = self.sp_model.encode(text, out_type=str) 
-        if not text.startswith(' ') and tokens[0] == SPIECE_UNDERLINE:
+        tokens = self.sp_model.encode(text, out_type=str)
+        if not text.startswith(" ") and tokens[0] == SPIECE_UNDERLINE:
             tokens = tokens[1:]
         return tokens
 
