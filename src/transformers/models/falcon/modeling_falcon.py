@@ -446,7 +446,7 @@ class FalconDecoderLayer(nn.Module):
 
 
 class FalconPreTrainedModel(PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask", r"lm_head.weight"]
+    _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask"]
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -707,7 +707,8 @@ class FalconModel(FalconPreTrainedModel):
 
 
 class FalconForCausalLM(FalconPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask", r"lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
+    _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask"]
 
     def __init__(self, config: FalconConfig):
         super().__init__(config)
@@ -843,7 +844,7 @@ class FalconForCausalLM(FalconPreTrainedModel):
 
 
 class FalconForSequenceClassification(FalconPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask", r"lm_head.weight"]
+    _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask"]
 
     def __init__(self, config: FalconConfig):
         super().__init__(config)
@@ -958,7 +959,7 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
 
 
 class FalconForTokenClassification(FalconPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask", r"lm_head.weight"]
+    _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask"]
 
     def __init__(self, config: FalconConfig):
         super().__init__(config)
@@ -1046,7 +1047,7 @@ class FalconForTokenClassification(FalconPreTrainedModel):
 
 
 class FalconForQuestionAnswering(FalconPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask", r"lm_head.weight"]
+    _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask"]
 
     def __init__(self, config):
         super().__init__(config)
