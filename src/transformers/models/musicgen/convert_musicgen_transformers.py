@@ -165,6 +165,11 @@ def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, repo_id=No
     model.generation_config.decoder_start_token_id = 2048
     model.generation_config.pad_token_id = 2048
 
+    # set other default generation config params
+    model.generation_config.max_length = int(30 * audio_encoder.config.frame_rate)
+    model.generation_config.do_sample = True
+    model.generation_config.guidance_scale = 3.0
+
     if pytorch_dump_folder is not None:
         Path(pytorch_dump_folder).mkdir(exist_ok=True)
         logger.info(f"Saving model {checkpoint} to {pytorch_dump_folder}")

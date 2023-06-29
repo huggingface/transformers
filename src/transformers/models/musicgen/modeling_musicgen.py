@@ -68,8 +68,6 @@ class MusicgenUnconditionalInput(ModelOutput):
         attention_mask (`torch.LongTensor`)  of shape `(batch_size, sequence_length)`, *optional*):
             Encoder attention mask to avoid performing attention on padding token indices. Mask values selected in `[0,
             1]`: 1 for tokens that are **not masked**, 0 for tokens that are **masked**.
-        max_new_tokens (`int`, *optional*):
-            Number of new tokens to generate.
         guidance_scale (`float`, *optional*):
             Guidance scale for classifier free guidance, setting the balance between the conditional logits (predicted
             from the prompts) and the unconditional logits (predicted without prompts).
@@ -77,7 +75,6 @@ class MusicgenUnconditionalInput(ModelOutput):
 
     encoder_outputs: Tuple[torch.FloatTensor] = None
     attention_mask: torch.LongTensor = None
-    max_new_tokens: int = None
     guidance_scale: float = None
 
 
@@ -2480,7 +2477,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         else:
             return output_values.audio_values
 
-    def get_unconditional_inputs(self, num_samples=1, max_new_tokens=256):
+    def get_unconditional_inputs(self, num_samples=1):
         """
         Helper function to get null inputs for unconditional generation, enabling the model to be used without the
         feature extractor or tokenizer.
@@ -2511,6 +2508,5 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         return MusicgenUnconditionalInput(
             encoder_outputs=(last_hidden_state,),
             attention_mask=attention_mask,
-            max_new_tokens=max_new_tokens,
             guidance_scale=None,
         )

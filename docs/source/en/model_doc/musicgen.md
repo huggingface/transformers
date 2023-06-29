@@ -49,8 +49,9 @@ This model was contributed by [sanchit-gandhi](https://huggingface.co/sanchit-ga
 ## Generation
 
 MusicGen is compatible with two generation modes: greedy and sampling. In practice, sampling leads to significantly
-better results than greedy, thus we encourage sampling mode to be used where possible. Sampling is enabled by setting
-`do_sample=True` in the call to [`MusicgenForConditionalGeneration.generate`] (see below).
+better results than greedy, thus we encourage sampling mode to be used where possible. Sampling is enabled by default,
+and can be explicitly specified by setting `do_sample=True` in the call to [`MusicgenForConditionalGeneration.generate`],
+or by overriding the model's generation config (see below).
 
 ### Unconditional Generation
 
@@ -61,9 +62,9 @@ The inputs for unconditional (or 'null') generation can be obtained through the 
 >>> from transformers import MusicgenForConditionalGeneration
 
 >>> model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
->>> unconditional_inputs = model.get_unconditional_inputs(num_samples=1, max_new_tokens=256)
+>>> unconditional_inputs = model.get_unconditional_inputs(num_samples=1)
 
->>> audio_values = model.generate(**unconditional_inputs, do_sample=True)
+>>> audio_values = model.generate(**unconditional_inputs, do_sample=True, max_new_tokens=256)
 ```
 
 The audio outputs are a three-dimensional Torch tensor of shape `(batch_size, num_channels, sequence_length)`. To listen
@@ -108,7 +109,7 @@ The `guidance_scale` is used in classifier free guidance (CFG), setting the weig
 (which are predicted from the text prompts) and the unconditional logits (which are predicted from an unconditional or
 'null' prompt). Higher guidance scale encourages the model to generate samples that are more closely linked to the input
 prompt, usually at the expense of poorer audio quality. CFG is enabled by setting `guidance_scale > 1`. For best results,
-use a `guidance_scale=3`.
+use `guidance_scale=3` (default).
 
 ### Audio-Prompted Generation
 
@@ -175,6 +176,30 @@ For batched audio-prompted generation, the generated `audio_values` can be post-
 >>> # post-process to remove padding from the batched audio
 >>> audio_values = processor.batch_decode(audio_values, padding_mask=inputs.padding_mask)
 ```
+
+### Generation Configuration
+
+The default parameters that control the generation process, such as sampling, guidance scale and number of generated 
+tokens, can be found in the model's generation config, and updated as desired:
+
+```python
+>>> from transformers import MusicgenForConditionalGeneration
+
+>>> model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+
+>>> # inspect the default generation config
+>>> model.generation_config
+
+>>> # increase the guidance scale to 4.0
+>>> model.generation_config.guidance_scale = 4.0
+
+>>> # decrease the max length to 256 tokens
+>>> model.generation_config.max_length = 256
+```
+
+Note that any arguments passed to the generate method will **supersede** those in the generation config, so setting 
+`do_sample=False` in the call to generate will supersede the setting of `model.generation_config.do_sample` in the 
+generation config.
 
 ## Model Structure
 
