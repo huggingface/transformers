@@ -430,4 +430,4 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_ids = tokenizer.encode(" <extra_id_0> ,")
         self.assertEquals(input_ids, [999, 3, 2])
         tokens = tokenizer.tokenize(" <extra_id_0> ,")
-        self.assertEquals(tokens, ['<extra_id_0>', ',']) # spaces are eaten by rstrip / lstrip
+        self.assertEquals(tokens, ["<extra_id_0>", ","])  # spaces are eaten by rstrip / lstrip
