@@ -1213,7 +1213,6 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
 
     config_class = FastSpeech2ConformerConfig
     base_model_prefix = "fastspeech2_conformer"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     main_input_name = "input_ids"
 
