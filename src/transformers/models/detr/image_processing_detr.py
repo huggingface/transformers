@@ -802,14 +802,6 @@ class DetrImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
 
-    @property
-    def max_size(self):
-        logger.warning(
-            "The `max_size` parameter is deprecated and will be removed in v4.27. "
-            "Please specify in `size['longest_edge'] instead`.",
-        )
-        return self.size["longest_edge"]
-
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
@@ -851,7 +843,7 @@ class DetrImageProcessor(BaseImageProcessor):
 
     def prepare(self, image, target, return_segmentation_masks=None, masks_path=None):
         logger.warning_once(
-            "The `prepare` method is deprecated and will be removed in a future version. "
+            "The `prepare` method is deprecated and will be removed in a v4.33. "
             "Please use `prepare_annotation` instead. Note: the `prepare_annotation` method "
             "does not return the image anymore.",
         )
@@ -859,21 +851,15 @@ class DetrImageProcessor(BaseImageProcessor):
         return image, target
 
     def convert_coco_poly_to_mask(self, *args, **kwargs):
-        logger.warning_once(
-            "The `convert_coco_poly_to_mask` method is deprecated and will be removed in a future version. "
-        )
+        logger.warning_once("The `convert_coco_poly_to_mask` method is deprecated and will be removed in v4.33. ")
         return convert_coco_poly_to_mask(*args, **kwargs)
 
     def prepare_coco_detection(self, *args, **kwargs):
-        logger.warning_once(
-            "The `prepare_coco_detection` method is deprecated and will be removed in a future version. "
-        )
+        logger.warning_once("The `prepare_coco_detection` method is deprecated and will be removed in v4.33. ")
         return prepare_coco_detection_annotation(*args, **kwargs)
 
     def prepare_coco_panoptic(self, *args, **kwargs):
-        logger.warning_once(
-            "The `prepare_coco_panoptic` method is deprecated and will be removed in a future version. "
-        )
+        logger.warning_once("The `prepare_coco_panoptic` method is deprecated and will be removed in v4.33. ")
         return prepare_coco_panoptic_annotation(*args, **kwargs)
 
     def resize(
@@ -948,39 +934,6 @@ class DetrImageProcessor(BaseImageProcessor):
         `[center_x, center_y, width, height]` format.
         """
         return normalize_annotation(annotation, image_size=image_size)
-
-    def pad_and_create_pixel_mask(
-        self,
-        pixel_values_list: List[ImageInput],
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = None,
-    ) -> BatchFeature:
-        """
-        Pads a batch of images with zeros to the size of largest height and width in the batch and returns their
-        corresponding pixel mask.
-
-        Args:
-            images (`List[np.ndarray]`):
-                Batch of images to pad.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        logger.warning_once("This method is deprecated and will be removed in v4.27.0. Please use pad instead.")
-        # pad expects a list of np.ndarray, but the previous feature extractors expected torch tensors
-        images = [to_numpy_array(image) for image in pixel_values_list]
-        return self.pad(
-            images=images,
-            return_pixel_mask=True,
-            return_tensors=return_tensors,
-            data_format=data_format,
-        )
 
     def _pad_image(
         self,
