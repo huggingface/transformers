@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils_base import TextInput
 from ...utils import logging
 
 
@@ -295,6 +296,11 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
+    def tokenize(self, text: TextInput, **kwargs) -> List[str]:
+        if not text.startswith(' '):
+            text = ' ' + text
+        return super().tokenize(text, *kwargs)
+    
     def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         tokens = self.sp_model.encode(text, out_type=str) 
