@@ -970,8 +970,6 @@ class MusicgenModel(MusicgenPreTrainedModel):
     MUSICGEN_START_DOCSTRING,
 )
 class MusicgenForCausalLM(MusicgenPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["model.decoder.embed_tokens.weight"]
-
     def __init__(self, config: MusicgenDecoderConfig):
         super().__init__(config)
 
