@@ -1457,6 +1457,8 @@ class TrainingArguments:
             raise ValueError("`--sharded_ddp simple` is not compatible with any other option.")
         elif ShardedDDPOption.ZERO_DP_2 in self.sharded_ddp and ShardedDDPOption.ZERO_DP_3 in self.sharded_ddp:
             raise ValueError("`--sharded_ddp zero_dp_2` is not compatible with `--sharded_ddp zero_dp_3`.")
+        if self.sharded_ddp is None:
+            self.sharded_ddp = []
 
         if isinstance(self.fsdp, bool):
             self.fsdp = "full_shard" if self.fsdp else ""
@@ -1469,6 +1471,8 @@ class TrainingArguments:
             )
         elif FSDPOption.FULL_SHARD in self.fsdp and FSDPOption.SHARD_GRAD_OP in self.fsdp:
             raise ValueError("`--fsdp full_shard` is not compatible with `--fsdp shard_grad_op`.")
+        if self.fsdp is None:
+            self.fsdp = []
 
         if self.fsdp_config is None:
             self.fsdp_config = {}
