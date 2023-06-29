@@ -1196,10 +1196,10 @@ class MusicgenIntegrationTests(unittest.TestCase):
         model = self.model
 
         # only generate 1 sample with greedy - since it's deterministic all elements of the batch will be the same
-        unconditional_inputs = model.get_unconditional_inputs(num_samples=1, max_new_tokens=5)
+        unconditional_inputs = model.get_unconditional_inputs(num_samples=1)
         unconditional_inputs = place_dict_on_device(unconditional_inputs, device=torch_device)
 
-        output_values = model.generate(**unconditional_inputs)
+        output_values = model.generate(**unconditional_inputs, do_sample=False, max_new_tokens=5)
 
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
@@ -1218,11 +1218,11 @@ class MusicgenIntegrationTests(unittest.TestCase):
         model = self.model
 
         # for stochastic sampling we can generate multiple outputs
-        unconditional_inputs = model.get_unconditional_inputs(num_samples=2, max_new_tokens=10)
+        unconditional_inputs = model.get_unconditional_inputs(num_samples=2)
         unconditional_inputs = place_dict_on_device(unconditional_inputs, device=torch_device)
 
         set_seed(0)
-        output_values = model.generate(**unconditional_inputs, do_sample=True)
+        output_values = model.generate(**unconditional_inputs, do_sample=True, max_new_tokens=10)
 
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
@@ -1247,7 +1247,7 @@ class MusicgenIntegrationTests(unittest.TestCase):
         input_ids = inputs.input_ids.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
 
-        output_values = model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=10)
+        output_values = model.generate(input_ids, attention_mask=attention_mask, do_sample=False, guidance_scale=None, max_new_tokens=10)
 
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
@@ -1272,7 +1272,7 @@ class MusicgenIntegrationTests(unittest.TestCase):
         input_ids = inputs.input_ids.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
 
-        output_values = model.generate(input_ids, attention_mask=attention_mask, guidance_scale=3, max_new_tokens=10)
+        output_values = model.generate(input_ids, attention_mask=attention_mask, do_sample=False, guidance_scale=3, max_new_tokens=10)
 
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
@@ -1298,7 +1298,7 @@ class MusicgenIntegrationTests(unittest.TestCase):
         attention_mask = inputs.attention_mask.to(torch_device)
 
         set_seed(0)
-        output_values = model.generate(input_ids, attention_mask=attention_mask, do_sample=True, max_new_tokens=10)
+        output_values = model.generate(input_ids, attention_mask=attention_mask, do_sample=True, guidance_scale=None, max_new_tokens=10)
 
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
@@ -1323,7 +1323,7 @@ class MusicgenIntegrationTests(unittest.TestCase):
         inputs = processor(audio=audio, text=text, padding=True, return_tensors="pt")
         inputs = place_dict_on_device(inputs, device=torch_device)
 
-        output_values = model.generate(**inputs, max_new_tokens=10)
+        output_values = model.generate(**inputs, do_sample=False, guidance_scale=None, max_new_tokens=10)
 
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
