@@ -65,6 +65,20 @@ class ChannelDimension(ExplicitEnum):
     NONE = "none"
 
 
+def _output_wrapper(output):
+    def _cast_to_image_object(result):
+        return ImageObject(result) if isinstance(result, np.ndarray) else result
+
+    def _method_wrapper(first_pos_arg, *args, **kwargs):
+        result = output(first_pos_arg, *args, **kwargs)
+        return _cast_to_image_object(result)
+
+    if callable(output) and not isinstance(output, type):
+        return _method_wrapper
+
+    return _cast_to_image_object(output)
+
+
 class ImageObject(np.lib.mixins.NDArrayOperatorsMixin):
     """
     Array container for images. This class is a wrapper around `np.ndarray` that includes image specific information
@@ -118,18 +132,19 @@ class ImageObject(np.lib.mixins.NDArrayOperatorsMixin):
         self._width = width
 
     def __getattribute__(self, __name: str) -> Any:
-        if __name == "_data":
+        if __name in ("_data"):
             return super().__getattribute__(__name)
 
         if hasattr(self._data, __name):
             result = getattr(self._data, __name)
         else:
             result = super().__getattribute__(__name)
-        return ImageObject(result) if isinstance(result, np.ndarray) else result
+
+        return _output_wrapper(result)
 
     def __getitem__(self, key: Any) -> Any:
         result = self._data[key]
-        return ImageObject(result) if isinstance(result, np.ndarray) else result
+        return _output_wrapper(result)
 
     def __setitem__(self, key: Any, value: Any) -> None:
         self._data[key] = value
@@ -148,7 +163,7 @@ class ImageObject(np.lib.mixins.NDArrayOperatorsMixin):
             else:
                 scalars += (input,)
         result = getattr(ufunc, method)(*scalars, **kwargs)
-        return ImageObject(result) if isinstance(result, np.ndarray) else result
+        return _output_wrapper(result)
 
     def __array_function__(
         self, func: Callable[..., Any], types: Iterable[type], args: Iterable[any], kwargs: Mapping[str, Any]
@@ -159,7 +174,7 @@ class ImageObject(np.lib.mixins.NDArrayOperatorsMixin):
         types = tuple(_type for _type in types if not issubclass(_type, ImageObject))
         args = tuple(arg._data if isinstance(arg, ImageObject) else arg for arg in args)
         result = func(*args, **kwargs)
-        return ImageObject(result) if isinstance(result, np.ndarray) else result
+        return _output_wrapper(result)
 
     def __repr__(self) -> str:
         return f"ImageObject({self._data}, data_format={self._data_format}, num_channels={self._num_channels}, shape={self.shape})"
