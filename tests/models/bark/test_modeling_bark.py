@@ -536,9 +536,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
         output_ids = self.model.generate_text_semantic(**input_ids, history_prompt=history_prompt, do_sample=False)
 
-        output_ids = self.model.generate_coarse(
-            output_ids, history_prompt=history_prompt, max_coarse_history=630, sliding_window_len=60, do_sample=False
-        )
+        output_ids = self.model.generate_coarse(output_ids, history_prompt=history_prompt, do_sample=False)
 
         self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
@@ -561,9 +559,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
         output_ids = self.model.generate_text_semantic(**input_ids, history_prompt=history_prompt, do_sample=False)
 
-        output_ids = self.model.generate_coarse(
-            output_ids, history_prompt=history_prompt, max_coarse_history=630, sliding_window_len=60, do_sample=False
-        )
+        output_ids = self.model.generate_coarse(output_ids, history_prompt=history_prompt, do_sample=False)
 
         # greedy decoding
         output_ids = self.model.generate_fine(

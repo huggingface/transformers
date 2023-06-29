@@ -34,6 +34,12 @@ from .configuration_bark import (
     BarkSemanticConfig,
     BarkSubModelConfig,
 )
+from .generation_configuration_bark import (
+    BarkCoarseGenerationConfig,
+    BarkFineGenerationConfig,
+    BarkGenerationConfig,
+    BarkSemanticGenerationConfig,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -427,7 +433,6 @@ class BarkPreTrainedModel(PreTrainedModel):
 
 # GPT2-like autoregressive model
 class BarkCausalModel(BarkPreTrainedModel):
-
     config_class = BarkSubModelConfig
 
     def __init__(self, config):
@@ -925,7 +930,6 @@ output sound according to specific predefined voice.
     BARK_START_DOCSTRING,
 )
 class BarkModel(BarkPreTrainedModel):
-
     config_class = BarkConfig
 
     def __init__(self, config):
@@ -939,15 +943,25 @@ class BarkModel(BarkPreTrainedModel):
 
         self.config = config
 
+        # manually create generation config
+        # override from_model_config (not) called during super().__init__
+        # TODO: ideally would call it again during from_pretrained
+        # self.generation_config = BarkGenerationConfig.from_model_config(config)
+        
+        # TODO: for now, default values - have to find the link between BarkConfig and BarkGenerationConfig
+        self.generation_config = BarkGenerationConfig({}, {}, {})
+        
+
     def preprocess_histories_before_coarse(
-        self, history_prompt, max_coarse_history, semantic_to_coarse_ratio, batch_size
+        self, history_prompt, max_coarse_history, semantic_to_coarse_ratio, batch_size, semantic_generation_config
     ):
         if history_prompt is not None:
             x_semantic_history = torch.repeat_interleave(history_prompt["semantic_prompt"][None], batch_size, dim=0)
             x_coarse_history = history_prompt["coarse_prompt"]
 
             x_coarse_history = (
-                _flatten_codebooks(x_coarse_history, self.config.codebook_size) + self.config.semantic_vocab_size
+                _flatten_codebooks(x_coarse_history, self.generation_config.codebook_size)
+                + semantic_generation_config.semantic_vocab_size
             )
             x_coarse_history = torch.repeat_interleave(x_coarse_history[None], batch_size, dim=0)
             # e.g: after SEMANTIC_VOCAB_SIZE (10000), 1024 tokens dedicated to first codebook, 1024 next tokens dedicated to second codebook.
@@ -983,8 +997,12 @@ class BarkModel(BarkPreTrainedModel):
         self,
         input_ids: torch.Tensor,
         history_prompt: Optional[Dict[str, torch.Tensor]] = None,
+        semantic_generation_config: BarkSemanticGenerationConfig = None,
         **kwargs,
     ) -> torch.LongTensor:
+        if semantic_generation_config is None:
+            semantic_generation_config = self.generation_config.semantic_config
+
         # TODO: add a max_gen_duration_s early stop
 
         # TODO: Not used for now. where to set the default value ?
@@ -994,62 +1012,67 @@ class BarkModel(BarkPreTrainedModel):
         # input_ids should be of shape (batch_size, seq_len) where seq_len = 513
         batch_size = input_ids.shape[0]
 
-        input_ids = input_ids + self.config.text_encoding_offset
+        max_input_semantic_length = semantic_generation_config.max_input_semantic_length
+
+        input_ids = input_ids + semantic_generation_config.text_encoding_offset
 
         if kwargs.get("attention_mask", None) is not None:
-            input_ids.masked_fill_((1 - kwargs.pop("attention_mask")).bool(), self.config.text_pad_token)
+            input_ids.masked_fill_(
+                (1 - kwargs.pop("attention_mask")).bool(), semantic_generation_config.text_pad_token
+            )
 
         if history_prompt is not None:
-            semantic_history = history_prompt["semantic_prompt"][-256:]
+            semantic_history = history_prompt["semantic_prompt"][
+                -semantic_generation_config.max_input_semantic_length :
+            ]
             semantic_history = nn.functional.pad(
                 semantic_history,
-                (0, 256 - len(semantic_history)),
-                value=self.config.semantic_pad_token,
+                (0, max_input_semantic_length - len(semantic_history)),
+                value=semantic_generation_config.semantic_pad_token,
                 mode="constant",
             )
         else:
-            semantic_history = torch.tensor([self.config.semantic_pad_token] * 256, dtype=torch.int)
+            semantic_history = torch.tensor(
+                [semantic_generation_config.semantic_pad_token] * max_input_semantic_length, dtype=torch.int
+            )
 
         semantic_history = torch.repeat_interleave(semantic_history[None], batch_size, dim=0)
         semantic_history = semantic_history.to(self.device)
 
-        infer_array = torch.tensor([[self.config.semantic_infer_token]] * batch_size, dtype=torch.int).to(self.device)
+        infer_array = torch.tensor(
+            [[semantic_generation_config.semantic_infer_token]] * batch_size, dtype=torch.int
+        ).to(self.device)
 
         input_embeds = torch.cat(
             [
-                self.semantic.wte(input_ids[:, :256]) + self.semantic.wte(semantic_history[:, :257]),
+                self.semantic.wte(input_ids[:, :max_input_semantic_length])
+                + self.semantic.wte(semantic_history[:, : max_input_semantic_length + 1]),
                 self.semantic.wte(infer_array),
             ],
             dim=1,
         )
 
         semantic_logits_processor = SemanticLogitsProcessor(
-            self.config.semantic_vocab_size, self.config.semantic_pad_token
+            semantic_generation_config.semantic_vocab_size, semantic_generation_config.semantic_pad_token
         )
 
         # TODO: for now, it is not implemented yet as long as StoppingCriteria issue is not dealt with
         # https://github.com/huggingface/transformers/issues/23674
-        # semantic_stopping_criteria = SemanticStoppingCriteria(min_eos_p , self.config.semantic_pad_token)
+        # semantic_stopping_criteria = SemanticStoppingCriteria(min_eos_p , semantic_generation_config.semantic_pad_token)
 
         # pass input_ids in order to stay consistent with the transformers generate method even though it is not used (except to get the input seq_len - that's why we keep the first 257 tokens)
         semantic_output = self.semantic.generate(
-            torch.ones((batch_size, 257), dtype=torch.int).to(self.device),
+            torch.ones((batch_size, max_input_semantic_length + 1), dtype=torch.int).to(self.device),
             input_embeds=input_embeds,
             logits_processor=[semantic_logits_processor],
+            generation_config=semantic_generation_config,
             # stopping_criteria=[semantic_stopping_criteria],
-            renormalize_logits=True,
-            eos_token_id=self.config.semantic_pad_token,
-            max_new_tokens=768,
-            output_scores=False,
-            return_dict_in_generate=False,
-            output_hidden_states=False,
-            output_attentions=False,
             **kwargs,
         )  # size: 10048
         # TODO: there is also a max_gen_duration_s early stop if the duration depass a certain duration
 
         # take the generated semantic tokens
-        semantic_output = semantic_output[:, 257:]
+        semantic_output = semantic_output[:, max_input_semantic_length + 1 :]
 
         return semantic_output
 
@@ -1057,33 +1080,48 @@ class BarkModel(BarkPreTrainedModel):
         self,
         semantic_output: torch.Tensor,
         history_prompt: Optional[Dict[str, torch.Tensor]] = None,
-        max_coarse_history: int = 630,
-        sliding_window_len: int = 60,
+        semantic_generation_config: BarkSemanticGenerationConfig = None,
+        coarse_acoustics_config: BarkCoarseGenerationConfig = None,
         **kwargs,
-    ):
+    ) -> torch.LongTensor:
+        if semantic_generation_config is None:
+            semantic_generation_config = self.generation_config.semantic_config
+
+        if coarse_acoustics_config is None:
+            coarse_acoustics_config = self.generation_config.coarse_acoustics_config
+
+        max_coarse_input_length = coarse_acoustics_config.max_coarse_input_length
+        max_coarse_history = coarse_acoustics_config.max_coarse_history
+        sliding_window_len = coarse_acoustics_config.sliding_window_len
+
         # replace semantic_pad_token (eos_tok and pad_tok here) with coarse_semantic_pad_token i.e the pad_token used in the next model
         semantic_output.masked_fill_(
-            semantic_output == self.config.semantic_pad_token, self.config.coarse_semantic_pad_token
+            semantic_output == semantic_generation_config.semantic_pad_token,
+            coarse_acoustics_config.coarse_semantic_pad_token,
         )
 
         semantic_to_coarse_ratio = (
-            self.config.coarse_rate_hz / self.config.semantic_rate_hz * self.config.n_coarse_codebooks
+            coarse_acoustics_config.coarse_rate_hz
+            / semantic_generation_config.semantic_rate_hz
+            * coarse_acoustics_config.n_coarse_codebooks
         )
         max_semantic_history = int(np.floor(max_coarse_history / semantic_to_coarse_ratio))
 
         # beware, depends on the seq_len of the longest sequence of the batch. Also, the seq_len might be one token too long because of an added pad_token as compared to Bark original implementation.
-        # TODO: do a dynamic max_generated_len. Pad it with self.config.codebook_size ?
+        # TODO: do a dynamic max_generated_len. Pad it with self.generation_config.codebook_size ?
         max_generated_len = int(
             round(
-                np.floor(semantic_output.shape[1] * semantic_to_coarse_ratio / self.config.n_coarse_codebooks)
-                * self.config.n_coarse_codebooks
+                np.floor(
+                    semantic_output.shape[1] * semantic_to_coarse_ratio / coarse_acoustics_config.n_coarse_codebooks
+                )
+                * coarse_acoustics_config.n_coarse_codebooks
             )
         )
 
         batch_size = semantic_output.shape[0]
 
         x_semantic_history, x_coarse = self.preprocess_histories_before_coarse(
-            history_prompt, max_coarse_history, semantic_to_coarse_ratio, batch_size
+            history_prompt, max_coarse_history, semantic_to_coarse_ratio, batch_size, semantic_generation_config
         )
         base_semantic_idx = x_semantic_history.shape[1]
 
@@ -1100,35 +1138,33 @@ class BarkModel(BarkPreTrainedModel):
 
             # pad from right side
             input_coarse = semantic_output[:, np.max([0, semantic_idx - max_semantic_history]) :]
-            input_coarse = input_coarse[:, :256]
+            input_coarse = input_coarse[:, :max_coarse_input_length]
             input_coarse = F.pad(
                 input_coarse,
-                (0, 256 - input_coarse.shape[-1]),
+                (0, max_coarse_input_length - input_coarse.shape[-1]),
                 "constant",
-                self.config.coarse_semantic_pad_token,
+                coarse_acoustics_config.coarse_semantic_pad_token,
             )
 
             input_coarse = torch.hstack(
                 [
                     input_coarse,
-                    torch.tensor([[self.config.coarse_infer_token]] * batch_size).to(self.device),
+                    torch.tensor([[coarse_acoustics_config.coarse_infer_token]] * batch_size).to(self.device),
                     x_coarse[:, -max_coarse_history:],
                 ]
             )
 
             alternatingLogitsProcessor = AlternatingCodebooksLogitsProcessor(
-                input_coarse.shape[1], self.config.semantic_vocab_size, self.config.codebook_size
+                input_coarse.shape[1],
+                semantic_generation_config.semantic_vocab_size,
+                self.generation_config.codebook_size,
             )
 
             output_coarse = self.coarse_acoustics.generate(
                 input_coarse,
                 logits_processor=[alternatingLogitsProcessor],
-                renormalize_logits=True,  # renormalize after logits_processor
                 max_new_tokens=min(sliding_window_len, max_generated_len - total_generated_len),
-                output_scores=False,
-                return_dict_in_generate=False,
-                output_hidden_states=False,
-                output_attentions=False,
+                generation_config=coarse_acoustics_config,
                 **kwargs,
             )
 
@@ -1147,15 +1183,36 @@ class BarkModel(BarkPreTrainedModel):
         self,
         coarse_output: torch.Tensor,
         history_prompt: Optional[Dict[str, torch.Tensor]] = None,
-        temperature: Optional[float] = None,
+        semantic_generation_config: BarkSemanticGenerationConfig = None,
+        coarse_acoustics_config: BarkCoarseGenerationConfig = None,
+        fine_acoustics_config: BarkFineGenerationConfig = None,
         **kwargs,
-    ):
+    ) -> torch.LongTensor:
+        if semantic_generation_config is None:
+            semantic_generation_config = self.generation_config.semantic_config
+
+        if coarse_acoustics_config is None:
+            coarse_acoustics_config = self.generation_config.coarse_acoustics_config
+
+        if fine_acoustics_config is None:
+            fine_acoustics_config = self.generation_config.fine_acoustics_config
+
+        # since we don't really use GenerationConfig through the fine model (autoencoder)
+        # and since only temperature is used from the classic GenerationConfig parameters
+        # manually impose the kwargs priority over the generation config
+        temperature = kwargs.get("temperature", fine_acoustics_config.temperature)
+
+        max_fine_history_length = fine_acoustics_config.max_fine_history_length
+        max_fine_input_length = fine_acoustics_config.max_fine_input_length
+
         # shape: (batch, n_coarse_codebooks * seq_len)
         # new_shape: (batch, seq_len, n_coarse_codebooks)
-        coarse_output = coarse_output.view(coarse_output.shape[0], -1, self.config.n_coarse_codebooks)
+        coarse_output = coarse_output.view(coarse_output.shape[0], -1, coarse_acoustics_config.n_coarse_codebooks)
 
         # brings ids into the range [0, codebook_size -1]
-        coarse_output = torch.remainder(coarse_output - self.config.semantic_vocab_size, self.config.codebook_size)
+        coarse_output = torch.remainder(
+            coarse_output - semantic_generation_config.semantic_vocab_size, self.generation_config.codebook_size
+        )
         batch_size = coarse_output.shape[0]
 
         if history_prompt is not None:
@@ -1165,71 +1222,87 @@ class BarkModel(BarkPreTrainedModel):
         else:
             x_fine_history = None
 
-        n_coarse = self.config.n_coarse_codebooks
+        n_coarse = coarse_acoustics_config.n_coarse_codebooks
 
         # pad the last 6th codebooks
         fine_input = F.pad(
             coarse_output,
             (0, self.config.n_fine_codebooks - n_coarse),
             "constant",
-            self.config.codebook_size,
+            self.generation_config.codebook_size,
         )
 
-        # prepend history if available (max 512)
+        # prepend history if available (max max_fine_history_length)
         if x_fine_history is not None:
             fine_input = torch.cat(
                 [
-                    x_fine_history[:, -512:, :],
+                    x_fine_history[:, -max_fine_history_length:, :],
                     fine_input,
                 ],
                 dim=1,
             )
 
             # len of the fine_history that has been added to fine_input
-            n_history = x_fine_history[:, -512:, :].shape[1]
+            n_history = x_fine_history[:, -max_fine_history_length:, :].shape[1]
         else:
             n_history = 0
 
         n_remove_from_end = 0
         # need to pad if too short (since non-causal model)
-        if fine_input.shape[1] < 1024:
-            n_remove_from_end = 1024 - fine_input.shape[1]
+        if fine_input.shape[1] < max_fine_input_length:
+            n_remove_from_end = max_fine_input_length - fine_input.shape[1]
             fine_input = F.pad(
-                fine_input, (0, 0, 0, n_remove_from_end), mode="constant", value=self.config.codebook_size
+                fine_input, (0, 0, 0, n_remove_from_end), mode="constant", value=self.generation_config.codebook_size
             )
 
         # we can be lazy about fractional loop and just keep overwriting codebooks.
-        # seems that coarse_output.shape[1] - (1024 - n_history) is equal to minus n_remove_from_end
+        # seems that coarse_output.shape[1] - (max_fine_input_length - n_history) is equal to minus n_remove_from_end
         # So if we needed to pad because too short, n_loops is always 1 (because n_remove_from_end > 0)
         # If not, we loop over at least twice.
-        n_loops = np.max([0, int(np.ceil((coarse_output.shape[1] - (1024 - n_history)) / 512))]) + 1
+        n_loops = (
+            np.max(
+                [
+                    0,
+                    int(
+                        np.ceil(
+                            (coarse_output.shape[1] - (max_fine_input_length - n_history)) / max_fine_history_length
+                        )
+                    ),
+                ]
+            )
+            + 1
+        )
 
         # with _inference_mode() ?
 
         for n_outer in range(n_loops):
-            start_idx = np.min([n_outer * 512, fine_input.shape[1] - 1024])
+            start_idx = np.min([n_outer * max_fine_history_length, fine_input.shape[1] - max_fine_input_length])
 
-            start_fill_idx = np.min([n_history + n_outer * 512, fine_input.shape[1] - 512])
+            start_fill_idx = np.min(
+                [n_history + n_outer * max_fine_history_length, fine_input.shape[1] - max_fine_history_length]
+            )
             rel_start_fill_idx = start_fill_idx - start_idx
-            input_buffer = fine_input[:, start_idx : start_idx + 1024, :]
+            input_buffer = fine_input[:, start_idx : start_idx + max_fine_input_length, :]
             for n_inner in range(n_coarse, self.config.n_fine_codebooks):
                 logits = self.fine_acoustics(n_inner, input_buffer).logits
                 if temperature is None:
-                    relevant_logits = logits[0, rel_start_fill_idx:, : self.config.codebook_size]
+                    relevant_logits = logits[0, rel_start_fill_idx:, : self.generation_config.codebook_size]
                     codebook_preds = torch.argmax(relevant_logits, -1)
                 else:
-                    relevant_logits = logits[0, :, : self.config.codebook_size] / temperature
+                    relevant_logits = logits[0, :, : self.generation_config.codebook_size] / temperature
                     probs = F.softmax(relevant_logits, dim=-1)
-                    codebook_preds = torch.multinomial(probs[rel_start_fill_idx:1024], num_samples=1).reshape(-1)
+                    codebook_preds = torch.multinomial(
+                        probs[rel_start_fill_idx:max_fine_input_length], num_samples=1
+                    ).reshape(-1)
                 codebook_preds = codebook_preds.to(torch.int32)
                 input_buffer[:, rel_start_fill_idx:, n_inner] = codebook_preds
                 del logits, codebook_preds
 
             # transfer over info into model_in and convert to numpy
             for n_inner in range(n_coarse, self.config.n_fine_codebooks):
-                fine_input[:, start_fill_idx : start_fill_idx + (1024 - rel_start_fill_idx), n_inner] = input_buffer[
-                    :, rel_start_fill_idx:, n_inner
-                ]
+                fine_input[
+                    :, start_fill_idx : start_fill_idx + (max_fine_input_length - rel_start_fill_idx), n_inner
+                ] = input_buffer[:, rel_start_fill_idx:, n_inner]
             del input_buffer
 
         fine_input = fine_input.transpose(1, 2)[:, :, n_history:]
@@ -1261,8 +1334,6 @@ class BarkModel(BarkPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         history_prompt: Optional[Dict[str, torch.Tensor]] = None,
-        max_coarse_history: int = 630,
-        sliding_window_len: int = 60,
         **kwargs,
     ) -> torch.LongTensor:
         """
@@ -1305,7 +1376,9 @@ class BarkModel(BarkPreTrainedModel):
 
         >>> voice_preset = "v2/en_speaker_6"
 
-        >>> inputs, history_prompt = processor("Hello, my dog is cute, I need him in my life", voice_preset=voice_preset)
+        >>> inputs, history_prompt = processor(
+        ...     "Hello, my dog is cute, I need him in my life", voice_preset=voice_preset
+        ... )
 
         >>> audio_array = model.generate_audio(**inputs, history_prompt=history_prompt)
         >>> audio_array = audio_array.detach().cpu().numpy().squeeze()
@@ -1315,7 +1388,7 @@ class BarkModel(BarkPreTrainedModel):
         >>> write_wav("bark_generation.wav", sample_rate, audio_array)
         ```
         """
-        
+
         ##### 1. Generate from the semantic model
 
         semantic_output = self.generate_text_semantic(
@@ -1324,13 +1397,11 @@ class BarkModel(BarkPreTrainedModel):
 
         ##### 2. Generate from the coarse model
 
-        coarse_output = self.generate_coarse(
-            semantic_output, history_prompt, max_coarse_history, sliding_window_len, **kwargs
-        )
+        coarse_output = self.generate_coarse(semantic_output, history_prompt, **kwargs)
 
         ##### 3. "generate" from the fine model
 
-        output = self.generate_fine(coarse_output, history_prompt, temperature=kwargs.get("temperature", None))
+        output = self.generate_fine(coarse_output, history_prompt, **kwargs)
 
         #### 4. Decode the output and generate audio array
 
