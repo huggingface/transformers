@@ -31,7 +31,7 @@ class Umt5IntegrationTest(unittest.TestCase):
     @slow
     def test_small_integration_test(self):
         """
-        For comparison run the kaggle notbook available here : TODO share view link only
+        For comparison run the kaggle notbook available here : https://www.kaggle.com/arthurzucker/umt5-inference
         """
 
         model = AutoModelForSeq2SeqLM.from_pretrained("google/umt5-small", return_dict=True).to(torch_device)

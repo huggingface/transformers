@@ -1,10 +1,11 @@
+import importlib.metadata
 import warnings
 from copy import deepcopy
 
 from packaging import version
 
 from ..utils import logging
-from .import_utils import importlib_metadata, is_accelerate_available, is_bitsandbytes_available
+from .import_utils import is_accelerate_available, is_bitsandbytes_available
 
 
 if is_bitsandbytes_available():
@@ -75,7 +76,7 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
             elif isinstance(value, torch.Tensor):
                 new_value = value.to("cpu")
                 if value.dtype == torch.int8:
-                    is_8bit_serializable = version.parse(importlib_metadata.version("bitsandbytes")) > version.parse(
+                    is_8bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) > version.parse(
                         "0.37.2"
                     )
                     if not is_8bit_serializable:

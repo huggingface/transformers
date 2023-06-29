@@ -31,7 +31,7 @@ The abstract from the paper is the following:
 
 Note: umT5 was only pre-trained on [mC4](https://huggingface.co/datasets/mc4) excluding any supervised training.
 Therefore, this model has to be fine-tuned before it is usable on a downstream task, unlike the original T5 model.
-Since umT5 was pre-trained unsupervisedly, there's no real advantage to using a task prefix during single-task
+Since umT5 was pre-trained in an unsupervise manner, there's no real advantage to using a task prefix during single-task
 fine-tuning. If you are doing multi-task fine-tuning, you should use a prefix.
 
 Google has released the following variants:
@@ -40,8 +40,6 @@ Google has released the following variants:
 
 - [google/umt5-base](https://huggingface.co/google/umt5-base)
 
-- [google/umt5-large](https://huggingface.co/google/umt5-large)
-
 - [google/umt5-xl](https://huggingface.co/google/umt5-xl)
 
 - [google/umt5-xxl](https://huggingface.co/google/umt5-xxl).
@@ -49,23 +47,25 @@ Google has released the following variants:
 This model was contributed by [agemagician](https://huggingface.co/agemagician) and [stefan-it](https://huggingface.co/stefan-it). The original code can be
 found [here](https://github.com/google-research/t5x).
 
-## Documentation resources
+One can refer to [T5's documentation page](t5) for more tips, code examples and notebooks.
 
-- [Translation task guide](../tasks/translation)
-- [Summarization task guide](../tasks/summarization)
+## Difference with mT5?
+`UmT5` is based on mT5, with a non-shared relative positional bias that is computed for each layer. This means that the model set `has_relative_bias` for each layer.
+The conversion script is also different because the model was save in t5x's latest checkpointing format.
 
-## UMT5Config
+# Sample usage
 
-[[autodoc]] UMT5Config
+```python
+>>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-## UMT5Model
+>>> model = AutoModelForSeq2SeqLM.from_pretrained("google/umt5-small")
+>>> tokenizer = AutoTokenizer.from_pretrained("google/umt5-small")
 
-[[autodoc]] UMT5Model
+>>> inputs = tokenizer(
+...     "A <extra_id_0> walks in <extra_id_1>, order a <extra_id_1> and drinks it.", return_tensors="pt"
+... )
+>>> outputs = model.generate(**inputs)
+>>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
+['Pour a cup of bolognese into a large bowl and add the pasta']
+```
 
-## UMT5ForConditionalGeneration
-
-[[autodoc]] UMT5ForConditionalGeneration
-
-## UMT5EncoderModel
-
-[[autodoc]] UMT5EncoderModel
