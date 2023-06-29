@@ -304,13 +304,16 @@ class FalconAttention(nn.Module):
                 # to do it by hand if we want them
                 attention_scores = query_layer_ @ key_layer_.transpose(-1, -2)
                 attention_scores /= math.sqrt(self.head_dim)
-                attn_mask = torch.ones_like(attention_scores, dtype=torch.bool).tril()
-                attention_scores = attention_scores.masked_fill(~attn_mask, float("-inf"))
+                if attention_mask is None:
+                    attn_mask = ~torch.ones_like(attention_scores, dtype=torch.bool).tril()
+                else:
+                    attn_mask = attention_mask
+                attention_scores = attention_scores.masked_fill(attn_mask, float("-inf"))
                 attention_scores = torch.softmax(attention_scores, dim=-1)
                 attn_output = attention_scores @ value_layer_
             else:
                 attn_output = F.scaled_dot_product_attention(
-                    query_layer_, key_layer_, value_layer_, None, 0.0, is_causal=True
+                    query_layer_, key_layer_, value_layer_, attention_mask, 0.0, is_causal=True
                 )
                 attention_scores = None
 
@@ -595,7 +598,7 @@ class FalconModel(FalconPreTrainedModel):
         if deprecated_arguments.pop("position_ids", False) is not False:
             # `position_ids` could have been `torch.Tensor` or `None` so defaulting pop to `False` allows to detect if users were passing explicitly `None`
             warnings.warn(
-                "`position_ids` have no functionality in BLOOM and will be removed in v5.0.0. You can safely ignore"
+                "`position_ids` have no functionality in Falcon and will be removed in v5.0.0. You can safely ignore"
                 " passing `position_ids`.",
                 FutureWarning,
             )
@@ -780,7 +783,7 @@ class FalconForCausalLM(FalconPreTrainedModel):
         if deprecated_arguments.pop("position_ids", False) is not False:
             # `position_ids` could have been `torch.Tensor` or `None` so defaulting pop to `False` allows to detect if users were passing explicitly `None`
             warnings.warn(
-                "`position_ids` have no functionality in BLOOM and will be removed in v5.0.0. You can safely ignore"
+                "`position_ids` have no functionality in Falcon and will be removed in v5.0.0. You can safely ignore"
                 " passing `position_ids`.",
                 FutureWarning,
             )
@@ -888,7 +891,7 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
         if deprecated_arguments.pop("position_ids", False) is not False:
             # `position_ids` could have been `torch.Tensor` or `None` so defaulting pop to `False` allows to detect if users were passing explicitly `None`
             warnings.warn(
-                "`position_ids` have no functionality in BLOOM and will be removed in v5.0.0. You can safely ignore"
+                "`position_ids` have no functionality in Falcon and will be removed in v5.0.0. You can safely ignore"
                 " passing `position_ids`.",
                 FutureWarning,
             )
@@ -1010,7 +1013,7 @@ class FalconForTokenClassification(FalconPreTrainedModel):
         if deprecated_arguments.pop("position_ids", False) is not False:
             # `position_ids` could have been `torch.Tensor` or `None` so defaulting pop to `False` allows to detect if users were passing explicitly `None`
             warnings.warn(
-                "`position_ids` have no functionality in BLOOM and will be removed in v5.0.0. You can safely ignore"
+                "`position_ids` have no functionality in Falcon and will be removed in v5.0.0. You can safely ignore"
                 " passing `position_ids`.",
                 FutureWarning,
             )
