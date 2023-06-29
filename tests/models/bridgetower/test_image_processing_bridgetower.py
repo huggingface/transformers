@@ -145,7 +145,7 @@ class BridgeTowerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Te
         pass
 
     def test_call_pil(self):
-        # Initialize feature_extractor
+        # Initialize image processor
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
         image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False)
@@ -176,7 +176,7 @@ class BridgeTowerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Te
         )
 
     def test_call_numpy(self):
-        # Initialize feature_extractor
+        # Initialize image processor
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
         image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False, numpify=True)
@@ -207,7 +207,7 @@ class BridgeTowerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Te
         )
 
     def test_call_pytorch(self):
-        # Initialize feature_extractor
+        # Initialize image processor
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
         image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False, torchify=True)
@@ -238,7 +238,7 @@ class BridgeTowerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Te
         )
 
     def test_equivalence_pad_and_create_pixel_mask(self):
-        # Initialize feature_extractors
+        # Initialize image processors
         image_processing_1 = self.image_processing_class(**self.image_processor_dict)
         image_processing_2 = self.image_processing_class(do_resize=False, do_normalize=False, do_rescale=False)
         # create random PyTorch tensors

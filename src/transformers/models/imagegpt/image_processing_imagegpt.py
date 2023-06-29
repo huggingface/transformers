@@ -81,7 +81,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        # clusters is a first argument to maintain backwards compatibility with the old ImageGPTFeatureExtractor
+        # clusters is a first argument to maintain backwards compatibility with the old ImageGPTImageProcessor
         clusters: Optional[Union[List[List[int]], np.ndarray]] = None,
         do_resize: bool = True,
         size: Dict[str, int] = None,

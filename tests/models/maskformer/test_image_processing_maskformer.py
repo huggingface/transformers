@@ -574,9 +574,9 @@ class MaskFormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
         self.assertEqual(segmentation[0].shape, target_sizes[0])
 
     def test_post_process_instance_segmentation(self):
-        feature_extractor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
+        image_processor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
         outputs = self.image_processor_tester.get_fake_maskformer_outputs()
-        segmentation = feature_extractor.post_process_instance_segmentation(outputs, threshold=0)
+        segmentation = image_processor.post_process_instance_segmentation(outputs, threshold=0)
 
         self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
         for el in segmentation:
@@ -587,7 +587,7 @@ class MaskFormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
                 el["segmentation"].shape, (self.image_processor_tester.height, self.image_processor_tester.width)
             )
 
-        segmentation = feature_extractor.post_process_instance_segmentation(
+        segmentation = image_processor.post_process_instance_segmentation(
             outputs, threshold=0, return_binary_maps=True
         )
 

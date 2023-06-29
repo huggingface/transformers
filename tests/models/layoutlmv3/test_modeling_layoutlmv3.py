@@ -45,7 +45,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import LayoutLMv3FeatureExtractor
+    from transformers import LayoutLMv3ImageProcessor
 
 
 class LayoutLMv3ModelTester:
@@ -382,16 +382,16 @@ def prepare_img():
 @require_torch
 class LayoutLMv3ModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return LayoutLMv3FeatureExtractor(apply_ocr=False) if is_vision_available() else None
+    def default_image_processor(self):
+        return LayoutLMv3ImageProcessor(apply_ocr=False) if is_vision_available() else None
 
     @slow
     def test_inference_no_head(self):
         model = LayoutLMv3Model.from_pretrained("microsoft/layoutlmv3-base").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values.to(torch_device)
+        pixel_values = image_processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
 
         input_ids = torch.tensor([[1, 2]])
         bbox = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]]).unsqueeze(0)

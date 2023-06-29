@@ -263,7 +263,7 @@ To use, create an image processor associated with the model you're using. For ex
 ViTImageProcessor {
   "do_normalize": true,
   "do_resize": true,
-  "feature_extractor_type": "ViTImageProcessor",
+  "image_processor_type": "ViTImageProcessor",
   "image_mean": [
     0.5,
     0.5,
@@ -295,7 +295,7 @@ Modify any of the [`ViTImageProcessor`] parameters to create your custom image p
 ViTImageProcessor {
   "do_normalize": false,
   "do_resize": true,
-  "feature_extractor_type": "ViTImageProcessor",
+  "image_processor_type": "ViTImageProcessor",
   "image_mean": [
     0.3,
     0.3,
