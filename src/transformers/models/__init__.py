@@ -135,6 +135,7 @@ from . import (
     mobilevitv2,
     mpnet,
     mt5,
+    musicgen,
     mvp,
     nat,
     nezha,
