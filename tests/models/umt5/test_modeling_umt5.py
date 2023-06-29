@@ -40,7 +40,8 @@ class Umt5IntegrationTest(unittest.TestCase):
             'Bonjour monsieur <extra_id_0> bien <extra_id_1>.',
             'No se como puedo <extra_id_0>.',
             'This is the reason why we <extra_id_0> them.',
-            'The <extra_id_0> walks in <extra_id_1>, sits'
+            'The <extra_id_0> walks in <extra_id_1>, sits',
+            'A <extra_id_0> walks into a bar a orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>.'
         ]
         input_ids = tokenizer(input_text, return_tensors="pt", padding = True).input_ids
         EXPECTED_INPUT_IDS = torch.tensor([
@@ -64,6 +65,7 @@ class Umt5IntegrationTest(unittest.TestCase):
 <pad><extra_id_0>.<extra_id_1>.,\n...spech \n<extra_id_20> <extra_id_21></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>
 <pad><extra_id_0> are not going to be a part of the world. We are not going to be a part of<extra_id_1> and<extra_id_2> \n<extra_id_48>.<extra_id_48></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>
 <pad><extra_id_0> city<extra_id_1> the city<extra_id_2> verkarzekł<extra_id_3>..,,<extra_id_4><extra_id_56>ajšie\n海外取寄せ品lleuxlleuxmogulleuxajšieM Loadingüentlleuxчинностіonomy嵋ABRmnázilleuxajšiewaнуарajšielemba嵋zdrowi Issumnázi\nmmersciedad泷嵋 https Httpajšiealulleuxlleuxambiquemündeijstajšiequippedrakutenblogzytelni seanwaitajšie
+<pad><extra_id_0> man<extra_id_1> drink<extra_id_2> a<extra_id_3> salt<extra_id_4> jerk<extra_id_5> a<extra_id_6>.\nA man<extra_id_7>
 """
         filling = tokenizer.batch_decode(generated_ids)
         self.assertTrue(filling, EXPECTED_FILLING)
