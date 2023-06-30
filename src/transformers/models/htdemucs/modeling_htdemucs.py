@@ -14,13 +14,15 @@
 # limitations under the License.
 """ PyTorch HT Demucs model."""
 
-from typing import Optional, Tuple 
-from ...modeling_utils import PreTrainedModel
+import math
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
+from ...modeling_outputs import BaseModelOutput
+from ...modeling_utils import PreTrainedModel
 
 
 class HtdemucsAttention(nn.Module):
@@ -59,7 +61,6 @@ class HtdemucsAttention(nn.Module):
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
@@ -106,15 +107,6 @@ class HtdemucsAttention(nn.Module):
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
-        if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-                    f" {layer_head_mask.size()}"
-                )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
         if output_attentions:
             # this operation is a bit awkward, but it's required to
             # make sure that attn_weights keeps its gradient.
@@ -146,6 +138,7 @@ class HtdemucsAttention(nn.Module):
 
         return attn_output, attn_weights_reshaped
 
+
 class HtdemucsEncoderBlock(nn.Module):
     def __init__(self, config: HtdemucsConfig, is_cross_attn=False):
         super().__init__()
@@ -167,8 +160,16 @@ class HtdemucsEncoderBlock(nn.Module):
         if is_cross_attn:
             self.cross_attn_layer_norm = nn.LayerNorm(self.embed_dim)
 
-        self.layer_scale_1 = nn.Parameter(torch.ones(self.embed_dim) * config.layer_scale_init_value) if config.attn_layer_scale else nn.Identity()  # TODO(SG): can remove attn_layer_scale from config
-        self.layer_scale_2 = nn.Parameter(torch.ones(self.embed_dim) * config.layer_scale_init_value) if config.attn_layer_scale else nn.Identity()
+        self.layer_scale_1 = (
+            nn.Parameter(torch.ones(self.embed_dim) * config.layer_scale_init_value)
+            if config.attn_layer_scale
+            else nn.Identity()
+        )  # TODO(SG): can remove attn_layer_scale from config
+        self.layer_scale_2 = (
+            nn.Parameter(torch.ones(self.embed_dim) * config.layer_scale_init_value)
+            if config.attn_layer_scale
+            else nn.Identity()
+        )
 
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
@@ -181,7 +182,6 @@ class HtdemucsEncoderBlock(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
@@ -192,8 +192,6 @@ class HtdemucsEncoderBlock(nn.Module):
                 Attention mask, where padding elements are indicated by very large negative values.
             encoder_hidden_states (`torch.FloatTensor` of shape `(batch, seq_len, embed_dim)`, *optional*):
                 Cross attention input to the layer. Only used for cross attention layers.
-            layer_head_mask (`torch.FloatTensor` of shape `(num_attention_heads,)`):
-                Mask for attention heads in a given layer.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -209,7 +207,6 @@ class HtdemucsEncoderBlock(nn.Module):
             hidden_states=hidden_states,
             key_value_states=encoder_hidden_states,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -240,8 +237,47 @@ class HtdemucsEncoderBlock(nn.Module):
 
 class HtdemucsEncoderLayer(nn.Module):
     def __init__(self, config: HtdemucsConfig):
+        self.freq_self_attn = HtdemucsEncoderBlock(config)
+        self.temp_self_attn = HtdemucsEncoderBlock(config)
 
-        self.classic_parity = 1 if config.cross_first else 0
+        self.freq_cross_attn = HtdemucsEncoderBlock(config, is_cross_attn=True)
+        self.temp_self_attn = HtdemucsEncoderBlock(config, is_cross_attn=True)
+
+    def forward(
+        self,
+        freq_hidden_states: torch.FloatTensor,
+        temp_hidden_states: torch.FloatTensor,
+        freq_attention_mask: torch.LongTensor = None,
+        temp_attention_mask: torch.LongTensor = None,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
+    ):
+        freq_layer_outputs = self.freq_self_attn(
+            freq_hidden_states, attention_mask=freq_attention_mask, output_attentions=output_attentions
+        )
+        temp_layer_outputs = self.temp_self_attn(
+            temp_hidden_states, attention_mask=temp_attention_mask, output_attentions=output_attentions
+        )
+
+        freq_residual = freq_hidden_states
+
+        freq_hidden_states = freq_layer_outputs[0]
+        temp_hidden_states = temp_hidden_states[0]
+
+        freq_layer_outputs = self.freq_cross_attn(
+            freq_hidden_states,
+            attention_mask=freq_attention_mask,
+            encoder_hidden_states=temp_hidden_states,
+            output_attentions=output_attentions,
+        )
+        temp_layer_outputs = self.temp_cross_attn(
+            temp_hidden_states,
+            attention_mask=temp_attention_mask,
+            encoder_hidden_states=freq_residual,
+            output_attentions=output_attentions,
+        )
+
+
 
 
 class HtdemucsPreTrainedModel(PreTrainedModel):
@@ -264,6 +300,46 @@ class HtdemucsPreTrainedModel(PreTrainedModel):
         if isinstance(module, HtdemucsEncoder):
             module.gradient_checkpointing = value
 
+
+def create_sin_embedding(length: int, dim: int, shift: int = 0, device="cpu", max_period=10000):
+    # We aim for TBC format
+    assert dim % 2 == 0
+    pos = shift + torch.arange(length, device=device).view(-1, 1, 1)
+    half_dim = dim // 2
+    adim = torch.arange(dim // 2, device=device).view(1, 1, -1)
+    phase = pos / (max_period ** (adim / (half_dim - 1)))
+    return torch.cat(
+        [
+            torch.cos(phase),
+            torch.sin(phase),
+        ],
+        dim=-1,
+    )
+
+
+def create_2d_sin_embedding(d_model, height, width, device="cpu", max_period=10000):
+    """
+    :param d_model: dimension of the model
+    :param height: height of the positions
+    :param width: width of the positions
+    :return: d_model*height*width position matrix
+    """
+    if d_model % 4 != 0:
+        raise ValueError("Cannot use sin/cos positional encoding with " "odd dimension (got dim={:d})".format(d_model))
+    pe = torch.zeros(d_model, height, width)
+    # Each dimension use half of d_model
+    d_model = int(d_model / 2)
+    div_term = torch.exp(torch.arange(0.0, d_model, 2) * -(math.log(max_period) / d_model))
+    pos_w = torch.arange(0.0, width).unsqueeze(1)
+    pos_h = torch.arange(0.0, height).unsqueeze(1)
+    pe[0:d_model:2, :, :] = torch.sin(pos_w * div_term).transpose(0, 1).unsqueeze(1).repeat(1, height, 1)
+    pe[1:d_model:2, :, :] = torch.cos(pos_w * div_term).transpose(0, 1).unsqueeze(1).repeat(1, height, 1)
+    pe[d_model::2, :, :] = torch.sin(pos_h * div_term).transpose(0, 1).unsqueeze(2).repeat(1, 1, width)
+    pe[d_model + 1 :: 2, :, :] = torch.cos(pos_h * div_term).transpose(0, 1).unsqueeze(2).repeat(1, 1, width)
+
+    return pe[None, :].to(device)
+
+
 class HtdemucsEncoder(HtdemucsPreTrainedModel):
     def __init__(self, config: HtdemucsConfig):
         self.dropout = config.dropout
@@ -276,9 +352,16 @@ class HtdemucsEncoder(HtdemucsPreTrainedModel):
         # temporal layers
         self.temp_layers = nn.ModuleList()
 
+        # set indices for self/cross attn layers
         self.classic_parity = 1 if config.cross_first else 0
 
-        self.layers = nn.ModuleList([HtdemucsEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        for idx in range(config.num_hidden_layers):
+            if idx % 2 == self.classic_parity:
+                self.freq_layers.append(HtdemucsEncoderBlock(config))
+                self.temp_layers.append(HtdemucsEncoderBlock(config))
+            else:
+                self.freq_layers.append(HtdemucsEncoderBlock(config, is_cross_attn=True))
+                self.temp_layers.append(HtdemucsEncoderBlock(config, is_cross_attn=True))
 
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
         self.layer_norm = nn.LayerNorm(config.d_model)
@@ -286,3 +369,66 @@ class HtdemucsEncoder(HtdemucsPreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
+
+    def forward(
+        self,
+        input_features: torch.FloatTensor = None,
+        input_values: torch.FloatTensor = None,
+        freq_attention_mask: torch.LongTensor = None,
+        temp_attention_mask: torch.LongTensor = None,
+        freq_embeds: Optional[torch.FloatTensor] = None,
+        temp_embeds: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
+        r"""
+        Args:
+            input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
+                Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
+                loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
+                the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
+                [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
+                tensor of type `torch.FloatTensor`. See [`~HtdemucsProcessor.__call__`]
+            input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+                Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+                into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+                soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+                conversion into a tensor of type `torch.FloatTensor`. See [`HtdemucsProcessor.__call__`] for details.
+            freq_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on spatial (frequency) padding token indices. Mask values selected
+                in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            temp_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on temporal padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            freq_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_features` you can choose to directly pass an embedded representation
+                for the spatial (frequency) inputs. This is useful if you want more control over how to convert
+                `input_features` into associated vectors than the model's internal embedding lookup matrix.
+            temp_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_values` you can choose to directly pass an embedded representation
+                for the temporal inputs. This is useful if you want more control over how to convert `input_values`
+                into associated vectors than the model's internal embedding lookup matrix.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
