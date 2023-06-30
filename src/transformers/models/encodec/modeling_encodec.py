@@ -426,6 +426,7 @@ class EncodecVectorQuantization(nn.Module):
         quantize = quantize.permute(0, 2, 1)
         return loss, embed_ind, quantize
 
+
 class EncodecResidualVectorQuantizer(nn.Module):
     """Residual Vector Quantizer."""
 
@@ -489,6 +490,7 @@ class EncodecResidualVectorQuantizer(nn.Module):
 
         out_losses, out_indices = map(torch.stack, (all_losses, all_indices))
         return out_losses, out_indices, quantized_out
+
 
 class EncodecPreTrainedModel(PreTrainedModel):
     """
