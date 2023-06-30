@@ -284,7 +284,7 @@ class UMT5Attention(nn.Module):
         # compute positional bias
         if self.has_relative_attention_bias:
             query_length = seq_length
-            if past_key_value:
+            if past_key_value is not None:
                 query_length += past_key_value[0].shape[2]
             position_bias = self.compute_bias(query_length, key_states.size(2), device=attention_scores.device)
         else:
