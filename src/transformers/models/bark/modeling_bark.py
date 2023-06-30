@@ -958,7 +958,9 @@ class BarkModel(BarkPreTrainedModel):
     ):
         if history_prompt is not None:
             x_semantic_history = torch.repeat_interleave(history_prompt["semantic_prompt"][None], batch_size, dim=0)
-            x_coarse_history = history_prompt["coarse_prompt"]
+            x_coarse_history = history_prompt[
+                "coarse_prompt"
+            ].clone()  # clone to avoid modifying history_prompt.coarse_prompt
 
             # offset x_coarse_history
             if self.generation_config.codebook_size is not None:
@@ -966,11 +968,11 @@ class BarkModel(BarkPreTrainedModel):
                     # offset
                     x_coarse_history[n, :] += self.generation_config.codebook_size * n
 
-            x_coarse_history = x_coarse_history + semantic_generation_config.semantic_vocab_size
-
             # flatten x_coarse_history
             # ravel("F")
             x_coarse_history = torch.transpose(x_coarse_history, 0, 1).view(-1)
+
+            x_coarse_history = x_coarse_history + semantic_generation_config.semantic_vocab_size
 
             x_coarse_history = torch.repeat_interleave(x_coarse_history[None], batch_size, dim=0)
             # e.g: after SEMANTIC_VOCAB_SIZE (10000), 1024 tokens dedicated to first codebook, 1024 next tokens dedicated to second codebook.
