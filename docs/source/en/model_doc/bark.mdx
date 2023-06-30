@@ -21,7 +21,7 @@ Bark is made of 4 main models:
 
 - [`BarkSemanticModel`] (also referred to as the 'text' model): a causal auto-regressive transformer model that takes as input tokenized text, and predicts semantic text tokens that capture the meaning of the text.
 - [`BarkCoarseModel`] (also referred to as the 'coarse acoustics' model): a causal autoregressive transformer, that takes as input the results of the [`BarkSemanticModel`] model. It aims at predicting the first two audio codebooks necessary for EnCodec.
-- [`BarkFineModel`] (the 'fine acoustics' model`), this time a non-causal autoencoder transformer, which iteratively predicts the last codebooks based on the sum of the previous codebooks embeddings.
+- [`BarkFineModel`] (the 'fine acoustics' model), this time a non-causal autoencoder transformer, which iteratively predicts the last codebooks based on the sum of the previous codebooks embeddings.
 - having predicted all the codebook channels from the [`EncodecModel`], Bark uses it to decode the output audio array.
 
 It should be noted that each of the first three modules can support conditional speaker embeddings to condition the output sound according to specific predefined voice.
