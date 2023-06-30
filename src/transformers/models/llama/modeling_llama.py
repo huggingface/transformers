@@ -227,7 +227,9 @@ class LlamaAttention(nn.Module):
             attn_weights = torch.max(
                 attn_weights,
                 torch.tensor(
-                    torch.finfo(attn_weights.dtype).min, device=attn_weights.device, dtype=attn_weights.dtype
+                    torch.finfo(attn_weights.dtype).min, 
+                    device=attn_weights.device, 
+                    dtype=attn_weights.dtype
                 ),
             )
 
