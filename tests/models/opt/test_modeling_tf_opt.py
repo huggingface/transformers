@@ -54,7 +54,7 @@ class TFOPTModelTester:
         use_labels=False,
         vocab_size=99,
         hidden_size=16,
-        num_hidden_layers=2,
+        num_hidden_layers=1,
         num_attention_heads=4,
         intermediate_size=4,
         hidden_act="gelu",
@@ -235,7 +235,7 @@ class TFOPTHeadTests(unittest.TestCase):
         config = OPTConfig(
             vocab_size=self.vocab_size,
             hidden_size=24,
-            num_hidden_layers=2,
+            num_hidden_layers=1,
             num_attention_heads=2,
             ffn_dim=32,
             max_position_embeddings=48,

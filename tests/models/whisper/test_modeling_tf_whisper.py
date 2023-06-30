@@ -84,7 +84,7 @@ class TFWhisperModelTester:
         use_labels=False,
         vocab_size=200,
         hidden_size=16,
-        num_hidden_layers=2,
+        num_hidden_layers=1,
         num_attention_heads=4,
         input_channels=1,
         hidden_act="gelu",
