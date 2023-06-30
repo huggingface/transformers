@@ -968,7 +968,6 @@ class BarkModel(BarkPreTrainedModel):
                     x_coarse_history[n, :] += self.generation_config.codebook_size * n
 
             # flatten x_coarse_history
-            # ravel("F")
             x_coarse_history = torch.transpose(x_coarse_history, 0, 1).view(-1)
 
             x_coarse_history = x_coarse_history + semantic_generation_config.semantic_vocab_size
