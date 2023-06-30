@@ -178,6 +178,7 @@ from .import_utils import (
 
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
+ADAPTER_CONFIG_NAME = "adapter_config.json"
 ADAPTER_WEIGHTS_NAME = "adapter_model.bin"
 ADAPTER_SAFE_WEIGHTS_NAME = "adapter_model.safetensors"
 TF2_WEIGHTS_NAME = "tf_model.h5"

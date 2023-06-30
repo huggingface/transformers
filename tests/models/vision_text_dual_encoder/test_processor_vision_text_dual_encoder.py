@@ -170,10 +170,10 @@ class VisionTextDualEncoderProcessorTest(unittest.TestCase):
         self.assertListEqual(decoded_tok, decoded_processor)
 
     def test_model_input_names(self):
-        feature_extractor = self.get_image_processor()
+        image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = VisionTextDualEncoderProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = VisionTextDualEncoderProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
