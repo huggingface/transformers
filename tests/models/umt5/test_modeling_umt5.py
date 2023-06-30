@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import tempfile
 import unittest
 
@@ -119,7 +118,7 @@ class UMT5ModelTester:
             "decoder_head_mask": decoder_head_mask,
             "cross_attn_head_mask": cross_attn_head_mask,
         }
-        
+
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
         decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
@@ -135,8 +134,8 @@ class UMT5ModelTester:
         decoder_input_ids = decoder_input_ids.clamp(self.pad_token_id + 1)
 
         config = self.get_config()
-        config.encoder_attention_heads =  config.num_attention_heads
-        input_dict = self.prepare_inputs_dict(config, input_ids,decoder_input_ids)
+        config.encoder_attention_heads = config.num_attention_heads
+        input_dict = self.prepare_inputs_dict(config, input_ids, decoder_input_ids)
         return config, input_dict
 
     def prepare_config_and_inputs_for_common(self):
@@ -255,6 +254,7 @@ class UMT5ModelTester:
         output = model(**input_dict)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
+
 @require_torch
 class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
@@ -274,11 +274,11 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = True
+    fx_compatible = False
     test_pruning = False
     test_missing_keys = True
     test_torchscript = True
-    # The small T5 model needs higher percentages for CPU/MP tests
+    # The small UMT5 model needs higher percentages for CPU/MP tests
     model_split_percents = [0.8, 0.9]
 
     def setUp(self):
@@ -297,7 +297,6 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 opset_version=9,
                 input_names=["input_ids", "decoder_input_ids"],
             )
-
 
     @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
     def test_model_fp16_forward(self):

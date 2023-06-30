@@ -148,6 +148,10 @@ class UMT5LayerFF(nn.Module):
 
 
 class UMT5Attention(nn.Module):
+    """
+    T5's attention using relative_attention_bias.
+    """
+
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -275,7 +279,8 @@ class UMT5Attention(nn.Module):
             position_bias = torch.zeros(
                 (1, self.n_heads, seq_length, key_states.size(2)),
                 device=attention_scores.device,
-                dtype=attention_scores.dtype,requires_grad=self.training
+                dtype=attention_scores.dtype,
+                requires_grad=self.training,
             )
         if past_key_value is not None:
             position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
@@ -434,7 +439,10 @@ class UMT5Block(nn.Module):
             clamp_value = torch.where(torch.isinf(hidden_states).any(), max_dtype - 1000, max_dtype)
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (hidden_states,present_key_value,)
+        outputs = (
+            hidden_states,
+            present_key_value,
+        )
 
         if output_attentions:
             outputs += (self_attn_weights, cross_attn_weights)
@@ -1405,7 +1413,6 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
 class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
-    # Copied from transformers.models.t5.modeling_t5.T5ForQuestionAnswering.__init__ with T5->UMT5
     def __init__(self, config):
         super().__init__(config)
         self.model_dim = config.d_model
