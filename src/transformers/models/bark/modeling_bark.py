@@ -22,7 +22,6 @@ from torch import nn
 from torch.nn import functional as F
 
 from ...generation.logits_process import AlternatingCodebooksLogitsProcessor, SemanticLogitsProcessor
-from ...generation.stopping_criteria import StoppingCriteria
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
@@ -1057,11 +1056,6 @@ class BarkModel(BarkPreTrainedModel):
             semantic_generation_config.semantic_vocab_size, semantic_generation_config.semantic_pad_token
         )
 
-        # TODO: for now, it is not implemented yet as long as StoppingCriteria issue is not dealt with
-        # https://github.com/huggingface/transformers/issues/23674
-        # semantic_stopping_criteria = SemanticStoppingCriteria(min_eos_p , semantic_generation_config.semantic_pad_token)
-        # TODO: add a max_gen_duration_s early stop
-
         # pass input_ids in order to stay consistent with the transformers generate method even though it is not used (except to get the input seq_len - that's why we keep the first 257 tokens)
         semantic_output = self.semantic.generate(
             torch.ones((batch_size, max_input_semantic_length + 1), dtype=torch.int).to(self.device),
@@ -1112,7 +1106,6 @@ class BarkModel(BarkPreTrainedModel):
 
         # beware, depends on the seq_len of the longest sequence of the batch.
         # Also, the seq_len might be one token too long because of an added pad_token as compared to Bark original implementation.
-        # TODO: do a dynamic max_generated_len. Pad it with self.generation_config.codebook_size ?
         max_generated_len = np.floor(
             semantic_output.shape[1] * semantic_to_coarse_ratio / coarse_acoustics_config.n_coarse_codebooks
         )
@@ -1381,24 +1374,3 @@ class BarkModel(BarkPreTrainedModel):
         BarkGenerationConfig.
         """
         return True
-
-
-class SemanticStoppingCriteria(StoppingCriteria):
-    r"""
-    [`StoppingCriteria`] enforcing early stop if the probability of the eos_token is higher than min_eos_p. Beware, to
-    stay consistent with transformers, it requires renormalize_logits=True in the generation parameters.
-
-    Args:
-        min_eos_p (`float`):
-            eos_token probability threshold beyond which generation is stopped.
-        semantic_pad_token (`int`):
-            Token id of the semantic pad token.
-    """
-
-    def __init__(self, min_eos_p: float, semantic_pad_token: int):
-        # since renormalize_logits applies a log_softmax instead of a softmax, needs to apply log to the proba.
-        self.min_eos_p = np.log(min_eos_p)
-        self.semantic_pad_token = semantic_pad_token
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
-        return scores[:, self.semantic_pad_token] >= self.min_eos_p
