@@ -61,7 +61,7 @@ BARK_SUBMODELCONFIG_START_DOCSTRING = """
         dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         bias (`bool`, *optional*, defaults to ):
-            True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster. Defaults to True.
+            Whether or not to use bias in the linear layers and layer norm layers.
         use_cache (`bool`, *optional*, defaults to True):
             Whether or not the model should return the last key/values attentions (not used by all models).
         initializer_range (`float`, *optional*, defaults to 0.02):
