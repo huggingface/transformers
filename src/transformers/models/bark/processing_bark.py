@@ -98,14 +98,20 @@ class BarkProcessor(ProcessorMixin):
             )
             if speaker_embeddings is None:
                 logger.warning(
-                    f"`{os.path.join(pretrained_processor_name_or_path,speaker_embeddings_file_name)}` does not exists, no preloaded speaker embeddings will be used - Make sure to provide a correct path if wanted, otherwise set `speaker_embeddings_file_name=None`."
+                    f"""`{os.path.join(pretrained_processor_name_or_path,speaker_embeddings_file_name)}` does not exists
+                    , no preloaded speaker embeddings will be used - Make sure to provide a correct path if wanted,
+                    otherwise set `speaker_embeddings_file_name=None`."""
                 )
             else:
                 speaker_embeddings = np.load(speaker_embeddings, allow_pickle=True)
 
                 if len(speaker_embeddings.keys()) != 1:
                     raise ValueError(
-                        "`speaker_embeddings` doesn't follow the required format - ensure that speaker embeddings are saved in a nested format, where the first level contains voice preset names (e.g `en_speaker_4`), and the second level contains `semantic_prompt`, `coarse_prompt` and `fine_prompt` embeddings, then save the speaker embeddings via `np.savez('speaker_embeddings.npz', speaker_embeddings)`."
+                        """`speaker_embeddings` doesn't follow the required format - ensure that speaker embeddings are
+                        saved in a nested format, where the first level contains voice preset names (e.g
+                        `en_speaker_4`) , and the second level contains `semantic_prompt`, `coarse_prompt` and
+                        `fine_prompt` embeddings, then save the speaker embeddings via
+                        `np.savez('speaker_embeddings.npz', speaker_embeddings)`"""
                     )
 
                 key_dict = list(speaker_embeddings.keys())[0]

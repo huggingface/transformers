@@ -136,7 +136,7 @@ BARK_CAUSAL_MODEL_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it. Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`.
 
@@ -343,8 +343,8 @@ class BarkBlock(nn.Module):
 
         if is_causal:
             # if causal, uses handmade LayerNorm, so that the layerNorm bias is optional
-            # this handmade layerNorm is used to stick with Bark choice of leaving optional bias in AutoRegressive models
-            # (corresponding to the "Text" and the "Coarse" modules)
+            # this handmade layerNorm is used to stick with Bark choice of leaving optional bias in
+            # AutoRegressive models (corresponding to the "Text" and the "Coarse" modules)
             self.ln_1 = LayerNorm(config.hidden_size, bias=config.bias)
         else:
             self.ln_1 = nn.LayerNorm(config.hidden_size)
@@ -479,7 +479,8 @@ class BarkCausalModel(BarkPreTrainedModel):
             else:
                 seq_len = input_ids.shape[1]
 
-        # ensure that attention_mask and position_ids shapes are aligned with the weird Bark hack of reducing sequence length on the first forward pass
+        # ensure that attention_mask and position_ids shapes are aligned with the weird Bark hack of reducing
+        # sequence length on the first forward pass
         if attention_mask is not None:
             attention_mask = attention_mask[:, :seq_len]
         if position_ids is not None:
@@ -538,7 +539,8 @@ class BarkCausalModel(BarkPreTrainedModel):
         if input_ids is not None and input_embeds is not None:
             raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
         elif input_embeds is not None and past_key_values is None:
-            # we want to return the input_embeds in priority so that it is in line with a weird hack of Bark which concatenate two bits of the input_embeds on the first forward pass of the semantic model
+            # we want to return the input_embeds in priority so that it is in line with a weird hack
+            # of Bark which concatenate two bits of the input_embeds on the first forward pass of the semantic model
             pass
         elif input_ids is not None:
             input_embeds = self.wte(input_ids)  # token embeddings of shape (b, t, n_embd)
@@ -689,7 +691,8 @@ class BarkCausalModel(BarkPreTrainedModel):
 
 
 @add_start_docstrings(
-    "Bark semantic (or text) model. It shares the same architecture as the coarse model. It is a GPT-2 like autoregressive model with a language modeling head on top.",
+    """Bark semantic (or text) model. It shares the same architecture as the coarse model.
+    It is a GPT-2 like autoregressive model with a language modeling head on top.""",
     BARK_MODEL_START_DOCSTRING,
 )
 class BarkSemanticModel(BarkCausalModel):
@@ -698,7 +701,9 @@ class BarkSemanticModel(BarkCausalModel):
 
 
 @add_start_docstrings(
-    "Bark coarse acoustics model. It shares the same architecture as the semantic (or text) model. It is a GPT-2 like autoregressive model with a language modeling head on top.",
+    """Bark coarse acoustics model.
+    It shares the same architecture as the semantic (or text) model. It is a GPT-2 like autoregressive model with a
+    language modeling head on top.""",
     BARK_MODEL_START_DOCSTRING,
 )
 class BarkCoarseModel(BarkCausalModel):
@@ -707,7 +712,8 @@ class BarkCoarseModel(BarkCausalModel):
 
 
 @add_start_docstrings(
-    "Bark fine acoustics model. It is a non-causal GPT-like model with `config.n_codes_total` embedding layers and language modeling heads, one for each codebook.",
+    """Bark fine acoustics model. It is a non-causal GPT-like model with `config.n_codes_total` embedding layers and
+    language modeling heads, one for each codebook.""",
     BARK_MODEL_START_DOCSTRING,
 )
 class BarkFineModel(BarkPreTrainedModel):
@@ -827,7 +833,8 @@ class BarkFineModel(BarkPreTrainedModel):
         if input_ids is not None and input_embeds is not None:
             raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
         elif input_ids is not None:
-            # the input_embeddings are the sum of the j previous codebooks embeddings before the current codebook_idx codebook
+            # the input_embeddings are the sum of the j previous codebooks embeddings before
+            # the current codebook_idx codebook
 
             # forward the GPT model itself
             input_embeds = [
@@ -923,12 +930,10 @@ class BarkFineModel(BarkPreTrainedModel):
     - [`BarkSemanticModel`] (also referred to as the 'text' model): a causal auto-regressive transformer model that
       takes
     as input tokenized text, and predicts semantic text tokens that capture the meaning of the text.
-    - [`BarkCoarseModel`] (also refered to as the 'coarse acoustics' model), also a causal autoregressive
-      transformer,
+    - [`BarkCoarseModel`] (also refered to as the 'coarse acoustics' model), also a causal autoregressive transformer,
     that takes into input the results of the last model. It aims at regressing the first two audio codebooks necessary
     to `encodec`.
-    - [`BarkFineModel`] (the 'fine acoustics' model), this time a non-causal autoencoder transformer, which
-      iteratively
+    - [`BarkFineModel`] (the 'fine acoustics' model), this time a non-causal autoencoder transformer, which iteratively
     predicts the last codebooks based on the sum of the previous codebooks embeddings.
     - having predicted all the codebook channels from the [`EncodecModel`], Bark uses it to decode the output audio
       array.
@@ -973,7 +978,8 @@ class BarkModel(BarkPreTrainedModel):
             x_coarse_history = x_coarse_history + semantic_generation_config.semantic_vocab_size
 
             x_coarse_history = torch.repeat_interleave(x_coarse_history[None], batch_size, dim=0)
-            # e.g: after SEMANTIC_VOCAB_SIZE (10000), 1024 tokens dedicated to first codebook, 1024 next tokens dedicated to second codebook.
+            # e.g: after SEMANTIC_VOCAB_SIZE (10000), 1024 tokens dedicated to first codebook, 1024 next tokens
+            # dedicated to second codebook.
 
             max_semantic_history = int(np.floor(max_coarse_history / semantic_to_coarse_ratio))
             # trim histories correctly
@@ -1055,7 +1061,8 @@ class BarkModel(BarkPreTrainedModel):
             semantic_generation_config.semantic_vocab_size, semantic_generation_config.semantic_pad_token
         )
 
-        # pass input_ids in order to stay consistent with the transformers generate method even though it is not used (except to get the input seq_len - that's why we keep the first 257 tokens)
+        # pass input_ids in order to stay consistent with the transformers generate method even though it is not used
+        # (except to get the input seq_len - that's why we keep the first 257 tokens)
         semantic_output = self.semantic.generate(
             torch.ones((batch_size, max_input_semantic_length + 1), dtype=torch.int).to(self.device),
             input_embeds=input_embeds,
@@ -1090,7 +1097,8 @@ class BarkModel(BarkPreTrainedModel):
         max_coarse_history = coarse_acoustics_config.max_coarse_history
         sliding_window_len = coarse_acoustics_config.sliding_window_len
 
-        # replace semantic_pad_token (eos_tok and pad_tok here) with coarse_semantic_pad_token i.e the pad_token used in the next model
+        # replace semantic_pad_token (eos_tok and pad_tok here) with coarse_semantic_pad_token i.e the pad_token
+        # used in the next model
         semantic_output.masked_fill_(
             semantic_output == semantic_generation_config.semantic_pad_token,
             coarse_acoustics_config.coarse_semantic_pad_token,
@@ -1104,7 +1112,8 @@ class BarkModel(BarkPreTrainedModel):
         max_semantic_history = int(np.floor(max_coarse_history / semantic_to_coarse_ratio))
 
         # beware, depends on the seq_len of the longest sequence of the batch.
-        # Also, the seq_len might be one token too long because of an added pad_token as compared to Bark original implementation.
+        # Also, the seq_len might be one token too long because of an added
+        # pad_token as compared to Bark original implementation.
         max_generated_len = np.floor(
             semantic_output.shape[1] * semantic_to_coarse_ratio / coarse_acoustics_config.n_coarse_codebooks
         )
@@ -1321,7 +1330,6 @@ class BarkModel(BarkPreTrainedModel):
             input_ids (`Optional[torch.Tensor]` of shape (batch_size, seq_len), *optional*, defaults to None):
                 Input ids. Will be truncated up to 256 tokens. Note that the output audios will be as long as the
                 longest generation among the batch.
-            The last token is `semantic_infer_token`. Note that batch_size is set to 1 to generate one audio per audio. Defaults to None.:
             history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*, defaults to None):
                 Optional `Bark` speaker prompt. Defaults to None. Note that for now, this model takes only one speaker
                 prompt per batch.

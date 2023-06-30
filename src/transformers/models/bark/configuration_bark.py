@@ -42,16 +42,16 @@ BARK_SUBMODELCONFIG_START_DOCSTRING = """
 
     Args:
         block_size (`int`, *optional*, defaults to 1024):
-        The maximum sequence length that this model might ever be used with. Typically set this to something large
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        input_vocab_size (`int`,, *optional*, defaults to 10_048):
-        Vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented by the
+        input_vocab_size (`int`, *optional*, defaults to 10_048):
+            Vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`{model}`]. Defaults to 10_048 but should be carefully thought with
             regards to the chosen sub-model.
         output_vocab_size (`int`, *optional*, defaults to 10_048):
-        Output vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented by the:
-            `output_ids` when passing forward a [`{model}`]. Defaults to 10_048 but should be carefully thought with
-            regards to the chosen sub-model.
+            Output vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented
+            by the: `output_ids` when passing forward a [`{model}`]. Defaults to 10_048 but should be carefully thought
+            with regards to the chosen sub-model.
         num_layers (`int`, *optional*, defaults to 12):
             Number of layers.
         num_heads (`int`, *optional*, defaults to 12):
@@ -69,7 +69,7 @@ BARK_SUBMODELCONFIG_START_DOCSTRING = """
         n_codes_total (`int`, *optional*, defaults to 8):
             The total number of audio codebooks predicted. Used in the fine acoustics sub-model.
         n_codes_given (`int`, *optional*, defaults to 1):
-            The number of audio codebooks predicted in the coarse acoustics sub-model. Use in the acoustics
+            The number of audio codebooks predicted in the coarse acoustics sub-model. Used in the acoustics
             sub-models.
 """
 
