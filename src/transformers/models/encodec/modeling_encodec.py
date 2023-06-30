@@ -479,6 +479,9 @@ class EncodecResidualVectorQuantizer(nn.Module):
 
         for layer in self.layers[:num_quantizers]:
             loss, embed_ind, quantized = layer(residual)
+            # Note: The source from FB research did not detach the quantized here. There may have been a bug in the
+            # commitment loss computation, which could mean that training results would be different between that
+            # implementation and this one.
             residual = residual - quantized.detach()
             quantized_out = quantized_out + quantized
             all_indices.append(embed_ind)
