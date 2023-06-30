@@ -67,9 +67,9 @@ BARK_SUBMODELCONFIG_START_DOCSTRING = """
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         n_codes_total (`int`, *optional*, defaults to 8):
-            The total number of [`Encodec`] codebooks. Used in the fine acoustics sub-model.
+            The total number of audio codebooks predicted. Used in the fine acoustics sub-model.
         n_codes_given (`int`, *optional*, defaults to 1):
-            The number of [`Encodec`] codebooks predicted in the coarse acoustics sub-model. Use in the acoustics
+            The number of audio codebooks predicted in the coarse acoustics sub-model. Use in the acoustics
             sub-models.
 """
 
