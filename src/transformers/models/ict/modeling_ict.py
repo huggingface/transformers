@@ -68,7 +68,7 @@ class IctEmbeddings(nn.Module):
         super().__init__()
 
         self.token_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.position_embedding = nn.Parameter(torch.zeros(1, config.image_size, config.hidden_size))
+        self.position_embedding = nn.Parameter(torch.zeros(1, config.image_size * config.image_size, config.hidden_size))
         self.dropout = nn.Dropout(config.embedding_dropout_prob)
 
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
@@ -287,7 +287,7 @@ class IctPretrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value: bool = False) -> None:
-        if isinstance(module, (IctEncoder, IctTransformerModel, IctGuidedUpsampler)):
+        if isinstance(module, (IctEncoder)):
             module.gradient_checkpointing = value
 
 
@@ -654,8 +654,7 @@ class IctGuidedUpsampler(IctPretrainedModel):
         self.l1_loss = nn.L1Loss()
         self.perceptual_loss = IctPerceptualLoss()
         self.style_loss = IctStyleLoss()
-        self.output_height = config.output_height
-        self.output_width = config.output_width
+        self.output_image_size = config.output_image_size
 
         self.post_init()
 
@@ -679,9 +678,9 @@ class IctGuidedUpsampler(IctPretrainedModel):
 
     # modified from https://github.com/raywzy/ICT/blob/59dd12d374d47cdf0dce90923017ca3657e6aa0b/Guided_Upsample/src/models.py#L165-L183
     def forward(self, images: List[torch.Tensor], edges: List[torch.Tensor], masks: List[torch.Tensor]):
-        images = torch.stack([self.resize(image, self.output_height, self.output_width) for image in images])
-        masks = torch.stack([self.resize(mask, self.output_height, self.output_width) for mask in masks])
-        edges = torch.stack([self.resize(edge, self.output_height, self.output_width) for edge in edges])
+        images = torch.stack([self.resize(image, self.output_image_size, self.output_image_size) for image in images])
+        masks = torch.stack([self.resize(mask, self.output_image_size, self.output_image_size) for mask in masks])
+        edges = torch.stack([self.resize(edge, self.output_image_size, self.output_image_size) for edge in edges])
 
         images_masked = (images * (1 - masks).float()) + masks
 
@@ -846,7 +845,7 @@ class IctModel(IctPretrainedModel):
 
         loss = None
         if bool_masked_pos is not None:
-            size = math.floor(self.config.image_size**0.5)
+            size = math.floor(self.config.image_size)
             bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
             bool_masked_pos.repeat_interleave(1, 1).repeat_interleave(1, 2).unsqueeze(1).contiguous()
             # nn.functional.l1_loss(pixel_values, reconstructed_pixel_values, reduction="none")

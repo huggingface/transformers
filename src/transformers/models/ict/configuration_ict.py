@@ -78,10 +78,8 @@ class IctConfig(PretrainedConfig):
         top_k (`int`, *optional*, defaults to 50):
             Number of highest probability vocabulary tokens to keep for top-k-filtering that will be used by default in
             the `generate` method of the model.
-        output_height (`int`, *optional*, defaults to 256):
-            The height of the final image.
-        output_width (`int`, *optional*, defaults to 256):
-            The width of the final image.
+        output_image_size (`int`, *optional*, defaults to 256):
+            The size (resolution) of the output image.
         clusters (`np.ndarray`, *optional*, defaults to `None`):
             Clusters used to quantize the image of shape `(n_clusters, 3)`. Provide the same `clusters` used for
             `IctImageProcessor`.
@@ -116,13 +114,12 @@ class IctConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        image_size=1024,
+        image_size=32,
         num_channels=3,
         qkv_bias=True,
         temperature=1.0,
         top_k=50,
-        output_height=256,
-        output_width=256,
+        output_image_size=256,
         clusters=None,
         **kwargs,
     ):
@@ -145,6 +142,5 @@ class IctConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.temperature = temperature
         self.top_k = top_k
-        self.output_height = output_height
-        self.output_width = output_width
+        self.output_image_size = output_image_size
         self.clusters = np.array(clusters) if clusters is not None else None

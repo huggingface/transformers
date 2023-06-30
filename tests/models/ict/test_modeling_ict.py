@@ -65,7 +65,7 @@ class IctModelTester:
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        image_size=1024,
+        image_size=32,
         num_channels=3,
         qkv_bias=False,
         output_height=256,
@@ -98,7 +98,7 @@ class IctModelTester:
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        pixel_values = ids_tensor([self.batch_size, self.image_size], self.vocab_size)
+        pixel_values = ids_tensor([self.batch_size, self.image_size * self.image_size], self.vocab_size)
         original_images = [prepare_img() for _ in range(self.batch_size)]
         bool_masked_pos = torch.randint(low=0, high=2, size=(1, pixel_values.shape[1])).bool()
 
@@ -223,7 +223,7 @@ class IctModelIntegrationTest(unittest.TestCase):
     def default_image_processor(self):
         return IctImageProcessor.from_pretrained("sheonhan/ict-imagenet-256") if is_vision_available() else None
 
-    @slow
+    # @slow
     def test_inference_masked_image_modeling(self):
         model = IctModel.from_pretrained("sheonhan/ict-imagenet-256").to(torch_device)
 
@@ -232,10 +232,11 @@ class IctModelIntegrationTest(unittest.TestCase):
         inputs = image_processor(images=image, return_tensors="pt")
 
         pixel_values = inputs.pixel_values
-        image_size = pixel_values.shape[1]
+        # image_size = pixel_values.shape[1]
+        image_size = 1
 
         torch.manual_seed(6)
-        bool_masked_pos = torch.randint(low=0, high=2, size=(1, image_size)).bool()
+        bool_masked_pos = torch.randint(low=0, high=2, size=(1, image_size * image_size)).bool()
         clusters = image_processor.clusters
 
         # forward pass
