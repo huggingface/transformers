@@ -26,6 +26,11 @@ from transformers import (
     BarkSemanticConfig,
     is_torch_available,
 )
+from transformers.models.bark.generation_configuration_bark import (
+    BarkCoarseGenerationConfig,
+    BarkFineGenerationConfig,
+    BarkSemanticGenerationConfig,
+)
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import cached_property
 
@@ -509,6 +514,21 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
         return input_ids
 
+    @cached_property
+    def semantic_generation_config(self):
+        semantic_generation_config = BarkSemanticGenerationConfig(**self.model.generation_config.semantic_config)
+        return semantic_generation_config
+
+    @cached_property
+    def coarse_generation_config(self):
+        coarse_generation_config = BarkCoarseGenerationConfig(**self.model.generation_config.coarse_acoustics_config)
+        return coarse_generation_config
+
+    @cached_property
+    def fine_generation_config(self):
+        fine_generation_config = BarkFineGenerationConfig(**self.model.generation_config.fine_acoustics_config)
+        return fine_generation_config
+
     @slow
     def test_generate_text_semantic(self):
         input_ids = self.inputs
@@ -520,7 +540,11 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
         # greedy decoding
         with torch.no_grad():
-            output_ids = self.model.generate_text_semantic(**input_ids, do_sample=False)
+            output_ids = self.model.semantic.generate_text_semantic(
+                **input_ids,
+                do_sample=False,
+                semantic_generation_config=self.semantic_generation_config,
+            )
 
         self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
@@ -536,9 +560,20 @@ class BarkModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         with torch.no_grad():
-            output_ids = self.model.generate_text_semantic(**input_ids, do_sample=False)
+            output_ids = self.model.semantic.generate_text_semantic(
+                **input_ids,
+                do_sample=False,
+                semantic_generation_config=self.semantic_generation_config,
+            )
 
-            output_ids = self.model.generate_coarse(output_ids, history_prompt=history_prompt, do_sample=False)
+            output_ids = self.model.coarse_acoustics.generate_coarse(
+                output_ids,
+                history_prompt=history_prompt,
+                do_sample=False,
+                semantic_generation_config=self.semantic_generation_config,
+                coarse_generation_config=self.coarse_generation_config,
+                codebook_size=self.model.generation_config.codebook_size,
+            )
 
         self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
@@ -562,15 +597,30 @@ class BarkModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         with torch.no_grad():
-            output_ids = self.model.generate_text_semantic(**input_ids, do_sample=False)
+            output_ids = self.model.semantic.generate_text_semantic(
+                **input_ids,
+                do_sample=False,
+                semantic_generation_config=self.semantic_generation_config,
+            )
 
-            output_ids = self.model.generate_coarse(output_ids, history_prompt=history_prompt, do_sample=False)
+            output_ids = self.model.coarse_acoustics.generate_coarse(
+                output_ids,
+                history_prompt=history_prompt,
+                do_sample=False,
+                semantic_generation_config=self.semantic_generation_config,
+                coarse_generation_config=self.coarse_generation_config,
+                codebook_size=self.model.generation_config.codebook_size,
+            )
 
             # greedy decoding
-            output_ids = self.model.generate_fine(
+            output_ids = self.model.fine_acoustics.generate_fine(
                 output_ids,
                 history_prompt=history_prompt,
                 temperature=None,
+                semantic_generation_config=self.semantic_generation_config,
+                coarse_generation_config=self.coarse_generation_config,
+                fine_generation_config=self.fine_generation_config,
+                codebook_size=self.model.generation_config.codebook_size,
             )
 
         self.assertListEqual(output_ids[0, :, : len(expected_output_ids[0])].tolist(), expected_output_ids)
