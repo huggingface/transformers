@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# mT5
+# UMT5
 
 <div class="flex flex-wrap space-x-1">
 <a href="https://huggingface.co/models?filter=umt5">
