@@ -246,8 +246,8 @@ class UMT5Attention(nn.Module):
         is_cross_attention = encoder_hidden_states is not None
         batch_size, seq_length = hidden_states.shape[:2]
 
-        # use encoder_hidden_states is cross attention
-        current_states = encoder_hidden_states if is_cross_attention else hidden_states
+        # use encoder_hidden_states if cross attention
+        current_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
         # checking that the `sequence_length` of the `past_key_value` is the same as the he provided
         # `encoder_hidden_states` to support prefix tuning
         if is_cross_attention and past_key_value and past_key_value[0].shape[2] == current_states.shape[1]:
@@ -275,14 +275,12 @@ class UMT5Attention(nn.Module):
             position_bias = torch.zeros(
                 (1, self.n_heads, seq_length, key_states.size(2)),
                 device=attention_scores.device,
-                dtype=attention_scores.dtype,
+                dtype=attention_scores.dtype,requires_grad=self.training
             )
         if past_key_value is not None:
             position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
         if attention_mask is not None:
             position_bias = position_bias + attention_mask  # (batch_size, n_heads, seq_length, key_length)
-        # if self.gradient_checkpointing and self.training:
-        #     position_bias.requires_grad = True
 
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
@@ -297,14 +295,14 @@ class UMT5Attention(nn.Module):
         attention_scores += position_bias
         # (batch_size, n_heads, seq_length, key_length)
         attn_weights = nn.functional.softmax(attention_scores.float(), dim=-1).type_as(attention_scores)
-        attention_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
         # Mask heads if we want to
         if layer_head_mask is not None:
             attn_weights = attn_weights * layer_head_mask
 
         #  attn_output = torch.bmm(attn_probs, value_states) ?
-        context_states = torch.matmul(attention_probs, value_states)
+        context_states = torch.matmul(attn_weights, value_states)
         # attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim) ?
         context_states = context_states.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
         attn_output = self.o(context_states)
@@ -436,10 +434,7 @@ class UMT5Block(nn.Module):
             clamp_value = torch.where(torch.isinf(hidden_states).any(), max_dtype - 1000, max_dtype)
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (
-            hidden_states,
-            present_key_value,
-        )
+        outputs = (hidden_states,present_key_value,)
 
         if output_attentions:
             outputs += (self_attn_weights, cross_attn_weights)
@@ -658,7 +653,7 @@ class UMT5Stack(UMT5PreTrainedModel):
         present_key_value_states = () if use_cache else None
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and self.is_decoder) else None
+        all_cross_attentions = () if output_attentions and self.is_decoder else None
 
         hidden_states = self.dropout(inputs_embeds)
 
@@ -707,7 +702,8 @@ class UMT5Stack(UMT5PreTrainedModel):
 
             if output_attentions:
                 all_attentions += (layer_outputs[2],)
-                all_cross_attentions += (layer_outputs[3],)
+                if self.is_decoder:
+                    all_cross_attentions += (layer_outputs[3],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -1429,7 +1425,7 @@ class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
         self.decoder = UMT5Stack(decoder_config, self.shared)
 
         self.num_labels = config.num_labels
-        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
+        self.qa_outputs = nn.Linear(config.d_model, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
