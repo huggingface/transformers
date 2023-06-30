@@ -1778,7 +1778,7 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         self.itc_image_head = BridgeTowerContrastiveHead(config.hidden_size, config.contrastive_hidden_size)
         self.itc_cross_modal_head = BridgeTowerContrastiveHead(config.hidden_size * 2, config.contrastive_hidden_size)
 
-        self.logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
+        self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
         # Initialize weights and apply final processing
         self.post_init()
 
