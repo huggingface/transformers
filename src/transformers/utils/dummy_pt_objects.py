@@ -4914,11 +4914,13 @@ class MT5ForConditionalGeneration(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+
 class UMT5ForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
 
 class MT5ForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]

@@ -402,7 +402,6 @@ _import_structure = {
     "models.mobilevitv2": ["MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTV2Config"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
-    "models.umt5": ["UMT5_PRETRAINED_MODEL_ARCHIVE_LIST","UMT5Config"],
     "models.musicgen": [
         "MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "MusicgenConfig",
@@ -522,6 +521,7 @@ _import_structure = {
         "TvltConfig",
         "TvltProcessor",
     ],
+    "models.umt5": ["UMT5_PRETRAINED_MODEL_ARCHIVE_LIST", "UMT5Config"],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechConfig",
@@ -2140,9 +2140,6 @@ else:
     _import_structure["models.mt5"].extend(
         ["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5ForQuestionAnswering", "MT5Model", "MT5PreTrainedModel"]
     )
-    _import_structure["models.umt5"].extend(
-        ["UMT5EncoderModel", "UMT5ForConditionalGeneration", "UMT5ForQuestionAnswering", "UMT5Model", "UMT5PreTrainedModel"]
-    )
     _import_structure["models.musicgen"].extend(
         [
             "MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2662,6 +2659,15 @@ else:
             "TvltForPreTraining",
             "TvltModel",
             "TvltPreTrainedModel",
+        ]
+    )
+    _import_structure["models.umt5"].extend(
+        [
+            "UMT5EncoderModel",
+            "UMT5ForConditionalGeneration",
+            "UMT5ForQuestionAnswering",
+            "UMT5Model",
+            "UMT5PreTrainedModel",
         ]
     )
     _import_structure["models.unispeech"].extend(
@@ -5736,14 +5742,6 @@ if TYPE_CHECKING:
             MT5Model,
             MT5PreTrainedModel,
         )
-        from .models.umt5 import (
-            UMT5_PRETRAINED_MODEL_ARCHIVE_LIST,
-            UMT5EncoderModel,
-            UMT5ForConditionalGeneration,
-            UMT5ForQuestionAnswering,
-            UMT5Model,
-            UMT5PreTrainedModel,
-        )
         from .models.musicgen import (
             MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST,
             MusicgenForCausalLM,
@@ -6168,6 +6166,14 @@ if TYPE_CHECKING:
             TvltForPreTraining,
             TvltModel,
             TvltPreTrainedModel,
+        )
+        from .models.umt5 import (
+            UMT5_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UMT5EncoderModel,
+            UMT5ForConditionalGeneration,
+            UMT5ForQuestionAnswering,
+            UMT5Model,
+            UMT5PreTrainedModel,
         )
         from .models.unispeech import (
             UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,

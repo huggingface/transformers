@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
+
 _import_structure = {}
 
 try:
@@ -24,7 +25,14 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_umt5"] = ["UMT5EncoderModel","UMT5ForConditionalGeneration","UMT5ForQuestionAnswering","UMT5Model","UMT5PreTrainedModel","UMT5Stack",]
+    _import_structure["modeling_umt5"] = [
+        "UMT5EncoderModel",
+        "UMT5ForConditionalGeneration",
+        "UMT5ForQuestionAnswering",
+        "UMT5Model",
+        "UMT5PreTrainedModel",
+        "UMT5Stack",
+    ]
 
 if TYPE_CHECKING:
     try:
