@@ -19,7 +19,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-
+from einops import rearrange
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -46,6 +46,88 @@ GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bigcode/gpt_bigcode-santacoder",
     # See all GPTBigCode models at https://huggingface.co/models?filter=gpt_bigcode
 ]
+
+try:
+    from flash_attn.flash_attn_interface import flash_attn_unpadded_func
+except ImportError:
+    flash_attn_unpadded_func = None
+
+
+def unsqueeze_and_expand(proj, unsqueeze_dim=2, num_head=12):
+    proj = torch.unsqueeze(proj, unsqueeze_dim)
+    b, sq, _, hn = proj.shape
+    proj = proj.expand((b, sq, num_head, hn))
+    return proj
+
+
+class FlashSelfAttention(torch.nn.Module):
+    """Implement the scaled dot product attention with softmax.
+    Arguments
+    ---------
+        softmax_scale: The temperature to use for the softmax attention.
+                      (default: 1/sqrt(d_keys) where d_keys is computed at
+                      runtime)
+        attention_dropout: The dropout rate to apply to the attention
+                           (default: 0.0)
+    """
+
+    def __init__(self, causal=False, softmax_scale=None, attention_dropout=0.0, device=None, dtype=None):
+        super().__init__()
+        assert flash_attn_unpadded_func is not None, (
+            "Please install FlashAttention first, " "e.g., with pip install flash-attn"
+        )
+        assert rearrange is not None, "Please install einops first, e.g., with pip install einops"
+        self.causal = causal
+        self.softmax_scale = softmax_scale
+        self.dropout_p = attention_dropout
+
+    def forward(self, q, k, v):
+        """Implements the multihead softmax attention.
+        Arguments
+        ---------
+            q, k, v: The tensor containing the query, key, and value. (B, S, H, D)
+        """
+
+        assert all((i.dtype in [torch.float16, torch.bfloat16] for i in (q, k, v)))
+        assert all((i.is_cuda for i in (q, k, v)))
+
+        batch_size, seqlen_q = q.shape[0], q.shape[1]
+        seqlen_k = k.shape[1]
+
+        q, k, v = [rearrange(x, "b s ... -> (b s) ...") for x in [q, k, v]]
+        cu_seqlens_q = torch.arange(0, (batch_size + 1) * seqlen_q, step=seqlen_q, dtype=torch.int32, device=q.device)
+
+        if self.training:
+            # during training q,k,v always have same seqlen
+            assert seqlen_k == seqlen_q
+
+            is_causal = self.causal
+            cu_seqlens_k = cu_seqlens_q
+            dropout_p = self.dropout_p
+        else:
+            # turn off FA causal mask after first inference autoregressive iteration
+            # only on first autoregressive step q,k,v have same seqlen
+            is_causal = self.causal and (seqlen_q == seqlen_k)
+            cu_seqlens_k = torch.arange(
+                0, (batch_size + 1) * seqlen_k, step=seqlen_k, dtype=torch.int32, device=q.device
+            )
+            dropout_p = 0
+
+        output = flash_attn_unpadded_func(
+            q,
+            k,
+            v,
+            cu_seqlens_q,
+            cu_seqlens_k,
+            seqlen_q,
+            seqlen_k,
+            dropout_p,
+            softmax_scale=self.softmax_scale,
+            causal=is_causal,
+        )
+
+        output = rearrange(output, "(b s) ... -> b s ...", b=batch_size)
+        return output
 
 
 # Fused kernels
@@ -82,7 +164,7 @@ class GPTBigCodeAttention(nn.Module):
     def __init__(self, config, is_cross_attention=False, layer_idx=None):
         super().__init__()
         self.mask_value = None
-
+        self.use_flash_attn = config.use_flash_attn
         self.multi_query = config.multi_query
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -118,6 +200,7 @@ class GPTBigCodeAttention(nn.Module):
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
+        self.core_attention_flash = FlashSelfAttention(causal=True, attention_dropout=config.attn_pdrop)
 
     def _get_mask_value(self, device, dtype):
         # torch.where expects a tensor. We use a cache to avoid recreating it every time.
@@ -245,15 +328,28 @@ class GPTBigCodeAttention(nn.Module):
 
         key, value = key_value.split((self.head_dim, self.head_dim), dim=-1)
 
-        attn_output, attn_weights = self._attn(query, key.transpose(-1, -2), value, attention_mask, head_mask)
-
-        if not self.multi_query:
-            attn_output = attn_output.transpose(1, 2).reshape(hidden_states.shape)
-        attn_output = self.c_proj(attn_output)
+        if not self.use_flash_attn:
+            attn_output, attn_weights = self._attn(query, key.transpose(-1, -2), value, attention_mask, head_mask)
+            if not self.multi_query:
+                attn_output = attn_output.transpose(1, 2)
+        else:
+            if self.multi_query:
+                batch_size, query_length, _ = query.shape
+                query = query.reshape(batch_size, query_length, self.num_heads, self.head_dim)
+                key, value = [unsqueeze_and_expand(x, unsqueeze_dim=2, num_head=self.num_heads) for x in [key, value]]
+            else:
+                query, key, value = [rearrange(x, "b h s d -> b s h d") for x in [query, key, value]]
+            query, key, value = [x.to(torch.bfloat16) for x in [query, key, value]]
+            # print(f"{query.shape=} {key.shape=} {value.shape=}")
+            attn_output = self.core_attention_flash(query, key, value)
+            attn_weights = None
+        attn_output = self.c_proj(attn_output.reshape(hidden_states.shape))
         attn_output = self.resid_dropout(attn_output)
 
         outputs = (attn_output, present)
         if output_attentions:
+            if self.use_flash_attn:
+                raise NotImplementedError("`output_attentions` is not supported when `use_flash_attn` is True")
             if self.multi_query:
                 # Transpose to return weights in the usual format (batch_size, num_heads, query_length, key_length)
                 attn_weights = attn_weights.transpose(1, 2)
@@ -667,6 +763,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
                     head_mask[i],
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    use_reentrant=False,
                 )
             else:
                 outputs = block(
@@ -722,8 +819,9 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config, use_flash_attn=False):
         super().__init__(config)
+        setattr(config, "use_flash_attn", use_flash_attn)
         self.transformer = GPTBigCodeModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
