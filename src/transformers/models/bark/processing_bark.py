@@ -101,7 +101,6 @@ class BarkProcessor(ProcessorMixin):
                     f"`{os.path.join(pretrained_processor_name_or_path,speaker_embeddings_file_name)}` does not exists, no preloaded speaker embeddings will be used - Make sure to provide a correct path if wanted, otherwise set `speaker_embeddings_file_name=None`."
                 )
             else:
-                # TODO: not sure this is the safest way to load/save speaker_embeddings
                 speaker_embeddings = np.load(speaker_embeddings, allow_pickle=True)
 
                 if len(speaker_embeddings.keys()) != 1:
@@ -209,7 +208,7 @@ class BarkProcessor(ProcessorMixin):
 
         if voice_preset is not None:
             self._validate_voice_preset_dict(voice_preset)
-        voice_preset = BatchFeature(data=voice_preset, tensor_type=return_tensors)
+            voice_preset = BatchFeature(data=voice_preset, tensor_type=return_tensors)
 
         encoded_text = self.tokenizer(
             text,
