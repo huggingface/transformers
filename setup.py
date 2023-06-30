@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+a = 3
+
 """
 Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/main/setup.py
 
@@ -142,7 +144,7 @@ _deps = [
     "packaging>=20.0",
     "parameterized",
     "phonemizer",
-    "protobuf",
+    "protobuf<=3.20.3",
     "psutil",
     "pyyaml>=5.1",
     "pydantic",
