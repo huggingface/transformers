@@ -297,7 +297,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    def tokenize(self, text: TextInput, **kwargs) -> List[str]:
+    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         if not text.startswith(" "):
             text = " " + text
         return super().tokenize(text, **kwargs)
