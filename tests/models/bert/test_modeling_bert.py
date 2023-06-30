@@ -18,7 +18,7 @@ import unittest
 
 from transformers import BertConfig, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import CaptureLogger, require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -40,6 +40,7 @@ if is_torch_available():
         BertForTokenClassification,
         BertLMHeadModel,
         BertModel,
+        logging,
     )
     from transformers.models.bert.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -566,6 +567,29 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+
+    def test_for_warning_if_padding_and_no_attention_mask(self):
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = self.model_tester.prepare_config_and_inputs()
+
+        # Set pad tokens in the input_ids
+        input_ids[0, 0] = config.pad_token_id
+
+        # Check for warnings if the attention_mask is missing.
+        logger = logging.get_logger("transformers.modeling_utils")
+        with CaptureLogger(logger) as cl:
+            model = BertModel(config=config)
+            model.to(torch_device)
+            model.eval()
+            model(input_ids, attention_mask=None, token_type_ids=token_type_ids)
+        self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
     @slow
     def test_model_from_pretrained(self):
