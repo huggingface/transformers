@@ -473,12 +473,12 @@ class EncodecResidualVectorQuantizer(nn.Module):
         residual = embeddings
         num_quantizers = self.get_num_quantizers_for_bandwidth(bandwidth)
 
-        quantized_out = 0.0
+        quantized_out = torch.tensor(0.0, device=embeddings.device)
         all_losses = []
         all_indices = []
 
         for layer in self.layers[:num_quantizers]:
-            quantized, embed_ind, loss = layer(residual)
+            loss, embed_ind, quantized = layer(residual)
             residual = residual - quantized.detach()
             quantized_out = quantized_out + quantized
             all_indices.append(embed_ind)
