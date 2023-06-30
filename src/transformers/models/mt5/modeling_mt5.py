@@ -205,11 +205,11 @@ class MT5LayerFF(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.t5.modeling_t5.T5Attention with T5->MT5
 class MT5Attention(nn.Module):
     def __init__(self, config: MT5Config, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
-        self.scalable_attention = config.scalable_attention if hasattr(config, "scalable_attention") else False
         self.has_relative_attention_bias = has_relative_attention_bias
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.relative_attention_max_distance = config.relative_attention_max_distance
@@ -393,18 +393,6 @@ class MT5Attention(nn.Module):
             query_states, key_states.transpose(3, 2)
         )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
 
-        # re-compute bias for umt5
-        if self.scalable_attention and self.has_relative_attention_bias:
-            position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
-
-            # if key and values are already calculated
-            # we want only the last query position bias
-            if past_key_value is not None:
-                position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
-
-            if mask is not None:
-                position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
-
         if position_bias is None:
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
@@ -431,9 +419,12 @@ class MT5Attention(nn.Module):
             position_bias_masked = position_bias
 
         scores += position_bias_masked
-        # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
+            scores
+        )  # (batch_size, n_heads, seq_length, key_length)
+        attn_weights = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )  # (batch_size, n_heads, seq_length, key_length)
 
         # Mask heads if we want to
         if layer_head_mask is not None:
@@ -856,18 +847,16 @@ class MT5PreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
+# Copied from transformers.models.t5.modeling_t5.T5Stack with T5->MT5
 class MT5Stack(MT5PreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
 
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
-        scalable_attention = config.scalable_attention if hasattr(config, "scalable_attention") else False
+
         self.block = nn.ModuleList(
-            [
-                MT5Block(config, has_relative_attention_bias=(i == 0) if not scalable_attention else True)
-                for i in range(config.num_layers)
-            ]
+            [MT5Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
         )
         self.final_layer_norm = MT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
