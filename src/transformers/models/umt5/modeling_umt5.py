@@ -278,6 +278,28 @@ class UMT5Attention(nn.Module):
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
+        query_states = self._shape(self.q(hidden_states))
+        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
+
+        # compute positional bias
+        if self.has_relative_attention_bias:
+            query_length = seq_length
+            if past_key_value:
+                query_length += past_key_value[0].shape[2]
+            position_bias = self.compute_bias(query_length, key_states.size(2), device=attention_scores.device)
+        else:
+            position_bias = torch.zeros(
+                (1, self.n_heads, seq_length, key_states.size(2)), device=attention_scores.device, dtype=attention_scores.dtype
+            )
+        if past_key_value is not None:
+            position_bias = position_bias[:, :,  -hidden_states.size(1):, :]
+        if attention_mask is not None:
+            position_bias = position_bias + attention_mask  # (batch_size, n_heads, seq_length, key_length)
+        if self.pruned_heads:
+            position_bias[:, self.pruned_heads, :, :] = 0
+        # if self.gradient_checkpointing and self.training:
+        #     position_bias.requires_grad = True
+
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
@@ -287,21 +309,8 @@ class UMT5Attention(nn.Module):
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
-
-        query_states = self._shape(self.q(hidden_states))
-        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
-
-        # compute positional bias
-        if self.has_relative_attention_bias:
-            position_bias = self.compute_bias(seq_length, key_states.size(2), device=attention_scores.device)
-            if past_key_value is not None:
-                position_bias = position_bias[:, :, -seq_length:, :]
-            if attention_mask is not None:
-                position_bias = position_bias + attention_mask  # (batch_size, n_heads, seq_length, key_length)
-            if self.pruned_heads:
-                position_bias[:, self.pruned_heads, :, :] = 0
-            attention_scores += position_bias
-
+            
+        attention_scores += position_bias      
         # (batch_size, n_heads, seq_length, key_length)
         attn_weights = nn.functional.softmax(attention_scores.float(), dim=-1).type_as(attention_scores)
         attention_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
