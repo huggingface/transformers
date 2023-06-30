@@ -924,11 +924,11 @@ class BarkFineModel(BarkPreTrainedModel):
     - [`BarkSemanticModel`] (also referred to as the 'text' model): a causal auto-regressive transformer model that
       takes
     as input tokenized text, and predicts semantic text tokens that capture the meaning of the text.
-    - [`BarkCoarseModel`] (also reffered to as the 'coarse acoustics' model`), also a causal autoregressive
+    - [`BarkCoarseModel`] (also refered to as the 'coarse acoustics' model), also a causal autoregressive
       transformer,
     that takes into input the results of the last model. It aims at regressing the first two audio codebooks necessary
     to `encodec`.
-    - [`BarkFineModel`] (the 'fine acoustics' model`), this time a non-causal autoencoder transformer, which
+    - [`BarkFineModel`] (the 'fine acoustics' model), this time a non-causal autoencoder transformer, which
       iteratively
     predicts the last codebooks based on the sum of the previous codebooks embeddings.
     - having predicted all the codebook channels from the [`EncodecModel`], Bark uses it to decode the output audio
