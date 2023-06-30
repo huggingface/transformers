@@ -69,9 +69,9 @@
   - sections:
       - local: tasks/image_captioning
         title: 이미지 캡셔닝
-      - local: in_translation
-        title: (번역중) Document Question Answering
-    title: (번역중) 멀티모달
+      - local: tasks/document_question_answering
+        title: 문서 질의 응답(Document Question Answering)
+    title: 멀티모달
     isExpanded: false
   title: 태스크 가이드
 - sections:
