@@ -176,8 +176,8 @@ from .import_utils import (
 )
 
 if is_protobuf_available():
-    import protobuf
-    if version.parse(protobuf.__version__) < version.parse("4.0.0"):
+    import google.protobuf
+    if version.parse(google.protobuf.__version__) < version.parse("4.0.0"):
         from . import sentencepiece_model_pb2
     else:
         from . import sentencepiece_model_pb2_new as sentencepiece_model_pb2
