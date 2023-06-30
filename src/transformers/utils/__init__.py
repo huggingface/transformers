@@ -16,7 +16,7 @@
 # limitations under the License.
 
 # from . import sentencepiece_model_pb2_new as sentencepiece_model_pb2
-from . import sentencepiece_model_pb2_old as sentencepiece_model_pb2
+# from . import sentencepiece_model_pb2
 
 from packaging import version
 
