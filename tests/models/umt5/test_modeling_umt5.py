@@ -112,6 +112,10 @@ class UMT5ModelTester:
             lm_labels,
         )
 
+    def prepare_config_and_inputs_for_common(self):
+        config, inputs_dict = self.prepare_config_and_inputs()
+        return config, inputs_dict
+
     def get_pipeline_config(self):
         return T5Config(
             vocab_size=166,  # t5 forces 100 extra tokens
