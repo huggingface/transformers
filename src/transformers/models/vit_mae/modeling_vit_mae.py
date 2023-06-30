@@ -578,7 +578,7 @@ class ViTMAEPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = []
+    _no_split_modules = ["ViTMAEEncoder"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
