@@ -249,14 +249,10 @@ class UMT5ModelTester:
     def create_and_check_model_fp16_forward(
         self,
         config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
+        input_dict,
     ):
         model = UMT5Model(config=config).to(torch_device).half().eval()
-        output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)["last_hidden_state"]
+        output = model(**input_dict)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
 @require_torch
@@ -330,7 +326,7 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 )
 
             out = model.generate(
-                config_and_inputs[1],
+                config_and_inputs[1]["input_ids"],
                 num_beams=1,
                 max_length=3,
                 output_attentions=True,
