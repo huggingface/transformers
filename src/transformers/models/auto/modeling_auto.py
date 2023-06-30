@@ -634,6 +634,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("marian", "MarianMTModel"),
         ("mbart", "MBartForConditionalGeneration"),
         ("mt5", "MT5ForConditionalGeneration"),
+        ("umt5", "UMT5ForConditionalGeneration"),
         ("mvp", "MvpForConditionalGeneration"),
         ("nllb-moe", "NllbMoeForConditionalGeneration"),
         ("pegasus", "PegasusForConditionalGeneration"),

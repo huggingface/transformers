@@ -402,6 +402,7 @@ _import_structure = {
     "models.mobilevitv2": ["MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTV2Config"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
+    "models.umt5": [],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
     "models.nat": ["NAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NatConfig"],
     "models.nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NezhaConfig"],
@@ -2133,6 +2134,9 @@ else:
     )
     _import_structure["models.mt5"].extend(
         ["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5ForQuestionAnswering", "MT5Model", "MT5PreTrainedModel"]
+    )
+    _import_structure["models.umt5"].extend(
+        ["UMT5EncoderModel", "UMT5ForConditionalGeneration", "UMT5ForQuestionAnswering", "UMT5Model", "UMT5PreTrainedModel"]
     )
     _import_structure["models.mvp"].extend(
         [
@@ -5708,6 +5712,13 @@ if TYPE_CHECKING:
             MT5ForQuestionAnswering,
             MT5Model,
             MT5PreTrainedModel,
+        )
+        from .models.umt5 import (
+            UMT5EncoderModel,
+            UMT5ForConditionalGeneration,
+            UMT5ForQuestionAnswering,
+            UMT5Model,
+            UMT5PreTrainedModel,
         )
         from .models.mvp import (
             MVP_PRETRAINED_MODEL_ARCHIVE_LIST,
