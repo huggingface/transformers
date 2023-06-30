@@ -355,41 +355,6 @@ class OneFormerProcessingTest(unittest.TestCase):
             (self.processing_tester.batch_size, expected_sequence_length),
         )
 
-    def test_equivalence_pad_and_create_pixel_mask(self):
-        # Initialize processors
-        processor_1 = self.processing_class(**self.processor_dict)
-
-        image_processor = OneFormerImageProcessor(
-            do_resize=False,
-            do_normalize=False,
-            do_rescale=False,
-            num_labels=self.processing_tester.num_classes,
-            class_info_file="ade20k_panoptic.json",
-            num_text=self.processing_tester.num_text,
-        )
-        tokenizer = CLIPTokenizer.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
-        processor_2 = self.processing_class(
-            image_processor=image_processor, tokenizer=tokenizer, max_seq_length=77, task_seq_length=77
-        )
-
-        # create random PyTorch tensors
-        image_inputs = prepare_image_inputs(self.processing_tester, equal_resolution=False, torchify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, torch.Tensor)
-
-        # Test whether the method "pad_and_return_pixel_mask" and calling the image processor return the same tensors
-        encoded_images_with_method = processor_1.encode_inputs(
-            image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt"
-        )
-        encoded_images = processor_2(image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt")
-
-        self.assertTrue(
-            torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4)
-        )
-        self.assertTrue(
-            torch.allclose(encoded_images_with_method["pixel_mask"], encoded_images["pixel_mask"], atol=1e-4)
-        )
-
     def comm_get_processor_inputs(self, with_segmentation_maps=False, is_instance_map=False, segmentation_type="np"):
         processor = self.processing_class(**self.processor_dict)
         # prepare image and target

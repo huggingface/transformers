@@ -18,10 +18,10 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-객체 탐지는 이미지에서 인스턴스(예: 사람, 건물 또는 자동차)를 감지하는 컴퓨터 비전 작업입니다. 객체 탐지 모델은 이미지를 입력으로 받고 탐지된 바운딩 박스의 좌표와 관련된 레이블을 출력합니다. 
-하나의 이미지에는 여러 객체가 있을 수 있으며 각각은 자체적인 바운딩 박스와 레이블을 가질 수 있습니다(예: 차와 건물이 있는 이미지). 
-또한 각 객체는 이미지의 다른 부분에 존재할 수 있습니다(예: 이미지에 여러 대의 차가 있을 수 있음). 
-이 작업은 보행자, 도로 표지판, 신호등과 같은 것들을 감지하는 자율 주행에 일반적으로 사용됩니다. 
+객체 탐지는 이미지에서 인스턴스(예: 사람, 건물 또는 자동차)를 감지하는 컴퓨터 비전 작업입니다. 객체 탐지 모델은 이미지를 입력으로 받고 탐지된 바운딩 박스의 좌표와 관련된 레이블을 출력합니다.
+하나의 이미지에는 여러 객체가 있을 수 있으며 각각은 자체적인 바운딩 박스와 레이블을 가질 수 있습니다(예: 차와 건물이 있는 이미지).
+또한 각 객체는 이미지의 다른 부분에 존재할 수 있습니다(예: 이미지에 여러 대의 차가 있을 수 있음).
+이 작업은 보행자, 도로 표지판, 신호등과 같은 것들을 감지하는 자율 주행에 일반적으로 사용됩니다.
 다른 응용 분야로는 이미지 내 객체 수 계산 및 이미지 검색 등이 있습니다.
 
 이 가이드에서 다음을 배울 것입니다:
@@ -45,7 +45,7 @@ rendered properly in your Markdown viewer.
 pip install -q datasets transformers evaluate timm albumentations
 ```
 
-허깅페이스 허브에서 데이터 세트를 가져오기 위한 🤗 Datasets과 모델을 학습하기 위한 🤗 Transformers, 데이터를 증강하기 위한 `albumentations`를 사용합니다. 
+허깅페이스 허브에서 데이터 세트를 가져오기 위한 🤗 Datasets과 모델을 학습하기 위한 🤗 Transformers, 데이터를 증강하기 위한 `albumentations`를 사용합니다.
 DETR 모델의 합성곱 백본을 가져오기 위해서는 현재 `timm`이 필요합니다.
 
 커뮤니티에 모델을 업로드하고 공유할 수 있도록 Hugging Face 계정에 로그인하는 것을 권장합니다. 프롬프트가 나타나면 토큰을 입력하여 로그인하세요:
@@ -110,7 +110,7 @@ DatasetDict({
   - `bbox`: 객체의 바운딩 박스 ([COCO 포맷](https://albumentations.ai/docs/getting_started/bounding_boxes_augmentation/#coco)으로)
   - `category`: 객체의 카테고리, 가능한 값으로는 `Coverall (0)`, `Face_Shield (1)`, `Gloves (2)`, `Goggles (3)` 및 `Mask (4)` 가 포함됩니다.
 
-`bbox` 필드가 DETR 모델이 요구하는 COCO 형식을 따른다는 것을 알 수 있습니다. 
+`bbox` 필드가 DETR 모델이 요구하는 COCO 형식을 따른다는 것을 알 수 있습니다.
 그러나 `objects` 내부의 필드 그룹은 DETR이 요구하는 어노테이션 형식과 다릅니다. 따라서 이 데이터를 학습에 사용하기 전에 전처리를 적용해야 합니다.
 
 데이터를 더 잘 이해하기 위해서 데이터 세트에서 한 가지 예시를 시각화하세요.
@@ -143,13 +143,13 @@ DatasetDict({
     <img src="https://i.imgur.com/TdaqPJO.png" alt="CPPE-5 Image Example"/>
 </div>
 
-바운딩 박스와 연결된 레이블을 시각화하려면 데이터 세트의 메타 데이터, 특히 `category` 필드에서 레이블을 가져와야 합니다. 
-또한 레이블 ID를 레이블 클래스에 매핑하는 `id2label`과 반대로 매핑하는 `label2id` 딕셔너리를 만들어야 합니다. 
+바운딩 박스와 연결된 레이블을 시각화하려면 데이터 세트의 메타 데이터, 특히 `category` 필드에서 레이블을 가져와야 합니다.
+또한 레이블 ID를 레이블 클래스에 매핑하는 `id2label`과 반대로 매핑하는 `label2id` 딕셔너리를 만들어야 합니다.
 모델을 설정할 때 이러한 매핑을 사용할 수 있습니다. 이러한 매핑은 허깅페이스 허브에서 모델을 공유했을 때 다른 사람들이 재사용할 수 있습니다.
 
-데이터를 더 잘 이해하기 위한 최종 단계로, 잠재적인 문제를 찾아보세요. 
-객체 감지를 위한 데이터 세트에서 자주 발생하는 문제 중 하나는 바운딩 박스가 이미지의 가장자리를 넘어가는 것입니다. 
-이러한 바운딩 박스를 "넘어가는 것(run away)"은 훈련 중에 오류를 발생시킬 수 있기에 이 단계에서 처리해야 합니다. 
+데이터를 더 잘 이해하기 위한 최종 단계로, 잠재적인 문제를 찾아보세요.
+객체 감지를 위한 데이터 세트에서 자주 발생하는 문제 중 하나는 바운딩 박스가 이미지의 가장자리를 넘어가는 것입니다.
+이러한 바운딩 박스를 "넘어가는 것(run away)"은 훈련 중에 오류를 발생시킬 수 있기에 이 단계에서 처리해야 합니다.
 이 데이터 세트에도 같은 문제가 있는 몇 가지 예가 있습니다. 이 가이드에서는 간단하게하기 위해 데이터에서 이러한 이미지를 제거합니다.
 
 ```py
@@ -160,15 +160,15 @@ DatasetDict({
 
 ## 데이터 전처리하기 [[preprocess-the-data]]
 
-모델을 미세 조정 하려면, 미리 학습된 모델에서 사용한 전처리 방식과 정확하게 일치하도록 사용할 데이터를 전처리해야 합니다. 
-[`AutoImageProcessor`]는 이미지 데이터를 처리하여 DETR 모델이 학습에 사용할 수 있는 `pixel_values`, `pixel_mask`, 그리고 `labels`를 생성하는 작업을 담당합니다. 
+모델을 미세 조정 하려면, 미리 학습된 모델에서 사용한 전처리 방식과 정확하게 일치하도록 사용할 데이터를 전처리해야 합니다.
+[`AutoImageProcessor`]는 이미지 데이터를 처리하여 DETR 모델이 학습에 사용할 수 있는 `pixel_values`, `pixel_mask`, 그리고 `labels`를 생성하는 작업을 담당합니다.
 이 이미지 프로세서에는 걱정하지 않아도 되는 몇 가지 속성이 있습니다:
 
 - `image_mean = [0.485, 0.456, 0.406 ]`
 - `image_std = [0.229, 0.224, 0.225]`
 
 
-이 값들은 모델 사전 훈련 중 이미지를 정규화하는 데 사용되는 평균과 표준 편차입니다. 
+이 값들은 모델 사전 훈련 중 이미지를 정규화하는 데 사용되는 평균과 표준 편차입니다.
 이 값들은 추론 또는 사전 훈련된 이미지 모델을 세밀하게 조정할 때 복제해야 하는 중요한 값입니다.
 
 사전 훈련된 모델과 동일한 체크포인트에서 이미지 프로세서를 인스턴스화합니다.
@@ -187,7 +187,7 @@ DatasetDict({
 
 첫째로, 모델이 학습 데이터에 과적합 되지 않도록 데이터 증강 라이브러리 중 아무거나 사용하여 변환을 적용할 수 있습니다. 여기에서는 [Albumentations](https://albumentations.ai/docs/) 라이브러리를 사용합니다...
 이 라이브러리는 변환을 이미지에 적용하고 바운딩 박스를 적절하게 업데이트하도록 보장합니다.
-🤗 Datasets 라이브러리 문서에는 [객체 탐지를 위해 이미지를 보강하는 방법에 대한 자세한 가이드](https://huggingface.co/docs/datasets/object_detection)가 있으며, 
+🤗 Datasets 라이브러리 문서에는 [객체 탐지를 위해 이미지를 보강하는 방법에 대한 자세한 가이드](https://huggingface.co/docs/datasets/object_detection)가 있으며,
 이 예제와 정확히 동일한 데이터 세트를 사용합니다. 여기서는 각 이미지를 (480, 480) 크기로 조정하고, 좌우로 뒤집고, 밝기를 높이는 동일한 접근법을 적용합니다:
 
 
@@ -290,14 +290,14 @@ DatasetDict({
  'labels': {'size': tensor([800, 800]), 'image_id': tensor([756]), 'class_labels': tensor([4]), 'boxes': tensor([[0.7340, 0.6986, 0.3414, 0.5944]]), 'area': tensor([519544.4375]), 'iscrowd': tensor([0]), 'orig_size': tensor([480, 480])}}
 ```
 
-각각의 이미지를 성공적으로 증강하고 이미지의 어노테이션을 준비했습니다. 
+각각의 이미지를 성공적으로 증강하고 이미지의 어노테이션을 준비했습니다.
 그러나 전처리는 아직 끝나지 않았습니다. 마지막 단계로, 이미지를 배치로 만들 사용자 정의 `collate_fn`을 생성합니다.
 해당 배치에서 가장 큰 이미지에 이미지(현재 `pixel_values` 인)를 패드하고, 실제 픽셀(1)과 패딩(0)을 나타내기 위해 그에 해당하는 새로운 `pixel_mask`를 생성해야 합니다.
 
 ```py
 >>> def collate_fn(batch):
 ...     pixel_values = [item["pixel_values"] for item in batch]
-...     encoding = image_processor.pad_and_create_pixel_mask(pixel_values, return_tensors="pt")
+...     encoding = image_processor.pad(pixel_values, return_tensors="pt")
 ...     labels = [item["labels"] for item in batch]
 ...     batch = {}
 ...     batch["pixel_values"] = encoding["pixel_values"]
@@ -318,7 +318,7 @@ DatasetDict({
 3. 모델, 데이터 세트, 이미지 프로세서 및 데이터 콜레이터와 함께 [`Trainer`]에 훈련 인수를 전달합니다.
 4. [`~Trainer.train`]를 호출하여 모델을 미세 조정 합니다.
 
-전처리에 사용한 체크포인트와 동일한 체크포인트에서 모델을 가져올 때, 데이터 세트의 메타데이터에서 만든 `label2id`와 `id2label` 매핑을 전달해야 합니다. 
+전처리에 사용한 체크포인트와 동일한 체크포인트에서 모델을 가져올 때, 데이터 세트의 메타데이터에서 만든 `label2id`와 `id2label` 매핑을 전달해야 합니다.
 또한, `ignore_mismatched_sizes=True`를 지정하여 기존 분류 헤드(모델에서 분류에 사용되는 마지막 레이어)를 새 분류 헤드로 대체합니다.
 
 ```py
@@ -333,7 +333,7 @@ DatasetDict({
 ```
 
 [`TrainingArguments`]에서 `output_dir`을 사용하여 모델을 저장할 위치를 지정한 다음, 필요에 따라 하이퍼파라미터를 구성하세요.
-사용하지 않는 열을 제거하지 않도록 주의해야 합니다. 만약 `remove_unused_columns`가 `True`일 경우 이미지 열이 삭제됩니다. 
+사용하지 않는 열을 제거하지 않도록 주의해야 합니다. 만약 `remove_unused_columns`가 `True`일 경우 이미지 열이 삭제됩니다.
 이미지 열이 없는 경우 `pixel_values`를 생성할 수 없기 때문에 `remove_unused_columns`를 `False`로 설정해야 합니다.
 모델을 Hub에 업로드하여 공유하려면 `push_to_hub`를 `True`로 설정하십시오(허깅페이스에 로그인하여 모델을 업로드해야 합니다).
 
@@ -372,7 +372,7 @@ DatasetDict({
 >>> trainer.train()
 ```
 
-`training_args`에서 `push_to_hub`를 `True`로 설정한 경우, 학습 체크포인트는 허깅페이스 허브에 업로드됩니다. 
+`training_args`에서 `push_to_hub`를 `True`로 설정한 경우, 학습 체크포인트는 허깅페이스 허브에 업로드됩니다.
 학습 완료 후, [`~transformers.Trainer.push_to_hub`] 메소드를 호출하여 최종 모델을 허깅페이스 허브에 업로드합니다.
 
 ```py
@@ -381,14 +381,14 @@ DatasetDict({
 
 ## 평가하기 [[evaluate]]
 
-객체 탐지 모델은 일반적으로 일련의 <a href="https://cocodataset.org/#detection-eval">COCO-스타일 지표</a>로 평가됩니다. 
+객체 탐지 모델은 일반적으로 일련의 <a href="https://cocodataset.org/#detection-eval">COCO-스타일 지표</a>로 평가됩니다.
 기존에 구현된 평가 지표 중 하나를 사용할 수도 있지만, 여기에서는 허깅페이스 허브에 푸시한 최종 모델을 평가하는 데 `torchvision`에서 제공하는 평가 지표를 사용합니다.
 
-`torchvision` 평가자(evaluator)를 사용하려면 실측값인 COCO 데이터 세트를 준비해야 합니다. 
-COCO 데이터 세트를 빌드하는 API는 데이터를 특정 형식으로 저장해야 하므로, 먼저 이미지와 어노테이션을 디스크에 저장해야 합니다. 
+`torchvision` 평가자(evaluator)를 사용하려면 실측값인 COCO 데이터 세트를 준비해야 합니다.
+COCO 데이터 세트를 빌드하는 API는 데이터를 특정 형식으로 저장해야 하므로, 먼저 이미지와 어노테이션을 디스크에 저장해야 합니다.
 학습을 위해 데이터를 준비할 때와 마찬가지로, cppe5["test"]에서의 어노테이션은 포맷을 맞춰야 합니다. 그러나 이미지는 그대로 유지해야 합니다.
 
-평가 단계는 약간의 작업이 필요하지만, 크게 세 가지 주요 단계로 나눌 수 있습니다. 
+평가 단계는 약간의 작업이 필요하지만, 크게 세 가지 주요 단계로 나눌 수 있습니다.
 먼저, `cppe5["test"]` 세트를 준비합니다: 어노테이션을 포맷에 맞게 만들고 데이터를 디스크에 저장합니다.
 
 ```py
@@ -454,9 +454,9 @@ COCO 데이터 세트를 빌드하는 API는 데이터를 특정 형식으로 �
 
 
 >>> class CocoDetection(torchvision.datasets.CocoDetection):
-...     def __init__(self, img_folder, feature_extractor, ann_file):
+...     def __init__(self, img_folder, image_processor, ann_file):
 ...         super().__init__(img_folder, ann_file)
-...         self.feature_extractor = feature_extractor
+...         self.image_processor = image_processor
 
 ...     def __getitem__(self, idx):
 ...         # read in PIL image and target in COCO format
@@ -466,7 +466,7 @@ COCO 데이터 세트를 빌드하는 API는 데이터를 특정 형식으로 �
 ...         # resizing + normalization of both image and target)
 ...         image_id = self.ids[idx]
 ...         target = {"image_id": image_id, "annotations": target}
-...         encoding = self.feature_extractor(images=img, annotations=target, return_tensors="pt")
+...         encoding = self.image_processor(images=img, annotations=target, return_tensors="pt")
 ...         pixel_values = encoding["pixel_values"].squeeze()  # remove batch dimension
 ...         target = encoding["labels"][0]  # remove batch dimension
 
@@ -532,9 +532,9 @@ IoU metric: bbox
 
 ## 추론하기 [[inference]]
 
-DETR 모델을 미세 조정 및 평가하고, 허깅페이스 허브에 업로드 했으므로 추론에 사용할 수 있습니다. 
+DETR 모델을 미세 조정 및 평가하고, 허깅페이스 허브에 업로드 했으므로 추론에 사용할 수 있습니다.
 
-미세 조정된 모델을 추론에 사용하는 가장 간단한 방법은 [`pipeline`]에서 모델을 사용하는 것입니다. 
+미세 조정된 모델을 추론에 사용하는 가장 간단한 방법은 [`pipeline`]에서 모델을 사용하는 것입니다.
 모델과 함께 객체 탐지를 위한 파이프라인을 인스턴스화하고, 이미지를 전달하세요:
 
 ```py
@@ -586,4 +586,3 @@ Detected Mask with confidence 0.584 at location [2449.06, 823.19, 3256.43, 1413.
 <div class="flex justify-center">
     <img src="https://i.imgur.com/4QZnf9A.png" alt="Object detection result on a new image"/>
 </div>
-

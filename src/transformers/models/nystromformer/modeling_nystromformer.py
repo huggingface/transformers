@@ -64,7 +64,9 @@ class NystromformerEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)) + 2)
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)) + 2, persistent=False
+        )
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer(
             "token_type_ids",
@@ -458,7 +460,6 @@ class NystromformerPreTrainedModel(PreTrainedModel):
     config_class = NystromformerConfig
     base_model_prefix = "nystromformer"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -658,7 +659,6 @@ class NystromformerModel(NystromformerPreTrainedModel):
 
 @add_start_docstrings("""Nyströmformer Model with a `language modeling` head on top.""", NYSTROMFORMER_START_DOCSTRING)
 class NystromformerForMaskedLM(NystromformerPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder"]
     _tied_weights_keys = ["cls.predictions.decoder"]
 
     def __init__(self, config):
