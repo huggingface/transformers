@@ -36,7 +36,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
 class Swinv2ModelTester:
@@ -412,9 +412,9 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 @require_torch
 class Swinv2ModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
-            AutoFeatureExtractor.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
+            AutoImageProcessor.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
             if is_vision_available()
             else None
         )
@@ -424,10 +424,10 @@ class Swinv2ModelIntegrationTest(unittest.TestCase):
         model = Swinv2ForImageClassification.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256").to(
             torch_device
         )
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():

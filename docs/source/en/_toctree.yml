@@ -549,6 +549,8 @@
         title: MCTCT
       - local: model_doc/mms
         title: MMS
+      - local: model_doc/musicgen
+        title: MusicGen
       - local: model_doc/sew
         title: SEW
       - local: model_doc/sew-d
@@ -608,6 +610,8 @@
         title: GIT
       - local: model_doc/groupvit
         title: GroupViT
+      - local: model_doc/instructblip
+        title: InstructBLIP
       - local: model_doc/layoutlm
         title: LayoutLM
       - local: model_doc/layoutlmv2

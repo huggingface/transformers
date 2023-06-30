@@ -327,7 +327,7 @@ class MvpEncoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -551,7 +551,6 @@ class MvpPreTrainedModel(PreTrainedModel):
     config_class = MvpConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_unexpected = [r"encoder.version", r"decoder.version"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -940,8 +939,13 @@ class MvpEncoder(MvpPreTrainedModel):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = torch.rand([])
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
+            to_drop = False
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    to_drop = True
+
+            if to_drop:
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
@@ -1215,9 +1219,10 @@ class MvpDecoder(MvpPreTrainedModel):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            dropout_probability = torch.rand([])
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
@@ -1294,8 +1299,7 @@ class MvpDecoder(MvpPreTrainedModel):
     MVP_START_DOCSTRING,
 )
 class MvpModel(MvpPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"final_logits_bias", r"lm_head.weight"]
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _keys_to_ignore_on_load_unexpected = ["final_logits_bias"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: MvpConfig):
@@ -1432,7 +1436,6 @@ class MvpModel(MvpPreTrainedModel):
     "The MVP Model with a language modeling head. Can be used for various text generation tasks.", MVP_START_DOCSTRING
 )
 class MvpForConditionalGeneration(MvpPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: MvpConfig):
@@ -1605,8 +1608,6 @@ class MvpForConditionalGeneration(MvpPreTrainedModel):
     MVP_START_DOCSTRING,
 )
 class MvpForSequenceClassification(MvpPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"final_logits_bias", r"lm_head.weight"]
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: MvpConfig, **kwargs):
@@ -1734,8 +1735,6 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
     MVP_START_DOCSTRING,
 )
 class MvpForQuestionAnswering(MvpPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"final_logits_bias", r"lm_head.weight"]
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config):
@@ -1867,7 +1866,6 @@ class MvpDecoderWrapper(MvpPreTrainedModel):
 
 
 class MvpForCausalLM(MvpPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

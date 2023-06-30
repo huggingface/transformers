@@ -240,6 +240,17 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 self.assertTrue(found_buffer)
                 model_buffers.pop(i)
 
+            model_buffers = list(model.buffers())
+            for non_persistent_buffer in non_persistent_buffers.values():
+                found_buffer = False
+                for i, model_buffer in enumerate(model_buffers):
+                    if torch.equal(non_persistent_buffer, model_buffer):
+                        found_buffer = True
+                        break
+
+                self.assertTrue(found_buffer)
+                model_buffers.pop(i)
+
             models_equal = True
             for layer_name, p1 in model_state_dict.items():
                 if layer_name in loaded_model_state_dict:
@@ -373,12 +384,12 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 uniform_init_parms = ["conv"]
                 ignore_init = ["lstm"]
                 if param.requires_grad:
-                    if any([x in name for x in uniform_init_parms]):
+                    if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
-                    elif not any([x in name for x in ignore_init]):
+                    elif not any(x in name for x in ignore_init):
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),
                             [0.0, 1.0],
@@ -412,8 +423,8 @@ class EncodecIntegrationTest(unittest.TestCase):
             "24.0": 0.0015,
         }
         expected_codesums = {
-            "1.5": [367184],
-            "24.0": [6648961],
+            "1.5": [371955],
+            "24.0": [6659962],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "facebook/encodec_24khz"
@@ -466,8 +477,8 @@ class EncodecIntegrationTest(unittest.TestCase):
             "24.0": 0.0005,
         }
         expected_codesums = {
-            "3.0": [142174, 147901, 154090, 178965, 161879],
-            "24.0": [1561048, 1284593, 1278330, 1487220, 1659404],
+            "3.0": [144259, 146765, 156435, 176871, 161971],
+            "24.0": [1568553, 1294948, 1306190, 1464747, 1663150],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "facebook/encodec_48khz"
@@ -523,12 +534,12 @@ class EncodecIntegrationTest(unittest.TestCase):
         }
         expected_codesums = {
             "3.0": [
-                [71689, 78549, 75644, 88889, 73100, 82509, 71449, 82835],
-                [84427, 82356, 75809, 52509, 80137, 87672, 87436, 70456],
+                [72410, 79137, 76694, 90854, 73023, 82980, 72707, 54842],
+                [85561, 81870, 76953, 48967, 79315, 85442, 81479, 107241],
             ],
             "24.0": [
-                [71689, 78549, 75644, 88889, 73100, 82509, 71449, 82835],
-                [84427, 82356, 75809, 52509, 80137, 87672, 87436, 70456],
+                [72410, 79137, 76694, 90854, 73023, 82980, 72707, 54842],
+                [85561, 81870, 76953, 48967, 79315, 85442, 81479, 107241],
             ],
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

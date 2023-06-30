@@ -89,7 +89,9 @@ class ErnieEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
         self.register_buffer(
             "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
         )
@@ -661,7 +663,6 @@ class ErniePreTrainedModel(PreTrainedModel):
     config_class = ErnieConfig
     base_model_prefix = "ernie"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -983,7 +984,6 @@ class ErnieModel(ErniePreTrainedModel):
     ERNIE_START_DOCSTRING,
 )
 class ErnieForPreTraining(ErniePreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     # Copied from transformers.models.bert.modeling_bert.BertForPreTraining.__init__ with Bert->Ernie,bert->ernie
@@ -1095,8 +1095,6 @@ class ErnieForPreTraining(ErniePreTrainedModel):
     """Ernie Model with a `language modeling` head on top for CLM fine-tuning.""", ERNIE_START_DOCSTRING
 )
 class ErnieForCausalLM(ErniePreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", "cls.predictions.decoder.weight"]
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.__init__ with BertLMHeadModel->ErnieForCausalLM,Bert->Ernie,bert->ernie
@@ -1243,8 +1241,6 @@ class ErnieForCausalLM(ErniePreTrainedModel):
 
 @add_start_docstrings("""Ernie Model with a `language modeling` head on top.""", ERNIE_START_DOCSTRING)
 class ErnieForMaskedLM(ErniePreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", "cls.predictions.decoder.weight"]
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     # Copied from transformers.models.bert.modeling_bert.BertForMaskedLM.__init__ with Bert->Ernie,bert->ernie
@@ -1665,8 +1661,6 @@ class ErnieForMultipleChoice(ErniePreTrainedModel):
     ERNIE_START_DOCSTRING,
 )
 class ErnieForTokenClassification(ErniePreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification.__init__ with Bert->Ernie,bert->ernie
     def __init__(self, config):
         super().__init__(config)
@@ -1746,8 +1740,6 @@ class ErnieForTokenClassification(ErniePreTrainedModel):
     ERNIE_START_DOCSTRING,
 )
 class ErnieForQuestionAnswering(ErniePreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering.__init__ with Bert->Ernie,bert->ernie
     def __init__(self, config):
         super().__init__(config)
