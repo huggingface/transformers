@@ -23,8 +23,6 @@ if is_torch_available():
 
     from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-# https://github.com/google-research/t5x/blob/main/docs/models.md#umt5-checkpoints
-
 
 @require_torch
 @require_sentencepiece

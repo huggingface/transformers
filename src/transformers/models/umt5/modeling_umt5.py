@@ -75,9 +75,9 @@ class UMT5LayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->UMT5
+# Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->UMT5,UMT5Config->PretrainedConfig
 class UMT5DenseActDense(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: PretrainedConfig):
         super().__init__()
         self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
@@ -98,9 +98,9 @@ class UMT5DenseActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5->UMT5
+# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5->UMT5,UMT5Config->PretrainedConfig
 class UMT5DenseGatedActDense(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: PretrainedConfig):
         super().__init__()
         self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
@@ -128,9 +128,9 @@ class UMT5DenseGatedActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5LayerFF with T5->UMT5
+# Copied from transformers.models.t5.modeling_t5.T5LayerFF with T5->UMT5,UMT5Config->PretrainedConfig
 class UMT5LayerFF(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: PretrainedConfig):
         super().__init__()
         if config.is_gated_act:
             self.DenseReluDense = UMT5DenseGatedActDense(config)
@@ -337,7 +337,6 @@ class UMT5LayerSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5->UMT5
 class UMT5LayerCrossAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
