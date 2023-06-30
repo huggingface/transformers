@@ -20,7 +20,7 @@ from typing import Dict, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings, logging
-from ..encodec import EncodecConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -220,7 +220,7 @@ class BarkConfig(PretrainedConfig):
         Configuration of the underlying coarse acoustics sub-model.
     fine_acoustics_config ([`BarkFineConfig`], *optional*, defaults to None):
         Configuration of the underlying fine acoustics sub-model.
-    codec_config ([`EncodecConfig`], *optional*, defaults to None):
+    codec_config ([`AutoConfig`], *optional*, defaults to None):
         Configuration of the underlying codec sub-model.
 
     Example:
@@ -232,14 +232,14 @@ class BarkConfig(PretrainedConfig):
     ...     BarkFineConfig,
     ...     BarkModel,
     ...     BarkConfig,
-    ...     EncodecConfig,
+    ...     AutoConfig,
     ... )
 
     >>> # Initializing Bark sub-modules configurations.
     >>> semantic_config = BarkSemanticConfig()
     >>> coarse_acoustics_config = BarkCoarseConfig()
     >>> fine_acoustics_config = BarkFineConfig()
-    >>> codec_config = EncodecConfig()
+    >>> codec_config = AutoConfig()
 
 
     >>> # Initializing a Bark module style configuration
@@ -286,7 +286,7 @@ class BarkConfig(PretrainedConfig):
         self.semantic_config = BarkSemanticConfig(**semantic_config)
         self.coarse_acoustics_config = BarkCoarseConfig(**coarse_acoustics_config)
         self.fine_acoustics_config = BarkFineConfig(**fine_acoustics_config)
-        self.codec_config = EncodecConfig(**codec_config)
+        self.codec_config = AutoConfig(**codec_config)
 
         self.initializer_range = initializer_range
 
@@ -298,7 +298,7 @@ class BarkConfig(PretrainedConfig):
         semantic_config: BarkSemanticConfig,
         coarse_acoustics_config: BarkCoarseConfig,
         fine_acoustics_config: BarkFineConfig,
-        codec_config: EncodecConfig,
+        codec_config: AutoConfig,
         **kwargs,
     ):
         r"""
