@@ -17,6 +17,7 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 """
 
 import contextlib
+import copy
 import functools
 import glob
 import inspect
@@ -118,6 +119,7 @@ from .trainer_utils import (
 )
 from .training_args import OptimizerNames, ParallelMode, TrainingArguments
 from .utils import (
+    ADAPTER_CONFIG_NAME,
     ADAPTER_SAFE_WEIGHTS_NAME,
     ADAPTER_WEIGHTS_NAME,
     CONFIG_NAME,
@@ -143,7 +145,6 @@ from .utils import (
     logging,
     strtobool,
 )
-from .utils.generic import ContextManagers
 
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
@@ -1265,9 +1266,14 @@ class Trainer:
             example_batch = next(iter(dataloader))
             example_batch = self._prepare_inputs(example_batch)
             try:
-                jit_model = model.eval()
-                with ContextManagers([self.autocast_smart_context_manager(cache_enabled=False), torch.no_grad()]):
-                    if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.14.0"):
+                jit_model = copy.copy(model)
+                jit_model.eval()
+                original_forward = jit_model.__dict__.pop("_original_forward", None)
+                # remove mixed precision hooks from the model
+                if original_forward:
+                    jit_model.forward = original_forward
+                with self.accelerator.autocast(cache_enabled=False), torch.no_grad():
+                    if version.parse(version.parse(torch.__version__).base_version) >= version.parse("2.0.0"):
                         if isinstance(example_batch, dict):
                             jit_model = torch.jit.trace(jit_model, example_kwarg_inputs=example_batch, strict=False)
                         else:
@@ -1548,7 +1554,7 @@ class Trainer:
         # number of training epochs: num_train_epochs
         # number of training steps per epoch: num_update_steps_per_epoch
         # total number of training steps to execute: max_steps
-        total_train_batch_size = args.train_batch_size * args.gradient_accumulation_steps * args.world_size
+        total_train_batch_size = self._train_batch_size * args.gradient_accumulation_steps * args.world_size
 
         len_dataloader = None
         if has_length(train_dataloader):
@@ -1635,6 +1641,7 @@ class Trainer:
 
         # prepare using `accelerator` prepare
         if use_accelerator_prepare:
+            self.model.train()
             if hasattr(self.lr_scheduler, "step"):
                 if self.use_apex:
                     model = self.accelerator.prepare(self.model)
@@ -2058,7 +2065,7 @@ class Trainer:
             # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
             if hasattr(model, "active_adapter") and hasattr(model, "load_adapter"):
                 if os.path.exists(resume_from_checkpoint):
-                    model.load_adapter(resume_from_checkpoint, model.active_adapter)
+                    model.load_adapter(resume_from_checkpoint, model.active_adapter, is_trainable=True)
                 else:
                     logger.warning(
                         "The intermediate checkpoints of PEFT may not be saved correctly, "
@@ -2740,13 +2747,17 @@ class Trainer:
                     self._save(output_dir, state_dict=state_dict)
         elif self.is_deepspeed_enabled:
             # this takes care of everything as long as we aren't under zero3
-            if self.args.should_save:
-                self._save(output_dir)
+            if self.args.should_save and not is_deepspeed_zero3_enabled():
+                if version.parse(accelerate_version) <= version.parse("0.20.3"):
+                    raise ValueError("Install Accelerate from main branch")
+                state_dict = self.accelerator.get_state_dict(self.deepspeed)
+
+                self._save(output_dir, state_dict=state_dict)
 
             if is_deepspeed_zero3_enabled():
                 # It's too complicated to try to override different places where the weights dump gets
                 # saved, so since under zero3 the file is bogus, simply delete it. The user should
-                # either user deepspeed checkpoint to resume or to recover full weights use
+                # either use deepspeed checkpoint to resume or to recover full weights use
                 # zero_to_fp32.py stored in the checkpoint.
                 if self.args.should_save:
                     file = os.path.join(output_dir, WEIGHTS_NAME)
@@ -3246,7 +3257,7 @@ class Trainer:
         elif is_sagemaker_mp_enabled():
             tensors = smp_gather(tensors)
         elif (self.args.distributed_state is not None and self.args.distributed_state.distributed_type != "NO") or (
-            self.args.distributed_state is None and self.local_rank != -1
+            self.args.distributed_state is None and self.args.local_rank != -1
         ):
             tensors = distributed_concat(tensors)
         return tensors
@@ -3523,6 +3534,8 @@ class Trainer:
         output_dir = self.args.output_dir
         # To avoid a new synchronization of all model weights, we just copy the file from the checkpoint folder
         modeling_files = [CONFIG_NAME, WEIGHTS_NAME, SAFE_WEIGHTS_NAME]
+        if is_peft_available():
+            modeling_files.extend([ADAPTER_CONFIG_NAME, ADAPTER_WEIGHTS_NAME, ADAPTER_SAFE_WEIGHTS_NAME])
         for modeling_file in modeling_files:
             if os.path.isfile(os.path.join(checkpoint_folder, modeling_file)):
                 shutil.copy(os.path.join(checkpoint_folder, modeling_file), os.path.join(output_dir, modeling_file))

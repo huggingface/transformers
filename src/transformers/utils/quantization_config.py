@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import importlib.metadata
 import json
 import os
 from dataclasses import dataclass
@@ -23,7 +24,6 @@ from typing import Any, Dict, Union
 from packaging import version
 
 from ..utils import is_torch_available, logging
-from ..utils.import_utils import importlib_metadata
 
 
 if is_torch_available():
@@ -141,7 +141,7 @@ class BitsAndBytesConfig:
         if not isinstance(self.bnb_4bit_use_double_quant, bool):
             raise ValueError("bnb_4bit_use_double_quant must be a boolean")
 
-        if self.load_in_4bit and not version.parse(importlib_metadata.version("bitsandbytes")) >= version.parse(
+        if self.load_in_4bit and not version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
             "0.39.0"
         ):
             raise ValueError(

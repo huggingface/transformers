@@ -500,8 +500,6 @@ GPT_BIGCODE_INPUTS_DOCSTRING = r"""
     GPT_BIGCODE_START_DOCSTRING,
 )
 class GPTBigCodeModel(GPTBigCodePreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
-
     def __init__(self, config):
         super().__init__(config)
         self.multi_query = config.multi_query
@@ -722,7 +720,6 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
     GPT_BIGCODE_START_DOCSTRING,
 )
 class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
@@ -876,8 +873,6 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
     GPT_BIGCODE_START_DOCSTRING,
 )
 class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head.weight"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

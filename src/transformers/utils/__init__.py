@@ -178,6 +178,7 @@ from .import_utils import (
 
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
+ADAPTER_CONFIG_NAME = "adapter_config.json"
 ADAPTER_WEIGHTS_NAME = "adapter_model.bin"
 ADAPTER_SAFE_WEIGHTS_NAME = "adapter_model.safetensors"
 TF2_WEIGHTS_NAME = "tf_model.h5"
@@ -215,6 +216,6 @@ def check_min_version(min_version):
         error_message += f" but the version found is {__version__}.\n"
         raise ImportError(
             error_message
-            + "Check out https://huggingface.co/transformers/examples.html for the examples corresponding to other "
+            + "Check out https://github.com/huggingface/transformers/tree/main/examples#important-note for the examples corresponding to other "
             "versions of HuggingFace Transformers."
         )

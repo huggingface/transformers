@@ -399,7 +399,6 @@ class OPTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OPTDecoderLayer"]
-    _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -684,9 +683,10 @@ class OPTDecoder(OPTPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            dropout_probability = torch.rand([])
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
@@ -816,7 +816,6 @@ class OPTModel(OPTPreTrainedModel):
 
 
 class OPTForCausalLM(OPTPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
@@ -1024,8 +1023,6 @@ class OPTForCausalLM(OPTPreTrainedModel):
     OPT_START_DOCSTRING,
 )
 class OPTForSequenceClassification(OPTPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
-
     def __init__(self, config: OPTConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1146,8 +1143,6 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
     OPT_START_DOCSTRING,
 )
 class OPTForQuestionAnswering(OPTPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
-
     def __init__(self, config: OPTConfig):
         super().__init__(config)
         self.model = OPTModel(config)

@@ -1190,7 +1190,6 @@ class FunnelForPreTraining(FunnelPreTrainedModel):
 
 @add_start_docstrings("""Funnel Transformer Model with a `language modeling` head on top.""", FUNNEL_START_DOCSTRING)
 class FunnelForMaskedLM(FunnelPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: FunnelConfig) -> None:

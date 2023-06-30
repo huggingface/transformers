@@ -305,7 +305,7 @@ to indicate which pixels are real (1) and which are padding (0).
 ```py
 >>> def collate_fn(batch):
 ...     pixel_values = [item["pixel_values"] for item in batch]
-...     encoding = image_processor.pad_and_create_pixel_mask(pixel_values, return_tensors="pt")
+...     encoding = image_processor.pad(pixel_values, return_tensors="pt")
 ...     labels = [item["labels"] for item in batch]
 ...     batch = {}
 ...     batch["pixel_values"] = encoding["pixel_values"]
@@ -462,9 +462,9 @@ Next, prepare an instance of a `CocoDetection` class that can be used with `coco
 
 
 >>> class CocoDetection(torchvision.datasets.CocoDetection):
-...     def __init__(self, img_folder, feature_extractor, ann_file):
+...     def __init__(self, img_folder, image_processor, ann_file):
 ...         super().__init__(img_folder, ann_file)
-...         self.feature_extractor = feature_extractor
+...         self.image_processor = image_processor
 
 ...     def __getitem__(self, idx):
 ...         # read in PIL image and target in COCO format
@@ -474,7 +474,7 @@ Next, prepare an instance of a `CocoDetection` class that can be used with `coco
 ...         # resizing + normalization of both image and target)
 ...         image_id = self.ids[idx]
 ...         target = {"image_id": image_id, "annotations": target}
-...         encoding = self.feature_extractor(images=img, annotations=target, return_tensors="pt")
+...         encoding = self.image_processor(images=img, annotations=target, return_tensors="pt")
 ...         pixel_values = encoding["pixel_values"].squeeze()  # remove batch dimension
 ...         target = encoding["labels"][0]  # remove batch dimension
 
@@ -591,4 +591,3 @@ Let's plot the result:
 <div class="flex justify-center">
     <img src="https://i.imgur.com/4QZnf9A.png" alt="Object detection result on a new image"/>
 </div>
-
