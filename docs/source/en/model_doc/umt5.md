@@ -37,11 +37,8 @@ fine-tuning. If you are doing multi-task fine-tuning, you should use a prefix.
 Google has released the following variants:
 
 - [google/umt5-small](https://huggingface.co/google/umt5-small)
-
 - [google/umt5-base](https://huggingface.co/google/umt5-base)
-
 - [google/umt5-xl](https://huggingface.co/google/umt5-xl)
-
 - [google/umt5-xxl](https://huggingface.co/google/umt5-xxl).
 
 This model was contributed by [agemagician](https://huggingface.co/agemagician) and [stefan-it](https://huggingface.co/stefan-it). The original code can be

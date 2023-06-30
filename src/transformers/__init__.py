@@ -521,7 +521,7 @@ _import_structure = {
         "TvltConfig",
         "TvltProcessor",
     ],
-    "models.umt5": ["UMT5_PRETRAINED_MODEL_ARCHIVE_LIST", "UMT5Config"],
+    "models.umt5": ["UMT5_PRETRAINED_MODEL_ARCHIVE_LIST"],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechConfig",

@@ -31,7 +31,6 @@ else:
         "UMT5ForQuestionAnswering",
         "UMT5Model",
         "UMT5PreTrainedModel",
-        "UMT5Stack",
     ]
 
 if TYPE_CHECKING:
@@ -47,7 +46,6 @@ if TYPE_CHECKING:
             UMT5ForQuestionAnswering,
             UMT5Model,
             UMT5PreTrainedModel,
-            UMT5Stack,
         )
 else:
     import sys
