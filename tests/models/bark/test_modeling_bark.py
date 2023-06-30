@@ -580,13 +580,13 @@ class BarkModelIntegrationTests(unittest.TestCase):
         input_ids = self.inputs
 
         with torch.no_grad():
-            self.model.generate_audio(**input_ids)
-            self.model.generate_audio(**{key: val for (key, val) in input_ids.items() if key != "history_prompt"})
+            self.model.generate_speech(**input_ids)
+            self.model.generate_speech(**{key: val for (key, val) in input_ids.items() if key != "history_prompt"})
 
     @slow
     def test_generate_end_to_end_with_args(self):
         input_ids = self.inputs
 
         with torch.no_grad():
-            self.model.generate_audio(**input_ids, do_sample=True, temperature=0.6, penalty_alpha=0.6)
-            self.model.generate_audio(**input_ids, do_sample=True, temperature=0.6, num_beams=4)
+            self.model.generate_speech(**input_ids, do_sample=True, temperature=0.6, penalty_alpha=0.6)
+            self.model.generate_speech(**input_ids, do_sample=True, temperature=0.6, num_beams=4)
