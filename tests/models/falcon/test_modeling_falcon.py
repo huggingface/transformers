@@ -348,7 +348,7 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    @unittest.skip("Falcon has a non-standard KV cache format that it inherited from BLOOM.")
+    @unittest.skip("The past key-values test doesn't understand the multi-query shape here.")
     def test_past_key_values_format(self):
         pass
 

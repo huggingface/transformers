@@ -107,20 +107,12 @@ def _make_causal_mask(
     # ONNX doesn't support `torch.Tensor.triu` properly, thus we use this workaround
     seq_ids = torch.arange(target_length, device=device)
     mask[:, past_key_values_length:] = seq_ids[:, None] < seq_ids[None, :]
-
+    # TODO Matt: Why is this False? Shouldn't the live sequence be able to attend to all past values?
     if past_key_values_length > 0:
         mask[:, :past_key_values_length] = False
 
     expanded_mask = mask[None, None, :, :].expand(batch_size, 1, target_length, target_length + past_key_values_length)
     return expanded_mask
-
-
-def _expand_mask(mask: torch.Tensor, tgt_length: int) -> torch.BoolTensor:
-    batch_size, src_length = mask.shape
-    tgt_length = tgt_length if tgt_length is not None else src_length
-
-    expanded_mask = ~(mask[:, None, None, :].to(torch.bool))
-    return expanded_mask.expand(batch_size, 1, tgt_length, src_length)
 
 
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
@@ -288,7 +280,6 @@ class FalconAttention(nn.Module):
             value_layer = torch.cat((past_value, value_layer), dim=1)
 
         _, kv_length, _ = key_layer.shape
-
         if use_cache is True:
             present = (key_layer, value_layer)
         else:
@@ -497,17 +488,18 @@ class FalconPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
     @staticmethod
-    def _convert_to_standard_cache(
-        past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]], batch_size: int
+    def _convert_to_standard_cache(past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]], batch_size: int
     ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
         """
         Standardizes the format of the cache so as to match most implementations, i.e. to tuple(tuple([batch_size,
         num_heads, ...]))
         """
         batch_size_times_num_heads, head_dim, seq_length = past_key_value[0][0].shape
-        num_heads = batch_size_times_num_heads // batch_size
         # key: [batch_size * num_heads, head_dim, seq_length] -> [batch_size, num_heads, head_dim, seq_length]
         # value: [batch_size * num_heads, seq_length, head_dim] -> [batch_size, num_heads, seq_length, head_dim]
+        # Note that don't want to use self.num_attention_heads because the number of heads may vary depending
+        # on whether we use multi_query attention.
+        num_heads = batch_size_times_num_heads // batch_size
         return tuple(
             (
                 layer_past[0].view(batch_size, num_heads, head_dim, seq_length),
@@ -562,18 +554,20 @@ class FalconModel(FalconPreTrainedModel):
         self, attention_mask: torch.Tensor, input_shape: Tuple[int, int], past_key_values_length: int
     ) -> torch.BoolTensor:
         # create causal mask
-        # [batch_size, seq_length] -> [batch_size, 1, tgt_length, src_length]
+        # [batch_size, seq_length] -> [batch_size, 1, seq_length, seq_length + past_key_values_length]
         combined_attention_mask = None
         device = attention_mask.device
-        _, src_length = input_shape
+        _, seq_length = input_shape
 
-        if src_length > 1:
+        if seq_length > 1:
             combined_attention_mask = _make_causal_mask(
                 input_shape, device=device, past_key_values_length=past_key_values_length
             )
 
-        # [batch_size, seq_length] -> [batch_size, 1, tgt_length, src_length]
-        expanded_attn_mask = _expand_mask(attention_mask, tgt_length=src_length)
+        # [batch_size, seq_length] -> [batch_size, 1, seq_length, seq_length + past_key_values_length]
+        # TODO Matt: Expand mask just needs to blow up the attention mask to cover the past_key_values
+        #            But first we need to figure out why it was setting past values to False
+        expanded_attn_mask = _expand_mask(attention_mask, tgt_length=seq_length + past_key_values_length)
         combined_attention_mask = (
             expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask | combined_attention_mask
         )
@@ -624,6 +618,8 @@ class FalconModel(FalconPreTrainedModel):
 
         if past_key_values is None:
             past_key_values = tuple([None] * len(self.h))
+        else:
+            past_key_values = self._convert_to_rw_cache(past_key_values)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -711,6 +707,9 @@ class FalconModel(FalconPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
+        if presents is not None:
+            presents = self._convert_to_standard_cache(presents, batch_size)
+
         if not return_dict:
             return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions] if v is not None)
 
@@ -742,21 +741,17 @@ class FalconForCausalLM(FalconPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        past: Optional[torch.Tensor] = None,
+        past_key_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> dict:
         # only last token for input_ids if past is not None
-        if past:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
-
-            # the cache may be in the stardard format (e.g. in contrastive search), convert to our's format if needed
-            if past[0][0].shape[0] == input_ids.shape[0]:
-                past = self._convert_to_rw_cache(past)
+        # if past:
+        #     input_ids = input_ids[:, -1].unsqueeze(-1)
 
         return {
             "input_ids": input_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": kwargs.get("use_cache"),
             "attention_mask": attention_mask,
         }
@@ -842,7 +837,6 @@ class FalconForCausalLM(FalconPreTrainedModel):
 
         Output shares the same memory storage as `past`.
         """
-        standardized_past = self._convert_to_standard_cache(past, batch_size=len(beam_idx))
 
         # Get a copy of `beam_idx` on all the devices where we need those indices.
         device_to_beam_idx = {
@@ -853,9 +847,9 @@ class FalconForCausalLM(FalconPreTrainedModel):
                 layer_past[0].index_select(0, device_to_beam_idx[layer_past[0].device]),
                 layer_past[1].index_select(0, device_to_beam_idx[layer_past[0].device]),
             )
-            for layer_past in standardized_past
+            for layer_past in past
         )
-        return self._convert_to_rw_cache(reordered_past)
+        return reordered_past
 
 
 class FalconForSequenceClassification(FalconPreTrainedModel):
