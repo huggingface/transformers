@@ -12,171 +12,341 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
+import tempfile
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    slow,
+    torch_device,
+)
+
+from ...generation.test_utils import GenerationTesterMixin
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
-    from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+    from transformers import T5Config, T5Tokenizer, UMT5ForConditionalGeneration, UMT5ForQuestionAnswering, UMT5Model
 
-
-class NllbMoeModelTester:
+# Copied from test.models.t5.test_modeling_t5.T5ModelTester with T5->UMT5,UMT5Config->T5Config
+class UMT5ModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_labels=False,
         vocab_size=99,
-        hidden_size=16,
-        num_hidden_layers=4,
+        batch_size=13,
+        encoder_seq_length=7,
+        decoder_seq_length=9,
+        # For common tests
+        is_training=True,
+        use_attention_mask=True,
+        use_labels=True,
+        hidden_size=32,
+        num_hidden_layers=5,
         num_attention_heads=4,
-        intermediate_size=4,
-        hidden_act="relu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        encoder_layerdrop=0.0,
-        decoder_layerdrop=0.0,
-        max_position_embeddings=20,
-        eos_token_id=2,
-        pad_token_id=1,
-        bos_token_id=0,
-        num_experts=4,
-        encoder_sparse_step=2,
-        decoder_sparse_step=1,
-        expert_capacity=100,
-        router_jitter_noise=0.0,
+        d_ff=37,
+        relative_attention_num_buckets=8,
+        dropout_rate=0.1,
+        initializer_factor=0.002,
+        eos_token_id=1,
+        pad_token_id=0,
+        decoder_start_token_id=0,
+        scope=None,
+        decoder_layers=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.seq_length = seq_length
+        self.encoder_seq_length = encoder_seq_length
+        self.decoder_seq_length = decoder_seq_length
+        # For common tests
+        self.seq_length = self.decoder_seq_length
         self.is_training = is_training
+        self.use_attention_mask = use_attention_mask
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.encoder_layerdrop = encoder_layerdrop
-        self.decoder_layerdrop = decoder_layerdrop
-        self.max_position_embeddings = max_position_embeddings
+        self.d_ff = d_ff
+        self.relative_attention_num_buckets = relative_attention_num_buckets
+        self.dropout_rate = dropout_rate
+        self.initializer_factor = initializer_factor
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.encoder_sparse_step = encoder_sparse_step
-        self.decoder_sparse_step = decoder_sparse_step
-        self.expert_capacity = expert_capacity
-        self.router_jitter_noise = router_jitter_noise
-        self.num_experts = num_experts
+        self.decoder_start_token_id = decoder_start_token_id
+        self.scope = None
+        self.decoder_layers = decoder_layers
 
-    def prepare_nllb_moe_inputs_dict(
+    def get_large_model_config(self):
+        return T5Config.from_pretrained("google/umt5-base")
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+
+        attention_mask = None
+        decoder_attention_mask = None
+        if self.use_attention_mask:
+            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
+            decoder_attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
+
+        lm_labels = None
+        if self.use_labels:
+            lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+
+        config = self.get_config()
+
+        return (
+            config,
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+            lm_labels,
+        )
+
+    def get_pipeline_config(self):
+        return T5Config(
+            vocab_size=166,  # t5 forces 100 extra tokens
+            d_model=self.hidden_size,
+            d_ff=self.d_ff,
+            d_kv=self.hidden_size // self.num_attention_heads,
+            num_layers=self.num_hidden_layers,
+            num_decoder_layers=self.decoder_layers,
+            num_heads=self.num_attention_heads,
+            relative_attention_num_buckets=self.relative_attention_num_buckets,
+            dropout_rate=self.dropout_rate,
+            initializer_factor=self.initializer_factor,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.pad_token_id,
+            pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.decoder_start_token_id,
+        )
+
+    def get_config(self):
+        return T5Config(
+            vocab_size=self.vocab_size,
+            d_model=self.hidden_size,
+            d_ff=self.d_ff,
+            d_kv=self.hidden_size // self.num_attention_heads,
+            num_layers=self.num_hidden_layers,
+            num_decoder_layers=self.decoder_layers,
+            num_heads=self.num_attention_heads,
+            relative_attention_num_buckets=self.relative_attention_num_buckets,
+            dropout_rate=self.dropout_rate,
+            initializer_factor=self.initializer_factor,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.pad_token_id,
+            pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.decoder_start_token_id,
+        )
+
+    def check_prepare_lm_labels_via_shift_left(
         self,
         config,
         input_ids,
         decoder_input_ids,
-        attention_mask=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
     ):
-        if attention_mask is None:
-            attention_mask = input_ids.ne(config.pad_token_id)
-        if decoder_attention_mask is None:
-            decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
-        if head_mask is None:
-            head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
-        if decoder_head_mask is None:
-            decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
-        if cross_attn_head_mask is None:
-            cross_attn_head_mask = torch.ones(
-                config.decoder_layers, config.decoder_attention_heads, device=torch_device
-            )
-        return {
-            "input_ids": input_ids,
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
-            "decoder_attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-        }
+        model = UMT5Model(config=config)
+        model.to(torch_device)
+        model.eval()
 
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        input_ids[:, -1] = self.eos_token_id  # Eos Token
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        # make sure that lm_labels are correctly padded from the right
+        lm_labels.masked_fill_((lm_labels == self.decoder_start_token_id), self.eos_token_id)
 
-        # we need to clamp the input ids here to avoid having pad token in between
-        # this is because for NllbMoe the position_ids are prepared such that
-        # all pad tokens have pos id = 2 and rest are between 2..seq_length
-        # and the seq_length here is seq_length - num_pad_tokens
-        # but when using past, there is no way of knowing if the past input ids had
-        # pad tokens in them, which results in incorrect seq_lenth and which in turn results in
-        # position_ids being off by num_pad_tokens in past input
-        input_ids = input_ids.clamp(self.pad_token_id + 1)
-        decoder_input_ids = decoder_input_ids.clamp(self.pad_token_id + 1)
+        # add casaul pad token mask
+        triangular_mask = torch.tril(lm_labels.new_ones(lm_labels.shape)).logical_not()
+        lm_labels.masked_fill_(triangular_mask, self.pad_token_id)
+        decoder_input_ids = model._shift_right(lm_labels)
 
-        config = self.get_config()
-        inputs_dict = self.prepare_nllb_moe_inputs_dict(config, input_ids, decoder_input_ids)
-        return config, inputs_dict
+        for i, (decoder_input_ids_slice, lm_labels_slice) in enumerate(zip(decoder_input_ids, lm_labels)):
+            # first item
+            self.parent.assertEqual(decoder_input_ids_slice[0].item(), self.decoder_start_token_id)
+            if i < decoder_input_ids_slice.shape[-1]:
+                if i < decoder_input_ids.shape[-1] - 1:
+                    # items before diagonal
+                    self.parent.assertListEqual(
+                        decoder_input_ids_slice[1 : i + 1].tolist(), lm_labels_slice[:i].tolist()
+                    )
+                # pad items after diagonal
+                if i < decoder_input_ids.shape[-1] - 2:
+                    self.parent.assertListEqual(
+                        decoder_input_ids_slice[i + 2 :].tolist(), lm_labels_slice[i + 1 : -1].tolist()
+                    )
+            else:
+                # all items after square
+                self.parent.assertListEqual(decoder_input_ids_slice[1:].tolist(), lm_labels_slice[:-1].tolist())
 
-    def get_config(self):
-        return NllbMoeConfig(
-            vocab_size=self.vocab_size,
-            d_model=self.hidden_size,
-            encoder_layers=self.num_hidden_layers,
-            decoder_layers=self.num_hidden_layers,
-            encoder_attention_heads=self.num_attention_heads,
-            decoder_attention_heads=self.num_attention_heads,
-            encoder_ffn_dim=self.intermediate_size,
-            decoder_ffn_dim=self.intermediate_size,
-            dropout=self.hidden_dropout_prob,
-            attention_dropout=self.attention_probs_dropout_prob,
-            encoder_layerdrop=self.encoder_layerdrop,
-            decoder_layerdrop=self.decoder_layerdrop,
-            max_position_embeddings=self.max_position_embeddings,
-            eos_token_id=self.eos_token_id,
-            bos_token_id=self.bos_token_id,
-            pad_token_id=self.pad_token_id,
-            expert_capacity=self.expert_capacity,
-            router_jitter_noise=self.router_jitter_noise,
-            decoder_sparse_step=self.decoder_sparse_step,
-            encoder_sparse_step=self.encoder_sparse_step,
-            num_experts=self.num_experts,
+    def create_and_check_model(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = UMT5Model(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids=input_ids,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
         )
+        result = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+        decoder_output = result.last_hidden_state
+        decoder_past = result.past_key_values
+        encoder_output = result.encoder_last_hidden_state
 
-    def prepare_config_and_inputs_for_common(self):
-        config, inputs_dict = self.prepare_config_and_inputs()
-        return config, inputs_dict
+        self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
+        self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
+        # There should be `num_layers` key value embeddings stored in decoder_past
+        self.parent.assertEqual(len(decoder_past), config.num_layers)
+        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
+        self.parent.assertEqual(len(decoder_past[0]), 4)
 
-    @require_torch
-    def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
-        model = NllbMoeModel(config=config).get_decoder().to(torch_device).eval()
-        input_ids = inputs_dict["input_ids"]
-        attention_mask = inputs_dict["attention_mask"]
-        head_mask = inputs_dict["head_mask"]
+    def create_and_check_with_lm_head(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = UMT5ForConditionalGeneration(config=config).to(torch_device).eval()
+        outputs = model(
+            input_ids=input_ids,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            labels=lm_labels,
+        )
+        self.parent.assertEqual(len(outputs), 4)
+        self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
+        self.parent.assertEqual(outputs["loss"].size(), ())
+
+    def create_and_check_decoder_model_past(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = UMT5Model(config=config).get_decoder().to(torch_device).eval()
+        # first forward pass
+        outputs = model(input_ids, use_cache=True)
+        outputs_use_cache_conf = model(input_ids)
+        outputs_no_past = model(input_ids, use_cache=False)
+
+        self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
+        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
+
+        output, past_key_values = outputs.to_tuple()
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+
+        # append to next input_ids and
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+
+        output_from_no_past = model(next_input_ids)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+    def create_and_check_decoder_model_attention_mask_past(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = UMT5Model(config=config).get_decoder()
+        model.to(torch_device)
+        model.eval()
+
+        # create attention mask
+        attn_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+
+        half_seq_length = input_ids.shape[-1] // 2
+        attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        output, past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True).to_tuple()
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+
+        # change a random masked slice from input_ids
+        random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
+        random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
+        input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
+
+        # append to next input_ids and attn_mask
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        attn_mask = torch.cat(
+            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
+            dim=1,
+        )
+
+        # get two different outputs
+        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask)[
+            "last_hidden_state"
+        ]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+    def create_and_check_decoder_model_past_large_inputs(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = UMT5Model(config=config).get_decoder().to(torch_device).eval()
+        # first forward pass
+        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_attn_mask = ids_tensor((self.batch_size, 3), 2)
+        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
 
         # append to next input_ids and
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
+        next_attention_mask = torch.cat([attention_mask, next_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
         output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
@@ -193,131 +363,253 @@ class NllbMoeModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def check_encoder_decoder_model_standalone(self, config, inputs_dict):
-        model = NllbMoeModel(config=config).to(torch_device).eval()
-        outputs = model(**inputs_dict)
+    def create_and_check_generate_with_past_key_values(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = UMT5ForConditionalGeneration(config=config).to(torch_device).eval()
+        torch.manual_seed(0)
+        output_without_past_cache = model.generate(
+            input_ids[:1], num_beams=2, max_length=5, do_sample=True, use_cache=False
+        )
+        torch.manual_seed(0)
+        output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
+        self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
 
-        encoder_last_hidden_state = outputs.encoder_last_hidden_state
-        last_hidden_state = outputs.last_hidden_state
+    def create_and_check_model_fp16_forward(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = UMT5Model(config=config).to(torch_device).half().eval()
+        output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)["last_hidden_state"]
+        self.parent.assertFalse(torch.isnan(output).any().item())
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            encoder = model.get_encoder()
-            encoder.save_pretrained(tmpdirname)
-            encoder = NllbMoeEncoder.from_pretrained(tmpdirname).to(torch_device)
+    def create_and_check_encoder_decoder_shared_weights(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        for model_class in [UMT5Model, UMT5ForConditionalGeneration]:
+            torch.manual_seed(0)
+            model = model_class(config=config).to(torch_device).eval()
+            # load state dict copies weights but does not tie them
+            model.encoder.load_state_dict(model.decoder.state_dict(), strict=False)
 
-        encoder_last_hidden_state_2 = encoder(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])[
-            0
-        ]
+            torch.manual_seed(0)
+            tied_config = copy.deepcopy(config)
+            tied_config.tie_encoder_decoder = True
+            tied_model = model_class(config=tied_config).to(torch_device).eval()
 
-        self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
+            model_result = model(
+                input_ids=input_ids,
+                decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=decoder_attention_mask,
+            )
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            decoder = model.get_decoder()
-            decoder.save_pretrained(tmpdirname)
-            decoder = NllbMoeDecoder.from_pretrained(tmpdirname).to(torch_device)
+            tied_model_result = tied_model(
+                input_ids=input_ids,
+                decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=decoder_attention_mask,
+            )
 
-        last_hidden_state_2 = decoder(
-            input_ids=inputs_dict["decoder_input_ids"],
-            attention_mask=inputs_dict["decoder_attention_mask"],
-            encoder_hidden_states=encoder_last_hidden_state,
-            encoder_attention_mask=inputs_dict["attention_mask"],
-        )[0]
+            # check that models has less parameters
+            self.parent.assertLess(
+                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
+            )
+            random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
-        self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
+            # check that outputs are equal
+            self.parent.assertTrue(
+                torch.allclose(
+                    model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4
+                )
+            )
+
+            # check that outputs after saving and loading are equal
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                tied_model.save_pretrained(tmpdirname)
+                tied_model = model_class.from_pretrained(tmpdirname)
+                tied_model.to(torch_device)
+                tied_model.eval()
+
+                # check that models has less parameters
+                self.parent.assertLess(
+                    sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
+                )
+                random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
+
+                tied_model_result = tied_model(
+                    input_ids=input_ids,
+                    decoder_input_ids=decoder_input_ids,
+                    attention_mask=attention_mask,
+                    decoder_attention_mask=decoder_attention_mask,
+                )
+
+                # check that outputs are equal
+                self.parent.assertTrue(
+                    torch.allclose(
+                        model_result[0][0, :, random_slice_idx],
+                        tied_model_result[0][0, :, random_slice_idx],
+                        atol=1e-4,
+                    )
+                )
 
 
 @require_torch
-class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (NllbMoeModel, NllbMoeForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (NllbMoeForConditionalGeneration,) if is_torch_available() else ()
+class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (UMT5Model, UMT5ForConditionalGeneration) if is_torch_available() else ()
+    all_generative_model_classes = (UMT5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": NllbMoeForConditionalGeneration,
-            "feature-extraction": NllbMoeModel,
-            "summarization": NllbMoeForConditionalGeneration,
-            "text2text-generation": NllbMoeForConditionalGeneration,
-            "translation": NllbMoeForConditionalGeneration,
+            "conversational": UMT5ForConditionalGeneration,
+            "feature-extraction": UMT5Model,
+            "summarization": UMT5ForConditionalGeneration,
+            "text2text-generation": UMT5ForConditionalGeneration,
+            "translation": UMT5ForConditionalGeneration,
+            "question-answering": UMT5ForQuestionAnswering,
         }
         if is_torch_available()
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = False
+    fx_compatible = True
     test_pruning = False
     test_missing_keys = True
-    test_torchscript = False
-
-    # TODO: Fix the failed tests when this model gets more usage
-    def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
-    ):
-        # Saving the slow tokenizer after saving the fast tokenizer causes the loading of the later hanging forever.
-        return True
+    test_torchscript = True
+    # The small T5 model needs higher percentages for CPU/MP tests
+    model_split_percents = [0.8, 0.9]
 
     def setUp(self):
-        self.model_tester = NllbMoeModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=NllbMoeConfig)
+        self.model_tester = UMT5ModelTester(self)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
+    @unittest.skip("Test has a segmentation fault on torch 1.8.0")
+    def test_export_to_onnx(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        model = UMT5Model(config_and_inputs[0]).to(torch_device)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            torch.onnx.export(
+                model,
+                (config_and_inputs[1], config_and_inputs[3], config_and_inputs[2]),
+                f"{tmpdirname}/t5_test.onnx",
+                export_params=True,
+                opset_version=9,
+                input_names=["input_ids", "decoder_input_ids"],
+            )
 
-    def test_save_load_strict(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        for model_class in self.all_model_classes:
-            model = model_class(config)
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+    def test_with_lm_head(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_with_lm_head(*config_and_inputs)
+
+    def test_decoder_model_past(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_decoder_model_past(*config_and_inputs)
+
+    def test_decoder_model_past_with_attn_mask(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
+
+    def test_decoder_model_past_with_3d_attn_mask(self):
+        (
+            config,
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+            lm_labels,
+        ) = self.model_tester.prepare_config_and_inputs()
+
+        attention_mask = ids_tensor(
+            [self.model_tester.batch_size, self.model_tester.encoder_seq_length, self.model_tester.encoder_seq_length],
+            vocab_size=2,
+        )
+        decoder_attention_mask = ids_tensor(
+            [self.model_tester.batch_size, self.model_tester.decoder_seq_length, self.model_tester.decoder_seq_length],
+            vocab_size=2,
+        )
+
+        self.model_tester.create_and_check_decoder_model_attention_mask_past(
+            config,
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+            lm_labels,
+        )
 
     def test_decoder_model_past_with_large_inputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        config.decoder_sparse_step = 0
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(config, inputs_dict)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_encoder_decoder_model_standalone(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
+    def test_generate_with_past_key_values(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
 
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    def test_encoder_decoder_shared_weights(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
 
-        for model_class in (NllbMoeModel, NllbMoeForConditionalGeneration):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
+    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    def test_model_fp16_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+    def test_generate_with_head_masking(self):
+        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config = config_and_inputs[0]
+        max_length = config_and_inputs[1].shape[-1] + 3
+        model = UMT5ForConditionalGeneration(config).eval()
+        model.to(torch_device)
 
-            if not self.is_encoder_decoder:
-                input_ids = inputs["input_ids"]
-                del inputs["input_ids"]
-            else:
-                encoder_input_ids = inputs["input_ids"]
-                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
-                del inputs["input_ids"]
-                inputs.pop("decoder_input_ids", None)
+        head_masking = {
+            "head_mask": torch.zeros(config.num_layers, config.num_heads, device=torch_device),
+            "decoder_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
+            "cross_attn_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
+        }
 
-            wte = model.get_input_embeddings()
-            if not self.is_encoder_decoder:
-                inputs["inputs_embeds"] = wte(input_ids)
-            else:
-                inputs["inputs_embeds"] = wte(encoder_input_ids)
-                inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
+        for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
+            head_masks = {name: mask}
+            # Explicitly pass decoder_head_mask as it is required from T5 model when head_mask specified
+            if name == "head_mask":
+                head_masks["decoder_head_mask"] = torch.ones(
+                    config.num_decoder_layers, config.num_heads, device=torch_device
+                )
 
-            with torch.no_grad():
-                model(**inputs)[0]
+            out = model.generate(
+                config_and_inputs[1],
+                num_beams=1,
+                max_length=max_length,
+                output_attentions=True,
+                return_dict_in_generate=True,
+                **head_masks,
+            )
+            # We check the state of decoder_attentions and cross_attentions just from the last step
+            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
+            self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
-    def test_generate_fp16(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs()
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        model = NllbMoeForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
-        model.generate(input_ids, attention_mask=attention_mask)
-        model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+    @unittest.skip("Does not work on the tiny model as we keep hitting edge cases.")
+    def test_disk_offload(self):
+        pass
 
 
 @require_torch
@@ -330,8 +622,8 @@ class Umt5IntegrationTest(unittest.TestCase):
         For comparison run the kaggle notbook available here : https://www.kaggle.com/arthurzucker/umt5-inference
         """
 
-        model = AutoModelForSeq2SeqLM.from_pretrained("google/umt5-small", return_dict=True).to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained("google/umt5-small")
+        model = UMT5ForConditionalGeneration.from_pretrained("google/umt5-small", return_dict=True).to(torch_device)
+        tokenizer = T5Tokenizer.from_pretrained("google/umt5-small")
         input_text = [
             "Bonjour monsieur <extra_id_0> bien <extra_id_1>.",
             "No se como puedo <extra_id_0>.",
