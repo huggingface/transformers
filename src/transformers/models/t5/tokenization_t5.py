@@ -19,11 +19,13 @@ import os
 import re
 import warnings
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
+
+
 if TYPE_CHECKING:
     from ...tokenization_utils_base import TextInput
 from ...utils import logging
