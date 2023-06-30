@@ -69,10 +69,10 @@ class IctImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_color_quantize (`bool`, *optional*, defaults to `self.do_color_quantize`):
+        do_color_quantize (`bool`, *optional*, defaults to `True`):
             Whether to color quantize the image. Can be overridden by the `do_color_quantize` parameter in the
             `preprocess` method.
-        clusters (`np.ndarray`, *optional*, defaults to `self.clusters`):
+        clusters (`np.ndarray`, *optional*, defaults to `None`):
             Clusters used to quantize the image of shape `(n_clusters, 3)`. Only has an effect if `do_color_quantize`
             is set to `True`.
     """
@@ -90,7 +90,7 @@ class IctImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_color_quantize: bool = True,
-        clusters: Optional[np.ndarray] = None,
+        clusters: Optional[Union[np.ndarray, List[float]]] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -105,7 +105,7 @@ class IctImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_color_quantize = do_color_quantize
-        self.clusters = np.array(clusters)
+        self.clusters = np.array(clusters) if clusters is not None else None
 
     def resize(
         self,
@@ -192,24 +192,25 @@ class IctImageProcessor(BaseImageProcessor):
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
-    def color_quantize(self, image: np.ndarray, clusters: Optional[np.ndarray] = None):
+    def color_quantize(self, image: np.ndarray, clusters: np.ndarray):
         """
-        Reduce the dimension by using an extra visual vocabulary with spatial size num_clusters × 3, which was
+        Reduce the dimension by using an extra visual vocabulary (Bags-of-Words vectors) with spatial size num_clusters × 3, which was
         generated using k-means clustered centers of the ImageNet RGB pixel spaces.
+        
+        e.g., An image of shape (32, 24, 3) will be reduced to (32, 24) where each element of the output tensor corresponds to an integer index in `clusters` which contain the actual RGB pixel. 
 
         Args:
             image (`np.ndarray`):
-                Image to reduce dimensions.
+                Image whose dimension will be reduced.
 
         Returns:
-            `np.ndarray`: The image with reduced dimension of shape `[input_height * input_width]` where each value
-            corresponds to the index of clusters.
+            `np.ndarray`: Image with reduced dimensions.
         """
 
-        # Copied from https://github.com/raywzy/ICT/blob/59dd12d374d47cdf0dce90923017ca3657e6aa0b/Transformer/inference.py#L98
-        image = torch.from_numpy(image).view(-1, 3).float()
-        image = ((image[:, None, :] - clusters[None, :, :]) ** 2).sum(-1).argmin(1)
-        image = image.numpy()
+        # Modified from https://github.com/raywzy/ICT/blob/59dd12d374d47cdf0dce90923017ca3657e6aa0b/Transformer/inference.py#L98
+        image = to_channel_dimension_format(image, ChannelDimension.LAST)
+        image = image.reshape(-1, 3)
+        image = np.argmin(np.sum((image[:, None, :] - clusters[None, :, :]) ** 2, axis=-1), axis=1)
         return image
 
     def preprocess(
@@ -314,7 +315,6 @@ class IctImageProcessor(BaseImageProcessor):
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
 
         if do_color_quantize:
-            images = [to_channel_dimension_format(image, ChannelDimension.LAST) for image in images]
             # flatten images to (batch_size, height * width)
             images = [self.color_quantize(image=image, clusters=clusters) for image in images]
         else:
