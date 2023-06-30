@@ -66,11 +66,6 @@ BARK_SUBMODELCONFIG_START_DOCSTRING = """
             Whether or not the model should return the last key/values attentions (not used by all models).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        n_codes_total (`int`, *optional*, defaults to 8):
-            The total number of audio codebooks predicted. Used in the fine acoustics sub-model.
-        n_codes_given (`int`, *optional*, defaults to 1):
-            The number of audio codebooks predicted in the coarse acoustics sub-model. Used in the acoustics
-            sub-models.
 """
 
 
@@ -95,8 +90,6 @@ class BarkSubModelConfig(PretrainedConfig):
         hidden_size=768,
         dropout=0.0,
         bias=True,  # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
-        n_codes_total=8,  # for BarkFineModel
-        n_codes_given=1,  # for BarkFineModel
         initializer_range=0.02,
         use_cache=True,
         **kwargs,
@@ -109,8 +102,6 @@ class BarkSubModelConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.dropout = dropout
         self.bias = bias
-        self.n_codes_total = n_codes_total
-        self.n_codes_given = n_codes_given
         self.use_cache = use_cache
         self.initializer_range = initializer_range
 
@@ -180,6 +171,11 @@ class BarkCoarseConfig(BarkSubModelConfig):
 @add_start_docstrings(
     BARK_SUBMODELCONFIG_START_DOCSTRING.format(config="BarkFineConfig", model="BarkFineModel"),
     """
+        n_codes_total (`int`, *optional*, defaults to 8):
+            The total number of audio codebooks predicted. Used in the fine acoustics sub-model.
+        n_codes_given (`int`, *optional*, defaults to 1):
+            The number of audio codebooks predicted in the coarse acoustics sub-model. Used in the acoustics
+            sub-models.
     Example:
 
     ```python
@@ -198,7 +194,10 @@ class BarkCoarseConfig(BarkSubModelConfig):
 class BarkFineConfig(BarkSubModelConfig):
     model_type = "fine_acoustics"
 
-    def __init__(self, *args, tie_word_embeddings=True, **kwargs):
+    def __init__(self, *args, tie_word_embeddings=True, n_codes_total=8, n_codes_given=1, **kwargs):
+        self.n_codes_total = n_codes_total
+        self.n_codes_given = n_codes_given
+
         super().__init__(*args, tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
