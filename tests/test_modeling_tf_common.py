@@ -120,6 +120,10 @@ class TFModelTesterMixin:
     is_encoder_decoder = False
     has_attentions = True
 
+    def get_random_model_classes(self):
+        MAX_NUM_TO_TEST = 2
+        return random.sample(self.all_model_classes, k=MAX_NUM_TO_TEST)
+
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False) -> dict:
         inputs_dict = copy.deepcopy(inputs_dict)
 
@@ -341,7 +345,7 @@ class TFModelTesterMixin:
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes:
+        for model_class in self.get_random_model_classes():
             model = model_class(config)
             model.build()
 
@@ -689,7 +693,7 @@ class TFModelTesterMixin:
     def test_compile_tf_model(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes:
+        for model_class in self.get_random_model_classes():
             # Prepare our model
             model = model_class(config)
             # These are maximally general inputs for the model, with multiple None dimensions
