@@ -2754,7 +2754,8 @@ class Trainer:
                 raise ValueError("Install Accelerate from main branch")
             try:
                 state_dict = self.accelerator.get_state_dict(self.deepspeed)
-                self._save(output_dir, state_dict=state_dict)
+                if self.args.should_save:
+                    self._save(output_dir, state_dict=state_dict)
             except ValueError:
                 logger.warning(
                     " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
