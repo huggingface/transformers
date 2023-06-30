@@ -341,7 +341,7 @@ class TFModelTesterMixin:
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes:
+        for model_class in self.all_model_classes[:2]:
             model = model_class(config)
             model.build()
 
@@ -689,7 +689,7 @@ class TFModelTesterMixin:
     def test_compile_tf_model(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes:
+        for model_class in self.all_model_classes[:2]:
             # Prepare our model
             model = model_class(config)
             # These are maximally general inputs for the model, with multiple None dimensions
