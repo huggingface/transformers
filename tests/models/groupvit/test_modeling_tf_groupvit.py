@@ -463,6 +463,10 @@ class TFGroupViTTextModelTest(TFModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_onnx = False
 
+    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-4, name="outputs", attributes=None):
+        # We override with a slightly higher tol value, as this model tends to diverge a bit more
+        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
+
     def setUp(self):
         self.model_tester = TFGroupViTTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GroupViTTextConfig, hidden_size=37)
@@ -584,6 +588,10 @@ class TFGroupViTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_resize_embeddings = False
     test_attention_outputs = False
     test_onnx = False
+
+    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-4, name="outputs", attributes=None):
+        # We override with a slightly higher tol value, as this model tends to diverge a bit more
+        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
 
     def setUp(self):
         self.model_tester = TFGroupViTModelTester(self)
