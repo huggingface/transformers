@@ -521,7 +521,7 @@ _import_structure = {
         "TvltConfig",
         "TvltProcessor",
     ],
-    "models.umt5": ["UMT5_PRETRAINED_MODEL_ARCHIVE_LIST"],
+    "models.umt5": [],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechConfig",
@@ -6168,7 +6168,6 @@ if TYPE_CHECKING:
             TvltPreTrainedModel,
         )
         from .models.umt5 import (
-            UMT5_PRETRAINED_MODEL_ARCHIVE_LIST,
             UMT5EncoderModel,
             UMT5ForConditionalGeneration,
             UMT5ForQuestionAnswering,

@@ -7040,9 +7040,6 @@ class TvltPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-UMT5_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
 class UMT5EncoderModel(metaclass=DummyObject):
     _backends = ["torch"]
 

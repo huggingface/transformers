@@ -16,7 +16,7 @@ import copy
 import tempfile
 import unittest
 
-from transformers import is_torch_available
+from transformers import T5Config, is_torch_available
 from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
@@ -33,7 +33,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import T5Config, T5Tokenizer, UMT5ForConditionalGeneration, UMT5ForQuestionAnswering, UMT5Model
+    from transformers import AutoTokenizer, UMT5ForConditionalGeneration, UMT5ForQuestionAnswering, UMT5Model
 
 # Copied from test.models.t5.test_modeling_t5.T5ModelTester with T5->UMT5,UMT5Config->T5Config
 class UMT5ModelTester:
@@ -625,7 +625,7 @@ class Umt5IntegrationTest(unittest.TestCase):
         """
 
         model = UMT5ForConditionalGeneration.from_pretrained("google/umt5-small", return_dict=True).to(torch_device)
-        tokenizer = T5Tokenizer.from_pretrained("google/umt5-small")
+        tokenizer = AutoTokenizer.from_pretrained("google/umt5-small")
         input_text = [
             "Bonjour monsieur <extra_id_0> bien <extra_id_1>.",
             "No se como puedo <extra_id_0>.",
