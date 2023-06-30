@@ -61,7 +61,7 @@ class TFXLNetModelTester:
         self.hidden_size = 32
         self.num_attention_heads = 4
         self.d_inner = 128
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 2
         self.type_sequence_label_size = 2
         self.untie_r = True
         self.bi_data = False
