@@ -150,6 +150,10 @@ class TFGroupViTVisionModelTest(TFModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_onnx = False
 
+    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-4, name="outputs", attributes=None):
+        # We override with a slightly higher tol value, as this model tends to diverge a bit more
+        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
+
     def setUp(self):
         self.model_tester = TFGroupViTVisionModelTester(self)
         self.config_tester = ConfigTester(
