@@ -286,7 +286,7 @@ class BarkConfig(PretrainedConfig):
         self.semantic_config = BarkSemanticConfig(**semantic_config)
         self.coarse_acoustics_config = BarkCoarseConfig(**coarse_acoustics_config)
         self.fine_acoustics_config = BarkFineConfig(**fine_acoustics_config)
-        self.codec_config = AutoConfig(**codec_config)
+        self.codec_config = AutoConfig.for_model(**codec_config)
 
         self.initializer_range = initializer_range
 
