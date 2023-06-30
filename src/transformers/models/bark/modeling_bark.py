@@ -21,7 +21,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from ...generation.logits_process import AlternatingCodebooksLogitsProcessor, SemanticLogitsProcessor
+from ...generation.logits_process import AlternatingCodebooksLogitsProcessor, SuppressTokensLogitsProcessor
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
@@ -750,16 +750,21 @@ class BarkSemanticModel(BarkCausalModel):
             dim=1,
         )
 
-        semantic_logits_processor = SemanticLogitsProcessor(
-            semantic_generation_config.semantic_vocab_size, semantic_generation_config.semantic_pad_token
+        tokens_to_suppress = list(
+            range(semantic_generation_config.semantic_vocab_size, semantic_generation_config.semantic_pad_token)
         )
+        tokens_to_suppress.extend(
+            list(range(semantic_generation_config.semantic_pad_token, self.config.output_vocab_size))
+        )
+
+        suppress_tokens_logits_processor = SuppressTokensLogitsProcessor(tokens_to_suppress)
 
         # pass input_ids in order to stay consistent with the transformers generate method even though it is not used
         # (except to get the input seq_len - that's why we keep the first 257 tokens)
         semantic_output = self.generate(
             torch.ones((batch_size, max_input_semantic_length + 1), dtype=torch.int).to(self.device),
             input_embeds=input_embeds,
-            logits_processor=[semantic_logits_processor],
+            logits_processor=[suppress_tokens_logits_processor],
             generation_config=semantic_generation_config,
             # stopping_criteria=[semantic_stopping_criteria],
             **kwargs,

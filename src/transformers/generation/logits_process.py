@@ -1103,32 +1103,6 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         scores = uncond_logits + (cond_logits - uncond_logits) * self.guidance_scale
         return scores
 
-class SemanticLogitsProcessor(LogitsProcessor):
-    r"""
-    [`LogitsProcessor`] enforcing that logits from the semantic model observe Bark original logic.
-
-    Args:
-        semantic_vocab_size (`int`):
-            The size of the semantic vocabulary size. Has to be lower than the output vocabulary size of the semantic
-            model.
-        semantic_pad_token (`int`):
-            Token id of the semantic pad token.
-    """
-
-    def __init__(self, semantic_vocab_size: int, semantic_pad_token: int):
-        if semantic_vocab_size > semantic_pad_token:
-            raise ValueError("`semantic_vocab_size` has to be lower or equal than `semantic_pad_token`")
-
-        self.semantic_vocab_size = semantic_vocab_size
-        self.semantic_pad_token = semantic_pad_token
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        scores[:, self.semantic_vocab_size : self.semantic_pad_token] = -float("inf")
-        scores[:, self.semantic_pad_token + 1 :] = -float("inf")
-
-        return scores
-
-
 class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] enforcing alternated generation between the two codebooks of [`Bark`]'s fine submodel.
