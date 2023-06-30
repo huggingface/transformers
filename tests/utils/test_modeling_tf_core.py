@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import copy
 import os
-import random
 import tempfile
 from importlib import import_module
 from math import isnan
@@ -73,10 +72,6 @@ class TFCoreModelTesterMixin:
     test_head_masking = True
     is_encoder_decoder = False
 
-    def get_random_model_classes(self):
-        MAX_NUM_TO_TEST = 2
-        return random.sample(self.all_model_classes, k=MAX_NUM_TO_TEST)
-
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False) -> dict:
         inputs_dict = copy.deepcopy(inputs_dict)
 
@@ -116,7 +111,7 @@ class TFCoreModelTesterMixin:
     @slow
     def test_graph_mode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.get_random_model_classes():
+        for model_class in self.all_model_classes[:2]:
             inputs = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config)
 
@@ -130,7 +125,7 @@ class TFCoreModelTesterMixin:
     @slow
     def test_xla_mode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.get_random_model_classes():
+        for model_class in self.all_model_classes[:2]:
             inputs = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config)
 
@@ -145,7 +140,7 @@ class TFCoreModelTesterMixin:
     def test_xla_fit(self):
         # This is a copy of the test_keras_fit method, but we use XLA compilation instead of eager
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.get_random_model_classes():
+        for model_class in self.all_model_classes[:2]:
             model = model_class(config)
             if getattr(model, "hf_compute_loss", None):
                 # Test that model correctly compute the loss with kwargs
@@ -219,7 +214,7 @@ class TFCoreModelTesterMixin:
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
-        for model_class in self.get_random_model_classes():
+        for model_class in self.all_model_classes[:2]:
             class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config)
             model.build()
@@ -274,7 +269,7 @@ class TFCoreModelTesterMixin:
         # try/finally block to ensure subsequent tests run in float32
         try:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            for model_class in self.get_random_model_classes():
+            for model_class in self.all_model_classes[:2]:
                 class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
                 model = model_class(config)
                 outputs = model(class_inputs_dict)
@@ -357,7 +352,7 @@ class TFCoreModelTesterMixin:
     def test_graph_mode_with_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.get_random_model_classes():
+        for model_class in self.all_model_classes[:2]:
             model = model_class(config)
 
             inputs = copy.deepcopy(inputs_dict)
