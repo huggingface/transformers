@@ -264,6 +264,7 @@ class BarkConfig(PretrainedConfig):
         coarse_acoustics_config: Dict = None,
         fine_acoustics_config: Dict = None,
         codec_config: Dict = None,
+        initializer_range=0.02,
         **kwargs,
     ):
         if semantic_config is None:
@@ -286,6 +287,8 @@ class BarkConfig(PretrainedConfig):
         self.coarse_acoustics_config = BarkCoarseConfig(**coarse_acoustics_config)
         self.fine_acoustics_config = BarkFineConfig(**fine_acoustics_config)
         self.codec_config = EncodecConfig(**codec_config)
+
+        self.initializer_range = initializer_range
 
         super().__init__(**kwargs)
 

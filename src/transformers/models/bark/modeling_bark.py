@@ -965,7 +965,7 @@ class BarkModel(BarkPreTrainedModel):
                 for n in range(1, x_coarse_history.shape[0]):
                     # offset
                     x_coarse_history[n, :] += self.generation_config.codebook_size * n
-                    
+
             x_coarse_history = x_coarse_history + semantic_generation_config.semantic_vocab_size
 
             # flatten x_coarse_history
