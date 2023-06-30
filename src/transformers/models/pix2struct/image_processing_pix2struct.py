@@ -257,6 +257,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         _check_torch_version()
 
         # convert to torch
+        image = np.array(image)
         image = to_channel_dimension_format(image, ChannelDimension.FIRST)
         image = torch.from_numpy(image)
 

@@ -69,8 +69,8 @@ def _output_wrapper(output):
     def _cast_to_image_object(result):
         return ImageObject(result) if isinstance(result, np.ndarray) else result
 
-    def _method_wrapper(first_pos_arg, *args, **kwargs):
-        result = output(first_pos_arg, *args, **kwargs)
+    def _method_wrapper(*args, **kwargs):
+        result = output(*args, **kwargs)
         return _cast_to_image_object(result)
 
     if callable(output) and not isinstance(output, type):
@@ -132,14 +132,13 @@ class ImageObject(np.lib.mixins.NDArrayOperatorsMixin):
         self._width = width
 
     def __getattribute__(self, __name: str) -> Any:
-        if __name in ("_data"):
+        if __name in ("_data",):
             return super().__getattribute__(__name)
 
         if hasattr(self._data, __name):
             result = getattr(self._data, __name)
         else:
             result = super().__getattribute__(__name)
-
         return _output_wrapper(result)
 
     def __getitem__(self, key: Any) -> Any:
