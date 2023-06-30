@@ -473,7 +473,9 @@ class UMT5ModelTester:
 
 @require_torch
 class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (UMT5Model, UMT5ForConditionalGeneration) if is_torch_available() else ()
+    all_model_classes = (
+        (UMT5Model, UMT5ForConditionalGeneration, UMT5ForQuestionAnswering) if is_torch_available() else ()
+    )
     all_generative_model_classes = (UMT5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
