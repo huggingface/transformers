@@ -296,12 +296,12 @@ DatasetDict({
 
 ```py
 >>> def collate_fn(batch):
-...     pixel_values = [item["pixel_values"] for item in batch]
-...     encoding = image_processor.pad(pixel_values, return_tensors="pt")
+...     pixel_values = [item["pixel_values"].numpy() for item in batch]
+...     pixel_values_padded = image_processor.pad(pixel_values, return_pixel_mask=True, return_tensors="pt")
 ...     labels = [item["labels"] for item in batch]
 ...     batch = {}
-...     batch["pixel_values"] = encoding["pixel_values"]
-...     batch["pixel_mask"] = encoding["pixel_mask"]
+...     batch["pixel_values"] = pixel_values_padded.pixel_values
+...     batch["pixel_mask"] = pixel_values_padded.pixel_mask
 ...     batch["labels"] = labels
 ...     return batch
 ```
