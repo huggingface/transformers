@@ -473,7 +473,7 @@ COCO 데이터 세트를 빌드하는 API는 데이터를 특정 형식으로 �
 ...         return {"pixel_values": pixel_values, "labels": target}
 
 
->>> im_processor = AutoImageProcessor.from_pretrained("MariaK/detr-resnet-50_finetuned_cppe5")
+>>> im_processor = AutoImageProcessor.from_pretrained("devonho/detr-resnet-50_finetuned_cppe5")
 
 >>> path_output_cppe5, path_anno = save_cppe5_annotation_file_images(cppe5["test"])
 >>> test_ds_coco_format = CocoDetection(path_output_cppe5, im_processor, path_anno)
@@ -485,7 +485,7 @@ COCO 데이터 세트를 빌드하는 API는 데이터를 특정 형식으로 �
 >>> import evaluate
 >>> from tqdm import tqdm
 
->>> model = AutoModelForObjectDetection.from_pretrained("MariaK/detr-resnet-50_finetuned_cppe5")
+>>> model = AutoModelForObjectDetection.from_pretrained("devonho/detr-resnet-50_finetuned_cppe5")
 >>> module = evaluate.load("ybelkada/cocoevaluate", coco=test_ds_coco_format.coco)
 >>> val_dataloader = torch.utils.data.DataLoader(
 ...     test_ds_coco_format, batch_size=8, shuffle=False, num_workers=4, collate_fn=collate_fn
@@ -514,18 +514,18 @@ COCO 데이터 세트를 빌드하는 API는 데이터를 특정 형식으로 �
 Accumulating evaluation results...
 DONE (t=0.08s).
 IoU metric: bbox
- Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.150
- Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.280
- Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.130
- Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.038
- Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.036
- Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.182
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.166
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.317
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.335
- Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.104
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.146
- Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.382
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.352
+ Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.681
+ Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.292
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.168
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.208
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.429
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.274
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.484
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.501
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.191
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.323
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.590
 ```
 
 이러한 결과는 [`~transformers.TrainingArguments`]의 하이퍼파라미터를 조정하여 더욱 개선될 수 있습니다. 한번 시도해 보세요!
@@ -544,15 +544,15 @@ DETR 모델을 미세 조정 및 평가하고, 허깅페이스 허브에 업로�
 >>> url = "https://i.imgur.com/2lnWoly.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> obj_detector = pipeline("object-detection", model="MariaK/detr-resnet-50_finetuned_cppe5")
+>>> obj_detector = pipeline("object-detection", model="devonho/detr-resnet-50_finetuned_cppe5")
 >>> obj_detector(image)
 ```
 
 만약 원한다면 수동으로 `pipeline`의 결과를 재현할 수 있습니다:
 
 ```py
->>> image_processor = AutoImageProcessor.from_pretrained("MariaK/detr-resnet-50_finetuned_cppe5")
->>> model = AutoModelForObjectDetection.from_pretrained("MariaK/detr-resnet-50_finetuned_cppe5")
+>>> image_processor = AutoImageProcessor.from_pretrained("devonho/detr-resnet-50_finetuned_cppe5")
+>>> model = AutoModelForObjectDetection.from_pretrained("devonho/detr-resnet-50_finetuned_cppe5")
 
 >>> with torch.no_grad():
 ...     inputs = image_processor(images=image, return_tensors="pt")
