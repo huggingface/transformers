@@ -1,38 +1,27 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
+<!-- 版权所有2022年HuggingFace团队保留所有权利。
+根据Apache许可证第2.0版（“许可证”）获得许可；除非符合许可证的要求，否则您不得使用本文件。您可以在以下位置获取许可证的副本：
 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
+除非适用法律要求或书面同意，根据许可证分发的软件以“原样”分发，不附带任何明示或暗示的担保或条件。请查看许可证以获得特定语言下的权限和限制。请注意，此文件是Markdown格式，但包含特定于我们的文档生成器（类似于MDX）的语法，可能无法正确地在您的Markdown查看器中呈现。
+⚠️请注意，此文件是Markdown格式，但包含特定于我们的文档生成器（类似于MDX）的语法，可能无法正确地在您的Markdown查看器中呈现。请注意，此文件是Markdown格式，但包含特定于我们的文档生成器（类似于MDX）的语法，可能无法正确地在您的Markdown查看器中呈现。
 -->
-
 # PEGASUS-X
 
-## Overview
+## 概述
 
-The PEGASUS-X model was proposed in [Investigating Efficiently Extending Transformers for Long Input Summarization](https://arxiv.org/abs/2208.04347)  by Jason Phang, Yao Zhao and Peter J. Liu.
+PEGASUS-X模型是由Jason Phang、Yao Zhao和Peter J. Liu在[Investigating Efficiently Extending Transformers for Long Input Summarization](https://arxiv.org/abs/2208.04347)中提出的。
 
-PEGASUS-X (PEGASUS eXtended) extends the PEGASUS models for long input summarization through additional long input pretraining and using staggered block-local attention with global tokens in the encoder.
+PEGASUS-X（PEGASUS扩展）通过额外的长输入预训练和在编码器中使用交错的块本地注意力和全局标记来扩展PEGASUS模型以用于长输入摘要。
 
-The abstract from the paper is the following:
+论文中的摘要如下：
 
-*While large pretrained Transformer models have proven highly capable at tackling natural language tasks, handling long sequence inputs continues to be a significant challenge. One such task is long input summarization, where inputs are longer than the maximum input context of most pretrained models. Through an extensive set of experiments, we investigate what model architectural changes and pretraining paradigms can most efficiently adapt a pretrained Transformer for long input summarization. We find that a staggered, block-local Transformer with global encoder tokens strikes a good balance of performance and efficiency, and that an additional pretraining phase on long sequences meaningfully improves downstream summarization performance. Based on our findings, we introduce PEGASUS-X, an extension of the PEGASUS model with additional long input pretraining to handle inputs of up to 16K tokens. PEGASUS-X achieves strong performance on long input summarization tasks comparable with much larger models while adding few additional parameters and not requiring model parallelism to train.*
+*尽管大型预训练Transformer模型在处理自然语言任务方面表现出色，但处理长序列输入仍然是一个重大挑战。其中一个任务是长输入摘要，其中输入超过大多数预训练模型的最大输入上下文。通过一系列广泛的实验，我们研究了哪些模型架构变化和预训练范式可以最有效地适应预训练Transformer用于长输入摘要。我们发现，具有全局编码器标记的交错块本地Transformer在性能和效率之间取得了良好的平衡，并且在长序列上进行额外的预训练可以显着提高下游摘要性能。基于我们的发现，我们引入了PEGASUS-X，这是PEGASUS模型的扩展，通过额外的长输入预训练来处理长达16K标记的输入。PEGASUS-X在长输入摘要任务上表现出与更大模型相当的强大性能，同时增加了少量的额外参数，并且不需要模型并行训练。*
 
-Tips:
+提示：
 
-* PEGASUS-X uses the same tokenizer as PEGASUS.
+* PEGASUS-X使用与PEGASUS相同的分词器。
+此模型由[zphang](<https://huggingface.co/zphang>)贡献。原始代码可在[此处](https://github.com/google-research/pegasus)找到。
 
-This model was contributed by [zphang](<https://huggingface.co/zphang). The original code can be found [here](https://github.com/google-research/pegasus).
-
-## Documentation resources
+## 文档资源
 
 - [Translation task guide](../tasks/translation)
 - [Summarization task guide](../tasks/summarization)

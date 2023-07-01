@@ -1,34 +1,21 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
+<!--版权2022年HuggingFace团队保留所有权利。
+根据Apache许可证第2.0版（“许可证”）授权；您除非符合许可证，否则不得使用此文件。您可以在以下位置获得许可证的副本
 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
+除非适用法律要求或书面同意，根据许可证分发的软件是按原样分发的“按现状”基础，无论是明示还是暗示的任何保证或条件。请参阅许可证特定语言下的权限和限制。
+⚠️请注意，此文件是Markdown格式的，但包含了我们文档生成器的特定语法（类似于MDX），可能无法正确地在您的Markdown查看器中呈现。
 -->
-
 # Chinese-CLIP
 
-## Overview
+## 概述
 
-The Chinese-CLIP model was proposed in [Chinese CLIP: Contrastive Vision-Language Pretraining in Chinese](https://arxiv.org/abs/2211.01335) by An Yang, Junshu Pan, Junyang Lin, Rui Men, Yichang Zhang, Jingren Zhou, Chang Zhou.
-Chinese-CLIP is an implementation of CLIP (Radford et al., 2021) on a large-scale dataset of Chinese image-text pairs. It is capable of performing cross-modal retrieval and also playing as a vision backbone for vision tasks like zero-shot image classification, open-domain object detection, etc. The original Chinese-CLIP code is released [at this link](https://github.com/OFA-Sys/Chinese-CLIP).
+《Chinese-CLIP：中文对比视觉-语言预训练》一文由An Yang、Junshu Pan、Junyang Lin、Rui Men、Yichang Zhang、Jingren Zhou、Chang Zhou提出（[原文链接](https://arxiv.org/abs/2211.01335)）。Chinese-CLIP是CLIP（Radford等，2021年）在大规模中文图文对数据集上的实现。它能够进行跨模态检索，同时也可以作为视觉任务（如零样本图像分类、开放域目标检测等）的视觉骨干。原始的Chinese-CLIP代码可以在[此链接](https://github.com/OFA-Sys/Chinese-CLIP)找到。
 
-The abstract from the paper is the following:
+来自论文的摘要如下：
 
-*The tremendous success of CLIP (Radford et al., 2021) has promoted the research and application of contrastive learning for vision-language pretraining. In this work, we construct a large-scale dataset of image-text pairs in Chinese, where most data are retrieved from publicly available datasets, and we pretrain Chinese CLIP models on the new dataset. We develop 5 Chinese CLIP models of multiple sizes, spanning from 77 to 958 million parameters. Furthermore, we propose a two-stage pretraining method, where the model is first trained with the image encoder frozen and then trained with all parameters being optimized, to achieve enhanced model performance. Our comprehensive experiments demonstrate that Chinese CLIP can achieve the state-of-the-art performance on MUGE, Flickr30K-CN, and COCO-CN in the setups of zero-shot learning and finetuning, and it is able to achieve competitive performance in zero-shot image classification based on the evaluation on the ELEVATER benchmark (Li et al., 2022). Our codes, pretrained models, and demos have been released.*
+*CLIP的巨大成功（Radford等，2021年）推动了视觉-语言预训练中对比学习的研究和应用。在这项工作中，我们构建了一个大规模的中文图文对数据集，其中大多数数据来自公开可用的数据集，然后我们在新数据集上预训练了中文CLIP模型。我们开发了5个中文CLIP模型，参数规模从7700万到9.58亿不等。此外，我们提出了一种两阶段的预训练方法，首先冻结图像编码器进行训练，然后对所有参数进行优化，以实现模型性能的增强。我们广泛的实验表明，中文CLIP在MUGE、Flickr30K-CN和COCO-CN的零样本学习和微调设置中都能达到最先进的性能，并且在ELEVATER基准测试（Li等，2022年）的零样本图像分类评估中能够取得竞争性的性能。我们已经发布了代码、预训练模型和演示。*
 
-## Usage
-
-The code snippet below shows how to compute image & text features and similarities:
-
+## 使用方法
+下面的代码段展示了如何计算图像和文本特征以及相似度：
 ```python
 >>> from PIL import Image
 >>> import requests
@@ -59,8 +46,7 @@ The code snippet below shows how to compute image & text features and similariti
 >>> probs = logits_per_image.softmax(dim=1)  # probs: [[1.2686e-03, 5.4499e-02, 6.7968e-04, 9.4355e-01]]
 ```
 
-Currently, we release the following scales of pretrained Chinese-CLIP models at HF Model Hub:
-
+当前，我们在HF Model Hub上发布了以下规模的预训练Chinese-CLIP模型：
 - [OFA-Sys/chinese-clip-vit-base-patch16](https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16)
 - [OFA-Sys/chinese-clip-vit-large-patch14](https://huggingface.co/OFA-Sys/chinese-clip-vit-large-patch14)
 - [OFA-Sys/chinese-clip-vit-large-patch14-336px](https://huggingface.co/OFA-Sys/chinese-clip-vit-large-patch14-336px)

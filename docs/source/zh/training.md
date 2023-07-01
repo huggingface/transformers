@@ -1,38 +1,29 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
+<!--版权所有2022年HuggingFace团队。保留所有权利。
+根据Apache许可证第2.0版（“许可证”）获得许可；除非符合许可证的规定，否则您不得使用此文件。您可以在以下位置获取许可证的副本
 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
+除非适用法律要求或书面同意，按“原样”分发的软件根据许可证分发，并且没有任何形式的担保或条件。请参阅许可证以了解特定语言下的权限和限制。具体语言下的权限和限制。
+⚠️请注意，此文件是使用Markdown编写的，但包含我们的文档生成器（类似于MDX）的特定语法，可能无法在您的Markdown查看器中正确呈现。
 -->
 
 # Fine-tune a pretrained model
 
 [[open-in-colab]]
 
-There are significant benefits to using a pretrained model. It reduces computation costs, your carbon footprint, and allows you to use state-of-the-art models without having to train one from scratch. 🤗 Transformers provides access to thousands of pretrained models for a wide range of tasks. When you use a pretrained model, you train it on a dataset specific to your task. This is known as fine-tuning, an incredibly powerful training technique. In this tutorial, you will fine-tune a pretrained model with a deep learning framework of your choice:
+使用预训练模型有很多好处。它降低了计算成本和碳排放量，并且可以让您使用最先进的模型，而无需从头开始训练一个模型。🤗 Transformers提供了数千个针对各种任务的预训练模型。当您使用预训练模型时，您会在与您的任务相关的数据集上进行微调。这被称为微调，是一种非常强大的训练技术。在本教程中，您将使用您选择的深度学习框架对一个预训练模型进行微调：
 
-* Fine-tune a pretrained model with 🤗 Transformers [`Trainer`].
-* Fine-tune a pretrained model in TensorFlow with Keras.
-* Fine-tune a pretrained model in native PyTorch.
+* 使用🤗 Transformers的[`Trainer`]对一个预训练模型进行微调。
+* 在TensorFlow中使用Keras对一个预训练模型进行微调。
+* 在原生PyTorch中对一个预训练模型进行微调。
 
 <a id='data-processing'></a>
 
-## Prepare a dataset
+## 准备数据集
 
 <Youtube id="_BZearw7f0w"/>
 
-Before you can fine-tune a pretrained model, download a dataset and prepare it for training. The previous tutorial showed you how to process data for training, and now you get an opportunity to put those skills to the test!
+在您对一个预训练模型进行微调之前，需要下载一个数据集并为其进行准备以用于训练。之前的教程向您展示了如何处理用于训练的数据，现在您有机会将这些技巧付诸实践！
 
-Begin by loading the [Yelp Reviews](https://huggingface.co/datasets/yelp_review_full) dataset:
+首先加载[Yelp Reviews](https://huggingface.co/datasets/yelp_review_full)数据集：
 
 ```py
 >>> from datasets import load_dataset
@@ -43,7 +34,7 @@ Begin by loading the [Yelp Reviews](https://huggingface.co/datasets/yelp_review_
  'text': 'My expectations for McDonalds are t rarely high. But for one to still fail so spectacularly...that takes something special!\\nThe cashier took my friends\'s order, then promptly ignored me. I had to force myself in front of a cashier who opened his register to wait on the person BEHIND me. I waited over five minutes for a gigantic order that included precisely one kid\'s meal. After watching two people who ordered after me be handed their food, I asked where mine was. The manager started yelling at the cashiers for \\"serving off their orders\\" when they didn\'t have their food. But neither cashier was anywhere near those controls, and the manager was the one serving food to customers and clearing the boards.\\nThe manager was rude when giving me my order. She didn\'t make sure that I had everything ON MY RECEIPT, and never even had the decency to apologize that I felt I was getting poor service.\\nI\'ve eaten at various McDonalds restaurants for over 30 years. I\'ve worked at more than one location. I expect bad days, bad moods, and the occasional mistake. But I have yet to have a decent experience at this store. It will remain a place I avoid unless someone in my party needs to avoid illness from low blood sugar. Perhaps I should go back to the racially biased service of Steak n Shake instead!'}
 ```
 
-As you now know, you need a tokenizer to process the text and include a padding and truncation strategy to handle any variable sequence lengths. To process your dataset in one step, use 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/process.html#map) method to apply a preprocessing function over the entire dataset:
+正如您现在所知道的，您需要一个分词器来处理文本，并包括填充和截断策略以处理任意长度的序列。为了一次处理整个数据集，使用🤗 Datasets的[`map`](https://huggingface.co/docs/datasets/process.html#map)方法在整个数据集上应用一个预处理函数：
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -58,8 +49,7 @@ As you now know, you need a tokenizer to process the text and include a padding 
 >>> tokenized_datasets = dataset.map(tokenize_function, batched=True)
 ```
 
-If you like, you can create a smaller subset of the full dataset to fine-tune on to reduce the time it takes:
-
+如果愿意的话，您可以创建一个较小的子集来进行微调，以减少所需的时间：
 ```py
 >>> small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(1000))
 >>> small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(1000))
@@ -69,19 +59,17 @@ If you like, you can create a smaller subset of the full dataset to fine-tune on
 
 ## Train
 
-At this point, you should follow the section corresponding to the framework you want to use. You can use the links
-in the right sidebar to jump to the one you want - and if you want to hide all of the content for a given framework,
-just use the button at the top-right of that framework's block!
+此时，您应该按照您想要使用的框架对应的部分进行操作。您可以使用右侧边栏的链接跳转到您想要的部分 - 如果您希望隐藏特定框架的全部内容，只需使用该框架块顶部右侧的按钮！
 
 <frameworkcontent>
 <pt>
 <Youtube id="nvBXf7s7vTI"/>
 
-## Train with PyTorch Trainer
+## 使用PyTorch Trainer进行训练
 
-🤗 Transformers provides a [`Trainer`] class optimized for training 🤗 Transformers models, making it easier to start training without manually writing your own training loop. The [`Trainer`] API supports a wide range of training options and features such as logging, gradient accumulation, and mixed precision.
+🤗 Transformers提供了一个针对训练🤗 Transformers模型进行优化的[`Trainer`]类，使得无需手动编写训练循环即可轻松开始训练。[` Trainer`] API支持广泛的训练选项和功能，如日志记录、梯度累积和混合精度。
 
-Start by loading your model and specify the number of expected labels. From the Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields), you know there are five labels:
+首先加载模型并指定期望的标签数量。根据Yelp Review [数据集卡片](https://huggingface.co/datasets/yelp_review_full#data-fields)，您知道有五个标签：
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -91,16 +79,15 @@ Start by loading your model and specify the number of expected labels. From the 
 
 <Tip>
 
-You will see a warning about some of the pretrained weights not being used and some weights being randomly
-initialized. Don't worry, this is completely normal! The pretrained head of the BERT model is discarded, and replaced with a randomly initialized classification head. You will fine-tune this new model head on your sequence classification task, transferring the knowledge of the pretrained model to it.
+您会看到有关某些预训练权重未被使用和某些权重随机初始化的警告。不要担心，这是完全正常的！BERT模型的预训练头部被丢弃，并用随机初始化的分类头部替换。您将在您的序列分类任务上对这个新的模型头部进行微调，将预训练模型的知识转移到它上面。
 
 </Tip>
 
-### Training hyperparameters
+### 训练超参数
 
-Next, create a [`TrainingArguments`] class which contains all the hyperparameters you can tune as well as flags for activating different training options. For this tutorial you can start with the default training [hyperparameters](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments), but feel free to experiment with these to find your optimal settings.
+接下来，创建一个[`TrainingArguments`]类，其中包含了您可以调节的所有超参数，以及用于激活不同训练选项的标志。对于本教程，您可以使用默认的训练[超参数](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments)，但请随意尝试不同的设置，找到最佳的配置。
 
-Specify where to save the checkpoints from your training:
+指定保存训练检查点的位置：
 
 ```py
 >>> from transformers import TrainingArguments
@@ -110,7 +97,7 @@ Specify where to save the checkpoints from your training:
 
 ### Evaluate
 
-[`Trainer`] does not automatically evaluate model performance during training. You'll need to pass [`Trainer`] a function to compute and report metrics. The [🤗 Evaluate](https://huggingface.co/docs/evaluate/index) library provides a simple [`accuracy`](https://huggingface.co/spaces/evaluate-metric/accuracy) function you can load with the [`evaluate.load`] (see this [quicktour](https://huggingface.co/docs/evaluate/a_quick_tour) for more information) function:
+[`Trainer`]在训练过程中不会自动评估模型性能。您需要为[`Trainer`]传递一个函数来计算和报告指标。[🤗 Evaluate](https://huggingface.co/docs/evaluate/index)库提供了一个简单的[`accuracy`](https://huggingface.co/spaces/evaluate-metric/accuracy)函数，您可以使用[`evaluate.load`]函数加载（有关更多信息，请参阅此[快速入门](https://huggingface.co/docs/evaluate/a_quick_tour)）：
 
 ```py
 >>> import numpy as np
@@ -119,7 +106,7 @@ Specify where to save the checkpoints from your training:
 >>> metric = evaluate.load("accuracy")
 ```
 
-Call [`~evaluate.compute`] on `metric` to calculate the accuracy of your predictions. Before passing your predictions to `compute`, you need to convert the predictions to logits (remember all 🤗 Transformers models return logits):
+在`metric`上调用[`~evaluate.compute`]计算您的预测的准确率。在将预测传递给`compute`之前，您需要将预测转换为logits（记住，所有🤗 Transformers模型返回的都是logits）：
 
 ```py
 >>> def compute_metrics(eval_pred):
@@ -128,7 +115,7 @@ Call [`~evaluate.compute`] on `metric` to calculate the accuracy of your predict
 ...     return metric.compute(predictions=predictions, references=labels)
 ```
 
-If you'd like to monitor your evaluation metrics during fine-tuning, specify the `evaluation_strategy` parameter in your training arguments to report the evaluation metric at the end of each epoch:
+如果您希望在微调过程中监控评估指标，请在训练参数中指定`evaluation_strategy`参数，以在每个epoch结束时报告评估指标：
 
 ```py
 >>> from transformers import TrainingArguments, Trainer
@@ -138,7 +125,7 @@ If you'd like to monitor your evaluation metrics during fine-tuning, specify the
 
 ### Trainer
 
-Create a [`Trainer`] object with your model, training arguments, training and test datasets, and evaluation function:
+使用您的模型、训练参数、训练和测试数据集以及评估函数创建一个[`Trainer`]对象：
 
 ```py
 >>> trainer = Trainer(
@@ -150,7 +137,7 @@ Create a [`Trainer`] object with your model, training arguments, training and te
 ... )
 ```
 
-Then fine-tune your model by calling [`~transformers.Trainer.train`]:
+然后通过调用[`~transformers.Trainer.train`]对模型进行微调：
 
 ```py
 >>> trainer.train()
@@ -161,41 +148,37 @@ Then fine-tune your model by calling [`~transformers.Trainer.train`]:
 
 <Youtube id="rnTGBy2ax1c"/>
 
-## Train a TensorFlow model with Keras
+## 使用Keras训练TensorFlow模型
 
-You can also train 🤗 Transformers models in TensorFlow with the Keras API!
+您也可以使用Keras API训练🤗 Transformers模型！
 
-### Loading data for Keras
+### 为Keras加载数据
 
-When you want to train a 🤗 Transformers model with the Keras API, you need to convert your dataset to a format that
-Keras understands. If your dataset is small, you can just convert the whole thing to NumPy arrays and pass it to Keras.
-Let's try that first before we do anything more complicated.
+当您想要使用Keras API训练一个🤗 Transformers模型时，您需要将数据集转换为Keras可以理解的格式。如果您的数据集很小，您可以将整个数据集转换为NumPy数组并将其传递给Keras。在更复杂的操作之前，让我们首先尝试这样做。
 
-First, load a dataset. We'll use the CoLA dataset from the [GLUE benchmark](https://huggingface.co/datasets/glue),
-since it's a simple binary text classification task, and just take the training split for now.
+首先加载一个数据集。我们将使用[GLUE基准](https://huggingface.co/datasets/glue)中的CoLA数据集，因为这是一个简单的二分类文本分类任务，现在只需取训练集。
 
 ```py
 from datasets import load_dataset
 
 dataset = load_dataset("glue", "cola")
-dataset = dataset["train"]  # Just take the training split for now
+dataset = dataset["train"]  # 现在只取训练集
 ```
 
-Next, load a tokenizer and tokenize the data as NumPy arrays. Note that the labels are already a list of 0 and 1s,
-so we can just convert that directly to a NumPy array without tokenization!
+接下来，加载一个分词器并将数据进行分词，得到NumPy数组。请注意，标签已经是一个由0和1组成的列表，因此我们可以直接将其转换为NumPy数组而无需进行分词！
 
 ```py
 from transformers import AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
 tokenized_data = tokenizer(dataset["sentence"], return_tensors="np", padding=True)
-# Tokenizer returns a BatchEncoding, but we convert that to a dict for Keras
+# 分词器返回BatchEncoding，但我们将其转换为Keras的dict格式
 tokenized_data = dict(tokenized_data)
 
-labels = np.array(dataset["label"])  # Label is already an array of 0 and 1
+labels = np.array(dataset["label"])  # 标签已经是一个由0和1组成的数组
 ```
 
-Finally, load, [`compile`](https://keras.io/api/models/model_training_apis/#compile-method), and [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) the model. Note that Transformers models all have a default task-relevant loss function, so you don't need to specify one unless you want to:
+最后，加载、[`compile`](https://keras.io/api/models/model_training_apis/#compile-method)和[`fit`](https://keras.io/api/models/model_training_apis/#fit-method)模型。请注意，🤗 Transformers模型都有一个默认的与任务相关的损失函数，因此除非您想要指定一个损失函数，否则不需要指定：
 
 ```py
 from transformers import TFAutoModelForSequenceClassification
@@ -211,30 +194,19 @@ model.fit(tokenized_data, labels)
 
 <Tip>
 
-You don't have to pass a loss argument to your models when you `compile()` them! Hugging Face models automatically
-choose a loss that is appropriate for their task and model architecture if this argument is left blank. You can always
-override this by specifying a loss yourself if you want to!
+当您调用`compile()`编译模型时，不需要为模型传递损失参数！如果将该参数留空，Hugging Face模型会自动选择适合任务和模型架构的损失函数。如果您希望自行指定损失函数，您始终可以覆盖此行为！
 
 </Tip>
 
-This approach works great for smaller datasets, but for larger datasets, you might find it starts to become a problem. Why?
-Because the tokenized array and labels would have to be fully loaded into memory, and because NumPy doesn’t handle
-“jagged” arrays, so every tokenized sample would have to be padded to the length of the longest sample in the whole
-dataset. That’s going to make your array even bigger, and all those padding tokens will slow down training too!
+这种方法在较小的数据集上效果很好，但对于较大的数据集，您可能会发现它开始成为一个问题。为什么呢？因为分词后的数组和标签需要完全加载到内存中，并且因为NumPy不能处理“jagged”数组，所以每个分词后的样本都必须填充到整个数据集中最长样本的长度。这会使您的数组变得更大，并且所有这些填充令牌也会减慢训练速度！
 
-### Loading data as a tf.data.Dataset
+### 将数据加载为tf.data.Dataset
 
-If you want to avoid slowing down training, you can load your data as a `tf.data.Dataset` instead. Although you can write your own
-`tf.data` pipeline if you want, we have two convenience methods for doing this:
+如果您想避免训练速度变慢，您可以将数据加载为`tf.data.Dataset`。虽然您可以自己编写`tf.data`流水线，但我们有两种方便的方法可以实现这一点：
+- [`~TFPreTrainedModel.prepare_tf_dataset`]: 这是我们在大多数情况下推荐的方法，因为它是一个方法在您的模型上，它可以检查模型以自动确定哪些列可用作模型输入，并丢弃其他列以创建一个更简单、更高性能的数据集。
+- [`~datasets.Dataset.to_tf_dataset`]: 这种方法更底层，适用于您想要精确控制数据集创建方式的情况，通过指定要包括的`columns`和`label_cols`。
 
-- [`~TFPreTrainedModel.prepare_tf_dataset`]: This is the method we recommend in most cases. Because it is a method
-on your model, it can inspect the model to automatically figure out which columns are usable as model inputs, and
-discard the others to make a simpler, more performant dataset.
-- [`~datasets.Dataset.to_tf_dataset`]: This method is more low-level, and is useful when you want to exactly control how
-your dataset is created, by specifying exactly which `columns` and `label_cols` to include.
-
-Before you can use [`~TFPreTrainedModel.prepare_tf_dataset`], you will need to add the tokenizer outputs to your dataset as columns, as shown in
-the following code sample:
+在使用[`~TFPreTrainedModel.prepare_tf_dataset`]之前，您需要将分词器的输出添加到数据集中作为列，如下所示：以下代码示例：
 
 ```py
 def tokenize_dataset(data):
@@ -245,25 +217,15 @@ def tokenize_dataset(data):
 dataset = dataset.map(tokenize_dataset)
 ```
 
-Remember that Hugging Face datasets are stored on disk by default, so this will not inflate your memory usage! Once the
-columns have been added, you can stream batches from the dataset and add padding to each batch, which greatly
-reduces the number of padding tokens compared to padding the entire dataset.
-
+请记住，Hugging Face数据集默认存储在磁盘上，因此这不会增加内存使用量！一旦列被添加，您可以从数据集中流式传输批次并为每个批次添加填充，这大大减少了与对整个数据集进行填充相比的填充标记数量。
 
 ```py
 >>> tf_dataset = model.prepare_tf_dataset(dataset["train"], batch_size=16, shuffle=True, tokenizer=tokenizer)
 ```
 
-Note that in the code sample above, you need to pass the tokenizer to `prepare_tf_dataset` so it can correctly pad batches as they're loaded.
-If all the samples in your dataset are the same length and no padding is necessary, you can skip this argument.
-If you need to do something more complex than just padding samples (e.g. corrupting tokens for masked language
-modelling), you can use the `collate_fn` argument instead to pass a function that will be called to transform the
-list of samples into a batch and apply any preprocessing you want. See our
-[examples](https://github.com/huggingface/transformers/tree/main/examples) or
-[notebooks](https://huggingface.co/docs/transformers/notebooks) to see this approach in action.
+请注意，在上面的代码示例中，您需要将分词器传递给`prepare_tf_dataset`，以便在加载批次时正确填充批次。如果数据集中的所有样本长度相同且不需要填充，则可以跳过此参数。如果您需要执行比填充样本更复杂的操作（例如对遮蔽语言进行破坏）建模），您可以使用`collate_fn`参数将调用一个函数来将样本列表转换为批次并应用任何预处理。请参阅我们的[示例](https://github.com/huggingface/transformers/tree/main/examples)或[笔记本](https://huggingface.co/docs/transformers/notebooks)以查看此方法的实际操作。
 
-Once you've created a `tf.data.Dataset`, you can compile and fit the model as before:
-
+创建了一个`tf.data.Dataset`后，您可以像以前一样编译和训练模型：
 ```py
 model.compile(optimizer=Adam(3e-5))  # No loss argument!
 
@@ -272,18 +234,16 @@ model.fit(tf_dataset)
 
 </tf>
 </frameworkcontent>
-
 <a id='pytorch_native'></a>
 
-## Train in native PyTorch
+## 在原生PyTorch中训练
 
-<frameworkcontent>
-<pt>
+<frameworkcontent><pt>
 <Youtube id="Dh9CL8fyG80"/>
 
-[`Trainer`] takes care of the training loop and allows you to fine-tune a model in a single line of code. For users who prefer to write their own training loop, you can also fine-tune a 🤗 Transformers model in native PyTorch.
+[`Trainer`]负责训练循环，并允许您通过一行代码进行模型微调。对于喜欢编写自己训练循环的用户，您还可以在原生PyTorch中微调🤗 Transformers模型。
 
-At this point, you may need to restart your notebook or execute the following code to free some memory:
+此时，您可能需要重新启动笔记本或执行以下代码以释放一些内存：
 
 ```py
 del model
@@ -291,27 +251,23 @@ del trainer
 torch.cuda.empty_cache()
 ```
 
-Next, manually postprocess `tokenized_dataset` to prepare it for training.
-
-1. Remove the `text` column because the model does not accept raw text as an input:
-
+接下来，手动对`tokenized_dataset`进行后处理，以准备进行训练。
+1. 删除`text`列，因为模型不接受原始文本作为输入：
     ```py
     >>> tokenized_datasets = tokenized_datasets.remove_columns(["text"])
     ```
-
 2. Rename the `label` column to `labels` because the model expects the argument to be named `labels`:
+
 
     ```py
     >>> tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
     ```
+3. 将数据集的格式设置为返回PyTorch张量而不是列表：
 
-3. Set the format of the dataset to return PyTorch tensors instead of lists:
-
-    ```py
-    >>> tokenized_datasets.set_format("torch")
-    ```
-
-Then create a smaller subset of the dataset as previously shown to speed up the fine-tuning:
+```py
+>>> tokenized_datasets.set_format("torch")
+```
+然后按照之前展示的方式创建一个较小的数据集子集，以加快微调的速度：
 
 ```py
 >>> small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(1000))
@@ -320,7 +276,7 @@ Then create a smaller subset of the dataset as previously shown to speed up the 
 
 ### DataLoader
 
-Create a `DataLoader` for your training and test datasets so you can iterate over batches of data:
+为您的训练和测试数据集创建一个`DataLoader`，以便您可以迭代处理批量数据：
 
 ```py
 >>> from torch.utils.data import DataLoader
@@ -328,8 +284,7 @@ Create a `DataLoader` for your training and test datasets so you can iterate ove
 >>> train_dataloader = DataLoader(small_train_dataset, shuffle=True, batch_size=8)
 >>> eval_dataloader = DataLoader(small_eval_dataset, batch_size=8)
 ```
-
-Load your model with the number of expected labels:
+使用预期标签数量加载您的模型：
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -339,8 +294,7 @@ Load your model with the number of expected labels:
 
 ### Optimizer and learning rate scheduler
 
-Create an optimizer and learning rate scheduler to fine-tune the model. Let's use the [`AdamW`](https://pytorch.org/docs/stable/generated/torch.optim.AdamW.html) optimizer from PyTorch:
-
+创建一个优化器和学习率调度器来微调模型。让我们使用PyTorch中的[`AdamW`](https://pytorch.org/docs/stable/generated/torch.optim.AdamW.html)优化器：
 ```py
 >>> from torch.optim import AdamW
 
@@ -359,7 +313,7 @@ Create the default learning rate scheduler from [`Trainer`]:
 ... )
 ```
 
-Lastly, specify `device` to use a GPU if you have access to one. Otherwise, training on a CPU may take several hours instead of a couple of minutes.
+最后，如果您可以访问GPU，请指定`device`以使用GPU。否则，在CPU上进行训练可能需要数小时而不是几分钟。
 
 ```py
 >>> import torch
@@ -370,15 +324,15 @@ Lastly, specify `device` to use a GPU if you have access to one. Otherwise, trai
 
 <Tip>
 
-Get free access to a cloud GPU if you don't have one with a hosted notebook like [Colaboratory](https://colab.research.google.com/) or [SageMaker StudioLab](https://studiolab.sagemaker.aws/).
+如果您没有GPU，可以通过使用像[Colaboratory](https://colab.research.google.com/)或[SageMaker StudioLab](https://studiolab.sagemaker.aws/)这样的在线笔记本来获得免费的云GPU访问。
 
 </Tip>
 
-Great, now you are ready to train! 🥳 
+太棒了，现在您已经准备好开始训练了！🥳
 
-### Training loop
+### 训练循环
 
-To keep track of your training progress, use the [tqdm](https://tqdm.github.io/) library to add a progress bar over the number of training steps:
+为了跟踪训练进度，使用[tqdm](https://tqdm.github.io/)库在训练步骤数量上添加一个进度条：
 
 ```py
 >>> from tqdm.auto import tqdm
@@ -401,7 +355,7 @@ To keep track of your training progress, use the [tqdm](https://tqdm.github.io/)
 
 ### Evaluate
 
-Just like how you added an evaluation function to [`Trainer`], you need to do the same when you write your own training loop. But instead of calculating and reporting the metric at the end of each epoch, this time you'll accumulate all the batches with [`~evaluate.add_batch`] and calculate the metric at the very end.
+就像您在[`Trainer`]中添加了一个评估函数一样，当您编写自己的训练循环时，您需要做同样的事情。但是，与在每个epoch结束时计算和报告指标不同，这一次您将使用[`~evaluate.add_batch`]来累积所有批次，并在最后计算指标。
 
 ```py
 >>> import evaluate
@@ -419,16 +373,15 @@ Just like how you added an evaluation function to [`Trainer`], you need to do th
 
 >>> metric.compute()
 ```
+
 </pt>
 </frameworkcontent>
 
 <a id='additional-resources'></a>
 
-## Additional resources
+## 其他资源
 
-For more fine-tuning examples, refer to:
+要获取更多微调示例，请参考以下资源：
 
-- [🤗 Transformers Examples](https://github.com/huggingface/transformers/tree/main/examples) includes scripts
-  to train common NLP tasks in PyTorch and TensorFlow.
-
-- [🤗 Transformers Notebooks](notebooks) contains various notebooks on how to fine-tune a model for specific tasks in PyTorch and TensorFlow.
+- [🤗 Transformers示例代码库](https://github.com/huggingface/transformers/tree/main/examples)：包含了使用PyTorch和TensorFlow训练常见NLP任务的示例脚本。
+- [🤗 Transformers笔记本](notebooks)：包含了使用PyTorch和TensorFlow为特定任务微调模型的各种笔记本。

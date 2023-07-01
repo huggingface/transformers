@@ -1,45 +1,22 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
+<!-- 版权所有2022年HuggingFace团队保留所有权利。
+根据Apache许可证第2.0版（“许可证”），除非符合许可证的要求，否则您不得使用此文件。您可以在许可证网站上获取许可证的副本。
 http://www.apache.org/licenses/LICENSE-2.0
+除非适用法律要求或书面同意，根据许可证分发的软件是按照“原样”基础分发的，不附带任何形式的明示或暗示保证。请参阅许可证以了解特定语言下的权限和限制。⚠️请注意，此文件是Markdown格式，但包含我们文档构建器（类似于MDX）的特定语法，可能无法在您的Markdown查看器中正确显示。
 
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
 
 -->
 
-# REALM
+## 概览
 
-## Overview
+REALM模型是由Kelvin Guu、Kenton Lee、Zora Tung、Panupong Pasupat和Ming-Wei Chang在[REALM：检索增强的语言模型预训练](https://arxiv.org/abs/2002.08909)中提出的。
 
-The REALM model was proposed in [REALM: Retrieval-Augmented Language Model Pre-Training](https://arxiv.org/abs/2002.08909) by Kelvin Guu, Kenton Lee, Zora Tung, Panupong Pasupat and Ming-Wei Chang. It's a
-retrieval-augmented language model that firstly retrieves documents from a textual knowledge corpus and then
-utilizes retrieved documents to process question answering tasks.
+它是一种检索增强的语言模型，首先从文本知识语料库中检索文档，然后利用检索到的文档来处理问题回答任务。
 
-The abstract from the paper is the following:
+该论文的摘要如下：
 
-*Language model pre-training has been shown to capture a surprising amount of world knowledge, crucial for NLP tasks
-such as question answering. However, this knowledge is stored implicitly in the parameters of a neural network,
-requiring ever-larger networks to cover more facts. To capture knowledge in a more modular and interpretable way, we
-augment language model pre-training with a latent knowledge retriever, which allows the model to retrieve and attend
-over documents from a large corpus such as Wikipedia, used during pre-training, fine-tuning and inference. For the
-first time, we show how to pre-train such a knowledge retriever in an unsupervised manner, using masked language
-modeling as the learning signal and backpropagating through a retrieval step that considers millions of documents. We
-demonstrate the effectiveness of Retrieval-Augmented Language Model pre-training (REALM) by fine-tuning on the
-challenging task of Open-domain Question Answering (Open-QA). We compare against state-of-the-art models for both
-explicit and implicit knowledge storage on three popular Open-QA benchmarks, and find that we outperform all previous
-methods by a significant margin (4-16% absolute accuracy), while also providing qualitative benefits such as
-interpretability and modularity.*
+*语言模型预训练已被证明可以捕捉大量的世界知识，这对于问答等NLP任务至关重要。然而，这些知识以神经网络的参数形式隐式存储，因此需要越来越大的网络来涵盖更多的事实。为了以更模块化和可解释的方式捕获知识，我们在语言模型预训练中增加了潜在的知识检索器，使模型能够从大规模语料库（如维基百科）中检索和关注文档，该语料库在预训练、微调和推理过程中使用。我们首次展示了如何以无监督的方式预训练这样的知识检索器，使用掩码语言建模作为学习信号，并通过考虑数百万个文档进行检索步骤的反向传播。我们通过在三个流行的开放领域问答基准测试中进行细调，对Retrieval-Augmented Language Model预训练（REALM）的有效性进行了验证。我们与所有先前方法相比，无论是显式还是隐式的知识存储，都取得了显著的提升（4-16%的绝对准确率），同时还提供了解释性和模块化等质量上的优势。*
 
-This model was contributed by [qqaatw](https://huggingface.co/qqaatw). The original code can be found
-[here](https://github.com/google-research/language/tree/master/language/realm).
-
+此模型由[qqaatw](https://huggingface.co/qqaatw)贡献。原始代码可以在[这里](https://github.com/google-research/language/tree/master/language/realm)找到。
 ## RealmConfig
 
 [[autodoc]] RealmConfig

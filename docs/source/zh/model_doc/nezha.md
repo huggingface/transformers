@@ -1,48 +1,26 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
+<!-- 版权所有2022年HuggingFace团队保留所有权利。
+根据Apache许可证2.0版（“许可证”）获得许可，除非符合许可证的规定，否则您不得使用此文件。您可以在以下网址获取许可证的副本
 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
+除非适用法律要求或书面同意，根据许可证分发的软件是基于“按原样”分发的，不附带任何形式的担保或条件。请参阅许可证以了解特定语言下的权限和限制。请注意，此文件是Markdown格式，但包含我们文档生成器的特定语法（类似于MDX），可能无法在您的Markdown查看器中正确显示。
+⚠️ 请注意，此文件是Markdown格式，但包含我们文档生成器的特定语法（类似于MDX），可能无法在您的Markdown查看器中正确显示。请注意，此文件是Markdown格式，但包含我们文档生成器的特定语法（类似于MDX），可能无法在您的Markdown查看器中正确显示。
 -->
-
 # Nezha
 
-## Overview
+## 概述
 
-The Nezha model was proposed in [NEZHA: Neural Contextualized Representation for Chinese Language Understanding](https://arxiv.org/abs/1909.00204) by Junqiu Wei et al.
+Nezha模型是由魏俊秋等人在[NEZHA: 用于中文语言理解的神经上下文表示](https://arxiv.org/abs/1909.00204)一文中提出的。
 
-The abstract from the paper is the following:
+该文摘要如下：
 
-*The pre-trained language models have achieved great successes in various natural language understanding (NLU) tasks
-due to its capacity to capture the deep contextualized information in text by pre-training on large-scale corpora.
-In this technical report, we present our practice of pre-training language models named NEZHA (NEural contextualiZed
-representation for CHinese lAnguage understanding) on Chinese corpora and finetuning for the Chinese NLU tasks. 
-The current version of NEZHA is based on BERT with a collection of proven improvements, which include Functional 
-Relative Positional Encoding as an effective positional encoding scheme, Whole Word Masking strategy,
-Mixed Precision Training and the LAMB Optimizer in training the models. The experimental results show that NEZHA
-achieves the state-of-the-art performances when finetuned on several representative Chinese tasks, including
-named entity recognition (People's Daily NER), sentence matching (LCQMC), Chinese sentiment classification (ChnSenti)
-and natural language inference (XNLI).*
+*由于预训练语言模型能够通过对大规模语料库进行预训练来捕捉文本中的深层上下文信息，因此在各种自然语言理解（NLU）任务中，预训练语言模型取得了巨大的成功。本技术报告中，我们介绍了我们在中文语料库上预训练的语言模型NEZHA（NEural contexualiZedrepresentation for CHinese lAnguage understanding）和其在中文NLU任务中的微调实践。当前版本的NEZHA基于BERT，并包含了一系列经过验证的改进，包括功能性相对位置编码作为一种有效的位置编码方案，全词掩蔽策略，混合精度训练和LAMB优化器等。实验结果表明，NEZHA在几个代表性的中文任务上进行微调后达到了最先进的性能，包括命名实体识别（人民日报NER），句子匹配（LCQMC），中文情感分类（ChnSenti）和自然语言推理（XNLI）.*
 
-This model was contributed by [sijunhe](https://huggingface.co/sijunhe). The original code can be found [here](https://github.com/huawei-noah/Pretrained-Language-Model/tree/master/NEZHA-PyTorch).
+该模型由[sijunhe](https://huggingface.co/sijunhe)贡献。原始代码可在[此处](https://github.com/huawei-noah/Pretrained-Language-Model/tree/master/NEZHA-PyTorch)找到。
 
-## Documentation resources
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
-
+## 文档资源
+- [文本分类任务指南](../tasks/sequence_classification)
+- [标记分类任务指南](../tasks/token_classification)
+- [问答任务指南](../tasks/question_answering)- [掩蔽语言建模任务指南](../tasks/masked_language_modeling)
+- [多项选择任务指南](../tasks/multiple_choice)
 ## NezhaConfig
 
 [[autodoc]] NezhaConfig

@@ -1,75 +1,46 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
+<!--版权所有 2022 年 HuggingFace 团队。保留所有权利。
+根据 Apache 许可证第 2.0 版（“许可证”）获得许可；除非符合许可证的要求，否则您不得使用此文件。您可以在以下网址获取许可证的副本
 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
+除非适用法律要求或书面同意，根据许可证分发的软件是按原样提供的，不附带任何形式的明示或暗示的担保或条件。请参阅许可证以获取特定语言下的权限和限制。⚠️ 请注意，此文件是 Markdown 格式，但包含我们的文档生成器（类似于 MDX）的特定语法，可能无法
+在您的 Markdown 阅读器中正确显示渲染。
 -->
 
-# Neighborhood Attention Transformer
+# 邻域注意力变换器 (Neighborhood Attention Transformer)
 
-## Overview
+## 概述
 
-NAT was proposed in [Neighborhood Attention Transformer](https://arxiv.org/abs/2204.07143)
-by Ali Hassani, Steven Walton, Jiachen Li, Shen Li, and Humphrey Shi.
+NAT 是由 Ali Hassani、Steven Walton、Jiachen Li、Shen Li 和 Humphrey Shi 在 [邻域注意力变换器](https://arxiv.org/abs/2204.07143)提出的。
 
-It is a hierarchical vision transformer based on Neighborhood Attention, a sliding-window self attention pattern.
+它是一种基于邻域注意力的分层视觉变换器，是一种滑动窗口自注意力模式。
 
-The abstract from the paper is the following:
+论文中的摘要如下：
 
-*We present Neighborhood Attention (NA), the first efficient and scalable sliding-window attention mechanism for vision.
-NA is a pixel-wise operation, localizing self attention (SA) to the nearest neighboring pixels, and therefore enjoys a
-linear time and space complexity compared to the quadratic complexity of SA. The sliding-window pattern allows NA's
-receptive field to grow without needing extra pixel shifts, and preserves translational equivariance, unlike
-Swin Transformer's Window Self Attention (WSA). We develop NATTEN (Neighborhood Attention Extension), a Python package
-with efficient C++ and CUDA kernels, which allows NA to run up to 40% faster than Swin's WSA while using up to 25% less
-memory. We further present Neighborhood Attention Transformer (NAT), a new hierarchical transformer design based on NA
-that boosts image classification and downstream vision performance. Experimental results on NAT are competitive;
-NAT-Tiny reaches 83.2% top-1 accuracy on ImageNet, 51.4% mAP on MS-COCO and 48.4% mIoU on ADE20K, which is 1.9%
-ImageNet accuracy, 1.0% COCO mAP, and 2.6% ADE20K mIoU improvement over a Swin model with similar size. *
+*我们提出了邻域注意力（NA），这是一种用于视觉的高效且可扩展的滑动窗口注意力机制。NA 是一个逐像素的操作，将自注意力（SA）局限于最近的邻居像素，因此具有与 SA 相比的线性时间和空间复杂度。滑动窗口模式使 NA 的感受野可以增长，而无需额外的像素平移，并且与 Swin 变换器的窗口自注意力（WSA）不同，它保持了平移等变性。我们开发了 NATTEN（邻域注意力扩展），这是一个带有高效 C++ 和 CUDA 核心的 Python 包，使 NA 的运行速度比 Swin 的 WSA 快40%，内存使用量减少 25%。我们进一步提出了基于 NA 的新分层变换器设计 NAT（邻域注意力变换器），它提高了图像分类和下游视觉性能。NAT 在 NAT 上的实验结果具有竞争力；NAT-Tiny 在 ImageNet 上达到了 83.2% 的 top-1 准确率，在 MS-COCO 上达到了 51.4% 的 mAP，在 ADE20K 上达到了 48.4% 的 mIoU，比具有相似大小的 Swin 模型提高了1.9% 的 ImageNet 准确率，1.0% 的 COCO mAP 和 2.6% 的 ADE20K mIoU。*
 
-Tips:
-- One can use the [`AutoImageProcessor`] API to prepare images for the model.
-- NAT can be used as a *backbone*. When `output_hidden_states = True`,
-it will output both `hidden_states` and `reshaped_hidden_states`.
-The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than
-`(batch_size, height, width, num_channels)`.
+提示：
+- 可以使用 [`AutoImageProcessor`] API 来为模型准备图像。
+- NAT 可以作为 *骨干* 使用。当 `output_hidden_states = True` 时，它将同时输出 `hidden_states` 和 `reshaped_hidden_states`。`reshaped_hidden_states` 的形状为 `(batch, num_channels, height, width)`，而不是`(batch_size, height, width, num_channels)`。
 
-Notes:
-- NAT depends on [NATTEN](https://github.com/SHI-Labs/NATTEN/)'s implementation of Neighborhood Attention.
-You can install it with pre-built wheels for Linux by referring to [shi-labs.com/natten](https://shi-labs.com/natten),
-or build on your system by running `pip install natten`.
-Note that the latter will likely take time to compile. NATTEN does not support Windows devices yet.
-- Patch size of 4 is only supported at the moment.
+注意：
 
-<img
-src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/neighborhood-attention-pattern.jpg"
-alt="drawing" width="600"/>
+- NAT 依赖于 [NATTEN](https://github.com/SHI-Labs/NATTEN/) 对邻域注意力的实现。您可以通过参考 [shi-labs.com/natten](https://shi-labs.com/natten) 在 Linux 上安装预构建的轮子，或者通过运行 `pip install natten` 在您的系统上进行构建。请注意，后者可能需要一些时间进行编译。NATTEN 尚不支持 Windows 设备。
+- 目前仅支持 4 的补丁大小。
 
-<small> Neighborhood Attention compared to other attention patterns.
-Taken from the <a href="https://arxiv.org/abs/2204.07143">original paper</a>.</small>
+<imgsrc="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/neighborhood-attention-pattern.jpg"alt="drawing" width="600"/>
 
-This model was contributed by [Ali Hassani](https://huggingface.co/alihassanijr).
-The original code can be found [here](https://github.com/SHI-Labs/Neighborhood-Attention-Transformer).
+<small> 邻域注意力与其他注意力模式的比较。来自 <a href="https://arxiv.org/abs/2204.07143">原始论文</a>。</small>
 
-## Resources
+此模型由 [Ali Hassani](https://huggingface.co/alihassanijr) 贡献。原始代码可以在 [此处](https://github.com/SHI-Labs/Neighborhood-Attention-Transformer) 找到。
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with NAT.
+## 资源
 
+这是一些官方 Hugging Face 和社区（🌎）资源的列表，可帮助您开始使用 NAT。
 <PipelineTag pipeline="image-classification"/>
 
-- [`NatForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-- See also: [Image classification task guide](../tasks/image_classification)
+- [`NatForImageClassification`] 支持这个 [示例脚本](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) 和 [笔记本](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
+- 另请参阅：[图像分类任务指南](../tasks/image_classification)
 
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+如果您有兴趣提交资源以包含在此处，请随时打开拉取请求，我们将对其进行审查！该资源应该展示出一些新的东西，而不是重复现有的资源。
 
 ## NatConfig
 

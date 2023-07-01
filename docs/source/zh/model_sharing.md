@@ -1,27 +1,17 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+<!-- 版权所有2022年HuggingFace团队保留所有权利。
+根据Apache许可证第2.0版（“许可证”）获得许可；除非符合许可证，否则您不得使用此文件。您可以在以下位置获取许可证副本：http://www.apache.org/licenses/LICENSE-2.0
+除非适用法律要求或以书面形式达成协议，否则根据许可证分发的软件是在“按原样”基础上分发的，不附带任何形式的任何保证或条件。请参阅许可证以了解特定语言下的权限和限制。
 
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
+⚠️ 特别提示：此文件是Markdown文件，但包含特定语法以适应我们的文档构建器（类似于MDX），在您的Markdown查看器中可能无法正确显示。
 -->
 
-# Share a model
+# 共享模型
 
-The last two tutorials showed how you can fine-tune a model with PyTorch, Keras, and 🤗 Accelerate for distributed setups. The next step is to share your model with the community! At Hugging Face, we believe in openly sharing knowledge and resources to democratize artificial intelligence for everyone. We encourage you to consider sharing your model with the community to help others save time and resources.
+前两篇教程展示了如何使用PyTorch、Keras和🤗 Accelerate进行模型微调和分布式设置。下一步是与社区分享您的模型！在Hugging Face，我们相信公开分享知识和资源，以使人工智能为每个人所用。我们鼓励您考虑与社区分享您的模型，以帮助他人节省时间和资源。
 
-In this tutorial, you will learn two methods for sharing a trained or fine-tuned model on the [Model Hub](https://huggingface.co/models):
+在本教程中，您将学习两种在[模型中心](https://huggingface.co/models)上共享已训练或微调模型的方法：
 
-- Programmatically push your files to the Hub.
-- Drag-and-drop your files to the Hub with the web interface.
+- 通过编程方式将文件推送到模型中心。- 使用Web界面将文件拖放到模型中心。
 
 <iframe width="560" height="315" src="https://www.youtube.com/embed/XvSGPZFEjDY" title="YouTube video player"
 frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
@@ -29,80 +19,74 @@ picture-in-picture" allowfullscreen></iframe>
 
 <Tip>
 
-To share a model with the community, you need an account on [huggingface.co](https://huggingface.co/join). You can also join an existing organization or create a new one.
-
+要与社区共享模型，您需要在[huggingface.co](https://huggingface.co/join)上拥有一个帐户。您还可以加入现有组织或创建一个新组织。
 </Tip>
 
-## Repository features
+## 存储库功能 Repository features
 
-Each repository on the Model Hub behaves like a typical GitHub repository. Our repositories offer versioning, commit history, and the ability to visualize differences.
+模型中心上的每个存储库都像一个典型的GitHub存储库一样运作。我们的存储库提供版本控制、提交历史记录以及可视化差异的功能。
 
-The Model Hub's built-in versioning is based on git and [git-lfs](https://git-lfs.github.com/). In other words, you can treat one model as one repository, enabling greater access control and scalability. Version control allows *revisions*, a method for pinning a specific version of a model with a commit hash, tag or branch.
+模型中心内置的版本控制基于git和[git-lfs](https://git-lfs.github.com/)。换句话说，您可以将一个模型视为一个存储库，从而实现更大的访问控制和可伸缩性。版本控制允许对模型进行*修订*，即使用提交哈希、标签或分支固定特定版本的方法。
 
-As a result, you can load a specific model version with the `revision` parameter:
-
+因此，您可以使用`revision`参数加载特定的模型版本:
 ```py
 >>> model = AutoModel.from_pretrained(
 ...     "julien-c/EsperBERTo-small", revision="v2.0.1"  # tag name, or branch name, or commit hash
 ... )
 ```
 
-Files are also easily edited in a repository, and you can view the commit history as well as the difference:
-
+在存储库中还可以轻松编辑文件，您可以查看提交历史记录以及差异:
 ![vis_diff](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/vis_diff.png)
 
-## Setup
+## 设置
 
-Before sharing a model to the Hub, you will need your Hugging Face credentials. If you have access to a terminal, run the following command in the virtual environment where 🤗 Transformers is installed. This will store your access token in your Hugging Face cache folder (`~/.cache/` by default):
-
+在将模型共享到模型中心之前，您需要使用Hugging Face凭据。如果您可以访问终端，请在安装了🤗 Transformers的虚拟环境中运行以下命令。这将在您的Hugging Face缓存文件夹（默认为`~/.cache/`）中存储您的访问令牌:
 ```bash
 huggingface-cli login
 ```
 
-If you are using a notebook like Jupyter or Colaboratory, make sure you have the [`huggingface_hub`](https://huggingface.co/docs/hub/adding-a-library) library installed. This library allows you to programmatically interact with the Hub.
+如果您正在使用Jupyter或Colaboratory等笔记本，请确保已安装[`huggingface_hub`](https://huggingface.co/docs/hub/adding-a-library)库。此库允许您以编程方式与模型中心进行交互。
 
 ```bash
 pip install huggingface_hub
 ```
 
-Then use `notebook_login` to sign-in to the Hub, and follow the link [here](https://huggingface.co/settings/token) to generate a token to login with:
-
+然后使用`notebook_login`登录模型中心，并在此处[生成一个令牌](https://huggingface.co/settings/token)以进行登录:
 ```py
 >>> from huggingface_hub import notebook_login
 
 >>> notebook_login()
 ```
 
-## Convert a model for all frameworks
+## 将模型转换为所有框架
 
-To ensure your model can be used by someone working with a different framework, we recommend you convert and upload your model with both PyTorch and TensorFlow checkpoints. While users are still able to load your model from a different framework if you skip this step, it will be slower because 🤗 Transformers will need to convert the checkpoint on-the-fly.
+为确保他人可以在使用不同框架的情况下使用您的模型，我们建议您转换并上传PyTorch和TensorFlow的检查点。如果跳过此步骤，用户仍然可以从不同框架加载您的模型，但速度会较慢，因为🤗 Transformers需要即时转换检查点。
+将检查点转换为另一个框架非常简单。
 
-Converting a checkpoint for another framework is easy. Make sure you have PyTorch and TensorFlow installed (see [here](installation) for installation instructions), and then find the specific model for your task in the other framework. 
+确保已安装PyTorch和TensorFlow（安装说明请参见[此处](installation)），然后在另一个框架中找到适合您任务的特定模型。
 
 <frameworkcontent>
 <pt>
-Specify `from_tf=True` to convert a checkpoint from TensorFlow to PyTorch:
-
+将`from_tf=True`指定为从TensorFlow转换为PyTorch的检查点:
 ```py
 >>> pt_model = DistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_tf=True)
 >>> pt_model.save_pretrained("path/to/awesome-name-you-picked")
 ```
 </pt>
 <tf>
-Specify `from_pt=True` to convert a checkpoint from PyTorch to TensorFlow:
-
+将`from_pt=True`指定为从PyTorch转换为TensorFlow的检查点:
 ```py
 >>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_pt=True)
 ```
 
-Then you can save your new TensorFlow model with it's new checkpoint:
-
+然后，您可以保存具有新检查点的新的TensorFlow模型:
 ```py
 >>> tf_model.save_pretrained("path/to/awesome-name-you-picked")
 ```
 </tf>
 <jax>
-If a model is available in Flax, you can also convert a checkpoint from PyTorch to Flax:
+
+如果某个模型在Flax中可用，您还可以将检查点从PyTorch转换为Flax:
 
 ```py
 >>> flax_model = FlaxDistilBertForSequenceClassification.from_pretrained(
@@ -112,20 +96,18 @@ If a model is available in Flax, you can also convert a checkpoint from PyTorch 
 </jax>
 </frameworkcontent>
 
-## Push a model during training
+## 在训练过程中推送模型
 
 <frameworkcontent>
 <pt>
 <Youtube id="Z1-XMy-GNLQ"/>
 
-Sharing a model to the Hub is as simple as adding an extra parameter or callback. Remember from the [fine-tuning tutorial](training), the [`TrainingArguments`] class is where you specify hyperparameters and additional training options. One of these training options includes the ability to push a model directly to the Hub. Set `push_to_hub=True` in your [`TrainingArguments`]:
-
+将模型推送到模型中心就像添加一个额外的参数或回调一样简单。请记住在[微调教程](training)中，[`TrainingArguments`]类是您指定超参数和其他训练选项的位置。其中一个训练选项包括直接将模型推送到模型中心。在[`TrainingArguments`]中设置`push_to_hub=True`:
 ```py
 >>> training_args = TrainingArguments(output_dir="my-awesome-model", push_to_hub=True)
 ```
 
-Pass your training arguments as usual to [`Trainer`]:
-
+像往常一样将您的训练参数传递给[`Trainer`]:
 ```py
 >>> trainer = Trainer(
 ...     model=model,
@@ -136,19 +118,14 @@ Pass your training arguments as usual to [`Trainer`]:
 ... )
 ```
 
-After you fine-tune your model, call [`~transformers.Trainer.push_to_hub`] on [`Trainer`] to push the trained model to the Hub. 🤗 Transformers will even automatically add training hyperparameters, training results and framework versions to your model card!
-
+在微调模型后，调用[`~transformers.Trainer.push_to_hub`]将训练后的模型推送到模型中心。🤗 Transformers甚至会自动将训练超参数、训练结果和框架版本添加到您的模型卡中！
 ```py
 >>> trainer.push_to_hub()
 ```
 </pt>
 <tf>
-Share a model to the Hub with [`PushToHubCallback`]. In the [`PushToHubCallback`] function, add:
-
-- An output directory for your model.
-- A tokenizer.
-- The `hub_model_id`, which is your Hub username and model name.
-
+使用[`PushToHubCallback`]将模型共享到模型中心。在[`PushToHubCallback`]函数中添加以下内容:
+- 用于您的模型的输出目录。- 一个标记器。- `hub_model_id`，即您的模型中心用户名和模型名称。
 ```py
 >>> from transformers import PushToHubCallback
 
@@ -157,76 +134,66 @@ Share a model to the Hub with [`PushToHubCallback`]. In the [`PushToHubCallback`
 ... )
 ```
 
-Add the callback to [`fit`](https://keras.io/api/models/model_training_apis/), and 🤗 Transformers will push the trained model to the Hub:
-
+将回调添加到[`fit`](https://keras.io/api/models/model_training_apis/)中，🤗 Transformers将会将训练后的模型推送到模型中心:
 ```py
 >>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3, callbacks=push_to_hub_callback)
 ```
 </tf>
 </frameworkcontent>
 
-## Use the `push_to_hub` function
+## 使用`push_to_hub`函数
 
-You can also call `push_to_hub` directly on your model to upload it to the Hub.
-
-Specify your model name in `push_to_hub`:
-
+您还可以直接在模型上调用`push_to_hub`将其上传到模型中心。
+在`push_to_hub`中指定您的模型名称:
 ```py
 >>> pt_model.push_to_hub("my-awesome-model")
 ```
 
-This creates a repository under your username with the model name `my-awesome-model`. Users can now load your model with the `from_pretrained` function:
-
+这将在您的用户名下创建一个名为`my-awesome-model`的存储库。现在用户可以使用`from_pretrained`函数加载您的模型了:
 ```py
 >>> from transformers import AutoModel
 
 >>> model = AutoModel.from_pretrained("your_username/my-awesome-model")
 ```
 
-If you belong to an organization and want to push your model under the organization name instead, just add it to the `repo_id`:
-
+如果您属于某个组织，并希望将您的模型推送到组织名称下，请将其添加到`repo_id`中:
 ```py
 >>> pt_model.push_to_hub("my-awesome-org/my-awesome-model")
 ```
 
-The `push_to_hub` function can also be used to add other files to a model repository. For example, add a tokenizer to a model repository:
-
+`push_to_hub`函数还可用于将其他文件添加到模型存储库。例如，将一个标记器添加到模型存储库:
 ```py
 >>> tokenizer.push_to_hub("my-awesome-model")
 ```
 
-Or perhaps you'd like to add the TensorFlow version of your fine-tuned PyTorch model:
-
+或者，您可能希望将您的微调的PyTorch模型的TensorFlow版本添加到模型存储库中:
 ```py
 >>> tf_model.push_to_hub("my-awesome-model")
 ```
 
-Now when you navigate to the your Hugging Face profile, you should see your newly created model repository. Clicking on the **Files** tab will display all the files you've uploaded to the repository.
+现在当您导航到您的Hugging Face个人资料时，您应该会看到您新创建的模型存储库。单击**文件**选项卡将显示您上传到存储库的所有文件。
 
-For more details on how to create and upload files to a repository, refer to the Hub documentation [here](https://huggingface.co/docs/hub/how-to-upstream).
+有关如何创建和上传文件到存储库的更多详细信息，请参阅[此处](https://huggingface.co/docs/hub/how-to-upstream)的模型中心文档。
 
-## Upload with the web interface
+## 使用Web界面上传
 
-Users who prefer a no-code approach are able to upload a model through the Hub's web interface. Visit [huggingface.co/new](https://huggingface.co/new) to create a new repository:
+偏好无代码方法的用户可以通过模型中心的Web界面上传模型。访问[huggingface.co/new](https://huggingface.co/new)创建一个新的存储库:
 
 ![new_model_repo](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/new_model_repo.png)
 
-From here, add some information about your model:
+从这里，添加有关您的模型的一些信息:
 
-- Select the **owner** of the repository. This can be yourself or any of the organizations you belong to.
-- Pick a name for your model, which will also be the repository name.
-- Choose whether your model is public or private.
-- Specify the license usage for your model.
+- 选择存储库的**所有者**。这可以是您自己或您所属的任何组织。
+- 为您的模型选择一个名称，这也将成为存储库的名称。
+- 选择您的模型是公开的还是私有的。- 指定您的模型的许可使用情况。
 
-Now click on the **Files** tab and click on the **Add file** button to upload a new file to your repository. Then drag-and-drop a file to upload and add a commit message.
+现在点击 **文件** 选项卡，然后点击 **添加文件** 按钮将新文件上传到您的存储库。然后拖放一个文件进行上传并添加提交消息。
 
 ![upload_file](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/upload_file.png)
 
-## Add a model card
+## 添加模型卡片
+为了确保用户了解您的模型的能力、限制、潜在偏见和道德考虑，请在存储库中添加一个模型卡片。模型卡片在 `README.md` 文件中定义。您可以通过以下方式添加模型卡片：
+* 手动创建并上传 `README.md` 文件。
+* 在您的模型存储库中点击 **编辑模型卡片** 按钮。
 
-To make sure users understand your model's capabilities, limitations, potential biases and ethical considerations, please add a model card to your repository. The model card is defined in the `README.md` file. You can add a model card by:
-
-* Manually creating and uploading a `README.md` file.
-* Clicking on the **Edit model card** button in your model repository.
-
-Take a look at the DistilBert [model card](https://huggingface.co/distilbert-base-uncased) for a good example of the type of information a model card should include. For more details about other options you can control in the `README.md` file such as a model's carbon footprint or widget examples, refer to the documentation [here](https://huggingface.co/docs/hub/models-cards).
+查看 DistilBert 的 [模型卡片](https://huggingface.co/distilbert-base-uncased) 以获得模型卡片应包含的信息类型的良好示例。有关您可以在 `README.md` 文件中控制的其他选项的更多详细信息，例如模型的碳足迹或小部件示例，请参阅[此处](https://huggingface.co/docs/hub/models-cards)的文档。

@@ -1,80 +1,41 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
+<!--版权所有2022年HuggingFace团队保留所有权利。-->
+根据Apache许可证第2.0版（“许可证”）获得许可；您不得使用此文件，除非符合许可证。您可以在以下网址获取许可证副本：
 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
+除非适用法律要求或书面同意，根据许可证分发的软件是基于“按原样”分发的，不附带任何形式的保证或条件。请参阅许可证了解特定语言下许可权限和限制。
+⚠️ 注意，此文件是Markdown格式，但包含特定于我们的文档生成器（类似于MDX）的语法，可能无法在Markdown查看器中正确呈现。
 -->
 
-# Dilated Neighborhood Attention Transformer
+# 扩张邻域注意力变换器 (Dilated Neighborhood Attention Transformer)
 
-## Overview
+## 概述
 
-DiNAT was proposed in [Dilated Neighborhood Attention Transformer](https://arxiv.org/abs/2209.15001)
-by Ali Hassani and Humphrey Shi.
+DiNAT是由Ali Hassani和Humphrey Shi在[扩张邻域注意力变换器](https://arxiv.org/abs/2209.15001)中提出的扩展了[NAT](nat)的模型。它通过添加扩张邻域注意力模式来捕捉全局上下文，并且在性能上显示出明显的改进。
+论文中的摘要如下所示：
 
-It extends [NAT](nat) by adding a Dilated Neighborhood Attention pattern to capture global context,
-and shows significant performance improvements over it.
+*变换器正在迅速成为跨模态，领域和任务中应用最广泛的深度学习架构之一。在视觉领域，除了朴素变换器的持续努力外，分层变换器也因其性能和易于集成到现有框架中而受到广泛关注。这些模型通常使用局部注意机制，例如滑动窗口邻域注意力（NA）或Swin变换器的偏移窗口自注意力。虽然这些机制可以有效降低自注意力的二次复杂度，但局部注意力削弱了自注意力的两个最有吸引力的特性：长程相互依赖建模和全局感受野。在本文中，我们引入了扩张邻域注意力（DiNA），它是NA的一种自然，灵活且高效的扩展，可以在不增加额外成本的情况下捕捉更多的全局上下文并以指数级扩展感受野。NA的局部关注和DiNA的稀疏全局关注相互补充，因此我们引入了扩张邻域注意力变换器（DiNAT），这是一个新的分层视觉变换器，它结合了两者。DiNAT变体在NAT、Swin和ConvNeXt等强基线模型上实现了显著的改进。我们的大型模型在COCO目标检测中比其Swin对应模型提前1.5%的框AP，在COCO实例分割中提前1.3%的掩模AP，在ADE20K语义分割中提前1.1%的mIoU与新框架搭配使用，我们的大型变体成为COCO（58.2 PQ）和ADE20K（48.5 PQ）的新一代全景分割模型，Cityscapes（44.5 AP）和ADE20K（35.4 AP）的实例分割模型（无额外数据）。它还与ADE20K（58.2 mIoU）的最先进的专用语义分割模型相匹配，并在Cityscapes（84.5 mIoU）上排名第二（无额外数据）。*and ranks second on Cityscapes (84.5 mIoU) (no extra data). *
 
-The abstract from the paper is the following:
+提示：
+- 您可以使用[`AutoImageProcessor`] API为模型准备图像。
+- DiNAT可用作*骨干*。当`output_hidden_states = True`时，它将输出`hidden_states`和`reshaped_hidden_states`。`reshaped_hidden_states`的形状为`(batch, num_channels, height, width)`，而不是`(batch_size, height, width, num_channels)`。
 
-*Transformers are quickly becoming one of the most heavily applied deep learning architectures across modalities,
-domains, and tasks. In vision, on top of ongoing efforts into plain transformers, hierarchical transformers have
-also gained significant attention, thanks to their performance and easy integration into existing frameworks.
-These models typically employ localized attention mechanisms, such as the sliding-window Neighborhood Attention (NA)
-or Swin Transformer's Shifted Window Self Attention. While effective at reducing self attention's quadratic complexity,
-local attention weakens two of the most desirable properties of self attention: long range inter-dependency modeling,
-and global receptive field. In this paper, we introduce Dilated Neighborhood Attention (DiNA), a natural, flexible and
-efficient extension to NA that can capture more global context and expand receptive fields exponentially at no
-additional cost. NA's local attention and DiNA's sparse global attention complement each other, and therefore we
-introduce Dilated Neighborhood Attention Transformer (DiNAT), a new hierarchical vision transformer built upon both.
-DiNAT variants enjoy significant improvements over strong baselines such as NAT, Swin, and ConvNeXt.
-Our large model is faster and ahead of its Swin counterpart by 1.5% box AP in COCO object detection,
-1.3% mask AP in COCO instance segmentation, and 1.1% mIoU in ADE20K semantic segmentation.
-Paired with new frameworks, our large variant is the new state of the art panoptic segmentation model on COCO (58.2 PQ)
-and ADE20K (48.5 PQ), and instance segmentation model on Cityscapes (44.5 AP) and ADE20K (35.4 AP) (no extra data).
-It also matches the state of the art specialized semantic segmentation models on ADE20K (58.2 mIoU),
-and ranks second on Cityscapes (84.5 mIoU) (no extra data). *
+注：
+- DiNAT依赖于[NATTEN](https://github.com/SHI-Labs/NATTEN/)对邻域注意力和扩张邻域注意力的实现。您可以通过参考[shi-labs.com/natten](https://shi-labs.com/natten)获取Linux的预构建轮子进行安装，或者通过运行`pip install natten`在系统上进行构建。请注意，后者可能需要一些时间进行编译。NATTEN尚不支持Windows设备。
+- 目前仅支持4个补丁大小。
 
-Tips:
-- One can use the [`AutoImageProcessor`] API to prepare images for the model.
-- DiNAT can be used as a *backbone*. When `output_hidden_states = True`,
-it will output both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, height, width, num_channels)`.
+<imgsrc="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/dilated-neighborhood-attention-pattern.jpg"alt="drawing" width="600"/>
 
-Notes:
-- DiNAT depends on [NATTEN](https://github.com/SHI-Labs/NATTEN/)'s implementation of Neighborhood Attention and Dilated Neighborhood Attention.
-You can install it with pre-built wheels for Linux by referring to [shi-labs.com/natten](https://shi-labs.com/natten), or build on your system by running `pip install natten`.
-Note that the latter will likely take time to compile. NATTEN does not support Windows devices yet.
-- Patch size of 4 is only supported at the moment.
+<small>不同扩张值的邻域注意力。摘自<a href="https://arxiv.org/abs/2209.15001">原始论文</a>。</small>
 
-<img
-src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/dilated-neighborhood-attention-pattern.jpg"
-alt="drawing" width="600"/>
+此模型由[Ali Hassani](https://huggingface.co/alihassanijr)贡献。原始代码可以在[此处](https://github.com/SHI-Labs/Neighborhood-Attention-Transformer)找到。
 
-<small> Neighborhood Attention with different dilation values.
-Taken from the <a href="https://arxiv.org/abs/2209.15001">original paper</a>.</small>
-
-This model was contributed by [Ali Hassani](https://huggingface.co/alihassanijr).
-The original code can be found [here](https://github.com/SHI-Labs/Neighborhood-Attention-Transformer).
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DiNAT.
+## 资源
+以下是一些官方Hugging Face和社区（通过🌎表示）的资源，可以帮助您开始使用DiNAT。
 
 <PipelineTag pipeline="image-classification"/>
 
-- [`DinatForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-- See also: [Image classification task guide](../tasks/image_classification)
+- 通过此[示例脚本](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification)和[笔记本](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)支持使用[`DinatForImageClassification`]。
 
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+如果您有兴趣提交要包含在此处的资源，请随时发起拉取请求，我们将进行审核！资源应该展示一些新东西，而不是重复现有的资源。
 
 ## DinatConfig
 

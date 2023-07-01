@@ -1,44 +1,22 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
+<!--版权所有2022年The HuggingFace团队。保留所有权利。
+根据Apache许可证第2.0版（“许可证”）授权；除非符合许可证，否则您不得使用此文件。您可以在
 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
+适用法律或书面同意的情况下，根据许可证分发的软件是按照“按原样”分发的基础上，不提供任何明示或暗示的担保或条件。请参阅许可证以了解特定语言下的权限和限制。
+⚠️ 请注意，此文件是Markdown格式，但包含我们的doc-builder（类似于MDX）的特定语法，可能无法在您的Markdown查看器中正确呈现。
 -->
 
-# Decision Transformer
+# 决策Transformer （Decision Transformer）
 
-## Overview
+## 概述
 
-The Decision Transformer model was proposed in [Decision Transformer: Reinforcement Learning via Sequence Modeling](https://arxiv.org/abs/2106.01345)  
-by Lili Chen, Kevin Lu, Aravind Rajeswaran, Kimin Lee, Aditya Grover, Michael Laskin, Pieter Abbeel, Aravind Srinivas, Igor Mordatch.
+决策Transformer模型是由Lili Chen、Kevin Lu、Aravind Rajeswaran、Kimin Lee、Aditya Grover、Michael Laskin、Pieter Abbeel、Aravind Srinivas和Igor Mordatch在[Decision Transformer: Reinforcement Learning via Sequence Modeling](https://arxiv.org/abs/2106.01345)中提出的。以下是论文中的摘要:
 
-The abstract from the paper is the following:
+*我们引入了一个将强化学习（RL）抽象为序列建模问题的框架。
+这使我们能够利用Transformer架构的简单性和可扩展性，以及GPT-x和BERT等语言建模的相关进展。特别是，我们提出了Decision Transformer，这是一种将RL问题作为条件序列建模的架构。与先前的RL方法不同，它适配了值函数或计算策略梯度，Decision Transformer仅通过利用具有因果遮蔽的Transformer来输出最佳动作。通过将自回归模型条件化为期望的回报（奖励）、过去的状态和动作，我们的Decision Transformer模型可以生成实现期望回报的未来动作。尽管简单，Decision Transformer在Atari、OpenAI Gym和Key-to-Door任务上与最先进的无模型离线RL基线模型的性能相匹配或超过。* 
 
-*We introduce a framework that abstracts Reinforcement Learning (RL) as a sequence modeling problem. 
-This allows us to draw upon the simplicity and scalability of the Transformer architecture, and associated advances
- in language modeling such as GPT-x and BERT. In particular, we present Decision Transformer, an architecture that 
- casts the problem of RL as conditional sequence modeling. Unlike prior approaches to RL that fit value functions or 
- compute policy gradients, Decision Transformer simply outputs the optimal actions by leveraging a causally masked 
- Transformer. By conditioning an autoregressive model on the desired return (reward), past states, and actions, our 
- Decision Transformer model can generate future actions that achieve the desired return. Despite its simplicity, 
- Decision Transformer matches or exceeds the performance of state-of-the-art model-free offline RL baselines on 
- Atari, OpenAI Gym, and Key-to-Door tasks.*
-
-Tips:
-
-This version of the model is for tasks where the state is a vector, image-based states will come soon.
-
-This model was contributed by [edbeeching](https://huggingface.co/edbeeching). The original code can be found [here](https://github.com/kzl/decision-transformer).
-
+提示:
+此版本的模型适用于状态为向量的任务，基于图像的状态将很快推出。
+此模型由[edbeeching](https://huggingface.co/edbeeching)贡献。原始代码可以在[此处](https://github.com/kzl/decision-transformer)找到。
 ## DecisionTransformerConfig
 
 [[autodoc]] DecisionTransformerConfig

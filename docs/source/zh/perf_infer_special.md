@@ -1,18 +1,9 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
+<!-- 版权所有2022年HuggingFace团队保留所有权利。
+根据Apache许可证，版本2.0（"许可证"），您不得使用此文件，除非符合许可证。您可以在以下位置获取许可证的副本
 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
+除非适用法律要求或书面同意，根据许可证分发的软件以"按原样"的方式分发，不附带任何形式的保证或条件。请参阅许可证的条款。
+⚠️ 请注意，此文件是Markdown格式，但包含特定于我们文档构建器（类似于MDX）的语法，可能无法在您的Markdown查看器中正确显示。
 -->
+# 在专用硬件上进行推理
 
-# Inference on Specialized Hardware
-
-This document will be completed soon with information on how to infer on specialized hardware. In the meantime you can check out [the guide for inference on CPUs](perf_infer_cpu).
+本文档将很快完善，提供有关如何在专用硬件上进行推理的信息。与此同时，您可以查看[在CPU上进行推理的指南](perf_infer_cpu)。

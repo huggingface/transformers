@@ -1,45 +1,32 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
+<!--版权 2022 年 HuggingFace 团队。保留所有权利。
+根据 Apache 许可证第 2.0 版（“许可证”）获得许可；除非遵守许可证，否则您不得使用此文件。您可以在以下位置获取许可证的副本
 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
+除非适用法律要求或书面同意，根据许可证分发的软件是按“按原样”基础分发的，不附带任何形式的担保或条件。请参阅许可证以了解特定语言下的权限和限制。
+⚠️ 请注意，此文件是使用 Markdown 编写的，但包含我们 doc-builder（类似于 MDX）的特定语法，可能无法在您的 Markdown 查看器中正确呈现。
 -->
-
 # SwitchTransformers
 
-## Overview
+## 概述
 
-The SwitchTransformers model was proposed in [Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity](https://arxiv.org/abs/2101.03961) by William Fedus, Barret Zoph, Noam Shazeer.
+SwitchTransformers 模型是由 William Fedus、Barret Zoph 和 Noam Shazeer 在 [Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity](https://arxiv.org/abs/2101.03961) 中提出的。
 
-The Switch Transformer model uses a sparse T5 encoder-decoder architecture, where the MLP are replaced by a Mixture of Experts (MoE). A routing mechanism (top 1 in this case) associates each token to one of the expert, where each expert is a dense MLP. While switch transformers have a lot more weights than their equivalent dense models, the sparsity allows better scaling and better finetuning performance at scale.
-During a forward pass, only a fraction of the weights are used. The routing mechanism allows the model to select relevant weights on the fly which increases the model capacity without increasing the number of operations.
+Switch Transformer 模型使用稀疏的 T5 编码器-解码器架构，其中 MLP 被 Mixture of Experts（MoE）替代。路由机制（此处为 top 1）将每个令牌与一个专家相关联，其中每个专家都是一个密集 MLP。尽管 switch transformers 的权重比其等效的密集模型多得多，但稀疏性可以实现更好的扩展和更好的规模微调性能。在前向传递过程中，只使用权重的一小部分。路由机制允许模型实时选择相关权重，从而增加模型容量而不增加操作数。
 
+论文中的摘要如下：
 
-The abstract from the paper is the following:
+*在深度学习中，模型通常对所有输入重复使用相同的参数。Mixture of Experts（MoE）打破了这一点，它为每个输入示例选择不同的参数。结果是一个稀疏激活的模型——具有大量参数——但计算成本恒定。然而，尽管 MoE 取得了一些显著的成功，但它的广泛应用受到了复杂性、通信成本和训练不稳定性的阻碍——我们通过 Switch Transformer 解决了这些问题。我们简化了 MoE 路由算法，并设计了直观的改进模型，减少了通信和计算成本。我们提出的训练技术有助于解决不稳定性问题，并且我们展示了大规模稀疏模型可以使用更低精度（bfloat16）格式训练。我们基于 T5-Base 和 T5-Large 设计的模型，在相同的计算资源下，可以实现高达 7 倍的预训练速度提升。这些改进在多语言环境中也适用，我们在所有 101 种语言上均对 mT5-Base 版本进行了增益测量。最后，我们通过对“Colossal Clean Crawled Corpus”进行预训练，将语言模型的当前规模推进到了万亿参数模型，并实现了对 T5-XXL 模型的 4 倍加速。*
 
-*In deep learning, models typically reuse the same parameters for all inputs. Mixture of Experts (MoE) defies this and instead selects different parameters for each incoming example. The result is a sparsely-activated model -- with outrageous numbers of parameters -- but a constant computational cost. However, despite several notable successes of MoE, widespread adoption has been hindered by complexity, communication costs and training instability -- we address these with the Switch Transformer. We simplify the MoE routing algorithm and design intuitive improved models with reduced communication and computational costs. Our proposed training techniques help wrangle the instabilities and we show large sparse models may be trained, for the first time, with lower precision (bfloat16) formats. We design models based off T5-Base and T5-Large to obtain up to 7x increases in pre-training speed with the same computational resources. These improvements extend into multilingual settings where we measure gains over the mT5-Base version across all 101 languages. Finally, we advance the current scale of language models by pre-training up to trillion parameter models on the "Colossal Clean Crawled Corpus" and achieve a 4x speedup over the T5-XXL model.*
+提示：
 
-Tips:
+- SwitchTransformers 使用 [`T5Tokenizer`]，可以直接从每个模型的存储库加载。
+- 发布的权重是在英语 [Masked Language Modeling](https://moon-ci-docs.huggingface.co/docs/transformers/pr_19323/en/glossary#general-terms) 任务上进行预训练的，需要进行微调。
 
-- SwitchTransformers uses the [`T5Tokenizer`], which can be loaded directly from each model's repository.
-- The released weights are pretrained on English [Masked Language Modeling](https://moon-ci-docs.huggingface.co/docs/transformers/pr_19323/en/glossary#general-terms) task, and should be finetuned.
+该模型由 [Younes Belkada](https://huggingface.co/ybelkada) 和 [Arthur Zucker](https://huggingface.co/ArtZucker) 贡献。原始代码可以在 [此处](https://github.com/google/flaxformer/tree/main/flaxformer/architectures/moe) 找到。
 
-This model was contributed by [Younes Belkada](https://huggingface.co/ybelkada) and [Arthur Zucker](https://huggingface.co/ArtZucker) .
-The original code can be found [here](https://github.com/google/flaxformer/tree/main/flaxformer/architectures/moe).
+## 资源
 
-## Resources
-
-- [Translation task guide](../tasks/translation)
-- [Summarization task guide](../tasks/summarization)
+- [翻译任务指南](../tasks/translation)
+- [摘要任务指南](../tasks/summarization)
 
 ## SwitchTransformersConfig
 

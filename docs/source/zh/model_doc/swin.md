@@ -1,68 +1,42 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
+<!-- 版权所有2022年HuggingFace团队保留所有权利。
+根据Apache许可证第2.0版（“许可证”）许可；您除非符合许可证的要求，否则不得使用此文件。您可以在以下位置获取许可证的副本
 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
+除非适用法律或书面同意，根据许可证分发的软件是基于“按原样”分发的，不附带任何形式的明示或默示的保证或条件。请参阅许可证中的特定语言的权限和限制。【注意】此文件是Markdown格式，但包含特定语法，用于我们的文档生成器（类似于MDX），在您的Markdown查看器中可能无法正确呈现。
+⚠️请注意，此文件是Markdown格式，但包含特定语法，用于我们的文档生成器（类似于MDX），在您的Markdown查看器中可能无法正确呈现。
 -->
 
 # Swin Transformer
 
-## Overview
+## 概述
 
-The Swin Transformer was proposed in [Swin Transformer: Hierarchical Vision Transformer using Shifted Windows](https://arxiv.org/abs/2103.14030)
-by Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, Baining Guo.
+Swin Transformer是由Ze Liu、Yutong Lin、Yue Cao、Han Hu、Yixuan Wei、Zheng Zhang、Stephen Lin和Baining Guo提出的[Swin Transformer: Hierarchical Vision Transformer using Shifted Windows](https://arxiv.org/abs/2103.14030)
+中提出的。以下是论文的摘要内容：
 
-The abstract from the paper is the following:
+*本文提出了一种新的视觉Transformer，称为Swin Transformer，它可以作为通用的计算机视觉主干。从语言到视觉的Transformer的适应挑战源于两个领域之间的差异，例如视觉实体的规模差异较大，图像中的像素分辨率与文本中的单词相比较高。为了解决这些差异，我们提出了一种使用移位窗口计算表示的分层Transformer。移位窗口方案通过将自注意计算限制在不重叠的局部窗口上，从而提高了效率，并允许窗口间的连接。这种分层结构具有在不同尺度上建模的灵活性，并且相对于图像大小具有线性计算复杂度。Swin Transformer的这些特点使其适用于各种视觉任务，包括图像分类（ImageNet-1K上的87.3的top-1准确率）以及目标检测（COCO test-dev上的58.7的box AP和51.1的mask AP）和语义分割（ADE20K val上的53.5的mIoU）。它的性能大大超过了之前的最新技术，COCO上的+2.7的box AP和+2.6的mask AP，以及ADE20K上的+3.2的mIoU，展示了基于Transformer的模型作为视觉主干的潜力。分层设计和移位窗口方法也对所有MLP架构有益。*
 
-*This paper presents a new vision Transformer, called Swin Transformer, that capably serves as a general-purpose backbone
-for computer vision. Challenges in adapting Transformer from language to vision arise from differences between the two domains,
-such as large variations in the scale of visual entities and the high resolution of pixels in images compared to words in text.
-To address these differences, we propose a hierarchical Transformer whose representation is computed with \bold{S}hifted
-\bold{win}dows. The shifted windowing scheme brings greater efficiency by limiting self-attention computation to non-overlapping
-local windows while also allowing for cross-window connection. This hierarchical architecture has the flexibility to model at
-various scales and has linear computational complexity with respect to image size. These qualities of Swin Transformer make it
-compatible with a broad range of vision tasks, including image classification (87.3 top-1 accuracy on ImageNet-1K) and dense
-prediction tasks such as object detection (58.7 box AP and 51.1 mask AP on COCO test-dev) and semantic segmentation
-(53.5 mIoU on ADE20K val). Its performance surpasses the previous state-of-the-art by a large margin of +2.7 box AP and
-+2.6 mask AP on COCO, and +3.2 mIoU on ADE20K, demonstrating the potential of Transformer-based models as vision backbones.
-The hierarchical design and the shifted window approach also prove beneficial for all-MLP architectures.*
-
-Tips:
-- One can use the [`AutoImageProcessor`] API to prepare images for the model.
-- Swin pads the inputs supporting any input height and width (if divisible by `32`).
-- Swin can be used as a *backbone*. When `output_hidden_states = True`, it will output both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, sequence_length, num_channels)`.
-
+提示：
+- 您可以使用[`AutoImageProcessor`] API为模型准备图像。
+- Swin填充输入以支持任何输入高度和宽度（如果可被`32`整除）。
+- Swin可以用作*主干*。当`output_hidden_states = True`时，它将同时输出`hidden_states`和`reshaped_hidden_states`。`reshaped_hidden_states`的形状为
+`(batch, num_channels, height, width)`，而不是`(batch_size, sequence_length, num_channels)`。
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/swin_transformer_architecture.png"
 alt="drawing" width="600"/>
 
-<small> Swin Transformer architecture. Taken from the <a href="https://arxiv.org/abs/2102.03334">original paper</a>.</small>
+<small> Swin Transformer架构。来自<a href="https://arxiv.org/abs/2102.03334">原始论文</a>。</small>
 
-This model was contributed by [novice03](https://huggingface.co/novice03). The Tensorflow version of this model was contributed by [amyeroberts](https://huggingface.co/amyeroberts). The original code can be found [here](https://github.com/microsoft/Swin-Transformer).
+该模型由[novice03](https://huggingface.co/novice03)贡献。此模型的Tensorflow版本由[amyeroberts](https://huggingface.co/amyeroberts)贡献。原始代码可在[此处](https://github.com/microsoft/Swin-Transformer)找到。
 
+## 资源
 
-## Resources
+以下是官方Hugging Face和社区（由🌎表示）资源列表，可帮助您入门使用Swin Transformer。
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Swin Transformer.
+- [`SwinForImageClassification`]支持此[示例脚本](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification)和[笔记本](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
+- 另请参阅：[图像分类任务指南](../tasks/image_classification)
 
-<PipelineTag pipeline="image-classification"/>
+除此之外：
+- [`SwinForMaskedImageModeling`]支持此[示例脚本](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining)。
 
-- [`SwinForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-- See also: [Image classification task guide](../tasks/image_classification)
-
-Besides that:
-
-- [`SwinForMaskedImageModeling`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+如果您有兴趣提交资源以包含在此处，请随时打开拉取请求，我们将进行审核！该资源应该展示出一些新的东西，而不是重复现有的资源。
 
 ## SwinConfig
 

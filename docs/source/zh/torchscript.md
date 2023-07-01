@@ -1,97 +1,63 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
+<!--版权所有2022年HuggingFace团队。保留所有权利。
+根据Apache许可证第2.0版（“许可证”）获得许可；除非符合许可证的规定，否则您不得使用此文件。您可以在以下位置获取许可证的副本
 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
+除非适用法律要求或书面同意，按“原样”分发的软件根据许可证分发，并且没有任何形式的担保或条件。请参阅许可证以了解特定语言下的权限和限制。具体语言下的权限和限制。
+⚠️请注意，此文件是使用Markdown编写的，但包含我们的文档生成器（类似于MDX）的特定语法，可能无法在您的Markdown查看器中正确呈现。
 -->
 
-# Export to TorchScript
-
+# 导出到TorchScript
 <Tip>
-
-This is the very beginning of our experiments with TorchScript and we are still
-exploring its capabilities with variable-input-size models. It is a focus of interest to
-us and we will deepen our analysis in upcoming releases, with more code examples, a more
-flexible implementation, and benchmarks comparing Python-based codes with compiled
-TorchScript.
-
+这是我们与TorchScript的实验的最开始阶段，我们仍在探索其在可变输入大小模型上的能力。这是我们的兴趣重点，并将在即将发布的版本中进行深入分析，提供更多代码示例，更灵活的实现以及与编译后的TorchScript的Python代码进行比较的基准测试。
+</Tip>
 </Tip>
 
-According to the [TorchScript documentation](https://pytorch.org/docs/stable/jit.html):
+根据[TorchScript文档](https://pytorch.org/docs/stable/jit.html)：
 
-> TorchScript is a way to create serializable and optimizable models from PyTorch code.
+>TorchScript是一种从PyTorch代码创建可序列化和可优化模型的方法。
 
-There are two PyTorch modules, [JIT and
-TRACE](https://pytorch.org/docs/stable/jit.html), that allow developers to export their
-models to be reused in other programs like efficiency-oriented C++ programs.
+有两个PyTorch模块，[JIT和TRACE](https://pytorch.org/docs/stable/jit.html)，使开发人员能够导出其模型以在其他程序中重复使用，比如面向效率的C++程序。
 
-We provide an interface that allows you to export 🤗 Transformers models to TorchScript
-so they can be reused in a different environment than PyTorch-based Python programs.
-Here, we explain how to export and use our models using TorchScript.
+我们提供了一个接口，可以让您将🤗 Transformers模型导出到TorchScript以便它们可以在与基于PyTorch的Python程序不同的环境中重复使用。在这里，我们将解释如何使用TorchScript导出和使用我们的模型。
 
-Exporting a model requires two things:
+导出模型需要两个步骤：
 
-- model instantiation with the `torchscript` flag
-- a forward pass with dummy inputs
+-使用`torchscript`标志进行模型实例化
+-使用虚拟输入进行前向传递
 
-These necessities imply several things developers should be careful about as detailed
-below.
+这些要求意味着开发人员需要注意以下几点，如下所述。
 
-## TorchScript flag and tied weights
+## TorchScript标志和绑定权重
 
-The `torchscript` flag is necessary because most of the 🤗 Transformers language models
-have tied weights between their `Embedding` layer and their `Decoding` layer.
-TorchScript does not allow you to export models that have tied weights, so it is
-necessary to untie and clone the weights beforehand.
+`torchscript`标志是必需的，因为大多数🤗 Transformers语言模型其`Embedding`层和`Decoding` 层之间有绑定权重。
 
-Models instantiated with the `torchscript` flag have their `Embedding` layer and
-`Decoding` layer separated, which means that they should not be trained down the line.
-Training would desynchronize the two layers, leading to unexpected results.
+TorchScript不允许您导出具有绑定权重的模型，因此需要在导出之前解除绑定并克隆权重。necessary to untie and clone the weights beforehand.
 
-This is not the case for models that do not have a language model head, as those do not
-have tied weights. These models can be safely exported without the `torchscript` flag.
+使用`torchscript`标志实例化的模型将其“嵌入”层和“解码”层分开，这意味着它们不应该被训练。训练将导致两个层不同步，导致意外结果。
 
-## Dummy inputs and standard lengths
+对于没有语言模型头的模型不是这种情况，因为这些模型没有绑定权重。这些模型可以安全地导出，而无需使用`torchscript`标志。
 
-The dummy inputs are used for a models forward pass. While the inputs' values are
-propagated through the layers, PyTorch keeps track of the different operations executed
-on each tensor. These recorded operations are then used to create the *trace* of the
-model.
+## 虚拟输入和标准长度 Dummy inputs and standard lengths
 
-The trace is created relative to the inputs' dimensions. It is therefore constrained by
-the dimensions of the dummy input, and will not work for any other sequence length or
-batch size. When trying with a different size, the following error is raised:
+虚拟输入用于模型的前向传递。在输入的值通过层时，PyTorch会跟踪每个张量上执行的不同操作。然后使用这些记录的操作来创建模型的*trace*。
+
+该trace是相对于输入的维度创建的。因此它受到虚拟输入的维度限制，不适用于任何其他序列长度或批次大小。尝试使用不同大小时，将引发以下错误：
 
 ```
 `The expanded size of the tensor (3) must match the existing size (7) at non-singleton dimension 2`
 ```
 
-We recommended you trace the model with a dummy input size at least as large as the
-largest input that will be fed to the model during inference. Padding can help fill the
-missing values. However, since the model is traced with a larger input size, the
-dimensions of the matrix will also be large, resulting in more calculations.
+我们建议您使用虚拟输入大小至少与将在推理期间馈送给模型的最大输入大小一样大进行跟踪。填充可以帮助填充缺失的值。
 
-Be careful of the total number of operations done on each input and follow the
-performance closely when exporting varying sequence-length models.
+但是，由于使用较大的输入大小来跟踪模型，矩阵的维度也会变大，导致更多的计算。
+在导出具有不同序列长度的模型时，请注意每个输入上执行的操作总数，并密切关注性能。
 
-## Using TorchScript in Python
+##  在Python中使用TorchScript
 
-This section demonstrates how to save and load models as well as how to use the trace
-for inference.
+本节演示了如何保存和加载模型以及如何使用trace进行推理。for inference.
 
-### Saving a model
+### 保存模型
 
-To export a `BertModel` with TorchScript, instantiate `BertModel` from the `BertConfig`
-class and then save it to disk under the filename `traced_bert.pt`:
+要使用TorchScript导出`BertModel`，请从`BertConfig`类实例化`BertModel`，然后将其保存到名为`traced_bert.pt`的磁盘中：
 
 ```python
 from transformers import BertModel, BertTokenizer, BertConfig
@@ -139,10 +105,9 @@ traced_model = torch.jit.trace(model, [tokens_tensor, segments_tensors])
 torch.jit.save(traced_model, "traced_bert.pt")
 ```
 
-### Loading a model
+### 加载模型
 
-Now you can load the previously saved `BertModel`, `traced_bert.pt`, from disk and use
-it on the previously initialised `dummy_input`:
+现在可以从磁盘加载先前保存的`BertModel`，`traced_bert.pt`，并使用在先前初始化的`dummy_input`上进行使用：
 
 ```python
 loaded_model = torch.jit.load("traced_bert.pt")
@@ -151,62 +116,37 @@ loaded_model.eval()
 all_encoder_layers, pooled_output = loaded_model(*dummy_input)
 ```
 
-### Using a traced model for inference
+### 使用trace模型进行推理
 
-Use the traced model for inference by using its `__call__` dunder method:
+通过使用其`__call__`方法使用trace模型进行推理：
 
 ```python
 traced_model(tokens_tensor, segments_tensors)
 ```
 
-## Deploy Hugging Face TorchScript models to AWS with the Neuron SDK
+## 使用Neuron SDK将Hugging Face TorchScript模型部署到AWS
+AWS推出了[Amazon EC2 Inf1](https://aws.amazon.com/ec2/instance-types/inf1/)实例系列，用于云中低成本、高性能的机器学习推理。Inf1实例由AWS Inferentia芯片提供支持，这是一款定制的硬件加速器，专门用于深度学习推理工作负载。[AWSNeuron](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/#)是Inferentia的SDK，支持对transformers模型进行跟踪和优化部署到Inf1上。Neuron SDK提供以下功能：
+1. 易于使用的API，只需更改一行代码即可对TorchScript进行跟踪和优化  用于云中推理的模型。
+2. 针对[改进的  成本效益性的性能优化（https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/benchmark/）。
+3. 支持使用  
+    [PyTorch](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/bert_tutorial/tutorial_pretrained_bert.html)  或  [TensorFlow](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/tensorflow/huggingface_bert/huggingface_bert.html)构建的Hugging Face transformers模型。
 
-AWS introduced the [Amazon EC2 Inf1](https://aws.amazon.com/ec2/instance-types/inf1/)
-instance family for low cost, high performance machine learning inference in the cloud.
-The Inf1 instances are powered by the AWS Inferentia chip, a custom-built hardware
-accelerator, specializing in deep learning inferencing workloads. [AWS
-Neuron](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/#) is the SDK for
-Inferentia that supports tracing and optimizing transformers models for deployment on
-Inf1. The Neuron SDK provides:
+### 影响
 
+基于[BERT（双向编码器表示来自Transformers）的transformer模型](https://huggingface.co/docs/transformers/main/model_doc/bert)架构，或其变体，如[distilBERT](https://huggingface.co/docs/transformers/main/model_doc/distilbert)和[roBERTa](https://huggingface.co/docs/transformers/main/model_doc/roberta)在Inf1上运行最佳，用于非生成任务，如抽取性问题回答、序列分类和标记分类。然而，文本生成任务仍然可以适应Inf1上运行，根据这个[AWS Neuron MarianMT
+教程](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/transformers-marianmt.html)。
+有关可以在Inferentia上直接转换的模型的更多信息，请参见[模型架构适配](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/models/models-inferentia.html#models-inferentia)部分的Neuron文档。
 
-1. Easy-to-use API with one line of code change to trace and optimize a TorchScript
-   model for inference in the cloud.
-2. Out of the box performance optimizations for [improved
-   cost-performance](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/benchmark/>).
-3. Support for Hugging Face transformers models built with either
-   [PyTorch](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/bert_tutorial/tutorial_pretrained_bert.html)
-   or
-   [TensorFlow](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/tensorflow/huggingface_bert/huggingface_bert.html).
+### 依赖项
+使用AWS Neuron转换模型需要[Neuron SDK环境](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/neuron-frameworks/pytorch-neuron/index.html#installation-guide)已经预配置在[AW+AWS深度学习AMI](https://docs.aws.amazon.com/dlami/latest/devguide/tutorial-inferentia-launching.html)上。
 
-### Implications
+### 将模型转换为AWS Neuron
 
-Transformers models based on the [BERT (Bidirectional Encoder Representations from
-Transformers)](https://huggingface.co/docs/transformers/main/model_doc/bert)
-architecture, or its variants such as
-[distilBERT](https://huggingface.co/docs/transformers/main/model_doc/distilbert) and
-[roBERTa](https://huggingface.co/docs/transformers/main/model_doc/roberta) run best on
-Inf1 for non-generative tasks such as extractive question answering, sequence
-classification, and token classification. However, text generation tasks can still be
-adapted to run on Inf1 according to this [AWS Neuron MarianMT
-tutorial](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/transformers-marianmt.html).
-More information about models that can be converted out of the box on Inferentia can be
-found in the [Model Architecture
-Fit](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/models/models-inferentia.html#models-inferentia)
-section of the Neuron documentation.
+使用与[在Python中使用TorchScript](torchscript#using-torchscript-in-python)相同的代码将模型转换为AWS NEURON。
 
-### Dependencies
+导入`torch.neuron`框架扩展，以通过Python API访问Neuron SDK的组件：
 
-Using AWS Neuron to convert models requires a [Neuron SDK
-environment](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/neuron-frameworks/pytorch-neuron/index.html#installation-guide)
-which comes preconfigured on [AWS Deep Learning
-AMI](https://docs.aws.amazon.com/dlami/latest/devguide/tutorial-inferentia-launching.html).
-
-### Converting a model for AWS Neuron
-
-Convert a model for AWS NEURON using the same code from [Using TorchScript in
-Python](torchscript#using-torchscript-in-python) to trace a `BertModel`. Import the
-`torch.neuron` framework extension to access the components of the Neuron SDK through a
+只需修改以下行：这样可以使Neuron SDK跟踪模型并对其进行优化，以用于Inf1实例。要了解有关AWS Neuron SDK功能、工具、示例教程和最新更新的更多信息，请参阅[AWS Neuron SDK文档](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/index.html)。
 Python API:
 
 ```python

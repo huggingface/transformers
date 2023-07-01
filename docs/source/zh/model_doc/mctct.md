@@ -1,47 +1,33 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
+<!-- 版权所有2022年HuggingFace团队保留所有权利。
+根据Apache许可证第2.0版（“许可证”）获得许可；除非符合许可证，否则不得使用此文件。您可以在以下网址获得许可证的副本
 http://www.apache.org/licenses/LICENSE-2.0
+除非适用法律要求或书面同意，根据许可证分发的软件是按“原样”基础分发的，不附带任何明示或暗示的担保或条件。请参阅许可证，了解特定语言下的权限和限制。
 
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
+⚠️请注意，此文件为Markdown格式，但包含我们的文档生成器（类似于MDX）的特定语法，可能无法在您的Markdown查看器中正确显示。
 -->
 
 # M-CTC-T
 
-## Overview
+## 概述
 
-The M-CTC-T model was proposed in [Pseudo-Labeling For Massively Multilingual Speech Recognition](https://arxiv.org/abs/2111.00161) by Loren Lugosch, Tatiana Likhomanenko, Gabriel Synnaeve, and Ronan Collobert. The model is a 1B-param transformer encoder, with a CTC head over 8065 character labels and a language identification head over 60 language ID labels. It is trained on Common Voice (version 6.1, December 2020 release) and VoxPopuli. After training on Common Voice and VoxPopuli, the model is trained on Common Voice only. The labels are unnormalized character-level transcripts (punctuation and capitalization are not removed). The model takes as input Mel filterbank features from a 16Khz audio signal.
+M-CTC-T模型是由Loren Lugosch、Tatiana Likhomanenko、Gabriel Synnaeve和Ronan Collobert在[Pseudo-Labeling For Massively Multilingual Speech Recognition](https://arxiv.org/abs/2111.00161)中提出的。
 
-The abstract from the paper is the following:
+该模型是一个具有8065个字符标签的1B参数的Transformer编码器，具有一个CTC头部和一个包含60个语言ID标签的语言识别头部。它是在Common Voice（版本6.1，2020年12月发布）和VoxPopuli上进行训练的。在训练Common Voice和VoxPopuli之后，该模型仅在Common Voice上进行训练。标签是未归一化的字符级转录（不删除标点符号和大写字母）。模型以来自16Khz音频信号的Mel滤波器组特征作为输入。
 
-*Semi-supervised learning through pseudo-labeling has become a staple of state-of-the-art monolingual
-speech recognition systems. In this work, we extend pseudo-labeling to massively multilingual speech
-recognition with 60 languages. We propose a simple pseudo-labeling recipe that works well even
-with low-resource languages: train a supervised multilingual model, fine-tune it with semi-supervised
-learning on a target language, generate pseudo-labels for that language, and train a final model using
-pseudo-labels for all languages, either from scratch or by fine-tuning. Experiments on the labeled
-Common Voice and unlabeled VoxPopuli datasets show that our recipe can yield a model with better
-performance for many languages that also transfers well to LibriSpeech.*
+论文摘要如下:
+
+*通过伪标签半监督学习已成为最先进的单语言语音识别系统的重要组成部分。在本工作中，我们将伪标签扩展到了包含60种语言的大规模多语言语音识别。我们提出了一种简单的伪标签配方，即使在资源稀缺的语言中也能很好地工作：训练一个监督的多语言模型，用目标语言进行半监督学习进行微调，为该语言生成伪标签，并使用所有语言的伪标签训练最终模型，可以从头开始训练或者通过微调进行训练。对标记的Common Voice和未标记的VoxPopuli数据集的实验表明，我们的方法可以获得比较好的性能的模型，并且在LibriSpeech上也具有良好的迁移性能。
 
 
+该模型由[cwkeam](https://huggingface.co/cwkeam)贡献。原始代码可在[此处](https://github.com/flashlight/wav2letter/tree/main/recipes/mling_pl)找到。
 
-This model was contributed by [cwkeam](https://huggingface.co/cwkeam). The original code can be found [here](https://github.com/flashlight/wav2letter/tree/main/recipes/mling_pl).
+## 文档资源
 
-## Documentation resources
+- [自动语音识别任务指南](../tasks/asr)
 
-- [Automatic speech recognition task guide](../tasks/asr)
+提示:
 
-Tips:
-
-- The PyTorch version of this model is only available in torch 1.9 and higher.
+- 此模型的PyTorch版本仅在torch 1.9及更高版本中可用。
 
 ## MCTCTConfig
 

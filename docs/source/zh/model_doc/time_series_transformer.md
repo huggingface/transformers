@@ -1,65 +1,35 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
+<!-- 版权所有2022年HuggingFace团队保留所有权利。
+根据Apache许可证第2.0版（"许可证"）的规定，您不得使用此文件，除非符合许可证的要求。您可以在以下位置获取许可证的副本
 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
+除非适用法律要求或书面同意，根据许可证分发的软件是基于"原样" BASIS，无论是明示还是暗示，在法律允许的范围内，不提供任何形式的担保或条件。请参阅许可证以获取特定语言下的权限和限制。
+⚠️ 请注意，此文件是Markdown格式的，但包含特定于我们的文档生成器（类似于MDX）的语法，您的Markdown查看器可能无法正确显示。
 -->
 
-# Time Series Transformer
-
+# 时间序列Transformer
 <Tip>
 
-This is a recently introduced model so the API hasn't been tested extensively. There may be some bugs or slight
-breaking changes to fix it in the future. If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title).
+这是一个最近推出的模型，因此API尚未经过广泛测试。可能存在一些错误或轻微的变更，以便在将来进行修复。如果您发现任何奇怪的情况，请提交[GitHub Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title)。
 
 </Tip>
 
-## Overview
+## 概述
 
-The Time Series Transformer model is a vanilla encoder-decoder Transformer for time series forecasting.
+时间序列Transformer模型是用于时间序列预测的普通编码器-解码器Transformer模型。
 
-Tips:
+提示：
 
-- Check out the Time Series Transformer blog-post in HuggingFace blog: [Probabilistic Time Series Forecasting with 🤗 Transformers](https://huggingface.co/blog/time-series-transformers)
-- Similar to other models in the library, [`TimeSeriesTransformerModel`] is the raw Transformer without any head on top, and [`TimeSeriesTransformerForPrediction`]
-adds a distribution head on top of the former, which can be used for time-series forecasting. Note that this is a so-called probabilistic forecasting model, not a
-point forecasting model. This means that the model learns a distribution, from which one can sample. The model doesn't directly output values.
-- [`TimeSeriesTransformerForPrediction`] consists of 2 blocks: an encoder, which takes a `context_length` of time series values as input (called `past_values`),
-and a decoder, which predicts a `prediction_length` of time series values into the future (called `future_values`). During training, one needs to provide
-pairs of (`past_values` and `future_values`) to the model.
-- In addition to the raw (`past_values` and `future_values`), one typically provides additional features to the model. These can be the following:
-    - `past_time_features`: temporal features which the model will add to `past_values`. These serve as "positional encodings" for the Transformer encoder.
-    Examples are "day of the month", "month of the year", etc. as scalar values (and then stacked together as a vector).
-    e.g. if a given time-series value was obtained on the 11th of August, then one could have [11, 8] as time feature vector (11 being "day of the month", 8 being "month of the year").
-    - `future_time_features`: temporal features which the model will add to `future_values`. These serve as "positional encodings" for the Transformer decoder.
-    Examples are "day of the month", "month of the year", etc. as scalar values (and then stacked together as a vector).
-    e.g. if a given time-series value was obtained on the 11th of August, then one could have [11, 8] as time feature vector (11 being "day of the month", 8 being "month of the year").
-    - `static_categorical_features`: categorical features which are static over time (i.e., have the same value for all `past_values` and `future_values`).
-    An example here is the store ID or region ID that identifies a given time-series.
-    Note that these features need to be known for ALL data points (also those in the future).
-    - `static_real_features`: real-valued features which are static over time (i.e., have the same value for all `past_values` and `future_values`).
-    An example here is the image representation of the product for which you have the time-series values (like the [ResNet](resnet) embedding of a "shoe" picture,
-    if your time-series is about the sales of shoes).
-    Note that these features need to be known for ALL data points (also those in the future).
-- The model is trained using "teacher-forcing", similar to how a Transformer is trained for machine translation. This means that, during training, one shifts the
-`future_values` one position to the right as input to the decoder, prepended by the last value of `past_values`. At each time step, the model needs to predict the
-next target. So the set-up of training is similar to a GPT model for language, except that there's no notion of `decoder_start_token_id` (we just use the last value
-of the context as initial input for the decoder).
-- At inference time, we give the final value of the `past_values` as input to the decoder. Next, we can sample from the model to make a prediction at the next time step,
-which is then fed to the decoder in order to make the next prediction (also called autoregressive generation).
+- 在HuggingFace博客中查看关于时间序列Transformer的博文：[使用🤗 Transformers进行概率时间序列预测](https://huggingface.co/blog/time-series-transformers)
+- 与库中的其他模型类似，[`TimeSeriesTransformerModel`]是没有任何顶部头的原始Transformer模型，而[`TimeSeriesTransformerForPrediction`]在前者的基础上添加了一个分布头，用于时间序列预测。请注意，这是一种所谓的概率预测模型，而不是点预测模型。这意味着模型学习一个分布，可以从中进行采样，而不是直接输出值。
+- [`TimeSeriesTransformerForPrediction`]由两个模块组成：编码器和解码器。编码器以`context_length`个时间序列值作为输入（称为`past_values`），解码器将预测未来`prediction_length`个时间序列值（称为`future_values`）。在训练过程中，需要为模型提供（`past_values`和`future_values`）的配对数据。
+- 除了原始的（`past_values`和`future_values`），通常还会为模型提供其他特征。这些特征可以是以下内容：      
+- `past_time_features`：模型将将其添加到`past_values`中的时间特征。这些作为Transformer编码器的"位置编码"。    例如，"月份的日期"，"年份的月份"等作为标量值（然后作为向量堆叠在一起）。    例如，如果给定的时间序列值是在8月11日获得的，则可以将[11, 8]作为时间特征向量（其中11代表"日期的日期"，8代表"年份的月份"）。   
+- `future_time_features`：模型将将其添加到`future_values`中的时间特征。这些作为Transformer解码器的"位置编码"。    例如，"月份的日期"，"年份的月份"等作为标量值（然后作为向量堆叠在一起）。    例如，如果给定的时间序列值是在8月11日获得的，则可以将[11, 8]作为时间特征向量（其中11代表"日期的日期"，8代表"年份的月份"）。      
+- `static_categorical_features`：随时间保持不变的分类特征（即，对于所有`past_values`和`future_values`具有相同的值）。    一个示例是标识给定时间序列的商店ID或区域ID。    请注意，这些特征需要对所有数据点（包括未来的数据点）都已知。   
+- `static_real_features`：随时间保持不变的实值特征（即，对于所有`past_values`和`future_values`具有相同的值）。    一个示例是您拥有时间序列值的产品的图像表示（例如，销售鞋子的[ResNet](resnet)嵌入）。    请注意，这些特征需要对所有数据点（包括未来的数据点）都已知。- 模型使用"teacher-forcing"进行训练，类似于Transformer进行机器翻译的训练方式。这意味着在训练过程中，将`future_values`向右移动一个位置作为解码器的输入，前面加上`past_values`的最后一个值。在每个时间步骤中，模型需要预测下一个目标。因此，训练的设置与语言模型的GPT模型类似，只是没有`decoder_start_token_id`（我们只使用上下文的最后一个值作为解码器的初始输入）。- 在推理阶段，我们将`past_values`的最后一个值作为输入传递给解码器。
 
+接下来，我们可以从模型中采样以在下一个时间步骤进行预测，然后将其馈送给解码器以进行下一个预测（也称为自回归生成）。
 
-This model was contributed by [kashif](https://huggingface.co/kashif).
-
+此模型由[kashif](https://huggingface.co/kashif)贡献。
 
 ## TimeSeriesTransformerConfig
 

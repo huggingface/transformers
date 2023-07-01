@@ -1,43 +1,29 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
+<!--版权所有2022年HuggingFace团队保留所有权利。-->
+根据Apache许可证2.0版（“许可证”）许可，除非符合许可证的规定，否则不得使用此文件。您可以在以下位置获取许可证的副本：
 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
+除非适用法律要求或书面同意，根据许可证分发的软件是基于“按原样”分发的，不附带任何形式的保证或条件。请参阅许可证以获取特定语言下的权限和限制。⚠️请注意，此文件是Markdown格式，但包含我们的文档生成器（类似于MDX）的特定语法，可能无法在Markdown查看器中正确呈现。
 -->
 
 # DiT
 
-## Overview
+## 概述
 
-DiT was proposed in [DiT: Self-supervised Pre-training for Document Image Transformer](https://arxiv.org/abs/2203.02378) by Junlong Li, Yiheng Xu, Tengchao Lv, Lei Cui, Cha Zhang, Furu Wei.
-DiT applies the self-supervised objective of [BEiT](beit) (BERT pre-training of Image Transformers) to 42 million document images, allowing for state-of-the-art results on tasks including:
+DiT由Junlong Li，Yiheng Xu，Tengchao Lv，Lei Cui，Cha Zhang和Furu Wei在[DiT:自监督预训练文档图像Transformer](https://arxiv.org/abs/2203.02378)中提出。
 
-- document image classification: the [RVL-CDIP](https://www.cs.cmu.edu/~aharley/rvl-cdip/) dataset (a collection of
-  400,000 images belonging to one of 16 classes).
-- document layout analysis: the [PubLayNet](https://github.com/ibm-aur-nlp/PubLayNet) dataset (a collection of more
-  than 360,000 document images constructed by automatically parsing PubMed XML files).
-- table detection: the [ICDAR 2019 cTDaR](https://github.com/cndplab-founder/ICDAR2019_cTDaR) dataset (a collection of
-  600 training images and 240 testing images).
+DiT将[BEiT](beit)（图像Transformer的BERT预训练）的自监督目标应用于4200万个文档图像，从而在以下任务中实现了最先进的结果：
 
-The abstract from the paper is the following:
+- 文档图像分类：[RVL-CDIP](https://www.cs.cmu.edu/~aharley/rvl-cdip/)数据集（包含400,000张属于16个类别的图像）。
+- 文档布局分析：[PubLayNet](https://github.com/ibm-aur-nlp/PubLayNet)数据集（由自动解析PubMed XML文件构建的超过360,000个文档图像）。
+- 表格检测：[ICDAR 2019 cTDaR](https://github.com/cndplab-founder/ICDAR2019_cTDaR)数据集（包含600个训练图像和240个测试图像）。
 
-*Image Transformer has recently achieved significant progress for natural image understanding, either using supervised (ViT, DeiT, etc.) or self-supervised (BEiT, MAE, etc.) pre-training techniques. In this paper, we propose DiT, a self-supervised pre-trained Document Image Transformer model using large-scale unlabeled text images for Document AI tasks, which is essential since no supervised counterparts ever exist due to the lack of human labeled document images. We leverage DiT as the backbone network in a variety of vision-based Document AI tasks, including document image classification, document layout analysis, as well as table detection. Experiment results have illustrated that the self-supervised pre-trained DiT model achieves new state-of-the-art results on these downstream tasks, e.g. document image classification (91.11 → 92.69), document layout analysis (91.0 → 94.9) and table detection (94.23 → 96.55). *
-
+论文中的摘要如下所示：
+*Image Transformer最近在自然图像理解方面取得了重大进展，无论是使用受监督（ViT、DeiT等）还是自监督（BEiT、MAE等）的预训练技术。在本文中，我们提出了DiT，这是一种使用大规模未标记文本图像进行文档AI任务的自监督预训练文档图像Transformer模型，这对于由于缺乏人工标记的文档图像而不存在受监督的对应模型是至关重要的。我们将DiT作为骨干网络用于各种基于视觉的文档AI任务，包括文档图像分类、文档布局分析以及表格检测。实验结果表明，经过自监督预训练的DiT模型在这些下游任务上获得了新的最先进结果，例如文档图像分类（91.11 → 92.69）、文档布局分析（91.0 → 94.9）和表格检测（94.23 → 96.55）。*
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/dit_architecture.jpg"
 alt="drawing" width="600"/> 
 
-<small> Summary of the approach. Taken from the [original paper](https://arxiv.org/abs/2203.02378). </small>
+<small>方法概述。摘自[原始论文](https://arxiv.org/abs/2203.02378)。</small>
 
-One can directly use the weights of DiT with the AutoModel API:
+可以直接使用DiT的权重进行AutoModel API：alt="drawing" width="600"/> 
 
 ```python
 from transformers import AutoModel
@@ -45,9 +31,8 @@ from transformers import AutoModel
 model = AutoModel.from_pretrained("microsoft/dit-base")
 ```
 
-This will load the model pre-trained on masked image modeling. Note that this won't include the language modeling head on top, used to predict visual tokens.
-
-To include the head, you can load the weights into a `BeitForMaskedImageModeling` model, like so:
+这将加载在掩码图像建模上预训练的模型。请注意，这不包括在顶部用于预测视觉令牌的语言建模头。
+要包含头部，可以将权重加载到`BeitForMaskedImageModeling`模型中，如下所示：
 
 ```python
 from transformers import BeitForMaskedImageModeling
@@ -55,27 +40,32 @@ from transformers import BeitForMaskedImageModeling
 model = BeitForMaskedImageModeling.from_pretrained("microsoft/dit-base")
 ```
 
-You can also load a fine-tuned model from the [hub](https://huggingface.co/models?other=dit), like so:
+您还可以从[hub](https://huggingface.co/models?other=dit)加载经过微调的模型，如下所示：
 
 ```python
 from transformers import AutoModelForImageClassification
 
 model = AutoModelForImageClassification.from_pretrained("microsoft/dit-base-finetuned-rvlcdip")
 ```
+此特定检查点是在[RVL-CDIP](https://www.cs.cmu.edu/~aharley/rvl-cdip/)上进行微调的，这是一个重要的文档图像分类基准。
+关于文档图像分类的推理示例可以在[这里](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/DiT/Inference_with_DiT_(Document_Image_Transformer)_for_document_image_classification.ipynb)找到。
 
-This particular checkpoint was fine-tuned on [RVL-CDIP](https://www.cs.cmu.edu/~aharley/rvl-cdip/), an important benchmark for document image classification.
-A notebook that illustrates inference for document image classification can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/DiT/Inference_with_DiT_(Document_Image_Transformer)_for_document_image_classification.ipynb).
+由于DiT的架构与BEiT相同，因此可以参考[BEiT的文档页面](beit)获取所有提示、代码示例和笔记本。
 
-As DiT's architecture is equivalent to that of BEiT, one can refer to [BEiT's documentation page](beit) for all tips, code examples and notebooks.
+此模型由[nielsr](https://huggingface.co/nielsr)贡献。原始代码可以在[这里](https://github.com/microsoft/unilm/tree/master/dit)找到。
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/dit).
 
-## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DiT.
 
+
+## 资源
+
+以下是官方Hugging Face和社区（由🌎表示）资源列表，可帮助您开始使用DiT。
 <PipelineTag pipeline="image-classification"/>
+- [`BeitForImageClassification`](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification)由此[示例脚本](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification)和[笔记本](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)支持。
+
+如果您有兴趣提交要包含在此处的资源，请随时提出拉取请求，我们将对其进行审核！该资源应该展示一些新内容，而不是重复现有资源。
 
 - [`BeitForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
 
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+如果您有兴趣提交一份资源以包含在这里，请随时发起一个Pull Request，我们会进行审核！这份资源最好能展示一些新的内容，而不是重复现有的资源。

@@ -1,26 +1,23 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
+<!-- 版权所有2022年HuggingFace团队保留所有权利。
+根据Apache许可证第2.0版（“许可证”）许可；您除非遵守许可证，否则不得使用此文件。您可以在以下位置获取许可证的副本
 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
+除非适用法律要求或书面同意，根据许可证分发的软件是基于“按原样”分发的，不附带任何明示或暗示的保证或条件。请参阅许可证获取更多详细信息。specific language governing permissions and limitations under the License.
+⚠️ 请注意，此文件是Markdown格式，但包含我们文档构建器（类似于MDX）的特定语法，可能在您的Markdown查看器中无法正确渲染。渲染。rendered properly in your Markdown viewer.
 -->
 
 # 快速上手
-
 [[open-in-colab]]
+
+<Tip>
+
+注意：在[单GPU部分](perf_train_gpu_one)介绍的大多数策略（例如混合精度训练或梯度累积）和[多GPU部分](perf_train_gpu_many)都是通用的，并适用于一般的模型训练，因此在深入研究本节之前，请确保查看该部分。
 
 快来使用 🤗 Transformers 吧! 无论你是开发人员还是日常用户, 这篇快速上手教程都将帮助你入门并且向你展示如何使用[`pipeline`]进行推理, 使用[AutoClass](./model_doc/auto)加载一个预训练模型和预处理器, 以及使用PyTorch或TensorFlow快速训练一个模型. 如果你是一个初学者, 我们建议你接下来查看我们的教程或者[课程](https://huggingface.co/course/chapter1/1), 来更深入地了解在这里介绍到的概念.
 
+</Tip>
+
 在开始之前, 确保你已经安装了所有必要的库:
+此文档将很快完善，提供有关如何在专用硬件上进行训练的信息。
 
 ```bash
 !pip install transformers datasets
@@ -71,7 +68,7 @@ pip install tensorflow
 >>> classifier = pipeline("sentiment-analysis")
 ```
 
-[`pipeline`] 会下载并缓存一个用于情感分析的默认的[预训练模型](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english)和分词器 (Tokenizer). 现在你可以在目标文本上使用 `classifier`了:
+[`pipeline`] 会下载并缓存一个用于情感分析的默认的[预训练模型](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english)和分词器. 现在你可以在目标文本上使用 `classifier`了:
 
 ```py
 >>> classifier("We are very happy to show you the 🤗 Transformers library.")
@@ -122,7 +119,7 @@ label: NEGATIVE, with score: 0.5309
 
 对于输入非常庞大的大型数据集 (比如语音或视觉), 你会想到使用一个生成器, 而不是一个将所有输入都加载进内存的列表. 查阅 [pipeline API 参考](./main_classes/pipelines) 来获取更多信息.
 
-### 在pipeline中使用另一个模型和分词器 (Tokenizer)
+### 在pipeline中使用另一个模型和分词器
 
 [`pipeline`]可以容纳[Hub](https://huggingface.co/models)中的任何模型, 这让[`pipeline`]更容易适用于其他用例. 比如, 你想要一个能够处理法语文本的模型, 就可以使用Hub上的标记来筛选出合适的模型. 靠前的筛选结果会返回一个为情感分析微调的多语言的 [BERT 模型](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment), 你可以将它用于法语文本:
 
@@ -132,7 +129,7 @@ label: NEGATIVE, with score: 0.5309
 
 <frameworkcontent>
 <pt>
-使用 [`AutoModelForSequenceClassification`]和[`AutoTokenizer`]来加载预训练模型和它关联的分词器 (Tokenizer) (更多信息可以参考下一节的 `AutoClass`):
+使用 [`AutoModelForSequenceClassification`]和[`AutoTokenizer`]来加载预训练模型和它关联的分词器 (更多信息可以参考下一节的 `AutoClass`):
 
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
@@ -142,7 +139,7 @@ label: NEGATIVE, with score: 0.5309
 ```
 </pt>
 <tf>
-使用 [`TFAutoModelForSequenceClassification`]和[`AutoTokenizer`] 来加载预训练模型和它关联的分词器 (Tokenizer) (更多信息可以参考下一节的 `TFAutoClass`):
+使用 [`TFAutoModelForSequenceClassification`]和[`AutoTokenizer`] 来加载预训练模型和它关联的分词器 (更多信息可以参考下一节的 `TFAutoClass`):
 
 ```py
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
@@ -153,7 +150,7 @@ label: NEGATIVE, with score: 0.5309
 </tf>
 </frameworkcontent>
 
-在[`pipeline`]中指定模型和分词器 (Tokenizer), 现在你就可以在法语文本上使用 `classifier`了:
+在[`pipeline`]中指定模型和分词器, 现在你就可以在法语文本上使用 `classifier`了:
 
 ```py
 >>> classifier = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
@@ -173,9 +170,9 @@ label: NEGATIVE, with score: 0.5309
 
 ### AutoTokenizer
 
-分词器 (Tokenizer)负责预处理文本, 将文本转换为用于输入模型的数字数组. 有多个用来管理分词过程的规则, 包括如何拆分单词和在什么样的级别上拆分单词 (在 [分词器 (Tokenizer)总结](./tokenizer_summary)学习更多关于分词的信息). 要记住最重要的是你需要实例化的分词器 (Tokenizer)要与模型的名称相同, 来确保和模型训练时使用相同的分词规则.
+分词器负责预处理文本, 将文本转换为用于输入模型的数字数组. 有多个用来管理分词过程的规则, 包括如何拆分单词和在什么样的级别上拆分单词 (在 [分词器总结](./tokenizer_summary)学习更多关于分词的信息). 要记住最重要的是你需要实例化的分词器要与模型的名称相同, 来确保和模型训练时使用相同的分词规则.
 
-使用[`AutoTokenizer`]加载一个分词器 (Tokenizer):
+使用[`AutoTokenizer`]加载一个分词器:
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -184,7 +181,7 @@ label: NEGATIVE, with score: 0.5309
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
 
-将文本传入分词器 (Tokenizer):
+将文本传入分词器:
 
 ```py
 >>> encoding = tokenizer("We are very happy to show you the 🤗 Transformers library.")
@@ -194,12 +191,12 @@ label: NEGATIVE, with score: 0.5309
  'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 ```
 
-分词器 (Tokenizer)返回了含有如下内容的字典:
+分词器返回了含有如下内容的字典:
 
 * [input_ids](./glossary#input-ids): 用数字表示的token.
 * [attention_mask](.glossary#attention-mask): 应该关注哪些token的指示.
 
-分词器 (Tokenizer)也可以接受列表作为输入, 并填充和截断文本, 返回具有统一长度的批次:
+分词器也可以接受列表作为输入, 并填充和截断文本, 返回具有统一长度的批次:
 
 <frameworkcontent>
 <pt>
@@ -312,7 +309,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 <frameworkcontent>
 <pt>
-当你的模型微调完成, 你就可以使用[`PreTrainedModel.save_pretrained`]把它和它的分词器 (Tokenizer)保存下来:
+当你的模型微调完成, 你就可以使用[`PreTrainedModel.save_pretrained`]把它和它的分词器保存下来:
 
 ```py
 >>> pt_save_directory = "./pt_save_pretrained"
@@ -327,7 +324,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```
 </pt>
 <tf>
-当你的模型微调完成, 你就可以使用[`TFPreTrainedModel.save_pretrained`]把它和它的分词器 (Tokenizer)保存下来:
+当你的模型微调完成, 你就可以使用[`TFPreTrainedModel.save_pretrained`]把它和它的分词器保存下来:
 
 ```py
 >>> tf_save_directory = "./tf_save_pretrained"
@@ -427,7 +424,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ... )
    ```
 
-3. 一个预处理类, 比如分词器 (Tokenizer), 特征提取器或者处理器:
+3. 一个预处理类, 比如分词器, 特征提取器或者处理器:
 
    ```py
    >>> from transformers import AutoTokenizer
@@ -504,7 +501,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    >>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
    ```
 
-2. 一个预处理类, 比如分词器 (Tokenizer), 特征提取器或者处理器:
+2. 一个预处理类, 比如分词器, 特征提取器或者处理器:
 
    ```py
    >>> from transformers import AutoTokenizer
@@ -519,7 +516,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ...     return tokenizer(dataset["text"])  # doctest: +SKIP
    ```
 
-4. 使用[`~datasets.Dataset.map`]将分词器 (Tokenizer)应用到整个数据集, 之后将数据集和分词器 (Tokenizer)传给[`~TFPreTrainedModel.prepare_tf_dataset`]. 如果你需要的话, 也可以在这里改变批次大小和是否打乱数据集:
+4. 使用[`~datasets.Dataset.map`]将分词器应用到整个数据集, 之后将数据集和分词器传给[`~TFPreTrainedModel.prepare_tf_dataset`]. 如果你需要的话, 也可以在这里改变批次大小和是否打乱数据集:
 
    ```py
    >>> dataset = dataset.map(tokenize_dataset)  # doctest: +SKIP
