@@ -54,7 +54,7 @@ One can refer to [T5's documentation page](t5) for more tips, code examples and 
 
 ## Differences with mT5?
 `UmT5` is based on mT5, with a non-shared relative positional bias that is computed for each layer. This means that the model set `has_relative_bias` for each layer.
-The conversion script is also different because the model was save in t5x's latest checkpointing format.
+The conversion script is also different because the model was saved in t5x's latest checkpointing format.
 
 # Sample usage
 
