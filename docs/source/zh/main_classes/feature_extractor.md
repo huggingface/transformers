@@ -8,7 +8,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 # Feature Extractor
 
-特征提取器负责为音频或视觉模型准备输入特征。这包括从序列中提取特征，例如将音频文件预处理为 Log-Mel Spectrogram 特征，从图像中提取特征，例如裁剪图像文件，还包括填充、归一化和转换为Numpy、PyTorch 和TensorFlow 张量。
+特征提取器负责为音频或视觉模型准备输入特征。这包括从序列中提取特征，例如将音频文件预处理为 Log-Mel Spectrogram 特征，从图像中提取特征，例如裁剪图像文件，还包括填充、归一化和转换为 Numpy、PyTorch 和 TensorFlow 张量。
 
 
 ## FeatureExtractionMixin

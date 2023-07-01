@@ -29,10 +29,10 @@ Tips:
 
 - One can use [`YolosImageProcessor`] for preparing images (and optional targets) for the model. Contrary to [DETR](detr), YOLOS doesn't require a `pixel_mask` to be created.
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/yolos_architecture.png"
-alt="drawing" width="600"/>
+< img src =" https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/yolos_architecture.png "
+alt = "drawing" width = "600"/>
 
-<small> YOLOS architecture. Taken from the <a href="https://arxiv.org/abs/2106.00666">original paper</a>.</small>
+<small> YOLOS architecture. Taken from the <a href="https://arxiv.org/abs/2106.00666"> original paper </a>.</small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/hustvl/YOLOS).
 

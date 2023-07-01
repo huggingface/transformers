@@ -32,10 +32,10 @@ This enables effective bottom-up cross-modal alignment and fusion between visual
 In particular, on the VQAv2 test-std set, BRIDGETOWER achieves an accuracy of 78.73%, outperforming the previous state-of-the-art model METER by 1.09% with the same pre-training data and almost negligible additional parameters and computational costs.
 Notably, when further scaling the model, BRIDGETOWER achieves an accuracy of 81.15%, surpassing models that are pre-trained on orders-of-magnitude larger datasets.*
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/bridgetower_architecture%20.jpg"
-alt="drawing" width="600"/>
+< img src =" https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/bridgetower_architecture%20.jpg "
+alt = "drawing" width = "600"/>
 
-<small> BridgeTower architecture. Taken from the <a href="https://arxiv.org/abs/2206.08657">original paper.</a> </small>
+<small> BridgeTower architecture. Taken from the <a href="https://arxiv.org/abs/2206.08657"> original paper.</a> </small>
 
 ## Usage
 

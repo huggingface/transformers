@@ -1,4 +1,4 @@
-<!--版权所有2023年HuggingFace团队。保留所有权利。
+<!--版权所有 2023 年 HuggingFace 团队。保留所有权利。
 
 根据 Apache 许可证第 2.0 版（“许可证”）获得许可；除非符合许可证，否则您不得使用此文件。您可以在以下位置获得许可证的副本：
 http://www.apache.org/licenses/LICENSE-2.0

@@ -240,7 +240,7 @@ class T5LayerFF(nn.Module):
         return hidden_states + self.dropout(forwarded_states)
 ```
 
-你可以看到我们添加了其中的2个，并且现在跟踪是否在中间某个地方检测到了 `forwarded_states` 的 `inf` 或 `nan`。
+你可以看到我们添加了其中的 2 个，并且现在跟踪是否在中间某个地方检测到了 `forwarded_states` 的 `inf` 或 `nan`。
 
 实际上，检测器已经报告了这些问题，因为上面的每个调用都是一个 `nn.Module`，但是假设你有一些本地的直接计算，你可以按照下面的方式进行调试。
 
@@ -254,7 +254,7 @@ debug_overflow = DebugUnderflowOverflow(model, max_frames_to_save=100)
 
 同样的调试类可以用于对每个批次进行跟踪，关闭了下溢/上溢检测功能。
 
-假设你想要观察给定批次的每个 `forward` 调用的所有参数的绝对最小值和最大值，只想在第1批和第3批进行观察。那么你可以按照以下方式实例化该类：
+假设你想要观察给定批次的每个 `forward` 调用的所有参数的绝对最小值和最大值，只想在第 1 批和第 3 批进行观察。那么你可以按照以下方式实例化该类：
 
 ```python
 debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1, 3])

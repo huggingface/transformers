@@ -32,8 +32,8 @@ ResNet, and 99.0% accuracy with full fine-tuning, matching the top supervised pr
 competitive with self-supervised benchmarks on ImageNet when substituting pixels for a VQVAE encoding, achieving 69.0%
 top-1 accuracy on a linear probe of our features.*
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/imagegpt_architecture.png"
-alt="drawing" width="600"/>
+< img src =" https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/imagegpt_architecture.png "
+alt = "drawing" width = "600"/>
 
 <small> Summary of the approach. Taken from the [original paper](https://cdn.openai.com/papers/Generative_Pretraining_from_Pixels_V2.pdf). </small>
 
@@ -47,8 +47,8 @@ Tips:
   also doesn't have tied input- and output embeddings.
 - As the time- and memory requirements of the attention mechanism of Transformers scales quadratically in the sequence
   length, the authors pre-trained ImageGPT on smaller input resolutions, such as 32x32 and 64x64. However, feeding a
-  sequence of 32x32x3=3072 tokens from 0..255 into a Transformer is still prohibitively large. Therefore, the authors
-  applied k-means clustering to the (R,G,B) pixel values with k=512. This way, we only have a 32*32 = 1024-long
+  sequence of 32x32x3 = 3072 tokens from 0..255 into a Transformer is still prohibitively large. Therefore, the authors
+  applied k-means clustering to the (R, G, B) pixel values with k = 512. This way, we only have a 32*32 = 1024-long
   sequence, but now of integers in the range 0..511. So we are shrinking the sequence length at the cost of a bigger
   embedding matrix. In other words, the vocabulary size of ImageGPT is 512, + 1 for a special "start of sentence" (SOS)
   token, used at the beginning of every sequence. One can use [`ImageGPTImageProcessor`] to prepare

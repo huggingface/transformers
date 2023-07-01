@@ -203,7 +203,7 @@ print(encoding.keys())
 # dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'image'])
 ```
 
-**Use case 2: document image classification (training, inference) + token classification (inference), apply_ocr=False**
+**Use case 2: document image classification (training, inference) + token classification (inference), apply_ocr = False**
 
 In case one wants to do OCR themselves, one can initialize the feature extractor with `apply_ocr` set to
 `False`. In that case, one should provide the words and corresponding (normalized) bounding boxes themselves to
@@ -225,7 +225,7 @@ print(encoding.keys())
 # dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'image'])
 ```
 
-**Use case 3: token classification (training), apply_ocr=False**
+**Use case 3: token classification (training), apply_ocr = False**
 
 For token classification tasks (such as FUNSD, CORD, SROIE, Kleister-NDA), one can also provide the corresponding word
 labels in order to train a model. The processor will then convert these into token-level `labels`. By default, it
@@ -250,7 +250,7 @@ print(encoding.keys())
 # dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'labels', 'image'])
 ```
 
-**Use case 4: visual question answering (inference), apply_ocr=True**
+**Use case 4: visual question answering (inference), apply_ocr = True**
 
 For visual question answering tasks (such as DocVQA), you can provide a question to the processor. By default, the
 processor will apply OCR on the image, and create [CLS] question tokens [SEP] word tokens [SEP].
@@ -270,7 +270,7 @@ print(encoding.keys())
 # dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'image'])
 ```
 
-**Use case 5: visual question answering (inference), apply_ocr=False**
+**Use case 5: visual question answering (inference), apply_ocr = False**
 
 For visual question answering tasks (such as DocVQA), you can provide a question to the processor. If you want to
 perform OCR yourself, you can provide your own words and (normalized) bounding boxes to the processor.

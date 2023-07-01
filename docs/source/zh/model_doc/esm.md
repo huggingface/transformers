@@ -40,8 +40,8 @@ to make predictions, and are much faster as a result.
 
 
 The abstract from 
-"Biological structure and function emerge from scaling unsupervised learning to 250 
-million protein sequences" is
+" Biological structure and function emerge from scaling unsupervised learning to 250 
+million protein sequences " is
 
 
 *In the field of artificial intelligence, a combination of scale in data and model capacity enabled by unsupervised

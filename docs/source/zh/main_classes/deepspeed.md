@@ -60,13 +60,13 @@ ZeRO (coming soon).
 
 
 
-<a id='deepspeed-trainer-integration'></a>
+<a id='deepspeed-trainer-integration'> </a>
 
 
 ## Trainer Deepspeed Integration
 
 
-<a id='deepspeed-installation'></a>
+<a id='deepspeed-installation'> </a>
 
 ### Installation
 
@@ -162,7 +162,7 @@ If after trying everything suggested you still encounter build issues, please, p
 
 
 
-<a id='deepspeed-multi-gpu'></a>
+<a id='deepspeed-multi-gpu'> </a>
 
 ### Deployment with multiple GPUs
 
@@ -205,7 +205,7 @@ For some practical usage examples, please, see this [post](https://github.com/hu
 
 
 
-<a id='deepspeed-one-gpu'></a>
+<a id='deepspeed-one-gpu'> </a>
 
 ### Deployment with one GPU
 
@@ -277,7 +277,7 @@ Notes:
 
 
 
-<a id='deepspeed-multi-node'></a>
+<a id='deepspeed-multi-node'> </a>
 
 ### Deployment with multiple Nodes
 
@@ -325,13 +325,13 @@ For more information please see [Resource Configuration (multi-node)](https://ww
 In the SLURM environment the following approach can be used. The following is a slurm script `launch.slurm` which you will need to adapt it to your specific SLURM environment.
 
 ```bash
-#SBATCH --job-name=test-nodes        # name
-#SBATCH --nodes=2                    # nodes
-#SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
-#SBATCH --cpus-per-task=10           # number of cores per tasks
-#SBATCH --gres=gpu:8                 # number of gpus
-#SBATCH --time 20:00:00              # maximum execution time (HH:MM:SS)
-#SBATCH --output=%x-%j.out           # output file name
+BATCH --job-name = test-nodes        # name
+#SBATCH --nodes = 2                    # nodes
+#SBATCH --ntasks-per-node = 1          # crucial - only 1 task per dist per node!
+#SBATCH --cpus-per-task = 10           # number of cores per tasks
+#SBATCH --gres = gpu: 8                 # number of gpus
+#SBATCH --time 20: 00: 00              # maximum execution time (HH: MM: SS)
+#SBATCH --output =%x-%j.out           # output file name
 
 export GPUS_PER_NODE=8
 export MASTER_ADDR=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
@@ -366,7 +366,7 @@ By default DeepSpeed expects that a multi-node environment uses a shared storage
 Alternatively, you can also use the [`Trainer`]'s `--save_on_each_node` argument, and the above config will be added automatically for you.
 
 
-<a id='deepspeed-notebook'></a>
+<a id='deepspeed-notebook'> </a>
 
 ### Deployment in Notebooks
 
@@ -376,7 +376,7 @@ under certain setups we have to emulate it.
 If you're using only 1 GPU, here is how you'd have to adjust your training code in the notebook to use DeepSpeed.
 
 ```python
-# DeepSpeed requires a distributed environment even when only one process is used.
+DeepSpeed requires a distributed environment even when only one process is used.
 # This emulates a launcher in the notebook
 import os
 
@@ -490,7 +490,7 @@ completes.
 
 
 
-<a id='deepspeed-config'></a>
+<a id='deepspeed-config'> </a>
 
 ### Configuration
 
@@ -578,7 +578,7 @@ to the console, so you can see exactly what was the final configuration passed t
 
 
 
-<a id='deepspeed-config-passing'></a>
+<a id='deepspeed-config-passing'> </a>
 
 ### Passing Configuration
 
@@ -601,7 +601,7 @@ ds_config_dict = dict(scheduler=scheduler_params, optimizer=optimizer_params)
 TrainingArguments(..., deepspeed=ds_config_dict)
 ```
 
-<a id='deepspeed-config-shared'></a>
+<a id='deepspeed-config-shared'> </a>
 
 ### Shared Configuration
 
@@ -639,7 +639,7 @@ and configure [`TrainingArguments`] based on that. The steps are:
 Do note that some values, such as `scheduler.params.total_num_steps` are calculated by
 [`Trainer`] during `train`, but you can of course do the math yourself.
 
-<a id='deepspeed-zero'></a>
+<a id='deepspeed-zero'> </a>
 
 ### ZeRO
 
@@ -661,7 +661,7 @@ going to use.
 
 
 
-<a id='deepspeed-zero2-config'></a>
+<a id='deepspeed-zero2-config'> </a>
 
 #### ZeRO-2 Config
 
@@ -710,7 +710,7 @@ Additionally, `deepspeed==0.4.4` added a new option `round_robin_gradients` whic
 This is a stage 2 optimization for CPU offloading that parallelizes gradient copying to CPU memory among ranks by fine-grained gradient partitioning. Performance benefit grows with gradient accumulation steps (more copying between optimizer steps) or GPU count (increased parallelism).
 
 
-<a id='deepspeed-zero3-config'></a>
+<a id='deepspeed-zero3-config'> </a>
 
 #### ZeRO-3 Config
 
@@ -832,7 +832,7 @@ Stage 1 is Stage 2 minus gradient sharding. You can always try it to speed thing
 
 
 
-<a id='deepspeed-nvme'></a>
+<a id='deepspeed-nvme'> </a>
 
 ### NVMe Support
 
@@ -897,7 +897,7 @@ In order to figure out the optimal `aio` configuration block you must run a benc
 
 
 
-<a id='deepspeed-zero2-zero3-performance'></a>
+<a id='deepspeed-zero2-zero3-performance'> </a>
 
 #### ZeRO-2 vs ZeRO-3 Performance
 
@@ -917,7 +917,7 @@ these help you to trade scalability for speed depending on your needs.
 
 
 
-<a id='deepspeed-zero2-example'></a>
+<a id='deepspeed-zero2-example'> </a>
 
 #### ZeRO-2 Example
 
@@ -1028,7 +1028,7 @@ values look like, but we highly recommend using the one with multiple `auto` set
 }
 ```
 
-<a id='deepspeed-zero3-example'></a>
+<a id='deepspeed-zero3-example'> </a>
 
 #### ZeRO-3 Example
 
@@ -1231,7 +1231,7 @@ GPU implementation (except LAMB).
 
 
 
-<a id='deepspeed-optimizer'></a>
+<a id='deepspeed-optimizer'> </a>
 
 #### Optimizer
 
@@ -1311,7 +1311,7 @@ to the top level configuration.
 
 
 
-<a id='deepspeed-scheduler'></a>
+<a id='deepspeed-scheduler'> </a>
 
 #### Scheduler
 
@@ -1395,7 +1395,7 @@ and `total_num_steps`, `warmup_max_lr`, `warmup_num_steps` and `total_num_steps`
 
 
 
-<a id='deepspeed-fp32'></a>
+<a id='deepspeed-fp32'> </a>
 
 ### fp32 Precision
 
@@ -1424,7 +1424,7 @@ With the 🤗 Trainer you can use `--tf32` to enable it, or disable it with `--t
 
 
 
-<a id='deepspeed-amp'></a>
+<a id='deepspeed-amp'> </a>
 
 ### Automatic Mixed Precision
 
@@ -1564,7 +1564,7 @@ Here is the [documentation](https://www.deepspeed.ai/docs/config-json/#automatic
 
 
 
-<a id='deepspeed-bs'></a>
+<a id='deepspeed-bs'> </a>
 
 ### Batch Size
 
@@ -1594,7 +1594,7 @@ configuration.
 
 
 
-<a id='deepspeed-grad-acc'></a>
+<a id='deepspeed-grad-acc'> </a>
 
 ### Gradient Accumulation
 
@@ -1621,7 +1621,7 @@ configuration.
 
 
 
-<a id='deepspeed-grad-clip'></a>
+<a id='deepspeed-grad-clip'> </a>
 
 ### Gradient Clipping
 
@@ -1648,7 +1648,7 @@ configuration.
 
 
 
-<a id='deepspeed-weight-extraction'></a>
+<a id='deepspeed-weight-extraction'> </a>
 
 ### Getting The Model Weights Out
 
@@ -1697,7 +1697,7 @@ checkpoint_dir = get_last_checkpoint(trainer.args.output_dir)
 fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
 ```
 
-If you're using the `--load_best_model_at_end` class:*~transformers.TrainingArguments* argument (to track the best
+If you're using the `--load_best_model_at_end` class: *~transformers.TrainingArguments* argument (to track the best
 checkpoint), then you can finish the training by first saving the final model explicitly and then do the same as above:
 
 ```python
@@ -1717,7 +1717,7 @@ of the training.
 
 </Tip>
 
-Of course, you don't have to use class:*~transformers.Trainer* and you can adjust the examples above to your own
+Of course, you don't have to use class: *~transformers.Trainer* and you can adjust the examples above to your own
 trainer.
 
 If for some reason you want more refinement, you can also extract the fp32 `state_dict` of the weights and apply
@@ -1849,7 +1849,7 @@ larger multi-dimensional shape, this means that the parameter is partitioned and
 
 
 
-<a id='deepspeed-zero-inference'></a>
+<a id='deepspeed-zero-inference'> </a>
 
 
 ### ZeRO Inference
@@ -2123,39 +2123,48 @@ Make sure to:
 2. enable bf16 if you own an Ampere or a newer GPU to make things faster. If you don't have that hardware you may enable fp16 as long as you don't use any model that was pre-trained in bf16 mixed precision (such as most t5 models). These usually overflow in fp16 and you will see garbage as output.
 
 ```python
-#!/usr/bin/env python
+/usr/bin/env python
 
 # This script demonstrates how to use Deepspeed ZeRO in an inference mode when one can't fit a model
 # into a single GPU
 #
+
 # 1. Use 1 GPU with CPU offload
 # 2. Or use multiple GPUs instead
 #
+
 # First you need to install deepspeed: pip install deepspeed
 #
+
 # Here we use a 3B "bigscience/T0_3B" model which needs about 15GB GPU RAM - so 1 largish or 2
 # small GPUs can handle it. or 1 small GPU and a lot of CPU memory.
 #
+
 # To use a larger model like "bigscience/T0" which needs about 50GB, unless you have an 80GB GPU -
 # you will need 2-4 gpus. And then you can adapt the script to handle more gpus if you want to
 # process multiple inputs at once.
 #
+
 # The provided deepspeed config also activates CPU memory offloading, so chances are that if you
 # have a lot of available CPU memory and you don't mind a slowdown you should be able to load a
 # model that doesn't normally fit into a single GPU. If you have enough GPU memory the program will
 # run faster if you don't want offload to CPU - so disable that section then.
 #
+
 # To deploy on 1 gpu:
 #
+
 # deepspeed --num_gpus 1 t0.py
 # or:
-# python -m torch.distributed.run --nproc_per_node=1 t0.py
+# python -m torch.distributed.run --nproc_per_node = 1 t0.py
 #
+
 # To deploy on 2 gpus:
 #
+
 # deepspeed --num_gpus 2 t0.py
 # or:
-# python -m torch.distributed.run --nproc_per_node=2 t0.py
+# python -m torch.distributed.run --nproc_per_node = 2 t0.py
 
 
 from transformers import AutoTokenizer, AutoConfig, AutoModelForSeq2SeqLM
@@ -2182,18 +2191,23 @@ train_batch_size = 1 * world_size
 
 # ds_config notes
 #
+
 # - enable bf16 if you use Ampere or higher GPU - this will run in mixed precision and will be
 # faster.
 #
+
 # - for older GPUs you can enable fp16, but it'll only work for non-bf16 pretrained models - e.g.
 # all official t5 models are bf16-pretrained
 #
+
 # - set offload_param.device to "none" or completely remove the `offload_param` section if you don't
 # - want CPU offload
 #
+
 # - if using `offload_param` you can manually finetune stage3_param_persistence_threshold to control
 # - which params should remain on gpus - the larger the value the smaller the offload size
 #
+
 # For indepth info on Deepspeed config see
 # https://huggingface.co/docs/transformers/main/main_classes/deepspeed
 
@@ -2228,8 +2242,10 @@ ds_config = {
 # next line instructs transformers to partition the model directly over multiple gpus using
 # deepspeed.zero.Init when model's `from_pretrained` method is called.
 #
+
 # **it has to be run before loading the model AutoModelForSeq2SeqLM.from_pretrained(model_name)**
 #
+
 # otherwise the model will first be loaded normally and only partitioned at forward time which is
 # less efficient and when there is little CPU RAM may fail
 dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive

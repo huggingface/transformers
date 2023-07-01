@@ -43,7 +43,7 @@ model = tf.keras.Sequential(
 The above model accepts inputs having a dimension of `(10, )`. We can use the model for running a forward pass like so:
 
 ```py
-# Generate random inputs for the model.
+Generate random inputs for the model.
 batch_size = 16
 input_vector_dim = 10
 random_inputs = tf.random.normal((batch_size, input_vector_dim))

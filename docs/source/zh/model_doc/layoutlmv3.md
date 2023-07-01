@@ -36,10 +36,10 @@ Tips:
 - Demo notebooks for LayoutLMv3 can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/LayoutLMv3).
 - Demo scripts can be found [here](https://github.com/huggingface/transformers/tree/main/examples/research_projects/layoutlmv3).
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/layoutlmv3_architecture.png"
-alt="drawing" width="600"/>
+< img src =" https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/layoutlmv3_architecture.png "
+alt = "drawing" width = "600"/>
 
-<small> LayoutLMv3 architecture. Taken from the <a href="https://arxiv.org/abs/2204.08387">original paper</a>. </small>
+<small> LayoutLMv3 architecture. Taken from the <a href="https://arxiv.org/abs/2204.08387"> original paper </a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The TensorFlow version of this model was added by [chriskoo](https://huggingface.co/chriskoo), [tokec](https://huggingface.co/tokec), and [lre](https://huggingface.co/lre). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/layoutlmv3).
 

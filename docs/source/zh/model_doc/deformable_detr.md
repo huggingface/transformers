@@ -30,10 +30,10 @@ Tips:
 - One can use [`DeformableDetrImageProcessor`] to prepare images (and optional targets) for the model.
 - Training Deformable DETR is equivalent to training the original [DETR](detr) model. See the [resources](#resources) section below for demo notebooks.
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/deformable_detr_architecture.png"
-alt="drawing" width="600"/>
+< img src =" https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/deformable_detr_architecture.png "
+alt = "drawing" width = "600"/>
 
-<small> Deformable DETR architecture. Taken from the <a href="https://arxiv.org/abs/2010.04159">original paper</a>.</small>
+<small> Deformable DETR architecture. Taken from the <a href="https://arxiv.org/abs/2010.04159"> original paper </a>.</small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/fundamentalvision/Deformable-DETR).
 

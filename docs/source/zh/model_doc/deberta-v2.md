@@ -7,7 +7,7 @@
 
 ## 概述
 
-DeBERTa 模型是由Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen在 [DeBERTa: Decoding-enhanced BERT with Disentangled Attention](https://arxiv.org/abs/2006.03654) 一文中提出的。它基于 2018 年发布的 GoogleBERT 模型和 2019 年发布的 Facebook 的 RoBERTa 模型。
+DeBERTa 模型是由 Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen 在 [DeBERTa: Decoding-enhanced BERT with Disentangled Attention](https://arxiv.org/abs/2006.03654) 一文中提出的。它基于 2018 年发布的 GoogleBERT 模型和 2019 年发布的 Facebook 的 RoBERTa 模型。
 
 它基于 RoBERTa 模型，并引入了解缠结的注意力机制和增强的掩码解码器训练，训练数据量仅为 RoBERTa 模型的一半。论文中的摘要如下：
 

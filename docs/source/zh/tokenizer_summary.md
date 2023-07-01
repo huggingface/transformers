@@ -111,7 +111,7 @@ seen before, by decomposing them into known subwords. For instance, the [`~trans
 
 >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 >>> tokenizer.tokenize("I have a new GPU!")
-["i", "have", "a", "new", "gp", "##u", "!"]
+["i", "have", "a", "new", "gp", "##u ", "!"]
 ```
 
 Because we are considering the uncased model, the sentence was lowercased first. We can see that the words `["i", "have", "a", "new"]` are present in the tokenizer's vocabulary, but the word `"gpu"` is not. Consequently, the
@@ -135,7 +135,7 @@ Let's now look at how the different subword tokenization algorithms work. Note t
 algorithms rely on some form of training which is usually done on the corpus the corresponding model will be trained
 on.
 
-<a id='byte-pair-encoding'></a>
+<a id='byte-pair-encoding'> </a>
 
 ### Byte-Pair Encoding (BPE)
 
@@ -208,7 +208,7 @@ tokenizer can tokenize every text without the need for the <unk> symbol. [GPT-2]
 size of 50,257, which corresponds to the 256 bytes base tokens, a special end-of-text token and the symbols learned
 with 50,000 merges.
 
-<a id='wordpiece'></a>
+<a id='wordpiece'> </a>
 
 ### WordPiece
 
@@ -225,7 +225,7 @@ merged if the probability of `"ug"` divided by `"u"`, `"g"` would have been grea
 pair. Intuitively, WordPiece is slightly different to BPE in that it evaluates what it _loses_ by merging two symbols
 to ensure it's _worth it_.
 
-<a id='unigram'></a>
+<a id='unigram'> </a>
 
 ### Unigram
 
@@ -262,7 +262,7 @@ defined as \\(S(x_{i})\\), then the overall loss is defined as
 
 $$\mathcal{L} = -\sum_{i=1}^{N} \log \left ( \sum_{x \in S(x_{i})} p(x) \right )$$
 
-<a id='sentencepiece'></a>
+<a id='sentencepiece'> </a>
 
 ### SentencePiece
 

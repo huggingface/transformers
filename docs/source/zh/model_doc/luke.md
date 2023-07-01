@@ -88,10 +88,10 @@ Example:
 
 >>> model = LukeModel.from_pretrained("studio-ousia/luke-base")
 >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
-# Example 1: Computing the contextualized entity representation corresponding to the entity mention "Beyoncé"
+# Example 1: Computing the contextualized entity representation corresponding to the entity mention "Beyonc é"
 
 >>> text = "Beyoncé lives in Los Angeles."
->>> entity_spans = [(0, 7)]  # character-based entity span corresponding to "Beyoncé"
+>>> entity_spans = [(0, 7)]  # character-based entity span corresponding to "Beyonc é"
 >>> inputs = tokenizer(text, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
 >>> outputs = model(**inputs)
 >>> word_last_hidden_state = outputs.last_hidden_state
@@ -101,8 +101,8 @@ Example:
 >>> entities = [
 ...     "Beyoncé",
 ...     "Los Angeles",
-... ]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "Los Angeles"
->>> entity_spans = [(0, 7), (17, 28)]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
+... ]  # Wikipedia entity titles corresponding to the entity mentions "Beyonc é" and "Los Angeles"
+>>> entity_spans = [(0, 7), (17, 28)]  # character-based entity spans corresponding to "Beyonc é" and "Los Angeles"
 >>> inputs = tokenizer(text, entities=entities, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
 >>> outputs = model(**inputs)
 >>> word_last_hidden_state = outputs.last_hidden_state
@@ -111,7 +111,7 @@ Example:
 
 >>> model = LukeForEntityPairClassification.from_pretrained("studio-ousia/luke-large-finetuned-tacred")
 >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-tacred")
->>> entity_spans = [(0, 7), (17, 28)]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
+>>> entity_spans = [(0, 7), (17, 28)]  # character-based entity spans corresponding to "Beyonc é" and "Los Angeles"
 >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
 >>> outputs = model(**inputs)
 >>> logits = outputs.logits

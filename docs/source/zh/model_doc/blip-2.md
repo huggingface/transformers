@@ -32,10 +32,10 @@ Tips:
 - BLIP-2 can be used for conditional text generation given an image and an optional text prompt. At inference time, it's recommended to use the [`generate`] method.
 - One can use [`Blip2Processor`] to prepare images for the model, and decode the predicted tokens ID's back to text.
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/blip2_architecture.jpg"
-alt="drawing" width="600"/> 
+< img src =" https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/blip2_architecture.jpg "
+alt = "drawing" width = "600"/> 
 
-<small> BLIP-2 architecture. Taken from the <a href="https://arxiv.org/abs/2301.12597">original paper.</a> </small>
+<small> BLIP-2 architecture. Taken from the <a href="https://arxiv.org/abs/2301.12597"> original paper.</a> </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/salesforce/LAVIS/tree/5ee63d688ba4cebff63acee04adaef2dee9af207).

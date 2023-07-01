@@ -60,10 +60,10 @@ Tips:
   language modeling). With this approach, the smaller ViT-B/16 model achieves 79.9% accuracy on ImageNet, a significant
   improvement of 2% to training from scratch, but still 4% behind supervised pre-training.
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vit_architecture.jpg"
-alt="drawing" width="600"/>
+< img src =" https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vit_architecture.jpg "
+alt = "drawing" width = "600"/>
 
-<small> ViT architecture. Taken from the <a href="https://arxiv.org/abs/2010.11929">original paper.</a> </small>
+<small> ViT architecture. Taken from the <a href="https://arxiv.org/abs/2010.11929"> original paper.</a> </small>
 
 Following the original Vision Transformer, some follow-up works have been made:
 

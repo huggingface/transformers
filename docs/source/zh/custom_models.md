@@ -250,9 +250,9 @@ You can then push to your own namespace (or an organization you are a member of)
 resnet50d.push_to_hub("custom-resnet50d")
 ```
 
-除了模型权重和以 JSON 格式保存的配置之外，这个过程还复制了模型和配置的 `.py` 文件到 `custom-resnet50d` 文件夹，并将结果上传到了 Hub。您可以在[此模型存储库](https://huggingface.co/sgugger/custom-resnet50d)中查看结果。
+除了模型权重和以 JSON 格式保存的配置之外，这个过程还复制了模型和配置的 `.py` 文件到 `custom-resnet50d` 文件夹，并将结果上传到了 Hub。您可以在 [此模型存储库](https://huggingface.co/sgugger/custom-resnet50d) 中查看结果。
 
-有关 `push_to_hub` 方法的更多信息，请参阅[分享教程](model_sharing)。
+有关 `push_to_hub` 方法的更多信息，请参阅 [分享教程](model_sharing)。
 
 ## 使用带有自定义代码的模型
 

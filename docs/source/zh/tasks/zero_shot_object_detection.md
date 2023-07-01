@@ -301,9 +301,9 @@ as before except now there are no labels.
 
 If you'd like to interactively try out inference with OWL-ViT, check out this demo:
 
-<iframe
-	src="https://adirik-owl-vit.hf.space"
-	frameborder="0"
-	width="850"
-	height="450"
-></iframe>
+< iframe
+	src = "https://adirik-owl-vit.hf.space"
+	frameborder = "0"
+	width = "850"
+	height = "450"
+> </iframe>

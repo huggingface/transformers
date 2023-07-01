@@ -14,11 +14,11 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Nyströmformer
+# Nystr ö mformer
 
 ## Overview
 
-The Nyströmformer model was proposed in [*Nyströmformer: A Nyström-Based Algorithm for Approximating Self-Attention*](https://arxiv.org/abs/2102.03902) by Yunyang Xiong, Zhanpeng Zeng, Rudrasis Chakraborty, Mingxing Tan, Glenn
+The Nystr ö mformer model was proposed in [*Nystr ö mformer: A Nystr ö m-Based Algorithm for Approximating Self-Attention*](https://arxiv.org/abs/2102.03902) by Yunyang Xiong, Zhanpeng Zeng, Rudrasis Chakraborty, Mingxing Tan, Glenn
 Fung, Yin Li, and Vikas Singh.
 
 The abstract from the paper is the following:
@@ -27,12 +27,12 @@ The abstract from the paper is the following:
 that drives the impressive performance of Transformers is the self-attention mechanism that encodes the influence or
 dependence of other tokens on each specific token. While beneficial, the quadratic complexity of self-attention on the
 input sequence length has limited its application to longer sequences -- a topic being actively studied in the
-community. To address this limitation, we propose Nyströmformer -- a model that exhibits favorable scalability as a
-function of sequence length. Our idea is based on adapting the Nyström method to approximate standard self-attention
-with O(n) complexity. The scalability of Nyströmformer enables application to longer sequences with thousands of
+community. To address this limitation, we propose Nystr ö mformer -- a model that exhibits favorable scalability as a
+function of sequence length. Our idea is based on adapting the Nystr ö m method to approximate standard self-attention
+with O(n) complexity. The scalability of Nystr ö mformer enables application to longer sequences with thousands of
 tokens. We perform evaluations on multiple downstream tasks on the GLUE benchmark and IMDB reviews with standard
-sequence length, and find that our Nyströmformer performs comparably, or in a few cases, even slightly better, than
-standard self-attention. On longer sequence tasks in the Long Range Arena (LRA) benchmark, Nyströmformer performs
+sequence length, and find that our Nystr ö mformer performs comparably, or in a few cases, even slightly better, than
+standard self-attention. On longer sequence tasks in the Long Range Arena (LRA) benchmark, Nystr ö mformer performs
 favorably relative to other efficient self-attention methods. Our code is available at this https URL.*
 
 This model was contributed by [novice03](https://huggingface.co/novice03). The original code can be found [here](https://github.com/mlpen/Nystromformer).

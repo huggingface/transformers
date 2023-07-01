@@ -1,4 +1,4 @@
-<!--版权所有2022年The HuggingFace团队。保留所有权利。
+<!--版权所有 2022 年 The HuggingFace 团队。保留所有权利。
 根据 Apache License，Version 2.0（“许可证”）获得许可；除非符合许可证，否则不得使用此文件。您可以在以下位置获取许可证的副本
 http://www.apache.org/licenses/LICENSE-2.0
 除非适用法律要求或书面同意，根据许可证分发的软件以“原样”分发，不附带任何形式的保证或条件。有关许可证的详细信息请参阅许可证。
@@ -44,7 +44,7 @@ pip install intel_extension_for_pytorch==<version_name> -f https://developer.int
 --doc_stride 128 \
 --output_dir /tmp/debug_squad/ \
 <b>--use_ipex \</b>
-<b>--bf16 --no_cuda</b></pre> 
+<b>--bf16 --no_cuda </b> </pre> 
 
 ### 实践示例
 

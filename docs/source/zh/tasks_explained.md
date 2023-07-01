@@ -120,7 +120,7 @@ This section briefly explains convolutions, but it'd be helpful to have a prior 
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/convolution.gif"/>
 </div>
 
-<small>A basic convolution without padding or stride, taken from <a href="https://arxiv.org/abs/1603.07285">A guide to convolution arithmetic for deep learning.</a></small>
+<small> A basic convolution without padding or stride, taken from <a href="https://arxiv.org/abs/1603.07285"> A guide to convolution arithmetic for deep learning.</a> </small>
 
 You can feed this output to another convolutional layer, and with each successive layer, the network learns more complex and abstract things like hotdogs or rockets. Between convolutional layers, it is common to add a pooling layer to reduce dimensionality and make the model more robust to variations of a feature's position.
 

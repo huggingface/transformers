@@ -38,7 +38,7 @@ Tips:
 
 - Each model is about 298 MB on disk, there are more than 1,000 models.
 - The list of supported language pairs can be found [here](https://huggingface.co/Helsinki-NLP).
-- Models were originally trained by [Jörg Tiedemann](https://researchportal.helsinki.fi/en/persons/j%C3%B6rg-tiedemann) using the [Marian](https://marian-nmt.github.io/) C++ library, which supports fast training and translation.
+- Models were originally trained by [J ö rg Tiedemann](https://researchportal.helsinki.fi/en/persons/j%C3%B6rg-tiedemann) using the [Marian](https://marian-nmt.github.io/) C++ library, which supports fast training and translation.
 - All models are transformer encoder-decoders with 6 layers in each component. Each model's performance is documented
   in a model card.
 - The 80 opus models that require BPE preprocessing are not supported.
@@ -54,7 +54,7 @@ Tips:
 ## Naming
 
 - All model names use the following format: `Helsinki-NLP/opus-mt-{src}-{tgt}`
-- The language codes used to name models are inconsistent. Two digit codes can usually be found [here](https://developers.google.com/admin-sdk/directory/v1/languages), three digit codes require googling "language
+- The language codes used to name models are inconsistent. Two digit codes can usually be found [here](https://developers.google.com/admin-sdk/directory/v1/languages), three digit codes require googling " language
   code {code}".
 - Codes formatted like `es_AR` are usually `code_{region}`. That one is Spanish from Argentina.
 - The models were converted in two stages. The first 1000 models use ISO-639-2 codes to identify languages, the second

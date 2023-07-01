@@ -30,7 +30,7 @@ outputs. The retriever and seq2seq modules are initialized from pretrained model
 both retrieval and generation to adapt to downstream tasks.
 
 It is based on the paper [Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks](https://arxiv.org/abs/2005.11401) by Patrick Lewis, Ethan Perez, Aleksandara Piktus, Fabio Petroni, Vladimir
-Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, Sebastian Riedel, Douwe Kiela.
+Karpukhin, Naman Goyal, Heinrich K ü ttler, Mike Lewis, Wen-tau Yih, Tim Rockt ä schel, Sebastian Riedel, Douwe Kiela.
 
 The abstract from the paper is the following:
 

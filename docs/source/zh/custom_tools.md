@@ -73,11 +73,11 @@ Task: "Answer the question in the variable `question` about the image stored in 
 I will use the following tools: `translator` to translate the question into English and then `image_qa` to answer the question on the input image.
 
 Answer:
-```py
-translated_question = translator(question=question, src_lang="French", tgt_lang="English")
-print(f"The translated question is {translated_question}.")
-answer = image_qa(image=image, question=translated_question)
-print(f"The answer is {answer}")
+``` py
+translated_question = translator(question = question, src_lang = "French", tgt_lang = "English")
+print(f "The translated question is {translated_question}.")
+answer = image_qa(image = image, question = translated_question)
+print(f "The answer is {answer}")
 ```
 
 Task: "Identify the oldest person in the `document` and create an image showcasing the result as a banner."
@@ -85,9 +85,9 @@ Task: "Identify the oldest person in the `document` and create an image showcasi
 I will use the following tools: `document_qa` to find the oldest person in the document, then `image_generator` to generate an image according to the answer.
 
 Answer:
-```py
-answer = document_qa(document, question="What is the oldest person?")
-print(f"The answer is {answer}.")
+``` py
+answer = document_qa(document, question = "What is the oldest person?")
+print(f "The answer is {answer}.")
 image = image_generator("A banner showing " + answer)
 ```
 
@@ -153,9 +153,9 @@ Task: "Identify the oldest person in the `document` and create an image showcasi
 I will use the following tools: `document_qa` to find the oldest person in the document, then `image_generator` to generate an image according to the answer.
 
 Answer:
-```py
-answer = document_qa(document, question="What is the oldest person?")
-print(f"The answer is {answer}.")
+``` py
+answer = document_qa(document, question = "What is the oldest person?")
+print(f "The answer is {answer}.")
 image = image_generator("A banner showing " + answer)
 ```
 
@@ -200,20 +200,20 @@ Human: Answer the question in the variable `question` about the image stored in 
 
 Assistant: I will use the tool `image_qa` to answer the question on the input image.
 
-```py
-answer = image_qa(text=question, image=image)
-print(f"The answer is {answer}")
+``` py
+answer = image_qa(text = question, image = image)
+print(f "The answer is {answer}")
 ```
 
 Human: I tried this code, it worked but didn't give me a good result. The question is in French
 
 Assistant: In this case, the question needs to be translated first. I will use the tool `translator` to do this.
 
-```py
-translated_question = translator(question=question, src_lang="French", tgt_lang="English")
-print(f"The translated question is {translated_question}.")
-answer = image_qa(text=translated_question, image=image)
-print(f"The answer is {answer}")
+``` py
+translated_question = translator(question = question, src_lang = "French", tgt_lang = "English")
+print(f "The translated question is {translated_question}.")
+answer = image_qa(text = translated_question, image = image)
+print(f "The answer is {answer}")
 ```
 
 =====
@@ -686,7 +686,7 @@ and generates the following audio.
 
 | **Audio**                                                                                                                                            |
 |------------------------------------------------------------------------------------------------------------------------------------------------------|
-| <audio controls><source src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/damo.wav" type="audio/wav"/> |
+| <audio controls> <source src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/damo.wav" type="audio/wav"/> |
 
 
 <Tip>

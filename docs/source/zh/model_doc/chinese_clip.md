@@ -1,18 +1,18 @@
-<!--版权2022年HuggingFace团队保留所有权利。
-根据Apache许可证第2.0版（“许可证”）授权；您除非符合许可证，否则不得使用此文件。您可以在以下位置获得许可证的副本
+<!--版权 2022 年 HuggingFace 团队保留所有权利。
+根据 Apache 许可证第 2.0 版（“许可证”）授权；您除非符合许可证，否则不得使用此文件。您可以在以下位置获得许可证的副本
 http://www.apache.org/licenses/LICENSE-2.0
 除非适用法律要求或书面同意，根据许可证分发的软件是按原样分发的“按现状”基础，无论是明示还是暗示的任何保证或条件。请参阅许可证特定语言下的权限和限制。
-⚠️请注意，此文件是Markdown格式的，但包含了我们文档生成器的特定语法（类似于MDX），可能无法正确地在您的Markdown查看器中呈现。
+⚠️请注意，此文件是 Markdown 格式的，但包含了我们文档生成器的特定语法（类似于 MDX），可能无法正确地在您的 Markdown 查看器中呈现。
 -->
 # Chinese-CLIP
 
 ## 概述
 
-《Chinese-CLIP：中文对比视觉-语言预训练》一文由An Yang、Junshu Pan、Junyang Lin、Rui Men、Yichang Zhang、Jingren Zhou、Chang Zhou提出（[原文链接](https://arxiv.org/abs/2211.01335)）。Chinese-CLIP是CLIP（Radford等，2021年）在大规模中文图文对数据集上的实现。它能够进行跨模态检索，同时也可以作为视觉任务（如零样本图像分类、开放域目标检测等）的视觉骨干。原始的Chinese-CLIP代码可以在[此链接](https://github.com/OFA-Sys/Chinese-CLIP)找到。
+《Chinese-CLIP：中文对比视觉-语言预训练》一文由 An Yang、Junshu Pan、Junyang Lin、Rui Men、Yichang Zhang、Jingren Zhou、Chang Zhou 提出（[原文链接](https://arxiv.org/abs/2211.01335)）。Chinese-CLIP 是 CLIP（Radford 等，2021 年）在大规模中文图文对数据集上的实现。它能够进行跨模态检索，同时也可以作为视觉任务（如零样本图像分类、开放域目标检测等）的视觉骨干。原始的 Chinese-CLIP 代码可以在 [此链接](https://github.com/OFA-Sys/Chinese-CLIP) 找到。
 
 来自论文的摘要如下：
 
-*CLIP的巨大成功（Radford等，2021年）推动了视觉-语言预训练中对比学习的研究和应用。在这项工作中，我们构建了一个大规模的中文图文对数据集，其中大多数数据来自公开可用的数据集，然后我们在新数据集上预训练了中文CLIP模型。我们开发了5个中文CLIP模型，参数规模从7700万到9.58亿不等。此外，我们提出了一种两阶段的预训练方法，首先冻结图像编码器进行训练，然后对所有参数进行优化，以实现模型性能的增强。我们广泛的实验表明，中文CLIP在MUGE、Flickr30K-CN和COCO-CN的零样本学习和微调设置中都能达到最先进的性能，并且在ELEVATER基准测试（Li等，2022年）的零样本图像分类评估中能够取得竞争性的性能。我们已经发布了代码、预训练模型和演示。*
+*CLIP 的巨大成功（Radford 等，2021 年）推动了视觉-语言预训练中对比学习的研究和应用。在这项工作中，我们构建了一个大规模的中文图文对数据集，其中大多数数据来自公开可用的数据集，然后我们在新数据集上预训练了中文 CLIP 模型。我们开发了 5 个中文 CLIP 模型，参数规模从 7700 万到 9.58 亿不等。此外，我们提出了一种两阶段的预训练方法，首先冻结图像编码器进行训练，然后对所有参数进行优化，以实现模型性能的增强。我们广泛的实验表明，中文 CLIP 在 MUGE、Flickr30K-CN 和 COCO-CN 的零样本学习和微调设置中都能达到最先进的性能，并且在 ELEVATER 基准测试（Li 等，2022 年）的零样本图像分类评估中能够取得竞争性的性能。我们已经发布了代码、预训练模型和演示。*
 
 ## 使用方法
 下面的代码段展示了如何计算图像和文本特征以及相似度：
@@ -46,7 +46,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 >>> probs = logits_per_image.softmax(dim=1)  # probs: [[1.2686e-03, 5.4499e-02, 6.7968e-04, 9.4355e-01]]
 ```
 
-当前，我们在HF Model Hub上发布了以下规模的预训练Chinese-CLIP模型：
+当前，我们在 HF Model Hub 上发布了以下规模的预训练 Chinese-CLIP 模型：
 - [OFA-Sys/chinese-clip-vit-base-patch16](https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16)
 - [OFA-Sys/chinese-clip-vit-large-patch14](https://huggingface.co/OFA-Sys/chinese-clip-vit-large-patch14)
 - [OFA-Sys/chinese-clip-vit-large-patch14-336px](https://huggingface.co/OFA-Sys/chinese-clip-vit-large-patch14-336px)

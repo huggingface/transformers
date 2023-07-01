@@ -202,11 +202,11 @@ DistilBertConfig {
 
 <Tip warning={true}>
 
-并非所有模型都支持快速分词器。您可以查看这个[表格](index#supported-frameworks)来检查模型是否支持快速分词器。
+并非所有模型都支持快速分词器。您可以查看这个 [表格](index#supported-frameworks) 来检查模型是否支持快速分词器。
 
 </Tip>
 
-如果您训练了自己的分词器，可以使用您的*词汇表*文件创建一个分词器：
+如果您训练了自己的分词器，可以使用您的 *词汇表* 文件创建一个分词器：
 
 ```py
 >>> from transformers import DistilBertTokenizer

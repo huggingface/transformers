@@ -40,7 +40,7 @@ rendered properly in your Markdown viewer.
   - 我们为每种架构提供至少一个示例，该示例重现了官方作者提供的结果。  
   - 代码通常与原始代码库尽可能接近，这意味着由于转换为 TensorFlow 代码和反之亦然，一些 PyTorch 代码可能不够符合 PyTorch 的编码习惯。 
 
-      "*pytorchic*"可以描述那些被转换为PyTorch代码的TensorFlow代码，反之亦然。
+      "*pytorchic*" 可以描述那些被转换为 PyTorch 代码的 TensorFlow 代码，反之亦然。
 
 其他几个目标：
 - 尽可能一致地公开模型的内部：

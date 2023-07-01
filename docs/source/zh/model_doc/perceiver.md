@@ -20,8 +20,8 @@ rendered properly in your Markdown viewer.
 
 The Perceiver IO model was proposed in [Perceiver IO: A General Architecture for Structured Inputs &
 Outputs](https://arxiv.org/abs/2107.14795) by Andrew Jaegle, Sebastian Borgeaud, Jean-Baptiste Alayrac, Carl Doersch,
-Catalin Ionescu, David Ding, Skanda Koppula, Daniel Zoran, Andrew Brock, Evan Shelhamer, Olivier Hénaff, Matthew M.
-Botvinick, Andrew Zisserman, Oriol Vinyals, João Carreira.
+Catalin Ionescu, David Ding, Skanda Koppula, Daniel Zoran, Andrew Brock, Evan Shelhamer, Olivier H é naff, Matthew M.
+Botvinick, Andrew Zisserman, Oriol Vinyals, Jo ã o Carreira.
 
 Perceiver IO is a generalization of [Perceiver](https://arxiv.org/abs/2103.03206) to handle arbitrary outputs in
 addition to arbitrary inputs. The original Perceiver only produced a single classification label. In addition to
@@ -54,7 +54,7 @@ depend on the length of the inputs anymore, as one uses a fixed amount of latent
 randomly initialized, after which they are trained end-to-end using backpropagation.
 
 Internally, [`PerceiverModel`] will create the latents, which is a tensor of shape `(batch_size, num_latents,
-d_latents)`. One must provide `inputs` (which could be text, images, audio, you name it!) to the model, which it will
+d_latents)`. One must provide ` inputs` (which could be text, images, audio, you name it!) to the model, which it will
 use to perform cross-attention with the latents. The output of the Perceiver encoder is a tensor of the same shape. One
 can then, similar to BERT, convert the last hidden states of the latents to classification logits by averaging along
 the sequence dimension, and placing a linear layer on top of that to project the `d_latents` to `num_labels`.
@@ -73,10 +73,10 @@ of the latents to update the `outputs` tensor. After cross-attention, one still 
 vocabulary size of the model, i.e. creating logits of shape `(batch_size, 2048, 262)` (as Perceiver uses a vocabulary
 size of 262 byte IDs).
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/perceiver_architecture.jpg"
-alt="drawing" width="600"/>
+< img src =" https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/perceiver_architecture.jpg "
+alt = "drawing" width = "600"/>
 
-<small> Perceiver IO architecture. Taken from the <a href="https://arxiv.org/abs/2105.15203">original paper</a> </small>
+<small> Perceiver IO architecture. Taken from the <a href="https://arxiv.org/abs/2105.15203"> original paper </a> </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found
 [here](https://github.com/deepmind/deepmind-research/tree/master/perceiver).

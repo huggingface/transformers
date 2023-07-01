@@ -19,7 +19,7 @@ GLPN 模型是由 Doyeon Kim，Woonghyun Ga，Pyungwhan Ahn，Donggyu Joo，Sehw
 
 *从单张图像中估计深度是一项重要任务，可应用于计算机视觉的各个领域，并且随着卷积神经网络的发展而迅速发展。在本文中，我们提出了一种新颖的结构和训练策略，用于进一步提高网络的预测精度。我们部署了分层 Transformer 编码器来捕捉和传递全局上下文，并设计了一个轻量级但功能强大的解码器，以在考虑局部连通性的同时生成估计的深度图。通过使用我们提出的选择性特征融合模块在多尺度局部特征和全局解码流之间构建连接路径，网络可以集成两种表示并恢复细节。此外，所提出的解码器显示出比先前提出的解码器更好的性能，并且计算复杂度明显降低。此外，我们通过利用深度估计中的一个重要观察结果改进了深度特定的数据增强方法，以增强模型。我们的网络在具有挑战性的深度数据集 NYU Depth V2 上实现了最先进的性能。我们进行了大量实验证明和验证了所提出方法的有效性。最后，我们的模型显示出比其他比较模型更好的泛化能力和鲁棒性。* 
 
-*请注意，使用我们的分词器需要安装sentencepiece库，可以使用以下命令进行安装：* `pip install transformers[sentencepiece]` 或 `pip install sentencepiece`
+*请注意，使用我们的分词器需要安装 sentencepiece 库，可以使用以下命令进行安装：* `pip install transformers[sentencepiece]` 或 `pip install sentencepiece`
 
 示例用法：
 

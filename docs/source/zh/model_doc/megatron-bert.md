@@ -1,4 +1,4 @@
-<!--版权所有2021年NVIDIA Corporation和HuggingFace团队。保留所有权利。
+<!--版权所有 2021 年 NVIDIA Corporation 和 HuggingFace 团队。保留所有权利。
 根据 Apache 许可证第 2.0 版（“许可证”）获得许可；除非符合许可证的规定，否则您不得使用此文件。您可以在以下网址获取许可证的副本
 http://www.apache.org/licenses/LICENSE-2.0
 除非适用法律要求或书面同意，根据许可证分发的软件是按原样的方式分发的，不附带任何明示或暗示的担保或条件。请参阅许可证获取特定语言下的权限和限制。特别提示：

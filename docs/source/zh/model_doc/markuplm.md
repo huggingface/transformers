@@ -46,10 +46,10 @@ These are the XPATH tags and subscripts respectively for each token in the input
 - One can use [`MarkupLMProcessor`] to prepare all data for the model. Refer to the [usage guide](#usage-markuplmprocessor) for more info.
 - Demo notebooks can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/MarkupLM).
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/markuplm_architecture.jpg"
-alt="drawing" width="600"/> 
+< img src =" https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/markuplm_architecture.jpg "
+alt = "drawing" width = "600"/> 
 
-<small> MarkupLM architecture. Taken from the <a href="https://arxiv.org/abs/2110.08518">original paper.</a> </small>
+<small> MarkupLM architecture. Taken from the <a href="https://arxiv.org/abs/2110.08518"> original paper.</a> </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/markuplm).
 
@@ -110,7 +110,7 @@ This is the simplest case, in which the processor will use the feature extractor
 dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'xpath_tags_seq', 'xpath_subs_seq'])
 ```
 
-**Use case 2: web page classification (training, inference) + token classification (inference), parse_html=False**
+**Use case 2: web page classification (training, inference) + token classification (inference), parse_html = False**
 
 In case one already has obtained all nodes and xpaths, one doesn't need the feature extractor. In that case, one should
 provide the nodes and corresponding xpaths themselves to the processor, and make sure to set `parse_html` to `False`.
@@ -128,7 +128,7 @@ provide the nodes and corresponding xpaths themselves to the processor, and make
 dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'xpath_tags_seq', 'xpath_subs_seq'])
 ```
 
-**Use case 3: token classification (training), parse_html=False**
+**Use case 3: token classification (training), parse_html = False**
 
 For token classification tasks (such as [SWDE](https://paperswithcode.com/dataset/swde)), one can also provide the
 corresponding node labels in order to train a model. The processor will then convert these into token-level `labels`.
@@ -150,7 +150,7 @@ initialize the tokenizer with `only_label_first_subword` set to `False`.
 dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'xpath_tags_seq', 'xpath_subs_seq', 'labels'])
 ```
 
-**Use case 4: web page question answering (inference), parse_html=True**
+**Use case 4: web page question answering (inference), parse_html = True**
 
 For question answering tasks on web pages, you can provide a question to the processor. By default, the
 processor will use the feature extractor to get all nodes and xpaths, and create [CLS] question tokens [SEP] word tokens [SEP].
@@ -178,7 +178,7 @@ processor will use the feature extractor to get all nodes and xpaths, and create
 dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'xpath_tags_seq', 'xpath_subs_seq'])
 ```
 
-**Use case 5: web page question answering (inference), parse_html=False**
+**Use case 5: web page question answering (inference), parse_html = False**
 
 For question answering tasks (such as WebSRC), you can provide a question to the processor. If you have extracted
 all nodes and xpaths yourself, you can provide them directly to the processor. Make sure to set `parse_html` to `False`.

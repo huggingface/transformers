@@ -60,8 +60,8 @@ These input embeddings are learnt positional encodings that the authors refer to
 the encoder, they are added to the input of each attention layer. Each object query will look for a particular object
 in the image. The decoder updates these embeddings through multiple self-attention and encoder-decoder attention layers
 to output `decoder_hidden_states` of the same shape: `(batch_size, num_queries, d_model)`. Next, two heads
-are added on top for object detection: a linear layer for classifying each object query into one of the objects or "no
-object", and a MLP to predict bounding boxes for each query.
+are added on top for object detection: a linear layer for classifying each object query into one of the objects or " no
+object ", and a MLP to predict bounding boxes for each query.
 
 The model is trained using a **bipartite matching loss**: so what we actually do is compare the predicted classes +
 bounding boxes of each of the N = 100 object queries to the ground truth annotations, padded up to the same length N

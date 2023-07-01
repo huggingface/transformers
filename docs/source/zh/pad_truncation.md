@@ -1,4 +1,4 @@
-<!-- 版权所有2022年HuggingFace团队保留所有权利。
+<!-- 版权所有 2022 年 HuggingFace 团队保留所有权利。
 根据 Apache 许可证第 2.0 版（“许可证”）进行许可；除非符合许可证，否则您不得使用此文件。您可以在以下位置获取许可证的副本
 http://www.apache.org/licenses/LICENSE-2.0
 除非适用法律要求或书面同意，按许可证分发的软件是按“按原样”分发的基础上，不提供任何明示或暗示的担保或条件。请参阅许可证特定语言下的权限和限制。
@@ -30,7 +30,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 |                                      |                                   | `tokenizer(batch_sentences, padding='longest')`                                        |
 |                                      | padding to max model input length | `tokenizer(batch_sentences, padding='max_length')`                                     |
 |                                      | padding to specific length        | `tokenizer(batch_sentences, padding='max_length', max_length=42)`                      |
-|                                      | padding to a multiple of a value  | `tokenizer(batch_sentences, padding=True, pad_to_multiple_of=8)                        |
+|                                      | padding to a multiple of a value  | `tokenizer(batch_sentences, padding = True, pad_to_multiple_of = 8)                        |
 | truncation to max model input length | no padding                        | `tokenizer(batch_sentences, truncation=True)` or                                       |
 |                                      |                                   | `tokenizer(batch_sentences, truncation=STRATEGY)`                                      |
 |                                      | padding to max sequence in batch  | `tokenizer(batch_sentences, padding=True, truncation=True)` or                         |

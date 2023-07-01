@@ -1,4 +1,4 @@
-<!--版权所有2021年HuggingFace团队。保留所有权利。
+<!--版权所有 2021 年 HuggingFace 团队。保留所有权利。
 - ->
 根据 Apache 许可证第 2.0 版（“许可证”）获得许可；除非符合许可证，否则您不能使用此文件。您可以在以下位置获取许可证副本：
 http://www.apache.org/licenses/LICENSE-2.0
@@ -22,10 +22,10 @@ The abstract from the paper is the following:
 - BigBird 有两种实现方式：**original_full** 和 **block_sparse**。对于序列长度 < 1024，建议使用  **original_full**，因为使用**block_sparse**注意力没有任何好处。
 -  代码当前使用 3 个块和 2 个全局块的窗口大小。
 -  序列长度必须是块大小的整数倍。
-- 当前实现仅支持**ITC**。
+- 当前实现仅支持 **ITC**。
 
-- 当前实现不支持**num_random_blocks = 0**。
--  BigBirdPegasus 使用[PegasusTokenizer](https://github.com/huggingface/transformers/blob/main/src/transformers/models/pegasus/tokenization_pegasus.py)。
+- 当前实现不支持 **num_random_blocks = 0**。
+-  BigBirdPegasus 使用 [PegasusTokenizer](https://github.com/huggingface/transformers/blob/main/src/transformers/models/pegasus/tokenization_pegasus.py)。
 -  BigBird 是一个带有绝对位置嵌入的模型，因此通常建议在右侧而不是左侧填充输入。
 
 可以在 [此处](https://github.com/google-research/bigbird) 找到原始代码。

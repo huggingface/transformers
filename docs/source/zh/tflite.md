@@ -41,4 +41,4 @@ The TensorFlow Lite export succeeded with the warning: The maximum absolute diff
 - logits: max diff = 5.817413330078125e-05.
  The exported model was saved at: bert_tflite
 ```
-上面的示例演示了如何从🤗 Hub导出一个检查点。当导出本地模型时，请确保将模型的权重和分词器文件保存在同一个目录(`local_path`)中。当使用命令行界面时，将`local_path`传递给`model`参数，而不是传递🤗 Hub上的检查点名称。
+上面的示例演示了如何从🤗 Hub 导出一个检查点。当导出本地模型时，请确保将模型的权重和分词器文件保存在同一个目录(`local_path`)中。当使用命令行界面时，将 `local_path` 传递给 `model` 参数，而不是传递🤗 Hub 上的检查点名称。

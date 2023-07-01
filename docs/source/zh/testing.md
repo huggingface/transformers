@@ -290,7 +290,7 @@ pytest --random-order-bucket=none tests/test_a.py tests/test_c.py tests/test_b.p
 pytest --random-order-bucket=none
 ```
 
-默认情况下，`--random-order-bucket=module` 被隐式地应用，它将在模块级别对文件进行洗牌。它还可以在 `class`、`package`、`global` 和 `none` 级别进行洗牌。有关完整详情，请参阅其[文档](https://github.com/jbasko/pytest-random-order)。
+默认情况下，`--random-order-bucket=module` 被隐式地应用，它将在模块级别对文件进行洗牌。它还可以在 `class`、`package`、`global` 和 `none` 级别进行洗牌。有关完整详情，请参阅其 [文档](https://github.com/jbasko/pytest-random-order)。
 
 另一种随机化的选择是：[`pytest-randomly`](https://github.com/pytest-dev/pytest-randomly)。这个模块具有非常类似的功能/接口，但它不具备 `pytest-random-order` 中的 bucket 模式。它在安装后也会自动生效。
 
@@ -440,7 +440,7 @@ pytest --pastebin=all tests/test_logging.py
 
 🤗 transformers 测试基于 `unittest`，但由 `pytest` 运行，因此大部分时间都可以使用这两个系统的功能。
 
-可用。您可以在 [这里](https://docs.pytest.org/en/stable/unittest.html) 阅读支持的功能，但重要的是要记住，大多数 `pytest` fixtures 不起作用。既不支持参数化，但我们使用的是模块`parameterized` 以类似的方式工作。### 参数化 `parameterized` that works in a similar way.
+可用。您可以在 [这里](https://docs.pytest.org/en/stable/unittest.html) 阅读支持的功能，但重要的是要记住，大多数 `pytest` fixtures 不起作用。既不支持参数化，但我们使用的是模块 `parameterized` 以类似的方式工作。### 参数化 `parameterized` that works in a similar way.
 
 
 ### Parametrization

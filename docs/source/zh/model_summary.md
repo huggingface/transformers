@@ -11,9 +11,9 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 如果您对原始 Transformer 模型不熟悉或需要复习，请查看 Hugging Face 课程的 [Transformer 是如何工作的](https://huggingface.co/course/chapter1/4?fw=pt) 章节。
 <div align="center">
-    <iframe width="560" height="315" src="https://www.youtube.com/embed/H39Z_720T5s" title="YouTube video player"
-    frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
-    picture-in-picture" allowfullscreen></iframe>
+    < iframe width =" 560 " height =" 315 " src =" https://www.youtube.com/embed/H39Z_720T5s " title =" YouTube video player "
+    frameborder = "0" allow =" accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+    picture-in-picture " allowfullscreen > </iframe>
 </div>
 
 ## 计算机视觉
@@ -43,7 +43,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 ## 自然语言处理
 
-<iframe style="border: 1px solid rgba(0, 0, 0, 0.1);" width="1000" height="450" src="https://www.figma.com/embed?embed_host=share&url=https%3A%2F%2Fwww.figma.com%2Ffile%2FUhbQAZDlpYW5XEpdFy6GoG%2Fnlp-model-timeline%3Fnode-id%3D0%253A1%26t%3D4mZMr4r1vDEYGJ50-1" allowfullscreen></iframe>
+<iframe style="border: 1px solid rgba(0, 0, 0, 0.1);" width="1000" height="450" src="https://www.figma.com/embed?embed_host=share&url=https%3A%2F%2Fwww.figma.com%2Ffile%2FUhbQAZDlpYW5XEpdFy6GoG%2Fnlp-model-timeline%3Fnode-id%3D0%253A1%26t%3D4mZMr4r1vDEYGJ50-1" allowfullscreen> </iframe>
 
 ### 编码器 [[nlp-encoder]]
 

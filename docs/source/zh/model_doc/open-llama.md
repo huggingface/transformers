@@ -1,4 +1,4 @@
-<!--版权2023年HuggingFace团队保留所有权利。
+<!--版权 2023 年 HuggingFace 团队保留所有权利。
 根据 Apache 许可证第 2.0 版（“许可证”）获得许可；除非符合许可证的要求，否则您不得使用此文件。您可以在以下位置获取许可证的副本
 http://www.apache.org/licenses/LICENSE-2.0
 除非适用法律要求或书面同意，根据许可证分发的软件是按“原样”分发的，不附带任何形式的明示或暗示担保或条件。请参阅许可证中的特定语言，以了解权限和限制。an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the

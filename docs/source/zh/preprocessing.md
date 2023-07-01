@@ -1,4 +1,4 @@
-<!--版权所有2023年The HuggingFace团队。保留所有权利。
+<!--版权所有 2023 年 The HuggingFace 团队。保留所有权利。
 根据 Apache 许可证第 2.0 版（“许可证”），您只有在遵守许可证的情况下才能使用此文件许可证。您可以在以下位置获取许可证的副本
 http://www.apache.org/licenses/LICENSE-2.0
 除非适用法律或书面同意，根据许可证分发的软件均按照“按原样”基础分发，无论是以明示还是默示的方式。请参阅许可证以获取特定语言下的权限和限制。
@@ -354,7 +354,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 >>> _transforms = Compose([RandomResizedCrop(size), ColorJitter(brightness=0.5, hue=0.5)])
 ```
 
-2. 这个模型接受`pixel_values`作为输入。`ImageProcessor`可以负责对图像进行归一化和生成适当的张量。创建一个函数，将图像增强和图像预处理结合起来处理一批图像，并生成`pixel_values`。
+2. 这个模型接受 `pixel_values` 作为输入。`ImageProcessor` 可以负责对图像进行归一化和生成适当的张量。创建一个函数，将图像增强和图像预处理结合起来处理一批图像，并生成 `pixel_values`。
 ```py
 >>> def transforms(examples):
 ...     images = [_transforms(img.convert("RGB")) for img in examples["image"]]

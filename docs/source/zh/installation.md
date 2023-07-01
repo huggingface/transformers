@@ -210,6 +210,6 @@ python -m pip install huggingface_hub
 
 <Tip>
 
-查看 [如何从Hub下载文件](https://huggingface.co/docs/hub/how-to-downstream) 部分，了解有关从Hub下载文件的更多详细信息。
+查看 [如何从 Hub 下载文件](https://huggingface.co/docs/hub/how-to-downstream) 部分，了解有关从 Hub 下载文件的更多详细信息。
 
 </Tip>

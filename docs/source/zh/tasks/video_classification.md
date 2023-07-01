@@ -126,7 +126,7 @@ UCF101_subset/
 # Unique classes: ['ApplyEyeMakeup', 'ApplyLipstick', 'Archery', 'BabyCrawling', 'BalanceBeam', 'BandMarching', 'BaseballPitch', 'Basketball', 'BasketballDunk', 'BenchPress'].
 ```
 
-共有10个唯一的类别。对于每个类别，训练集中有30个视频。
+共有 10 个唯一的类别。对于每个类别，训练集中有 30 个视频。
 
 ## 加载要微调的模型
 
@@ -155,13 +155,13 @@ Some weights of VideoMAEForVideoClassification were not initialized from the mod
 You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
 ```
 
-警告告诉我们我们正在丢弃一些权重（例如`classifier`层的权重和偏差），并随机初始化其他权重（新`classifier`层的权重和偏差）。在这种情况下，这是预期的，因为我们正在添加一个新的头部，这个头部没有预训练的权重，所以库警告我们在使用它进行推断之前应该微调这个模型，这正是我们要做的。
+警告告诉我们我们正在丢弃一些权重（例如 `classifier` 层的权重和偏差），并随机初始化其他权重（新 `classifier` 层的权重和偏差）。在这种情况下，这是预期的，因为我们正在添加一个新的头部，这个头部没有预训练的权重，所以库警告我们在使用它进行推断之前应该微调这个模型，这正是我们要做的。
 
-**注意**，[此检查点](https://huggingface.co/MCG-NJU/videomae-base-finetuned-kinetics)在此任务上具有更好的性能，因为该检查点通过在具有相当领域重叠的类似下游任务上进行微调获得。您可以查看[此检查点](https://huggingface.co/sayakpaul/videomae-base-finetuned-kinetics-finetuned-ucf101-subset)，该检查点是通过对`MCG-NJU/videomae-base-finetuned-kinetics`进行微调获得的。
+**注意**，[此检查点](https://huggingface.co/MCG-NJU/videomae-base-finetuned-kinetics) 在此任务上具有更好的性能，因为该检查点通过在具有相当领域重叠的类似下游任务上进行微调获得。您可以查看 [此检查点](https://huggingface.co/sayakpaul/videomae-base-finetuned-kinetics-finetuned-ucf101-subset)，该检查点是通过对 `MCG-NJU/videomae-base-finetuned-kinetics` 进行微调获得的。
 
 ## 为训练准备数据集
 
-为了对视频进行预处理，您将利用[PyTorchVideo库](https://pytorchvideo.org/)。首先导入我们需要的依赖项。
+为了对视频进行预处理，您将利用 [PyTorchVideo 库](https://pytorchvideo.org/)。首先导入我们需要的依赖项。
 
 ``` py 
 >>> import pytorchvideo.data
@@ -186,9 +186,9 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 
 对于训练数据集的预处理转换，使用统一的时间子采样、像素归一化、随机裁剪和随机水平翻转的组合。
 
-对于验证和评估数据集的转换，保持相同的转换链，除了随机裁剪和水平翻转。要了解更多有关这些转换的详细信息，请查看[PyTorchVideo的官方文档](https://pytorchvideo.org)。
+对于验证和评估数据集的转换，保持相同的转换链，除了随机裁剪和水平翻转。要了解更多有关这些转换的详细信息，请查看 [PyTorchVideo 的官方文档](https://pytorchvideo.org)。
 
-使用预训练模型关联的`image_processor`来获取以下信息：
+使用预训练模型关联的 `image_processor` 来获取以下信息：
 
 * 图像均值和标准差，用于对视频帧像素进行归一化。
 * 将调整视频帧大小的空间分辨率。
@@ -275,14 +275,14 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 ```
 
 **注意**：
-上述数据集流水线取自[官方PyTorchVideo示例](https://pytorchvideo.org/docs/tutorial_classification#dataset)。
+上述数据集流水线取自 [官方 PyTorchVideo 示例](https://pytorchvideo.org/docs/tutorial_classification#dataset)。
 
-我们使用[`pytorchvideo.data.Ucf101()`](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html#pytorchvideo.data.Ucf101)函数，因为它专门针对UCF-101数据集进行了调整。在幕后，它返回一个[`pytorchvideo.data.labeled_video_dataset.LabeledVideoDataset`](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html#pytorchvideo.data.LabeledVideoDataset)对象。`LabeledVideoDataset`类是PyTorchVideo数据集中所有视频相关的基类。
+我们使用 [`pytorchvideo.data.Ucf101()`](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html#pytorchvideo.data.Ucf101) 函数，因为它专门针对 UCF-101 数据集进行了调整。在幕后，它返回一个 [`pytorchvideo.data.labeled_video_dataset.LabeledVideoDataset`](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html#pytorchvideo.data.LabeledVideoDataset) 对象。`LabeledVideoDataset` 类是 PyTorchVideo 数据集中所有视频相关的基类。
 
-因此，如果要使用PyTorchVideo不支持的自定义数据集，可以相应地扩展`LabeledVideoDataset`类。请参阅`data` API的[文档](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html)以了解更多信息。
+因此，如果要使用 PyTorchVideo 不支持的自定义数据集，可以相应地扩展 `LabeledVideoDataset` 类。请参阅 `data` API 的 [文档](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html) 以了解更多信息。
 
-此外，如果您的数据集遵循类似的结构（如上所示），那么使用`pytorchvideo.data.Ucf101()`应该工作正常。
-您可以访问`num_videos`参数来了解数据集中的视频数量。
+此外，如果您的数据集遵循类似的结构（如上所示），那么使用 `pytorchvideo.data.Ucf101()` 应该工作正常。
+您可以访问 `num_videos` 参数来了解数据集中的视频数量。
 
 ``` py
 >>> print(train_dataset.num_videos, val_dataset.num_videos, test_dataset.num_videos)
@@ -327,7 +327,7 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 >>> display_gif(video_tensor)
 ```
 
-<div class="flex justify-center">    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sample_gif.gif" alt="人在打篮球"/></div>
+<div class="flex justify-center">    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sample_gif.gif" alt="人在打篮球"/> </div>
 
 ## 训练模型
 
@@ -431,7 +431,7 @@ def compute_metrics(eval_pred):
 >>> sample_test_video = next(iter(test_dataset))
 ```
 
-<div class="flex justify-center">    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sample_gif_two.gif" alt="Teams playing basketball"/></div>
+<div class="flex justify-center">    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sample_gif_two.gif" alt="Teams playing basketball"/> </div>
 
 尝试使用最简单的方法对您微调的模型进行推理，即在 [`pipeline`](https://huggingface.co/docs/transformers/main/en/main_classes/pipelines#transformers.VideoClassificationPipeline) 中使用它。
 

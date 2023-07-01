@@ -36,10 +36,10 @@ Tips:
 
 - See the code examples below each model regarding usage.
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/convnext_architecture.jpg"
-alt="drawing" width="600"/>
+< img src =" https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/convnext_architecture.jpg "
+alt = "drawing" width = "600"/>
 
-<small> ConvNeXT architecture. Taken from the <a href="https://arxiv.org/abs/2201.03545">original paper</a>.</small>
+<small> ConvNeXT architecture. Taken from the <a href="https://arxiv.org/abs/2201.03545"> original paper </a>.</small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). TensorFlow version of the model was contributed by [ariG23498](https://github.com/ariG23498),
 [gante](https://github.com/gante), and [sayakpaul](https://github.com/sayakpaul) (equal contribution). The original code can be found [here](https://github.com/facebookresearch/ConvNeXt).

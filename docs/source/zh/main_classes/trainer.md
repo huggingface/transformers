@@ -300,7 +300,7 @@ Toward Training Trillion Parameter Models, by Samyam Rajbhandari, Jeff Rasley, O
 
 This provided support is new and experimental as of this writing. While the support for DeepSpeed and PyTorch FSDP is active and we welcome issues around it, we don't support the FairScale integration anymore since it has been integrated in PyTorch main (see the [PyTorch FSDP integration](#pytorch-fully-sharded-data-parallel))
 
-<a id='zero-install-notes'></a>
+<a id='zero-install-notes'> </a>
 
 ### CUDA Extension Installation Notes
 
@@ -582,7 +582,7 @@ as the model saving with FSDP activated is only available with recent fixes.
   FSDP json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`. 
   - If auto wrapping is enabled, you can either use transformer based auto wrap policy or size based auto wrap policy.
     - For transformer based auto wrap policy, please specify `fsdp_transformer_layer_cls_to_wrap` in the config file. 
-      This specifies the list of transformer layer class name (case-sensitive) to wrap ,e.g, [`BertLayer`], [`GPTJBlock`], [`T5Block`] ....
+      This specifies the list of transformer layer class name (case-sensitive) to wrap , e.g, [`BertLayer`], [`GPTJBlock`], [`T5Block`] ....
       This is important because submodules that share weights (e.g., embedding layer) should not end up in different FSDP wrapped units.
       Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers. 
       Remaining layers including the shared embeddings are conveniently wrapped in same outermost FSDP unit.
@@ -609,7 +609,7 @@ All the latest Fully Sharded Data Parallel (FSDP) training are supported.
 For more information refer to the [Scaling PyTorch models on Cloud TPUs with FSDP](https://pytorch.org/blog/scaling-pytorch-models-on-cloud-tpus-with-fsdp/) and [PyTorch/XLA implementation of FSDP](https://github.com/pytorch/xla/tree/master/torch_xla/distributed/fsdp)
 All you need to do is enable it through the config.
 
-**Required PyTorch/XLA version for FSDP support**: >=2.0
+**Required PyTorch/XLA version for FSDP support**: >= 2.0
 
 **Usage**:
 
@@ -623,7 +623,7 @@ Pass `--fsdp "full shard"` along with following changes to be made in `--fsdp_co
   `fsdp_min_num_params` or `fsdp_transformer_layer_cls_to_wrap`. 
 - You can either use transformer based auto wrap policy or size based auto wrap policy.
   - For transformer based auto wrap policy, please specify `fsdp_transformer_layer_cls_to_wrap` in the config file. 
-    This specifies the list of transformer layer class name (case-sensitive) to wrap ,e.g, [`BertLayer`], [`GPTJBlock`], [`T5Block`] ....
+    This specifies the list of transformer layer class name (case-sensitive) to wrap , e.g, [`BertLayer`], [`GPTJBlock`], [`T5Block`] ....
     This is important because submodules that share weights (e.g., embedding layer) should not end up in different FSDP wrapped units.
     Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers. 
     Remaining layers including the shared embeddings are conveniently wrapped in same outermost FSDP unit.
@@ -844,27 +844,27 @@ For more information, please refer the 🤗 Accelerate CLI guide: [Launching you
 
 Sections that were moved:
 
-[ <a href="./deepspeed#deepspeed-trainer-integration">DeepSpeed</a><a id="deepspeed"></a>
-| <a href="./deepspeed#deepspeed-installation">Installation</a><a id="installation"></a>
-| <a href="./deepspeed#deepspeed-multi-gpu">Deployment with multiple GPUs</a><a id="deployment-with-multiple-gpus"></a>
-| <a href="./deepspeed#deepspeed-one-gpu">Deployment with one GPU</a><a id="deployment-with-one-gpu"></a>
-| <a href="./deepspeed#deepspeed-notebook">Deployment in Notebooks</a><a id="deployment-in-notebooks"></a>
-| <a href="./deepspeed#deepspeed-config">Configuration</a><a id="configuration"></a>
-| <a href="./deepspeed#deepspeed-config-passing">Passing Configuration</a><a id="passing-configuration"></a>
-| <a href="./deepspeed#deepspeed-config-shared">Shared Configuration</a><a id="shared-configuration"></a>
-| <a href="./deepspeed#deepspeed-zero">ZeRO</a><a id="zero"></a>
-| <a href="./deepspeed#deepspeed-zero2-config">ZeRO-2 Config</a><a id="zero-2-config"></a>
-| <a href="./deepspeed#deepspeed-zero3-config">ZeRO-3 Config</a><a id="zero-3-config"></a>
-| <a href="./deepspeed#deepspeed-nvme">NVMe Support</a><a id="nvme-support"></a>
-| <a href="./deepspeed#deepspeed-zero2-zero3-performance">ZeRO-2 vs ZeRO-3 Performance</a><a id="zero-2-vs-zero-3-performance"></a>
-| <a href="./deepspeed#deepspeed-zero2-example">ZeRO-2 Example</a><a id="zero-2-example"></a>
-| <a href="./deepspeed#deepspeed-zero3-example">ZeRO-3 Example</a><a id="zero-3-example"></a>
-| <a href="./deepspeed#deepspeed-optimizer">Optimizer</a><a id="optimizer"></a>
-| <a href="./deepspeed#deepspeed-scheduler">Scheduler</a><a id="scheduler"></a>
-| <a href="./deepspeed#deepspeed-fp32">fp32 Precision</a><a id="fp32-precision"></a>
-| <a href="./deepspeed#deepspeed-amp">Automatic Mixed Precision</a><a id="automatic-mixed-precision"></a>
-| <a href="./deepspeed#deepspeed-bs">Batch Size</a><a id="batch-size"></a>
-| <a href="./deepspeed#deepspeed-grad-acc">Gradient Accumulation</a><a id="gradient-accumulation"></a>
-| <a href="./deepspeed#deepspeed-grad-clip">Gradient Clipping</a><a id="gradient-clipping"></a>
-| <a href="./deepspeed#deepspeed-weight-extraction">Getting The Model Weights Out</a><a id="getting-the-model-weights-out"></a>
+[ <a href="./deepspeed#deepspeed-trainer-integration"> DeepSpeed </a> <a id="deepspeed"> </a>
+| <a href="./deepspeed#deepspeed-installation"> Installation </a> <a id="installation"> </a>
+| <a href="./deepspeed#deepspeed-multi-gpu"> Deployment with multiple GPUs </a> <a id="deployment-with-multiple-gpus"> </a>
+| <a href="./deepspeed#deepspeed-one-gpu"> Deployment with one GPU </a> <a id="deployment-with-one-gpu"> </a>
+| <a href="./deepspeed#deepspeed-notebook"> Deployment in Notebooks </a> <a id="deployment-in-notebooks"> </a>
+| <a href="./deepspeed#deepspeed-config"> Configuration </a> <a id="configuration"> </a>
+| <a href="./deepspeed#deepspeed-config-passing"> Passing Configuration </a> <a id="passing-configuration"> </a>
+| <a href="./deepspeed#deepspeed-config-shared"> Shared Configuration </a> <a id="shared-configuration"> </a>
+| <a href="./deepspeed#deepspeed-zero"> ZeRO </a> <a id="zero"> </a>
+| <a href="./deepspeed#deepspeed-zero2-config"> ZeRO-2 Config </a> <a id="zero-2-config"> </a>
+| <a href="./deepspeed#deepspeed-zero3-config"> ZeRO-3 Config </a> <a id="zero-3-config"> </a>
+| <a href="./deepspeed#deepspeed-nvme"> NVMe Support </a> <a id="nvme-support"> </a>
+| <a href="./deepspeed#deepspeed-zero2-zero3-performance"> ZeRO-2 vs ZeRO-3 Performance </a> <a id="zero-2-vs-zero-3-performance"> </a>
+| <a href="./deepspeed#deepspeed-zero2-example"> ZeRO-2 Example </a> <a id="zero-2-example"> </a>
+| <a href="./deepspeed#deepspeed-zero3-example"> ZeRO-3 Example </a> <a id="zero-3-example"> </a>
+| <a href="./deepspeed#deepspeed-optimizer"> Optimizer </a> <a id="optimizer"> </a>
+| <a href="./deepspeed#deepspeed-scheduler"> Scheduler </a> <a id="scheduler"> </a>
+| <a href="./deepspeed#deepspeed-fp32"> fp32 Precision </a> <a id="fp32-precision"> </a>
+| <a href="./deepspeed#deepspeed-amp"> Automatic Mixed Precision </a> <a id="automatic-mixed-precision"> </a>
+| <a href="./deepspeed#deepspeed-bs"> Batch Size </a> <a id="batch-size"> </a>
+| <a href="./deepspeed#deepspeed-grad-acc"> Gradient Accumulation </a> <a id="gradient-accumulation"> </a>
+| <a href="./deepspeed#deepspeed-grad-clip"> Gradient Clipping </a> <a id="gradient-clipping"> </a>
+| <a href="./deepspeed#deepspeed-weight-extraction"> Getting The Model Weights Out </a> <a id="getting-the-model-weights-out"> </a>
 ]

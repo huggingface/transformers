@@ -150,7 +150,7 @@ with torch.no_grad():
 
 ids = torch.argmax(outputs, dim=-1)[0]
 transcription = processor.decode(ids)
-# "ce dernier est volé tout au long de l'histoire romaine"
+# "ce dernier est vol é tout au long de l'histoire romaine"
 ```
 
 In the same way the language can be switched out for all other supported languages. Please have a look at:
@@ -177,7 +177,7 @@ First, we install transformers and some other libraries
 pip install torch accelerate torchaudio datasets
 pip install --upgrade transformers
 ````
-pip install torch datasets[audio]
+pip install torch datasets [audio]
 Next, we load a couple of audio samples via `datasets`. Make sure that the audio data is sampled to 16000 kHz.
 
 ```py
@@ -209,7 +209,7 @@ model = Wav2Vec2ForSequenceClassification.from_pretrained(model_id)
 Now we process the audio data, pass the processed audio data to the model to classify it into a language, just like we usually do for Wav2Vec2 audio classification models such as [ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition](https://huggingface.co/harshit345/xlsr-wav2vec-speech-emotion-recognition)
 
 ```py
-# English
+English
 inputs = processor(en_sample, sampling_rate=16_000, return_tensors="pt")
 
 with torch.no_grad():

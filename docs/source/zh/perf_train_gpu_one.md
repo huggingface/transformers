@@ -614,13 +614,13 @@ GPU memory occupied: 5363 MB.
     ```python
     TrainingArguments(deepspeed="/path/to/ds_config.json")
     ```
-- 在笔记本中部署：请参阅[此指南](main_classes/deepspeed#deployment-in-notebooks)。
+- 在笔记本中部署：请参阅 [此指南](main_classes/deepspeed#deployment-in-notebooks)。
 
-- 自定义训练循环：这有些复杂，但您可以研究如何在[HF Trainer](https://github.com/huggingface/transformers/blob/master/src/transformers/trainer.py)中实现 - 只需在代码中搜索 `deepspeed`。
+- 自定义训练循环：这有些复杂，但您可以研究如何在 [HF Trainer](https://github.com/huggingface/transformers/blob/master/src/transformers/trainer.py) 中实现 - 只需在代码中搜索 `deepspeed`。
 
-## GPU的选择
+## GPU 的选择
 
-有时，即使应用了上述的所有优化技巧，某个GPU的吞吐量可能仍然不够好。一个简单的解决方案是更换GPU的类型。例如，从Google Colab上通常使用的K80切换到更高级的GPU，如V100或A100。尽管它们的价格更高，但由于其更大的内存和更快的架构，通常比较便宜的GPU更具成本效益。
+有时，即使应用了上述的所有优化技巧，某个 GPU 的吞吐量可能仍然不够好。一个简单的解决方案是更换 GPU 的类型。例如，从 Google Colab 上通常使用的 K80 切换到更高级的 GPU，如 V100 或 A100。尽管它们的价格更高，但由于其更大的内存和更快的架构，通常比较便宜的 GPU 更具成本效益。
 
 现在，让我们退后一步，讨论在扩展大型模型的训练时应该优化的内容。
 
@@ -631,30 +631,30 @@ GPU memory occupied: 5363 MB.
 - 数据吞吐量/训练时间
 - 模型性能
 
-我们已经看到每种方法都会改变内存使用和吞吐量。通常我们希望最大化吞吐量（样本/秒），以最小化训练成本。这通常通过尽可能充分利用GPU并将GPU内存填满来实现。例如，如前所述，我们仅在希望使用大于GPU内存大小的批次大小时才使用梯度累积。如果所需的批次大小适合内存，则没有理由应用梯度累积，因为这只会减慢训练速度。
+我们已经看到每种方法都会改变内存使用和吞吐量。通常我们希望最大化吞吐量（样本/秒），以最小化训练成本。这通常通过尽可能充分利用 GPU 并将 GPU 内存填满来实现。例如，如前所述，我们仅在希望使用大于 GPU 内存大小的批次大小时才使用梯度累积。如果所需的批次大小适合内存，则没有理由应用梯度累积，因为这只会减慢训练速度。
 
 第二个目标是模型性能。仅仅因为我们可以使用大批次大小并不意味着我们应该这样做。作为超参数调整的一部分，您应该确定哪个批次大小产生了最佳结果，然后相应地优化吞吐量。
 
 ## 高效的软件预构建
 
-PyTorch的[pip和conda构建](https://pytorch.org/get-started/locally/#start-locally)预先构建了cuda toolkit，足以运行PyTorch，但如果需要构建cuda扩展，这是不够的。
+PyTorch 的 [pip 和 conda 构建](https://pytorch.org/get-started/locally/#start-locally) 预先构建了 cuda toolkit，足以运行 PyTorch，但如果需要构建 cuda 扩展，这是不够的。
 
-有时候，可能需要额外的工作来预构建一些组件，例如，如果您使用的是不预编译的库（如`apex`）。在其他情况下，如果您需要全系统范围内安装正确的cuda toolkit可能会很复杂。为了满足用户的需求，PyTorch和NVIDIA发布了一个新版本的NGC docker容器，其中已经预先构建了所有内容，您只需将程序安装到其中，就可以立即运行。
+有时候，可能需要额外的工作来预构建一些组件，例如，如果您使用的是不预编译的库（如 `apex`）。在其他情况下，如果您需要全系统范围内安装正确的 cuda toolkit 可能会很复杂。为了满足用户的需求，PyTorch 和 NVIDIA 发布了一个新版本的 NGC docker 容器，其中已经预先构建了所有内容，您只需将程序安装到其中，就可以立即运行。
 
-如果您想调整PyTorch源代码和/或进行新的定制构建，这种方法也非常有用。
+如果您想调整 PyTorch 源代码和/或进行新的定制构建，这种方法也非常有用。
 
-要找到您想要的docker映像版本，请从这里开始，选择最新的月度发布之一。进入所需版本的发布说明，检查环境的组件是否符合您的需求（包括NVIDIA驱动程序要求！），然后在该文档的顶部转到相应的NGC页面。如果不慎迷失方向，这是所有PyTorch NGC映像的索引。
+要找到您想要的 docker 映像版本，请从这里开始，选择最新的月度发布之一。进入所需版本的发布说明，检查环境的组件是否符合您的需求（包括 NVIDIA 驱动程序要求！），然后在该文档的顶部转到相应的 NGC 页面。如果不慎迷失方向，这是所有 PyTorch NGC 映像的索引。
 
-接下来，请按照下载和部署docker映像的说明进行操作。
+接下来，请按照下载和部署 docker 映像的说明进行操作。
 ## 稀疏性
 
 ### 专家混合模型
 
-最近的一些论文报告称，将专家混合模型（Mixture of Experts，MoE）集成到Transformer模型中可以加快训练速度4-5倍，并提高推断速度。
+最近的一些论文报告称，将专家混合模型（Mixture of Experts，MoE）集成到 Transformer 模型中可以加快训练速度 4-5 倍，并提高推断速度。
 
 由于已经发现更多的参数可以带来更好的性能，这种技术可以使参数数量增加一个数量级，而不增加训练成本。
 
-在这种方法中，每个FFN（Feed-Forward Network）层都被MoE层替换，MoE层由许多专家组成，通过门控函数以平衡的方式训练每个专家，具体取决于输入标记在序列中的位置。
+在这种方法中，每个 FFN（Feed-Forward Network）层都被 MoE 层替换，MoE 层由许多专家组成，通过门控函数以平衡的方式训练每个专家，具体取决于输入标记在序列中的位置。
 
 ![MoE Transformer 2x block](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/perf-moe-transformer.png)
 
@@ -662,31 +662,31 @@ PyTorch的[pip和conda构建](https://pytorch.org/get-started/locally/#start-loc
 
 您可以在本节末尾列出的论文中找到详尽的细节和比较表格。
 
-这种方法的主要缺点是它需要大量的GPU内存，几乎比密集模型的内存要大一个数量级。为了解决更高的内存需求，提出了各种蒸馏和方法。
+这种方法的主要缺点是它需要大量的 GPU 内存，几乎比密集模型的内存要大一个数量级。为了解决更高的内存需求，提出了各种蒸馏和方法。
 
-然而，存在一种直接的权衡，您可以使用少量的专家和2-3倍较小的基本模型，而不是数十个或数百个专家，这样可以得到一个5倍较小的模型，从而在适度增加内存需求的同时适度提高训练速度。
+然而，存在一种直接的权衡，您可以使用少量的专家和 2-3 倍较小的基本模型，而不是数十个或数百个专家，这样可以得到一个 5 倍较小的模型，从而在适度增加内存需求的同时适度提高训练速度。
 
-大多数相关的论文和实现都是基于TensorFlow/TPU的：
+大多数相关的论文和实现都是基于 TensorFlow/TPU 的：
 
 - [GShard: Scaling Giant Models with Conditional Computation and Automatic Sharding](https://arxiv.org/abs/2006.16668)
 - [Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity](https://arxiv.org/abs/2101.03961)
 - [GLaM: Generalist Language Model (GLaM)](https://ai.googleblog.com/2021/12/more-efficient-in-context-learning-with.html)
 
-对于PyTorch，DeepSpeed也构建了一个专家混合模型：[DeepSpeed-MoE: Advancing Mixture-of-Experts Inference and Training to Power Next-Generation AI Scale](https://arxiv.org/abs/2201.05596)，[Mixture of Experts](https://www.deepspeed.ai/tutorials/mixture-of-experts/) - 博文：[1](https://www.microsoft.com/en-us/research/blog/deepspeed-powers-8x-larger-moe-model-training-with-high-performance/)，[2](https://www.microsoft.com/en-us/research/publication/scalable-and-efficient-moe-training-for-multitask-multilingual-models/)，以及用于大型基于Transformer的自然语言生成模型的具体部署：[博文](https://www.deepspeed.ai/news/2021/12/09/deepspeed-m
+对于 PyTorch，DeepSpeed 也构建了一个专家混合模型：[DeepSpeed-MoE: Advancing Mixture-of-Experts Inference and Training to Power Next-Generation AI Scale](https://arxiv.org/abs/2201.05596)，[Mixture of Experts](https://www.deepspeed.ai/tutorials/mixture-of-experts/) - 博文：[1](https://www.microsoft.com/en-us/research/blog/deepspeed-powers-8x-larger-moe-model-training-with-high-performance/)，[2](https://www.microsoft.com/en-us/research/publication/scalable-and-efficient-moe-training-for-multitask-multilingual-models/)，以及用于大型基于 Transformer 的自然语言生成模型的具体部署：[博文](https://www.deepspeed.ai/news/2021/12/09/deepspeed-m
 
-oe-nlg.html)，[Megatron-Deepspeed分支](Thttps://github.com/microsoft/Megatron-DeepSpeed/tree/moe-training)。
+oe-nlg.html)，[Megatron-Deepspeed 分支](Thttps://github.com/microsoft/Megatron-DeepSpeed/tree/moe-training)。
 
-## 超越单个GPU的扩展
+## 超越单个 GPU 的扩展
 
-对于一些应用，例如预训练大型语言模型，应用上述所有方法可能仍然不够快。在这种情况下，您可以将实验扩展到多个GPU上。
+对于一些应用，例如预训练大型语言模型，应用上述所有方法可能仍然不够快。在这种情况下，您可以将实验扩展到多个 GPU 上。
 
-在需要在多个GPU上进行训练的另一个用例是，如果模型无法在单个GPU上使用所有提到的技巧进行训练。尽管此时的方法更加复杂，但通常涉及某种形式的流水线或张量并行，其中模型本身在多个GPU上进行分布。您还可以利用DeepSpeed，它实现了一些并行策略以及一些更多的优化，以减少内存占用，例如对优化器状态进行分区。您可以在["多GPU训练"部分](perf_train_gpu_many)中阅读更多相关信息。
+在需要在多个 GPU 上进行训练的另一个用例是，如果模型无法在单个 GPU 上使用所有提到的技巧进行训练。尽管此时的方法更加复杂，但通常涉及某种形式的流水线或张量并行，其中模型本身在多个 GPU 上进行分布。您还可以利用 DeepSpeed，它实现了一些并行策略以及一些更多的优化，以减少内存占用，例如对优化器状态进行分区。您可以在 ["多 GPU 训练" 部分](perf_train_gpu_many) 中阅读更多相关信息。
 
-## 使用PyTorch原生注意力机制
+## 使用 PyTorch 原生注意力机制
 
-PyTorch 2.0发布了原生的[`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA)，它可以使用融合的GPU内核进行[内存高效的注意力计算](https://arxiv.org/abs/2112.05682)和[快闪注意力](https://arxiv.org/abs/2205.14135)。
+PyTorch 2.0 发布了原生的 [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA)，它可以使用融合的 GPU 内核进行 [内存高效的注意力计算](https://arxiv.org/abs/2112.05682) 和 [快闪注意力](https://arxiv.org/abs/2205.14135)。
 
-在安装了[`optimum`](https://github.com/huggingface/optimum)包之后，可以使用以下代码将相关内部模块替换为使用PyTorch的原生注意力机制：
+在安装了 [`optimum`](https://github.com/huggingface/optimum) 包之后，可以使用以下代码将相关内部模块替换为使用 PyTorch 的原生注意力机制：
 
 ```python
 model = model.to_bettertransformer()
@@ -694,28 +694,28 @@ model = model.to_bettertransformer()
 
 然后可以像往常一样进行训练。
 
-## 使用torch.compile
+## 使用 torch.compile
 
-PyTorch 2.0引入了一个新的编译函数，您可以在他们的[文档](https://pytorch.org/get-started/pytorch-2.0/)中了解更多信息。它使用Python的帧评估API从现有的PyTorch程序自动创建图形。在捕获图形之后，可以部署不同的后端来将图形降低到优化的引擎。您可以从下面的选项中选择一个来提高性能。
+PyTorch 2.0 引入了一个新的编译函数，您可以在他们的 [文档](https://pytorch.org/get-started/pytorch-2.0/) 中了解更多信息。它使用 Python 的帧评估 API 从现有的 PyTorch 程序自动创建图形。在捕获图形之后，可以部署不同的后端来将图形降低到优化的引擎。您可以从下面的选项中选择一个来提高性能。
 
-`torch.compile`拥有越来越多的后端，可以在[backends.py](https://github.com/pytorch/pytorch/blob/master/torch/_dynamo/optimizations/backends.py)中找到，或者使用`torchdynamo.list_backends()`，每个后端都有其可选的依赖项。
+`torch.compile` 拥有越来越多的后端，可以在 [backends.py](https://github.com/pytorch/pytorch/blob/master/torch/_dynamo/optimizations/backends.py) 中找到，或者使用 `torchdynamo.list_backends()`，每个后端都有其可选的依赖项。
 
 其中一些最常用的后端是：
 
 **调试后端**：
-* `dynamo.optimize("eager")` - 使用PyTorch运行提取的GraphModule。这在调试TorchDynamo问题时非常有用。
-* `dynamo.optimize("aot_eager")` - 仅使用PyTorch的eager模式对AotAutograd提取的前向和反向图进行运行。这对调试很有用，但不太可能提供
+* `dynamo.optimize("eager")` - 使用 PyTorch 运行提取的 GraphModule。这在调试 TorchDynamo 问题时非常有用。
+* `dynamo.optimize("aot_eager")` - 仅使用 PyTorch 的 eager 模式对 AotAutograd 提取的前向和反向图进行运行。这对调试很有用，但不太可能提供
 
 速度优势。
 
 **训练和推断后端**：
-* `dynamo.optimize("inductor")` - 使用TorchInductor后端，结合AotAutograd和cudagraphs，利用代码生成的Triton内核。[了解更多](https://dev-discuss.pytorch.org/t/torchinductor-a-pytorch-native-compiler-with-define-by-run-ir-and-symbolic-shapes/747)
-* `dynamo.optimize("nvfuser")` - 使用TorchScript的nvFuser。[了解更多](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593)
-* `dynamo.optimize("aot_nvfuser")` - 使用AotAutograd的nvFuser。[了解更多](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593)
-* `dynamo.optimize("aot_cudagraphs")` - 使用AotAutograd的cudagraphs。[了解更多](https://github.com/pytorch/torchdynamo/pull/757)
+* `dynamo.optimize("inductor")` - 使用 TorchInductor 后端，结合 AotAutograd 和 cudagraphs，利用代码生成的 Triton 内核。[了解更多](https://dev-discuss.pytorch.org/t/torchinductor-a-pytorch-native-compiler-with-define-by-run-ir-and-symbolic-shapes/747)
+* `dynamo.optimize("nvfuser")` - 使用 TorchScript 的 nvFuser。[了解更多](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593)
+* `dynamo.optimize("aot_nvfuser")` - 使用 AotAutograd 的 nvFuser。[了解更多](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593)
+* `dynamo.optimize("aot_cudagraphs")` - 使用 AotAutograd 的 cudagraphs。[了解更多](https://github.com/pytorch/torchdynamo/pull/757)
 
 **仅推断后端**：
-* `dynamo.optimize("ofi")` - 使用Torchscript的optimize_for_inference。[了解更多](https://pytorch.org/docs/stable/generated/torch.jit.optimize_for_inference.html)
-* `dynamo.optimize("fx2trt")` - 使用Nvidia TensorRT进行推断优化。[了解更多](https://github.com/pytorch/TensorRT/blob/master/docsrc/tutorials/getting_started_with_fx_path.rst)
-* `dynamo.optimize("onnxrt")` - 使用ONNXRT进行CPU/GPU上的推断。[了解更多](https://onnxruntime.ai/)
-* `dynamo.optimize("ipex")` - 使用IPEX在CPU上进行推断。[了解更多](https://github.com/intel/intel-extension-for-pytorch)
+* `dynamo.optimize("ofi")` - 使用 Torchscript 的 optimize_for_inference。[了解更多](https://pytorch.org/docs/stable/generated/torch.jit.optimize_for_inference.html)
+* `dynamo.optimize("fx2trt")` - 使用 Nvidia TensorRT 进行推断优化。[了解更多](https://github.com/pytorch/TensorRT/blob/master/docsrc/tutorials/getting_started_with_fx_path.rst)
+* `dynamo.optimize("onnxrt")` - 使用 ONNXRT 进行 CPU/GPU 上的推断。[了解更多](https://onnxruntime.ai/)
+* `dynamo.optimize("ipex")` - 使用 IPEX 在 CPU 上进行推断。[了解更多](https://github.com/intel/intel-extension-for-pytorch)

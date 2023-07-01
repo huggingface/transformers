@@ -48,7 +48,7 @@ agent.run("Read the following text out loud", text=text)
 ```
 | **Input**                                                                                                               | **Output**                                   |
 |-------------------------------------------------------------------------------------------------------------------------|----------------------------------------------|
-| A beaver is swimming in the water | <audio controls><source src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tts_example.wav" type="audio/wav"> your browser does not support the audio element. </audio>
+| A beaver is swimming in the water | <audio controls> <source src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tts_example.wav" type="audio/wav"> your browser does not support the audio element. </audio>
 
 ---
 
@@ -105,7 +105,7 @@ agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
 # StarcoderBase
 # agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoderbase")
 # OpenAssistant
-# agent = HfAgent(url_endpoint="https://api-inference.huggingface.co/models/OpenAssistant/oasst-sft-4-pythia-12b-epoch-3.5")
+# agent = HfAgent(url_endpoint = "https://api-inference.huggingface.co/models/OpenAssistant/oasst-sft-4-pythia-12b-epoch-3.5")
 ```
 
 This is using the inference API that Hugging Face provides for free at the moment. If you have your own inference
@@ -259,7 +259,7 @@ limited in what can be executed. You should be safe if it's limited to Hugging F
 Then, we don't allow any attribute lookup or imports (which shouldn't be needed anyway for passing along 
 inputs/outputs to a small set of functions) so all the most obvious attacks (and you'd need to prompt the LLM 
 to output them anyway) shouldn't be an issue. If you want to be on the super safe side, you can execute the 
-run() method with the additional argument return_code=True, in which case the agent will just return the code 
+run() method with the additional argument return_code = True, in which case the agent will just return the code 
 to execute and you can decide whether to do it or not.
 
 The execution will stop at any line trying to perform an illegal operation or if there is a regular Python error 

@@ -28,7 +28,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The ELECTRA model was proposed in the paper [ELECTRA: Pre-training Text Encoders as Discriminators Rather Than
-Generators](https://openreview.net/pdf?id=r1xMH1BtvB). ELECTRA is a new pretraining approach which trains two
+Generators](https://openreview.net/pdf?id = r1xMH1BtvB). ELECTRA is a new pretraining approach which trains two
 transformer models: the generator and the discriminator. The generator's role is to replace tokens in a sequence, and
 is therefore trained as a masked language model. The discriminator, which is the model we're interested in, tries to
 identify which tokens were replaced by the generator in the sequence.

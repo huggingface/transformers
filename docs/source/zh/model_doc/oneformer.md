@@ -19,10 +19,10 @@ OneFormer 是一个通用的图像分割框架，可以在单个全景数据集�
 提示：
 - OneFormer 在推断过程中需要两个输入：*image* 和 *task token*。
 - 在训练过程中，OneFormer 仅使用全景标注。
-- 如果您要在多个节点的分布式环境中训练模型，则应在 `modeling_oneformer.py` 中的 `OneFormerLoss` 类的 `get_num_masks` 函数中进行更新。在多个节点上训练时，应将其设置为所有节点上目标掩码的平均数，可以在原始实现[此处](https://github.com/SHI-Labs/OneFormer/blob/33ebb56ed34f970a30ae103e786c0cb64c653d9a/oneformer/modeling/criterion.py#L287)中看到。
+- 如果您要在多个节点的分布式环境中训练模型，则应在 `modeling_oneformer.py` 中的 `OneFormerLoss` 类的 `get_num_masks` 函数中进行更新。在多个节点上训练时，应将其设置为所有节点上目标掩码的平均数，可以在原始实现 [此处](https://github.com/SHI-Labs/OneFormer/blob/33ebb56ed34f970a30ae103e786c0cb64c653d9a/oneformer/modeling/criterion.py#L287) 中看到。
 - 您可以使用 [`OneFormerProcessor`] 来准备模型的输入图像和任务输入，以及模型的可选目标。[`OneFormerProcessor`] 将 [`OneFormerImageProcessor`] 和 [`CLIPTokenizer`] 封装到单个实例中，用于同时准备图像和编码任务输入。
 - 要获取最终的分割结果，根据任务的不同，可以调用 [`~OneFormerProcessor.post_process_semantic_segmentation`] 或 [`~OneFormerImageProcessor.post_process_instance_segmentation`] 或 [`~OneFormerImageProcessor.post_process_panoptic_segmentation`]。这三个任务都可以使用 [`OneFormerForUniversalSegmentation`] 的输出解决，全景分割接受一个可选的 `label_ids_to_fuse` 参数，用于将目标对象（例如天空）的实例合并在一起。
-下图展示了 OneFormer 的体系结构。摘自[原始论文](https://arxiv.org/abs/2211.06220)。
+下图展示了 OneFormer 的体系结构。摘自 [原始论文](https://arxiv.org/abs/2211.06220)。
 <img width="600" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/oneformer_architecture.png"/>
 此模型由 [Jitesh Jain](https://huggingface.co/praeclarumjj3) 贡献。原始代码可以在 [此处](https://github.com/SHI-Labs/OneFormer) 找到。
 
@@ -30,7 +30,7 @@ OneFormer 是一个通用的图像分割框架，可以在单个全景数据集�
 
 以下是官方 Hugging Face 和社区（由 🌎 表示）资源列表，可帮助您开始使用 OneFormer。
 
-- 可在[此处](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/OneFormer)找到有关推断 + 自定义数据微调的演示笔记本。
+- 可在 [此处](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/OneFormer) 找到有关推断 + 自定义数据微调的演示笔记本。
 如果您有兴趣提交资源以包含在此处，请随时提出拉取请求，我们将进行审查。该资源应该展示出一些新东西，而不是重复现有的资源。
 
 [[autodoc]] models.oneformer.modeling_oneformer.OneFormerModelOutput

@@ -33,10 +33,10 @@ effective, and can be pre-trained with large-scale synthetic data and fine-tuned
 show that the TrOCR model outperforms the current state-of-the-art models on both printed and handwritten text recognition
 tasks.*
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/trocr_architecture.jpg"
-alt="drawing" width="600"/>
+< img src =" https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/trocr_architecture.jpg "
+alt = "drawing" width = "600"/>
 
-<small> TrOCR architecture. Taken from the <a href="https://arxiv.org/abs/2109.10282">original paper</a>. </small>
+<small> TrOCR architecture. Taken from the <a href="https://arxiv.org/abs/2109.10282"> original paper </a>. </small>
 
 Please refer to the [`VisionEncoderDecoder`] class on how to use this model.
 
@@ -50,7 +50,7 @@ Tips:
   at inference time as well as fine-tuning on custom data.
 - TrOCR is pre-trained in 2 stages before being fine-tuned on downstream datasets. It achieves state-of-the-art results
   on both printed (e.g. the [SROIE dataset](https://paperswithcode.com/dataset/sroie) and handwritten (e.g. the [IAM
-  Handwriting dataset](https://fki.tic.heia-fr.ch/databases/iam-handwriting-database>) text recognition tasks. For more
+  Handwriting dataset](https://fki.tic.heia-fr.ch/databases/iam-handwriting-database >) text recognition tasks. For more
   information, see the [official models](https://huggingface.co/models?other=trocr>).
 - TrOCR is always used within the [VisionEncoderDecoder](vision-encoder-decoder) framework.
 

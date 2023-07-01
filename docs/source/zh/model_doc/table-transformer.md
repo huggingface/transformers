@@ -38,10 +38,10 @@ Tips:
 - The authors released 2 models, one for [table detection](https://huggingface.co/microsoft/table-transformer-detection) in documents, one for [table structure recognition](https://huggingface.co/microsoft/table-transformer-structure-recognition) (the task of recognizing the individual rows, columns etc. in a table).
 - One can use the [`AutoImageProcessor`] API to prepare images and optional targets for the model. This will load a [`DetrImageProcessor`] behind the scenes.
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/table_transformer_architecture.jpeg"
-alt="drawing" width="600"/>
+< img src =" https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/table_transformer_architecture.jpeg "
+alt = "drawing" width = "600"/>
 
-<small> Table detection and table structure recognition clarified. Taken from the <a href="https://arxiv.org/abs/2110.00061">original paper</a>. </small>
+<small> Table detection and table structure recognition clarified. Taken from the <a href="https://arxiv.org/abs/2110.00061"> original paper </a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be
 found [here](https://github.com/microsoft/table-transformer).

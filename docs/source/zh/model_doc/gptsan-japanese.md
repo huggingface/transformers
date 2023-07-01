@@ -59,7 +59,7 @@ The model treats the part where `token_type_ids` is 1 as a `Prefix` part, that i
 Tips:
 
 Specifying the Prefix part is done with a mask passed to self-attention.
-When token_type_ids=None or all zero, it is equivalent to regular causal mask
+When token_type_ids = None or all zero, it is equivalent to regular causal mask
 
 for example:
 
@@ -74,7 +74,7 @@ SEG | 1 1 0 0 0 0 |
 ｳ   | 1 1 1 1 1 0 |
 ｴ   | 1 1 1 1 1 1 |
 
->>> x_token = tokenizer("", prefix_text="ｱｲｳｴ")
+>>> x_token = tokenizer("", prefix_text = "ｱｲｳｴ")
 input_ids:      | SOT | ｱ | ｲ | ｳ | ｴ | SEG |
 token_type_ids: | 1   | 1 | 1 | 1 | 1 | 0  |
 prefix_lm_mask:
@@ -85,7 +85,7 @@ SOT | 1 1 1 1 1 0 |
 ｴ   | 1 1 1 1 1 0 |
 SEG | 1 1 1 1 1 1 |
 
->>> x_token = tokenizer("ｳｴ", prefix_text="ｱｲ")
+>>> x_token = tokenizer("ｳｴ", prefix_text = "ｱｲ")
 input_ids:      | SOT | ｱ | ｲ | SEG | ｳ | ｴ |
 token_type_ids: | 1   | 1 | 1 | 0   | 0 | 0 |
 prefix_lm_mask:
