@@ -285,7 +285,7 @@ class TrainingArguments:
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
             `output_dir`. When `load_best_model_at_end` is enabled, the "best" checkpoint according to
             `metric_for_best_model` will always be retained in addition to the most recent ones. For example,
-            for `save_total_limit=5` and `load_best_model_at_end`, the four last checkpoints will always be 
+            for `save_total_limit=5` and `load_best_model_at_end`, the four last checkpoints will always be
             retained alongside the best model. When `save_total_limit=1` and `load_best_model_at_end`,
             it is possible that two checkpoints are saved: the last one and the best one (if they are different).
         save_safetensors (`bool`, *optional*, defaults to `False`):
@@ -375,7 +375,7 @@ class TrainingArguments:
             except if the model used is one of the `XxxForQuestionAnswering` in which case it will also include the
             `["start_positions", "end_positions"]` keys.
         load_best_model_at_end (`bool`, *optional*, defaults to `False`):
-            Whether or not to load the best model found during training at the end of training. When this option is 
+            Whether or not to load the best model found during training at the end of training. When this option is
             enabled, the best checkpoint will always be saved. See `save_total_limit` for more.
 
             <Tip>
@@ -767,11 +767,11 @@ class TrainingArguments:
         metadata={
             "help": (
                 "If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in"
-                " `output_dir`. When `load_best_model_at_end` is enabled, the "best" checkpoint according to"
+                " `output_dir`. When `load_best_model_at_end` is enabled, the 'best' checkpoint according to"
                 " `metric_for_best_model` will always be retained in addition to the most recent ones. For example,"
                 " for `save_total_limit=5` and `load_best_model_at_end`, the four last checkpoints will always be"
                 " retained alongside the best model. When `save_total_limit=1` and `load_best_model_at_end`,"
-                " it is possible that two checkpoints are saved: the last one and the best one (if they are different).
+                " it is possible that two checkpoints are saved: the last one and the best one (if they are different)."
                 " Default is unlimited checkpoints"
             )
         },
