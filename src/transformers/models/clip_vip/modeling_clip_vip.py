@@ -421,6 +421,13 @@ class CLIPViPVisionAttention(CLIPViPAttention):
         """Input shape: [batch size, (num_cls + num_frames * num_patches), embed_dim]"""
 
         # num_cls corresponds to the number of "video proxy tokens" from the paper
+        # The video proxy tokens attend to all the patches in all frames and other video proxy tokens.
+        # The patch tokens attend to the video proxy tokens, and other patches in the same frame.
+        #
+        # This allows the video proxy tokens to capture global structure of the video, while the patch
+        # tokens can get relevent global information from the video proxy tokens.
+        # This is found to handle interactions between frames better than having
+        # patches from a frame attend to patches in other frames directly.
         num_cls = self.config.add_cls_num + 1
         bsz, tgt_len, embed_dim = hidden_states.size()
 
@@ -433,8 +440,8 @@ class CLIPViPVisionAttention(CLIPViPAttention):
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
+
         # qkv: [bsz*num_heads, num_cls+num_frames*num_patches, head_dim]
-        # in-frame attention:
         q = query_states[:, num_cls:].reshape(
             -1, num_patches, self.head_dim
         )  # [bsz*num_heads*num_frames, num_patches, head_dim]
@@ -450,6 +457,8 @@ class CLIPViPVisionAttention(CLIPViPAttention):
         v = torch.cat(
             [v, value_states[:, num_cls:].reshape(-1, num_patches, self.head_dim)], dim=1
         )  # [bsz*num_heads*num_frames, num_cls+num_patches, head_dim]
+
+        # attention for each patch token:
         attn_weights = torch.bmm(q, k.transpose(1, 2))
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
@@ -460,7 +469,10 @@ class CLIPViPVisionAttention(CLIPViPAttention):
             bsz, num_frames * num_patches, embed_dim
         )  # [bsz, num_frames*num_patches, channels]
 
-        # cls divided attention:
+        # attention for each video proxy token:
+        # The video proxy tokens attend to the patches in all frames and other video proxy tokens
+        # The first video proxy token represents the entire video, since it is used as the
+        # video representation in the pretraining's contrastive loss.
         q = query_states[:, :num_cls]  # [bsz*num_heads, num_cls, head_dim]
         k = key_states  # [bsz*num_heads, num_cls+num_frames*num_patches, head_dim]
         v = value_states  # [bsz*num_heads, num_cls+num_frames*num_patches, head_dim]
