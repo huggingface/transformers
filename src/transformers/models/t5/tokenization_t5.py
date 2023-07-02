@@ -307,7 +307,7 @@ class T5Tokenizer(PreTrainedTokenizer):
     def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         if text.startswith(SPIECE_UNDERLINE):
-            return(self.sp_model.encode(text[1:], out_type=str))
+            return self.sp_model.encode(text[1:], out_type=str)
         tokens = self.sp_model.encode(text, out_type=str)
         if not text.startswith((SPIECE_UNDERLINE)) and tokens[0] == SPIECE_UNDERLINE:
             tokens = tokens[1:]

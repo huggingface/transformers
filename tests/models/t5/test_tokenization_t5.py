@@ -435,9 +435,9 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_ids = tokenizer.encode("Hello")
         self.assertEquals(input_ids, [156, 86, 20, 2])
         tokens = tokenizer.tokenize("Hello")
-        self.assertEquals(tokens, ['▁He', 'll', 'o'])
-        
+        self.assertEquals(tokens, ["▁He", "ll", "o"])
+
         input_ids = tokenizer.encode("     Hello")
         self.assertEquals(input_ids, [156, 86, 20, 2])
         tokens = tokenizer.tokenize("     Hello")
-        self.assertEquals(tokens, ['▁He', 'll', 'o'])  # spaces are eaten by rstrip / lstrip
+        self.assertEquals(tokens, ["▁He", "ll", "o"])  # spaces are eaten by rstrip / lstrip
