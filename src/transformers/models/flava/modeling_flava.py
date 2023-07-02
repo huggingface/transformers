@@ -1229,7 +1229,7 @@ class FlavaModel(FlavaPreTrainedModel):
 
         self.image_projection = nn.Linear(self.image_hidden_size, self.projection_dim)
         self.text_projection = nn.Linear(self.text_hidden_size, self.projection_dim)
-        self.logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
+        self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
 
         self.image_to_mm_projection = nn.Linear(self.image_hidden_size, self.mm_hidden_size)
         self.text_to_mm_projection = nn.Linear(self.text_hidden_size, self.mm_hidden_size)
