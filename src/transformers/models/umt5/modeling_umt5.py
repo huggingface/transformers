@@ -1177,12 +1177,9 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
         >>> logits = outputs.logits
 
         >>> # inference
-        >>> input_ids = tokenizer(
-        ...     "summarize: studies have shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
+        >>> input_ids = tokenizer("Studies have shown that <extra_id_0> good for you", return_tensors="pt").input_ids
         >>> outputs = model.generate(input_ids)
-        >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-        >>> # studies have shown that owning a dog is good for you.
+        >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

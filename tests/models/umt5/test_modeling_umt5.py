@@ -352,7 +352,7 @@ class Umt5IntegrationTest(unittest.TestCase):
         """
 
         model = UMT5ForConditionalGeneration.from_pretrained("google/umt5-small", return_dict=True).to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained("google/umt5-small")
+        tokenizer = AutoTokenizer.from_pretrained("google/umt5-small", use_fast=False)
         input_text = [
             "Bonjour monsieur <extra_id_0> bien <extra_id_1>.",
             "No se como puedo <extra_id_0>.",
@@ -362,7 +362,7 @@ class Umt5IntegrationTest(unittest.TestCase):
         ]
         input_ids = tokenizer(input_text, return_tensors="pt", padding=True).input_ids
         # fmt: off
-        torch.tensor(
+        EXPECTED_IDS = torch.tensor(
             [
                 [ 38530, 210703, 256299, 1410, 256298, 274, 1, 0,0, 0, 0, 0, 0, 0, 0, 0,0, 0],
                 [   826, 321, 671, 25922, 256299, 274, 1, 0,0, 0, 0, 0, 0, 0, 0, 0,0, 0],
@@ -372,11 +372,9 @@ class Umt5IntegrationTest(unittest.TestCase):
             ]
         )
         # fmt: on
+        self.assertEqual(input_ids,EXPECTED_IDS)
 
         generated_ids = model.generate(input_ids.to(torch_device))
-        self.assertTrue(
-            generated_ids,
-        )
         EXPECTED_FILLING = [
             "<pad><extra_id_0> et<extra_id_1> [eod] <extra_id_2><extra_id_55>.. [eod] 💐 💐 💐 💐 💐 💐 💐 💐 💐 💐 💐 <extra_id_56>ajšietosto<extra_id_56>lleux<extra_id_19><extra_id_6>ajšie</s>",
             "<pad><extra_id_0>.<extra_id_1>.,<0x0A>...spech <0x0A><extra_id_20> <extra_id_21></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
