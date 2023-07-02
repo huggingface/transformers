@@ -894,32 +894,11 @@ class PegasusConverter(SpmConverter):
 
 
 class T5Converter(SpmConverter):
-    handle_byte_fallback = True
-
-    def decoder(self, replacement, add_prefix_space):
-        return decoders.Sequence(
-            [
-                decoders.Replace("▁", " "),
-                decoders.ByteFallback(),
-                decoders.Fuse(),
-                decoders.Strip(content=" ", left=1),
-            ]
-        )
-
     def vocab(self, proto):
         num_extra_ids = self.original_tokenizer._extra_ids
         vocab = [(piece.piece, piece.score) for piece in proto.pieces]
         vocab += [(f"<extra_id_{i}>", 0.0) for i in range(num_extra_ids - 1, -1, -1)]
-
         return vocab
-
-    def normalizer(self, proto):
-        return normalizers.Sequence(
-            [
-                normalizers.Prepend(prepend="▁"),
-                normalizers.Replace(pattern=" ", content="▁"),
-            ]
-        )
 
     def post_processor(self):
         return processors.TemplateProcessing(
