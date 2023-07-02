@@ -79,6 +79,20 @@ class CLIPImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class CLIPViPImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class CLIPViPProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class ConditionalDetrFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 

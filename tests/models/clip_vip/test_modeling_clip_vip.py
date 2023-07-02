@@ -58,7 +58,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import CLIPProcessor
+    from transformers import CLIPViPProcessor
 
 
 class CLIPViPVisionModelTester:
@@ -555,15 +555,13 @@ class CLIPViPModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
         model_name = "tensorpro/clip_vip"
         model = CLIPViPModel.from_pretrained(model_name).to(torch_device)
-        processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch16")
+        processor = CLIPViPProcessor.from_pretrained("openai/clip-vit-base-patch16")
 
         image = prepare_img()
-        print(image)
+        video = [image, image]
         inputs = processor(
-            text=["a photo of a cat", "a photo of a dog"], images=image, padding=True, return_tensors="pt"
+            text=["a video of a cat", "a video of a dog"], videos=video, padding=True, return_tensors="pt"
         ).to(torch_device)
-        inputs["pixel_values"] = inputs["pixel_values"].unsqueeze(1)  # add a temporal dimension
-        print(f"{inputs.keys()=}")
 
         # forward pass
         with torch.no_grad():
@@ -578,6 +576,6 @@ class CLIPViPModelIntegrationTest(unittest.TestCase):
             outputs.logits_per_text.shape,
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
-        expected_logits = torch.tensor([[15.6374, 8.8812]], device=torch_device)
+        expected_logits = torch.tensor([[14.1541, 7.3370]], device=torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-4))

@@ -17,6 +17,7 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_torch_available,
+    is_vision_available,
 )
 
 
@@ -29,6 +30,15 @@ _import_structure = {
         "CLIPViPVisionConfig",
     ],
 }
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_clip_vip"] = ["CLIPViPImageProcessor"]
+    _import_structure["processing_clip_vip"] = ["CLIPViPProcessor"]
 
 try:
     if not is_torch_available():
@@ -52,6 +62,15 @@ if TYPE_CHECKING:
         CLIPViPTextConfig,
         CLIPViPVisionConfig,
     )
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_clip_vip import CLIPViPImageProcessor
+        from .processing_clip_vip import CLIPViPProcessor
 
     try:
         if not is_torch_available():
