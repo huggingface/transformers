@@ -114,9 +114,8 @@ for begin_loc in tqdm(range(0, seq_len, stride)):
     with torch.no_grad():
         outputs = model(input_ids, labels=target_ids)
 
-        # loss is calculated using CrossEntropyLoss which averages over valid labels
-        # N.B. the model only calculates loss over trg_len - 1 labels, because it internally shifts the labels
-        # to the left by 1.
+        # 손실은 모든 유효한 레이블에 대한 평균값을 구하는 교차 엔트로피(cross entropy)로 계산됩니다.
+        # 나이브 베이지안 모델은 내부적으로 레이블을 왼쪽으로 1개씩 밀기 때문에, (타켓 - 1)개 만큼의 레이블에 대해 손실을 계산합니다.
         neg_log_likelihood = outputs.loss
 
     nlls.append(neg_log_likelihood)
