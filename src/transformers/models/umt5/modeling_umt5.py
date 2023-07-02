@@ -49,6 +49,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "UMT5Config"
 _CHECKPOINT_FOR_DOC = "google/umt5-small"
 
+
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->UMT5
 class UMT5LayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):

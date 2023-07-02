@@ -34,6 +34,7 @@ if is_torch_available():
 
     from transformers import AutoTokenizer, UMT5ForConditionalGeneration, UMT5ForQuestionAnswering, UMT5Model
 
+
 # Copied from test.models.t5.test_modeling_t5.T5ModelTester with T5->UMT5,UMT5Config->T5Config
 class UMT5ModelTester:
     def __init__(
@@ -372,7 +373,7 @@ class Umt5IntegrationTest(unittest.TestCase):
             ]
         )
         # fmt: on
-        self.assertEqual(input_ids,EXPECTED_IDS)
+        self.assertEqual(input_ids, EXPECTED_IDS)
 
         generated_ids = model.generate(input_ids.to(torch_device))
         EXPECTED_FILLING = [
