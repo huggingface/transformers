@@ -110,7 +110,7 @@ class TFRotaryEmbedding(Layer):
     def build(self, input_shape):
         super().build(input_shape)
         self.inv_freq = self.add_weight(
-            "inv_freq", shape=(self.dim // 2,), dtype=tf.float32, initializer=get_initializer(1.0)
+            "inv_freq", shape=(self.dim // 2,), dtype=tf.float32, initializer=get_initializer(1.0), trainable=False
         )
         self.inv_freq.assign(
             1.0 / (10000 ** (tf.range(start=0, limit=self.dim, delta=2, dtype=tf.float32) / self.dim))

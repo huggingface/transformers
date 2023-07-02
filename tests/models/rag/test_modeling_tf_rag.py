@@ -490,6 +490,7 @@ class TFRagTestMixin:
         inputs_dict = self.config_and_inputs
         self.check_model_without_retriever(**inputs_dict)
 
+    @slow
     def test_model_generate_from_context_input_ids(self):
         inputs_dict = self.config_and_inputs
         self.check_model_generate_from_context_input_ids(**inputs_dict)
@@ -498,6 +499,7 @@ class TFRagTestMixin:
         inputs_dict = self.config_and_inputs
         self.check_model_with_encoder_outputs(**inputs_dict)
 
+    @slow
     def test_model_generate(self):
         inputs_dict = self.config_and_inputs
         self.check_model_generate(**inputs_dict)

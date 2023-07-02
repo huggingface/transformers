@@ -714,7 +714,6 @@ class GraphormerPreTrainedModel(PreTrainedModel):
     config_class = GraphormerConfig
     base_model_prefix = "graphormer"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
     main_input_name_nodes = "input_nodes"
     main_input_name_edges = "input_edges"
 

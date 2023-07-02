@@ -26,7 +26,6 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    infer_channel_dimension_format,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -84,20 +83,6 @@ def apply_tesseract(image: np.ndarray, lang: Optional[str], tesseract_config: Op
     assert len(words) == len(normalized_boxes), "Not as many words as there are bounding boxes"
 
     return words, normalized_boxes
-
-
-def flip_channel_order(image: np.ndarray, data_format: Optional[ChannelDimension] = None) -> np.ndarray:
-    input_data_format = infer_channel_dimension_format(image)
-    if input_data_format == ChannelDimension.LAST:
-        image = image[..., ::-1]
-    elif input_data_format == ChannelDimension.FIRST:
-        image = image[:, ::-1, ...]
-    else:
-        raise ValueError(f"Unsupported channel dimension: {input_data_format}")
-
-    if data_format is not None:
-        image = to_channel_dimension_format(image, data_format)
-    return image
 
 
 class LayoutLMv3ImageProcessor(BaseImageProcessor):
@@ -356,7 +341,6 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         if do_normalize:
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
 
-        # flip color channels from RGB to BGR (as Detectron2 requires this)
         images = [to_channel_dimension_format(image, data_format) for image in images]
 
         data = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)

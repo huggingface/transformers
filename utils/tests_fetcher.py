@@ -263,14 +263,14 @@ def get_diff_for_doctesting(repo, base_commit, commits):
     code_diff = []
     for commit in commits:
         for diff_obj in commit.diff(base_commit):
-            # We always add new python/mdx files
-            if diff_obj.change_type in ["A"] and (diff_obj.b_path.endswith(".py") or diff_obj.b_path.endswith(".mdx")):
+            # We always add new python/md files
+            if diff_obj.change_type in ["A"] and (diff_obj.b_path.endswith(".py") or diff_obj.b_path.endswith(".md")):
                 code_diff.append(diff_obj.b_path)
             # Now for modified files
             elif (
                 diff_obj.change_type in ["M", "R"]
                 and diff_obj.b_path.endswith(".py")
-                or diff_obj.b_path.endswith(".mdx")
+                or diff_obj.b_path.endswith(".md")
             ):
                 # In case of renames, we'll look at the tests using both the old and new name.
                 if diff_obj.a_path != diff_obj.b_path:
@@ -353,7 +353,9 @@ def extract_imports(module_fname, cache=None):
         content = f.read()
 
     # Filter out all docstrings to not get imports in code examples.
-    splits = content.split('"""')
+    # fmt: off
+    splits = content.split('\"\"\"')
+    # fmt: on
     content = "".join(splits[::2])
 
     module_parts = str(module_fname).split(os.path.sep)
@@ -426,7 +428,7 @@ def get_module_dependencies(module_fname, cache=None):
                 # So we get the imports from that init then try to find where our objects come from.
                 new_imported_modules = extract_imports(module, cache=cache)
                 for new_module, new_imports in new_imported_modules:
-                    if any([i in new_imports for i in imports]):
+                    if any(i in new_imports for i in imports):
                         if new_module not in dependencies:
                             new_modules.append((new_module, [i for i in new_imports if i in imports]))
                         imports = [i for i in imports if i not in new_imports]
@@ -533,6 +535,9 @@ def init_test_examples_dependencies():
             test_example_deps[str(test_file.relative_to(PATH_TO_REPO))] = [
                 str(e.relative_to(PATH_TO_REPO)) for e in examples if e.name in content
             ]
+            test_example_deps[str(test_file.relative_to(PATH_TO_REPO))].append(
+                str(test_file.relative_to(PATH_TO_REPO))
+            )
     return test_example_deps, all_examples
 
 
@@ -691,12 +696,14 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filter_models=T
             if f in test_map:
                 test_files_to_run.extend(test_map[f])
         test_files_to_run = sorted(set(test_files_to_run))
+        # Remove repo utils tests
+        test_files_to_run = [f for f in test_files_to_run if not f.split(os.path.sep)[1] == "repo_utils"]
         # Remove SageMaker tests
         test_files_to_run = [f for f in test_files_to_run if not f.split(os.path.sep)[1] == "sagemaker"]
         # Make sure we did not end up with a test file that was removed
         test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
 
-        repo_utils_launch = any(f.split(os.path.sep)[1] == "repo_utils" for f in modified_files)
+        repo_utils_launch = any(f.split(os.path.sep)[0] == "utils" for f in modified_files)
 
     if repo_utils_launch:
         repo_util_file = Path(output_file).parent / "test_repo_utils.txt"
@@ -852,10 +859,10 @@ if __name__ == "__main__":
 
         if commit_flags["test_all"]:
             with open(args.output_file, "w", encoding="utf-8") as f:
-                if args.filters is None:
-                    f.write("./tests/")
-                else:
-                    f.write(" ".join(args.filters))
+                f.write("tests")
+            example_file = Path(args.output_file).parent / "examples_test_list.txt"
+            with open(example_file, "w", encoding="utf-8") as f:
+                f.write("all")
 
             test_files_to_run = get_all_tests()
             create_json_map(test_files_to_run, args.json_output_file)

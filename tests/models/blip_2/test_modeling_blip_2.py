@@ -330,9 +330,7 @@ class Blip2TextModelDecoderOnlyTester:
     def prepare_config_and_inputs(self):
         config = self.get_config()
 
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
-            3,
-        )
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(3)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
 
         attention_mask = input_ids.ne(self.pad_token_id)

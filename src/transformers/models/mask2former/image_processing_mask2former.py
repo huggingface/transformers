@@ -29,7 +29,6 @@ from ...image_transforms import (
     rescale,
     resize,
     to_channel_dimension_format,
-    to_numpy_array,
 )
 from ...image_utils import (
     ChannelDimension,
@@ -38,6 +37,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_batched,
+    to_numpy_array,
     valid_images,
 )
 from ...utils import (
@@ -441,24 +441,6 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             image_processor_dict["size_divisibility"] = kwargs.pop("size_divisibility")
         return super().from_dict(image_processor_dict, **kwargs)
 
-    @property
-    def size_divisibility(self):
-        warnings.warn(
-            "The `size_divisibility` property is deprecated and will be removed in v4.27. Please use "
-            "`size_divisor` instead.",
-            FutureWarning,
-        )
-        return self.size_divisor
-
-    @property
-    def max_size(self):
-        warnings.warn(
-            "The `max_size` property is deprecated and will be removed in v4.27. Please use size['longest_edge']"
-            " instead.",
-            FutureWarning,
-        )
-        return self.size["longest_edge"]
-
     def resize(
         self,
         image: np.ndarray,
@@ -789,7 +771,6 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         ignore_index: Optional[int] = None,
         reduce_labels: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs,
     ):
         """
         Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
@@ -840,12 +821,6 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         """
         ignore_index = self.ignore_index if ignore_index is None else ignore_index
         reduce_labels = self.reduce_labels if reduce_labels is None else reduce_labels
-
-        if "pad_and_return_pixel_mask" in kwargs:
-            warnings.warn(
-                "The `pad_and_return_pixel_mask` argument has no effect and will be removed in v4.27", FutureWarning
-            )
-
         pixel_values_list = [to_numpy_array(pixel_values) for pixel_values in pixel_values_list]
         encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)
 

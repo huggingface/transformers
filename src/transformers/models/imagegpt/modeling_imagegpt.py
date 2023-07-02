@@ -183,8 +183,9 @@ class ImageGPTAttention(nn.Module):
             torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
                 1, 1, max_positions, max_positions
             ),
+            persistent=False,
         )
-        self.register_buffer("masked_bias", torch.tensor(-1e4))
+        self.register_buffer("masked_bias", torch.tensor(-1e4), persistent=False)
 
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -613,8 +614,6 @@ IMAGEGPT_INPUTS_DOCSTRING = r"""
     IMAGEGPT_START_DOCSTRING,
 )
 class ImageGPTModel(ImageGPTPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
-
     def __init__(self, config: ImageGPTConfig):
         super().__init__(config)
 
@@ -893,7 +892,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
     IMAGEGPT_START_DOCSTRING,
 )
 class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: ImageGPTConfig):
         super().__init__(config)
@@ -979,12 +978,12 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
         >>> image_processor = AutoImageProcessor.from_pretrained("openai/imagegpt-small")
         >>> model = ImageGPTForCausalImageModeling.from_pretrained("openai/imagegpt-small")
         >>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        >>> model.to(device)
+        >>> model.to(device)  # doctest: +IGNORE_RESULT
 
         >>> # unconditional generation of 8 images
-        >>> batch_size = 8
+        >>> batch_size = 4
         >>> context = torch.full((batch_size, 1), model.config.vocab_size - 1)  # initialize with SOS token
-        >>> context = torch.tensor(context).to(device)
+        >>> context = context.to(device)
         >>> output = model.generate(
         ...     input_ids=context, max_length=model.config.n_positions + 1, temperature=1.0, do_sample=True, top_k=40
         ... )
@@ -999,7 +998,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
         ... ]  # convert color cluster tokens back to pixels
         >>> f, axes = plt.subplots(1, batch_size, dpi=300)
 
-        >>> for img, ax in zip(samples_img, axes):
+        >>> for img, ax in zip(samples_img, axes):  # doctest: +IGNORE_RESULT
         ...     ax.axis("off")
         ...     ax.imshow(img)
         ```"""
@@ -1084,8 +1083,6 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
     IMAGEGPT_START_DOCSTRING,
 )
 class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head.weight"]
-
     def __init__(self, config: ImageGPTConfig):
         super().__init__(config)
         self.num_labels = config.num_labels

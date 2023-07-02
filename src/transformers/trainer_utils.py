@@ -55,7 +55,7 @@ def seed_worker(_):
     set_seed(worker_seed)
 
 
-def enable_full_determinism(seed: int):
+def enable_full_determinism(seed: int, warn_only: bool = False):
     """
     Helper function for reproducible behavior during distributed training. See
     - https://pytorch.org/docs/stable/notes/randomness.html for pytorch
@@ -70,7 +70,7 @@ def enable_full_determinism(seed: int):
         # depending on the CUDA version, so we set them both here
         os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
-        torch.use_deterministic_algorithms(True)
+        torch.use_deterministic_algorithms(True, warn_only=warn_only)
 
         # Enable CUDNN deterministic mode
         torch.backends.cudnn.deterministic = True
@@ -301,14 +301,6 @@ class HPSearchBackend(ExplicitEnum):
     WANDB = "wandb"
 
 
-default_hp_space = {
-    HPSearchBackend.OPTUNA: default_hp_space_optuna,
-    HPSearchBackend.RAY: default_hp_space_ray,
-    HPSearchBackend.SIGOPT: default_hp_space_sigopt,
-    HPSearchBackend.WANDB: default_hp_space_wandb,
-}
-
-
 def is_main_process(local_rank):
     """
     Whether or not the current process is the local process, based on `xm.get_ordinal()` (for TPUs) first, then on
@@ -350,6 +342,8 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None):
     """
     runtime = time.time() - start_time
     result = {f"{split}_runtime": round(runtime, 4)}
+    if runtime == 0:
+        return result
     if num_samples is not None:
         samples_per_second = num_samples / runtime
         result[f"{split}_samples_per_second"] = round(samples_per_second, 3)

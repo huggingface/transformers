@@ -144,7 +144,7 @@ class KerasMetricCallback(Callback):
     @staticmethod
     def _concatenate_batches(batches, padding_index=-100):
         # If all batches are unidimensional or same length, do a simple concatenation
-        if batches[0].ndim == 1 or all([batch.shape[1] == batches[0].shape[1] for batch in batches]):
+        if batches[0].ndim == 1 or all(batch.shape[1] == batches[0].shape[1] for batch in batches):
             return np.concatenate(batches, axis=0)
 
         # Welp, they're not the same length. Let's do some padding
@@ -224,7 +224,9 @@ class KerasMetricCallback(Callback):
                 if self.use_xla_generation:
                     predictions = self.generation_function(generation_inputs, attention_mask=attention_mask)
                 else:
-                    predictions = self.model.generate(generation_inputs, attention_mask=attention_mask)
+                    predictions = self.model.generate(
+                        generation_inputs, attention_mask=attention_mask, **self.generate_kwargs
+                    )
             else:
                 predictions = self.model.predict_on_batch(batch)
                 if isinstance(predictions, dict):

@@ -64,7 +64,7 @@ class MgpstrProcessorTest(unittest.TestCase):
         image_processor_map = {
             "do_normalize": False,
             "do_resize": True,
-            "feature_extractor_type": "ViTFeatureExtractor",
+            "image_processor_type": "ViTImageProcessor",
             "resample": 3,
             "size": {"height": 32, "width": 128},
         }
