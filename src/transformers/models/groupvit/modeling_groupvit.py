@@ -1368,7 +1368,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
             nn.ReLU(inplace=True),
             nn.Linear(self.projection_intermediate_dim, self.projection_dim, bias=True),
         )
-        self.logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
+        self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
 
         # Initialize weights and apply final processing
         self.post_init()
