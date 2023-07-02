@@ -196,8 +196,8 @@ class IctImageProcessor(BaseImageProcessor):
         """
         Reduce the dimension by using an extra visual vocabulary (Bags-of-Words vectors) with spatial size num_clusters × 3, which was
         generated using k-means clustered centers of the ImageNet RGB pixel spaces.
-        
-        e.g., An image of shape (32, 24, 3) will be reduced to (32, 24) where each element of the output tensor corresponds to an integer index in `clusters` which contain the actual RGB pixel. 
+
+        e.g., An image of shape (32, 24, 3) will be reduced to (32, 24) where each element of the output tensor corresponds to an integer index in `clusters` which contain the actual RGB pixel.
 
         Args:
             image (`np.ndarray`):
@@ -315,10 +315,13 @@ class IctImageProcessor(BaseImageProcessor):
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
 
         if do_color_quantize:
+            images = [to_channel_dimension_format(image, ChannelDimension.LAST) for image in images]
             # flatten images to (batch_size, height * width)
             images = [self.color_quantize(image=image, clusters=clusters) for image in images]
         else:
             images = [to_channel_dimension_format(image, data_format) for image in images]
 
-        data = {"pixel_values": images}
+        clusters = torch.from_numpy(clusters)
+        data = {"pixel_values": images, "clusters": clusters}
+
         return BatchFeature(data=data, tensor_type=return_tensors)

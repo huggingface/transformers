@@ -68,8 +68,10 @@ class IctModelTester:
         image_size=32,
         num_channels=3,
         qkv_bias=False,
-        output_height=256,
-        output_width=256,
+        temperature=1.0,
+        top_k=50,
+        gan_loss_function="nsgan",
+        output_image_size=256,
         scope=None,
         is_training=True,
     ):
@@ -90,24 +92,25 @@ class IctModelTester:
         self.image_size = image_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
-        self.output_height = output_height
-        self.output_width = output_width
+        self.temperature = temperature
+        self.top_k = top_k
+        self.gan_loss_function = gan_loss_function
+        self.output_image_size = output_image_size
 
-        self.seq_length = image_size
+        self.seq_length = image_size * image_size
         self.scope = scope
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
         pixel_values = ids_tensor([self.batch_size, self.image_size * self.image_size], self.vocab_size)
-        original_images = [prepare_img() for _ in range(self.batch_size)]
         bool_masked_pos = torch.randint(low=0, high=2, size=(1, pixel_values.shape[1])).bool()
 
         np.random.seed(6)
-        clusters = np.random.rand(512, 3)
+        clusters = torch.from_numpy(np.random.rand(512, 3))
 
         config = self.get_config()
 
-        return config, pixel_values, original_images, bool_masked_pos, clusters
+        return config, pixel_values, bool_masked_pos, clusters
 
     def get_config(self):
         return IctConfig(
@@ -126,25 +129,27 @@ class IctModelTester:
             image_size=self.image_size,
             num_channels=self.num_channels,
             qkv_bias=self.qkv_bias,
-            output_height=self.output_height,
-            output_width=self.output_width,
+            temperature=self.temperature,
+            top_k=self.top_k,
+            gan_loss_function=self.gan_loss_function,
+            output_image_size=self.output_image_size,
         )
 
-    def create_and_check_model(self, config, pixel_values, original_images, bool_masked_pos, clusters):
+    def create_and_check_model(self, config, pixel_values, bool_masked_pos, clusters):
         model = IctModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values, original_images, bool_masked_pos, clusters)
+        result = model(pixel_values, bool_masked_pos, clusters)
         self.parent.assertEqual(
-            result.reconstruction.shape, (self.batch_size, self.num_channels, self.output_height, self.output_width)
+            result.reconstruction.shape,
+            (self.batch_size, self.num_channels, self.output_image_size, self.output_image_size),
         )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (config, pixel_values, original_images, bool_masked_pos, clusters) = config_and_inputs
+        (config, pixel_values, bool_masked_pos, clusters) = config_and_inputs
         inputs_dict = {
             "pixel_values": pixel_values,
-            "original_images": original_images,
             "bool_masked_pos": bool_masked_pos,
             "clusters": clusters,
         }
@@ -200,7 +205,6 @@ class IctModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        print(f"CUSTOM_LOG config_and_inputs: {config_and_inputs}")
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     @slow
@@ -232,17 +236,18 @@ class IctModelIntegrationTest(unittest.TestCase):
         inputs = image_processor(images=image, return_tensors="pt")
 
         pixel_values = inputs.pixel_values
-        # image_size = pixel_values.shape[1]
-        image_size = 1
+        image_size = pixel_values.shape[1]
 
         torch.manual_seed(6)
-        bool_masked_pos = torch.randint(low=0, high=2, size=(1, image_size * image_size)).bool()
-        clusters = image_processor.clusters
+        bool_masked_pos = torch.randint(low=0, high=2, size=(1, image_size)).bool()
+        clusters = inputs.clusters
 
         # forward pass
         with torch.no_grad():
             outputs = model(
-                pixel_values=pixel_values, original_images=image, clusters=clusters, bool_masked_pos=bool_masked_pos
+                pixel_values=pixel_values,
+                bool_masked_pos=bool_masked_pos,
+                clusters=clusters,
             )
 
         # verify the logits
@@ -253,4 +258,4 @@ class IctModelIntegrationTest(unittest.TestCase):
             [[2.3445, 2.6889, 2.7313], [1.0530, 1.2416, 0.5699], [0.2205, 0.7749, 0.3953]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3, :3], expected_slice, atol=1e-4))

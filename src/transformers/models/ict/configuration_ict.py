@@ -78,6 +78,9 @@ class IctConfig(PretrainedConfig):
         top_k (`int`, *optional*, defaults to 50):
             Number of highest probability vocabulary tokens to keep for top-k-filtering that will be used by default in
             the `generate` method of the model.
+        gan_loss_function (`str`, *optional*, defaults to `"nsgan"`):
+            GAN loss function for the guided upsampler. Choose one of `"nsgan"`, `"lsgan"`, `"hinge"`.
+            Defaults to "nsgan".
         output_image_size (`int`, *optional*, defaults to 256):
             The size (resolution) of the output image.
         clusters (`np.ndarray`, *optional*, defaults to `None`):
@@ -119,6 +122,7 @@ class IctConfig(PretrainedConfig):
         qkv_bias=True,
         temperature=1.0,
         top_k=50,
+        gan_loss_function="nsgan",
         output_image_size=256,
         clusters=None,
         **kwargs,
@@ -142,5 +146,6 @@ class IctConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.temperature = temperature
         self.top_k = top_k
+        self.gan_loss_function = gan_loss_function
         self.output_image_size = output_image_size
         self.clusters = np.array(clusters) if clusters is not None else None
