@@ -906,10 +906,10 @@ class UMT5Model(UMT5PreTrainedModel):
 
     >>> model = UMT5Model.from_pretrained("google/umt5-small")
     >>> tokenizer = AutoTokenizer.from_pretrained("google/umt5-small")
-    >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
-    >>> summary = "Weiter Verhandlung in Syrien."
-    >>> inputs = tokenizer(article, return_tensors="pt")
-    >>> labels = tokenizer(text_target=summary, return_tensors="pt")
+    >>> noisy_text = "UN Offizier sagt, dass weiter <extra_id_0> werden muss in Syrien."
+    >>> label = "<extra_id_0> verhandelt"
+    >>> inputs = tokenizer(inputs, return_tensors="pt")
+    >>> labels = tokenizer(label=label, return_tensors="pt")
 
     >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=labels["input_ids"])
     >>> hidden_states = outputs.last_hidden_state
@@ -992,8 +992,8 @@ class UMT5Model(UMT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, UMT5Model
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("umt5-small")
-        >>> model = UMT5Model.from_pretrained("umt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/umt5-small")
+        >>> model = UMT5Model.from_pretrained("google/umt5-small")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
@@ -1166,8 +1166,8 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, UMT5ForConditionalGeneration
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("umt5-small")
-        >>> model = UMT5ForConditionalGeneration.from_pretrained("umt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/umt5-small")
+        >>> model = UMT5ForConditionalGeneration.from_pretrained("google/umt5-small")
 
         >>> # training
         >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
@@ -1380,8 +1380,8 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, UMT5EncoderModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("umt5-small")
-        >>> model = UMT5EncoderModel.from_pretrained("umt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/umt5-small")
+        >>> model = UMT5EncoderModel.from_pretrained("google/umt5-small")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1

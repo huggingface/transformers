@@ -36,7 +36,7 @@ import torch
 from flax import traverse_util
 from t5x import checkpoints
 
-from transformers import MT5Config, MT5EncoderModel, MT5ForConditionalGeneration
+from transformers import MT5Config, UMT5EncoderModel, UMT5ForConditionalGeneration
 from transformers.utils import logging
 
 
@@ -223,9 +223,9 @@ def convert_t5x_checkpoint_to_pytorch(
     # Non-v1.1 checkpoints could also use T5Model, but this works for all.
     # The v1.0 checkpoints will simply have an LM head that is the word embeddings.
     if is_encoder_only:
-        model = MT5EncoderModel(config)
+        model = UMT5EncoderModel(config)
     else:
-        model = MT5ForConditionalGeneration(config)
+        model = UMT5ForConditionalGeneration(config)
 
     # Load weights from tf checkpoint
     load_t5x_weights_in_t5(model, config, t5x_checkpoint_path, is_encoder_only, scalable_attention)
