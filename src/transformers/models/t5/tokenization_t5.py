@@ -302,7 +302,7 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         if not text.startswith(" "):
-            text = " " + text
+            text = SPIECE_UNDERLINE + text
         return super().tokenize(text, **kwargs)
 
     def _tokenize(self, text: str) -> List[str]:
