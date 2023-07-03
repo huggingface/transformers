@@ -1214,8 +1214,6 @@ class GenerationMixin:
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
-            low_memory (`bool`, *optional*):
-                Switch to sequential topk for contrastive search to reduce peak memory requirements. Used with contrastive search.
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1555,7 +1553,7 @@ class GenerationMixin:
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
-                low_memory=low_memory,
+                low_memory=generation_config.low_memory,
                 **model_kwargs,
             )
 
