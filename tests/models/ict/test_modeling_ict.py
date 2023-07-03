@@ -18,8 +18,6 @@
 import inspect
 import unittest
 
-import numpy as np
-
 from transformers import IctConfig
 from transformers.testing_utils import (
     require_torch,
@@ -37,6 +35,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
     from torch import nn
+    torch.manual_seed(3)
 
     from transformers import IctModel
     from transformers.models.ict.modeling_ict import ICT_PRETRAINED_MODEL_ARCHIVE_LIST
@@ -105,8 +104,7 @@ class IctModelTester:
         pixel_values = ids_tensor([self.batch_size, self.image_size * self.image_size], self.vocab_size)
         bool_masked_pos = torch.randint(low=0, high=2, size=(1, pixel_values.shape[1])).bool()
 
-        np.random.seed(6)
-        clusters = torch.from_numpy(np.random.rand(512, 3))
+        clusters = torch.rand(512, 3)
 
         config = self.get_config()
 
@@ -227,7 +225,7 @@ class IctModelIntegrationTest(unittest.TestCase):
     def default_image_processor(self):
         return IctImageProcessor.from_pretrained("sheonhan/ict-imagenet-256") if is_vision_available() else None
 
-    # @slow
+    @slow
     def test_inference_masked_image_modeling(self):
         model = IctModel.from_pretrained("sheonhan/ict-imagenet-256").to(torch_device)
 
@@ -238,7 +236,6 @@ class IctModelIntegrationTest(unittest.TestCase):
         pixel_values = inputs.pixel_values
         image_size = pixel_values.shape[1]
 
-        torch.manual_seed(6)
         bool_masked_pos = torch.randint(low=0, high=2, size=(1, image_size)).bool()
         clusters = inputs.clusters
 

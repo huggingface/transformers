@@ -25,6 +25,10 @@ import torch.utils.checkpoint
 import torchvision.models as models
 from torch import nn
 
+import torchvision.transforms.functional as FV
+import numpy as np
+from PIL import Image
+
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedImageModelingOutput
 from ...modeling_utils import PreTrainedModel
@@ -531,7 +535,7 @@ class VGG19(nn.Module):
 
 class IctAdversarialLoss(nn.Module):
     r"""
-    Adversarial loss https://arxiv.org/abs/1711.10337
+    ICT Adversarial loss https://arxiv.org/abs/1711.10337
     """
 
     def __init__(self, config):
@@ -569,7 +573,7 @@ class IctAdversarialLoss(nn.Module):
 
 class IctStyleLoss(nn.Module):
     r"""
-    Perceptual loss, VGG-based https://arxiv.org/abs/1603.08155
+    Style loss, VGG-based https://arxiv.org/abs/1603.08155
     https://github.com/dxyang/StyleTransfer/blob/master/utils.py
     """
 
@@ -777,7 +781,7 @@ class IctModel(IctPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[Tuple, MaskedImageModelingOutput]:
         r"""
         Returns:
 
