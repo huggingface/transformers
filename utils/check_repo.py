@@ -46,6 +46,7 @@ PRIVATE_MODELS = [
     "RealmBertModel",
     "T5Stack",
     "MT5Stack",
+    "UMT5Stack",
     "SwitchTransformersStack",
     "TFDPRSpanPredictor",
     "MaskFormerSwinModel",
@@ -61,6 +62,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "InstructBlipQFormerModel",  # Building part of bigger (tested) model.
     "NllbMoeDecoder",
     "NllbMoeEncoder",
+    "UMT5EncoderModel",  # Building part of bigger (tested) model.
     "LlamaDecoder",  # Building part of bigger (tested) model.
     "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "DetaEncoder",  # Building part of bigger (tested) model.
