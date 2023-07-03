@@ -280,13 +280,12 @@ class Dinov2Attention(nn.Module):
 
 
 class Dinov2LayerScale(nn.Module):
-    def __init__(self, config, inplace: bool = False):
+    def __init__(self, config) -> None:
         super().__init__()
         self.lambda1 = nn.Parameter(config.layerscale_value * torch.ones(config.hidden_size))
-        self.inplace = inplace
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        return hidden_state.mul_(self.lambda1) if self.inplace else hidden_state * self.lambda1
+        return hidden_state * self.lambda1
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -345,7 +344,7 @@ class Dinov2MLP(nn.Module):
 
 
 class Dinov2SwiGLUFFN(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config) -> None:
         super().__init__()
         in_features = out_features = config.hidden_size
         hidden_features = int(config.hidden_size * config.mlp_ratio)
