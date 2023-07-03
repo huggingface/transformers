@@ -309,7 +309,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         if text.startswith(SPIECE_UNDERLINE):
             return self.sp_model.encode(text[1:], out_type=str)
         tokens = self.sp_model.encode(text, out_type=str)
-        if not text.startswith((SPIECE_UNDERLINE)) and tokens[0] == SPIECE_UNDERLINE:
+        if tokens[0] == SPIECE_UNDERLINE:
             tokens = tokens[1:]
         return tokens
 
