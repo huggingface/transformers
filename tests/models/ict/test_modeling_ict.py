@@ -35,6 +35,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
     from torch import nn
+
     torch.manual_seed(3)
 
     from transformers import IctModel
@@ -225,7 +226,7 @@ class IctModelIntegrationTest(unittest.TestCase):
     def default_image_processor(self):
         return IctImageProcessor.from_pretrained("sheonhan/ict-imagenet-256") if is_vision_available() else None
 
-    @slow
+    # @slow
     def test_inference_masked_image_modeling(self):
         model = IctModel.from_pretrained("sheonhan/ict-imagenet-256").to(torch_device)
 
