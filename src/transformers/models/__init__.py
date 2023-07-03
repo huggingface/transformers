@@ -36,6 +36,7 @@ from . import (
     blip,
     blip_2,
     bloom,
+    mpt,
     bort,
     bridgetower,
     byt5,
