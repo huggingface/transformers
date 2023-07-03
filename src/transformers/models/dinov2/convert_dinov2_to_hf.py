@@ -152,6 +152,14 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
         rename_key(state_dict, src, dest)
     read_in_q_k_v(state_dict, config)
 
+    for key, val in state_dict.copy().items():
+        val = state_dict.pop(key)
+        if "w12" in key:
+            key = key.replace("w12", "weights_in")
+        if "w3" in key:
+            key = key.replace("w3", "weights_out")
+        state_dict[key] = val
+
     # load HuggingFace model
     model = Dinov2Model(config, add_pooling_layer=False).eval()
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)

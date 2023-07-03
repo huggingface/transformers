@@ -350,14 +350,14 @@ class Dinov2SwiGLUFFN(nn.Module):
         hidden_features = int(config.hidden_size * config.mlp_ratio)
         hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
 
-        self.w12 = nn.Linear(in_features, 2 * hidden_features, bias=True)
-        self.w3 = nn.Linear(hidden_features, out_features, bias=True)
+        self.weights_in = nn.Linear(in_features, 2 * hidden_features, bias=True)
+        self.weights_out = nn.Linear(hidden_features, out_features, bias=True)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        x12 = self.w12(hidden_state)
-        x1, x2 = x12.chunk(2, dim=-1)
+        hidden_state = self.weights_in(hidden_state)
+        x1, x2 = hidden_state.chunk(2, dim=-1)
         hidden = nn.functional.silu(x1) * x2
-        return self.w3(hidden)
+        return self.weights_out(hidden)
 
 
 class Dinov2Layer(nn.Module):
