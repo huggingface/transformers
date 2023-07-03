@@ -174,8 +174,8 @@
     title: BERTology
   - local: in_translation
     title: (번역중) Perplexity of fixed-length models
-  - local: in_translation
-    title: (번역중) Pipelines for webserver inference
+  - local: perplexity
+    title: 고정 길이 모델의 펄플렉서티(Perplexity)
   title: (번역중) 개념 가이드
 - sections:
   - sections:
