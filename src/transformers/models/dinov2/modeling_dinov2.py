@@ -280,15 +280,10 @@ class Dinov2Attention(nn.Module):
 
 
 class Dinov2LayerScale(nn.Module):
-    def __init__(
-        self,
-        dim: int,
-        init_values: Union[float, torch.Tensor] = 1e-5,
-        inplace: bool = False,
-    ) -> None:
+    def __init__(self, config, inplace: bool = False):
         super().__init__()
+        self.lambda1 = nn.Parameter(config.layerscale_value * torch.ones(config.hidden_size))
         self.inplace = inplace
-        self.lambda1 = nn.Parameter(init_values * torch.ones(dim))
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         return hidden_state.mul_(self.lambda1) if self.inplace else hidden_state * self.lambda1
@@ -331,18 +326,10 @@ class Dinov2DropPath:
 
 
 class Dinov2MLP(nn.Module):
-    def __init__(
-        self,
-        config,
-        in_features: int,
-        hidden_features: Optional[int] = None,
-        out_features: Optional[int] = None,
-        drop: float = 0.0,
-        bias: bool = True,
-    ) -> None:
+    def __init__(self, config, drop: float = 0.0, bias: bool = True) -> None:
         super().__init__()
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
+        in_features = out_features = config.hidden_size
+        hidden_features = int(config.hidden_size * config.mlp_ratio)
         self.fc1 = nn.Linear(in_features, hidden_features, bias=bias)
         if isinstance(config.hidden_act, str):
             self.activation = ACT2FN[config.hidden_act]
@@ -361,17 +348,12 @@ class Dinov2MLP(nn.Module):
 
 
 class Dinov2SwiGLUFFN(nn.Module):
-    def __init__(
-        self,
-        in_features: int,
-        hidden_features: Optional[int] = None,
-        out_features: Optional[int] = None,
-        bias: bool = True,
-    ) -> None:
+    def __init__(self, config, bias: bool = True):
         super().__init__()
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
+        in_features = out_features = config.hidden_size
+        hidden_features = int(config.hidden_size * config.mlp_ratio)
         hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
+        
         self.w12 = nn.Linear(in_features, 2 * hidden_features, bias=bias)
         self.w3 = nn.Linear(hidden_features, out_features, bias=bias)
 
@@ -390,17 +372,16 @@ class Dinov2Layer(nn.Module):
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = Dinov2Attention(config)
-        self.layer_scale1 = Dinov2LayerScale(config.hidden_size, init_values=config.layerscale_value)
+        self.layer_scale1 = Dinov2LayerScale(config)
         self.drop_path1 = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        mlp_hidden_size = int(config.hidden_size * config.mlp_ratio)
 
         if config.use_swiglu_ffn:
-            self.mlp = Dinov2SwiGLUFFN(config.hidden_size, mlp_hidden_size)
+            self.mlp = Dinov2SwiGLUFFN(config)
         else:
-            self.mlp = Dinov2MLP(config, config.hidden_size, mlp_hidden_size)
-        self.layer_scale2 = Dinov2LayerScale(config.hidden_size, init_values=config.layerscale_value)
+            self.mlp = Dinov2MLP(config)
+        self.layer_scale2 = Dinov2LayerScale(config)
         self.drop_path2 = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
     def forward(
