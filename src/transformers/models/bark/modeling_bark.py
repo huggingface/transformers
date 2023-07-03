@@ -958,7 +958,6 @@ class BarkFineModel(BarkPreTrainedModel):
     config_class = BarkFineConfig
     main_input_name = "codebook_idx"
     _tied_weights_keys = []
-    _keys_to_ignore_on_load_missing = []
 
     def __init__(self, config):
         # non-causal gpt-like model with one embedding layer and one lm_head for each codebook of Encodec
@@ -1038,7 +1037,6 @@ class BarkFineModel(BarkPreTrainedModel):
                 # self.wtes[i + 1].weight = self.lm_heads[i].weight
                 self._tie_or_clone_weights(output_embeddings[i], input_embeddings[i + 1])
                 self._tied_weights_keys.append(f"lm_heads.{i}.weight")
-                self._keys_to_ignore_on_load_missing.append(f"lm_heads.{i}.weight")
 
         for module in self.modules():
             if hasattr(module, "_tie_weights"):

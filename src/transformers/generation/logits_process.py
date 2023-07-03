@@ -1103,6 +1103,7 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         scores = uncond_logits + (cond_logits - uncond_logits) * self.guidance_scale
         return scores
 
+
 class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] enforcing alternated generation between the two codebooks of [`Bark`]'s fine submodel.

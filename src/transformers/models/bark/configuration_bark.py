@@ -16,7 +16,7 @@
 
 import copy
 import os
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings, logging
@@ -108,7 +108,23 @@ class BarkSubModelConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Union[str, os.PathLike],
+        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: Optional[Union[str, bool]] = None,
+        revision: str = "main",
+        **kwargs,
+    ) -> "PretrainedConfig":
+        kwargs["cache_dir"] = cache_dir
+        kwargs["force_download"] = force_download
+        kwargs["local_files_only"] = local_files_only
+        kwargs["revision"] = revision
+
+        cls._set_token_in_kwargs(kwargs, token)
+
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the config dict if we are loading from Bark
@@ -194,11 +210,11 @@ class BarkCoarseConfig(BarkSubModelConfig):
 class BarkFineConfig(BarkSubModelConfig):
     model_type = "fine_acoustics"
 
-    def __init__(self, *args, tie_word_embeddings=True, n_codes_total=8, n_codes_given=1, **kwargs):
+    def __init__(self, tie_word_embeddings=True, n_codes_total=8, n_codes_given=1, **kwargs):
         self.n_codes_total = n_codes_total
         self.n_codes_given = n_codes_given
 
-        super().__init__(*args, tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
 class BarkConfig(PretrainedConfig):
