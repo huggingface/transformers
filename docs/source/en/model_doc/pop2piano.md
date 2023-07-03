@@ -35,11 +35,14 @@ of producing plausible piano covers.*
 
 Tips:
 
-1. Pop2Piano is an Encoder-Decoder based model like T5.
-2. Pop2Piano can be used to generate midi-audio files for a given audio sequence.
-3. Choosing different composers in `Pop2PianoForConditionalGeneration.generate()` can lead to variety of different results.
-4. Setting the sampling rate to 44.1 kHz when loading the audio file can give good performance.
-5. Though Pop2Piano was mainly trained on Korean Pop music, it also does pretty well on other Western Pop or Hip Hop songs.    
+1. To use Pop2Piano, you will need to install the 🤗 Transformers library, as well as the following third party modules:  
+`pip install pretty-midi==0.2.9 essentia==2.1b6.dev609 librosa scipy`  
+Please note that you may need to restart your runtime after installation.
+2. Pop2Piano is an Encoder-Decoder based model like T5.
+3. Pop2Piano can be used to generate midi-audio files for a given audio sequence.
+4. Choosing different composers in `Pop2PianoForConditionalGeneration.generate()` can lead to variety of different results.
+5. Setting the sampling rate to 44.1 kHz when loading the audio file can give good performance.
+6. Though Pop2Piano was mainly trained on Korean Pop music, it also does pretty well on other Western Pop or Hip Hop songs.
 
 This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
 The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
@@ -53,7 +56,6 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 >>> from transformers import Pop2PianoForConditionalGeneration, Pop2PianoTokenizer, Pop2PianoFeatureExtractor
 
 >>> model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
->>> model.eval()
 >>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
 >>> tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
 >>> ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
@@ -76,7 +78,6 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 
 >>> audio, sr = librosa.load("<your_audio_file_here>", sr=44100)  # feel free to change the sr to a suitable value.
 >>> model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
->>> model.eval()
 >>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
 >>> tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
 
@@ -101,7 +102,6 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 ...     "<your_second_audio_file_here>", sr=44100
 ... )  # feel free to change the sr to a suitable value.
 >>> model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
->>> model.eval()
 >>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
 >>> tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
 

@@ -1025,13 +1025,8 @@ num_heads)`.
 
 @add_start_docstrings("""Pop2Piano Model with a `language modeling` head on top.""", Pop2Piano_START_DOCSTRING)
 class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.embed_tokens.weight",
-        r"decoder.embed_tokens.weight",
-        r"lm_head.weight",
-    ]
     _keys_to_ignore_on_load_unexpected = [
-        r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
+        "decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
 
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
