@@ -1464,14 +1464,14 @@ class GenerationTesterMixin:
             if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
                 return
 
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config(batch_size=1)
 
             # NOTE: contrastive search only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
                 return
+
             config.use_cache = True
             config.is_decoder = True
-
             prompt = "The rain in Spain"
 
             # test output equality of low versus high memory
