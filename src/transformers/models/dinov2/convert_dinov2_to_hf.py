@@ -65,6 +65,7 @@ def create_rename_keys(config):
 
     # patch embedding layer
     rename_keys.append(("cls_token", "embeddings.cls_token"))
+    rename_keys.append(("mask_token", "embeddings.mask_token"))
     rename_keys.append(("pos_embed", "embeddings.position_embeddings"))
     rename_keys.append(("patch_embed.proj.weight", "embeddings.patch_embeddings.projection.weight"))
     rename_keys.append(("patch_embed.proj.bias", "embeddings.patch_embeddings.projection.bias"))
@@ -162,9 +163,7 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
 
     # load HuggingFace model
     model = Dinov2Model(config, add_pooling_layer=False).eval()
-    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    assert len(missing_keys) == 0
-    assert unexpected_keys == ["mask_token"]
+    model.load_state_dict(state_dict)
 
     # load image
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
