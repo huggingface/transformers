@@ -326,36 +326,33 @@ class Dinov2DropPath:
 
 
 class Dinov2MLP(nn.Module):
-    def __init__(self, config, drop: float = 0.0, bias: bool = True) -> None:
+    def __init__(self, config) -> None:
         super().__init__()
         in_features = out_features = config.hidden_size
         hidden_features = int(config.hidden_size * config.mlp_ratio)
-        self.fc1 = nn.Linear(in_features, hidden_features, bias=bias)
+        self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
         if isinstance(config.hidden_act, str):
             self.activation = ACT2FN[config.hidden_act]
         else:
             self.activation = config.hidden_act
-        self.fc2 = nn.Linear(hidden_features, out_features, bias=bias)
-        self.drop = nn.Dropout(drop)
+        self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.fc1(hidden_state)
         hidden_state = self.activation(hidden_state)
-        hidden_state = self.drop(hidden_state)
         hidden_state = self.fc2(hidden_state)
-        hidden_state = self.drop(hidden_state)
         return hidden_state
 
 
 class Dinov2SwiGLUFFN(nn.Module):
-    def __init__(self, config, bias: bool = True):
+    def __init__(self, config):
         super().__init__()
         in_features = out_features = config.hidden_size
         hidden_features = int(config.hidden_size * config.mlp_ratio)
         hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
-        
-        self.w12 = nn.Linear(in_features, 2 * hidden_features, bias=bias)
-        self.w3 = nn.Linear(hidden_features, out_features, bias=bias)
+
+        self.w12 = nn.Linear(in_features, 2 * hidden_features, bias=True)
+        self.w3 = nn.Linear(hidden_features, out_features, bias=True)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         x12 = self.w12(hidden_state)
