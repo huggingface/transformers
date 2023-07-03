@@ -1465,6 +1465,7 @@ class GenerationTesterMixin:
                 return
 
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config(batch_size=1)
+            input_ids = torch.unsqueeze(input_ids, 0)
 
             # NOTE: contrastive search only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
