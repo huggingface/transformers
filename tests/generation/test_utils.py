@@ -1464,8 +1464,8 @@ class GenerationTesterMixin:
             if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
                 return
 
+            # enable cache
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config(batch_size=1)
-            input_ids = torch.unsqueeze(input_ids, 0)
 
             # NOTE: contrastive search only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
@@ -1477,18 +1477,30 @@ class GenerationTesterMixin:
 
             # test output equality of low versus high memory
             model = model_class(config).to(torch_device).eval()
-            low_output = model.generate(input_ids, 
-                top_k=4, 
-                penalty_alpha=0.6, 
-                low_memory=True, 
-                max_length=max_length
+            _, low_output = self._contrastive_generate(
+                model=model,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_length=max_length,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+                low_memory=True
             )
-            high_output = model.generate(input_ids, 
-                top_k=4, 
-                penalty_alpha=0.6, 
-                low_memory=False, 
-                max_length=max_length
+
+            _, high_output = self._contrastive_generate(
+                model=model,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_length=max_length,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+                low_memory=False
             )
+
             self.assertListEqual(low_output.tolist(), high_output.tolist())
 
         return
