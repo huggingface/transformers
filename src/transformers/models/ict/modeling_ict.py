@@ -747,18 +747,19 @@ class IctModel(IctPretrainedModel):
         return new_logits
 
     def sample_mask(self, pixel_values, logits, bool_masked_pos, temperature=1.0, top_k=50):
-        _, length, _ = logits.shape
-        output = pixel_values.clone()
+        logits = logits / temperature
+        bool_masked_pos_expanded = bool_masked_pos.expand(logits.shape[0], logits.shape[1])
 
-        for i in range(length):
-            if bool_masked_pos[0, i] != 0:
-                logits_i = logits[:, i, :] / temperature
-                logits_i = self.top_k_logits(logits_i, top_k)
-                probs = nn.functional.softmax(logits_i, dim=-1)
-                pred = torch.multinomial(probs, num_samples=1)
-                output[:, i] = pred[:, 0]
+        logits = logits[bool_masked_pos_expanded].view(-1, logits.size(-1))
+        logits = self.top_k_logits(logits, top_k)
+        probs = nn.functional.softmax(logits, dim=-1)
+        pred = torch.multinomial(probs, num_samples=1)
+
+        output = torch.zeros_like(pixel_values)
+        output[~bool_masked_pos_expanded] = pixel_values[~bool_masked_pos_expanded]
+        output[bool_masked_pos_expanded] = pred.squeeze()
+
         return output
-
 
     @add_start_docstrings_to_model_forward(ICT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

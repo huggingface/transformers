@@ -52,9 +52,6 @@ PRIVATE_MODELS = [
     "MaskFormerSwinPreTrainedModel",
     "BridgeTowerTextModel",
     "BridgeTowerVisionModel",
-    "IctGuidedUpsampler",
-    "IctPretrainedModel",
-    "IctTransformerModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
