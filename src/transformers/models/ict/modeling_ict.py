@@ -256,7 +256,7 @@ class IctEncoder(nn.Module):
         )
 
 
-class IctPretrainedModel(PreTrainedModel):
+class IctPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -287,7 +287,7 @@ class IctPretrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-class IctTransformerModel(IctPretrainedModel):
+class IctTransformerModel(IctPreTrainedModel):
     def __init__(self, config: IctConfig, use_mask_token: bool = False):
         super().__init__(config)
         self.config = config
@@ -633,7 +633,7 @@ class IctPerceptualLoss(nn.Module):
         return content_loss
 
 
-class IctGuidedUpsampler(IctPretrainedModel):
+class IctGuidedUpsampler(IctPreTrainedModel):
     def __init__(self, config: IctConfig):
         super().__init__(config)
 
@@ -722,7 +722,7 @@ ICT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(ICT_START_DOCSTRING)
-class IctModel(IctPretrainedModel):
+class IctModel(IctPreTrainedModel):
     config_class = IctConfig
 
     def __init__(self, config: IctConfig, use_mask_token: bool = True):
