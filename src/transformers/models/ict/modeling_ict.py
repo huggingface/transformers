@@ -25,10 +25,6 @@ import torch.utils.checkpoint
 import torchvision.models as models
 from torch import nn
 
-import torchvision.transforms.functional as FV
-import numpy as np
-from PIL import Image
-
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedImageModelingOutput
 from ...modeling_utils import PreTrainedModel
