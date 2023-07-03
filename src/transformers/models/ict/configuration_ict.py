@@ -79,8 +79,8 @@ class IctConfig(PretrainedConfig):
             Number of highest probability vocabulary tokens to keep for top-k-filtering that will be used by default in
             the `generate` method of the model.
         gan_loss_function (`str`, *optional*, defaults to `"nsgan"`):
-            GAN loss function for the guided upsampler. Choose one of `"nsgan"`, `"lsgan"`, `"hinge"`.
-            Defaults to "nsgan".
+            GAN loss function for the guided upsampler. Choose one of `"nsgan"`, `"lsgan"`, `"hinge"`. Defaults to
+            "nsgan".
         output_image_size (`int`, *optional*, defaults to 256):
             The size (resolution) of the output image.
         clusters (`np.ndarray`, *optional*, defaults to `None`):

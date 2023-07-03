@@ -194,10 +194,11 @@ class IctImageProcessor(BaseImageProcessor):
 
     def color_quantize(self, image: np.ndarray, clusters: np.ndarray):
         """
-        Reduce the dimension by using an extra visual vocabulary (Bags-of-Words vectors) with spatial size num_clusters × 3, which was
-        generated using k-means clustered centers of the ImageNet RGB pixel spaces.
+        Reduce the dimension by using an extra visual vocabulary (Bags-of-Words vectors) with spatial size num_clusters
+        × 3, which was generated using k-means clustered centers of the ImageNet RGB pixel spaces.
 
-        e.g., An image of shape (32, 24, 3) will be reduced to (32, 24) where each element of the output tensor corresponds to an integer index in `clusters` which contain the actual RGB pixel.
+        e.g., An image of shape (32, 24, 3) will be reduced to (32, 24) where each element of the output tensor
+        corresponds to an integer index in `clusters` which contain the actual RGB pixel.
 
         Args:
             image (`np.ndarray`):
