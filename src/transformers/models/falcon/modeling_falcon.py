@@ -102,17 +102,31 @@ class FalconRotaryEmbedding(torch.nn.Module):
 def _make_causal_mask(
     input_ids_shape: torch.Size, device: torch.device, past_key_values_length: int
 ) -> torch.BoolTensor:
+    """
+    Make causal mask used for self-attention.
+    """
     batch_size, target_length = input_ids_shape
     mask = torch.empty((target_length, target_length + past_key_values_length), dtype=torch.bool, device=device)
     # ONNX doesn't support `torch.Tensor.triu` properly, thus we use this workaround
     seq_ids = torch.arange(target_length, device=device)
     mask[:, past_key_values_length:] = seq_ids[:, None] < seq_ids[None, :]
-    # TODO Matt: Why is this False? Shouldn't the live sequence be able to attend to all past values?
+
     if past_key_values_length > 0:
         mask[:, :past_key_values_length] = False
 
     expanded_mask = mask[None, None, :, :].expand(batch_size, 1, target_length, target_length + past_key_values_length)
     return expanded_mask
+
+
+def _expand_mask(mask: torch.Tensor, total_length: int) -> torch.BoolTensor:
+    """
+    Expands attention_mask from `[batch_size, seq_length]` to `[batch_size, 1, seq_length, seq_length + past_length]`.
+    """
+    batch_size, seq_length = mask.shape
+    tgt_length = total_length if total_length is not None else seq_length
+
+    expanded_mask = ~(mask[:, None, None, :].to(torch.bool))
+    return expanded_mask.expand(batch_size, 1, tgt_length, seq_length)
 
 
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
@@ -254,6 +268,7 @@ class FalconAttention(nn.Module):
         use_cache: bool = False,
         output_attentions: bool = False,
     ):
+        assert attention_mask is not None  # Sorry Sylvain! I'll remove it when I'm done testing!
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         n_head_kv = self.num_heads if self.new_decoder_architecture else self.num_kv
         # 3 x [batch_size, seq_length, num_heads, head_dim]
@@ -285,6 +300,8 @@ class FalconAttention(nn.Module):
         else:
             present = None
 
+        attention_mask_float = (attention_mask * 1.0).masked_fill(attention_mask, -1e9).to(query_layer.dtype)
+
         if alibi is None:
             query_layer_ = query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim)
             key_layer_ = key_layer.reshape(batch_size, n_head_kv, -1, self.head_dim)
@@ -295,17 +312,12 @@ class FalconAttention(nn.Module):
                 # to do it by hand if we want them
                 attention_scores = query_layer_ @ key_layer_.transpose(-1, -2)
                 attention_scores /= math.sqrt(self.head_dim)
-                if attention_mask is None:
-                    attn_mask = ~torch.ones_like(attention_scores, dtype=torch.bool).tril()
-                else:
-                    attn_mask = attention_mask
-                attention_scores = attention_scores.masked_fill(attn_mask, float("-inf"))
-                attention_scores = torch.softmax(attention_scores, dim=-1)
+
+                attention_scores = F.softmax(attention_scores + attention_mask_float, dim=-1, dtype=hidden_states.dtype)
                 attn_output = attention_scores @ value_layer_
             else:
-                use_causal_attention = attention_mask is None
                 attn_output = F.scaled_dot_product_attention(
-                    query_layer_, key_layer_, value_layer_, attention_mask, 0.0, is_causal=use_causal_attention
+                    query_layer_, key_layer_, value_layer_, attention_mask_float, 0.0, is_causal=False
                 )
                 attention_scores = None
 
@@ -321,7 +333,6 @@ class FalconAttention(nn.Module):
 
             return outputs
         else:
-            attention_mask_float = (attention_mask * 1.0).masked_fill(attention_mask, -1e9).to(torch.bfloat16)
             matmul_result = query_layer @ key_layer.transpose(-1, -2)
 
             # change view to [batch_size, num_heads, q_length, kv_length]
@@ -564,10 +575,8 @@ class FalconModel(FalconPreTrainedModel):
                 input_shape, device=device, past_key_values_length=past_key_values_length
             )
 
-        # [batch_size, seq_length] -> [batch_size, 1, seq_length, seq_length + past_key_values_length]
-        # TODO Matt: Expand mask just needs to blow up the attention mask to cover the past_key_values
-        #            But first we need to figure out why it was setting past values to False
-        expanded_attn_mask = _expand_mask(attention_mask, tgt_length=seq_length + past_key_values_length)
+        # [batch_size, seq_length + past_key_values_length] -> [batch_size, 1, seq_length, seq_length + past_key_values_length]
+        expanded_attn_mask = _expand_mask(attention_mask, total_length=seq_length + past_key_values_length)
         combined_attention_mask = (
             expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask | combined_attention_mask
         )
@@ -745,9 +754,6 @@ class FalconForCausalLM(FalconPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> dict:
-        # only last token for input_ids if past is not None
-        # if past:
-        #     input_ids = input_ids[:, -1].unsqueeze(-1)
 
         return {
             "input_ids": input_ids,
