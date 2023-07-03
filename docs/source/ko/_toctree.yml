@@ -21,6 +21,8 @@
     title: 🤗 Accelerate로 분산 학습 구성하기
   - local: model_sharing
     title: 만든 모델 공유하기
+  - local: transformers_agents
+    title: 에이전트
   title: 튜토리얼
 - sections:
   - sections:
