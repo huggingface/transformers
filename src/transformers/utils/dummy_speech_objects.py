@@ -9,35 +9,7 @@ class ASTFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["speech"])
 
 
-class EncodecFeatureExtractor(metaclass=DummyObject):
-    _backends = ["speech"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["speech"])
-
-
-class MCTCTFeatureExtractor(metaclass=DummyObject):
-    _backends = ["speech"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["speech"])
-
-
 class Speech2TextFeatureExtractor(metaclass=DummyObject):
-    _backends = ["speech"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["speech"])
-
-
-class SpeechT5FeatureExtractor(metaclass=DummyObject):
-    _backends = ["speech"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["speech"])
-
-
-class TvltFeatureExtractor(metaclass=DummyObject):
     _backends = ["speech"]
 
     def __init__(self, *args, **kwargs):
