@@ -754,7 +754,7 @@ class BarkSemanticModel(BarkCausalModel):
             range(semantic_generation_config.semantic_vocab_size, semantic_generation_config.semantic_pad_token)
         )
         tokens_to_suppress.extend(
-            list(range(semantic_generation_config.semantic_pad_token, self.config.output_vocab_size))
+            list(range(semantic_generation_config.semantic_pad_token + 1, self.config.output_vocab_size))
         )
 
         suppress_tokens_logits_processor = SuppressTokensLogitsProcessor(tokens_to_suppress)
