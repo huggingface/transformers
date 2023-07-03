@@ -181,6 +181,8 @@ class GenerationConfig(PushToHubMixin):
             A list of pairs of integers which indicates a mapping from generation indices to token indices that will be
             forced before sampling. For example, `[[1, 123]]` means the second generated token will always be a token
             of index 123.
+        low_memory (`bool`, *optional*, defaults to False):
+            Switch to sequential topk for contrastive search to reduce peak memory. Used with contrastive search.
 
         > Parameters that define the output variables of `generate`
 
@@ -260,6 +262,7 @@ class GenerationConfig(PushToHubMixin):
         self.suppress_tokens = kwargs.pop("suppress_tokens", None)
         self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
         self.forced_decoder_ids = kwargs.pop("forced_decoder_ids", None)
+        self.low_memory = kwargs.pop("low_memory", False)
 
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
