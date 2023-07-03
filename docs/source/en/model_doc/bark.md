@@ -79,7 +79,7 @@ To save the audio, simply take the sample rate from the model config and some sc
 >>> from scipy.io.wavfile import write as write_wav
 
 >>> # save audio to disk, but first take the sample rate from the model config
->>> sample_rate = model.config.sample_rate
+>>> sample_rate = model.generation_config.sample_rate
 >>> write_wav("bark_generation.wav", sample_rate, audio_array)
 ```
 
