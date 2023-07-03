@@ -35,8 +35,8 @@ These presets are also uploaded in the hub [here](https://huggingface.co/ylacomb
 ```python
 >>> from transformers import AutoProcessor, BarkModel
 
->>> processor = AutoProcessor.from_pretrained("{_CHECKPOINT_FOR_DOC}")
->>> model = BarkModel.from_pretrained("{_CHECKPOINT_FOR_DOC}")
+>>> processor = AutoProcessor.from_pretrained("suno/bark")
+>>> model = BarkModel.from_pretrained("suno/bark")
 
 >>> voice_preset = "v2/en_speaker_6"
 
