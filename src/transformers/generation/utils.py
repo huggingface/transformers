@@ -2125,6 +2125,7 @@ class GenerationMixin:
                 next_model_input = self.prepare_inputs_for_generation(
                     top_k_ids[:, selected_idx].unsqueeze(0), **model_kwargs
                 )
+                print (next_model_input['input_ids'].shape)
                 selected_outputs = self(
                     **next_model_input, return_dict=True, output_hidden_states=False, output_attentions=False,
                 )
