@@ -563,7 +563,11 @@ _import_structure = {
         "TvltFeatureExtractor",
         "TvltProcessor",
     ],
-    "models.udop": ["UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP", "UdopConfig"],
+    "models.udop": [
+        "UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "UdopConfig",
+        "UdopProcessor",
+    ],
     "models.umt5": ["UMT5Config"],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",

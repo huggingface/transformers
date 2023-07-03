@@ -429,7 +429,6 @@ class UdopTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
     def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         return self.sp_model.encode(text, out_type=str)
