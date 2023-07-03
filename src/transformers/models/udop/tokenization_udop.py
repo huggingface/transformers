@@ -38,6 +38,9 @@ from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
 logger = logging.get_logger(__name__)
 
 
+SPIECE_UNDERLINE = "▁"
+
+
 UDOP_ENCODE_KWARGS_DOCSTRING = r"""
             add_special_tokens (`bool`, *optional*, defaults to `True`):
                 Whether or not to encode the sequences with the special tokens relative to their model.
@@ -429,9 +432,19 @@ class UdopTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
+    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
+    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
+        if not text.startswith(" "):
+            text = " " + text
+        return super().tokenize(text, **kwargs)
+
+    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
     def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
-        return self.sp_model.encode(text, out_type=str)
+        tokens = self.sp_model.encode(text, out_type=str)
+        if not text.startswith(" ") and tokens[0] == SPIECE_UNDERLINE:
+            tokens = tokens[1:]
+        return tokens
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
