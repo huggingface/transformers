@@ -1444,7 +1444,7 @@ class AlignModel(AlignPreTrainedModel):
         self.vision_model = AlignVisionModel(vision_config)
 
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim)
-        self.temperature = nn.Parameter(torch.ones([]) * self.config.temperature_init_value)
+        self.temperature = nn.Parameter(torch.tensor(self.config.temperature_init_value))
 
         # Initialize weights and apply final processing
         self.post_init()
