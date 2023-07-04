@@ -65,11 +65,11 @@ class FalconConfig(PretrainedConfig):
 
     Example:
 
-    ```python
+    ```pytho
     >>> from transformers import FalconModel, FalconConfig
 
     >>> # Initializing a small (2-layer) Falcon configuration
-    >>> configuration = FalconConfig()
+    >>> configuration = FalconConfig(num_hidden_layers=2)
 
     >>> # Initializing a model from the small configuration
     >>> model = FalconModel(configuration)
