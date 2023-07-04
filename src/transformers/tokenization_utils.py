@@ -545,7 +545,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if token in no_split_token:
                 tokenized_text.append(token)
             else:
-                tokenized_text.extend(self._tokenize(token, i==0))
+                tokenized_text.extend(self._tokenize(token, i == 0))
         # ["This", " is", " something", "<special_token_1>", "else"]
         return tokenized_text
 

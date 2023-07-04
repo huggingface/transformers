@@ -153,7 +153,7 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(PreTrainedTokenizer):
     def get_vocab(self):
         """ Returns vocab as a dict """
 
-    def _tokenize(self, text):
+    def _tokenize(self, text: str, **kwargs):
         """ Returns a tokenized string. """
 
     def _convert_token_to_id(self, token):
