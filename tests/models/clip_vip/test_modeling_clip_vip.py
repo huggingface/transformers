@@ -553,7 +553,7 @@ def prepare_img():
 class CLIPViPModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model_name = "tensorpro/clip_vip"
+        model_name = "tensorpro/clip_vip_pretrained_base_16"
         model = CLIPViPModel.from_pretrained(model_name).to(torch_device)
         processor = CLIPViPProcessor.from_pretrained("openai/clip-vit-base-patch16")
 

@@ -38,10 +38,10 @@ from .configuration_clip_vip import CLIPViPConfig, CLIPViPTextConfig, CLIPViPVis
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "tensorpro/clip_vip"
+_CHECKPOINT_FOR_DOC = "tensorpro/clip_vip_pretrained_base_16"
 
 CLIP_VIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "tensorpro/clip_vip",
+    "tensorpro/clip_vip_pretrained_base_16",
     # See all CLIP ViP models at https://huggingface.co/models?filter=clip_vip
 ]
 
@@ -233,7 +233,7 @@ class CLIPViPVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
         self.added_cls = nn.Parameter(torch.randn(config.add_cls_num, self.embed_dim))
         if self.use_temporal_embed:
@@ -276,7 +276,6 @@ class CLIPViPTextEmbeddings(nn.Module):
         self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
         self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
 
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
@@ -585,7 +584,7 @@ class CLIPViPPreTrainedModel(PreTrainedModel):
     config_class = CLIPViPConfig
     base_model_prefix = "clip_vip"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = []
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -979,8 +978,8 @@ class CLIPViPTextModel(CLIPViPPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, CLIPViPTextModel
 
-        >>> model = CLIPViPTextModel.from_pretrained("tensorpro/clip_vip")
-        >>> tokenizer = AutoTokenizer.from_pretrained("tensorpro/clip_vip")
+        >>> model = CLIPViPTextModel.from_pretrained("tensorpro/clip_vip_pretrained_base_16")
+        >>> tokenizer = AutoTokenizer.from_pretrained("tensorpro/clip_vip_pretrained_base_16")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
@@ -1099,8 +1098,8 @@ class CLIPViPVisionModel(CLIPViPPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, CLIPViPVisionModel
 
-        >>> model = CLIPViPVisionModel.from_pretrained("tensorpro/clip_vip")
-        >>> processor = AutoProcessor.from_pretrained("tensorpro/clip_vip")
+        >>> model = CLIPViPVisionModel.from_pretrained("tensorpro/clip_vip_pretrained_base_16")
+        >>> processor = AutoProcessor.from_pretrained("tensorpro/clip_vip_pretrained_base_16")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1178,8 +1177,8 @@ class CLIPViPModel(CLIPViPPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, CLIPViPModel
 
-        >>> model = CLIPViPModel.from_pretrained("tensorpro/clip_vip")
-        >>> tokenizer = AutoTokenizer.from_pretrained("tensorpro/clip_vip")
+        >>> model = CLIPViPModel.from_pretrained("tensorpro/clip_vip_pretrained_base_16")
+        >>> tokenizer = AutoTokenizer.from_pretrained("tensorpro/clip_vip_pretrained_base_16")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
@@ -1230,8 +1229,8 @@ class CLIPViPModel(CLIPViPPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, CLIPViPModel
 
-        >>> model = CLIPViPModel.from_pretrained("tensorpro/clip_vip")
-        >>> processor = AutoProcessor.from_pretrained("tensorpro/clip_vip")
+        >>> model = CLIPViPModel.from_pretrained("tensorpro/clip_vip_pretrained_base_16")
+        >>> processor = AutoProcessor.from_pretrained("tensorpro/clip_vip_pretrained_base_16")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1286,8 +1285,8 @@ class CLIPViPModel(CLIPViPPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, CLIPViPModel
 
-        >>> model = CLIPViPModel.from_pretrained("tensorpro/clip_vip")
-        >>> processor = AutoProcessor.from_pretrained("tensorpro/clip_vip")
+        >>> model = CLIPViPModel.from_pretrained("tensorpro/clip_vip_pretrained_base_16")
+        >>> processor = AutoProcessor.from_pretrained("tensorpro/clip_vip_pretrained_base_16")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)

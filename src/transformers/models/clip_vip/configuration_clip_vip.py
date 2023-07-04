@@ -32,7 +32,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 CLIP_VIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "tensorpro/clip_vip": "https://huggingface.co/tensorpro/clip_vip/resolve/main/config.json",
+    "tensorpro/clip_vip_pretrained_base_16": "https://huggingface.co/tensorpro/clip_vip_pretrained_base_16/resolve/main/config.json",
 }
 
 
@@ -41,7 +41,7 @@ class CLIPViPTextConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`CLIPViPTextModel`]. It is used to instantiate a
     CLIPViP text encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the text encoder of the CLIPViP
-    [tensorpro/clip_vip](https://huggingface.co/tensorpro/clip_vip) architecture.
+    [tensorpro/clip_vip_pretrained_base_16](https://huggingface.co/tensorpro/clip_vip_pretrained_base_16) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -79,10 +79,10 @@ class CLIPViPTextConfig(PretrainedConfig):
     ```python
     >>> from transformers import CLIPViPTextConfig, CLIPViPTextModel
 
-    >>> # Initializing a CLIPViPTextConfig with tensorpro/clip_vip style configuration
+    >>> # Initializing a CLIPViPTextConfig with tensorpro/clip_vip_pretrained_base_16 style configuration
     >>> configuration = CLIPViPTextConfig()
 
-    >>> # Initializing a CLIPViPTextModel (with random weights) from the tensorpro/clip_vip style configuration
+    >>> # Initializing a CLIPViPTextModel (with random weights) from the tensorpro/clip_vip_pretrained_base_16 style configuration
     >>> model = CLIPViPTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -146,7 +146,7 @@ class CLIPViPVisionConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`CLIPViPVisionModel`]. It is used to instantiate a
     CLIPViP vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the CLIPViP
-    [tensorpro/clip_vip](https://huggingface.co/tensorpro/clip_vip) architecture.
+    [tensorpro/clip_vip_pretrained_base_16](https://huggingface.co/tensorpro/clip_vip_pretrained_base_16) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -182,10 +182,10 @@ class CLIPViPVisionConfig(PretrainedConfig):
     ```python
     >>> from transformers import CLIPViPVisionConfig, CLIPViPVisionModel
 
-    >>> # Initializing a CLIPViPVisionConfig with tensorpro/clip_vip style configuration
+    >>> # Initializing a CLIPViPVisionConfig with tensorpro/clip_vip_pretrained_base_16 style configuration
     >>> configuration = CLIPViPVisionConfig()
 
-    >>> # Initializing a CLIPViPVisionModel (with random weights) from the tensorpro/clip_vip style configuration
+    >>> # Initializing a CLIPViPVisionModel (with random weights) from the tensorpro/clip_vip_pretrained_base_16 style configuration
     >>> model = CLIPViPVisionModel(configuration)
 
     >>> # Accessing the model configuration
@@ -257,7 +257,7 @@ class CLIPViPConfig(PretrainedConfig):
     [`CLIPViPConfig`] is the configuration class to store the configuration of a [`CLIPViPModel`]. It is used to
     instantiate a CLIPViP model according to the specified arguments, defining the text model and vision model configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the CLIPViP
-    [tensorpro/clip_vip](https://huggingface.co/tensorpro/clip_vip) architecture.
+    [tensorpro/clip_vip_pretrained_base_16](https://huggingface.co/tensorpro/clip_vip_pretrained_base_16) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -279,10 +279,10 @@ class CLIPViPConfig(PretrainedConfig):
     ```python
     >>> from transformers import CLIPViPConfig, CLIPViPModel
 
-    >>> # Initializing a CLIPViPConfig with tensorpro/clip_vip style configuration
+    >>> # Initializing a CLIPViPConfig with tensorpro/clip_vip_pretrained_base_16 style configuration
     >>> configuration = CLIPViPConfig()
 
-    >>> # Initializing a CLIPViPModel (with random weights) from the tensorpro/clip_vip style configuration
+    >>> # Initializing a CLIPViPModel (with random weights) from the tensorpro/clip_vip_pretrained_base_16 style configuration
     >>> model = CLIPViPModel(configuration)
 
     >>> # Accessing the model configuration
