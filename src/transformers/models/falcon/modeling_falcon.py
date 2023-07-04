@@ -94,10 +94,10 @@ class FalconRotaryEmbedding(torch.nn.Module):
 
         return self.cos_cached, self.sin_cached
 
-    def forward(self, q, k):
-        batch, seq_len, head_dim = q.shape
-        cos, sin = self.cos_sin(seq_len, q.device, q.dtype)
-        return (q * cos) + (rotate_half(q) * sin), (k * cos) + (rotate_half(k) * sin)
+    def forward(self, query, key):
+        batch, seq_len, head_dim = query.shape
+        cos, sin = self.cos_sin(seq_len, query.device, q.uerydtype)
+        return (query * cos) + (rotate_half(query) * sin), (key * cos) + (rotate_half(key) * sin)
 
 
 def _make_causal_mask(
