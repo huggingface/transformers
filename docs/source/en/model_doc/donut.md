@@ -46,9 +46,9 @@ Tips:
 Donut's [`VisionEncoderDecoder`] model accepts images as input and makes use of
 [`~generation.GenerationMixin.generate`] to autoregressively generate text given the input image.
 
-The [`DonutFeatureExtractor`] class is responsible for preprocessing the input image and
+The [`DonutImageProcessor`] class is responsible for preprocessing the input image and
 [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`] decodes the generated target tokens to the target string. The
-[`DonutProcessor`] wraps [`DonutFeatureExtractor`] and [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]
+[`DonutProcessor`] wraps [`DonutImageProcessor`] and [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]
 into a single instance to both extract the input features and decode the predicted token ids.
 
 - Step-by-step Document Image Classification

@@ -382,7 +382,7 @@ class Speech2TextEncoderLayer(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -1266,17 +1266,6 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
 )
 class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.version",
-        r"decoder.version",
-        r"model.encoder.embed_positions.weights",
-        r"model.decoder.embed_positions.weights",
-        r"lm_head.weight",
-    ]
-    _keys_to_ignore_on_save = [
-        r"model.encoder.embed_positions.weights",
-        r"model.decoder.embed_positions.weights",
-    ]
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: Speech2TextConfig):

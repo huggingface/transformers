@@ -358,11 +358,11 @@ class TrOCRDecoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
+                cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -788,7 +788,6 @@ class TrOCRDecoderWrapper(TrOCRPreTrainedModel):
     TROCR_START_DOCSTRING,
 )
 class TrOCRForCausalLM(TrOCRPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["output_projection.weight"]
     _tied_weights_keys = ["output_projection.weight"]
 
     def __init__(self, config):

@@ -15,6 +15,7 @@
 Integrations with other Python libraries.
 """
 import functools
+import importlib.metadata
 import importlib.util
 import json
 import numbers
@@ -31,7 +32,6 @@ import numpy as np
 
 from . import __version__ as version
 from .utils import flatten_dict, is_datasets_available, is_pandas_available, is_torch_available, logging
-from .utils.versions import importlib_metadata
 
 
 logger = logging.get_logger(__name__)
@@ -59,13 +59,13 @@ _has_neptune = (
 )
 if TYPE_CHECKING and _has_neptune:
     try:
-        _neptune_version = importlib_metadata.version("neptune")
+        _neptune_version = importlib.metadata.version("neptune")
         logger.info(f"Neptune version {_neptune_version} available.")
-    except importlib_metadata.PackageNotFoundError:
+    except importlib.metadata.PackageNotFoundError:
         try:
-            _neptune_version = importlib_metadata.version("neptune-client")
+            _neptune_version = importlib.metadata.version("neptune-client")
             logger.info(f"Neptune-client version {_neptune_version} available.")
-        except importlib_metadata.PackageNotFoundError:
+        except importlib.metadata.PackageNotFoundError:
             _has_neptune = False
 
 from .trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
@@ -367,10 +367,8 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     import sigopt
 
-    from transformers.utils.versions import importlib_metadata
-
     if trainer.args.process_index == 0:
-        if importlib_metadata.version("sigopt") >= "8.0.0":
+        if importlib.metadata.version("sigopt") >= "8.0.0":
             sigopt.set_project("huggingface")
 
             experiment = sigopt.create_experiment(

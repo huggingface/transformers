@@ -387,7 +387,9 @@ class FlavaTextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
         self.register_buffer(
             "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
         )
@@ -1227,7 +1229,7 @@ class FlavaModel(FlavaPreTrainedModel):
 
         self.image_projection = nn.Linear(self.image_hidden_size, self.projection_dim)
         self.text_projection = nn.Linear(self.text_hidden_size, self.projection_dim)
-        self.logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
+        self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
 
         self.image_to_mm_projection = nn.Linear(self.image_hidden_size, self.mm_hidden_size)
         self.text_to_mm_projection = nn.Linear(self.text_hidden_size, self.mm_hidden_size)
@@ -1724,12 +1726,6 @@ class FlavaGlobalContrastiveHead(nn.Module):
 )
 class FlavaForPreTraining(FlavaPreTrainedModel):
     # Those are linked to xxx.bias
-    _keys_to_ignore_on_load_missing = [
-        "mmm_text_head.decoder.bias",
-        "mmm_image_head.decoder.bias",
-        "mlm_head.decoder.bias",
-        "mim_head.decoder.bias",
-    ]
     _tied_weights_keys = [
         "mmm_text_head.decoder.bias",
         "mmm_image_head.decoder.bias",
