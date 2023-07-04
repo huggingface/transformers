@@ -24,7 +24,8 @@ from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
-from sentencepiece import sentencepiece_model_pb2, SentencePieceProcessor
+from sentencepiece import SentencePieceProcessor
+from ...utils import sentencepiece_model_pb2
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging

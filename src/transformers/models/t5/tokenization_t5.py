@@ -22,7 +22,7 @@ from shutil import copyfile
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
-from sentencepiece import sentencepiece_model_pb2
+from ...utils import sentencepiece_model_pb2
 
 from ...tokenization_utils import PreTrainedTokenizer
 
