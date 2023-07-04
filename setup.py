@@ -97,7 +97,7 @@ if stale_egg_info.exists():
 # 1. all dependencies should be listed here with their version requirements if any
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
-    "Pillow",
+    "Pillow<10.0.0",
     "accelerate>=0.20.3",
     "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
     "beautifulsoup4",
@@ -107,7 +107,7 @@ _deps = [
     "dataclasses",
     "datasets!=2.5.0",
     "decord==0.6.0",
-    "deepspeed>=0.8.3",
+    "deepspeed>=0.9.3",
     "diffusers",
     "dill<0.3.5",
     "evaluate>=0.2.0",
@@ -142,10 +142,10 @@ _deps = [
     "packaging>=20.0",
     "parameterized",
     "phonemizer",
-    "protobuf<=3.20.3",
+    "protobuf",
     "psutil",
     "pyyaml>=5.1",
-    "pydantic",
+    "pydantic<2",
     "pytest>=7.2.0",
     "pytest-timeout",
     "pytest-xdist",

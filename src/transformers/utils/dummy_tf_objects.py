@@ -289,6 +289,13 @@ class TFAutoModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFAutoModelForAudioClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFAutoModelForCausalLM(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -310,7 +317,21 @@ class TFAutoModelForImageClassification(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFAutoModelForMaskedImageModeling(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFAutoModelForMaskedLM(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFAutoModelForMaskGeneration(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):

@@ -444,7 +444,7 @@ def prepare_img():
 @require_vision
 class EfficientFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
             EfficientFormerImageProcessor.from_pretrained("snap-research/efficientformer-l1-300")
             if is_vision_available()
@@ -457,9 +457,9 @@ class EfficientFormerModelIntegrationTest(unittest.TestCase):
             torch_device
         )
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -478,9 +478,9 @@ class EfficientFormerModelIntegrationTest(unittest.TestCase):
             "snap-research/efficientformer-l1-300"
         ).to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
