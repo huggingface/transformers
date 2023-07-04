@@ -224,9 +224,10 @@ class LlamaAttention(nn.Module):
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
             attn_weights = attn_weights + attention_mask
-            attn_weights = torch.max(
-                attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
+            dtype_min = torch.tensor(
+                torch.finfo(attn_weights.dtype).min, device=attn_weights.device, dtype=attn_weights.dtype
             )
+            attn_weights = torch.max(attn_weights, dtype_min)
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
