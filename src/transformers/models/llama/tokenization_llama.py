@@ -89,6 +89,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             add_eos_token=add_eos_token,
             sp_model_kwargs=self.sp_model_kwargs,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            legacy=legacy,
             **kwargs,
         )
         self.vocab_file = vocab_file
@@ -118,13 +119,23 @@ class LlamaTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def _tokenize(self, text, is_first = True):
-        """Returns a tokenized string."""
+    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
+    def _tokenize(self, text, is_first=True):
+        """
+        Returns a tokenized string. Since the sentencpiece internal model always adds a SPIECE_UNDERLINE, at the
+        beginning of the provided text, we need to remove it by hand when the current text is a subsequence. This
+        happens whenever the `self.tokenize` function is called with specials tokens: the input is split on the special
+        tokens, and each subsequence is passed to `_tokenize`. Thus is a subsequence did not start with a `" "` or
+        SPIECE_UNDERLINE, we have to remove the extra `SPIECE_UNDERLINE` prepended.
+        """
         tokens = self.sp_model.encode(text, out_type=str)
-        if not is_first and tokens[0].startswith(SPIECE_UNDERLINE) and not text.startswith((" ", SPIECE_UNDERLINE)):
-            tokens[0] = tokens[0][1:]
-            if tokens[0] == '':
-                tokens = tokens[1:]
+        if (
+            not self.legacy
+            and not is_first
+            and not text.startswith((" ", SPIECE_UNDERLINE))
+            and tokens[0].startswith(SPIECE_UNDERLINE)
+        ):
+            tokens = tokens[0][1:] if len(tokens[0]) > 1 else [] + tokens[1:]
         return tokens
 
     def _convert_token_to_id(self, token):
