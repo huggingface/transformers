@@ -44,11 +44,10 @@ FALCON_PRETRAINED_MODEL_ARCHIVE_LIST = ["Rocketknight1/falcon-rw-1b"]
 # In order not to degrade the quality of our HF-port, we keep these characteristics in the final model.
 class FalconLinear(nn.Linear):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        ret = input @ self.weight.T
+        hidden_states = input @ self.weight.T
         if self.bias is None:
-            return ret
-        else:
-            return ret + self.bias
+            return hidden_states
+        return hidden_states+ self.bias
 
 
 # rotary pos emb helpers (torch.jit.script does not seem to support staticmethod...)
