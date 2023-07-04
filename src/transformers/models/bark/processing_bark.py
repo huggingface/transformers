@@ -15,6 +15,7 @@
 """
 Processor class for Bark
 """
+import json
 import os
 from typing import Optional
 
@@ -37,10 +38,10 @@ class BarkProcessor(ProcessorMixin):
     Args:
         tokenizer ([`PreTrainedTokenizer`]):
             An instance of [`PreTrainedTokenizer`].
-        speaker_embeddings (`Dict[np.ndarray]`, *optional*, defaults to `None`):
+        speaker_embeddings (`Dict[Dict[str]]`, *optional*, defaults to `None`):
             Optional nested speaker embeddings dictionary. The first level contains voice preset names (e.g
             `"en_speaker_4"`). The second level contains `"semantic_prompt"`, `"coarse_prompt"` and `"fine_prompt"`
-            embeddings. See
+            embeddings. The values correspond to the path of the corresponding `np.ndarray`. See
             [here](https://suno-ai.notion.site/8b8e8749ed514b0cbf3f699013548683?v=bc67cff786b04b50b3ceb756fd05f68c) for
             a list of `voice_preset_names`.
 
@@ -61,7 +62,7 @@ class BarkProcessor(ProcessorMixin):
 
     @classmethod
     def from_pretrained(
-        cls, pretrained_processor_name_or_path, speaker_embeddings_file_name="speaker_embeddings.npz", **kwargs
+        cls, pretrained_processor_name_or_path, speaker_embeddings_dict_path="speaker_embeddings_path.json", **kwargs
     ):
         r"""
         Instantiate a Bark processor associated with a pretrained model.
@@ -75,18 +76,18 @@ class BarkProcessor(ProcessorMixin):
                   namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
                 - a path to a *directory* containing a processor saved using the [`~BarkProcessor.save_pretrained`]
                   method, e.g., `./my_model_directory/`.
-            speaker_embeddings_file_name (`str`, *optional*, defaults to `"speaker_embeddings.npz"`):
-                The name of the `.npz` file containing the speaker_embeddings (e.g `"speaker_embeddings.npz"`) located
-                in `pretrained_model_name_or_path`. If `None`, no speaker_embeddings is loaded.
+            speaker_embeddings_dict_path (`str`, *optional*, defaults to `"speaker_embeddings_path.json"`):
+                The name of the `.json` file containing the speaker_embeddings dictionnary located in
+                `pretrained_model_name_or_path`. If `None`, no speaker_embeddings is loaded.
             **kwargs
                 Additional keyword arguments passed along to both
                 [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`].
         """
 
-        if speaker_embeddings_file_name is not None:
-            speaker_embeddings = get_file_from_repo(
+        if speaker_embeddings_dict_path is not None:
+            speaker_embeddings_path = get_file_from_repo(
                 pretrained_processor_name_or_path,
-                speaker_embeddings_file_name,
+                speaker_embeddings_dict_path,
                 subfolder=kwargs.pop("subfolder", None),
                 cache_dir=kwargs.pop("cache_dir", None),
                 force_download=kwargs.pop("force_download", False),
@@ -96,27 +97,16 @@ class BarkProcessor(ProcessorMixin):
                 use_auth_token=kwargs.pop("use_auth_token", None),
                 revision=kwargs.pop("revision", None),
             )
-            if speaker_embeddings is None:
+            if speaker_embeddings_path is None:
                 logger.warning(
-                    f"""`{os.path.join(pretrained_processor_name_or_path,speaker_embeddings_file_name)}` does not exists
-                    , no preloaded speaker embeddings will be used - Make sure to provide a correct path if wanted,
-                    otherwise set `speaker_embeddings_file_name=None`."""
+                    f"""`{os.path.join(pretrained_processor_name_or_path,speaker_embeddings_dict_path)}` does not exists
+                    , no preloaded speaker embeddings will be used - Make sure to provide a correct path to the json
+                    dictionnary if wanted, otherwise set `speaker_embeddings_dict_path=None`."""
                 )
+                speaker_embeddings = None
             else:
-                speaker_embeddings = np.load(speaker_embeddings, allow_pickle=True)
-
-                if len(speaker_embeddings.keys()) != 1:
-                    raise ValueError(
-                        """`speaker_embeddings` doesn't follow the required format - ensure that speaker embeddings are
-                        saved in a nested format, where the first level contains voice preset names (e.g
-                        `en_speaker_4`) , and the second level contains `semantic_prompt`, `coarse_prompt` and
-                        `fine_prompt` embeddings, then save the speaker embeddings via
-                        `np.savez('speaker_embeddings.npz', speaker_embeddings)`"""
-                    )
-
-                key_dict = list(speaker_embeddings.keys())[0]
-                speaker_embeddings = speaker_embeddings[key_dict].item()
-
+                with open(speaker_embeddings_path) as speaker_embeddings_json:
+                    speaker_embeddings = json.load(speaker_embeddings_json)
         else:
             speaker_embeddings = None
 
@@ -127,7 +117,8 @@ class BarkProcessor(ProcessorMixin):
     def save_pretrained(
         self,
         save_directory,
-        speaker_embeddings_file_name="speaker_embeddings.npz",
+        speaker_embeddings_dict_path="speaker_embeddings_path.json",
+        speaker_embeddings_directory="speaker_embeddings",
         push_to_hub: bool = False,
         **kwargs,
     ):
@@ -137,11 +128,13 @@ class BarkProcessor(ProcessorMixin):
 
         Args:
             save_directory (`str` or `os.PathLike`):
-                Directory where the tokenizer files will and the speaker embeddings be saved (directory will be created
+                Directory where the tokenizer files and the speaker embeddings will be saved (directory will be created
                 if it does not exist).
-            speaker_embeddings_file_name (`str`, *optional*, defaults to `"speaker_embeddings.npz"`):
-                The name of the `.npz` file that will contains the speaker_embeddings, if it exists, and that will be
-                located in `pretrained_model_name_or_path`.
+            speaker_embeddings_dict_path (`str`, *optional*, defaults to `"speaker_embeddings_path.json"`):
+                The name of the `.json` file that will contains the speaker_embeddings nested path dictionnary, if it
+                exists, and that will be located in `pretrained_model_name_or_path/speaker_embeddings_directory`.
+            speaker_embeddings_directory (`str`, *optional*, defaults to `"speaker_embeddings/"`):
+                The name of the folder in which the speaker_embeddings arrays will be saved.
             push_to_hub (`bool`, *optional*, defaults to `False`):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
@@ -150,10 +143,66 @@ class BarkProcessor(ProcessorMixin):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         if self.speaker_embeddings is not None:
-            os.makedirs(save_directory, exist_ok=True)
-            np.savez(os.path.join(save_directory, speaker_embeddings_file_name), self.speaker_embeddings)
+            os.makedirs(os.path.join(save_directory, speaker_embeddings_directory, "v2"), exist_ok=True)
+
+            embeddings_dict = {}
+
+            embeddings_dict["repo_or_path"] = save_directory
+
+            for prompt_key in self.speaker_embeddings:
+                if prompt_key != "repo_or_path":
+                    voice_preset = self._load_voice_preset(prompt_key)
+
+                    tmp_dict = {}
+                    for key in self.speaker_embeddings[prompt_key]:
+                        np.save(
+                            os.path.join(
+                                embeddings_dict["repo_or_path"], speaker_embeddings_directory, f"{prompt_key}_{key}"
+                            ),
+                            voice_preset[key],
+                            allow_pickle=False,
+                        )
+                        tmp_dict[key] = os.path.join(speaker_embeddings_directory, f"{prompt_key}_{key}.npy")
+
+                    embeddings_dict[prompt_key] = tmp_dict
+
+            with open(os.path.join(save_directory, speaker_embeddings_dict_path), "w") as fp:
+                json.dump(embeddings_dict, fp)
 
         super().save_pretrained(save_directory, push_to_hub, **kwargs)
+
+    def _load_voice_preset(self, voice_preset: str = None, **kwargs):
+        voice_preset_paths = self.speaker_embeddings[voice_preset]
+
+        voice_preset_dict = {}
+        for key in ["semantic_prompt", "coarse_prompt", "fine_prompt"]:
+            if key not in voice_preset_paths:
+                raise ValueError(
+                    f"Voice preset unrecognized, missing {key} as a key in self.speaker_embeddings[{voice_preset}]."
+                )
+
+            path = get_file_from_repo(
+                self.speaker_embeddings.get("repo_or_path", "/"),
+                voice_preset_paths[key],
+                subfolder=kwargs.pop("subfolder", None),
+                cache_dir=kwargs.pop("cache_dir", None),
+                force_download=kwargs.pop("force_download", False),
+                proxies=kwargs.pop("proxies", None),
+                resume_download=kwargs.pop("resume_download", False),
+                local_files_only=kwargs.pop("local_files_only", False),
+                use_auth_token=kwargs.pop("use_auth_token", None),
+                revision=kwargs.pop("revision", None),
+            )
+            if path is None:
+                raise ValueError(
+                    f"""`{os.path.join(self.speaker_embeddings.get("repo_or_path", "/"),voice_preset_paths[key])}` does not exists
+                    , no preloaded voice preset will be used - Make sure to provide correct paths to the {voice_preset}
+                    embeddings."""
+                )
+
+            voice_preset_dict[key] = np.load(path)
+
+        return voice_preset_dict
 
     def _validate_voice_preset_dict(self, voice_preset: Optional[dict] = None):
         for key in ["semantic_prompt", "coarse_prompt", "fine_prompt"]:
@@ -190,8 +239,8 @@ class BarkProcessor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             voice_preset (`str`, `Dict[np.ndarray]`):
                 The voice preset, i.e the speaker embeddings. It can either be a valid voice_preset name, e.g
-                `"en_speaker_1"`, or a directly a dictionnary of embeddings for each submodel of `Bark`. Or it can be a
-                valid file name of a local `.npz` single voice preset.
+                `"en_speaker_1"`, or directly a dictionnary of `np.ndarray` embeddings for each submodel of `Bark`. Or
+                it can be a valid file name of a local `.npz` single voice preset.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
@@ -203,8 +252,12 @@ class BarkProcessor(ProcessorMixin):
             `tokenizer` and a [`BatchFeature`], i.e the voice preset with the right tensors type.
         """
         if voice_preset is not None and not isinstance(voice_preset, dict):
-            if isinstance(voice_preset, str) and voice_preset in self.speaker_embeddings:
-                voice_preset = self.speaker_embeddings[voice_preset]
+            if (
+                isinstance(voice_preset, str)
+                and self.speaker_embeddings is not None
+                and voice_preset in self.speaker_embeddings
+            ):
+                voice_preset = self._load_voice_preset(voice_preset)
 
             else:
                 if isinstance(voice_preset, str) and not voice_preset.endswith(".npz"):
@@ -213,7 +266,7 @@ class BarkProcessor(ProcessorMixin):
                 voice_preset = np.load(voice_preset)
 
         if voice_preset is not None:
-            self._validate_voice_preset_dict(voice_preset)
+            self._validate_voice_preset_dict(voice_preset, **kwargs)
             voice_preset = BatchFeature(data=voice_preset, tensor_type=return_tensors)
 
         encoded_text = self.tokenizer(

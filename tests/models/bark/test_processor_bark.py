@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 
 from transformers import AutoTokenizer, BarkProcessor
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_torch, slow
 
 
 @require_torch
@@ -30,7 +30,8 @@ class BarkProcessorTest(unittest.TestCase):
         self.tmpdirname = tempfile.mkdtemp()
         self.voice_preset = "en_speaker_1"
         self.input_string = "This is a test string"
-        self.speaker_embeddings_file_name = "speaker_embeddings.npz"
+        self.speaker_embeddings_dict_path = "speaker_embeddings_path.json"
+        self.speaker_embeddings_directory = "speaker_embeddings"
 
     def get_tokenizer(self, **kwargs):
         return AutoTokenizer.from_pretrained(self.checkpoint, **kwargs)
@@ -48,18 +49,23 @@ class BarkProcessorTest(unittest.TestCase):
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
 
+    @slow
     def test_save_load_pretrained_additional_features(self):
         processor = BarkProcessor.from_pretrained(
             pretrained_processor_name_or_path=self.checkpoint,
-            speaker_embeddings_file_name=self.speaker_embeddings_file_name,
+            speaker_embeddings_dict_path=self.speaker_embeddings_dict_path,
         )
-        processor.save_pretrained(self.tmpdirname, self.speaker_embeddings_file_name)
+        processor.save_pretrained(
+            self.tmpdirname,
+            speaker_embeddings_dict_path=self.speaker_embeddings_dict_path,
+            speaker_embeddings_directory=self.speaker_embeddings_directory,
+        )
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
 
         processor = BarkProcessor.from_pretrained(
             self.tmpdirname,
-            self.speaker_embeddings_file_name,
+            self.speaker_embeddings_dict_path,
             bos_token="(BOS)",
             eos_token="(EOS)",
         )
@@ -69,7 +75,7 @@ class BarkProcessorTest(unittest.TestCase):
     def test_speaker_embeddings(self):
         processor = BarkProcessor.from_pretrained(
             pretrained_processor_name_or_path=self.checkpoint,
-            speaker_embeddings_file_name=self.speaker_embeddings_file_name,
+            speaker_embeddings_dict_path=self.speaker_embeddings_dict_path,
         )
 
         seq_len = 35
