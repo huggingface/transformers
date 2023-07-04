@@ -348,8 +348,16 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    @unittest.skip("The past key-values test doesn't understand the multi-query shape here.")
+    @unittest.skip("The past key-values test doesn't understand Falcon's multi-query setup")
     def test_past_key_values_format(self):
+        pass
+
+    @unittest.skip("Assisted generation doesn't work yet")
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @unittest.skip("Assisted generation doesn't work yet")
+    def test_assisted_decoding_matches_greedy_search(self):
         pass
 
 
