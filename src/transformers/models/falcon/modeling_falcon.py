@@ -114,19 +114,19 @@ def _make_causal_mask(
     if past_key_values_length > 0:
         mask[:, :past_key_values_length] = False
 
-    expanded_mask = mask[None, None, :, :].expand(batch_size, 1, target_length, target_length + past_key_values_length)
+    expanded_mask = mask[None, None, :, :].expand(batch_size, 1, target_length, target_length)
     return expanded_mask
 
 
-def _expand_mask(mask: torch.Tensor, total_length: int) -> torch.BoolTensor:
+def _expand_mask(mask: torch.Tensor, past_key_values_length: int) -> torch.BoolTensor:
     """
     Expands attention_mask from `[batch_size, seq_length]` to `[batch_size, 1, seq_length, seq_length + past_length]`.
     """
-    batch_size, seq_length = mask.shape
-    tgt_length = total_length if total_length is not None else seq_length
+    batch_size, total_length = mask.shape
+    seq_length = total_length - past_key_values_length if past_key_values_length is not None else total_length
 
     expanded_mask = ~(mask[:, None, None, :].to(torch.bool))
-    return expanded_mask.expand(batch_size, 1, tgt_length, seq_length)
+    return expanded_mask.expand(batch_size, 1, seq_length, total_length)
 
 
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
@@ -313,7 +313,9 @@ class FalconAttention(nn.Module):
                 attention_scores = query_layer_ @ key_layer_.transpose(-1, -2)
                 attention_scores /= math.sqrt(self.head_dim)
 
-                attention_scores = F.softmax(attention_scores + attention_mask_float, dim=-1, dtype=hidden_states.dtype)
+                attention_scores = F.softmax(
+                    attention_scores + attention_mask_float, dim=-1, dtype=hidden_states.dtype
+                )
                 attn_output = attention_scores @ value_layer_
             else:
                 attn_output = F.scaled_dot_product_attention(
@@ -499,7 +501,8 @@ class FalconPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
     @staticmethod
-    def _convert_to_standard_cache(past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]], batch_size: int
+    def _convert_cache_to_standard_format(
+        past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]], batch_size: int
     ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
         """
         Standardizes the format of the cache so as to match most implementations, i.e. to tuple(tuple([batch_size,
@@ -513,8 +516,8 @@ class FalconPreTrainedModel(PreTrainedModel):
         num_heads = batch_size_times_num_heads // batch_size
         return tuple(
             (
-                layer_past[0].view(batch_size, num_heads, head_dim, seq_length),
-                layer_past[1].view(batch_size, num_heads, seq_length, head_dim),
+                layer_past[0].reshape(batch_size, num_heads, seq_length, head_dim),
+                layer_past[1].reshape(batch_size, num_heads, seq_length, head_dim),
             )
             for layer_past in past_key_value
         )
@@ -529,7 +532,7 @@ class FalconPreTrainedModel(PreTrainedModel):
         # value: [batch_size, num_heads, seq_length, head_dim] -> [batch_size * num_heads, seq_length, head_dim]
         return tuple(
             (
-                layer_past[0].view(batch_size_times_num_heads, head_dim, seq_length),
+                layer_past[0].view(batch_size_times_num_heads, seq_length, head_dim),
                 layer_past[1].view(batch_size_times_num_heads, seq_length, head_dim),
             )
             for layer_past in past_key_value
@@ -565,7 +568,7 @@ class FalconModel(FalconPreTrainedModel):
         self, attention_mask: torch.Tensor, input_shape: Tuple[int, int], past_key_values_length: int
     ) -> torch.BoolTensor:
         # create causal mask
-        # [batch_size, seq_length] -> [batch_size, 1, seq_length, seq_length + past_key_values_length]
+        # [batch_size, seq_length] -> [batch_size, 1, seq_length - past_key_values_length, seq_length]
         combined_attention_mask = None
         device = attention_mask.device
         _, seq_length = input_shape
@@ -576,7 +579,7 @@ class FalconModel(FalconPreTrainedModel):
             )
 
         # [batch_size, seq_length + past_key_values_length] -> [batch_size, 1, seq_length, seq_length + past_key_values_length]
-        expanded_attn_mask = _expand_mask(attention_mask, total_length=seq_length + past_key_values_length)
+        expanded_attn_mask = _expand_mask(attention_mask, past_key_values_length=past_key_values_length)
         combined_attention_mask = (
             expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask | combined_attention_mask
         )
@@ -646,13 +649,11 @@ class FalconModel(FalconPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
 
         # Compute alibi tensor: check build_alibi_tensor documentation
-        seq_length_with_past = seq_length
         past_key_values_length = 0
         if past_key_values[0] is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
-            seq_length_with_past = seq_length_with_past + past_key_values_length
+            past_key_values_length = past_key_values[0][0].shape[1]  # 1 because RW-cache, not standard format
         if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_length_with_past), device=hidden_states.device)
+            attention_mask = torch.ones((batch_size, seq_length), device=hidden_states.device)
         else:
             attention_mask = attention_mask.to(hidden_states.device)
 
@@ -717,7 +718,7 @@ class FalconModel(FalconPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if presents is not None:
-            presents = self._convert_to_standard_cache(presents, batch_size)
+            presents = self._convert_cache_to_standard_format(presents, batch_size)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions] if v is not None)
@@ -754,6 +755,8 @@ class FalconForCausalLM(FalconPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> dict:
+        if past_key_values is not None:
+            input_ids = input_ids[:, -1:]
 
         return {
             "input_ids": input_ids,
