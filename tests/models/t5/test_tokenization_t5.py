@@ -19,7 +19,7 @@ import tempfile
 import unittest
 
 from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, T5Tokenizer, T5TokenizerFast
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow, require_seqio
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_seqio, require_tokenizers, slow
 from transformers.utils import cached_property, is_tf_available, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -381,7 +381,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_get_sentinel_tokens(self):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=10)
         sentinel_tokens = tokenizer.get_sentinel_tokens()
-        self.assertEquals(len(sentinel_tokens), 10)
+        self.assertEqual(len(sentinel_tokens), 10)
         self.assertListEqual(sorted(sentinel_tokens), sorted([f"<extra_id_{str(i)}>" for i in range(0, 10)]))
         self.assertTrue([re.search(r"<extra_id_\d+>", token) is not None for token in sentinel_tokens])
 
@@ -392,7 +392,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_get_sentinel_tokens_for_fasttokenizer(self):
         tokenizer = T5TokenizerFast(SAMPLE_VOCAB, extra_ids=10)
         sentinel_tokens = tokenizer.get_sentinel_tokens()
-        self.assertEquals(len(sentinel_tokens), 10)
+        self.assertEqual(len(sentinel_tokens), 10)
         self.assertListEqual(sorted(sentinel_tokens), sorted([f"<extra_id_{str(i)}>" for i in range(0, 10)]))
         self.assertTrue([re.search(r"<extra_id_\d+>", token) is not None for token in sentinel_tokens])
 
@@ -408,43 +408,46 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # So the extra ids are split....
 
         input_ids = tokenizer.encode(". Hello")
-        self.assertEquals(input_ids, [7, 4, 156, 86, 20, 2])
+        self.assertEqual(input_ids, [7, 4, 156, 86, 20, 2])
         tokens = tokenizer.tokenize(". Hello")
-        self.assertEquals(tokens, ["▁", ".", "▁He", "ll", "o"])
+        self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
 
         input_ids = tokenizer.encode(" . Hello")
-        self.assertEquals(input_ids, [7, 7, 4, 156, 86, 20, 2])
+        self.assertEqual(input_ids, [7, 4, 156, 86, 20, 2])
         tokens = tokenizer.tokenize(" . Hello")
-        self.assertEquals(tokens, ["▁", "▁", ".", "▁He", "ll", "o"])
+        self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
 
         input_ids = tokenizer.encode("Hello, <extra_id_0>I")
-        self.assertEquals(input_ids, [156, 86, 20, 3, 999, 100, 2])
+        self.assertEqual(input_ids, [156, 86, 20, 3, 999, 100, 2])
         tokens = tokenizer.tokenize("Hello, <extra_id_0>I")
-        self.assertEquals(tokens, ["▁He", "ll", "o", ",", "<extra_id_0>", "I"])
+        self.assertEqual(tokens, ["▁He", "ll", "o", ",", "<extra_id_0>", "I"])
 
         input_ids = tokenizer.encode("Hello, <extra_id_0>,")
-        self.assertEquals(input_ids, [156, 86, 20, 3, 999, 3, 2])
+        self.assertEqual(input_ids, [156, 86, 20, 3, 999, 3, 2])
         tokens = tokenizer.tokenize("Hello, <extra_id_0>,")
-        self.assertEquals(tokens, ["▁He", "ll", "o", ",", "<extra_id_0>", ","])
+        self.assertEqual(tokens, ["▁He", "ll", "o", ",", "<extra_id_0>", ","])
 
         input_ids = tokenizer.encode(" <extra_id_0> ,")
-        self.assertEquals(input_ids, [7,999, 3, 2])
+        self.assertEqual(input_ids, [999, 3, 2])
         tokens = tokenizer.tokenize(" <extra_id_0> ,")
-        self.assertEquals(tokens, ["▁","<extra_id_0>", ","])  # spaces are eaten by rstrip / lstrip
+        self.assertEqual(
+            tokens, ["<extra_id_0>", ","]
+        )  # spaces are eaten by rstrip / lstrip + spm sp_model.encode("  ") = []
 
         input_ids = tokenizer.encode("Hello")
-        self.assertEquals(input_ids, [156, 86, 20, 2])
+        self.assertEqual(input_ids, [156, 86, 20, 2])
         tokens = tokenizer.tokenize("Hello")
-        self.assertEquals(tokens, ["▁He", "ll", "o"])
+        self.assertEqual(tokens, ["▁He", "ll", "o"])
 
         input_ids = tokenizer.encode("     Hello")
-        self.assertEquals(input_ids, [7,7,7,7,7, 156, 86, 20, 2])
+        self.assertEqual(input_ids, [156, 86, 20, 2])
         tokens = tokenizer.tokenize("     Hello")
-        self.assertEquals(tokens, ['▁', '▁', '▁', '▁', '▁', '▁He', 'll', 'o'])  # spaces are eaten by rstrip / lstrip
+        self.assertEqual(tokens, ["▁He", "ll", "o"])  # spaces are eaten by rstrip / lstrip
 
     @require_seqio
     def test_integration_seqio(self):
         from seqio import SentencePieceVocabulary
+
         vocab_path = "gs://t5-data/vocabs/umt5.256000/sentencepiece.model"
-        t5x_tokenizer = SentencePieceVocabulary(vocab_path, extra_ids = 300)
+        SentencePieceVocabulary(vocab_path, extra_ids=300)
         # TODO add more tests
