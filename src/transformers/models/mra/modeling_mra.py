@@ -477,21 +477,21 @@ def mra2_attention(
         high_resolution_attn_out = high_resolution_attn_out * high_resolution_corr[:, :, None]
         high_resolution_normalizer = high_resolution_normalizer * high_resolution_corr
 
-        attn = (high_resolution_attn_out + low_resolution_attn_out) / (
+        context_layer = (high_resolution_attn_out + low_resolution_attn_out) / (
             high_resolution_normalizer[:, :, None] + low_resolution_normalizer[:, :, None] + 1e-6
         )
 
     elif approx_mode == "sparse":
-        attn = high_resolution_attn_out / (high_resolution_normalizer[:, :, None] + 1e-6)
+        context_layer = high_resolution_attn_out / (high_resolution_normalizer[:, :, None] + 1e-6)
     else:
         raise Exception('config.approx_mode must be "full" or "sparse"')
 
     if mask is not None:
-        attn = attn * mask[:, :, None]
+        context_layer = context_layer * mask[:, :, None]
 
-    attn = attn.reshape(batch_size, num_head, seq_len, head_dim)
+    context_layer = context_layer.reshape(batch_size, num_head, seq_len, head_dim)
 
-    return attn
+    return context_layer
 
 
 class MraEmbeddings(nn.Module):
@@ -586,7 +586,7 @@ class MraSelfAttention(nn.Module):
         layer = layer.view(*new_layer_shape)
         return layer.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+    def forward(self, hidden_states, attention_mask=None):
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -632,7 +632,7 @@ class MraSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, context_layer) if output_attentions else (context_layer,)
+        outputs = (context_layer,)
 
         return outputs
 
@@ -678,8 +678,8 @@ class MraAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
-        self_outputs = self.self(hidden_states, attention_mask, output_attentions)
+    def forward(self, hidden_states, attention_mask=None):
+        self_outputs = self.self(hidden_states, attention_mask)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -727,8 +727,8 @@ class MraLayer(nn.Module):
         self.intermediate = MraIntermediate(config)
         self.output = MraOutput(config)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
-        self_attention_outputs = self.attention(hidden_states, attention_mask, output_attentions=output_attentions)
+    def forward(self, hidden_states, attention_mask=None):
+        self_attention_outputs = self.attention(hidden_states, attention_mask)
         attention_output = self_attention_outputs[0]
 
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -759,12 +759,10 @@ class MraEncoder(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
     ):
         all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -774,7 +772,7 @@ class MraEncoder(nn.Module):
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
+                        return module(*inputs)
 
                     return custom_forward
 
@@ -784,21 +782,18 @@ class MraEncoder(nn.Module):
                     attention_mask,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
+                layer_outputs = layer_module(hidden_states, attention_mask)
 
             hidden_states = layer_outputs[0]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
         return BaseModelOutputWithCrossAttentions(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
         )
 
 
@@ -934,9 +929,6 @@ MRA_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -989,11 +981,9 @@ class MraModel(MraPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithCrossAttentions]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1043,7 +1033,6 @@ class MraModel(MraPreTrainedModel):
             embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1095,7 +1084,6 @@ class MraForMaskedLM(MraPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MaskedLMOutput]:
@@ -1114,7 +1102,6 @@ class MraForMaskedLM(MraPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1192,7 +1179,6 @@ class MraForSequenceClassification(MraPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SequenceClassifierOutput]:
@@ -1211,7 +1197,6 @@ class MraForSequenceClassification(MraPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1285,7 +1270,6 @@ class MraForMultipleChoice(MraPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MultipleChoiceModelOutput]:
@@ -1315,7 +1299,6 @@ class MraForMultipleChoice(MraPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1378,7 +1361,6 @@ class MraForTokenClassification(MraPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, TokenClassifierOutput]:
@@ -1395,7 +1377,6 @@ class MraForTokenClassification(MraPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1466,7 +1447,6 @@ class MraForQuestionAnswering(MraPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
@@ -1489,7 +1469,6 @@ class MraForQuestionAnswering(MraPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )

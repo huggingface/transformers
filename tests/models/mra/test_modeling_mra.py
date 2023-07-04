@@ -296,6 +296,7 @@ class MraModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
+    has_attentions = False
 
     all_generative_model_classes = ()
 
@@ -342,6 +343,7 @@ class MraModelTest(ModelTesterMixin, unittest.TestCase):
             model = MraModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skip(reason="MRA does not output attentions")
     def test_attention_outputs(self):
         return
 
