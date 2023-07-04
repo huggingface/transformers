@@ -201,17 +201,12 @@ class FalconAttention(nn.Module):
         self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
         self.beta = self.inv_norm_factor
         if config.new_decoder_architecture:
-            self.query_key_value = FalconLinear(
-                self.hidden_size,
-                (config.n_head_kv * 2 + config.num_attention_heads) * self.head_dim,
-                bias=config.bias,
-            )
+            qkv_out_dim = config.n_head_kv * 2 + config.num_attention_heads * self.head_dim
+        elif config.multi_query:
+            qkv_out_dim = self.hidden_size + 2 * self.head_dim
         else:
-            self.query_key_value = FalconLinear(
-                self.hidden_size,
-                3 * self.hidden_size if not config.multi_query else (self.hidden_size + 2 * self.head_dim),
-                bias=config.bias,
-            )
+            qkv_out_dim = 3 * self.hidden_size
+        self.query_key_value = FalconLinear(self.hidden_size, qkv_out_dim, bias=config.bias)
         self.new_decoder_architecture = config.new_decoder_architecture
         self.multi_query = config.multi_query
         self.dense = FalconLinear(self.hidden_size, self.hidden_size, bias=config.bias)
