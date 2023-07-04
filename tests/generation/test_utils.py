@@ -1483,7 +1483,7 @@ class GenerationTesterMixin:
                 penalty_alpha=0.6, 
                 low_memory=True, 
                 max_length=max_length,
-                attention_maks=attention_mask
+                attention_mask=attention_mask
             )
 
             high_output = model.generate(input_ids, 
@@ -1493,7 +1493,7 @@ class GenerationTesterMixin:
                 max_length=max_length,
                 attention_mask=attention_mask
             )
-            # self.assertListEqual(low_output.tolist(), high_output.tolist())
+            self.assertListEqual(low_output.tolist(), high_output.tolist())
 
         return
 
