@@ -334,9 +334,9 @@ class FalconAttention(nn.Module):
                 )
                 attention_scores = None
 
-            x = attn_output.view(batch_size, self.num_heads, query_length, self.head_dim)
-            x = x.permute(0, 2, 1, 3)
-            attn_output = x.reshape(batch_size, query_length, self.num_heads * self.head_dim)
+            attn_output = attn_output.view(batch_size, self.num_heads, query_length, self.head_dim)
+            attn_output = attn_output.permute(0, 2, 1, 3)
+            attn_output = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
 
             output_tensor = self.dense(attn_output)
 
