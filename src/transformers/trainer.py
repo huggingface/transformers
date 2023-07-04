@@ -2741,11 +2741,6 @@ class Trainer:
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
             if self.is_fsdp_enabled:
-                if self.args.should_save:
-                    for filename in [WEIGHTS_NAME, SAFE_WEIGHTS_NAME]:
-                        file = os.path.join(output_dir, filename)
-                        if os.path.isfile(file):
-                            os.remove(file)
                 save_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir)
 
         elif self.is_deepspeed_enabled:
