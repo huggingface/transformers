@@ -47,7 +47,7 @@ class FalconLinear(nn.Linear):
         hidden_states = input @ self.weight.T
         if self.bias is None:
             return hidden_states
-        return hidden_states+ self.bias
+        return hidden_states + self.bias
 
 
 # rotary pos emb helpers (torch.jit.script does not seem to support staticmethod...)
@@ -96,7 +96,7 @@ class FalconRotaryEmbedding(torch.nn.Module):
 
     def forward(self, query, key):
         batch, seq_len, head_dim = query.shape
-        cos, sin = self.cos_sin(seq_len, query.device, q.uerydtype)
+        cos, sin = self.cos_sin(seq_len, query.device, query.dtype)
         return (query * cos) + (rotate_half(query) * sin), (key * cos) + (rotate_half(key) * sin)
 
 
@@ -275,11 +275,15 @@ class FalconAttention(nn.Module):
         # 3 x [batch_size, seq_length, num_heads, head_dim]
         (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
 
-        batch_size, q_length, _, _ = query_layer.shape
+        batch_size, query_length, _, _ = query_layer.shape
 
-        query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
-        key_layer = key_layer.transpose(1, 2).reshape(batch_size * n_head_kv,q_length,self.head_dim,)
-        value_layer = value_layer.transpose(1, 2).reshape(batch_size * n_head_kv, q_length, self.head_dim)
+        query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, query_length, self.head_dim)
+        key_layer = key_layer.transpose(1, 2).reshape(
+            batch_size * n_head_kv,
+            query_length,
+            self.head_dim,
+        )
+        value_layer = value_layer.transpose(1, 2).reshape(batch_size * n_head_kv, query_length, self.head_dim)
 
         query_layer, key_layer = self.maybe_rotary(query_layer, key_layer)
 
@@ -320,9 +324,9 @@ class FalconAttention(nn.Module):
                 )
                 attention_scores = None
 
-            x = attn_output.view(batch_size, self.num_heads, q_length, self.head_dim)
+            x = attn_output.view(batch_size, self.num_heads, query_length, self.head_dim)
             x = x.permute(0, 2, 1, 3)
-            attn_output = x.reshape(batch_size, q_length, self.num_heads * self.head_dim)
+            attn_output = x.reshape(batch_size, query_length, self.num_heads * self.head_dim)
 
             output_tensor = self.dense(attn_output)
 
@@ -335,7 +339,7 @@ class FalconAttention(nn.Module):
             matmul_result = query_layer @ key_layer.transpose(-1, -2)
 
             # change view to [batch_size, num_heads, q_length, kv_length]
-            attention_scores = matmul_result.view(batch_size, self.num_heads, q_length, kv_length)
+            attention_scores = matmul_result.view(batch_size, self.num_heads, query_length, kv_length)
 
             # cast attention scores to fp32, compute scaled softmax and cast back to initial dtype - [batch_size, num_heads, q_length, kv_length]
             input_dtype = attention_scores.dtype
@@ -354,7 +358,7 @@ class FalconAttention(nn.Module):
                 attention_probs = attention_probs * head_mask
 
             # change view [batch_size x num_heads, q_length, kv_length]
-            attention_probs_reshaped = attention_probs.view(batch_size * self.num_heads, q_length, kv_length)
+            attention_probs_reshaped = attention_probs.view(batch_size * self.num_heads, query_length, kv_length)
 
             # matmul: [batch_size * num_heads, q_length, head_dim]
             context_layer = attention_probs_reshaped @ value_layer

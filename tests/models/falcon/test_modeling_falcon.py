@@ -378,7 +378,7 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=19)
         output_str = tokenizer.batch_decode(output_ids)[0]
 
-        self.assertEqual(output_str, expected_output)
+        self.assertEqual(output_str, EXPECTED_OUTPUT)
 
     @slow
     def test_lm_generation_big_models(self):
