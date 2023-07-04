@@ -464,24 +464,24 @@ class LlamaIntegrationTest(unittest.TestCase):
         input_ids = tokenizer.encode(" . Hello")
         self.assertEqual(input_ids, [1, 29871, 869, 15043])
         tokens = tokenizer.tokenize(" . Hello")
-        self.assertEqual(tokens, ['▁', '▁.', '▁Hello'])
+        self.assertEqual(tokens, ["▁", "▁.", "▁Hello"])
 
         input_ids = tokenizer.encode("Hello, <s>I")
         self.assertEqual(input_ids, [1, 15043, 29892, 29871, 1, 29902])
         tokens = tokenizer.tokenize("Hello, <s>I")
         # make sure no extra `▁` is added to the I.
-        self.assertEqual(tokens,['▁Hello', ',', '▁', '<s>', 'I'])
+        self.assertEqual(tokens, ["▁Hello", ",", "▁", "<s>", "I"])
 
         input_ids = tokenizer.encode("Hello, <s>,")
         self.assertEqual(input_ids, [1, 15043, 29892, 29871, 1, 29892])
         tokens = tokenizer.tokenize("Hello, <s>,")
-        self.assertEqual(tokens, ['▁Hello', ',', '▁', '<s>', ','])
+        self.assertEqual(tokens, ["▁Hello", ",", "▁", "<s>", ","])
 
         input_ids = tokenizer.encode(" <s> ,")
         self.assertEqual(input_ids, [1, 259, 1, 29871, 1919])
         tokens = tokenizer.tokenize(" <s> ,")
         # spaces are only eatin by rstrip / lstrip + spm sp_model.encode("  ") != []
-        self.assertEqual(tokens, ['▁▁', '<s>', '▁', '▁,'])  
+        self.assertEqual(tokens, ["▁▁", "<s>", "▁", "▁,"])
 
         input_ids = tokenizer.encode("Hello")
         self.assertEqual(input_ids, [1, 15043])
@@ -491,34 +491,37 @@ class LlamaIntegrationTest(unittest.TestCase):
         input_ids = tokenizer.encode("     Hello")
         self.assertEqual(input_ids, [1, 418, 15043])
         tokens = tokenizer.tokenize("     Hello")
-        self.assertEqual(tokens, ['▁▁▁▁▁', '▁Hello'])  # spaces are eaten by rstrip / lstrip
+        self.assertEqual(tokens, ["▁▁▁▁▁", "▁Hello"])  # spaces are eaten by rstrip / lstrip
 
         input_ids = tokenizer.encode("▁He is not<s>He")
         self.assertEqual(input_ids, [1, 29871, 940, 338, 451, 1, 29950, 29872])
         tokens = tokenizer.tokenize("▁He is not<s>He")
-        self.assertEqual(tokens, ['▁', '▁He', '▁is', '▁not', '<s>', 'H', 'e'])  # no extra space added
-        
+        self.assertEqual(tokens, ["▁", "▁He", "▁is", "▁not", "<s>", "H", "e"])  # no extra space added
+
         input_ids = tokenizer.encode("▁He is not<s>▁He")
         self.assertEqual(input_ids, [156, 46, 44, 999, 262, 15, 2])
         tokens = tokenizer.tokenize("▁He is not<s>▁He")
-        self.assertEqual(tokens, ['▁He', '▁is', '▁not', '<s>', 'H', 'e'])  # eat space since lstrip
+        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<s>", "H", "e"])  # eat space since lstrip
 
         input_ids = tokenizer.encode("▁He is not<s> ▁He")
-        self.assertEqual(input_ids,[1, 29871, 940, 338, 451, 1, 29871, 940])
+        self.assertEqual(input_ids, [1, 29871, 940, 338, 451, 1, 29871, 940])
         tokens = tokenizer.tokenize("▁He is not<s> He")
-        self.assertEqual(tokens, ['▁', '▁He', '▁is', '▁not', '<s>', '▁', '▁He'])  # spaces arenot eaten
+        self.assertEqual(tokens, ["▁", "▁He", "▁is", "▁not", "<s>", "▁", "▁He"])  # spaces arenot eaten
 
-        input_ids = tokenizer.encode("▁He is not<s>             ▁He") 
+        input_ids = tokenizer.encode("▁He is not<s>             ▁He")
         self.assertEqual(input_ids, [1, 29871, 940, 338, 451, 1, 1669, 940])
         tokens = tokenizer.tokenize("▁He is not<s>              ▁He")
-        self.assertEqual(tokens, ['▁', '▁He', '▁is', '▁not', '<s>', '▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁', '▁He'])  # spaces are eaten by spm + our strip
-        
+        self.assertEqual(
+            tokens, ["▁", "▁He", "▁is", "▁not", "<s>", "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁", "▁He"]
+        )  # spaces are eaten by spm + our strip
+
         input_ids = tokenizer.encode("▁He is not             ▁He")
         self.assertEqual(input_ids, [1, 29871, 940, 338, 451, 795, 940])
         tokens = tokenizer.tokenize("▁He is not              ▁He")
-        self.assertEqual(tokens, ['▁', '▁He', '▁is', '▁not', '▁▁▁▁▁▁▁▁▁▁▁▁▁▁', '▁He'])  # spaces are eaten by spm even if not start
-        
-    
+        self.assertEqual(
+            tokens, ["▁", "▁He", "▁is", "▁not", "▁▁▁▁▁▁▁▁▁▁▁▁▁▁", "▁He"]
+        )  # spaces are eaten by spm even if not start
+
     @unittest.skipIf(
         os.getenv("RUN_TOKENIZER_INTEGRATION", "0") == "0",
         "RUN_TOKENIZER_INTEGRATION=1 to run tokenizer integration tests",
