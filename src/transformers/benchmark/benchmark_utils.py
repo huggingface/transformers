@@ -33,7 +33,13 @@ from typing import Callable, Iterable, List, NamedTuple, Optional, Union
 
 from .. import AutoConfig, PretrainedConfig
 from .. import __version__ as version
-from ..utils import is_psutil_available, is_py3nvml_available, is_tf_available, is_torch_available, logging
+from ..utils import (
+    is_psutil_available,
+    is_py3nvml_available,
+    is_tf_available,
+    is_torch_available,
+    logging,
+)
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -890,7 +896,8 @@ class Benchmark(ABC):
             return
         self.print_fn("Saving results to csv.")
         with open(filename, mode="w") as csv_file:
-            assert len(self.args.model_names) > 0, f"At least 1 model should be defined, but got {self.model_names}"
+            if len(self.args.modle_names) <= 0:
+                raise ValueError(f"At least 1 model should be defined, but got {self.model_names}")
 
             fieldnames = ["model", "batch_size", "sequence_length"]
             writer = csv.DictWriter(csv_file, fieldnames=fieldnames + ["result"])
