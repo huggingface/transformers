@@ -95,9 +95,7 @@ class Blip2VisionEmbeddings(nn.Module):
         self.image_size = config.image_size
         self.patch_size = config.patch_size
 
-        self.class_embedding = nn.Parameter(
-            torch.randn(1, 1, self.embed_dim),
-        )
+        self.class_embedding = nn.Parameter(torch.randn(1, 1, self.embed_dim))
 
         self.patch_embedding = nn.Conv2d(
             in_channels=3, out_channels=self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size
@@ -171,11 +169,7 @@ class Blip2Attention(nn.Module):
         mixed_qkv = mixed_qkv.reshape(bsz, tgt_len, 3, self.num_heads, embed_dim // self.num_heads).permute(
             2, 0, 3, 1, 4
         )
-        query_states, key_states, value_states = (
-            mixed_qkv[0],
-            mixed_qkv[1],
-            mixed_qkv[2],
-        )
+        query_states, key_states, value_states = mixed_qkv[0], mixed_qkv[1], mixed_qkv[2]
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
@@ -279,12 +273,6 @@ class Blip2PreTrainedModel(PreTrainedModel):
     config_class = Blip2Config
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [
-        r"position_ids",
-        r"language_model.encoder.embed_tokens.weight",
-        r"language_model.decoder.embed_tokens.weight",
-        r"language_model.lm_head.weight",
-    ]
     _no_split_modules = ["Blip2Attention", "T5Block", "OPTDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _keep_in_fp32_modules = ["wo"]
@@ -1155,11 +1143,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
             if type(encoder_hidden_states) == list:
                 encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states[0].size()
             else:
-                (
-                    encoder_batch_size,
-                    encoder_sequence_length,
-                    _,
-                ) = encoder_hidden_states.size()
+                encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
 
             if type(encoder_attention_mask) == list:

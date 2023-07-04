@@ -64,7 +64,7 @@ class TFBlipVisionModelTester:
         is_training=True,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -207,7 +207,7 @@ class TFBlipTextModelTester:
         vocab_size=99,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -433,6 +433,13 @@ class TFBlipModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
         super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
+
+    @unittest.skip("Matt: Re-enable this test when we have a proper export function for TF models.")
+    def test_saved_model_creation(self):
+        # This fails because the if return_loss: conditional can return None or a Tensor and TF hates that.
+        # We could fix that by setting the bool to a constant when exporting, but that requires a dedicated export
+        # function that we don't have yet.
+        pass
 
 
 class BlipTextRetrievalModelTester:

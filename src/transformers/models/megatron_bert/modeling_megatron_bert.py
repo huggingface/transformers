@@ -149,7 +149,9 @@ class MegatronBertEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
     def forward(
@@ -713,7 +715,6 @@ class MegatronBertPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_megatron_bert
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1014,7 +1015,6 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
     MEGATRON_BERT_START_DOCSTRING,
 )
 class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder"]
     _tied_weights_keys = ["cls.predictions.decoder"]
 
     def __init__(self, config, add_binary_head=True):
@@ -1121,8 +1121,6 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
     MEGATRON_BERT_START_DOCSTRING,
 )
 class MegatronBertForCausalLM(MegatronBertPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"cls.predictions.decoder"]
     _tied_weights_keys = ["cls.predictions.decoder"]
 
     def __init__(self, config):
@@ -1267,8 +1265,6 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel):
 
 @add_start_docstrings("""MegatronBert Model with a `language modeling` head on top.""", MEGATRON_BERT_START_DOCSTRING)
 class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler", r"seq_relationship"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder"]
     _tied_weights_keys = ["cls.predictions.decoder"]
 
     def __init__(self, config):
@@ -1376,8 +1372,6 @@ class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
     MEGATRON_BERT_START_DOCSTRING,
 )
 class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"predictions"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1672,8 +1666,6 @@ class MegatronBertForMultipleChoice(MegatronBertPreTrainedModel):
     MEGATRON_BERT_START_DOCSTRING,
 )
 class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1752,8 +1744,6 @@ class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
     MEGATRON_BERT_START_DOCSTRING,
 )
 class MegatronBertForQuestionAnswering(MegatronBertPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

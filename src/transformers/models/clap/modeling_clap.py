@@ -1166,7 +1166,9 @@ class ClapTextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=True
+        )
         self.register_buffer(
             "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=True
         )
@@ -1677,7 +1679,6 @@ class ClapPreTrainedModel(PreTrainedModel):
     config_class = ClapConfig
     base_model_prefix = "clap"
     supports_gradient_checkpointing = False
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"logit_scale_a", r"logit_scale_t"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1781,7 +1782,6 @@ class ClapTextModel(ClapPreTrainedModel):
     """
 
     config_class = ClapTextConfig
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->ClapText
     def __init__(self, config, add_pooling_layer=True):
@@ -1854,6 +1854,7 @@ class ClapTextModel(ClapPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
@@ -1936,7 +1937,6 @@ class ClapTextModel(ClapPreTrainedModel):
 @add_start_docstrings(CLAP_START_DOCSTRING)
 class ClapModel(ClapPreTrainedModel):
     config_class = ClapConfig
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config: ClapConfig):
         super().__init__(config)
@@ -1956,8 +1956,8 @@ class ClapModel(ClapPreTrainedModel):
         text_config = config.text_config
         audio_config = config.audio_config
 
-        self.logit_scale_a = nn.Parameter(torch.ones([]) * np.log(config.logit_scale_init_value))
-        self.logit_scale_t = nn.Parameter(torch.ones([]) * np.log(config.logit_scale_init_value))
+        self.logit_scale_a = nn.Parameter(torch.tensor(np.log(config.logit_scale_init_value)))
+        self.logit_scale_t = nn.Parameter(torch.tensor(np.log(config.logit_scale_init_value)))
 
         self.projection_dim = config.projection_dim
 

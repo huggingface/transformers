@@ -277,7 +277,8 @@ def infer_framework_load_model(
         if isinstance(model, str):
             raise ValueError(f"Could not load model {model} with any of the following classes: {class_tuple}.")
 
-    framework = infer_framework(model.__class__)
+    if framework is None:
+        framework = infer_framework(model.__class__)
     return framework, model
 
 
@@ -902,9 +903,10 @@ class Pipeline(_ScikitCompat):
                 yield
         else:
             if self.device.type == "cuda":
-                torch.cuda.set_device(self.device)
-
-            yield
+                with torch.cuda.device(self.device):
+                    yield
+            else:
+                yield
 
     def ensure_tensor_on_device(self, **inputs):
         """

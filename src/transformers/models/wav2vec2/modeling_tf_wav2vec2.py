@@ -451,8 +451,10 @@ class TFWav2Vec2WeightNormConv1D(tf.keras.layers.Conv1D):
     def build(self, input_shape):
         if not self.built:
             input_shape = input_shape.as_list()
-            # Conv1D output shapes are checked at build time since TF 2.7, so we need to account for padding
-            input_shape[-2] += self.explicit_padding * 2
+            # If a specific input shape is passed in, we need to modify it to account for padding
+            # Not necessary if those portions of the shape are None
+            if input_shape[-2] is not None:
+                input_shape[-2] += self.explicit_padding * 2
             super().build(input_shape)
 
             self.kernel = tf.Variable(tf.transpose(self.kernel), name="weight_v", trainable=True)
@@ -1646,7 +1648,7 @@ class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
         if attention_mask is None:
             pooled_output = tf.reduce_mean(hidden_states, axis=1)
         else:
-            padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
+            padding_mask = self._get_feature_vector_attention_mask(shape_list(hidden_states)[1], attention_mask)
             padding_mask_float = tf.cast(padding_mask, hidden_states.dtype)
             hidden_states = tf.multiply(hidden_states, tf.expand_dims(padding_mask_float, axis=-1))
             pooled_output = tf.divide(

@@ -191,7 +191,9 @@ class ConvBertEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
         self.register_buffer(
             "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
         )
@@ -245,8 +247,6 @@ class ConvBertPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_convbert
     base_model_prefix = "convbert"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-    _keys_to_ignore_on_load_unexpected = [r"convbert.embeddings_project.weight", r"convbert.embeddings_project.bias"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -765,8 +765,6 @@ CONVBERT_INPUTS_DOCSTRING = r"""
     CONVBERT_START_DOCSTRING,
 )
 class ConvBertModel(ConvBertPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["embeddings.position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
         self.embeddings = ConvBertEmbeddings(config)
@@ -880,7 +878,6 @@ class ConvBertGeneratorPredictions(nn.Module):
 
 @add_start_docstrings("""ConvBERT Model with a `language modeling` head on top.""", CONVBERT_START_DOCSTRING)
 class ConvBertForMaskedLM(ConvBertPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["embeddings.position_ids", "generator.lm_head.weight"]
     _tied_weights_keys = ["generator.lm_head.weight"]
 
     def __init__(self, config):
@@ -992,8 +989,6 @@ class ConvBertClassificationHead(nn.Module):
     CONVBERT_START_DOCSTRING,
 )
 class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["embeddings.position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1089,8 +1084,6 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
     CONVBERT_START_DOCSTRING,
 )
 class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["embeddings.position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1184,8 +1177,6 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
     CONVBERT_START_DOCSTRING,
 )
 class ConvBertForTokenClassification(ConvBertPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["embeddings.position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1267,8 +1258,6 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
     CONVBERT_START_DOCSTRING,
 )
 class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["embeddings.position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
 

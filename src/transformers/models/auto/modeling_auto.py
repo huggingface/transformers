@@ -184,6 +184,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("trajectory_transformer", "TrajectoryTransformerModel"),
         ("transfo-xl", "TransfoXLModel"),
         ("tvlt", "TvltModel"),
+        ("umt5", "UMT5Model"),
         ("unispeech", "UniSpeechModel"),
         ("unispeech-sat", "UniSpeechSatModel"),
         ("van", "VanModel"),
@@ -389,6 +390,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mbart", "MBartForCausalLM"),
         ("mega", "MegaForCausalLM"),
         ("megatron-bert", "MegatronBertForCausalLM"),
+        ("musicgen", "MusicgenForCausalLM"),
         ("mvp", "MvpForCausalLM"),
         ("open-llama", "OpenLlamaForCausalLM"),
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
@@ -536,6 +538,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("blip", "BlipForConditionalGeneration"),
         ("blip-2", "Blip2ForConditionalGeneration"),
         ("git", "GitForCausalLM"),
+        ("instructblip", "InstructBlipForConditionalGeneration"),
         ("pix2struct", "Pix2StructForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
     ]
@@ -641,6 +644,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("prophetnet", "ProphetNetForConditionalGeneration"),
         ("switch_transformers", "SwitchTransformersForConditionalGeneration"),
         ("t5", "T5ForConditionalGeneration"),
+        ("umt5", "UMT5ForConditionalGeneration"),
         ("xlm-prophetnet", "XLMProphetNetForConditionalGeneration"),
     ]
 )
@@ -767,6 +771,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertForQuestionAnswering"),
         ("mobilebert", "MobileBertForQuestionAnswering"),
         ("mpnet", "MPNetForQuestionAnswering"),
+        ("mt5", "MT5ForQuestionAnswering"),
         ("mvp", "MvpForQuestionAnswering"),
         ("nezha", "NezhaForQuestionAnswering"),
         ("nystromformer", "NystromformerForQuestionAnswering"),
@@ -780,6 +785,8 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("roformer", "RoFormerForQuestionAnswering"),
         ("splinter", "SplinterForQuestionAnswering"),
         ("squeezebert", "SqueezeBertForQuestionAnswering"),
+        ("t5", "T5ForQuestionAnswering"),
+        ("umt5", "UMT5ForQuestionAnswering"),
         ("xlm", "XLMForQuestionAnsweringSimple"),
         ("xlm-roberta", "XLMRobertaForQuestionAnswering"),
         ("xlm-roberta-xl", "XLMRobertaXLForQuestionAnswering"),
@@ -1011,6 +1018,37 @@ MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
+    [
+        ("albert", "AlbertModel"),
+        ("bert", "BertModel"),
+        ("big_bird", "BigBirdModel"),
+        ("data2vec-text", "Data2VecTextModel"),
+        ("deberta", "DebertaModel"),
+        ("deberta-v2", "DebertaV2Model"),
+        ("distilbert", "DistilBertModel"),
+        ("electra", "ElectraModel"),
+        ("flaubert", "FlaubertModel"),
+        ("ibert", "IBertModel"),
+        ("longformer", "LongformerModel"),
+        ("mobilebert", "MobileBertModel"),
+        ("mt5", "MT5EncoderModel"),
+        ("nystromformer", "NystromformerModel"),
+        ("reformer", "ReformerModel"),
+        ("rembert", "RemBertModel"),
+        ("roberta", "RobertaModel"),
+        ("roberta-prelayernorm", "RobertaPreLayerNormModel"),
+        ("roc_bert", "RoCBertModel"),
+        ("roformer", "RoFormerModel"),
+        ("squeezebert", "SqueezeBertModel"),
+        ("t5", "T5EncoderModel"),
+        ("umt5", "UMT5EncoderModel"),
+        ("xlm", "XLMModel"),
+        ("xlm-roberta", "XLMRobertaModel"),
+        ("xlm-roberta-xl", "XLMRobertaXLModel"),
+    ]
+)
+
 MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_MAPPING_NAMES)
 MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_PRETRAINING_MAPPING_NAMES)
 MODEL_WITH_LM_HEAD_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_WITH_LM_HEAD_MAPPING_NAMES)
@@ -1088,9 +1126,15 @@ MODEL_FOR_BACKBONE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_BA
 
 MODEL_FOR_MASK_GENERATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_MASK_GENERATION_MAPPING_NAMES)
 
+MODEL_FOR_TEXT_ENCODING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES)
+
 
 class AutoModelForMaskGeneration(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_MASK_GENERATION_MAPPING
+
+
+class AutoModelForTextEncoding(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TEXT_ENCODING_MAPPING
 
 
 class AutoModel(_BaseAutoModelClass):

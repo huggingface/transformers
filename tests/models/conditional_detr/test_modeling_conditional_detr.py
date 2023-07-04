@@ -43,7 +43,7 @@ if is_timm_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ConditionalDetrFeatureExtractor
+    from transformers import ConditionalDetrImageProcessor
 
 
 class ConditionalDetrModelTester:
@@ -493,9 +493,9 @@ def prepare_img():
 @slow
 class ConditionalDetrModelIntegrationTests(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
-            ConditionalDetrFeatureExtractor.from_pretrained("microsoft/conditional-detr-resnet-50")
+            ConditionalDetrImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
             if is_vision_available()
             else None
         )
@@ -503,9 +503,9 @@ class ConditionalDetrModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
         model = ConditionalDetrModel.from_pretrained("microsoft/conditional-detr-resnet-50").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model(**encoding)
@@ -522,9 +522,9 @@ class ConditionalDetrModelIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
         pixel_values = encoding["pixel_values"].to(torch_device)
         pixel_mask = encoding["pixel_mask"].to(torch_device)
 
@@ -547,7 +547,7 @@ class ConditionalDetrModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
         # verify postprocessing
-        results = feature_extractor.post_process_object_detection(
+        results = image_processor.post_process_object_detection(
             outputs, threshold=0.3, target_sizes=[image.size[::-1]]
         )[0]
         expected_scores = torch.tensor([0.8330, 0.8313, 0.8039, 0.6829, 0.5355]).to(torch_device)

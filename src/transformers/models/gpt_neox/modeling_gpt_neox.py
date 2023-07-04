@@ -88,6 +88,10 @@ class GPTNeoXAttention(nn.Module):
         super().__init__()
         self.num_attention_heads = config.num_attention_heads
         self.hidden_size = config.hidden_size
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                "The hidden size is not divisble by the number of attention heads! Make sure to update them"
+            )
         self.head_size = self.hidden_size // self.num_attention_heads
         self.rotary_ndims = int(self.head_size * config.rotary_pct)
         max_positions = config.max_position_embeddings
@@ -96,8 +100,9 @@ class GPTNeoXAttention(nn.Module):
             torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
                 1, 1, max_positions, max_positions
             ),
+            persistent=False,
         )
-        self.register_buffer("masked_bias", torch.tensor(-1e9))
+        self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
         self.rotary_emb = RotaryEmbedding(
             self.rotary_ndims, config.max_position_embeddings, base=config.rotary_emb_base
         )
@@ -596,7 +601,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
     """GPTNeoX Model with a `language modeling` head on top for CLM fine-tuning.""", GPT_NEOX_START_DOCSTRING
 )
 class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
     _tied_weights_keys = ["embed_out.weight"]
 
     def __init__(self, config):
@@ -771,8 +775,6 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
     GPT_NEOX_START_DOCSTRING,
 )
 class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -967,8 +969,6 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
     GPT_NEOX_START_DOCSTRING,
 )
 class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias", r"lm_head.weight"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

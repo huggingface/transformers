@@ -798,7 +798,7 @@ class SwitchTransformersBlock(nn.Module):
         if isinstance(hidden_states, tuple):
             hidden_states, router_tuple = hidden_states
         else:
-            router_tuple = (torch.tensor([0]),)
+            router_tuple = (torch.tensor([0], device=hidden_states.device),)
 
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
@@ -1337,7 +1337,6 @@ num_heads)`.
     SWITCH_TRANSFORMERS_START_DOCSTRING,
 )
 class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight", r"decoder.embed_tokens.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: SwitchTransformersConfig):
@@ -1506,11 +1505,6 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
     """SWITCH_TRANSFORMERS Model with a `language modeling` head on top.""", SWITCH_TRANSFORMERS_START_DOCSTRING
 )
 class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.embed_tokens.weight",
-        r"decoder.embed_tokens.weight",
-        r"lm_head.weight",
-    ]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: SwitchTransformersConfig):
@@ -1819,7 +1813,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
     SWITCH_TRANSFORMERS_START_DOCSTRING,
 )
 class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight"]
 
     def __init__(self, config: SwitchTransformersConfig):

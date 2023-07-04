@@ -141,7 +141,9 @@ class Attention(nn.Module):
         if n_state % config.n_head != 0:
             raise ValueError(f"Attention n_state shape: {n_state} must be divisible by config.n_head {config.n_head}")
         self.register_buffer(
-            "bias", torch.tril(torch.ones(n_positions, n_positions)).view(1, 1, n_positions, n_positions)
+            "bias",
+            torch.tril(torch.ones(n_positions, n_positions)).view(1, 1, n_positions, n_positions),
+            persistent=False,
         )
         self.n_head = config.n_head
         self.split_size = n_state
@@ -274,7 +276,6 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
     config_class = OpenAIGPTConfig
     load_tf_weights = load_tf_weights_in_openai_gpt
     base_model_prefix = "transformer"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -407,7 +408,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([Block(config.n_positions, config, scale=True) for _ in range(config.n_layer)])
 
-        self.register_buffer("position_ids", torch.arange(config.n_positions))
+        self.register_buffer("position_ids", torch.arange(config.n_positions), persistent=False)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -529,7 +530,6 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     OPENAI_GPT_START_DOCSTRING,
 )
 class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
@@ -621,7 +621,6 @@ input sequence).
     OPENAI_GPT_START_DOCSTRING,
 )
 class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

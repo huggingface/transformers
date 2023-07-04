@@ -170,10 +170,18 @@ class Mask2FormerConfig(PretrainedConfig):
                 use_absolute_embeddings=False,
                 out_features=["stage1", "stage2", "stage3", "stage4"],
             )
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
+
+        if isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.pop("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
+
+        # verify that the backbone is supported
+        if backbone_config.model_type not in self.backbones_supported:
+            logger.warning_once(
+                f"Backbone {backbone_config.model_type} is not a supported model and may not be compatible with Mask2Former. "
+                f"Supported model types: {','.join(self.backbones_supported)}"
+            )
 
         self.backbone_config = backbone_config
         self.feature_size = feature_size

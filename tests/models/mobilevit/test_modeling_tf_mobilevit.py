@@ -40,7 +40,7 @@ if is_tf_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import MobileViTFeatureExtractor
+    from transformers import MobileViTImageProcessor
 
 
 class TFMobileViTConfigTester(ConfigTester):
@@ -381,9 +381,9 @@ class TFMobileViTModelIntegrationTest(unittest.TestCase):
     def test_inference_image_classification_head(self):
         model = TFMobileViTForImageClassification.from_pretrained("apple/mobilevit-xx-small")
 
-        feature_extractor = MobileViTFeatureExtractor.from_pretrained("apple/mobilevit-xx-small")
+        image_processor = MobileViTImageProcessor.from_pretrained("apple/mobilevit-xx-small")
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="tf")
+        inputs = image_processor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(**inputs, training=False)
@@ -401,10 +401,10 @@ class TFMobileViTModelIntegrationTest(unittest.TestCase):
         # `from_pt` will be removed
         model = TFMobileViTForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
 
-        feature_extractor = MobileViTFeatureExtractor.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
+        image_processor = MobileViTImageProcessor.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
 
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="tf")
+        inputs = image_processor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(inputs.pixel_values, training=False)

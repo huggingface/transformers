@@ -253,7 +253,7 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def setUp(self):
         self.model_tester = GPTNeoXModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GPTNeoXConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=GPTNeoXConfig, hidden_size=64, num_attention_heads=8)
 
     def test_config(self):
         self.config_tester.run_common_tests()

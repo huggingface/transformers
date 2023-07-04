@@ -399,3 +399,35 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_get_sentinel_token_ids_for_fasttokenizer(self):
         tokenizer = T5TokenizerFast(SAMPLE_VOCAB, extra_ids=10)
         self.assertListEqual(sorted(tokenizer.get_sentinel_token_ids()), sorted(range(1000, 1010)))
+
+    def test_encode_extra_ids(self):
+        tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=0)
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<extra_id_0>"]})
+        tokenizer._create_trie(tokenizer.all_special_tokens)
+        # TODO ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
+        # So the extra ids are split....
+
+        input_ids = tokenizer.encode(". Hello")
+        self.assertEquals(input_ids, [7, 4, 156, 86, 20, 2])
+        tokens = tokenizer.tokenize(". Hello")
+        self.assertEquals(tokens, ["▁", ".", "▁He", "ll", "o"])
+
+        input_ids = tokenizer.encode(" . Hello")
+        self.assertEquals(input_ids, [7, 4, 156, 86, 20, 2])
+        tokens = tokenizer.tokenize(" . Hello")
+        self.assertEquals(tokens, ["▁", ".", "▁He", "ll", "o"])
+
+        input_ids = tokenizer.encode("Hello, <extra_id_0>I")
+        self.assertEquals(input_ids, [156, 86, 20, 3, 999, 8, 2])
+        tokens = tokenizer.tokenize("Hello, <extra_id_0>I")
+        self.assertEquals(tokens, ["▁He", "ll", "o", ",", "<extra_id_0>", "▁I"])
+
+        input_ids = tokenizer.encode("Hello, <extra_id_0>,")
+        self.assertEquals(input_ids, [156, 86, 20, 3, 999, 3, 2])
+        tokens = tokenizer.tokenize("Hello, <extra_id_0>,")
+        self.assertEquals(tokens, ["▁He", "ll", "o", ",", "<extra_id_0>", ","])
+
+        input_ids = tokenizer.encode(" <extra_id_0> ,")
+        self.assertEquals(input_ids, [999, 3, 2])
+        tokens = tokenizer.tokenize(" <extra_id_0> ,")
+        self.assertEquals(tokens, ["<extra_id_0>", ","])  # spaces are eaten by rstrip / lstrip
