@@ -768,9 +768,7 @@ class Pipeline(_ScikitCompat):
         **kwargs,
     ):
         if framework is None:
-            framework, model = infer_framework_load_model(
-                model, config=model.config, load_in_4bit=load_in_4bit
-            )
+            framework, model = infer_framework_load_model(model, config=model.config, load_in_4bit=load_in_4bit)
 
         self.task = task
         self.model = model

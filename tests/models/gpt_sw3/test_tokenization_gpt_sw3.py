@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import GPTSw3Tokenizer, Conversation
+from transformers import Conversation, GPTSw3Tokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -132,9 +132,7 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_build_conversation_input_ids_single_response(self):
         tokenizer = self.get_tokenizer()
         conversation = Conversation("Hvem er du?")
-        conversation_input_ids = tokenizer._build_conversation_input_ids(
-            conversation=conversation
-        )
+        conversation_input_ids = tokenizer._build_conversation_input_ids(conversation=conversation)
         self.assertEqual(
             tokenizer.decode(conversation_input_ids),
             "<|endoftext|><s>\nUser:\nHvem er du?\nBot:\n",
@@ -146,12 +144,8 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         conversation.add_user_input("Hvem er du?")
         conversation.append_response("Jeg er en bot.")
         conversation.add_user_input("Hvad hedder du?")
-        conversation_input_ids = tokenizer._build_conversation_input_ids(
-            conversation=conversation
-        )
+        conversation_input_ids = tokenizer._build_conversation_input_ids(conversation=conversation)
         self.assertEqual(
             tokenizer.decode(conversation_input_ids),
-            "<|endoftext|>"
-            "<s>\nUser:\nHvem er du?\nBot:\nJeg er en bot.\n"
-            "<s>\nUser:\nHvad hedder du?\nBot:\n",
+            "<|endoftext|>" "<s>\nUser:\nHvem er du?\nBot:\nJeg er en bot.\n" "<s>\nUser:\nHvad hedder du?\nBot:\n",
         )
