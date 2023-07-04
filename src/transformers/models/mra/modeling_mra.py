@@ -652,7 +652,6 @@ class MraSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.yoso.modeling_yoso.YosoAttention with Yoso->Mra
 class MraAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -716,7 +715,6 @@ class MraOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.yoso.modeling_yoso.YosoLayer with Yoso->Mra
 class MraLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -746,7 +744,6 @@ class MraLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.yoso.modeling_yoso.YosoEncoder with Yoso->Mra
 class MraEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -941,7 +938,6 @@ MRA_INPUTS_DOCSTRING = r"""
     "The bare MRA Model transformer outputting raw hidden-states without any specific head on top.",
     MRA_START_DOCSTRING,
 )
-# Copied from transformers.models.yoso.modeling_yoso.YosoModel with YOSO->MRA,Yoso->Mra
 class MraModel(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1050,7 +1046,6 @@ class MraModel(MraPreTrainedModel):
 
 
 @add_start_docstrings("""MRA Model with a `language modeling` head on top.""", MRA_START_DOCSTRING)
-# Copied from transformers.models.yoso.modeling_yoso.YosoForMaskedLM with YOSO->MRA,Yoso->Mra,yoso->mra
 class MraForMaskedLM(MraPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
@@ -1153,7 +1148,6 @@ class MraClassificationHead(nn.Module):
     the pooled output) e.g. for GLUE tasks.""",
     MRA_START_DOCSTRING,
 )
-# Copied from transformers.models.yoso.modeling_yoso.YosoForSequenceClassification with YOSO->MRA,Yoso->Mra,yoso->mra
 class MraForSequenceClassification(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1243,7 +1237,6 @@ class MraForSequenceClassification(MraPreTrainedModel):
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks.""",
     MRA_START_DOCSTRING,
 )
-# Copied from transformers.models.yoso.modeling_yoso.YosoForMultipleChoice with YOSO->MRA,Yoso->Mra,yoso->mra
 class MraForMultipleChoice(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1333,7 +1326,6 @@ class MraForMultipleChoice(MraPreTrainedModel):
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks.""",
     MRA_START_DOCSTRING,
 )
-# Copied from transformers.models.yoso.modeling_yoso.YosoForTokenClassification with YOSO->MRA,Yoso->Mra,yoso->mra
 class MraForTokenClassification(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1417,7 +1409,6 @@ class MraForTokenClassification(MraPreTrainedModel):
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).""",
     MRA_START_DOCSTRING,
 )
-# Copied from transformers.models.yoso.modeling_yoso.YosoForQuestionAnswering with YOSO->MRA,Yoso->Mra,yoso->mra
 class MraForQuestionAnswering(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
