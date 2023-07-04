@@ -306,7 +306,7 @@ class FalconAttention(nn.Module):
             value_layer = torch.cat((past_value, value_layer), dim=1)
 
         _, kv_length, _ = key_layer.shape
-        if use_cache is True:
+        if use_cache:
             present = (key_layer, value_layer)
         else:
             present = None
