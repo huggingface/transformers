@@ -399,7 +399,7 @@ class OneFormerLoss(nn.Module):
         self.importance_sample_ratio = importance_sample_ratio
         self.contrastive_temperature = contrastive_temperature
         if self.contrastive_temperature is not None:
-            self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / contrastive_temperature))
+            self.logit_scale = nn.Parameter(torch.tensor(np.log(1 / contrastive_temperature)))
 
     def _max_by_axis(self, the_list: List[List[int]]) -> List[int]:
         maxes = the_list[0]

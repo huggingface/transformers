@@ -99,11 +99,11 @@ def convert_movilevit_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     load_tf_weights_in_mobilenet_v2(model, config, checkpoint_path)
 
     # Check outputs on an image, prepared by MobileNetV2ImageProcessor
-    feature_extractor = MobileNetV2ImageProcessor(
+    image_processor = MobileNetV2ImageProcessor(
         crop_size={"width": config.image_size, "height": config.image_size},
         size={"shortest_edge": config.image_size + 32},
     )
-    encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
+    encoding = image_processor(images=prepare_img(), return_tensors="pt")
     outputs = model(**encoding)
     logits = outputs.logits
 
@@ -143,13 +143,13 @@ def convert_movilevit_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         print("Pushing to the hub...")
         repo_id = "google/" + model_name
-        feature_extractor.push_to_hub(repo_id)
+        image_processor.push_to_hub(repo_id)
         model.push_to_hub(repo_id)
 
 

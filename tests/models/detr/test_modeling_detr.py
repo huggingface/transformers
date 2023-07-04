@@ -38,7 +38,7 @@ if is_timm_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DetrFeatureExtractor
+    from transformers import DetrImageProcessor
 
 
 class DetrModelTester:
@@ -512,15 +512,15 @@ def prepare_img():
 @slow
 class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
+    def default_image_processor(self):
+        return DetrImageProcessor.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
 
     def test_inference_no_head(self):
         model = DetrModel.from_pretrained("facebook/detr-resnet-50").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model(**encoding)
@@ -535,9 +535,9 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
     def test_inference_object_detection_head(self):
         model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
         pixel_values = encoding["pixel_values"].to(torch_device)
         pixel_mask = encoding["pixel_mask"].to(torch_device)
 
@@ -560,7 +560,7 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
         # verify postprocessing
-        results = feature_extractor.post_process_object_detection(
+        results = image_processor.post_process_object_detection(
             outputs, threshold=0.3, target_sizes=[image.size[::-1]]
         )[0]
         expected_scores = torch.tensor([0.9982, 0.9960, 0.9955, 0.9988, 0.9987]).to(torch_device)
@@ -575,9 +575,9 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
     def test_inference_panoptic_segmentation_head(self):
         model = DetrForSegmentation.from_pretrained("facebook/detr-resnet-50-panoptic").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
         pixel_values = encoding["pixel_values"].to(torch_device)
         pixel_mask = encoding["pixel_mask"].to(torch_device)
 
@@ -607,7 +607,7 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.pred_masks[0, 0, :3, :3], expected_slice_masks, atol=1e-3))
 
         # verify postprocessing
-        results = feature_extractor.post_process_panoptic_segmentation(
+        results = image_processor.post_process_panoptic_segmentation(
             outputs, threshold=0.3, target_sizes=[image.size[::-1]]
         )[0]
 
@@ -633,9 +633,9 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
 @slow
 class DetrModelIntegrationTests(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
-            DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50", revision="no_timm")
+            DetrImageProcessor.from_pretrained("facebook/detr-resnet-50", revision="no_timm")
             if is_vision_available()
             else None
         )
@@ -643,9 +643,9 @@ class DetrModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
         model = DetrModel.from_pretrained("facebook/detr-resnet-50", revision="no_timm").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model(**encoding)
