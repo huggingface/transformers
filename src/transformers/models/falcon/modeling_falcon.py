@@ -340,11 +340,11 @@ class FalconAttention(nn.Module):
 
             output_tensor = self.dense(attn_output)
 
-            outputs = (output_tensor, present)
             if output_attentions:
-                outputs += (attention_scores,)
+                return output_tensor, present, attention_scores
+            else:
+                return output_tensor, present
 
-            return outputs
         else:
             matmul_result = query_layer @ key_layer.transpose(-1, -2)
 
@@ -376,11 +376,10 @@ class FalconAttention(nn.Module):
 
             output_tensor = self.dense(context_layer)
 
-            outputs = (output_tensor, present)
             if output_attentions:
-                outputs += (attention_probs,)
-
-            return outputs
+                return output_tensor, present, attention_scores
+            else:
+                return output_tensor, present
 
 
 class FalconMLP(nn.Module):
