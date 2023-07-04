@@ -900,6 +900,27 @@ class T5Converter(SpmConverter):
         vocab += [(f"<extra_id_{i}>", 0.0) for i in range(num_extra_ids - 1, -1, -1)]
         return vocab
 
+    def normalizer(self, proto):
+        return normalizers.Sequence(
+            [
+                normalizers.Prepend(prepend="▁"),
+                normalizers.Replace(pattern=" ", content="▁"),
+            ]
+        )
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        return None
+
+    def decoder(self, replacement, add_prefix_space):
+        return decoders.Sequence(
+            [
+                decoders.Replace("▁", " "),
+                decoders.ByteFallback(),
+                decoders.Fuse(),
+                decoders.Strip(content=" ", left=1),
+            ]
+        )
+
     def post_processor(self):
         return processors.TemplateProcessing(
             single=["$A", "</s>"],
