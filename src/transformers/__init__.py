@@ -213,6 +213,7 @@ _import_structure = {
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
+    "models.cct": ["CCT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CctConfig"],
     "models.chinese_clip": [
         "CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ChineseCLIPConfig",
@@ -1297,6 +1298,14 @@ else:
             "CanineModel",
             "CaninePreTrainedModel",
             "load_tf_weights_in_canine",
+        ]
+    )
+    _import_structure["models.cct"].extend(
+        [
+            "CCT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CctForImageClassification",
+            "CctModel",
+            "CctPreTrainedModel",
         ]
     )
     _import_structure["models.chinese_clip"].extend(
@@ -4097,6 +4106,7 @@ if TYPE_CHECKING:
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
+    from .models.cct import CCT_PRETRAINED_CONFIG_ARCHIVE_MAP, CctConfig
     from .models.chinese_clip import (
         CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ChineseCLIPConfig,
@@ -5063,6 +5073,12 @@ if TYPE_CHECKING:
             CanineModel,
             CaninePreTrainedModel,
             load_tf_weights_in_canine,
+        )
+        from .models.cct import (
+            CCT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CctForImageClassification,
+            CctModel,
+            CctPreTrainedModel,
         )
         from .models.chinese_clip import (
             CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
