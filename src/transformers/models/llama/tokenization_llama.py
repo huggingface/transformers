@@ -24,6 +24,7 @@ from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
+from sentencepiece import sentencepiece_model_pb2, SentencePieceProcessor
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
@@ -44,6 +45,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "hf-internal-testing/llama-tokenizer": 2048,
 }
+SPIECE_UNDERLINE = "▁"
 
 
 class LlamaTokenizer(PreTrainedTokenizer):
@@ -71,6 +73,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
+        legacy=False,
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -92,9 +95,24 @@ class LlamaTokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
+        self.legacy = False
+        self.sp_model = self.get_spm_processor()
 
+    def get_spm_processor(self):
+        tokenizer = SentencePieceProcessor(**self.sp_model_kwargs)
+        with open(self.vocab_file, "rb") as f:
+            sp_model = f.read()
+            model = sentencepiece_model_pb2.ModelProto.FromString(sp_model)
+            if not self.legacy:
+                normalizer_spec = sentencepiece_model_pb2.NormalizerSpec()
+                normalizer_spec.add_dummy_prefix = False
+                model.normalizer_spec.MergeFrom(normalizer_spec)
+            sp_model = model.SerializeToString()
+            tokenizer.LoadFromSerializedProto(sp_model)
+        return tokenizer
+                
+                
+                
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None
@@ -116,9 +134,13 @@ class LlamaTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def _tokenize(self, text):
+    def tokenize(self, text):
+        return super().tokenize(SPIECE_UNDERLINE + text)
+
+    def _tokenize(self, text, is_first = True):
         """Returns a tokenized string."""
-        return self.sp_model.encode(text, out_type=str)
+        tokens = self.sp_model.encode(text, out_type=str)
+        return tokens
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
