@@ -27,7 +27,7 @@ from ...tokenization_utils import PreTrainedTokenizer
 
 
 if TYPE_CHECKING:
-    from ...tokenization_utils_base import TextInput
+    pass
 from ...utils import logging
 
 
@@ -126,6 +126,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         extra_ids=100,
         additional_special_tokens=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        legacy=True,
         **kwargs,
     ) -> None:
         # Add extra_ids to the special token list
@@ -140,7 +141,7 @@ class T5Tokenizer(PreTrainedTokenizer):
                     " provided to T5Tokenizer. In this case the additional_special_tokens must include the extra_ids"
                     " tokens"
                 )
-
+        self.legacy = False
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         super().__init__(
@@ -300,13 +301,22 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    def _tokenize(self, text, is_first = True):
-        """Returns a tokenized string."""
+    def _tokenize(self, text, is_first=True):
+        """
+        Returns a tokenized string. Since the sentencpiece internal model always adds a SPIECE_UNDERLINE, at the
+        beginning of the provided text, we need to remove it by hand when the current text is a subsequence. This
+        happens whenever the `self.tokenize` function is called with specials tokens: the input is split on the special
+        tokens, and each subsequence is passed to `_tokenize`. Thus is a subsequence did not start with a `" "` or
+        SPIECE_UNDERLINE, we have to remove the extra `SPIECE_UNDERLINE` prepended.
+        """
         tokens = self.sp_model.encode(text, out_type=str)
-        if not is_first and tokens[0].startswith(SPIECE_UNDERLINE) and not text.startswith((" ", SPIECE_UNDERLINE)):
-            tokens[0] = tokens[0][1:]
-            if tokens[0] == '':
-                tokens = tokens[1:]
+        if (
+            not self.legacy
+            and not is_first
+            and not text.startswith((" ", SPIECE_UNDERLINE))
+            and tokens[0].startswith(SPIECE_UNDERLINE)
+        ):
+            tokens = tokens[0][1:] if len(tokens[0]) > 1 else [] + tokens[1:]
         return tokens
 
     def _convert_token_to_id(self, token):
