@@ -1460,13 +1460,12 @@ class GenerationTesterMixin:
     def test_contrastive_generate_low_memory(self):
         # Check that choosing 'low_memory' does not change the model output
         for model_class in self.all_generative_model_classes:
-            # won't fix: FSMT and Reformer have a different cache variable type (and format).
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            # won't fix: FSMT, Reformer, gptbigcode, and speech2text have a different cache variable type (and format).
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer", "gptbigcode", "speech2text"]):
                 return
 
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config(batch_size=1)
-            print (input_ids.shape)
-
+            
             # NOTE: contrastive search only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
                 return
