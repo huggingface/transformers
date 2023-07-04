@@ -2123,7 +2123,7 @@ class GenerationMixin:
             # select the past_key_value
             if low_memory:
                 next_model_input = self.prepare_inputs_for_generation(
-                    top_k_ids[:, selected_idx], **model_kwargs
+                    top_k_ids[:, selected_idx].view(-1, 1), **model_kwargs
                 )
                 print (next_model_input['input_ids'].shape)
                 selected_outputs = self(
