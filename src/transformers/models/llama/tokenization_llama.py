@@ -92,6 +92,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             legacy=legacy,
             **kwargs,
         )
+        self.legacy = legacy
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token

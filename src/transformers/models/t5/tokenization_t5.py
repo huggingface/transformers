@@ -27,7 +27,7 @@ from ...tokenization_utils import PreTrainedTokenizer
 
 
 if TYPE_CHECKING:
-    pass
+    from ...tokenization_utils_base import TextInput
 from ...utils import logging
 
 

@@ -17,7 +17,6 @@ import os
 import re
 import tempfile
 import unittest
-
 from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, T5Tokenizer, T5TokenizerFast
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_seqio, require_tokenizers, slow
 from transformers.utils import cached_property, is_tf_available, is_torch_available
@@ -430,9 +429,8 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_ids = tokenizer.encode(" <extra_id_0> ,")
         self.assertEqual(input_ids, [999, 3, 2])
         tokens = tokenizer.tokenize(" <extra_id_0> ,")
-        self.assertEqual(
-            tokens, ["<extra_id_0>", ","]
-        )  # spaces are eaten by rstrip / lstrip + spm sp_model.encode("  ") = []
+        # spaces are eaten by rstrip / lstrip + spm sp_model.encode("  ") = []
+        self.assertEqual(tokens, ["<extra_id_0>", ","])  
 
         input_ids = tokenizer.encode("Hello")
         self.assertEqual(input_ids, [156, 86, 20, 2])
@@ -444,10 +442,48 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens = tokenizer.tokenize("     Hello")
         self.assertEqual(tokens, ["▁He", "ll", "o"])  # spaces are eaten by rstrip / lstrip
 
+        input_ids = tokenizer.encode("▁He is not<extra_id_0>He")
+        self.assertEqual(input_ids, [156, 46, 44, 999, 262, 15, 2])
+        tokens = tokenizer.tokenize("▁He is not<extra_id_0>He")
+        self.assertEqual(tokens, ['▁He', '▁is', '▁not', '<extra_id_0>', 'H', 'e'])  # no extra space added
+        
+        input_ids = tokenizer.encode("▁He is not<extra_id_0>▁He")
+        self.assertEqual(input_ids, [156, 46, 44, 999, 262, 15, 2])
+        tokens = tokenizer.tokenize("▁He is not<extra_id_0>▁He")
+        self.assertEqual(tokens, ['▁He', '▁is', '▁not', '<extra_id_0>', 'H', 'e'])  # eat space since lstrip
+
+        input_ids = tokenizer.encode("▁He is not<extra_id_0> ▁He")
+        self.assertEqual(input_ids, [156, 46, 44, 999, 262, 15, 2])
+        tokens = tokenizer.tokenize("▁He is not<extra_id_0> He")
+        self.assertEqual(tokens, ['▁He', '▁is', '▁not', '<extra_id_0>', 'H', 'e'])  # spaces are eaten by rstrip / lstrip
+
+        input_ids = tokenizer.encode("▁He is not<extra_id_0>             ▁He") 
+        # here t5x does not eat with lstrip, so there is and extra ▁He in the original one
+        # TODO @arthurzucker we should probably not srip right since it is done by default
+        # for certain models...
+        self.assertEqual(input_ids, [156, 46, 44, 999, 262, 15, 2])
+        tokens = tokenizer.tokenize("▁He is not<extra_id_0>              ▁He")
+        self.assertEqual(tokens, ['▁He', '▁is', '▁not', '<extra_id_0>', 'H','e'])  # spaces are eaten by spm + our strip
+        
+        input_ids = tokenizer.encode("▁He is not             ▁He")
+        self.assertEqual(input_ids, [156, 46, 44, 156, 2])
+        tokens = tokenizer.tokenize("▁He is not              ▁He")
+        self.assertEqual(tokens, ['▁He', '▁is', '▁not', '▁He'])  # spaces are eaten by spm even if not start
+        
     @require_seqio
     def test_integration_seqio(self):
+        from datasets import load_dataset
+        from transformers import AutoTokenizer
+        
         from seqio import SentencePieceVocabulary
+        dataset = load_dataset("xnli", split="test+validation")
 
         vocab_path = "gs://t5-data/vocabs/umt5.256000/sentencepiece.model"
-        SentencePieceVocabulary(vocab_path, extra_ids=300)
-        # TODO add more tests
+        t5x_tokenizer = SentencePieceVocabulary(vocab_path, extra_ids=300)
+        hf_tokenizer = AutoTokenizer.from_pretrained("google/umt5-small")
+        
+        input_text = "Hello! Is this <extra_id_0>your idea"
+        t5_out = t5x_tokenizer.encode(input_text)
+        hf_out = hf_tokenizer.encode(input_text)
+        self.assertEqual(hf_out, [""])
+        self.assertEqual(t5_out, hf_out)
