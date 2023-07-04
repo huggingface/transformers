@@ -851,7 +851,7 @@ class DetaDecoderLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(seq_len, batch, embed_dim)`.
+                Input to the layer of shape `(batch, seq_len, embed_dim)`.
             position_embeddings (`torch.FloatTensor`, *optional*):
                 Position embeddings that are added to the queries and keys in the self-attention layer.
             reference_points (`torch.FloatTensor`, *optional*):
@@ -861,7 +861,7 @@ class DetaDecoderLayer(nn.Module):
             level_start_index (`torch.LongTensor`, *optional*):
                 Level start index.
             encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
+                cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.

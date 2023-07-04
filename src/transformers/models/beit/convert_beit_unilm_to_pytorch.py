@@ -27,10 +27,10 @@ from PIL import Image
 
 from transformers import (
     BeitConfig,
-    BeitFeatureExtractor,
     BeitForImageClassification,
     BeitForMaskedImageModeling,
     BeitForSemanticSegmentation,
+    BeitImageProcessor,
 )
 from transformers.image_utils import PILImageResampling
 from transformers.utils import logging
@@ -266,16 +266,16 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # Check outputs on an image
     if is_semantic:
-        feature_extractor = BeitFeatureExtractor(size=config.image_size, do_center_crop=False)
+        image_processor = BeitImageProcessor(size=config.image_size, do_center_crop=False)
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         image = Image.open(ds[0]["file"])
     else:
-        feature_extractor = BeitFeatureExtractor(
+        image_processor = BeitImageProcessor(
             size=config.image_size, resample=PILImageResampling.BILINEAR, do_center_crop=False
         )
         image = prepare_img()
 
-    encoding = feature_extractor(images=image, return_tensors="pt")
+    encoding = image_processor(images=image, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
     outputs = model(pixel_values)
@@ -353,8 +353,8 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

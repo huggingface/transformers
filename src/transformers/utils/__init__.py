@@ -176,8 +176,21 @@ from .import_utils import (
 )
 
 
+if is_protobuf_available():
+    import google.protobuf
+
+    if version.parse(google.protobuf.__version__) < version.parse("4.0.0"):
+        from . import sentencepiece_model_pb2
+    else:
+        from . import sentencepiece_model_pb2_new as sentencepiece_model_pb2
+else:
+    # just to get the expected `No module named 'google.protobuf'` error
+    from . import sentencepiece_model_pb2
+
+
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
+ADAPTER_CONFIG_NAME = "adapter_config.json"
 ADAPTER_WEIGHTS_NAME = "adapter_model.bin"
 ADAPTER_SAFE_WEIGHTS_NAME = "adapter_model.safetensors"
 TF2_WEIGHTS_NAME = "tf_model.h5"
