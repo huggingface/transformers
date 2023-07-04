@@ -1248,7 +1248,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         """
         logger.warning_once(
             "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_object_detection`.",
+            " `post_process_object_detection` instead, with `threshold=0.` for equivalent results.",
         )
 
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
