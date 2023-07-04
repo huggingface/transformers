@@ -2038,7 +2038,7 @@ class GenerationMixin:
                 for i in range(top_k):
                     # compute the candidate tokens by the language model and collect their hidden_states
                     next_model_inputs = self.prepare_inputs_for_generation(
-                        top_k_ids[:, i].unsqueeze(0), **model_kwargs
+                        top_k_ids[:, i].view(-1, 1), **model_kwargs
                     )
 
                     outputs = self(
@@ -2123,8 +2123,9 @@ class GenerationMixin:
             # select the past_key_value
             if low_memory:
                 next_model_input = self.prepare_inputs_for_generation(
-                    top_k_ids[:, selected_idx].unsqueeze(0), **model_kwargs
+                    top_k_ids[:, selected_idx].view(-1, 1), **model_kwargs
                 )
+
                 selected_outputs = self(
                     **next_model_input, return_dict=True, output_hidden_states=False, output_attentions=False,
                 )
