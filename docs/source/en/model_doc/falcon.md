@@ -27,8 +27,11 @@ There is no paper associated with Falcon yet, but for citation information pleas
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-40b")
-model = AutoModelForCausalLM.from_pretrained("tiiuae/falcon-40b")
+tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-40b-instruct")
+model = AutoModelForCausalLM.from_pretrained("tiiuae/falcon-40b-instruct")
+
+inputs = tokenizer("What's the best way to divide a pizza between three people?", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
 ```
 
 - The Falcon tokenizer is a BPE model.
