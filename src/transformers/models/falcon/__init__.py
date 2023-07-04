@@ -32,6 +32,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_falcon"] = [
+        "FALCON_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FalconForCausalLM",
         "FalconModel",
         "FalconPreTrainedModel",
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_falcon import (
+            FALCON_PRETRAINED_MODEL_ARCHIVE_LIST,
             FalconForCausalLM,
             FalconForQuestionAnswering,
             FalconForSequenceClassification,

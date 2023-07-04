@@ -363,7 +363,6 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         model.to(torch_device)
         inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
 
-
         expected_output = (
             "My favorite food is pizza. I love it so much that I have a pizza party every year for my birthday."
         )

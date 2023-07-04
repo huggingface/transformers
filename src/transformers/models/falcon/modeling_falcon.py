@@ -37,6 +37,8 @@ from .configuration_falcon import FalconConfig
 
 logger = logging.get_logger(__name__)
 
+FALCON_PRETRAINED_MODEL_ARCHIVE_LIST = ["Rocketknight1/falcon-rw-1b"]
+
 
 # NOTE(Hesslow): Unfortunately we did not fuse matmul and bias during training, this means that there's one additional quantization to bfloat16 between the operations.
 # In order not to degrade the quality of our HF-port, we keep these characteristics in the final model.
