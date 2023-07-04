@@ -244,12 +244,13 @@ class FalconAttention(nn.Module):
             fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads + 2, self.head_dim)
             return fused_qkv[..., :-2, :], fused_qkv[..., [-2], :], fused_qkv[..., [-1], :]
 
+    # Copied from transformers.models.bloom.modeling_bloom.BloomAttention._merge_heads
     def _merge_heads(self, x: torch.Tensor) -> torch.Tensor:
         """
         Merge heads together over the last dimenstion
 
         Args:
-            x: (`torch.tensor`, *required*): [batch_size * num_heads, seq_length, head_dim]
+            x (`torch.tensor`, *required*): [batch_size * num_heads, seq_length, head_dim]
 
         Returns:
             torch.tensor: [batch_size, seq_length, num_heads * head_dim]
