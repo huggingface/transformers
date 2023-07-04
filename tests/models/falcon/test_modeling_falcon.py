@@ -302,10 +302,10 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_various_embeddings(self):
+    def test_position_embedding_types(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
+        for alibi in [True, False]:
+            config_and_inputs[0].alibi = alibi
             self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_falcon_sequence_classification_model(self):
