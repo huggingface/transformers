@@ -454,74 +454,6 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(pyth_tokenizer.encode("<s>"), [1, 1])
         self.assertEqual(rust_tokenizer.encode("<s>"), [1, 1])
 
-    def test_special_tokens_spm(self):
-        tokenizer = self.tokenizer
-        input_ids = tokenizer.encode(". Hello")
-        self.assertEqual(input_ids, [1, 869, 15043])
-        tokens = tokenizer.tokenize(". Hello")
-        self.assertEqual(tokens, ["▁.", "▁Hello"])
-
-        input_ids = tokenizer.encode(" . Hello")
-        self.assertEqual(input_ids, [1, 29871, 869, 15043])
-        tokens = tokenizer.tokenize(" . Hello")
-        self.assertEqual(tokens, ["▁", "▁.", "▁Hello"])
-
-        input_ids = tokenizer.encode("Hello, <s>I")
-        self.assertEqual(input_ids, [1, 15043, 29892, 29871, 1, 29902])
-        tokens = tokenizer.tokenize("Hello, <s>I")
-        # make sure no extra `▁` is added to the I.
-        self.assertEqual(tokens, ["▁Hello", ",", "▁", "<s>", "I"])
-
-        input_ids = tokenizer.encode("Hello, <s>,")
-        self.assertEqual(input_ids, [1, 15043, 29892, 29871, 1, 29892])
-        tokens = tokenizer.tokenize("Hello, <s>,")
-        self.assertEqual(tokens, ["▁Hello", ",", "▁", "<s>", ","])
-
-        input_ids = tokenizer.encode(" <s> ,")
-        self.assertEqual(input_ids, [1, 259, 1, 29871, 1919])
-        tokens = tokenizer.tokenize(" <s> ,")
-        # spaces are only eatin by rstrip / lstrip + spm sp_model.encode("  ") != []
-        self.assertEqual(tokens, ["▁▁", "<s>", "▁", "▁,"])
-
-        input_ids = tokenizer.encode("Hello")
-        self.assertEqual(input_ids, [1, 15043])
-        tokens = tokenizer.tokenize("Hello")
-        self.assertEqual(tokens, ["▁Hello"])
-
-        input_ids = tokenizer.encode("     Hello")
-        self.assertEqual(input_ids, [1, 418, 15043])
-        tokens = tokenizer.tokenize("     Hello")
-        self.assertEqual(tokens, ["▁▁▁▁▁", "▁Hello"])  # spaces are eaten by rstrip / lstrip
-
-        input_ids = tokenizer.encode("▁He is not<s>He")
-        self.assertEqual(input_ids, [1, 29871, 940, 338, 451, 1, 29950, 29872])
-        tokens = tokenizer.tokenize("▁He is not<s>He")
-        self.assertEqual(tokens, ["▁", "▁He", "▁is", "▁not", "<s>", "H", "e"])  # no extra space added
-
-        input_ids = tokenizer.encode("▁He is not<s>▁He")
-        self.assertEqual(input_ids, [156, 46, 44, 999, 262, 15, 2])
-        tokens = tokenizer.tokenize("▁He is not<s>▁He")
-        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<s>", "H", "e"])  # eat space since lstrip
-
-        input_ids = tokenizer.encode("▁He is not<s> ▁He")
-        self.assertEqual(input_ids, [1, 29871, 940, 338, 451, 1, 29871, 940])
-        tokens = tokenizer.tokenize("▁He is not<s> He")
-        self.assertEqual(tokens, ["▁", "▁He", "▁is", "▁not", "<s>", "▁", "▁He"])  # spaces arenot eaten
-
-        input_ids = tokenizer.encode("▁He is not<s>             ▁He")
-        self.assertEqual(input_ids, [1, 29871, 940, 338, 451, 1, 1669, 940])
-        tokens = tokenizer.tokenize("▁He is not<s>              ▁He")
-        self.assertEqual(
-            tokens, ["▁", "▁He", "▁is", "▁not", "<s>", "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁", "▁He"]
-        )  # spaces are eaten by spm + our strip
-
-        input_ids = tokenizer.encode("▁He is not             ▁He")
-        self.assertEqual(input_ids, [1, 29871, 940, 338, 451, 795, 940])
-        tokens = tokenizer.tokenize("▁He is not              ▁He")
-        self.assertEqual(
-            tokens, ["▁", "▁He", "▁is", "▁not", "▁▁▁▁▁▁▁▁▁▁▁▁▁▁", "▁He"]
-        )  # spaces are eaten by spm even if not start
-
     @unittest.skipIf(
         os.getenv("RUN_TOKENIZER_INTEGRATION", "0") == "0",
         "RUN_TOKENIZER_INTEGRATION=1 to run tokenizer integration tests",
@@ -558,3 +490,89 @@ class LlamaIntegrationTest(unittest.TestCase):
                 decoded2 = rust_tokenizer.decode(encoded2, skip_special_tokens=True)
 
                 self.assertEqual(decoded1, decoded2)
+
+
+
+@require_sentencepiece
+@require_tokenizers
+class CommonSpmInegrationTests(unittest.TestCase):
+    
+    @classmethod
+    def setUpClass(cls):
+        tokenizer = LlamaTokenizer(SAMPLE_VOCAB, extra_ids=0, add_bos_token = False)
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<s>"]})
+        tokenizer._create_trie(tokenizer.all_special_tokens)
+        tokenizer.encode("", add_special_tokens = False)
+        # TODO ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
+        # So the extra ids are split....
+        cls.tokenizer = tokenizer
+        return cls
+        
+    def test_add_dummy_prefix(self):
+        # make sure `'▁'` is prepended, and outputs match sp_model's
+        # `sentencepiece.NormalizerSpec.add_dummy_prefix` attribute
+        input_ids = self.tokenizer.encode(". Hello")
+        self.assertEqual(input_ids, [7, 4, 156, 86, 20])
+        sp_encode = self.tokenizer.sp_model.encode(". Hello")
+        self.assertEqual(input_ids, sp_encode)
+        tokens = self.tokenizer.tokenize(". Hello")
+        self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
+        
+    def test_remove_extra_whitespaces(self):
+        # make sure the extra spaces are NOT eaten
+        # sentencepiece.NormalizerSpec.remove_extra_whitespaces attribute is set to False
+        input_ids = self.tokenizer.encode("       . Hello")
+        self.assertEqual(input_ids, [7, 4, 156, 86, 20])
+        sp_encode = self.tokenizer.sp_model.encode("       . Hello")
+        self.assertEqual(input_ids, sp_encode)
+        tokens = self.tokenizer.tokenize(" . Hello")
+        self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
+        
+        # `'▁'` is also a whitespace
+        input_ids = self.tokenizer.encode("▁He is not")
+        self.assertEqual(input_ids, [156, 46, 44])
+        tokens = self.tokenizer.tokenize("▁He is not")
+        self.assertEqual(tokens, ["▁He", "▁is", "▁not"])  # no extra space added
+    
+        input_ids = self.tokenizer.encode("▁He is not<s>             ▁He")
+        self.assertEqual(input_ids, [156, 46, 44, 999, 262, 15, 2])
+        tokens = self.tokenizer.tokenize("▁He is not<s>              ▁He")
+        self.assertEqual(
+            tokens, ["▁He", "▁is", "▁not", "<s>", "H", "e"]
+        )  # spaces are eaten by spm + our strip
+        # make sure that the output after the extra id is the same as if
+        # extra_id was not there
+        input_ids = self.tokenizer.encode("▁He is not             ▁He")
+        self.assertEqual(input_ids, [156, 46, 44, 156, 2])
+        tokens  = self.tokenizer.tokenize("▁He is not              ▁He")
+        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "▁He"])  # spaces are eaten by spm even if not start
+    
+    def test_character_after_special_token(self):
+        # Make sure that `tokenizer.tokenize` is similar to 
+        # adding the equivalent special token to the vocab
+        input_ids = self.tokenizer.encode("Hey <s>I")
+        self.assertEqual(input_ids, [156, 86, 20, 3, 999, 100, 2])
+        sp_encode = self.tokenizer.sp_model.encode("Hey I")
+        self.assertEqual(input_ids, sp_encode)
+        tokens = self.tokenizer.tokenize("<s>I")
+        self.assertEqual(tokens, ["<s>", "I"])
+
+        input_ids = self.tokenizer.encode("Hello, <s>,")
+        self.assertEqual(input_ids, [156, 86, 20, 3, 999, 3, 2])
+        tokens = self.tokenizer.tokenize("Hello, <s>,")
+        self.assertEqual(tokens, ["▁He", "ll", "o", ",", "<s>", ","])
+    
+    def test_special_tokens_strip(self):
+        input_ids = self.tokenizer.encode(" <s> ,")
+        self.assertEqual(input_ids, [999, 3, 2])
+        tokens = self.tokenizer.tokenize(" <s> ,")
+        # spaces are eaten by rstrip / lstrip + spm sp_model.encode("  ") = []
+        self.assertEqual(tokens, ["<s>", ","])
+        
+        input_ids = self.tokenizer.encode("No <s> ▁He")
+        self.assertEqual(input_ids, [156, 46, 44, 999, 262, 15, 2])
+        tokens = self.tokenizer.tokenize("No <s> ▁He")
+        self.assertEqual(
+            tokens, ["▁He", "▁is", "▁not", "<s>", "H", "e"]
+        )  # spaces are eaten by rstrip / lstrip
+        
