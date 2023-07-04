@@ -270,7 +270,6 @@ class FalconAttention(nn.Module):
         use_cache: bool = False,
         output_attentions: bool = False,
     ):
-        assert attention_mask is not None  # Sorry Sylvain! I'll remove it when I'm done testing!
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         n_head_kv = self.num_heads if self.new_decoder_architecture else self.num_kv
         # 3 x [batch_size, seq_length, num_heads, head_dim]
