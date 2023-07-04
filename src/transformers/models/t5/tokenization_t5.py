@@ -22,7 +22,6 @@ from shutil import copyfile
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
-from ...utils import sentencepiece_model_pb2
 
 from ...tokenization_utils import PreTrainedTokenizer
 
@@ -157,22 +156,8 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
 
-        self.legacy = False
-        self.sp_model = self.get_spm_processor()
-
-    def get_spm_processor(self):
-        tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        with open(self.vocab_file, "rb") as f:
-            sp_model = f.read()
-            model = sentencepiece_model_pb2.ModelProto.FromString(sp_model)
-            if not self.legacy:
-                normalizer_spec = sentencepiece_model_pb2.NormalizerSpec()
-                normalizer_spec.add_dummy_prefix = False
-                model.normalizer_spec.MergeFrom(normalizer_spec)
-            sp_model = model.SerializeToString()
-            tokenizer.LoadFromSerializedProto(sp_model)
-        return tokenizer
-                
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(vocab_file)
 
     @staticmethod
     def _eventually_correct_t5_max_length(pretrained_model_name_or_path, max_model_length, init_max_model_length):
@@ -315,12 +300,13 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    def tokenize(self, text):
-        return super().tokenize(SPIECE_UNDERLINE + text)
-
     def _tokenize(self, text, is_first = True):
         """Returns a tokenized string."""
         tokens = self.sp_model.encode(text, out_type=str)
+        if not is_first and tokens[0].startswith(SPIECE_UNDERLINE) and not text.startswith((" ", SPIECE_UNDERLINE)):
+            tokens[0] = tokens[0][1:]
+            if tokens[0] == '':
+                tokens = tokens[1:]
         return tokens
 
     def _convert_token_to_id(self, token):

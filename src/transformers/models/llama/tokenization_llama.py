@@ -24,8 +24,6 @@ from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
-from sentencepiece import SentencePieceProcessor
-from ...utils import sentencepiece_model_pb2
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
@@ -96,24 +94,9 @@ class LlamaTokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
-        self.legacy = False
-        self.sp_model = self.get_spm_processor()
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(vocab_file)
 
-    def get_spm_processor(self):
-        tokenizer = SentencePieceProcessor(**self.sp_model_kwargs)
-        with open(self.vocab_file, "rb") as f:
-            sp_model = f.read()
-            model = sentencepiece_model_pb2.ModelProto.FromString(sp_model)
-            if not self.legacy:
-                normalizer_spec = sentencepiece_model_pb2.NormalizerSpec()
-                normalizer_spec.add_dummy_prefix = False
-                model.normalizer_spec.MergeFrom(normalizer_spec)
-            sp_model = model.SerializeToString()
-            tokenizer.LoadFromSerializedProto(sp_model)
-        return tokenizer
-                
-                
-                
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None
@@ -135,12 +118,13 @@ class LlamaTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def tokenize(self, text):
-        return super().tokenize(SPIECE_UNDERLINE + text)
-
     def _tokenize(self, text, is_first = True):
         """Returns a tokenized string."""
         tokens = self.sp_model.encode(text, out_type=str)
+        if not is_first and tokens[0].startswith(SPIECE_UNDERLINE) and not text.startswith((" ", SPIECE_UNDERLINE)):
+            tokens[0] = tokens[0][1:]
+            if tokens[0] == '':
+                tokens = tokens[1:]
         return tokens
 
     def _convert_token_to_id(self, token):
