@@ -301,7 +301,13 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    def _tokenize(self, text, is_first=True):
+    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
+        # Replace the SPIECE_UNDERLINE with a space to make sure SPIECE_UNDERLINE is only used at
+        # the beginning of the text
+        text = SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " ")
+        return super().tokenize(text, **kwargs)
+
+    def _tokenize(self, text, **kwargs):
         """
         Returns a tokenized string. Since the sentencpiece internal model always adds a SPIECE_UNDERLINE, at the
         beginning of the provided text, we need to remove it by hand when the current text is a subsequence. This
@@ -309,13 +315,12 @@ class T5Tokenizer(PreTrainedTokenizer):
         tokens, and each subsequence is passed to `_tokenize`. Thus is a subsequence did not start with a `" "` or
         SPIECE_UNDERLINE, we have to remove the extra `SPIECE_UNDERLINE` prepended.
         """
+        is_first = text.startswith(SPIECE_UNDERLINE)
+        if is_first:
+            text = text[1:]
         tokens = self.sp_model.encode(text, out_type=str)
-        if (
-            not self.legacy
-            and not is_first
-            and not text.startswith((" ", SPIECE_UNDERLINE))
-            and tokens[0].startswith(SPIECE_UNDERLINE)
-        ):
+
+        if not is_first and not self.legacy and not text.startswith(" ") and tokens[0].startswith(SPIECE_UNDERLINE):
             tokens = tokens[0][1:] if len(tokens[0]) > 1 else [] + tokens[1:]
         return tokens
 
