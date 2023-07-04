@@ -504,6 +504,7 @@ class FalconPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+    # Copied from transformers.models.bloom.modeling_bloom.BloomPreTrainedModel._set_gradient_checkpointing with BloomModel->FalconModel
     def _set_gradient_checkpointing(self, module: nn.Module, value: bool = False):
         if isinstance(module, FalconModel):
             module.gradient_checkpointing = value
