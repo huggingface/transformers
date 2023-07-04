@@ -29,7 +29,6 @@ The Time Series Transformer model is a vanilla encoder-decoder Transformer for t
 
 Tips:
 
-- Check out the Time Series Transformer blog-post in HuggingFace blog: [Probabilistic Time Series Forecasting with 🤗 Transformers](https://huggingface.co/blog/time-series-transformers)
 - Similar to other models in the library, [`TimeSeriesTransformerModel`] is the raw Transformer without any head on top, and [`TimeSeriesTransformerForPrediction`]
 adds a distribution head on top of the former, which can be used for time-series forecasting. Note that this is a so-called probabilistic forecasting model, not a
 point forecasting model. This means that the model learns a distribution, from which one can sample. The model doesn't directly output values.
@@ -59,6 +58,12 @@ which is then fed to the decoder in order to make the next prediction (also call
 
 
 This model was contributed by [kashif](https://huggingface.co/kashif).
+
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+
+- Check out the Time Series Transformer blog-post in HuggingFace blog: [Probabilistic Time Series Forecasting with 🤗 Transformers](https://huggingface.co/blog/time-series-transformers)
 
 
 ## TimeSeriesTransformerConfig
