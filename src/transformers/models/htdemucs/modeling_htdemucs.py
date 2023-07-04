@@ -25,6 +25,8 @@ from ...activations import ACT2FN
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 
+from .configuration_htdemucs import HtdemucsConfig
+
 @dataclass
 class HtdemucsBaseModelOutput(ModelOutput):
     """
@@ -184,12 +186,12 @@ class HtdemucsAttention(nn.Module):
 class HtdemucsEncoderBlock(nn.Module):
     def __init__(self, config: HtdemucsConfig, is_cross_attn=False):
         super().__init__()
-        self.embed_dim = config.d_model
+        self.embed_dim = config.hidden_size
         self.is_cross_attn = is_cross_attn
 
         self.attn = HtdemucsAttention(
             self.embed_dim,
-            config.decoder_attention_heads,
+            config.num_attention_heads,
             dropout=config.attention_dropout,
         )
 
@@ -202,19 +204,11 @@ class HtdemucsEncoderBlock(nn.Module):
         if is_cross_attn:
             self.cross_attn_layer_norm = nn.LayerNorm(self.embed_dim)
 
-        self.layer_scale_1 = (
-            nn.Parameter(torch.ones(self.embed_dim) * config.layer_scale_init_value)
-            if config.attn_layer_scale
-            else nn.Identity()
-        )  # TODO(SG): can remove attn_layer_scale from config
-        self.layer_scale_2 = (
-            nn.Parameter(torch.ones(self.embed_dim) * config.layer_scale_init_value)
-            if config.attn_layer_scale
-            else nn.Identity()
-        )
+        self.layer_scale_1 = nn.Parameter(torch.ones(self.embed_dim) * config.layer_scale_init_value)
+        self.layer_scale_2 = nn.Parameter(torch.ones(self.embed_dim) * config.layer_scale_init_value)
 
-        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
+        self.fc1 = nn.Linear(self.embed_dim, config.ffn_dim)
+        self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
         self.group_norm = nn.GroupNorm(num_groups=1, num_channels=self.embed_dim)
@@ -416,7 +410,7 @@ class HtdemucsSinusoidalPositionalEmbedding(nn.Module):
 class Htdemucs2dSinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.max_len = config.max_source_positions
+        self.max_len = config.max_position_embeddings
         self.d_model = config.hidden_size
         self.num_stems = config.num_stems
 
@@ -432,17 +426,18 @@ class Htdemucs2dSinusoidalPositionalEmbedding(nn.Module):
                     self.pos_emb = self.pos_emb.to(dtype=x.dtype, device=x.device)
                 return
 
-        pos_emb = torch.zeros(seq_len, self.num_stems, self.d_model)
+        # TODO(SG): clean-up and correct
+        pos_emb = torch.zeros(self.d_model, self.num_stems, seq_len)
         height_position = torch.arange(0, self.num_stems, dtype=torch.float32).unsqueeze(1)
         width_position = torch.arange(0, x.size(1), dtype=torch.float32).unsqueeze(1)
         div_term = torch.exp(
             torch.arange(0, self.d_model, 2, dtype=torch.float32) * -(math.log(10000.0) / self.d_model)
         )
 
-        pos_emb[:, :, 0:self.d_model:2] = torch.sin(width_position * div_term)
-        pos_emb[:, :, 1:self.d_model:2] = torch.cos(width_position * div_term)
-        pos_emb[:, :, self.d_model::2] = torch.sin(height_position * div_term)
-        pos_emb[:, :, self.d_model + 1::2] = torch.cos(height_position * div_term)
+        pos_emb[:, :, 0:self.d_model:2] = torch.sin(width_position * div_term).transpose(0, 1).unsqueeze(1).repeat(1, self.num_stems, 1)
+        pos_emb[:, :, 1:self.d_model:2] = torch.cos(width_position * div_term).transpose(0, 1).unsqueeze(1).repeat(1, self.num_stems, 1)
+        pos_emb[:, :, self.d_model::2] = torch.sin(height_position * div_term).transpose(0, 1).unsqueeze(2).repeat(1, 1, seq_len)
+        pos_emb[:, :, self.d_model + 1::2] = torch.cos(height_position * div_term).transpose(0, 1).unsqueeze(2).repeat(1, 1, seq_len)
 
         self.pos_emb = pos_emb.to(device=x.device, dtype=x.dtype)
 
@@ -458,9 +453,9 @@ class HtdemucsEncoder(HtdemucsPreTrainedModel):
         super().__init__(config)
 
         self.dropout = config.dropout
-        self.layerdrop = config.encoder_layerdrop
+        self.layerdrop = config.layerdrop
 
-        embed_dim = config.d_model
+        embed_dim = config.hidden_size
 
         self.layers = nn.ModuleList([HtdemucsEncoderLayer(config) for _ in range(config.num_hidden_layers // 2)])
 
@@ -469,9 +464,6 @@ class HtdemucsEncoder(HtdemucsPreTrainedModel):
 
         self.freq_layernorm_embedding = nn.LayerNorm(embed_dim)
         self.temp_layernorm_embedding = nn.LayerNorm(embed_dim)
-
-        self.freq_layer_norm = nn.LayerNorm(embed_dim)
-        self.temp_layer_norm = nn.LayerNorm(embed_dim)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
