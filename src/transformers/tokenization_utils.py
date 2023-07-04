@@ -359,6 +359,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     def is_fast(self) -> bool:
         return False
 
+
     @property
     def vocab_size(self) -> int:
         """
@@ -537,14 +538,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                         tokens[i - 1] = left.rstrip()
         # ["This is something", "<special_token_1>", "else"]
         tokenized_text = []
-        for token in tokens:
+        for i, token in enumerate(tokens):
             # Need to skip eventual empty (fully stripped) tokens
             if not token:
                 continue
             if token in no_split_token:
                 tokenized_text.append(token)
             else:
-                tokenized_text.extend(self._tokenize(token))
+                tokenized_text.extend(self._tokenize(token, i==0))
         # ["This", " is", " something", "<special_token_1>", "else"]
         return tokenized_text
 
