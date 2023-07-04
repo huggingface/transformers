@@ -647,7 +647,7 @@ class DetrEncoderLayer(nn.Module):
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
             object_queries (`torch.FloatTensor`, *optional*):
-                object queries (also called content embeddings), to be added to hidden_states.
+                Object queries (also called content embeddings), to be added to the hidden states.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -729,7 +729,7 @@ class DetrDecoderLayer(nn.Module):
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
             object_queries (`torch.FloatTensor`, *optional*):
-                object_queries that are added to the queries and keys
+               Object_queries that are added to the hidden states.
             in the cross-attention layer.
             query_position_embeddings (`torch.FloatTensor`, *optional*):
                 position embeddings that are added to the queries and keys
@@ -764,10 +764,10 @@ class DetrDecoderLayer(nn.Module):
 
             hidden_states, cross_attn_weights = self.encoder_attn(
                 hidden_states=hidden_states,
-                object_queries=query_position_embeddings,
+                object_queries=object_queries,  
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                spatial_position_embeddings=object_queries,
+                spatial_position_embeddings=query_position_embeddings,
                 output_attentions=output_attentions,
             )
 
@@ -948,7 +948,7 @@ class DetrEncoder(DetrPreTrainedModel):
                 [What are attention masks?](../glossary#attention-mask)
 
             object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Object queries that are added to the queries and keys in each self-attention layer.
+                Object queries that are added to the queries in each self-attention layer.
 
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -1076,7 +1076,7 @@ class DetrDecoder(DetrPreTrainedModel):
             object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Object queries that are added to the queries and keys in each cross-attention layer.
             query_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                , *optional*): Position embeddings that are added to the queries and keys in each self-attention layer.
+                , *optional*): Position embeddings that are added to the values and keys in each self-attention layer.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
