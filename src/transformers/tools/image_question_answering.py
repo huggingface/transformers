@@ -15,12 +15,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from typing import TYPE_CHECKING
-
 import torch
+from PIL import Image
+from torch.utils.data import DataLoader
 
 from ..models.auto import AutoModelForVisualQuestionAnswering, AutoProcessor
 from ..utils import requires_backends
 from .base import PipelineTool
+from typing import TYPE_CHECKING, List
 
 
 if TYPE_CHECKING:
@@ -30,9 +32,9 @@ if TYPE_CHECKING:
 class ImageQuestionAnsweringTool(PipelineTool):
     default_checkpoint = "dandelin/vilt-b32-finetuned-vqa"
     description = (
-        "This is a tool that answers a question about an image. It takes an input named `image` which should be the "
-        "image containing the information, as well as a `question` which should be the question in English. It "
-        "returns a text that is the answer to the question."
+        "This is a tool that answers a question about an image. It takes a list of inputs where each input should contain "
+        "an `image` which should be the image containing the information, as well as a `question` which should be the question in English. It "
+        "returns a list of texts that are the answers to the questions."
     )
     name = "image_qa"
     pre_processor_class = AutoProcessor
@@ -45,13 +47,19 @@ class ImageQuestionAnsweringTool(PipelineTool):
         requires_backends(self, ["vision"])
         super().__init__(*args, **kwargs)
 
-    def encode(self, image: "Image", question: str):
-        return self.pre_processor(image, question, return_tensors="pt")
+    def encode(self, images: List["Image"], questions: List[str]):
+        encoded_inputs = self.pre_processor(images, questions, return_tensors="pt")
+        return DataLoader(encoded_inputs, batch_size=self.batch_size)
 
     def forward(self, inputs):
         with torch.no_grad():
-            return self.model(**inputs).logits
+            outputs = []
+            for batch in inputs:
+                batch = {k: v.to(self.device) for k, v in batch.items()}
+                output = self.model(**batch).logits
+                outputs.append(output)
+            return torch.cat(outputs, dim=0)
 
     def decode(self, outputs):
-        idx = outputs.argmax(-1).item()
-        return self.model.config.id2label[idx]
+        indices = outputs.argmax(-1)
+        return [self.model.config.id2label[idx.item()] for idx in indices]
