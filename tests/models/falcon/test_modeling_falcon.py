@@ -363,6 +363,7 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         model.to(torch_device)
         inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
 
+
         expected_output = (
             "My favorite food is pizza. I love it so much that I have a pizza party every year for my birthday."
         )
@@ -371,3 +372,20 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         output_str = tokenizer.batch_decode(output_ids)[0]
 
         self.assertEqual(output_str, expected_output)
+
+    @slow
+    def test_lm_generation_big_models(self):
+        # The big models are way too big for the CI, so we use tiny random models that resemble their
+        # architectures but with much smaller and fewer layers
+        for repo in ["Rocketknight1/tiny-random-falcon-7b", "Rocketknight1/tiny-random-falcon-40b"]:
+            tokenizer = AutoTokenizer.from_pretrained(repo)
+            model = FalconForCausalLM.from_pretrained(repo)
+            model.eval()
+            model.to(torch_device)
+            inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
+
+            # We just test that these run without errors - the models are randomly initialized
+            # and so the actual text outputs will be garbage
+            model.generate(**inputs, do_sample=False, max_new_tokens=4)
+            model.generate(**inputs, do_sample=True, max_new_tokens=4)
+            model.generate(**inputs, num_beams=2, max_new_tokens=4)
