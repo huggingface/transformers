@@ -110,6 +110,7 @@ UNCONVERTIBLE_MODEL_ARCHITECTURES = {
     "MaskFormerSwinBackbone",
     "MT5Model",
     "MT5ForConditionalGeneration",
+    "UMT5ForConditionalGeneration",
     "TFMT5ForConditionalGeneration",
     "TFMT5Model",
     "QDQBertForSequenceClassification",
