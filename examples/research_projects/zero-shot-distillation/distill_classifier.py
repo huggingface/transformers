@@ -295,27 +295,41 @@ def main():
             "text": examples,
             "labels": teacher_soft_preds,
         }
-    )
+    ).map(tokenizer, input_columns="text").set_format("torch")
 
     # 3. create student
     logger.info("Initializing student model")
-    model = AutoModelForSequenceClassification.from_pretrained(
-        student_args.student_name_or_path, num_labels=len(class_names)
-    )
-    tokenizer = AutoTokenizer.from_pretrained(student_args.student_name_or_path, use_fast=data_args.use_fast_tokenizer)
+    model, tokenizer = initialize_student_model(student_args.student_name_or_path, len(class_names), data_args.use_fast_tokenizer)
     model.config.id2label = dict(enumerate(class_names))
     model.config.label2id = {label: i for i, label in enumerate(class_names)}
 
     # 4. train student on teacher predictions
-    dataset = dataset.map(tokenizer, input_columns="text")
-    dataset.set_format("torch")
+    compute_metrics_func = create_compute_metrics_func()
+    trainer = create_distillation_trainer(model, tokenizer, training_args, dataset, compute_metrics_func)
 
+    train_and_evaluate_model(trainer, training_args)
+
+    trainer.save_model()
+    
+if __name__ == "__main__":
+    main()
+
+def initialize_student_model(student_name_or_path, num_labels, use_fast):
+    model = AutoModelForSequenceClassification.from_pretrained(
+        student_name_or_path, num_labels=num_labels
+    )
+    tokenizer = AutoTokenizer.from_pretrained(student_name_or_path, use_fast=use_fast)
+    return model, tokenizer
+
+def create_compute_metrics_func():
     def compute_metrics(p, return_outputs=False):
         preds = p.predictions.argmax(-1)
         proxy_labels = p.label_ids.argmax(-1)  # "label_ids" are actually distributions
         return {"agreement": (preds == proxy_labels).mean().item()}
+    return compute_metrics
 
-    trainer = DistillationTrainer(
+def create_distillation_trainer(model, tokenizer, training_args, dataset, compute_metrics):
+    return DistillationTrainer(
         model=model,
         tokenizer=tokenizer,
         args=training_args,
@@ -323,6 +337,7 @@ def main():
         compute_metrics=compute_metrics,
     )
 
+def train_and_evaluate_model(trainer, training_args):
     if training_args.do_train:
         logger.info("Training student model on teacher predictions")
         trainer.train()
@@ -330,9 +345,3 @@ def main():
     if training_args.do_eval:
         agreement = trainer.evaluate(eval_dataset=dataset)["eval_agreement"]
         logger.info(f"Agreement of student and teacher predictions: {agreement * 100:0.2f}%")
-
-    trainer.save_model()
-
-
-if __name__ == "__main__":
-    main()
