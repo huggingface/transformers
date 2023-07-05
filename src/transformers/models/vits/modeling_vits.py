@@ -53,7 +53,7 @@ class VitsModelOutput(ModelOutput):
     Describes the outputs for the VITS model, with potential hidden states and attentions.
 
     Args:
-        audio (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        output_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Audio waveform predicted by the model.
         sequence_lengths  (`torch.FloatTensor` of shape `(batch_size,)`):
             The length in samples of each element in the `audio` batch.
@@ -70,7 +70,7 @@ class VitsModelOutput(ModelOutput):
             heads.
     """
 
-    audio: torch.FloatTensor = None
+    output_values: torch.FloatTensor = None
     sequence_lengths: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -1465,8 +1465,8 @@ class VitsModel(VitsPreTrainedModel):
         prior_latents = prior_means + torch.randn_like(prior_means) * torch.exp(prior_log_variances) * noise_scale
         latents = self.flow(prior_latents, output_padding_mask, speaker_embeddings, reverse=True)
 
-        predicted_audio = self.decoder((latents * output_padding_mask), speaker_embeddings)
-        predicted_audio = predicted_audio.squeeze(1)
+        output_values = self.decoder((latents * output_padding_mask), speaker_embeddings)
+        output_values = output_values.squeeze(1)
         sequence_lengths = predicted_lengths * np.prod(self.config.upsample_rates)
 
         if not return_dict:
@@ -1482,7 +1482,7 @@ class VitsModel(VitsPreTrainedModel):
             )
 
         return VitsModelOutput(
-            audio=predicted_audio,
+            output_values=output_values,
             sequence_lengths=sequence_lengths,
             hidden_states=text_encoder_output.hidden_states,
             attentions=text_encoder_output.attentions,
