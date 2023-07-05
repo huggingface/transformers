@@ -1196,7 +1196,7 @@ class VitsTextEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.FloatTensor], VitsTextEncoderOutput]:
+    ) -> tuple[Any, ...] | VitsTextEncoderOutput:
         hidden_states = self.embed_tokens(input_ids) * math.sqrt(self.config.hidden_size)
 
         encoder_outputs = self.encoder(
