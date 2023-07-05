@@ -109,7 +109,6 @@ class CctDropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-# Copied from transformers.models.cvt.modeling_cvt.CvtConvEmbeddings with Cvt->Cct
 class CctConvEmbeddings(nn.Module):
     """
     Performs convolutional tokenization of the input image.
@@ -155,7 +154,6 @@ class CctConvEmbeddings(nn.Module):
         return self.forward(torch.zeros((1, self.in_channels, self.img_size, self.img_size))).shape[1]
 
 
-# Copied from transformers.models.cvt.modeling_cvt.CvtSelfAttentionConvProjection with Cvt->Cct
 class CctSelfAttention(nn.Module):
     """
     Attention Module that computes self-attention, given an input hidden_state. Q, K, V are computed implicitly from
@@ -314,7 +312,6 @@ class CctEncoder(nn.Module):
         return pe.unsqueeze(0)
 
 
-# Copied from transformers.models.cvt.modeling_cvt.CvtPreTrainedModel with Cvt->Cct,cvt->cct
 class CctPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -371,7 +368,6 @@ CCT_INPUTS_DOCSTRING = r"""
     "The bare Cct Model transformer outputting raw hidden-states without any specific head on top.",
     CCT_START_DOCSTRING,
 )
-# Copied from transformers.models.cvt.modeling_cvt.CvtModel with CVT->CCT,Cvt->Cct
 class CctModel(CctPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -419,7 +415,6 @@ class CctModel(CctPreTrainedModel):
     """,
     CCT_START_DOCSTRING,
 )
-# Copied from transformers.models.cvt.modeling_cvt.CvtForImageClassification with CVT->CCT,Cvt->Cct,cvt->cct
 class CctForImageClassification(CctPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
