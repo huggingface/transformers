@@ -345,6 +345,21 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
     def _build_conversation_input_ids(self, conversation: Conversation) -> List[int]:
         """Builds the input ids for a conversation.
 
+        This is the format used in the original GPT-SW3 paper [1] and which is also
+        mentioned in the model card [2]. The format is inspired by the ChatML format
+        [3]. Concretely, the chat format is set up as follows:
+
+        ```
+        <eos><bos>
+        User:
+        Jag tycker träd är fina
+        <bos>
+        Bot:
+        Kul att du tycker det!
+        <bos>
+        ...
+        ```
+
         Args:
             conversation (`Conversation`):
                 Conversation to build input ids for.
@@ -352,6 +367,11 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         Returns:
             `List[int]`:
                 Input ids for the conversation.
+
+        References:
+            [1] https://doi.org/10.48550/arXiv.2305.12987
+            [2] https://huggingface.co/AI-Sweden-Models/gpt-sw3-126m-instruct
+            [3] https://github.com/openai/openai-python/blob/main/chatml.md
         """
         all_responses = [
             f"User:\n{text}" if is_user else f"Bot:\n{text}" for is_user, text in conversation.iter_texts()
