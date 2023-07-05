@@ -58,8 +58,8 @@ class VitsModelOutput(ModelOutput):
         sequence_lengths  (`torch.FloatTensor` of shape `(batch_size,)`):
             The length in samples of each element in the `output_values` batch.
         spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
-            The log-mel spectrogram predicted at the output of the flow model. This spectrogram is passed to the
-            Hi-Fi GAN decoder model to obtain the final audio waveform.
+            The log-mel spectrogram predicted at the output of the flow model. This spectrogram is passed to the Hi-Fi
+            GAN decoder model to obtain the final audio waveform.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -191,7 +191,7 @@ def _rational_quadratic_spline(
     min_derivative,
 ):
     upper_bound = tail_bound
-    lower_bound = - tail_bound
+    lower_bound = -tail_bound
 
     if torch.min(inputs) < lower_bound or torch.max(inputs) > upper_bound:
         raise ValueError("Input to a transform is not within its domain")
@@ -1315,12 +1315,6 @@ VITS_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        speaking_rate (`float`, *optional*, defaults to 1.0):
-            Speaking rate. Larger values give faster synthesised speech.
-        noise_scale (`float`, *optional*, defaults to 0.667):
-            How random the speech prediction is. Larger values create more variation in the predicted speech.
-        noise_scale_duration (`float`, *optional*, defaults to 0.8):
-            How random the duration prediction is. Larger values create more variation in the predicted durations.
         speaker_id (`int`, *optional*):
             Which speaker embedding to use. Only used for multispeaker models.
         output_attentions (`bool`, *optional*):
@@ -1357,6 +1351,11 @@ class VitsModel(VitsPreTrainedModel):
         # This is used only for training.
         self.posterior_encoder = VitsPosteriorEncoder(config)
 
+        # These parameters control the speech properties
+        self.speaking_rate = config.speaking_rate
+        self.noise_scale = config.noise_scale
+        self.noise_scale_duration = config.noise_scale_duration
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1369,9 +1368,6 @@ class VitsModel(VitsPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        speaking_rate: float = 1.0,
-        noise_scale: float = 0.667,
-        noise_scale_duration: float = 0.8,
         speaker_id: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1444,12 +1440,16 @@ class VitsModel(VitsPreTrainedModel):
 
         if self.config.use_stochastic_duration_prediction:
             log_duration = self.duration_predictor(
-                hidden_states, input_padding_mask, speaker_embeddings, reverse=True, noise_scale=noise_scale_duration
+                hidden_states,
+                input_padding_mask,
+                speaker_embeddings,
+                reverse=True,
+                noise_scale=self.noise_scale_duration,
             )
         else:
             log_duration = self.duration_predictor(hidden_states, input_padding_mask, speaker_embeddings)
 
-        length_scale = 1.0 / speaking_rate
+        length_scale = 1.0 / self.speaking_rate
         duration = torch.ceil(torch.exp(log_duration) * input_padding_mask * length_scale)
         predicted_lengths = torch.clamp_min(torch.sum(duration, [1, 2]), 1).long()
 
@@ -1472,7 +1472,7 @@ class VitsModel(VitsPreTrainedModel):
         prior_means = torch.matmul(attn.squeeze(1), prior_means).transpose(1, 2)
         prior_log_variances = torch.matmul(attn.squeeze(1), prior_log_variances).transpose(1, 2)
 
-        prior_latents = prior_means + torch.randn_like(prior_means) * torch.exp(prior_log_variances) * noise_scale
+        prior_latents = prior_means + torch.randn_like(prior_means) * torch.exp(prior_log_variances) * self.noise_scale
         latents = self.flow(prior_latents, output_padding_mask, speaker_embeddings, reverse=True)
 
         spectrogram = latents * output_padding_mask

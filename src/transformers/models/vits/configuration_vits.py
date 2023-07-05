@@ -123,6 +123,12 @@ class VitsConfig(PretrainedConfig):
             Dilation rates of the dilated 1D convolutional layers used in the WaveNet model.
         wavenet_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the WaveNet layers.
+        speaking_rate (`float`, *optional*, defaults to 1.0):
+            Speaking rate. Larger values give faster synthesised speech.
+        noise_scale (`float`, *optional*, defaults to 0.667):
+            How random the speech prediction is. Larger values create more variation in the predicted speech.
+        noise_scale_duration (`float`, *optional*, defaults to 0.8):
+            How random the duration prediction is. Larger values create more variation in the predicted durations.
 
     Example:
 
@@ -180,6 +186,9 @@ class VitsConfig(PretrainedConfig):
         wavenet_kernel_size=5,
         wavenet_dilation_rate=1,
         wavenet_dropout=0.0,
+        speaking_rate=1.0,
+        noise_scale=0.667,
+        noise_scale_duration=0.8,
         **kwargs,
     ):
         if len(upsample_kernel_sizes) != len(upsample_rates):
@@ -225,5 +234,8 @@ class VitsConfig(PretrainedConfig):
         self.wavenet_kernel_size = wavenet_kernel_size
         self.wavenet_dilation_rate = wavenet_dilation_rate
         self.wavenet_dropout = wavenet_dropout
+        self.speaking_rate = speaking_rate
+        self.noise_scale = noise_scale
+        self.noise_scale_duration = noise_scale_duration
 
         super().__init__(**kwargs)
