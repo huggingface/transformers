@@ -54,9 +54,12 @@ class VitsModelOutput(ModelOutput):
 
     Args:
         output_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Audio waveform predicted by the model.
+            The final audio waveform predicted by the model.
         sequence_lengths  (`torch.FloatTensor` of shape `(batch_size,)`):
-            The length in samples of each element in the `audio` batch.
+            The length in samples of each element in the `output_values` batch.
+        spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
+            The log-mel spectrogram predicted at the output of the flow model. This spectrogram is passed to the
+            Hi-Fi GAN decoder model to obtain the final audio waveform.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -72,6 +75,7 @@ class VitsModelOutput(ModelOutput):
 
     output_values: torch.FloatTensor = None
     sequence_lengths: torch.FloatTensor = None
+    spectrogram: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1471,7 +1475,8 @@ class VitsModel(VitsPreTrainedModel):
         prior_latents = prior_means + torch.randn_like(prior_means) * torch.exp(prior_log_variances) * noise_scale
         latents = self.flow(prior_latents, output_padding_mask, speaker_embeddings, reverse=True)
 
-        output_values = self.decoder((latents * output_padding_mask), speaker_embeddings)
+        spectrogram = latents * output_padding_mask
+        output_values = self.decoder(spectrogram, speaker_embeddings)
         output_values = output_values.squeeze(1)
         sequence_lengths = predicted_lengths * np.prod(self.config.upsample_rates)
 
@@ -1490,6 +1495,7 @@ class VitsModel(VitsPreTrainedModel):
         return VitsModelOutput(
             output_values=output_values,
             sequence_lengths=sequence_lengths,
+            spectrogram=spectrogram,
             hidden_states=text_encoder_output.hidden_states,
             attentions=text_encoder_output.attentions,
         )
