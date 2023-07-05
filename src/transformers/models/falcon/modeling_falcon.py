@@ -58,8 +58,8 @@ def rotate_half(x):
 
 class FalconRotaryEmbedding(nn.Module):
     """Implementation of RotaryEmbedding from GPT-NeoX.
-    This implementation is design to operate on queries and keys that are compatible with [batch_size,
-    n_heads_per_partition, seq_len, head_dim] (e.g. MinGPTAttention format).
+    This implementation is designed to operate on queries and keys that are compatible with `[batch_size,
+    n_heads_per_partition, seq_len, head_dim]` (e.g. MinGPTAttention format).
     """
 
     def __init__(
