@@ -251,8 +251,7 @@ def _compute_mask_indices(
         spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = sequence_length - 1
 
     # scatter indices to mask
-    mask_values = torch.ones(spec_aug_mask_idxs.shape, dtype=torch.bool)
-    spec_aug_mask = spec_aug_mask.scatter(1, spec_aug_mask_idxs, mask_values)
+    spec_aug_mask.scatter_(1, spec_aug_mask_idxs, spec_aug_mask)
 
     return spec_aug_mask
 
