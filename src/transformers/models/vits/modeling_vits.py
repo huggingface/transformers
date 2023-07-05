@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union, Any
+from typing import Any, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -130,6 +130,150 @@ def fused_add_tanh_sigmoid_multiply(input_a, input_b, num_channels):
     s_act = torch.sigmoid(in_act[:, num_channels:, :])
     acts = t_act * s_act
     return acts
+
+
+def _unconstrained_rational_quadratic_spline(
+    inputs,
+    unnormalized_widths,
+    unnormalized_heights,
+    unnormalized_derivatives,
+    reverse=False,
+    tail_bound=5.0,
+    min_bin_width=1e-3,
+    min_bin_height=1e-3,
+    min_derivative=1e-3,
+):
+    inside_interval_mask = (inputs >= -tail_bound) & (inputs <= tail_bound)
+    outside_interval_mask = ~inside_interval_mask
+
+    outputs = torch.zeros_like(inputs)
+    log_abs_det = torch.zeros_like(inputs)
+    constant = np.log(np.exp(1 - min_derivative) - 1)
+
+    unnormalized_derivatives = nn.functional.pad(unnormalized_derivatives, pad=(1, 1))
+    unnormalized_derivatives[..., 0] = constant
+    unnormalized_derivatives[..., -1] = constant
+
+    outputs[outside_interval_mask] = inputs[outside_interval_mask]
+    log_abs_det[outside_interval_mask] = 0.0
+
+    outputs[inside_interval_mask], log_abs_det[inside_interval_mask] = _rational_quadratic_spline(
+        inputs=inputs[inside_interval_mask],
+        unnormalized_widths=unnormalized_widths[inside_interval_mask, :],
+        unnormalized_heights=unnormalized_heights[inside_interval_mask, :],
+        unnormalized_derivatives=unnormalized_derivatives[inside_interval_mask, :],
+        reverse=reverse,
+        tail_bound=tail_bound,
+        min_bin_width=min_bin_width,
+        min_bin_height=min_bin_height,
+        min_derivative=min_derivative,
+    )
+    return outputs, log_abs_det
+
+
+def _rational_quadratic_spline(
+    inputs,
+    unnormalized_widths,
+    unnormalized_heights,
+    unnormalized_derivatives,
+    reverse,
+    tail_bound,
+    min_bin_width,
+    min_bin_height,
+    min_derivative,
+):
+    left = -tail_bound
+    right = tail_bound
+    bottom = -tail_bound
+    top = tail_bound
+
+    if torch.min(inputs) < left or torch.max(inputs) > right:
+        raise ValueError("Input to a transform is not within its domain")
+
+    num_bins = unnormalized_widths.shape[-1]
+
+    if min_bin_width * num_bins > 1.0:
+        raise ValueError(f"Minimal bin width {min_bin_width} too large for the number of bins {num_bins}")
+    if min_bin_height * num_bins > 1.0:
+        raise ValueError(f"Minimal bin height {min_bin_height} too large for the number of bins {num_bins}")
+
+    widths = nn.functional.softmax(unnormalized_widths, dim=-1)
+    widths = min_bin_width + (1 - min_bin_width * num_bins) * widths
+    cumwidths = torch.cumsum(widths, dim=-1)
+    cumwidths = nn.functional.pad(cumwidths, pad=(1, 0), mode="constant", value=0.0)
+    cumwidths = (right - left) * cumwidths + left
+    cumwidths[..., 0] = left
+    cumwidths[..., -1] = right
+    widths = cumwidths[..., 1:] - cumwidths[..., :-1]
+
+    derivatives = min_derivative + nn.functional.softplus(unnormalized_derivatives)
+
+    heights = nn.functional.softmax(unnormalized_heights, dim=-1)
+    heights = min_bin_height + (1 - min_bin_height * num_bins) * heights
+    cumheights = torch.cumsum(heights, dim=-1)
+    cumheights = nn.functional.pad(cumheights, pad=(1, 0), mode="constant", value=0.0)
+    cumheights = (top - bottom) * cumheights + bottom
+    cumheights[..., 0] = bottom
+    cumheights[..., -1] = top
+    heights = cumheights[..., 1:] - cumheights[..., :-1]
+
+    bin_locations = cumheights if reverse else cumwidths
+    bin_locations[..., -1] += 1e-6
+    bin_idx = torch.sum(inputs[..., None] >= bin_locations, dim=-1) - 1
+    bin_idx = bin_idx[..., None]
+
+    input_cumwidths = cumwidths.gather(-1, bin_idx)[..., 0]
+    input_bin_widths = widths.gather(-1, bin_idx)[..., 0]
+
+    input_cumheights = cumheights.gather(-1, bin_idx)[..., 0]
+    delta = heights / widths
+    input_delta = delta.gather(-1, bin_idx)[..., 0]
+
+    input_derivatives = derivatives.gather(-1, bin_idx)[..., 0]
+    input_derivatives_plus_one = derivatives[..., 1:].gather(-1, bin_idx)[..., 0]
+
+    input_heights = heights.gather(-1, bin_idx)[..., 0]
+
+    intermediate1 = input_derivatives + input_derivatives_plus_one - 2 * input_delta
+    if not reverse:
+        theta = (inputs - input_cumwidths) / input_bin_widths
+        theta_one_minus_theta = theta * (1 - theta)
+
+        numerator = input_heights * (input_delta * theta.pow(2) + input_derivatives * theta_one_minus_theta)
+        denominator = input_delta + intermediate1 * theta_one_minus_theta
+        outputs = input_cumheights + numerator / denominator
+
+        derivative_numerator = input_delta.pow(2) * (
+            input_derivatives_plus_one * theta.pow(2)
+            + 2 * input_delta * theta_one_minus_theta
+            + input_derivatives * (1 - theta).pow(2)
+        )
+        log_abs_det = torch.log(derivative_numerator) - 2 * torch.log(denominator)
+        return outputs, log_abs_det
+    else:
+        # find the roots of a quadratic equation
+        intermediate2 = inputs - input_cumheights
+        intermediate3 = intermediate2 * intermediate1
+        a = input_heights * (input_delta - input_derivatives) + intermediate3
+        b = input_heights * input_derivatives - intermediate3
+        c = -input_delta * intermediate2
+
+        discriminant = b.pow(2) - 4 * a * c
+        if not (discriminant >= 0).all():
+            raise RuntimeError(f"invalid discriminant {discriminant}")
+
+        root = (2 * c) / (-b - torch.sqrt(discriminant))
+        outputs = root * input_bin_widths + input_cumwidths
+
+        theta_one_minus_theta = root * (1 - root)
+        denominator = input_delta + intermediate1 * theta_one_minus_theta
+        derivative_numerator = input_delta.pow(2) * (
+            input_derivatives_plus_one * root.pow(2)
+            + 2 * input_delta * theta_one_minus_theta
+            + input_derivatives * (1 - root).pow(2)
+        )
+        log_abs_det = torch.log(derivative_numerator) - 2 * torch.log(denominator)
+        return outputs, -log_abs_det
 
 
 class VitsWaveNet(torch.nn.Module):
@@ -484,7 +628,7 @@ class VitsConvFlow(nn.Module):
         unnormalized_heights = hidden_states[..., self.num_bins : 2 * self.num_bins] / math.sqrt(self.filter_channels)
         unnormalized_derivatives = hidden_states[..., 2 * self.num_bins :]
 
-        second_half, log_abs_det = self._unconstrained_rational_quadratic_spline(
+        second_half, log_abs_det = _unconstrained_rational_quadratic_spline(
             second_half,
             unnormalized_widths,
             unnormalized_heights,
@@ -499,150 +643,6 @@ class VitsConvFlow(nn.Module):
             return outputs, log_determinant
         else:
             return outputs
-
-    @staticmethod
-    def _unconstrained_rational_quadratic_spline(
-        inputs,
-        unnormalized_widths,
-        unnormalized_heights,
-        unnormalized_derivatives,
-        reverse=False,
-        tail_bound=5.0,
-        min_bin_width=1e-3,
-        min_bin_height=1e-3,
-        min_derivative=1e-3,
-    ):
-        inside_interval_mask = (inputs >= -tail_bound) & (inputs <= tail_bound)
-        outside_interval_mask = ~inside_interval_mask
-
-        outputs = torch.zeros_like(inputs)
-        log_abs_det = torch.zeros_like(inputs)
-        constant = np.log(np.exp(1 - min_derivative) - 1)
-
-        unnormalized_derivatives = nn.functional.pad(unnormalized_derivatives, pad=(1, 1))
-        unnormalized_derivatives[..., 0] = constant
-        unnormalized_derivatives[..., -1] = constant
-
-        outputs[outside_interval_mask] = inputs[outside_interval_mask]
-        log_abs_det[outside_interval_mask] = 0.0
-
-        outputs[inside_interval_mask], log_abs_det[inside_interval_mask] = VitsConvFlow._rational_quadratic_spline(
-            inputs=inputs[inside_interval_mask],
-            unnormalized_widths=unnormalized_widths[inside_interval_mask, :],
-            unnormalized_heights=unnormalized_heights[inside_interval_mask, :],
-            unnormalized_derivatives=unnormalized_derivatives[inside_interval_mask, :],
-            reverse=reverse,
-            tail_bound=tail_bound,
-            min_bin_width=min_bin_width,
-            min_bin_height=min_bin_height,
-            min_derivative=min_derivative,
-        )
-        return outputs, log_abs_det
-
-    @staticmethod
-    def _rational_quadratic_spline(
-        inputs,
-        unnormalized_widths,
-        unnormalized_heights,
-        unnormalized_derivatives,
-        reverse,
-        tail_bound,
-        min_bin_width,
-        min_bin_height,
-        min_derivative,
-    ):
-        left = -tail_bound
-        right = tail_bound
-        bottom = -tail_bound
-        top = tail_bound
-
-        if torch.min(inputs) < left or torch.max(inputs) > right:
-            raise ValueError("Input to a transform is not within its domain")
-
-        num_bins = unnormalized_widths.shape[-1]
-
-        if min_bin_width * num_bins > 1.0:
-            raise ValueError(f"Minimal bin width {min_bin_width} too large for the number of bins {num_bins}")
-        if min_bin_height * num_bins > 1.0:
-            raise ValueError(f"Minimal bin height {min_bin_height} too large for the number of bins {num_bins}")
-
-        widths = nn.functional.softmax(unnormalized_widths, dim=-1)
-        widths = min_bin_width + (1 - min_bin_width * num_bins) * widths
-        cumwidths = torch.cumsum(widths, dim=-1)
-        cumwidths = nn.functional.pad(cumwidths, pad=(1, 0), mode="constant", value=0.0)
-        cumwidths = (right - left) * cumwidths + left
-        cumwidths[..., 0] = left
-        cumwidths[..., -1] = right
-        widths = cumwidths[..., 1:] - cumwidths[..., :-1]
-
-        derivatives = min_derivative + nn.functional.softplus(unnormalized_derivatives)
-
-        heights = nn.functional.softmax(unnormalized_heights, dim=-1)
-        heights = min_bin_height + (1 - min_bin_height * num_bins) * heights
-        cumheights = torch.cumsum(heights, dim=-1)
-        cumheights = nn.functional.pad(cumheights, pad=(1, 0), mode="constant", value=0.0)
-        cumheights = (top - bottom) * cumheights + bottom
-        cumheights[..., 0] = bottom
-        cumheights[..., -1] = top
-        heights = cumheights[..., 1:] - cumheights[..., :-1]
-
-        bin_locations = cumheights if reverse else cumwidths
-        bin_locations[..., -1] += 1e-6
-        bin_idx = torch.sum(inputs[..., None] >= bin_locations, dim=-1) - 1
-        bin_idx = bin_idx[..., None]
-
-        input_cumwidths = cumwidths.gather(-1, bin_idx)[..., 0]
-        input_bin_widths = widths.gather(-1, bin_idx)[..., 0]
-
-        input_cumheights = cumheights.gather(-1, bin_idx)[..., 0]
-        delta = heights / widths
-        input_delta = delta.gather(-1, bin_idx)[..., 0]
-
-        input_derivatives = derivatives.gather(-1, bin_idx)[..., 0]
-        input_derivatives_plus_one = derivatives[..., 1:].gather(-1, bin_idx)[..., 0]
-
-        input_heights = heights.gather(-1, bin_idx)[..., 0]
-
-        intermediate1 = input_derivatives + input_derivatives_plus_one - 2 * input_delta
-        if not reverse:
-            theta = (inputs - input_cumwidths) / input_bin_widths
-            theta_one_minus_theta = theta * (1 - theta)
-
-            numerator = input_heights * (input_delta * theta.pow(2) + input_derivatives * theta_one_minus_theta)
-            denominator = input_delta + intermediate1 * theta_one_minus_theta
-            outputs = input_cumheights + numerator / denominator
-
-            derivative_numerator = input_delta.pow(2) * (
-                input_derivatives_plus_one * theta.pow(2)
-                + 2 * input_delta * theta_one_minus_theta
-                + input_derivatives * (1 - theta).pow(2)
-            )
-            log_abs_det = torch.log(derivative_numerator) - 2 * torch.log(denominator)
-            return outputs, log_abs_det
-        else:
-            # find the roots of a quadratic equation
-            intermediate2 = inputs - input_cumheights
-            intermediate3 = intermediate2 * intermediate1
-            a = input_heights * (input_delta - input_derivatives) + intermediate3
-            b = input_heights * input_derivatives - intermediate3
-            c = -input_delta * intermediate2
-
-            discriminant = b.pow(2) - 4 * a * c
-            if not (discriminant >= 0).all():
-                raise RuntimeError(f"invalid discriminant {discriminant}")
-
-            root = (2 * c) / (-b - torch.sqrt(discriminant))
-            outputs = root * input_bin_widths + input_cumwidths
-
-            theta_one_minus_theta = root * (1 - root)
-            denominator = input_delta + intermediate1 * theta_one_minus_theta
-            derivative_numerator = input_delta.pow(2) * (
-                input_derivatives_plus_one * root.pow(2)
-                + 2 * input_delta * theta_one_minus_theta
-                + input_derivatives * (1 - root).pow(2)
-            )
-            log_abs_det = torch.log(derivative_numerator) - 2 * torch.log(denominator)
-            return outputs, -log_abs_det
 
 
 class VitsElementwiseAffine(nn.Module):
