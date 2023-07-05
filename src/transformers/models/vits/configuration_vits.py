@@ -46,9 +46,13 @@ class VitsConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 2):
             Number of attention heads for each attention layer in the Transformer encoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 768):
+        window_size (`int`, *optional*, defaults to 4):
+            Window size for the relative positional embeddings in the attention layers of the Transformer encoder.
+        use_bias (`bool`, *optional*, defaults to `True`)
+            Whether to use bias in the key, query, value projection layers in the Transformer encoder.
+        ffn_dim (`int`, *optional*, defaults to 768):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.1):
+        layerdrop (`float`, *optional*, defaults to 0.1):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         ffn_kernel_size (`int`, *optional*, defaults to 3):
@@ -152,8 +156,10 @@ class VitsConfig(PretrainedConfig):
         hidden_size=192,
         num_hidden_layers=6,
         num_attention_heads=2,
-        encoder_ffn_dim=768,
-        encoder_layerdrop=0.1,
+        window_size=4,
+        use_bias=True,
+        ffn_dim=768,
+        layerdrop=0.1,
         ffn_kernel_size=3,
         flow_size=192,
         spectrogram_bins=513,
@@ -191,17 +197,14 @@ class VitsConfig(PretrainedConfig):
         noise_scale_duration=0.8,
         **kwargs,
     ):
-        if len(upsample_kernel_sizes) != len(upsample_rates):
-            raise ValueError(
-                f"The length of `upsample_kernel_sizes` ({len(upsample_kernel_sizes)}) must match the length of `upsample_rates` ({len(upsample_rates)})"
-            )
-
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_layerdrop = encoder_layerdrop
+        self.window_size = window_size
+        self.use_bias = use_bias
+        self.ffn_dim = ffn_dim
+        self.layerdrop = layerdrop
         self.ffn_kernel_size = ffn_kernel_size
         self.flow_size = flow_size
         self.spectrogram_bins = spectrogram_bins
@@ -237,5 +240,17 @@ class VitsConfig(PretrainedConfig):
         self.speaking_rate = speaking_rate
         self.noise_scale = noise_scale
         self.noise_scale_duration = noise_scale_duration
+
+        if len(upsample_kernel_sizes) != len(upsample_rates):
+            raise ValueError(
+                f"The length of `upsample_kernel_sizes` ({len(upsample_kernel_sizes)}) must match the length of "
+                f"`upsample_rates` ({len(upsample_rates)})"
+            )
+
+        if (hidden_size // num_attention_heads * num_attention_heads) != hidden_size:
+            raise ValueError(
+                f"hidden_size must be divisible by num_attention_heads (got `hidden_size`: {hidden_size}"
+                f" and `num_attention_heads`: {num_attention_heads})."
+            )
 
         super().__init__(**kwargs)
