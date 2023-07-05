@@ -185,7 +185,7 @@ class VitsWaveNet(torch.nn.Module):
             else:
                 global_states = torch.zeros_like(hidden_states)
 
-            acts = fused_add_tanh_sigmoid_multiply(hidden_states, global_states, num_channels_tensor)
+            acts = fused_add_tanh_sigmoid_multiply(hidden_states, global_states, num_channels_tensor[0])
             acts = self.dropout(acts)
 
             res_skip_acts = self.res_skip_layers[i](acts)
