@@ -158,16 +158,16 @@ class VitsConfig(PretrainedConfig):
         resblock_kernel_sizes=[3, 7, 11],
         resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
         leaky_relu_slope=0.1,
+        duration_predictor_kernel_size=3,
+        duration_predictor_dropout=0.5,
+        duration_predictor_num_flows=4,
+        duration_predictor_filter_channels=256,
         prior_encoder_num_flows=4,
         prior_encoder_num_wavenet_layers=4,
         posterior_encoder_num_wavenet_layers=16,
         wavenet_kernel_size=5,
         wavenet_dilation_rate=1,
         wavenet_dropout=0.0,
-        duration_predictor_kernel_size=3,
-        duration_predictor_dropout=0.5,
-        duration_predictor_num_flows=4,
-        duration_predictor_filter_channels=256,
         **kwargs,
     ):
         if len(upsample_kernel_sizes) != len(upsample_rates):
@@ -202,12 +202,12 @@ class VitsConfig(PretrainedConfig):
         self.prior_encoder_num_flows = prior_encoder_num_flows
         self.prior_encoder_num_wavenet_layers = prior_encoder_num_wavenet_layers
         self.posterior_encoder_num_wavenet_layers = posterior_encoder_num_wavenet_layers
-        self.wavenet_kernel_size = wavenet_kernel_size
-        self.wavenet_dilation_rate = wavenet_dilation_rate
-        self.wavenet_dropout = wavenet_dropout
         self.duration_predictor_kernel_size = duration_predictor_kernel_size
         self.duration_predictor_dropout = duration_predictor_dropout
         self.duration_predictor_num_flows = duration_predictor_num_flows
         self.duration_predictor_filter_channels = duration_predictor_filter_channels
+        self.wavenet_kernel_size = wavenet_kernel_size
+        self.wavenet_dilation_rate = wavenet_dilation_rate
+        self.wavenet_dropout = wavenet_dropout
 
         super().__init__(**kwargs)
