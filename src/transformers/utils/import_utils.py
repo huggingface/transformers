@@ -249,6 +249,15 @@ def is_torch_cuda_available():
         return False
 
 
+def is_torch_mps_available():
+    if is_torch_available():
+        import torch
+
+        if hasattr(torch.backends, "mps"):
+            return torch.backends.mps.is_available()
+    return False
+
+
 def is_torch_bf16_gpu_available():
     if not is_torch_available():
         return False
