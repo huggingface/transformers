@@ -214,7 +214,7 @@ def _compute_mask_indices(
 
         # get random indices to mask
         spec_aug_mask_idx = torch.tensor(
-            random.sample(range(input_length - (mask_length - 1)), num_masked_span), dtype=torch.int64
+            random.sample(range(input_length - (mask_length - 1)), num_masked_span), dtype=torch.int32
         )
 
         # pick first sampled index that will serve as a dummy index to pad vector
