@@ -125,10 +125,9 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 @torch.jit.script
 def fused_add_tanh_sigmoid_multiply(input_a, input_b, num_channels):
-    num_channels_int = num_channels[0]
     in_act = input_a + input_b
-    t_act = torch.tanh(in_act[:, :num_channels_int, :])
-    s_act = torch.sigmoid(in_act[:, num_channels_int:, :])
+    t_act = torch.tanh(in_act[:, :num_channels, :])
+    s_act = torch.sigmoid(in_act[:, num_channels:, :])
     acts = t_act * s_act
     return acts
 
@@ -1246,7 +1245,6 @@ class VitsPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vits"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = []
 
     def _init_weights(self, module):
         """Initialize the weights"""
