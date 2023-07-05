@@ -73,7 +73,7 @@ google-auth==2.6.2
 google-auth-oauthlib==0.4.6
 google-pasta==0.2.0
 greenlet==1.1.2
-grpcio==1.44.0
+grpcio==1.53.0
 gym==0.23.1
 gym-notices==0.0.6
 h5py==3.6.0
