@@ -1351,7 +1351,7 @@ class VitsModel(VitsPreTrainedModel):
         # This is used only for training.
         self.posterior_encoder = VitsPosteriorEncoder(config)
 
-        # These parameters control the speech properties
+        # These parameters control the synthesised speech properties
         self.speaking_rate = config.speaking_rate
         self.noise_scale = config.noise_scale
         self.noise_scale_duration = config.noise_scale_duration
@@ -1463,10 +1463,10 @@ class VitsModel(VitsPreTrainedModel):
         batch_size, _, output_length, input_length = attn_mask.shape
         cum_duration = torch.cumsum(duration, -1).view(batch_size * input_length, 1)
         indices = torch.arange(output_length, dtype=duration.dtype, device=duration.device)
-        path = indices.unsqueeze(0) < cum_duration
-        path = path.to(attn_mask.dtype).view(batch_size, input_length, output_length)
-        path = path - nn.functional.pad(path, [0, 0, 1, 0, 0, 0])[:, :-1]
-        attn = path.unsqueeze(1).transpose(2, 3) * attn_mask
+        attn_path = indices.unsqueeze(0) < cum_duration
+        attn_path = attn_path.to(attn_mask.dtype).view(batch_size, input_length, output_length)
+        attn_path = attn_path - nn.functional.pad(attn_path, [0, 0, 1, 0, 0, 0])[:, :-1]
+        attn = attn_path.unsqueeze(1).transpose(2, 3) * attn_mask
 
         # Expand prior distribution
         prior_means = torch.matmul(attn.squeeze(1), prior_means).transpose(1, 2)
