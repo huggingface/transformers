@@ -15,7 +15,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import sentencepiece as spm
 
-from ...pipelines import Conversation
+if TYPE_CHECKING:
+    from transformers.pipelines.conversational import Conversation
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
@@ -334,7 +335,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
 
         return self.sp_model.decode(token_ids)
 
-    def _build_conversation_input_ids(self, conversation: Conversation) -> List[int]:
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         """Builds the input ids for a conversation.
 
         This is the format used in the original GPT-SW3 paper [1] and which is also
