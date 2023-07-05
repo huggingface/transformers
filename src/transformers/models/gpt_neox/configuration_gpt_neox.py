@@ -99,6 +99,8 @@ class GPTNeoXConfig(PretrainedConfig):
         hidden_act="gelu",
         rotary_pct=0.25,
         rotary_emb_base=10000,
+        attention_dropout=0.0,
+        hidden_dropout=0.0,
         classifier_dropout=0.1,
         max_position_embeddings=2048,
         initializer_range=0.02,
@@ -120,6 +122,8 @@ class GPTNeoXConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.rotary_pct = rotary_pct
         self.rotary_emb_base = rotary_emb_base
+        self.attention_dropout = attention_dropout
+        self.hidden_dropout = hidden_dropout
         self.classifier_dropout = classifier_dropout
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
