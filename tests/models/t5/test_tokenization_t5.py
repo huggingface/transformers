@@ -404,7 +404,6 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 class CommonSpmInegrationTests(unittest.TestCase):
-    
     def setup(self):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=0)
         tokenizer.add_special_tokens({"additional_special_tokens": ["<extra_id_0>"]})
@@ -412,7 +411,7 @@ class CommonSpmInegrationTests(unittest.TestCase):
         # TODO ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
         # So the extra ids are split....
         self.tokenizer = tokenizer
-        
+
     def test_add_dummy_prefix(self):
         # make sure `'▁'` is prepended, and outputs match sp_model's
         # `sentencepiece.NormalizerSpec.add_dummy_prefix` attribute
@@ -422,7 +421,7 @@ class CommonSpmInegrationTests(unittest.TestCase):
         self.assertEqual(input_ids, sp_encode)
         tokens = self.tokenizer.tokenize(". Hello")
         self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
-        
+
     def test_remove_extra_whitespaces(self):
         # make sure the extra spaces are eaten
         # sentencepiece.NormalizerSpec.remove_extra_whitespaces attribute
@@ -432,13 +431,13 @@ class CommonSpmInegrationTests(unittest.TestCase):
         self.assertEqual(input_ids, sp_encode)
         tokens = self.tokenizer.tokenize(" . Hello")
         self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
-        
+
         # `'▁'` is also a whitespace
         input_ids = self.tokenizer.encode("▁He is not")
         self.assertEqual(input_ids, [156, 46, 44, 999, 262, 15, 2])
         tokens = self.tokenizer.tokenize("▁He is not")
         self.assertEqual(tokens, ["▁He", "▁is", "▁not"])  # no extra space added
-    
+
         input_ids = self.tokenizer.encode("▁He is not<extra_id_0>             ▁He")
         # here t5x does not eat with lstrip, so there is and extra ▁He in the original one
         # TODO @arthurzucker we should probably not srip right since it is done by default
@@ -452,11 +451,11 @@ class CommonSpmInegrationTests(unittest.TestCase):
         # extra_id was not there
         input_ids = self.tokenizer.encode("▁He is not             ▁He")
         self.assertEqual(input_ids, [156, 46, 44, 156, 2])
-        tokens  = self.tokenizer.tokenize("▁He is not              ▁He")
+        tokens = self.tokenizer.tokenize("▁He is not              ▁He")
         self.assertEqual(tokens, ["▁He", "▁is", "▁not", "▁He"])  # spaces are eaten by spm even if not start
-    
+
     def test_character_after_special_token(self):
-        # Make sure that `tokenizer.tokenize` is similar to 
+        # Make sure that `tokenizer.tokenize` is similar to
         # adding the equivalent special token to the vocab
         input_ids = self.tokenizer.encode("Hey <extra_id_0>I")
         self.assertEqual(input_ids, [156, 86, 20, 3, 999, 100, 2])
@@ -469,22 +468,20 @@ class CommonSpmInegrationTests(unittest.TestCase):
         self.assertEqual(input_ids, [156, 86, 20, 3, 999, 3, 2])
         tokens = self.tokenizer.tokenize("Hello, <extra_id_0>,")
         self.assertEqual(tokens, ["▁He", "ll", "o", ",", "<extra_id_0>", ","])
-    
+
     def test_special_tokens_strip(self):
         input_ids = self.tokenizer.encode(" <extra_id_0> ,")
         self.assertEqual(input_ids, [999, 3, 2])
         tokens = self.tokenizer.tokenize(" <extra_id_0> ,")
         # spaces are eaten by rstrip / lstrip + spm sp_model.encode("  ") = []
         self.assertEqual(tokens, ["<extra_id_0>", ","])
-        
+
         input_ids = self.tokenizer.encode("No <extra_id_0> ▁He")
         self.assertEqual(input_ids, [156, 46, 44, 999, 262, 15, 2])
         tokens = self.tokenizer.tokenize("No <extra_id_0> ▁He")
         self.assertEqual(
             tokens, ["▁He", "▁is", "▁not", "<extra_id_0>", "H", "e"]
         )  # spaces are eaten by rstrip / lstrip
-        
-
 
     @require_seqio
     def test_integration_seqio(self):
@@ -510,7 +507,7 @@ class CommonSpmInegrationTests(unittest.TestCase):
         hf_out = hf_tokenizer.encode(input_text)
         self.assertEqual(hf_out, [""])
         self.assertEqual(t5_out, hf_out)
-        
+
         input_text = "Hello! Is this <extra_id_0>your idea"
         t5_out = t5x_tokenizer.encode(input_text)
         hf_out = hf_tokenizer.encode(input_text)
