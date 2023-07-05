@@ -57,14 +57,14 @@ class VitsModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         seq_length=7,
         is_training=False,
-        hidden_size=192,
-        num_hidden_layers=6,
+        hidden_size=16,
+        num_hidden_layers=2,
         num_attention_heads=2,
-        intermediate_size=768,
-        flow_size=192,
+        intermediate_size=64,
+        flow_size=16,
         vocab_size=38,
     ):
         self.parent = parent
