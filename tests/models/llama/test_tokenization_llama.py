@@ -521,6 +521,9 @@ class CommonSpmInegrationTests(unittest.TestCase):
     def test_remove_extra_whitespaces(self):
         # make sure the extra spaces are NOT eaten
         # sentencepiece.NormalizerSpec.remove_extra_whitespaces attribute is set to False
+        
+        #TODO not eaten only if they are learned == code database.
+        # Otherwise by default they are removed it seems.
         input_ids = self.tokenizer.encode("       . Hello")
         self.assertEqual(input_ids, [7, 4, 156, 86, 20])
         sp_encode = self.tokenizer.sp_model.encode("       . Hello")
