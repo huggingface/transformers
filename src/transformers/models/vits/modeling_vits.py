@@ -53,10 +53,10 @@ class VitsModelOutput(ModelOutput):
     Describes the outputs for the VITS model, with potential hidden states and attentions.
 
     Args:
-        output_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        waveform (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             The final audio waveform predicted by the model.
         sequence_lengths  (`torch.FloatTensor` of shape `(batch_size,)`):
-            The length in samples of each element in the `output_values` batch.
+            The length in samples of each element in the `waveform` batch.
         spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
             The log-mel spectrogram predicted at the output of the flow model. This spectrogram is passed to the Hi-Fi
             GAN decoder model to obtain the final audio waveform.
@@ -73,7 +73,7 @@ class VitsModelOutput(ModelOutput):
             heads.
     """
 
-    output_values: torch.FloatTensor = None
+    waveform: torch.FloatTensor = None
     sequence_lengths: torch.FloatTensor = None
     spectrogram: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -1476,15 +1476,15 @@ class VitsModel(VitsPreTrainedModel):
         latents = self.flow(prior_latents, output_padding_mask, speaker_embeddings, reverse=True)
 
         spectrogram = latents * output_padding_mask
-        output_values = self.decoder(spectrogram, speaker_embeddings)
-        output_values = output_values.squeeze(1)
+        waveform = self.decoder(spectrogram, speaker_embeddings)
+        waveform = waveform.squeeze(1)
         sequence_lengths = predicted_lengths * np.prod(self.config.upsample_rates)
 
         if not return_dict:
             return tuple(
                 v
                 for v in [
-                    output_values,
+                    waveform,
                     sequence_lengths,
                     text_encoder_output.hidden_states,
                     text_encoder_output.attentions,
@@ -1493,7 +1493,7 @@ class VitsModel(VitsPreTrainedModel):
             )
 
         return VitsModelOutput(
-            output_values=output_values,
+            waveform=waveform,
             sequence_lengths=sequence_lengths,
             spectrogram=spectrogram,
             hidden_states=text_encoder_output.hidden_states,
