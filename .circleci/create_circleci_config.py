@@ -434,6 +434,8 @@ exotic_models_job = CircleCIJob(
         "sudo apt install tesseract-ocr",
         "pip install -U --upgrade-strategy eager pytesseract",
         "pip install -U --upgrade-strategy eager natten",
+        # TODO (ydshieh): Remove this line once `https://github.com/facebookresearch/detectron2/issues/5010` is resolved
+        'pip install -U --upgrade-strategy eager "Pillow<10.0.0"',
     ],
     tests_to_run=[
         "tests/models/*layoutlmv*",
