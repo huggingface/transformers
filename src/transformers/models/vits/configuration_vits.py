@@ -42,9 +42,9 @@ class VitsConfig(PretrainedConfig):
             `inputs_ids` passed to the forward method of [`VitsModel`].
         hidden_size (`int`, *optional*, defaults to 192):
             Dimensionality of the text encoder layers.
-        encoder_layers (`int`, *optional*, defaults to 6):
+        num_hidden_layers (`int`, *optional*, defaults to 6):
             Number of hidden layers in the Transformer encoder.
-        encoder_attention_heads (`int`, *optional*, defaults to 2):
+        num_attention_heads (`int`, *optional*, defaults to 2):
             Number of attention heads for each attention layer in the Transformer encoder.
         encoder_ffn_dim (`int`, *optional*, defaults to 768):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
@@ -130,14 +130,13 @@ class VitsConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
     model_type = "vits"
-    attribute_map = {"num_attention_heads": "encoder_attention_heads", "num_hidden_layers": "encoder_layers"}
 
     def __init__(
         self,
         vocab_size=38,
         hidden_size=192,
-        encoder_layers=6,
-        encoder_attention_heads=2,
+        num_hidden_layers=6,
+        num_attention_heads=2,
         encoder_ffn_dim=768,
         encoder_layerdrop=0.1,
         ffn_kernel_size=3,
@@ -177,8 +176,8 @@ class VitsConfig(PretrainedConfig):
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.encoder_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layerdrop = encoder_layerdrop
         self.ffn_kernel_size = ffn_kernel_size
