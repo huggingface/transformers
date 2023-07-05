@@ -15,6 +15,7 @@
 """ PyTorch Wav2Vec2 model."""
 
 import math
+import random
 import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
@@ -144,7 +145,7 @@ def _compute_mask_indices(
     mask_length: int,
     attention_mask: Optional[torch.LongTensor] = None,
     min_masks: int = 0,
-) -> np.ndarray:
+) -> torch.Tensor:
     """
     Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
     ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
@@ -174,7 +175,7 @@ def _compute_mask_indices(
         )
 
     # epsilon is used for probabilistic rounding
-    epsilon = np.random.rand(1).item()
+    epsilon = torch.rand(1).item()
 
     def compute_num_masked_span(input_length):
         """Given input length, compute how many spans should be masked"""
@@ -199,8 +200,8 @@ def _compute_mask_indices(
     )
 
     # SpecAugment mask to fill
-    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=bool)
-    spec_aug_mask_idxs = []
+    spec_aug_mask = torch.zeros((batch_size, sequence_length), dtype=torch.bool)
+    spec_aug_mask_idxs = torch.tensor([], dtype=torch.int64)
 
     max_num_masked_span = compute_num_masked_span(sequence_length)
 
@@ -212,8 +213,8 @@ def _compute_mask_indices(
         num_masked_span = compute_num_masked_span(input_length)
 
         # get random indices to mask
-        spec_aug_mask_idx = np.random.choice(
-            np.arange(input_length - (mask_length - 1)), num_masked_span, replace=False
+        spec_aug_mask_idx = torch.tensor(
+            random.sample(range(input_length - (mask_length - 1)), num_masked_span), dtype=torch.int64
         )
 
         # pick first sampled index that will serve as a dummy index to pad vector
@@ -227,22 +228,20 @@ def _compute_mask_indices(
         else:
             dummy_mask_idx = spec_aug_mask_idx[0]
 
-        spec_aug_mask_idx = np.concatenate(
-            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
+        spec_aug_mask_idx = torch.cat(
+            (spec_aug_mask_idx, torch.ones(max_num_masked_span - num_masked_span, dtype=torch.int32) * dummy_mask_idx)
         )
-        spec_aug_mask_idxs.append(spec_aug_mask_idx)
-
-    spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
+        spec_aug_mask_idxs = torch.cat((spec_aug_mask_idxs, spec_aug_mask_idx.unsqueeze(0)), dim=0)
 
     # expand masked indices to masked spans
-    spec_aug_mask_idxs = np.broadcast_to(
+    spec_aug_mask_idxs = torch.broadcast_to(
         spec_aug_mask_idxs[:, :, None], (batch_size, max_num_masked_span, mask_length)
     )
     spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
 
     # add offset to the starting indexes so that indexes now create a span
-    offsets = np.arange(mask_length)[None, None, :]
-    offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
+    offsets = torch.arange(mask_length)[None, None, :]
+    offsets = torch.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
         batch_size, max_num_masked_span * mask_length
     )
     spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
@@ -252,7 +251,8 @@ def _compute_mask_indices(
         spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = sequence_length - 1
 
     # scatter indices to mask
-    np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
+    mask_values = torch.ones(spec_aug_mask_idxs.shape, dtype=torch.bool)
+    spec_aug_mask = spec_aug_mask.scatter(1, spec_aug_mask_idxs, mask_values)
 
     return spec_aug_mask
 
@@ -1502,7 +1502,10 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         if mask_time_indices is not None:
             # apply SpecAugment along time axis with given mask_time_indices
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+            temp_hidden_states = hidden_states.clone()
+            temp_hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+            hidden_states = temp_hidden_states
+
         elif self.config.mask_time_prob > 0 and self.training:
             mask_time_indices = _compute_mask_indices(
                 (batch_size, sequence_length),
@@ -1511,8 +1514,10 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 attention_mask=attention_mask,
                 min_masks=self.config.mask_time_min_masks,
             )
-            mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.bool)
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+            mask_time_indices = mask_time_indices.to(device=hidden_states.device)
+            temp_hidden_states = hidden_states.clone()
+            temp_hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+            hidden_states = temp_hidden_states
 
         if self.config.mask_feature_prob > 0 and self.training:
             # generate indices & apply SpecAugment along feature axis
@@ -1522,7 +1527,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 mask_length=self.config.mask_feature_length,
                 min_masks=self.config.mask_feature_min_masks,
             )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
+            mask_feature_indices = mask_feature_indices.to(device=hidden_states.device)
             mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
             hidden_states[mask_feature_indices] = 0
 
