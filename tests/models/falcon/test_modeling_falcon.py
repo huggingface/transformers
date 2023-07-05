@@ -301,10 +301,10 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_position_embedding_types(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config, *inputs = self.model_tester.prepare_config_and_inputs()
         for alibi in [True, False]:
-            config_and_inputs[0].alibi = alibi
-            self.model_tester.create_and_check_model(*config_and_inputs)
+            config.alibi = alibi
+            self.model_tester.create_and_check_model(config, *inputs)
 
     def test_falcon_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
