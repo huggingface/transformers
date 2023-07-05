@@ -1214,25 +1214,25 @@ class VitsTextEncoder(nn.Module):
         stats = self.project(last_hidden_state.transpose(1, 2)).transpose(1, 2) * padding_mask
         prior_means, prior_log_variances = torch.split(stats, self.config.flow_size, dim=2)
 
-        if return_dict:
-            return VitsTextEncoderOutput(
-                last_hidden_state=last_hidden_state,
-                prior_means=prior_means,
-                prior_log_variances=prior_log_variances,
-                hidden_states=encoder_outputs.hidden_states,
-                attentions=encoder_outputs.attentions,
+        if not return_dict:
+            return tuple(
+                v
+                for v in [
+                    last_hidden_state,
+                    prior_means,
+                    prior_log_variances,
+                    encoder_outputs.hidden_states,
+                    encoder_outputs.attentions,
+                ]
+                if v is not None
             )
 
-        return tuple(
-            v
-            for v in [
-                last_hidden_state,
-                prior_means,
-                prior_log_variances,
-                encoder_outputs.hidden_states,
-                encoder_outputs.attentions,
-            ]
-            if v is not None
+        return VitsTextEncoderOutput(
+            last_hidden_state=last_hidden_state,
+            prior_means=prior_means,
+            prior_log_variances=prior_log_variances,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
@@ -1471,21 +1471,21 @@ class VitsModel(VitsPreTrainedModel):
         predicted_audio = predicted_audio.squeeze(1)
         sequence_lengths = predicted_lengths * np.prod(self.config.upsample_rates)
 
-        if return_dict:
-            return VitsModelOutput(
-                audio=predicted_audio,
-                sequence_lengths=sequence_lengths,
-                hidden_states=text_encoder_output.hidden_states,
-                attentions=text_encoder_output.attentions,
+        if not return_dict:
+            return tuple(
+                v
+                for v in [
+                    predicted_audio,
+                    sequence_lengths,
+                    text_encoder_output.hidden_states,
+                    text_encoder_output.attentions,
+                ]
+                if v is not None
             )
 
-        return tuple(
-            v
-            for v in [
-                predicted_audio,
-                sequence_lengths,
-                text_encoder_output.hidden_states,
-                text_encoder_output.attentions,
-            ]
-            if v is not None
+        return VitsModelOutput(
+            audio=predicted_audio,
+            sequence_lengths=sequence_lengths,
+            hidden_states=text_encoder_output.hidden_states,
+            attentions=text_encoder_output.attentions,
         )
