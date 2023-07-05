@@ -113,8 +113,6 @@ In Multimodal tasks:
 - [Document Question Answering with LayoutLM](https://huggingface.co/impira/layoutlm-document-qa)
 - [Zero-shot Video Classification with X-CLIP](https://huggingface.co/docs/transformers/model_doc/xclip)
 
-**[Write With Transformer](https://transformer.huggingface.co)**, built by the Hugging Face team, is the official demo of this repo’s text generation capabilities.
-
 
 ## 100 projects using Transformers
 
