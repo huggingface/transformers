@@ -1473,7 +1473,7 @@ class VitsModel(VitsPreTrainedModel):
             return tuple(
                 v
                 for v in [
-                    predicted_audio,
+                    output_values,
                     sequence_lengths,
                     text_encoder_output.hidden_states,
                     text_encoder_output.attentions,
