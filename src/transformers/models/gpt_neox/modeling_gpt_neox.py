@@ -349,7 +349,7 @@ class GPTNeoXLayer(nn.Module):
             output_attentions=output_attentions,
         )
         attn_output = attention_layer_outputs[0]  # output_attn: attn_output, present, (attn_weights)
-        attn_output = self.post_attention_dropout(attn_dropout)
+        attn_output = self.post_attention_dropout(attn_output)
         outputs = attention_layer_outputs[1:]
 
         if self.use_parallel_residual:
