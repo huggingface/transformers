@@ -24,3 +24,10 @@ from ...utils import (
 )
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_resnet import ResNetConfig
+
+
+class attention_block(nn.Module):
+  def __init__(self, args: ModelArgs):
+    super().__init__()
+
+    self.
