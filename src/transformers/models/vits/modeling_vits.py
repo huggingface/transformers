@@ -84,10 +84,10 @@ class VitsTextEncoderOutput(ModelOutput):
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        means (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            The predicted mean values.
-        log_variances (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            The predicted log-variance values.
+        prior_means (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            The predicted mean values of the prior distribution for the latent text variables.
+        prior_log_variances (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            The predicted log-variance values of the prior distribution for the latent text variables.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -102,8 +102,8 @@ class VitsTextEncoderOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    means: torch.FloatTensor = None
-    log_variances: torch.FloatTensor = None
+    prior_means: torch.FloatTensor = None
+    prior_log_variances: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1212,13 +1212,13 @@ class VitsTextEncoder(nn.Module):
         last_hidden_state = encoder_outputs.last_hidden_state
 
         stats = self.project(last_hidden_state.transpose(1, 2)).transpose(1, 2) * padding_mask
-        means, log_variances = torch.split(stats, self.config.flow_size, dim=2)
+        prior_means, prior_log_variances = torch.split(stats, self.config.flow_size, dim=2)
 
         if return_dict:
             return VitsTextEncoderOutput(
                 last_hidden_state=last_hidden_state,
-                means=means,
-                log_variances=log_variances,
+                prior_means=prior_means,
+                prior_log_variances=prior_log_variances,
                 hidden_states=encoder_outputs.hidden_states,
                 attentions=encoder_outputs.attentions,
             )
@@ -1227,8 +1227,8 @@ class VitsTextEncoder(nn.Module):
             v
             for v in [
                 last_hidden_state,
-                means,
-                log_variances,
+                prior_means,
+                prior_log_variances,
                 encoder_outputs.hidden_states,
                 encoder_outputs.attentions,
             ]
@@ -1419,8 +1419,8 @@ class VitsModel(VitsPreTrainedModel):
         )
         hidden_states = text_encoder_output.last_hidden_state.transpose(1, 2)
         input_padding_mask = input_padding_mask.transpose(1, 2)
-        means_prior = text_encoder_output.means
-        log_variances_prior = text_encoder_output.log_variances
+        prior_means = text_encoder_output.prior_means
+        prior_log_variances = text_encoder_output.prior_log_variances
 
         if self.config.num_speakers > 1:
             if speaker_id is None:
@@ -1460,12 +1460,12 @@ class VitsModel(VitsPreTrainedModel):
         path = path - nn.functional.pad(path, [0, 0, 1, 0, 0, 0])[:, :-1]
         attn = path.unsqueeze(1).transpose(2, 3) * attn_mask
 
-        # Expand prior
-        means_prior = torch.matmul(attn.squeeze(1), means_prior).transpose(1, 2)
-        log_variances_prior = torch.matmul(attn.squeeze(1), log_variances_prior).transpose(1, 2)
+        # Expand prior distribution
+        prior_means = torch.matmul(attn.squeeze(1), prior_means).transpose(1, 2)
+        prior_log_variances = torch.matmul(attn.squeeze(1), prior_log_variances).transpose(1, 2)
 
-        latents_prior = means_prior + torch.randn_like(means_prior) * torch.exp(log_variances_prior) * noise_scale
-        latents = self.flow(latents_prior, output_padding_mask, speaker_embeddings, reverse=True)
+        prior_latents = prior_means + torch.randn_like(prior_means) * torch.exp(prior_log_variances) * noise_scale
+        latents = self.flow(prior_latents, output_padding_mask, speaker_embeddings, reverse=True)
 
         predicted_audio = self.decoder((latents * output_padding_mask), speaker_embeddings)
         predicted_audio = predicted_audio.squeeze(1)
