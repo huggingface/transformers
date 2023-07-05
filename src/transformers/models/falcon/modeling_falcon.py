@@ -56,7 +56,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-class FalconRotaryEmbedding(torch.nn.Module):
+class FalconRotaryEmbedding(nn.Module):
     """Implementation of RotaryEmbedding from GPT-NeoX.
     This implementation is design to operate on queries and keys that are compatible with [batch_size,
     n_heads_per_partition, seq_len, head_dim] (e.g. MinGPTAttention format).
