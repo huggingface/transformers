@@ -116,6 +116,7 @@ from .utils import (
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
+    is_torch_mps_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
