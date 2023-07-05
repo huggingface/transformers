@@ -1463,10 +1463,10 @@ class VitsModel(VitsPreTrainedModel):
         batch_size, _, output_length, input_length = attn_mask.shape
         cum_duration = torch.cumsum(duration, -1).view(batch_size * input_length, 1)
         indices = torch.arange(output_length, dtype=duration.dtype, device=duration.device)
-        attn_path = indices.unsqueeze(0) < cum_duration
-        attn_path = attn_path.to(attn_mask.dtype).view(batch_size, input_length, output_length)
-        attn_path = attn_path - nn.functional.pad(attn_path, [0, 0, 1, 0, 0, 0])[:, :-1]
-        attn = attn_path.unsqueeze(1).transpose(2, 3) * attn_mask
+        valid_indices = indices.unsqueeze(0) < cum_duration
+        valid_indices = valid_indices.to(attn_mask.dtype).view(batch_size, input_length, output_length)
+        padded_indices = valid_indices - nn.functional.pad(valid_indices, [0, 0, 1, 0, 0, 0])[:, :-1]
+        attn = padded_indices.unsqueeze(1).transpose(2, 3) * attn_mask
 
         # Expand prior distribution
         prior_means = torch.matmul(attn.squeeze(1), prior_means).transpose(1, 2)
