@@ -127,14 +127,12 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         name_or_path = kwargs.get("name_or_path")
         if name_or_path is None:
             logger.warning(
-                "name_or_path not provided. This will work for all GPT-SW3 models "
-                "except gpt-sw3-7b. If you are just testing the model, this can "
-                "safely be ignored."
+                "name_or_path not provided. This will work for all GPT-SW3 models except "
+                "gpt-sw3-7b. If you are just testing the model, this can safely be ignored."
             )
             name_or_path = "None"
 
-        # Default definitions for our 2 tokenizer versions, with None-checks to enable
-        # proper testing
+        # Default definitions for our 2 tokenizer versions, with None-checks to enable proper testing
         eos_token = "<|endoftext|>" if eos_token is None else eos_token
         unk_token = "<unk>" if unk_token is None else unk_token
         if "gpt-sw3-7b" in name_or_path:
@@ -169,22 +167,19 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         self.whitespaces = {" ", " ", " ", " ", " ", "　", " ", " ", " ", " ", "￼", ""}
         # fmt : on
 
-        # Regular expression to remove non-printing characters (e.g. some unicode
-        # control chars) in preprocessing
+        # Regular expression to remove non-printing characters (e.g. some unicode control chars) in preprocessing
         non_printing_characters = "".join(
             map(chr, list(range(0, 9)) + list(range(11, 32)) + list(range(127, 160)) + [160, 173, 8203])
         )
         self.non_printing_characters_re = re.compile(f"[{non_printing_characters}]")
 
-    # Copied from
-    # transformers.models.albert.tokenization_albert.AlbertTokenizer.__getstate__
+    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.__getstate__
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None
         return state
 
-    # Copied from
-    # transformers.models.albert.tokenization_albert.AlbertTokenizer.__setstate__
+    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.__setstate__
     def __setstate__(self, d):
         self.__dict__ = d
 
@@ -196,8 +191,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         self.sp_model.Load(self.vocab_file)
 
     @property
-    # Copied from
-    # transformers.models.albert.tokenization_albert.AlbertTokenizer.vocab_size
+    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.vocab_size
     def vocab_size(self) -> int:
         return len(self.sp_model)
 
@@ -260,15 +254,13 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
 
         return out_string
 
-    # Copied from
-    # transformers.models.albert.tokenization_albert.AlbertTokenizer.get_vocab
+    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.get_vocab
     def get_vocab(self) -> Dict[str, int]:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    # Copied from
-    # transformers.models.albert.tokenization_albert.AlbertTokenizer.save_vocabulary
+    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.save_vocabulary
     def save_vocabulary(
         self,
         save_directory: str,
