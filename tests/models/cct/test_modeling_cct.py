@@ -18,6 +18,8 @@
 import inspect
 import unittest
 from math import floor
+from typing import Dict, List, Tuple
+import torch.nn as nn
 
 from transformers import CctConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
@@ -73,13 +75,14 @@ class CctModelTester:
         qkv_bias=[False, False, False],
         qkv_projection_method=["avg", "avg", "avg"],
         num_transformer_layers=14,
-        pos_emb_type="learnable",
+        pos_emb_type='learnable',
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         is_training=True,
         use_labels=True,
         num_labels=2,  # Check
     ):
+        
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
@@ -108,7 +111,7 @@ class CctModelTester:
         self.is_training = is_training
         self.use_labels = use_labels
         self.num_labels = num_labels
-
+ 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.in_channels, self.image_size, self.image_size])
 
@@ -149,11 +152,11 @@ class CctModelTester:
     def create_and_check_hidden_state(self, post_pool):
         sz = self.image_size
         for _ in range(self.num_conv_layers):
-            sz = floor((sz + 2 * self.conv_padding - self.conv_kernel_size) / self.conv_stride) + 1
-            sz = floor((sz + 2 * self.pool_padding - self.pool_kernel_size) / self.pool_stride) + 1
+            sz = floor((sz + 2*self.conv_padding - self.conv_kernel_size)/self.conv_stride) + 1
+            sz = floor((sz + 2*self.pool_padding - self.pool_kernel_size)/self.pool_stride) + 1
 
-        if post_pool is False:
-            expected_size = (self.batch_size, sz * sz, self.embed_dim)
+        if post_pool == False:
+            expected_size = (self.batch_size, sz*sz, self.embed_dim)
         else:
             expected_size = (self.batch_size, self.embed_dim)
 
@@ -241,23 +244,22 @@ class CctModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config=config)
             for key, value in model.named_parameters():
-                if "weight" in key and value.requires_grad:
-                    if "norm" in key:
+                if 'weight' in key and value.requires_grad:
+                    if 'norm' in key:
                         bound = 1.0
                     else:
                         bound = 0.0
                     self.assertTrue(
-                        bound - 0.01 <= ((value.data.mean() * 1e9).round() / 1e9).item() <= bound + 0.01,
-                        msg=f"Parameter {key} of model {model_class} seems not properly initialized with value {value.data.mean()}",
-                    )
-
-                if "bias" in key and value.requires_grad:
+                        bound-0.01 <= ((value.data.mean() * 1e9).round() / 1e9).item() <= bound+0.01,
+                        msg=f"Parameter {key} of model {model_class} seems not properly initialized with value {value.data.mean()}") 
+                        
+                if 'bias' in key and value.requires_grad: 
                     self.assertEqual(
                         value.data.mean().item(),
                         0.0,
                         msg=f"Parameter {key} of model {model_class} seems not properly initialized with value {value.data.mean()}",
                     )
-
+                
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -269,9 +271,7 @@ class CctModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             hidden_states = outputs.hidden_states
 
-            expected_num_layers = (
-                self.model_tester.num_transformer_layers + 2
-            )  ## output from conv tokenizer + num_transformer_layers + output of seq_pool
+            expected_num_layers = self.model_tester.num_transformer_layers + 2 ## output from conv tokenizer + num_transformer_layers + output of seq_pool
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             ## check input hidden state

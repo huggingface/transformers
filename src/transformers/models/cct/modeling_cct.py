@@ -112,47 +112,79 @@ class CctDropPath(nn.Module):
 # Copied from transformers.models.cvt.modeling_cvt.CvtConvEmbeddings with Cvt->Cct
 class CctConvEmbeddings(nn.Module):
     """
-    Image to Conv Embedding.
+    Performs convolutional tokenization of the input image.
     """
 
-    def __init__(self, patch_size, num_channels, embed_dim, stride, padding):
+    def __init__(self, config: CctConfig):
         super().__init__()
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        self.patch_size = patch_size
-        self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=stride, padding=padding)
-        self.normalization = nn.LayerNorm(embed_dim)
+        self.in_channels = config.in_channels
+        self.img_size = config.img_size
+
+        channels_size = [config.in_channels] + config.out_channels
+        assert (
+            len(channels_size) == config.num_conv_layers + 1
+        ), "Ensure that the number output channels matches the number of conv layers"
+
+        self.embedding_layers = nn.ModuleList([])
+        for i in range(config.num_conv_layers):
+            self.embedding_layers.extend(
+                [
+                    nn.Conv2d(
+                        channels_size[i],
+                        channels_size[i + 1],
+                        kernel_size=config.conv_kernel_size,
+                        stride=config.conv_stride,
+                        padding=config.conv_padding,
+                        bias=config.conv_bias,
+                    ),
+                    nn.ReLU(),
+                    nn.MaxPool2d(config.pool_kernel_size, stride=config.pool_stride, padding=config.pool_padding),
+                ]
+            )
 
     def forward(self, pixel_values):
-        pixel_values = self.projection(pixel_values)
+        for layer in self.embedding_layers:
+            pixel_values = layer(pixel_values)
         batch_size, num_channels, height, width = pixel_values.shape
         hidden_size = height * width
         # rearrange "b c h w -> b (h w) c"
         pixel_values = pixel_values.view(batch_size, num_channels, hidden_size).permute(0, 2, 1)
-        if self.normalization:
-            pixel_values = self.normalization(pixel_values)
-        # rearrange "b (h w) c" -> b c h w"
-        pixel_values = pixel_values.permute(0, 2, 1).view(batch_size, num_channels, height, width)
         return pixel_values
+
+    def get_sequence_length(self) -> int:
+        return self.forward(torch.zeros((1, self.in_channels, self.img_size, self.img_size))).shape[1]
 
 
 # Copied from transformers.models.cvt.modeling_cvt.CvtSelfAttentionConvProjection with Cvt->Cct
 class CctSelfAttention(nn.Module):
-    def __init__(self, embed_dim, kernel_size, padding, stride):
+    """
+    Attention Module that computes self-attention, given an input hidden_state. Q, K, V are computed implicitly from
+    hidden_state
+    """
+
+    def __init__(self, embed_dim, num_heads=6, attention_drop_rate=0.1, drop_rate=0.0):
         super().__init__()
-        self.convolution = nn.Conv2d(
-            embed_dim,
-            embed_dim,
-            kernel_size=kernel_size,
-            padding=padding,
-            stride=stride,
-            bias=False,
-            groups=embed_dim,
-        )
-        self.normalization = nn.BatchNorm2d(embed_dim)
+        self.num_heads = num_heads
+        head_dim = embed_dim // self.num_heads
+        self.scale = head_dim**-0.5
+
+        self.qkv = nn.Linear(embed_dim, embed_dim * 3, bias=False)
+        self.attn_drop = nn.Dropout(attention_drop_rate)
+        self.proj = nn.Linear(embed_dim, embed_dim)
+        self.proj_drop = nn.Dropout(drop_rate)
 
     def forward(self, hidden_state):
-        hidden_state = self.convolution(hidden_state)
-        hidden_state = self.normalization(hidden_state)
+        B, N, C = hidden_state.shape
+        qkv = self.qkv(hidden_state).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv[0], qkv[1], qkv[2]
+
+        attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
+
+        hidden_state = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        hidden_state = self.proj(hidden_state)
+        hidden_state = self.proj_drop(hidden_state)
         return hidden_state
 
 
@@ -294,19 +326,21 @@ class CctPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
 
     def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data = nn.init.trunc_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, nn.ModuleList):
+            for module_child in module:
+                self._init_weights(module_child)
+        elif isinstance(module, nn.Module) and len(list(module.children())) > 0:
+            for module_child in module.children():
+                self._init_weights(module_child)
+        elif isinstance(module, nn.Linear):
+            nn.init.trunc_normal_(module.weight, std=0.02)
             if module.bias is not None:
-                module.bias.data.zero_()
+                nn.init.constant_(module.bias, 0.0)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, CctStage):
-            if self.config.cls_token[module.stage]:
-                module.cls_token.data = nn.init.trunc_normal_(
-                    torch.zeros(1, 1, self.config.embed_dim[-1]), mean=0.0, std=self.config.initializer_range
-                )
+            nn.init.constant_(module.bias, 0.0)
+            nn.init.constant_(module.weight, 1.0)
+        elif isinstance(module, nn.Conv2d):
+            nn.init.kaiming_normal_(module.weight)
 
 
 CCT_START_DOCSTRING = r"""
@@ -342,54 +376,40 @@ class CctModel(CctPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
-        self.encoder = CctEncoder(config)
+        self.embedder = CctConvEmbeddings(config)
+        self.encoder = CctEncoder(config, self.embedder.get_sequence_length())
         self.post_init()
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(CCT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithCLSToken,
+        output_type=BaseModelOutputWithSeqPool,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
+        pixel_values: torch.Tensor,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithCLSToken]:
+    ) -> Union[Tuple, BaseModelOutputWithSeqPool]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
+            raise ValueError("You have to specify pixel_values (input image)")
 
+        embedder_outputs = self.embedder(pixel_values)
         encoder_outputs = self.encoder(
-            pixel_values,
+            embedder_outputs,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        sequence_output = encoder_outputs[0]
 
-        if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
-
-        return BaseModelOutputWithCLSToken(
-            last_hidden_state=sequence_output,
-            cls_token_value=encoder_outputs.cls_token_value,
-            hidden_states=encoder_outputs.hidden_states,
-        )
+        return encoder_outputs
 
 
 @add_start_docstrings(
@@ -406,11 +426,8 @@ class CctForImageClassification(CctPreTrainedModel):
 
         self.num_labels = config.num_labels
         self.cct = CctModel(config, add_pooling_layer=False)
-        self.layernorm = nn.LayerNorm(config.embed_dim[-1])
         # Classifier head
-        self.classifier = (
-            nn.Linear(config.embed_dim[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
-        )
+        self.classifier = nn.Linear(config.embed_dim, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -436,24 +453,18 @@ class CctForImageClassification(CctPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
         outputs = self.cct(
             pixel_values,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
-        cls_token = outputs[1]
-        if self.config.cls_token[-1]:
-            sequence_output = self.layernorm(cls_token)
-        else:
-            batch_size, num_channels, height, width = sequence_output.shape
-            # rearrange "b c h w -> b (h w) c"
-            sequence_output = sequence_output.view(batch_size, num_channels, height * width).permute(0, 2, 1)
-            sequence_output = self.layernorm(sequence_output)
-
-        sequence_output_mean = sequence_output.mean(dim=1)
-        logits = self.classifier(sequence_output_mean)
+        pooled_output = outputs.hidden_state_post_pool if return_dict else outputs[1]
+        logits = self.classifier(pooled_output)
 
         loss = None
         if labels is not None:
@@ -479,7 +490,9 @@ class CctForImageClassification(CctPreTrainedModel):
                 loss = loss_fct(logits, labels)
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            out = (logits, outputs[2]) if output_hidden_states else (logits,)
+            return (loss,) + out if loss is not None else out
 
-        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+        return ImageClassifierOutputWithNoAttention(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states if output_hidden_states else None
+        )

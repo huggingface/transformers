@@ -20,13 +20,14 @@
 import argparse
 import json
 from pathlib import Path
+from collections import OrderedDict
 
-import requests
 import torch
 from huggingface_hub import cached_download, hf_hub_url
-from PIL import Image
 
 from transformers import CctConfig, CctForImageClassification, ConvNextFeatureExtractor
+from PIL import Image
+import requests
 
 
 def embeddings(idx):
@@ -50,9 +51,9 @@ def transformer(idx):
     transformer_weights = {}
 
     if idx == 0:
-        transformer_weights["classifier.positional_emb"] = "cct.encoder.positional_emb"
-        transformer_weights["classifier.attention_pool.weight"] = "cct.encoder.attention_pool.weight"
-        transformer_weights["classifier.attention_pool.bias"] = "cct.encoder.attention_pool.bias"
+        transformer_weights[f"classifier.positional_emb"] = f"cct.encoder.positional_emb"
+        transformer_weights[f"classifier.attention_pool.weight"] = f"cct.encoder.attention_pool.weight"
+        transformer_weights[f"classifier.attention_pool.bias"] = f"cct.encoder.attention_pool.bias"
 
     transformer_weights[f"classifier.blocks.{idx}.pre_norm.weight"] = f"cct.encoder.blocks.{idx}.pre_norm.weight"
     transformer_weights[f"classifier.blocks.{idx}.pre_norm.bias"] = f"cct.encoder.blocks.{idx}.pre_norm.bias"
@@ -62,18 +63,11 @@ def transformer(idx):
     transformer_weights[f"classifier.blocks.{idx}.norm1.bias"] = f"cct.encoder.blocks.{idx}.norm1.bias"
     transformer_weights[f"classifier.blocks.{idx}.linear2.weight"] = f"cct.encoder.blocks.{idx}.linear2.weight"
     transformer_weights[f"classifier.blocks.{idx}.linear2.bias"] = f"cct.encoder.blocks.{idx}.linear2.bias"
-    transformer_weights[
-        f"classifier.blocks.{idx}.self_attn.qkv.weight"
-    ] = f"cct.encoder.blocks.{idx}.self_attn.qkv.weight"
-    transformer_weights[
-        f"classifier.blocks.{idx}.self_attn.proj.weight"
-    ] = f"cct.encoder.blocks.{idx}.self_attn.proj.weight"
-    transformer_weights[
-        f"classifier.blocks.{idx}.self_attn.proj.bias"
-    ] = f"cct.encoder.blocks.{idx}.self_attn.proj.bias"
+    transformer_weights[f"classifier.blocks.{idx}.self_attn.qkv.weight"] = f"cct.encoder.blocks.{idx}.self_attn.qkv.weight"
+    transformer_weights[f"classifier.blocks.{idx}.self_attn.proj.weight"] = f"cct.encoder.blocks.{idx}.self_attn.proj.weight"
+    transformer_weights[f"classifier.blocks.{idx}.self_attn.proj.bias"] = f"cct.encoder.blocks.{idx}.self_attn.proj.bias"
 
     return transformer_weights
-
 
 def final():
     """
@@ -94,7 +88,6 @@ def prepare_img():
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
-
 @torch.no_grad()
 def convert_cct_checkpoint(model_name, pytorch_dump_folder):
     """
@@ -103,8 +96,10 @@ def convert_cct_checkpoint(model_name, pytorch_dump_folder):
 
     # define CCT configuration based on URL
     checkpoint_url_dict = {
-        "cct_14_7x2_224": "https://shi-labs.com/projects/cct/checkpoints/pretrained/cct_14_7x2_224_imagenet.pth",
-        "cct_14_7x2_384": "https://shi-labs.com/projects/cct/checkpoints/finetuned/cct_14_7x2_384_imagenet.pth",
+        'cct_14_7x2_224':
+            'https://shi-labs.com/projects/cct/checkpoints/pretrained/cct_14_7x2_224_imagenet.pth',
+        'cct_14_7x2_384':
+            'https://shi-labs.com/projects/cct/checkpoints/finetuned/cct_14_7x2_384_imagenet.pth',
     }
 
     checkpoint_url = checkpoint_url_dict[model_name]
@@ -114,7 +109,7 @@ def convert_cct_checkpoint(model_name, pytorch_dump_folder):
     id2label = json.load(open(cached_download(hf_hub_url(repo_id, img_labels_file, repo_type="dataset")), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
 
-    if model_name.split("_")[3] == "224":
+    if model_name.split('_')[3] == '224':
         size = 224
     else:
         size = 384
@@ -141,15 +136,13 @@ def convert_cct_checkpoint(model_name, pytorch_dump_folder):
 
     # load original state_dict from URL
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)
-
+    
     for idx in range(config.num_conv_layers):
         new_keys = embeddings(idx)
         for key, n_key in new_keys.items():
             value = state_dict.pop(key)
 
-            assert (
-                value.shape == model.get_parameter(n_key).data.shape
-            ), f"Shape of weights doesn't match for {key} in original model and {n_key} in hf model: Expected{model.get_parameter(n_key).data.shape}, got {value.shape}"
+            assert value.shape == model.get_parameter(n_key).data.shape, f"Shape of weights doesn't match for {key} in original model and {n_key} in hf model: Expected{model.get_parameter(n_key).data.shape}, got {value.shape}"
             print(f"Initialized weight {n_key} from {key}, with shape {value.shape}")
             state_dict[n_key] = value
 
@@ -158,9 +151,7 @@ def convert_cct_checkpoint(model_name, pytorch_dump_folder):
         for key, n_key in new_keys.items():
             value = state_dict.pop(key)
 
-            assert (
-                value.shape == model.get_parameter(n_key).data.shape
-            ), f"Shape of weights doesn't match for {key} in original model and {n_key} in hf model: Expected{model.get_parameter(n_key).data.shape}, got {value.shape}"
+            assert value.shape == model.get_parameter(n_key).data.shape, f"Shape of weights doesn't match for {key} in original model and {n_key} in hf model: Expected{model.get_parameter(n_key).data.shape}, got {value.shape}"
             print(f"Initialized weight {n_key} from {key}, with shape {value.shape}")
             state_dict[n_key] = value
 
@@ -168,15 +159,13 @@ def convert_cct_checkpoint(model_name, pytorch_dump_folder):
     for key, n_key in new_keys.items():
         value = state_dict.pop(key)
 
-        assert (
-            value.shape == model.get_parameter(n_key).data.shape
-        ), f"Shape of weights doesn't match for {key} in original model and {n_key} in hf model: Expected{model.get_parameter(n_key).data.shape}, got {value.shape}"
+        assert value.shape == model.get_parameter(n_key).data.shape, f"Shape of weights doesn't match for {key} in original model and {n_key} in hf model: Expected{model.get_parameter(n_key).data.shape}, got {value.shape}"
         print(f"Initialized weight {n_key} from {key}, with shape {value.shape}")
         state_dict[n_key] = value
 
     # load HuggingFace model
     model.load_state_dict(state_dict)
-    print("Successfully loaded state dict")
+    print(f"Successfully loaded state dict")
     model.eval()
 
     # Check outputs on an image, prepared by ConvNextFeatureExtractor
@@ -185,11 +174,11 @@ def convert_cct_checkpoint(model_name, pytorch_dump_folder):
 
     logits = model(pixel_values).logits
 
-    if model_name == "cct_14_7x2_224":
+    if model_name == 'cct_14_7x2_224':
         expected_logits = torch.tensor([0.4862, 0.6512, 0.2444, 0.2685, 0.4327])
-    if model_name == "cct_14_7x2_384":
+    if model_name == 'cct_14_7x2_384':
         expected_logits = torch.tensor([0.1484, 1.1873, 0.3872, 0.1801, 0.5467])
-
+        
     assert torch.allclose(logits[0, :5], expected_logits, atol=1e-3)
     assert logits.shape == (1, num_labels)
 
@@ -200,11 +189,16 @@ def convert_cct_checkpoint(model_name, pytorch_dump_folder):
     feature_extractor.save_pretrained(pytorch_dump_folder)
 
     print("Pushing model to the hub...")
-    model.push_to_hub(repo_id=f"rishabbala/{model_name}", commit_message="Add model CCT", use_temp_dir=True)
-    feature_extractor.push_to_hub(
-        repo_id=f"rishabbala/{model_name}", commit_message="Add feature exteractor CCT", use_temp_dir=True
+    model.push_to_hub(
+        repo_id=f"rishabbala/{model_name}",
+        commit_message="Add model CCT",
+        use_temp_dir=True
     )
-
+    feature_extractor.push_to_hub(
+        repo_id=f"rishabbala/{model_name}",
+        commit_message="Add feature exteractor CCT",
+        use_temp_dir=True
+    )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
