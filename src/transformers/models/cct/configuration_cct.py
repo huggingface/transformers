@@ -71,19 +71,10 @@ class CctConfig(PretrainedConfig):
             The dropout ratio following linear projections.
         drop_path_rate (`float`, *optional*, defaults to `0.0`):
             The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
-        qkv_bias (`List[bool]`, *optional*, defaults to `[False, False, False]`):
-            The bias bool for query, key and value in attentions
-        qkv_projection_method (`List[string]`, *optional*, defaults to ["avg", "avg", "avg"]`):
-            The projection method for query, key and value Default is depth-wise convolutions with batch norm. For
-            Linear projection use "avg".
         num_transformer_layers(`int`, *optional*, defaults to 14):
             Number of transformer self-attention layers
         pos_emb_type (`str`, *optional*, defaults to 'learnable'):
             Type of positional embedding used. Alternative: 'sinusoidal'
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the layer normalization layers.
 
     Example:
 
@@ -120,12 +111,8 @@ class CctConfig(PretrainedConfig):
         attention_drop_rate=0.1,
         drop_rate=0.0,
         drop_path_rate=0.0,
-        qkv_bias=[False, False, False],
-        qkv_projection_method=["avg", "avg", "avg"],
         num_transformer_layers=14,
         pos_emb_type="learnable",
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -147,9 +134,5 @@ class CctConfig(PretrainedConfig):
         self.attention_drop_rate = attention_drop_rate
         self.drop_rate = drop_rate
         self.drop_path_rate = drop_path_rate
-        self.qkv_bias = qkv_bias
-        self.qkv_projection_method = qkv_projection_method
         self.num_transformer_layers = num_transformer_layers
         self.pos_emb_type = pos_emb_type
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
