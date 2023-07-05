@@ -1307,8 +1307,8 @@ VITS_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        speed (`float`, *optional*, defaults to 1.0):
-            Speaking rate. Larger values are faster.
+        speaking_rate (`float`, *optional*, defaults to 1.0):
+            Speaking rate. Larger values give faster synthesised speech.
         noise_scale (`float`, *optional*, defaults to 0.667):
             How random the speech prediction is. Larger values create more variation in the predicted speech.
         noise_scale_duration (`float`, *optional*, defaults to 0.8):
@@ -1361,7 +1361,7 @@ class VitsModel(VitsPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        speed: float = 1.0,
+        speaking_rate: float = 1.0,
         noise_scale: float = 0.667,
         noise_scale_duration: float = 0.8,
         speaker_id: Optional[int] = None,
@@ -1441,7 +1441,7 @@ class VitsModel(VitsPreTrainedModel):
         else:
             log_duration = self.duration_predictor(hidden_states, input_padding_mask, speaker_embeddings)
 
-        length_scale = 1.0 / speed
+        length_scale = 1.0 / speaking_rate
         duration = torch.ceil(torch.exp(log_duration) * input_padding_mask * length_scale)
         predicted_lengths = torch.clamp_min(torch.sum(duration, [1, 2]), 1).long()
 
