@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, Any
 
 import numpy as np
 import torch
@@ -1367,7 +1367,7 @@ class VitsModel(VitsPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.FloatTensor] = None,
-    ) -> Union[Tuple[torch.FloatTensor], VitsModelOutput]:
+    ) -> Union[Tuple[Any], VitsModelOutput]:
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`, *optional*):
             Float values of target spectrogram. Timesteps set to `-100.0` are ignored (masked) for the loss
