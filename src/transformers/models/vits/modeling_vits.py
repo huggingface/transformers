@@ -143,6 +143,10 @@ def _unconstrained_rational_quadratic_spline(
     min_bin_height=1e-3,
     min_derivative=1e-3,
 ):
+    """
+    This transformation represents a monotonically increasing piecewise rational quadratic function. Outside of the
+    `tail_bound`, the transform behaves as an identity function.
+    """
     inside_interval_mask = (inputs >= -tail_bound) & (inputs <= tail_bound)
     outside_interval_mask = ~inside_interval_mask
 
@@ -182,12 +186,10 @@ def _rational_quadratic_spline(
     min_bin_height,
     min_derivative,
 ):
-    left = -tail_bound
-    right = tail_bound
-    bottom = -tail_bound
-    top = tail_bound
+    upper_bound = tail_bound
+    lower_bound = - tail_bound
 
-    if torch.min(inputs) < left or torch.max(inputs) > right:
+    if torch.min(inputs) < lower_bound or torch.max(inputs) > upper_bound:
         raise ValueError("Input to a transform is not within its domain")
 
     num_bins = unnormalized_widths.shape[-1]
@@ -201,9 +203,9 @@ def _rational_quadratic_spline(
     widths = min_bin_width + (1 - min_bin_width * num_bins) * widths
     cumwidths = torch.cumsum(widths, dim=-1)
     cumwidths = nn.functional.pad(cumwidths, pad=(1, 0), mode="constant", value=0.0)
-    cumwidths = (right - left) * cumwidths + left
-    cumwidths[..., 0] = left
-    cumwidths[..., -1] = right
+    cumwidths = (upper_bound - lower_bound) * cumwidths + lower_bound
+    cumwidths[..., 0] = lower_bound
+    cumwidths[..., -1] = upper_bound
     widths = cumwidths[..., 1:] - cumwidths[..., :-1]
 
     derivatives = min_derivative + nn.functional.softplus(unnormalized_derivatives)
@@ -212,9 +214,9 @@ def _rational_quadratic_spline(
     heights = min_bin_height + (1 - min_bin_height * num_bins) * heights
     cumheights = torch.cumsum(heights, dim=-1)
     cumheights = nn.functional.pad(cumheights, pad=(1, 0), mode="constant", value=0.0)
-    cumheights = (top - bottom) * cumheights + bottom
-    cumheights[..., 0] = bottom
-    cumheights[..., -1] = top
+    cumheights = (upper_bound - lower_bound) * cumheights + lower_bound
+    cumheights[..., 0] = lower_bound
+    cumheights[..., -1] = upper_bound
     heights = cumheights[..., 1:] - cumheights[..., :-1]
 
     bin_locations = cumheights if reverse else cumwidths
@@ -559,16 +561,18 @@ class VitsResidualCouplingBlock(nn.Module):
 
 
 class VitsDilatedDepthSeparableConv(nn.Module):
-    def __init__(self, channels, kernel_size, num_layers, dropout_rate=0.0):
+    def __init__(self, config: VitsConfig, dropout_rate=0.0):
         super().__init__()
-        self.num_layers = num_layers
+        kernel_size = config.duration_predictor_kernel_size
+        channels = config.depth_separable_channels
+        self.num_layers = config.depth_separable_num_convs
 
         self.dropout = nn.Dropout(dropout_rate)
         self.convs_dilated = nn.ModuleList()
         self.convs_pointwise = nn.ModuleList()
         self.norms_1 = nn.ModuleList()
         self.norms_2 = nn.ModuleList()
-        for i in range(num_layers):
+        for i in range(self.num_layers):
             dilation = kernel_size**i
             padding = (kernel_size * dilation - dilation) // 2
             self.convs_dilated.append(
@@ -603,16 +607,16 @@ class VitsDilatedDepthSeparableConv(nn.Module):
 
 
 class VitsConvFlow(nn.Module):
-    def __init__(self, in_channels, filter_channels, kernel_size, num_layers, num_bins=10, tail_bound=5.0):
+    def __init__(self, config: VitsConfig):
         super().__init__()
-        self.filter_channels = filter_channels
-        self.num_bins = num_bins
-        self.tail_bound = tail_bound
-        self.half_channels = in_channels // 2
+        filter_channels = config.hidden_size
+        self.half_channels = config.depth_separable_channels // 2
+        self.num_bins = config.duration_predictor_flow_bins
+        self.tail_bound = config.duration_predictor_tail_bound
 
         self.conv_pre = nn.Conv1d(self.half_channels, filter_channels, 1)
-        self.conv_dds = VitsDilatedDepthSeparableConv(filter_channels, kernel_size, num_layers)
-        self.conv_proj = nn.Conv1d(filter_channels, self.half_channels * (num_bins * 3 - 1), 1)
+        self.conv_dds = VitsDilatedDepthSeparableConv(config)
+        self.conv_proj = nn.Conv1d(filter_channels, self.half_channels * (self.num_bins * 3 - 1), 1)
 
     def forward(self, inputs, padding_mask, global_conditioning=None, reverse=False):
         first_half, second_half = torch.split(inputs, [self.half_channels] * 2, dim=1)
@@ -646,13 +650,13 @@ class VitsConvFlow(nn.Module):
 
 
 class VitsElementwiseAffine(nn.Module):
-    def __init__(self, channels):
+    def __init__(self, config: VitsConfig):
         super().__init__()
-        self.channels = channels
-        self.translate = nn.Parameter(torch.zeros(channels, 1))
-        self.log_scale = nn.Parameter(torch.zeros(channels, 1))
+        self.channels = config.depth_separable_channels
+        self.translate = nn.Parameter(torch.zeros(self.channels, 1))
+        self.log_scale = nn.Parameter(torch.zeros(self.channels, 1))
 
-    def forward(self, inputs, padding_mask, reverse=False, **kwargs):
+    def forward(self, inputs, padding_mask, reverse=False):
         if not reverse:
             outputs = self.translate + torch.exp(self.log_scale) * inputs
             outputs = outputs * padding_mask
@@ -666,33 +670,35 @@ class VitsElementwiseAffine(nn.Module):
 class VitsStochasticDurationPredictor(nn.Module):
     def __init__(self, config):
         super().__init__()
-        kernel_size = config.duration_predictor_kernel_size
+        embed_dim = config.speaker_embedding_size
         filter_channels = config.hidden_size
 
-        self.conv_pre = nn.Conv1d(config.hidden_size, filter_channels, 1)
+        self.conv_pre = nn.Conv1d(filter_channels, filter_channels, 1)
         self.conv_proj = nn.Conv1d(filter_channels, filter_channels, 1)
         self.conv_dds = VitsDilatedDepthSeparableConv(
-            filter_channels, kernel_size, 3, config.duration_predictor_dropout
+            config,
+            dropout_rate=config.duration_predictor_dropout,
         )
 
-        if config.speaker_embedding_size != 0:
-            self.cond = nn.Conv1d(config.speaker_embedding_size, filter_channels, 1)
+        if embed_dim != 0:
+            self.cond = nn.Conv1d(embed_dim, filter_channels, 1)
 
         self.flows = nn.ModuleList()
-        self.flows.append(VitsElementwiseAffine(2))
+        self.flows.append(VitsElementwiseAffine(config))
         for _ in range(config.duration_predictor_num_flows):
-            self.flows.append(VitsConvFlow(2, filter_channels, kernel_size, num_layers=3))
+            self.flows.append(VitsConvFlow(config))
 
         self.post_conv_pre = nn.Conv1d(1, filter_channels, 1)
         self.post_conv_proj = nn.Conv1d(filter_channels, filter_channels, 1)
         self.post_conv_dds = VitsDilatedDepthSeparableConv(
-            filter_channels, kernel_size, 3, config.duration_predictor_dropout
+            config,
+            dropout_rate=config.duration_predictor_dropout,
         )
 
         self.post_flows = nn.ModuleList()
-        self.post_flows.append(VitsElementwiseAffine(2))
+        self.post_flows.append(VitsElementwiseAffine(config))
         for _ in range(config.duration_predictor_num_flows):
-            self.post_flows.append(VitsConvFlow(2, filter_channels, kernel_size, num_layers=3))
+            self.post_flows.append(VitsConvFlow(config))
 
     def forward(self, inputs, padding_mask, global_conditioning=None, durations=None, reverse=False, noise_scale=1.0):
         inputs = torch.detach(inputs)

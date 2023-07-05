@@ -94,6 +94,15 @@ class VitsConfig(PretrainedConfig):
             HiFi-GAN multi-receptive field fusion (MRF) module.
         leaky_relu_slope (`float`, *optional*, defaults to 0.1):
             The angle of the negative slope used by the leaky ReLU activation.
+        depth_separable_channels (`int`, *optional*, defaults to 2):
+            Number of channels to use in each depth-separable block.
+        depth_separable_num_convs (`int`, *optional*, defaults to 3):
+            Number of convolutional layers to use in each depth-separable block.
+        duration_predictor_flow_bins (`int`, *optional*, defaults to 10):
+            Number of channels to map using the unonstrained rational spline in the duration predictor model.
+        duration_predictor_tail_bound (`float`, *optional*, defaults to 5.0):
+            Value of the tail bin boundary when computing the unconstrained rational spline in the duration predictor
+            model.
         duration_predictor_kernel_size (`int`, *optional*, defaults to 3):
             Kernel size of the 1D convolution layers used in the duration predictor model.
         duration_predictor_dropout (`float`, *optional*, defaults to 0.5):
@@ -152,11 +161,15 @@ class VitsConfig(PretrainedConfig):
         num_speakers=1,
         speaker_embedding_size=0,
         upsample_initial_channel=512,
-        upsample_rates=[8, 8, 2, 2],
-        upsample_kernel_sizes=[16, 16, 4, 4],
-        resblock_kernel_sizes=[3, 7, 11],
-        resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
+        upsample_rates=(8, 8, 2, 2),
+        upsample_kernel_sizes=(16, 16, 4, 4),
+        resblock_kernel_sizes=(3, 7, 11),
+        resblock_dilation_sizes=((1, 3, 5), (1, 3, 5), (1, 3, 5)),
         leaky_relu_slope=0.1,
+        depth_separable_channels=2,
+        depth_separable_num_layers=3,
+        duration_predictor_flow_bins=10,
+        duration_predictor_tail_bound=5.0,
         duration_predictor_kernel_size=3,
         duration_predictor_dropout=0.5,
         duration_predictor_num_flows=4,
@@ -198,13 +211,17 @@ class VitsConfig(PretrainedConfig):
         self.resblock_kernel_sizes = resblock_kernel_sizes
         self.resblock_dilation_sizes = resblock_dilation_sizes
         self.leaky_relu_slope = leaky_relu_slope
-        self.prior_encoder_num_flows = prior_encoder_num_flows
-        self.prior_encoder_num_wavenet_layers = prior_encoder_num_wavenet_layers
-        self.posterior_encoder_num_wavenet_layers = posterior_encoder_num_wavenet_layers
+        self.depth_separable_channels = depth_separable_channels
+        self.depth_separable_num_layers = depth_separable_num_layers
+        self.duration_predictor_flow_bins = duration_predictor_flow_bins
+        self.duration_predictor_tail_bound = duration_predictor_tail_bound
         self.duration_predictor_kernel_size = duration_predictor_kernel_size
         self.duration_predictor_dropout = duration_predictor_dropout
         self.duration_predictor_num_flows = duration_predictor_num_flows
         self.duration_predictor_filter_channels = duration_predictor_filter_channels
+        self.prior_encoder_num_flows = prior_encoder_num_flows
+        self.prior_encoder_num_wavenet_layers = prior_encoder_num_wavenet_layers
+        self.posterior_encoder_num_wavenet_layers = posterior_encoder_num_wavenet_layers
         self.wavenet_kernel_size = wavenet_kernel_size
         self.wavenet_dilation_rate = wavenet_dilation_rate
         self.wavenet_dropout = wavenet_dropout
