@@ -148,7 +148,6 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(
             conversation_input_ids,
             tokenizer.encode(
-                "<|endoftext|><s>\nUser:\nHvem er du?\nBot:\nJeg er en bot.\n"
-                "<s>\nUser:\nHvad hedder du?\nBot:\n",
-            )
+                "<|endoftext|><s>\nUser:\nHvem er du?\nBot:\nJeg er en bot.\n<s>\nUser:\nHvad hedder du?\nBot:\n",
+            ),
         )

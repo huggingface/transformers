@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import sentencepiece as spm
 
+
 if TYPE_CHECKING:
     from transformers.pipelines.conversational import Conversation
 from ...tokenization_utils import PreTrainedTokenizer
@@ -262,11 +263,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         return vocab
 
     # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.save_vocabulary
-    def save_vocabulary(
-        self,
-        save_directory: str,
-        filename_prefix: Optional[str] = None,
-    ) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -338,9 +335,8 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
     def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         """Builds the input ids for a conversation.
 
-        This is the format used in the original GPT-SW3 paper [1] and which is also
-        mentioned in the model card [2]. The format is inspired by the ChatML format
-        [3]. Concretely, the chat format is set up as follows:
+        This is the format used in the original GPT-SW3 paper [1] and which is also mentioned in the model card [2].
+        The format is inspired by the ChatML format [3]. Concretely, the chat format is set up as follows:
 
         ```
         <eos><bos>
@@ -362,9 +358,9 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
                 Input ids for the conversation.
 
         References:
-            [1] https://doi.org/10.48550/arXiv.2305.12987
-            [2] https://huggingface.co/AI-Sweden-Models/gpt-sw3-126m-instruct
-            [3] https://github.com/openai/openai-python/blob/main/chatml.md
+            - [1] https://doi.org/10.48550/arXiv.2305.12987
+            - [2] https://huggingface.co/AI-Sweden-Models/gpt-sw3-126m-instruct
+            - [3] https://github.com/openai/openai-python/blob/main/chatml.md
         """
         all_responses = [
             f"User:\n{text}" if is_user else f"Bot:\n{text}" for is_user, text in conversation.iter_texts()
