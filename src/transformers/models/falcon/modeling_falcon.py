@@ -312,11 +312,11 @@ class FalconAttention(nn.Module):
 
         attention_mask_float = (attention_mask * 1.0).masked_fill(attention_mask, -1e9).to(query_layer.dtype)
 
-        if alibi is None:
-            query_layer_ = query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim)
-            key_layer_ = key_layer.reshape(batch_size, n_head_kv, -1, self.head_dim)
-            value_layer_ = value_layer.reshape(batch_size, n_head_kv, -1, self.head_dim)
+        query_layer_ = query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim)
+        key_layer_ = key_layer.reshape(batch_size, n_head_kv, -1, self.head_dim)
+        value_layer_ = value_layer.reshape(batch_size, n_head_kv, -1, self.head_dim)
 
+        if alibi is None:
             if output_attentions:
                 # F.scaled_dot_product_attention doesn't return the attention weights, so we have
                 # to do it by hand if we want them
@@ -345,7 +345,7 @@ class FalconAttention(nn.Module):
                 return output_tensor, present
 
         else:
-            matmul_result = query_layer @ key_layer.transpose(-1, -2)
+            matmul_result = query_layer_ @ key_layer_.transpose(-1, -2)
 
             # change view to [batch_size, num_heads, q_length, kv_length]
             attention_scores = matmul_result.view(batch_size, self.num_heads, query_length, kv_length)
@@ -364,11 +364,11 @@ class FalconAttention(nn.Module):
             if head_mask is not None:
                 attention_probs = attention_probs * head_mask
 
-            # change view [batch_size x num_heads, q_length, kv_length]
-            attention_probs_reshaped = attention_probs.view(batch_size * self.num_heads, query_length, kv_length)
+            # change view [batch_size, num_heads, q_length, kv_length]
+            attention_probs_reshaped = attention_probs.view(batch_size, self.num_heads, query_length, kv_length)
 
             # matmul: [batch_size * num_heads, q_length, head_dim]
-            context_layer = attention_probs_reshaped @ value_layer
+            context_layer = (attention_probs_reshaped @ value_layer_).flatten(0, 1)
 
             # change view [batch_size, num_heads, q_length, head_dim]
             context_layer = self._merge_heads(context_layer)
