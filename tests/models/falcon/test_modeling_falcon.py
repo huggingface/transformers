@@ -95,8 +95,6 @@ class FalconModelTester:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
         sequence_labels = None
         token_labels = None
