@@ -293,6 +293,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             pickled_tokenizer = pickle.dumps(tokenizer)
         pickle.loads(pickled_tokenizer)
 
+
 @require_torch
 @require_sentencepiece
 @require_tokenizers
