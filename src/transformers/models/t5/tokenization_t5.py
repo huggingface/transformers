@@ -141,7 +141,7 @@ class T5Tokenizer(PreTrainedTokenizer):
                     " provided to T5Tokenizer. In this case the additional_special_tokens must include the extra_ids"
                     " tokens"
                 )
-        self.legacy = False
+        self.legacy = legacy
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         super().__init__(
@@ -151,6 +151,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             extra_ids=extra_ids,
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
+            legacy = legacy,
             **kwargs,
         )
 
