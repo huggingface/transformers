@@ -352,10 +352,12 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     @unittest.skip("Assisted generation doesn't work yet")
     def test_assisted_decoding_sample(self):
+        # We get some odd zero-length inputs when we try it
         pass
 
     @unittest.skip("Assisted generation doesn't work yet")
     def test_assisted_decoding_matches_greedy_search(self):
+        # We get some odd zero-length inputs when we try it
         pass
 
 

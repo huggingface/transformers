@@ -88,10 +88,7 @@ class FalconRotaryEmbedding(nn.Module):
             self.cos_cached = self.cos_cached.type(dtype)
             self.sin_cached = self.sin_cached.type(dtype)
 
-            self.cos_cached = self.cos_cached.to(device)
-            self.sin_cached = self.sin_cached.to(device)
-
-        return self.cos_cached, self.sin_cached
+        return self.cos_cached.to(device), self.sin_cached.to(device)
 
     def forward(self, query, key):
         batch, seq_len, head_dim = query.shape
@@ -957,9 +954,9 @@ class FalconForTokenClassification(FalconPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.transformer = FalconModel(config)
-        if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None:
+        if getattr(config, "classifier_dropout", None) is not None:
             classifier_dropout = config.classifier_dropout
-        elif hasattr(config, "hidden_dropout") and config.hidden_dropout is not None:
+        elif getattr(config, "hidden_dropout", None) is not None:
             classifier_dropout = config.hidden_dropout
         else:
             classifier_dropout = 0.1
