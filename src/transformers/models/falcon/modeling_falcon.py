@@ -92,6 +92,9 @@ class FalconRotaryEmbedding(nn.Module):
             self.cos_cached = self.cos_cached.type(dtype)
             self.sin_cached = self.sin_cached.type(dtype)
 
+            self.cos_cached = self.cos_cached.to(device)
+            self.sin_cached = self.sin_cached.to(device)
+
         return self.cos_cached, self.sin_cached
 
     def forward(self, query, key):

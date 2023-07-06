@@ -118,7 +118,7 @@ class FalconConfig(PretrainedConfig):
         self.n_head_kv = num_attention_heads if n_head_kv is None else n_head_kv
         self.alibi = alibi
         self.new_decoder_architecture = new_decoder_architecture
-        self.multi_query = multi_query
+        self.multi_query = multi_query  # Ignored when new_decoder_architecture is True
         self.parallel_attn = parallel_attn
         self.bias = bias
 
