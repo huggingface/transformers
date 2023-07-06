@@ -12,15 +12,14 @@ if is_torch_available():
 
 from shutil import copyfile
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
-
 import sentencepiece as spm
+
+from ...tokenization_utils import PreTrainedTokenizer
+from ...utils import logging
 
 
 if TYPE_CHECKING:
     from transformers.pipelines.conversational import Conversation
-from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
-
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
