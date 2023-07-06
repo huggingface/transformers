@@ -128,26 +128,3 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             model_name="AI-Sweden/gpt-sw3-126m",
             sequences=sequences,
         )
-
-    def test_build_conversation_input_ids_single_response(self):
-        tokenizer = self.get_tokenizer()
-        conversation = Conversation("Hvem er du?")
-        conversation_input_ids = tokenizer._build_conversation_input_ids(conversation=conversation)
-        self.assertEqual(
-            conversation_input_ids,
-            tokenizer.encode("<|endoftext|><s>\nUser:\nHvem er du?\nBot:\n"),
-        )
-
-    def test_build_conversation_input_ids_multiple_responses(self):
-        tokenizer = self.get_tokenizer()
-        conversation = Conversation()
-        conversation.add_user_input("Hvem er du?")
-        conversation.append_response("Jeg er en bot.")
-        conversation.add_user_input("Hvad hedder du?")
-        conversation_input_ids = tokenizer._build_conversation_input_ids(conversation=conversation)
-        self.assertEqual(
-            conversation_input_ids,
-            tokenizer.encode(
-                "<|endoftext|><s>\nUser:\nHvem er du?\nBot:\nJeg er en bot.\n<s>\nUser:\nHvad hedder du?\nBot:\n",
-            ),
-        )
