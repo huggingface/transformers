@@ -79,10 +79,6 @@ class FalconConfig(PretrainedConfig):
     ```"""
     model_type = "falcon"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {
-        "num_hidden_layers": "n_layer",
-        "num_attention_heads": "n_head",
-    }
 
     def __init__(
         self,
@@ -130,7 +126,7 @@ class FalconConfig(PretrainedConfig):
 
     @property
     def head_dim(self):
-        return self.hidden_size // self.n_head
+        return self.hidden_size // self.num_attention_heads
 
     @property
     def rotary(self):
