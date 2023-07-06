@@ -1,3 +1,4 @@
+## still have to write the generator and stuff to it !
 """ PyTorch laVIN model."""
 
 from typing import Optional, Tuple
@@ -187,7 +188,7 @@ class transformer(nn.Module):
     self.output = nn.Linear(self.params.dim, self.params.vocab_size, bias=False)
     self.freq_cis = precompute_freqs_cis(self.params.dim // self.params.n_heads, self.params.max_seq_len * 2)
 
-    self.backbone = clip.from_pretrained("openai/clip-vit-base-patch32")
+    self.backbone = clip.from_pretrained("openai/clip-vit-large-patch14")
 
     self.adapter_proj = AdapterMLP(1024,self.params.hidden_proj, params.dim).float()
     self.adapter_modality_embedding = nn.Embedding(2,self.params.dim).float()
@@ -268,6 +269,3 @@ class transformer(nn.Module):
     c_loss = self.criterion(output, labels)
     return c_loss
 
-
-model = transformer(ModelArgs)
-print(model)
