@@ -501,7 +501,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        tokenizer = LlamaTokenizer(SAMPLE_VOCAB, extra_ids=0, add_bos_token=False, legacy = False)
+        tokenizer = LlamaTokenizer(SAMPLE_VOCAB, extra_ids=0, add_bos_token=False, legacy=False)
         tokenizer.add_special_tokens({"additional_special_tokens": ["<s>"]})
         tokenizer._create_trie(tokenizer.all_special_tokens)
         # TODO ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created

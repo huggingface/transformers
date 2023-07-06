@@ -353,7 +353,7 @@ class Umt5IntegrationTest(unittest.TestCase):
         """
 
         model = UMT5ForConditionalGeneration.from_pretrained("google/umt5-small", return_dict=True).to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained("google/umt5-small", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained("google/umt5-small", use_fast=False, legacy = False)
         input_text = [
             "Bonjour monsieur <extra_id_0> bien <extra_id_1>.",
             "No se como puedo <extra_id_0>.",

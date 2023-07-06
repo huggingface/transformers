@@ -151,7 +151,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             extra_ids=extra_ids,
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
-            legacy = legacy,
+            legacy=legacy,
             **kwargs,
         )
 
