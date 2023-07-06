@@ -37,7 +37,7 @@ class FalconConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 250880):
+        vocab_size (`int`, *optional*, defaults to 65024):
             Vocabulary size of the Falcon model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`FalconModel`]
         hidden_size (`int`, *optional*, defaults to 64):
