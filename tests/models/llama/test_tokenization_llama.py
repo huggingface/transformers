@@ -494,7 +494,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
 @require_sentencepiece
 @require_tokenizers
-class CommonSpmInegrationTests(unittest.TestCase):
+class CommonSpmIntegrationTests(unittest.TestCase):
     """
     A class that regroups important test to make sure that we properly handle the special tokens.
     """
