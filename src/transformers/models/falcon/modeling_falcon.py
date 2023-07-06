@@ -75,7 +75,7 @@ class FalconRotaryEmbedding(nn.Module):
     def cos_sin(self, seq_len: int, device="cpu", dtype=torch.bfloat16) -> torch.Tensor:
         if seq_len != self.seq_len_cached:
             self.seq_len_cached = seq_len
-            t = torch.arange(seq_len, device=device).type_as(self.inv_freq)
+            t = torch.arange(seq_len, device=device, dtype=self.inv_freq.dtype)
             freqs = torch.einsum("i,j->ij", t, self.inv_freq)
             emb = torch.cat((freqs, freqs), dim=-1).to(device)
 
