@@ -420,8 +420,8 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     def test_add_dummy_prefix(self):
         # make sure `'▁'` is prepended, and outputs match sp_model's
         # `sentencepiece.NormalizerSpec.add_dummy_prefix` attribute
-        input_ids = self.tokenizer.encode(". Hello")
-        self.assertEqual(input_ids, [7, 4, 156, 86, 20, 2])
+        input_ids = self.tokenizer.encode(". Hello", add_special_tokens = False)
+        self.assertEqual(input_ids, [7, 4, 156, 86, 20])
         sp_encode = self.tokenizer.sp_model.encode(". Hello")
         self.assertEqual(input_ids, sp_encode)
         tokens = self.tokenizer.tokenize(". Hello")
@@ -430,8 +430,8 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     def test_remove_extra_whitespaces(self):
         # make sure the extra spaces are eaten
         # sentencepiece.NormalizerSpec.remove_extra_whitespaces attribute
-        input_ids = self.tokenizer.encode("       . Hello")
-        self.assertEqual(input_ids, [7, 4, 156, 86, 20, 2])
+        input_ids = self.tokenizer.encode("       . Hello", add_special_tokens = False)
+        self.assertEqual(input_ids, [7, 4, 156, 86, 20])
         sp_encode = self.tokenizer.sp_model.encode("       . Hello")
         self.assertEqual(input_ids, sp_encode)
         tokens = self.tokenizer.tokenize(" . Hello")
@@ -439,7 +439,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
         # `'▁'` is also a whitespace
         input_ids = self.tokenizer.encode("▁He is not")
-        self.assertEqual(input_ids, [156, 46, 44, 999, 262, 15, 2])
+        self.assertEqual(input_ids, [156, 46, 44, 2])
         tokens = self.tokenizer.tokenize("▁He is not")
         self.assertEqual(tokens, ["▁He", "▁is", "▁not"])  # no extra space added
 
@@ -463,9 +463,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         # Make sure that `tokenizer.tokenize` is similar to
         # adding the equivalent special token to the vocab
         input_ids = self.tokenizer.encode("Hey <extra_id_0>I")
-        self.assertEqual(input_ids, [156, 86, 20, 3, 999, 100, 2])
-        sp_encode = self.tokenizer.sp_model.encode("Hey I")
-        self.assertEqual(input_ids, sp_encode)
+        self.assertEqual(input_ids,  [156, 30, 999, 100, 2])
         tokens = self.tokenizer.tokenize("<extra_id_0>I")
         self.assertEqual(tokens, ["<extra_id_0>", "I"])
 
@@ -483,20 +481,21 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
         # test with a begin of word like `▁He`
         input_ids = self.tokenizer.encode("No <extra_id_0> He")
-        self.assertEqual(input_ids, [156, 46, 44, 999, 262, 15, 2])
+        self.assertEqual(input_ids, [284, 999, 262, 15, 2])
         # spaces are eaten by rstrip / lstrip, so this is expected. Don't strip otherwise you break
         spm_out = self.tokenizer.sp_model.encode("No.He", out_type = str) # ['▁No', '.', 'H', 'e']
         tokens = self.tokenizer.tokenize("No <extra_id_0> He")
-        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<extra_id_0>", "H", "e"])  
+        self.assertEqual(tokens, ['▁No', '<extra_id_0>', 'H', 'e'])  
         self.assertEqual(tokens[-2:], spm_out[-2:])  
 
         # Make sure this does not happen if we don't strip
-        self.tokenizer.add_special_tokens({"bos_token":AddedToken("<bos>")})
-        input_ids = self.tokenizer.encode("No <bos> He")
+        tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=0)
+        tokenizer.add_special_tokens({"bos_token":AddedToken("<bos>")})
+        input_ids = tokenizer.encode("No <bos> He")
         self.assertEqual(input_ids, [284, 1000, 156, 2])
-        tokens = self.tokenizer.tokenize("No <bos> He")
+        tokens = tokenizer.tokenize("No <bos> He")
         # the first `' '` after `'No'` is eaten by spm:
-        self.assertEqual(self.tokenizer.sp_model.encode("No         ", out_type = str),['▁No'])
+        self.assertEqual(tokenizer.sp_model.encode("No         ", out_type = str),['▁No'])
         self.assertEqual(tokens, ["▁No", "<bos>", "▁He"])  
 
     @require_seqio
