@@ -202,7 +202,6 @@ _import_structure = {
         "Blip2VisionConfig",
     ],
     "models.bloom": ["BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP", "BloomConfig"],
-    "models.mpt": ["MPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MptConfig"],
     "models.bort": [],
     "models.bridgetower": [
         "BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -403,6 +402,7 @@ _import_structure = {
     "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mobilevitv2": ["MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTV2Config"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
+    "models.mpt": ["MPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MptConfig"],
     "models.mt5": ["MT5Config"],
     "models.musicgen": [
         "MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -771,7 +771,6 @@ else:
     _import_structure["models.blenderbot"].append("BlenderbotTokenizerFast")
     _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
     _import_structure["models.bloom"].append("BloomTokenizerFast")
-    _import_structure["models.mpt"].append("MptTokenizer")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.codegen"].append("CodeGenTokenizerFast")
@@ -1263,17 +1262,6 @@ else:
             "BloomForTokenClassification",
             "BloomModel",
             "BloomPreTrainedModel",
-        ]
-    )
-    _import_structure["models.mpt"].extend(
-        [
-            "MPT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MptForCausalLM",
-            "MptForQuestionAnswering",
-            "MptForSequenceClassification",
-            "MptForTokenClassification",
-            "MptModel",
-            "MptPreTrainedModel",
         ]
     )
     _import_structure["models.bridgetower"].extend(
@@ -2147,6 +2135,17 @@ else:
             "MPNetLayer",
             "MPNetModel",
             "MPNetPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mpt"].extend(
+        [
+            "MPT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MptForCausalLM",
+            "MptForQuestionAnswering",
+            "MptForSequenceClassification",
+            "MptForTokenClassification",
+            "MptModel",
+            "MptPreTrainedModel",
         ]
     )
     _import_structure["models.mt5"].extend(

@@ -1216,8 +1216,8 @@ class MptForTokenClassification(MptPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The MPT Model transformer with a span classification head on top for extractive question-answering tasks like
-    SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    The MPT Model transformer with a span classification head on top for extractive question-answering tasks like SQuAD
+    (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     MPT_START_DOCSTRING,
 )

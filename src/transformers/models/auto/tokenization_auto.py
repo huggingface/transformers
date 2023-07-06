@@ -86,7 +86,6 @@ else:
             ("blip", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("blip-2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("bloom", (None, "BloomTokenizerFast" if is_tokenizers_available() else None)),
-            ("mpt", (None, "MptTokenizer" if is_tokenizers_available() else None)),
             ("bridgetower", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             ("byt5", ("ByT5Tokenizer", None)),
             (
@@ -215,6 +214,7 @@ else:
             ("mluke", ("MLukeTokenizer" if is_sentencepiece_available() else None, None)),
             ("mobilebert", ("MobileBertTokenizer", "MobileBertTokenizerFast" if is_tokenizers_available() else None)),
             ("mpnet", ("MPNetTokenizer", "MPNetTokenizerFast" if is_tokenizers_available() else None)),
+            ("mpt",  (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "mt5",
                 (
