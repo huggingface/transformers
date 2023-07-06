@@ -403,8 +403,13 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
 @require_sentencepiece
 @require_tokenizers
-class CommonSpmInegrationTests(unittest.TestCase):
-    def setup(self):
+class CommonSpmIntegrationTests(unittest.TestCase):
+    """
+    A class that regroups important test to make sure that we properly handle the special tokens.
+    """
+
+    @classmethod
+    def setUpClass(cls):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=0)
         tokenizer.add_special_tokens({"additional_special_tokens": ["<extra_id_0>"]})
         tokenizer._create_trie(tokenizer.all_special_tokens)
