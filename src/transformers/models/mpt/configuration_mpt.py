@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Mpt configuration"""
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Union
 
 
 if TYPE_CHECKING:
@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+
 
 
 logger = logging.get_logger(__name__)
@@ -139,11 +140,6 @@ class MptConfig(PretrainedConfig):
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
-
-"""A HuggingFace-style model configuration."""
-from typing import Optional, Union
-
-from transformers import PretrainedConfig
 
 
 class MptAttentionConfig(PretrainedConfig):
