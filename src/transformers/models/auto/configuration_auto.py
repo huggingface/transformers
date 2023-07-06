@@ -194,7 +194,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("transfo-xl", "TransfoXLConfig"),
         ("trocr", "TrOCRConfig"),
         ("tvlt", "TvltConfig"),
-        ("umt5", "MT5Config"),
+        ("umt5", "UMT5Config"),
         ("unispeech", "UniSpeechConfig"),
         ("unispeech-sat", "UniSpeechSatConfig"),
         ("upernet", "UperNetConfig"),
