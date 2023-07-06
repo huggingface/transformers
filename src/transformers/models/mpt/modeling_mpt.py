@@ -48,7 +48,6 @@ MPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 def _make_causal_mask(
     input_ids_shape: torch.Size, device: torch.device, past_key_values_length: int
 ) -> torch.BoolTensor:

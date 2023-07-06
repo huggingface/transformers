@@ -4101,7 +4101,6 @@ if TYPE_CHECKING:
         Blip2VisionConfig,
     )
     from .models.bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig
-    from .models.mpt import MPT_PRETRAINED_CONFIG_ARCHIVE_MAP, MptConfig
     from .models.bridgetower import (
         BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BridgeTowerConfig,
@@ -4290,6 +4289,7 @@ if TYPE_CHECKING:
     from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
     from .models.mobilevitv2 import MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTV2Config
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
+    from .models.mpt import MPT_PRETRAINED_CONFIG_ARCHIVE_MAP, MptConfig
     from .models.mt5 import MT5Config
     from .models.musicgen import (
         MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4631,7 +4631,6 @@ if TYPE_CHECKING:
         from .models.blenderbot import BlenderbotTokenizerFast
         from .models.blenderbot_small import BlenderbotSmallTokenizerFast
         from .models.bloom import BloomTokenizerFast
-        from .models.mpt import MptTokenizer
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast
         from .models.codegen import CodeGenTokenizerFast
@@ -4661,6 +4660,7 @@ if TYPE_CHECKING:
         from .models.mbart50 import MBart50TokenizerFast
         from .models.mobilebert import MobileBertTokenizerFast
         from .models.mpnet import MPNetTokenizerFast
+        from .models.mpt import MptTokenizer
         from .models.mt5 import MT5TokenizerFast
         from .models.mvp import MvpTokenizerFast
         from .models.nllb import NllbTokenizerFast
@@ -5051,15 +5051,6 @@ if TYPE_CHECKING:
             BloomForTokenClassification,
             BloomModel,
             BloomPreTrainedModel,
-        )
-        from .models.mpt import (
-            MPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MptForCausalLM,
-            MptForQuestionAnswering,
-            MptForSequenceClassification,
-            MptForTokenClassification,
-            MptModel,
-            MptPreTrainedModel,
         )
         from .models.bridgetower import (
             BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5758,6 +5749,15 @@ if TYPE_CHECKING:
             MPNetLayer,
             MPNetModel,
             MPNetPreTrainedModel,
+        )
+        from .models.mpt import (
+            MPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MptForCausalLM,
+            MptForQuestionAnswering,
+            MptForSequenceClassification,
+            MptForTokenClassification,
+            MptModel,
+            MptPreTrainedModel,
         )
         from .models.mt5 import (
             MT5EncoderModel,
