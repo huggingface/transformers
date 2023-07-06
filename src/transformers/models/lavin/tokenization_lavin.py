@@ -23,17 +23,15 @@ from ..bert.tokenization_bert import BertTokenizer
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "naver-clova-ocr/bros-base-uncased": "https://huggingface.co/naver-clova-ocr/bros-base-uncased/resolve/main/vocab.txt",
-        "naver-clova-ocr/bros-large-uncased": "https://huggingface.co/naver-clova-ocr/bros-large-uncased/resolve/main/vocab.txt",
+        "shauray/lavin": "https://huggingface.co/shauray/lavin/resolve/main/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "naver-clova-ocr/bros-base-uncased": 512,
     "naver-clova-ocr/bros-large-uncased": 512,
 }
 
@@ -43,66 +41,31 @@ PRETRAINED_INIT_CONFIGURATION = {
 }
 
 
-def load_vocab(vocab_file):
-    """Loads a vocabulary file into a dictionary."""
-    vocab = collections.OrderedDict()
-    with open(vocab_file, "r", encoding="utf-8") as reader:
-        tokens = reader.readlines()
-    for index, token in enumerate(tokens):
-        token = token.rstrip("\n")
-        vocab[token] = index
-    return vocab
+class lavin_tokenizer:
+    def __init__(self, model_path: str):
+        # reload tokenizer
+        assert os.path.isfile(model_path), model_path
+        self.sp_model = SentencePieceProcessor(model_file=model_path)
+        logger.info(f"Reloaded SentencePiece model from {model_path}")
 
+        # BOS / EOS token IDs
+        self.n_words: int = self.sp_model.vocab_size()
+        self.bos_id: int = self.sp_model.bos_id()
+        self.eos_id: int = self.sp_model.eos_id()
+        self.pad_id: int = self.sp_model.pad_id()
+        logger.info(
+            f"#words: {self.n_words} - BOS ID: {self.bos_id} - EOS ID: {self.eos_id}"
+        )
+        assert self.sp_model.vocab_size() == self.sp_model.get_piece_size()
 
-def whitespace_tokenize(text):
-    """Runs basic whitespace cleaning and splitting on a piece of text."""
-    text = text.strip()
-    if not text:
-        return []
-    tokens = text.split()
-    return tokens
+    def encode(self, s: str, bos: bool, eos: bool) -> List[int]:
+        assert type(s) is str
+        t = self.sp_model.encode(s)
+        if bos:
+            t = [self.bos_id] + t
+        if eos:
+            t = t + [self.eos_id]
+        return t
 
-
-class BrosTokenizer(BertTokenizer):
-    r"""
-    Construct a BERT tokenizer. Based on WordPiece.
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
-    this superclass for more information regarding those methods.
-    Args:
-        vocab_file (`str`):
-            File containing the vocabulary.
-        do_lower_case (`bool`, *optional*, defaults to `True`):
-            Whether or not to lowercase the input when tokenizing.
-        do_basic_tokenize (`bool`, *optional*, defaults to `True`):
-            Whether or not to do basic tokenization before WordPiece.
-        never_split (`Iterable`, *optional*):
-            Collection of tokens which will never be split during tokenization. Only has an effect when
-            `do_basic_tokenize=True`
-        unk_token (`str`, *optional*, defaults to `"[UNK]"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
-        sep_token (`str`, *optional*, defaults to `"[SEP]"`):
-            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
-            sequence classification or for a text and a question for question answering. It is also used as the last
-            token of a sequence built with special tokens.
-        pad_token (`str`, *optional*, defaults to `"[PAD]"`):
-            The token used for padding, for example when batching sequences of different lengths.
-        cls_token (`str`, *optional*, defaults to `"[CLS]"`):
-            The classifier token which is used when doing sequence classification (classification of the whole sequence
-            instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        mask_token (`str`, *optional*, defaults to `"[MASK]"`):
-            The token used for masking values. This is the token used when training this model with masked language
-            modeling. This is the token which the model will try to predict.
-        tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
-            Whether or not to tokenize Chinese characters.
-            This should likely be deactivated for Japanese (see this
-            [issue](https://github.com/huggingface/transformers/issues/328)).
-        strip_accents: (`bool`, *optional*):
-            Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for `lowercase` (as in the original BERT).
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    def decode(self, t: List[int]) -> str:
+        return self.sp_model.decode(t)
