@@ -45,9 +45,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 
 class GPTSw3Tokenizer(PreTrainedTokenizer):
-    """Construct an GPTSw3 tokenizer.
-
-    Based on [SentencePiece](https://github.com/google/sentencepiece).
+    """
+    Construct an GPTSw3 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
@@ -129,8 +128,8 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         name_or_path = kwargs.get("name_or_path")
         if name_or_path is None:
             logger.warning(
-                "name_or_path not provided. This will work for all GPT-SW3 models except "
-                "gpt-sw3-7b. If you are just testing the model, this can safely be ignored."
+                "name_or_path not provided, will work for all GPTSw3 models except gpt-sw3-7b,"
+                " you are testing the model, this can safely be ignored"
             )
             name_or_path = "None"
 
@@ -170,10 +169,9 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         # fmt : on
 
         # Regular expression to remove non-printing characters (e.g. some unicode control chars) in preprocessing
-        non_printing_characters = "".join(
-            map(chr, list(range(0, 9)) + list(range(11, 32)) + list(range(127, 160)) + [160, 173, 8203])
+        self.non_printing_characters_re = re.compile(
+            f"[{''.join(map(chr, list(range(0, 9)) + list(range(11, 32)) + list(range(127, 160)) + [160, 173, 8203]))}]"
         )
-        self.non_printing_characters_re = re.compile(f"[{non_printing_characters}]")
 
     # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.__getstate__
     def __getstate__(self):
@@ -198,9 +196,8 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         return len(self.sp_model)
 
     def preprocess_text(self, text: str) -> str:
-        """Returns the preprocessed text.
-
-        This procedure is identical to what was used when training the tokenizer.
+        """
+        Returns the preprocessed text. This procedure is identical to what was used when training the tokenizer.
         """
 
         # Remove non-printing characters
@@ -227,17 +224,11 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
 
     @staticmethod
     def clean_up_tokenization(out_string: str) -> str:
-        """Returns the input string.
-
-        This function is overridden to remove the default clean up.
-        """
+        """Returns the input string, this function is overridden to remove the default clean up."""
         return out_string
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """Converts a sequence of tokens (strings) to a single string.
-
-        Special tokens remain intact.
-        """
+        """Converts a sequence of tokens (strings) to a single string. Special tokens remain intact."""
         current_sub_tokens = []
         out_string = ""
         prev_is_special = False
@@ -283,9 +274,9 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
     def encode_fast(
         self, text: Union[str, List[str]], return_tensors: Union[str, bool] = False
     ) -> Union[List[int], List[List[int]], "torch.Tensor"]:
-        """Encodes a text or batch of texts to token IDs.
-
-        This uses preprocessing and the raw SP tokenizer. This has reduced functionality but is often much faster.
+        """
+        Encodes a text or batch of texts to token ids using preprocessing and the raw SP tokenizer. This has reduced
+        functionality but is often much faster.
 
         Does NOT handle special tokens correctly, these can manually be added as ids afterwards.
 
@@ -294,14 +285,11 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         Use default HuggingFace tokenization methods for full functionality.
 
         Args:
-            text (`str` or `List[str]`):
-                One or several text(s) to convert to token ids.
-            return_tensors (`str` or `bool`):
-                Returns PyTorch tensors if set to True or "pt"
+            text (`str` or `List[str]`): One or several text(s) to convert to token ids.
+            return_tensors (`str` or `bool`): Returns PyTorch tensors if set to True or "pt"
 
         Returns:
-            `List[int]`, `List[List[int]]`, or `torch.Tensor`:
-                The encoded text(s) as token ids.
+            `List[int]`, `List[List[int]]`, or `torch.Tensor`: The encoded text(s) as token ids.
         """
 
         if isinstance(text, str):
@@ -317,17 +305,15 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         return token_ids
 
     def decode_fast(self, token_ids: Union[int, List[int]]) -> str:
-        """Decodes token IDs to text.
-
-        This uses preprocessing and the raw SP tokenizer. This has reduced functionality but is often much faster.
+        """
+        Encodes a text or batch of texts to token ids using preprocessing and the raw SP tokenizer. This has reduced
+        functionality but is often much faster.
 
         Args:
-            token_ids (`int` or `List[int]`):
-                Encoded token or text as token id(s).
+            token_ids (`int` or `List[int]`): Encoded token or text as token id(s).
 
         Returns:
-            `str`:
-                Decoded text.
+            `str`: Decoded text
         """
 
         return self.sp_model.decode(token_ids)
