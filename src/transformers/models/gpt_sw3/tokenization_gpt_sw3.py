@@ -323,14 +323,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         The format is inspired by the ChatML format [3]. Concretely, the chat format is set up as follows:
 
         ```
-        <eos><bos>
-        User:
-        Jag tycker träd är fina
-        <bos>
-        Bot:
-        Kul att du tycker det!
-        <bos>
-        ...
+        <eos><bos>User: Jag tycker träd är fina<bos>Bot: Kul att du tycker det!<bos>...
         ```
 
         Args:
@@ -347,11 +340,11 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
             - [3] https://github.com/openai/openai-python/blob/main/chatml.md
         """
         all_responses = [
-            f"User:\n{text}" if is_user else f"Bot:\n{text}" for is_user, text in conversation.iter_texts()
+            f"User: {text}" if is_user else f"Bot: {text}" for is_user, text in conversation.iter_texts()
         ]
         prompt = (
-            f"{self.eos_token}{self.bos_token}\n"
-            + f"\n{self.bos_token}\n".join(all_responses)
-            + f"{self.bos_token}Bot:\n"
+            f"{self.eos_token}{self.bos_token}"
+            + f"{self.bos_token}".join(all_responses)
+            + f"{self.bos_token}Bot: "
         )
         return self.encode(text=prompt)
