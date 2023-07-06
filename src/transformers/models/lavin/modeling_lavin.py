@@ -9,7 +9,7 @@ import torch.utils.checkpoint
 from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ....transformers import CLIPModel as clip
+from transformers import CLIPModel as clip
 
 #from ...modeling_outputs import (
 #    BackboneOutput,
@@ -34,10 +34,11 @@ class ModelArgs:
     dim: int = 512
     n_layers: int = 8
     n_heads: int = 8
-    vocab_size: int = -1  # defined later by tokenizer
+    vocab_size: int = 1  # defined later by tokenizer
     multiple_of: int = 256  # make SwiGLU hidden layer size multiple of large power of 2
     norm_eps: float = 1e-5
     hidden_proj: int=128
+    head_dim:int = 3
 
     max_batch_size: int = 32
     max_seq_len: int = 2048
@@ -55,7 +56,7 @@ class RMSNorm(nn.Module):
     output = self._norm(x.float()).type_as(x)
     return output * self.weight
 
-def precomute_freqs_cis(sim: int, end: int, theta: float = 10000.0):
+def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0):
   freqs = 1. / (theta ** (torch.arange(0,dim,2)[: (dim // 2)].float()/dim))
   t = torch.arange(end, device=freqs.device)
   freqs = torch.outer(t, freqs).float()
@@ -84,10 +85,10 @@ class attention_block(nn.Module):
     self.params = params
     self.head_dim = self.params.dim // self.params.n_heads
 
-    self.wq = Linear(self.params.dim, self.params.n_heads * self.params.head_dim, bias=False)
-    self.wk = Linear(self.params.dim, self.params.n_heads * self.params.head_dim, bias=False)
-    self.wv = Linear(self.params.dim, self.params.n_heads * self.params.head_dim, bias=False)
-    self.wo = Linear(self.params.n_heads * self.params.head_dim, self.params.dim,  bias=False)
+    self.wq = nn.Linear(self.params.dim, self.params.n_heads * self.params.head_dim, bias=False)
+    self.wk = nn.Linear(self.params.dim, self.params.n_heads * self.params.head_dim, bias=False)
+    self.wv = nn.Linear(self.params.dim, self.params.n_heads * self.params.head_dim, bias=False)
+    self.wo = nn.Linear(self.params.n_heads * self.params.head_dim, self.params.dim,  bias=False)
 
   def forward(self, x:torch.Tensor, start_pos: int, freq_cis:torch.Tensor, mask: Optional[torch.Tensor], adaptor=None):
     bsz, seqlen, _ = x.shape
@@ -118,9 +119,9 @@ class feed_forward(nn.Module):
     super().__init__()
     hidden_dim = int(2*hidden_dim / 3)
     hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
-    self.w1 = Linear(dim, hidden_dim, bias=False)
-    self.w2 = Linear(hidden_dim, dim, bias=False)
-    self.w3 = Linear(dim, hidden_dim, bias=False)
+    self.w1 = nn.Linear(dim, hidden_dim, bias=False)
+    self.w2 = nn.Linear(hidden_dim, dim, bias=False)
+    self.w3 = nn.Linear(dim, hidden_dim, bias=False)
 
   def forward(self, x):
     return self.w2(F.silu(self.w1(x), inplace=False) * self.w3(x))
@@ -131,7 +132,7 @@ class transformer_block(nn.Module):
     super().__init__()
     self.params = params
     self.head_dim = self.params.dim // self.params.n_heads
-    self.attention = Attention(self.params)
+    self.attention = attention_block(self.params)
     self.feed_forward = feed_forward(dim = self.params.dim, hidden_dim=4*self.params.dim, multiple_of=self.params.multiple_of)
     self.layer = layer
     self.attention_norm = RMSNorm(self.params.dim, eps=self.params.norm_eps)
@@ -157,7 +158,7 @@ class AdapterMLP(nn.Module):
   def __init__(self, in_features=768, hidden_dim=128, out_features=4096):
     super().__init__()
     self.conv_A = nn.Linear(in_features, hidden_dim)
-    slef.conv_B = nn.Linear(hidden_dim, out_features)
+    self.conv_B = nn.Linear(hidden_dim, out_features)
 
     nn.init.xavier_uniform_(self.conv_A.weight)
     nn.init.zeros_(self.conv_A.bias)
@@ -173,21 +174,20 @@ class transformer(nn.Module):
   def __init__(self, params: ModelArgs):
     super().__init__()
     self.params = params
-    self.vocab = params.vocab
     self.n_layers = params.n_layers
     self.tok_embeddings = nn.Embedding(params.vocab_size, params.dim)
     self.criterion = CrossEntropyLoss(ignore_index=0)
 
-    self.layers = nn.Modulelist()
+    self.layers = nn.ModuleList()
 ## experimental (might not include in release)
     #self.layers += transformer_block(layer, params) for layer in range(self.params.n_layers)
     for layer_id in range(params.n_layers):
       self.layers.append(transformer_block(layer_id, params))
-    self.norm = RMSNorm(self.params.dim, self.params.vocab_size, bias=False)
+    self.norm = RMSNorm(self.params.dim, eps=self.params.norm_eps)
     self.output = nn.Linear(self.params.dim, self.params.vocab_size, bias=False)
-    self.freq_cis = precompute_freq(self.params.dim // self.params.n_heads, self.params.max_seq_len * 2)
+    self.freq_cis = precompute_freqs_cis(self.params.dim // self.params.n_heads, self.params.max_seq_len * 2)
 
-    self.backbone = clip.load('ViT-L/14')[0]
+    self.backbone = clip.from_pretrained("openai/clip-vit-base-patch32")
 
     self.adapter_proj = AdapterMLP(1024,self.params.hidden_proj, params.dim).float()
     self.adapter_modality_embedding = nn.Embedding(2,self.params.dim).float()
@@ -269,5 +269,5 @@ class transformer(nn.Module):
     return c_loss
 
 
-model = transformers(ModelArgs)
-model()
+model = transformer(ModelArgs)
+print(model)
