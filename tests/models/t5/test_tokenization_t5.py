@@ -498,33 +498,40 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(tokenizer.sp_model.encode("No         ", out_type=str), ["▁No"])
         self.assertEqual(tokens, ["▁No", "<bos>", "▁He"])
 
-    @unittest.skip("This test cannot be run as is because of protobuf. Should be run alone in a clean environnment")
     @require_seqio
     def test_integration_seqio(self):
         from datasets import load_dataset
         from seqio import SentencePieceVocabulary
 
-        load_dataset("xnli", split="test+validation")
+        ds = load_dataset("xnli", "all_languages", split="train+test+validation")
 
-        input_text = [
+        input_texts = [
             "Bonjour <extra_id_0>.",
-            "Bonjour<extra_id_0>.",  # this will fail. In T5 the special token has to be at the end.
+            # "Bonjour<extra_id_0>.",  # this will fail. In T5 the special token has to be at the end.
             # because in T5 they add `_<extra_id_0>` to the vocab, not `<extra_id_0>`.
             "                   Hey <extra_id_0>I love you",
             "Hey <extra_id_0> I love you",
             "Hey <extra_id_0>▁He",
         ]
 
+        import tqdm
+
         # Test with umt5
         vocab_path = "gs://t5-data/vocabs/umt5.256000/sentencepiece.model"
         t5x_tokenizer = SentencePieceVocabulary(vocab_path, extra_ids=300)
         hf_tokenizer = T5Tokenizer.from_pretrained("google/umt5-small")
-        for text in input_text:
-            self.assertEqual(hf_tokenizer.tokenize(text), t5x_tokenizer.tokenizer.tokenize(text, out_type=str))
+        for text in input_texts:
+            self.assertEqual(hf_tokenizer.encode(text), t5x_tokenizer.tokenizer.tokenize(text), f"{text}")
+        for texts in tqdm.tqdm(ds["premise"]):
+            for text in texts:
+                self.assertEqual(hf_tokenizer.encode(text), t5x_tokenizer.tokenizer.tokenize(text), f"{text}")
 
         # Test with T5
         hf_tokenizer = T5Tokenizer.from_pretrained("t5-small")
         vocab_path = "gs://t5-data/vocabs/cc_all.32000/sentencepiece.model"
         t5x_tokenizer = SentencePieceVocabulary(vocab_path, extra_ids=300)
-        for text in input_text:
-            self.assertEqual(hf_tokenizer.tokenize(text), t5x_tokenizer.tokenizer.tokenize(text, out_type=str))
+        for text in input_texts:
+            self.assertEqual(hf_tokenizer.encode(text), t5x_tokenizer.tokenizer.tokenize(text), f"{text}")
+        for texts in tqdm.tqdm(ds["premise"]):
+            for text in texts:
+                self.assertEqual(hf_tokenizer.encode(text), t5x_tokenizer.tokenizer.tokenize(text), f"{text}")
