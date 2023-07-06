@@ -59,7 +59,7 @@ class GPTNeoXConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio probability of the attention score.
         hidden_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio of (1) the word embeddings, (2) the post-attention hidden states, and (3) the post-mlp 
+            The dropout ratio of (1) the word embeddings, (2) the post-attention hidden states, and (3) the post-mlp
             hidden states.
         classifier_dropout (`float`, *optional*, defaults to 0.1):
             Argument used when doing token classification, used in the model [`GPTNeoXForTokenClassification`].
