@@ -305,7 +305,8 @@ class T5Tokenizer(PreTrainedTokenizer):
     def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         # Replace the SPIECE_UNDERLINE with a space to make sure SPIECE_UNDERLINE is only used at
         # the beginning of the text
-        text = SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " ")
+        if not self.legacy:
+            text = SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " ")
         return super().tokenize(text, **kwargs)
 
     def _tokenize(self, text, **kwargs):
@@ -316,9 +317,11 @@ class T5Tokenizer(PreTrainedTokenizer):
         tokens, and each subsequence is passed to `_tokenize`. Thus is a subsequence did not start with a `" "` or
         SPIECE_UNDERLINE, we have to remove the extra `SPIECE_UNDERLINE` prepended.
         """
-        is_first = text.startswith(SPIECE_UNDERLINE)
-        if is_first:
-            text = text[1:]
+        if not self.legacy:
+            is_first = text.startswith(SPIECE_UNDERLINE)
+            if is_first:
+                text = text[1:]
+
         tokens = self.sp_model.encode(text, out_type=str)
 
         if not is_first and not self.legacy and not text.startswith(" ") and tokens[0].startswith(SPIECE_UNDERLINE):
