@@ -184,9 +184,6 @@ if is_protobuf_available():
         from . import sentencepiece_model_pb2
     else:
         from . import sentencepiece_model_pb2_new as sentencepiece_model_pb2
-else:
-    # just to get the expected `No module named 'google.protobuf'` error
-    from . import sentencepiece_model_pb2
 
 
 WEIGHTS_NAME = "pytorch_model.bin"
