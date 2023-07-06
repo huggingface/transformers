@@ -239,6 +239,7 @@ class MPTConfig(PretrainedConfig):
         **kwargs,
     ):
         """The MPT configuration class.
+
         Args:
             d_model (int): The size of the embedding dimension of the model.
             n_heads (int): The number of attention heads.
