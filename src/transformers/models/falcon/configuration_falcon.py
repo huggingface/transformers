@@ -89,8 +89,6 @@ class FalconConfig(PretrainedConfig):
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         use_cache=True,
-        bos_token_id=11,
-        eos_token_id=11,
         hidden_dropout=0.0,
         attention_dropout=0.0,
         num_kv_heads=None,
@@ -99,6 +97,8 @@ class FalconConfig(PretrainedConfig):
         multi_query=True,
         parallel_attn=True,
         bias=False,
+        bos_token_id=11,
+        eos_token_id=11,
         **kwargs,
     ):
         self.vocab_size = vocab_size
