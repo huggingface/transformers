@@ -707,11 +707,11 @@ class _LazyConfigMapping(OrderedDict):
     def __contains__(self, item):
         return item in self._mapping or item in self._extra_content
 
-    def register(self, key, value):
+    def register(self, key, value, exist_ok=False):
         """
         Register a new configuration in this mapping.
         """
-        if key in self._mapping.keys():
+        if key in self._mapping.keys() and not exist_ok:
             raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
         self._extra_content[key] = value
 

@@ -73,7 +73,8 @@ class EncodecModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        # `batch_size` needs to be an even number if the model has some outputs with batch dim != 0.
+        batch_size=12,
         num_channels=2,
         is_training=False,
         num_hidden_layers=4,
