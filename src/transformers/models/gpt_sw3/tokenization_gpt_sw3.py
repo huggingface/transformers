@@ -3,23 +3,22 @@
 import os
 import re
 import unicodedata
+from shutil import copyfile
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
-from ... import is_torch_available
+import sentencepiece as spm
+
+from ...tokenization_utils import PreTrainedTokenizer
+from ...utils import is_torch_available, logging
 
 
 if is_torch_available():
     import torch
 
-from shutil import copyfile
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
-import sentencepiece as spm
-
-from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
-
 
 if TYPE_CHECKING:
     from transformers.pipelines.conversational import Conversation
+
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
