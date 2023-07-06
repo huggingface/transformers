@@ -1149,7 +1149,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
             "google/switch-base-8", torch_dtype=torch.bfloat16
         ).eval()
-        tokenizer = AutoTokenizer.from_pretrained("t5-small", use_fast=False, legacy = False)
+        tokenizer = AutoTokenizer.from_pretrained("t5-small", use_fast=False, legacy=False)
         model = model.to(torch_device)
 
         input_ids = tokenizer(
@@ -1174,7 +1174,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
             "google/switch-base-8", torch_dtype=torch.bfloat16
         ).eval()
-        tokenizer = AutoTokenizer.from_pretrained("t5-small", use_fast=False, legacy = False)
+        tokenizer = AutoTokenizer.from_pretrained("t5-small", use_fast=False, legacy=False)
 
         inputs = [
             "A <extra_id_0> walks into a bar and orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>."
