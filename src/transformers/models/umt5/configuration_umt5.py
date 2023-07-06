@@ -22,13 +22,18 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
+UMT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "google/umt5-small": "https://huggingface.co/google/umt5-small/resolve/main/config.json",
+    # See all umt5 models at https://huggingface.co/models?filter=umt5
+}
+
 
 class UMT5Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`UMT5Model`]. It is used to instantiate a UMT5
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the UMT5
-    [google/mt5-small](https://huggingface.co/google/umt5-small) architecture.
+    [google/umt5-small](https://huggingface.co/google/umt5-small) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
