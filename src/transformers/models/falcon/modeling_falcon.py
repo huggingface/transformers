@@ -206,7 +206,7 @@ class FalconAttention(nn.Module):
         self.multi_query = config.multi_query
         self.dense = FalconLinear(self.hidden_size, self.hidden_size, bias=config.bias)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
-        self.num_kv = config.num_kv_heads if (self.new_decoder_architecture or not self.multi_query) else 1
+        self.num_kv_heads = config.num_kv_heads if (self.new_decoder_architecture or not self.multi_query) else 1
 
     def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -221,7 +221,7 @@ class FalconAttention(nn.Module):
         """
         if self.new_decoder_architecture:
             batch, seq_len, _ = fused_qkv.shape
-            qkv = fused_qkv.view(batch, seq_len, -1, self.num_heads // self.num_kv + 2, 64)
+            qkv = fused_qkv.view(batch, seq_len, -1, self.num_heads // self.num_kv_heads + 2, 64)
             query = qkv[:, :, :, :-2]
             key = qkv[:, :, :, [-2]]
             value = qkv[:, :, :, [-1]]
@@ -276,7 +276,7 @@ class FalconAttention(nn.Module):
         output_attentions: bool = False,
     ):
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
-        num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv
+        num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv_heads
         # 3 x [batch_size, seq_length, num_heads, head_dim]
         (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
 
