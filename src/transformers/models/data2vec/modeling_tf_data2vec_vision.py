@@ -96,8 +96,8 @@ class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
 
     last_hidden_state: tf.Tensor = None
     pooler_output: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
 
 
 # Copied from transformers.models.beit.modeling_tf_beit.TFBeitDropPath with Beit->Data2VecVision
@@ -171,7 +171,7 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
             with tf.name_scope(self.patch_embeddings.name):
                 self.patch_embeddings.build(None)
 
-    def call(self, pixel_values: tf.Tensor, bool_masked_pos: tf.Tensor | None = None) -> tf.Tensor:
+    def call(self, pixel_values: tf.Tensor, bool_masked_pos: Optional[tf.Tensor] = None) -> tf.Tensor:
         embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_len, projection_dim = shape_list(embeddings)
 
@@ -490,7 +490,7 @@ class TFData2VecVisionLayer(tf.keras.layers.Layer):
         )
         self.init_values = config.layer_scale_init_value
 
-    def build(self, input_shape: tf.TensorShape = None):
+    def build(self, input_shape: tf.TensorShape):
         if self.init_values > 0:
             self.lambda_1 = self.add_weight(
                 shape=(self.config.hidden_size),
@@ -593,7 +593,7 @@ class TFData2VecVisionRelativePositionBias(tf.keras.layers.Layer):
             initializer="zeros",
             trainable=True,
             name="relative_position_bias_table",
-        )  # [2*Wh-1 * 2*Ww-1, nH]
+        )  # [2*Window_height-1 * 2*Window_width-1, nH]
         # cls to token & token 2 cls & cls to cls
 
         super().build(input_shape)
@@ -601,17 +601,23 @@ class TFData2VecVisionRelativePositionBias(tf.keras.layers.Layer):
     def get_position_index(self):
         # get pair-wise relative position index for each token inside the window
         xx, yy = tf.meshgrid(range(self.window_size[0]), range(self.window_size[1]))
-        coords = tf.stack([yy, xx], axis=0)  # [2, Wh, Ww]
-        coords_flatten = tf.reshape(coords, [2, -1])  # [2, Wh*Ww]
+        coords = tf.stack([yy, xx], axis=0)  # [2, Window_height, Window_width]
+        coords_flatten = tf.reshape(coords, [2, -1])  # [2, Window_height*Window_width]
 
-        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # [2, Wh*Ww, Wh*Ww]
-        relative_coords = tf.transpose(relative_coords, perm=[1, 2, 0])  # [Wh*Ww, Wh*Ww, 2]
+        relative_coords = (
+            coords_flatten[:, :, None] - coords_flatten[:, None, :]
+        )  # [2, Window_height*Window_width, Window_height*Window_width]
+        relative_coords = tf.transpose(
+            relative_coords, perm=[1, 2, 0]
+        )  # [Window_height*Window_width, Window_height*Window_width, 2]
 
         xx = (relative_coords[:, :, 0] + self.window_size[0] - 1) * (2 * self.window_size[1] - 1)
         yy = relative_coords[:, :, 1] + self.window_size[1] - 1
         relative_coords = tf.stack([xx, yy], axis=-1)
 
-        relative_position_index = tf.reduce_sum(relative_coords, axis=-1)  # [Wh*Ww, Wh*Ww]
+        relative_position_index = tf.reduce_sum(
+            relative_coords, axis=-1
+        )  # [Window_height*Window_width, Window_height*Window_width]
 
         top = tf.ones((1, relative_position_index.shape[1]), dtype=relative_position_index.dtype) * (
             self.num_relative_distance - 3
@@ -623,7 +629,9 @@ class TFData2VecVisionRelativePositionBias(tf.keras.layers.Layer):
 
         left_corner = tf.concat([corner, left], axis=0)
         relative_position_index = tf.concat([top, relative_position_index], axis=0)
-        relative_position_index = tf.concat([left_corner, relative_position_index], axis=1)  # [Wh*Ww + 1, Wh*Ww + 1]
+        relative_position_index = tf.concat(
+            [left_corner, relative_position_index], axis=1
+        )  # [Window_height*Window_width + 1, Window_height*Window_width + 1]
         return relative_position_index
 
     def call(self, inputs=None) -> tf.Tensor:
@@ -658,7 +666,7 @@ class TFData2VecVisionEncoder(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        head_mask: tf.Tensor | None = None,
+        head_mask: Optional[tf.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -747,9 +755,9 @@ class TFData2VecVisionMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        pixel_values: tf.Tensor | None = None,
-        bool_masked_pos: tf.Tensor | None = None,
-        head_mask: tf.Tensor | None = None,
+        pixel_values: Optional[tf.Tensor] = None,
+        bool_masked_pos: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -836,6 +844,17 @@ class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
     main_input_name = "pixel_values"
     _keys_to_ignore_on_load_unexpected = [r"relative_position_index"]
 
+    @property
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        """
+        Dummy inputs to build the network. Returns:
+            `Dict[str, tf.Tensor]`: The dummy inputs.
+        """
+        VISION_DUMMY_INPUTS = tf.random.uniform(
+            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size),
+            dtype=tf.float32,
+        )
+        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
     @tf.function(
         input_signature=[
@@ -1017,12 +1036,12 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
     )
     def call(
         self,
-        pixel_values: TFModelInputType | None = None,
-        head_mask: np.ndarray | tf.Tensor | None = None,
+        pixel_values: Optional[TFModelInputType] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: np.ndarray | tf.Tensor | None = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
     ) -> Union[TFSequenceClassifierOutput, tuple]:
         r"""
@@ -1058,6 +1077,12 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
 
 
 # Copied from transformers.models.beit.modeling_tf_beit.TFBeitConvModule with Beit->Data2VecVision
@@ -1203,15 +1228,15 @@ class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
         return tf.gather(both_pool, gather_indices, axis=axis)
 
     def call(self, inputs):
-        # Rearrange from NHWC -> NCHW
+        # Rearrange from batch_size, height, width, channels -> batch_size, channels, height, width
         inputs = tf.transpose(inputs, perm=[0, 3, 1, 2])
         # Perform W-pooling
         inputs = self.w_pool(inputs)
-        # Rearrange NCHW -> NCWH
+        # Rearrange batch_size, channels, height, width -> batch_size, channels, width, height
         inputs = tf.transpose(inputs, perm=[0, 1, 3, 2])
         # Perform H-pooling
         inputs = self.h_pool(inputs)
-        # Rearrange from NCWH -> NHWC
+        # Rearrange from batch_size, channels, width, height -> batch_size, height, width, channels
         inputs = tf.transpose(inputs, perm=[0, 3, 2, 1])
         return inputs
 
@@ -1225,9 +1250,10 @@ class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
     """
     Args:
     Pyramid Pooling Module (PPM) used in PSPNet.
-        pool_scales (tuple[int]): Pooling scales used in Pooling Pyramid
-            Module.
-        channels (int): Channels after modules, before conv_seg.
+        pool_scales (tuple[int]):
+            Pooling scales used in Pooling Pyramid Module.
+        channels (int):
+            Channels after modules, before conv_seg.
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
@@ -1380,11 +1406,16 @@ class TFData2VecVisionUperHead(tf.keras.layers.Layer):
 
 class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
     """
-    Args:
     Fully Convolution Networks for Semantic Segmentation. This head is implemented from
     [FCNNet](https://arxiv.org/abs/1411.4038).
-        config (Data2VecVisionConfig): Configuration. kernel_size (int): The kernel size for convs in the head.
-        Default: 3. dilation (int): The dilation rate for convs in the head. Default: 1.
+
+    Args:
+        config (Data2VecVisionConfig):
+            Configuration.
+        kernel_size (int):
+            The kernel size for convs in the head. Default: 3.
+        dilation (int):
+            The dilation rate for convs in the head. Default: 1.
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
@@ -1479,7 +1510,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         # FPNs
         self.fpn1 = [
             tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn1.0"),
-            tf.keras.layers.BatchNormalization(name="fpn1.1"),
+            tf.keras.layers.BatchNormalization(name="fpn1.1", momentum=0.9, epsilon=1e-5),
             tf.keras.layers.Activation("gelu"),
             tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn1.3"),
         ]
