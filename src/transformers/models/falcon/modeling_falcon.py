@@ -549,7 +549,7 @@ class FalconModel(FalconPreTrainedModel):
 
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.alibi = config.alibi
+        self.use_alibi = config.alibi
 
         # Embedding + LN Embedding
         self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
@@ -651,7 +651,7 @@ class FalconModel(FalconPreTrainedModel):
         else:
             attention_mask = attention_mask.to(hidden_states.device)
 
-        if self.alibi:
+        if self.use_alibi:
             alibi = build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
         else:
             alibi = None
