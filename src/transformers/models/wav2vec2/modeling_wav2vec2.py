@@ -201,7 +201,7 @@ def _compute_mask_indices(
 
     # SpecAugment mask to fill
     spec_aug_mask = torch.zeros((batch_size, sequence_length), dtype=torch.bool)
-    spec_aug_mask_idxs = torch.tensor([], dtype=torch.int64)
+    spec_aug_mask_idxs = torch.tensor([], dtype=torch.int32)
 
     max_num_masked_span = compute_num_masked_span(sequence_length)
 
@@ -251,7 +251,8 @@ def _compute_mask_indices(
         spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = sequence_length - 1
 
     # scatter indices to mask
-    spec_aug_mask.scatter_(1, spec_aug_mask_idxs, spec_aug_mask)
+    mask_values = torch.ones(spec_aug_mask_idxs.shape, dtype=torch.bool)
+    spec_aug_mask.scatter_(1, spec_aug_mask_idxs, mask_values)
 
     return spec_aug_mask
 
