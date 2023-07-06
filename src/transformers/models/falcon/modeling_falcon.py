@@ -196,7 +196,7 @@ class FalconAttention(nn.Module):
         self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
         self.beta = self.inv_norm_factor
         if config.new_decoder_architecture:
-            qkv_out_dim = (config.n_head_kv * 2 + config.num_attention_heads) * self.head_dim
+            qkv_out_dim = (config.num_kv_heads * 2 + config.num_attention_heads) * self.head_dim
         elif config.multi_query:
             qkv_out_dim = self.hidden_size + 2 * self.head_dim
         else:
@@ -206,7 +206,7 @@ class FalconAttention(nn.Module):
         self.multi_query = config.multi_query
         self.dense = FalconLinear(self.hidden_size, self.hidden_size, bias=config.bias)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
-        self.num_kv = config.n_head_kv if (self.new_decoder_architecture or not self.multi_query) else 1
+        self.num_kv = config.num_kv_heads if (self.new_decoder_architecture or not self.multi_query) else 1
 
     def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -276,7 +276,7 @@ class FalconAttention(nn.Module):
         output_attentions: bool = False,
     ):
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
-        n_head_kv = self.num_heads if self.new_decoder_architecture else self.num_kv
+        num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv
         # 3 x [batch_size, seq_length, num_heads, head_dim]
         (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
 
@@ -284,11 +284,11 @@ class FalconAttention(nn.Module):
 
         query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, query_length, self.head_dim)
         key_layer = key_layer.transpose(1, 2).reshape(
-            batch_size * n_head_kv,
+            batch_size * num_kv_heads,
             query_length,
             self.head_dim,
         )
-        value_layer = value_layer.transpose(1, 2).reshape(batch_size * n_head_kv, query_length, self.head_dim)
+        value_layer = value_layer.transpose(1, 2).reshape(batch_size * num_kv_heads, query_length, self.head_dim)
 
         query_layer, key_layer = self.maybe_rotary(query_layer, key_layer)
 
@@ -309,8 +309,8 @@ class FalconAttention(nn.Module):
         attention_mask_float = (attention_mask * 1.0).masked_fill(attention_mask, -1e9).to(query_layer.dtype)
 
         query_layer_ = query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim)
-        key_layer_ = key_layer.reshape(batch_size, n_head_kv, -1, self.head_dim)
-        value_layer_ = value_layer.reshape(batch_size, n_head_kv, -1, self.head_dim)
+        key_layer_ = key_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim)
+        value_layer_ = value_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim)
 
         if alibi is None:
             if output_attentions:
