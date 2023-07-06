@@ -141,33 +141,82 @@ class MptConfig(PretrainedConfig):
 
 
 """A HuggingFace-style model configuration."""
-from typing import Dict, Optional, Union
+from typing import Optional, Union
 
 from transformers import PretrainedConfig
 
 
-attn_config_defaults: Dict = {
-    "attn_type": "multihead_attention",
-    "attn_pdrop": 0.0,
-    "attn_impl": "triton",
-    "qk_ln": False,
-    "clip_qkv": None,
-    "softmax_scale": None,
-    "prefix_lm": False,
-    "attn_uses_sequence_id": False,
-    "alibi": False,
-    "alibi_bias_max": 8,
-}
-init_config_defaults: Dict = {
-    "name": "kaiming_normal_",
-    "fan_mode": "fan_in",
-    "init_nonlinearity": "relu",
-    "init_div_is_residual": True,
-    "emb_init_std": None,
-    "emb_init_uniform_lim": None,
-    "init_std": None,
-    "init_gain": 0.0,
-}
+class MptAttentionConfig(PretrainedConfig):
+    """
+    This is the configuration class to store the configuration of a [`MptAttention`] class. It is used to instantiate
+    attention layers according to the specified arguments, defining the layers architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the MPT
+    [mosaicml/mpt-7b](https://huggingface.co/mosaicml/mpt-7b) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+    """
+
+    def __init__(
+        self,
+        attn_type="multihead_attention",
+        attn_pdrop=0,
+        attn_impl="triton",
+        normalise_query_key=False,
+        clip_query_key_value=None,
+        softmax_scale=None,  # TODO rename
+        prefix_lm=False,  # TODO what is this
+        attn_uses_sequence_id=False,
+        alibi=False,
+        alibi_bias_max=8,
+        **kwargs,
+    ):
+        super().__init__()
+        self.attn_type = attn_type
+        self.attn_pdrop = attn_pdrop
+        self.attn_impl = attn_impl
+        self.normalise_query_key = normalise_query_key
+        self.clip_query_key_value = clip_query_key_value
+        self.softmax_scale = softmax_scale
+        self.prefix_lm = prefix_lm
+        self.attn_uses_sequence_id = attn_uses_sequence_id
+        self.alibi = alibi
+        self.alibi_bias_max = alibi_bias_max
+
+
+class MptIntializerConfig(PretrainedConfig):
+    """
+    This is the configuration class to store the configuration of a [`MptAttention`] class. It is used to instantiate
+    attention layers according to the specified arguments, defining the layers architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the MPT
+    [mosaicml/mpt-7b](https://huggingface.co/mosaicml/mpt-7b) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+    """
+
+    def __init__(
+        self,
+        name="kaiming_normal_",
+        fan_mode="fan_in",
+        init_nonlinearity="relu",
+        init_div_is_residual=True,
+        emb_init_std=None,
+        emb_init_uniform_lim=None,
+        init_std=None,
+        init_gain=0.0,
+        **kwargs,
+    ):
+        super().__init__()
+
+        self.name = name
+        self.fan_mode = fan_mode
+        self.init_nonlinearity = init_nonlinearity
+        self.init_div_is_residual = init_div_is_residual
+        self.emb_init_std = emb_init_std
+        self.emb_init_uniform_lim = emb_init_uniform_lim
+        self.init_std = init_std
+        self.init_gain = init_gain
 
 
 class MPTConfig(PretrainedConfig):
@@ -184,7 +233,7 @@ class MPTConfig(PretrainedConfig):
         resid_pdrop: float = 0.0,
         emb_pdrop: float = 0.0,
         learned_pos_emb: bool = True,
-        attn_config: Dict = attn_config_defaults,
+        attn_config: MptAttentionConfig = None,
         init_device: str = "cpu",
         logit_scale: Optional[Union[float, str]] = None,
         no_bias: bool = False,
@@ -192,7 +241,7 @@ class MPTConfig(PretrainedConfig):
         embedding_fraction: float = 1.0,
         norm_type: str = "low_precision_layernorm",
         use_cache: bool = False,
-        init_config: Dict = init_config_defaults,
+        init_config: MptIntializerConfig = None,
         **kwargs,
     ):
         """The MPT configuration class.
@@ -273,15 +322,7 @@ class MPTConfig(PretrainedConfig):
         super().__init__(**kwargs)
         self._validate_config()
 
-    def _set_config_defaults(self, config, config_defaults):
-        for k, v in config_defaults.items():
-            if k not in config:
-                config[k] = v
-        return config
-
     def _validate_config(self):
-        self.attn_config = self._set_config_defaults(self.attn_config, attn_config_defaults)
-        self.init_config = self._set_config_defaults(self.init_config, init_config_defaults)
         if self.d_model % self.n_heads != 0:
             raise ValueError("d_model must be divisible by n_heads")
         if any((prob < 0 or prob > 1 for prob in [self.attn_config["attn_pdrop"], self.resid_pdrop, self.emb_pdrop])):
