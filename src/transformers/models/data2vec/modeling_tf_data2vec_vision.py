@@ -845,10 +845,10 @@ class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"relative_position_index"]
 
     @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+    def dummy_inputs(self) -> dict[str, tf.Tensor]:
         """
         Dummy inputs to build the network. Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
+            `dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
             shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size),
@@ -948,7 +948,6 @@ DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
     "The bare Data2VecVision Model transformer outputting raw hidden-states without any specific head on top.",
     DATA2VEC_VISION_START_DOCSTRING,
 )
-
 class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = True, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)

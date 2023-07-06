@@ -554,14 +554,20 @@ class TFBeitRelativePositionBias(tf.keras.layers.Layer):
         coords = tf.stack([yy, xx], axis=0)  # [2, Window_height, Window_width]
         coords_flatten = tf.reshape(coords, [2, -1])  # [2, Window_height*Window_width]
 
-        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # [2, Window_height*Window_width, Window_height*Window_width]
-        relative_coords = tf.transpose(relative_coords, perm=[1, 2, 0])  # [Window_height*Window_width, Window_height*Window_width, 2]
+        relative_coords = (
+            coords_flatten[:, :, None] - coords_flatten[:, None, :]
+        )  # [2, Window_height*Window_width, Window_height*Window_width]
+        relative_coords = tf.transpose(
+            relative_coords, perm=[1, 2, 0]
+        )  # [Window_height*Window_width, Window_height*Window_width, 2]
 
         xx = (relative_coords[:, :, 0] + self.window_size[0] - 1) * (2 * self.window_size[1] - 1)
         yy = relative_coords[:, :, 1] + self.window_size[1] - 1
         relative_coords = tf.stack([xx, yy], axis=-1)
 
-        relative_position_index = tf.reduce_sum(relative_coords, axis=-1)  # [Window_height*Window_width, Window_height*Window_width]
+        relative_position_index = tf.reduce_sum(
+            relative_coords, axis=-1
+        )  # [Window_height*Window_width, Window_height*Window_width]
 
         top = tf.ones((1, relative_position_index.shape[1]), dtype=relative_position_index.dtype) * (
             self.num_relative_distance - 3
@@ -573,7 +579,9 @@ class TFBeitRelativePositionBias(tf.keras.layers.Layer):
 
         left_corner = tf.concat([corner, left], axis=0)
         relative_position_index = tf.concat([top, relative_position_index], axis=0)
-        relative_position_index = tf.concat([left_corner, relative_position_index], axis=1)  # [Window_height*Window_width + 1, Window_height*Window_width + 1]
+        relative_position_index = tf.concat(
+            [left_corner, relative_position_index], axis=1
+        )  # [Window_height*Window_width + 1, Window_height*Window_width + 1]
         return relative_position_index
 
     def call(self, inputs=None) -> tf.Tensor:
@@ -788,8 +796,8 @@ class TFBeitPreTrainedModel(TFPreTrainedModel):
     )
     def serving(self, inputs):
         """
-        Method used for serving the model.
         Args:
+        Method used for serving the model.
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
@@ -1201,11 +1209,11 @@ class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
 
 class TFBeitPyramidPoolingModule(tf.keras.layers.Layer):
     """
+    Args:
     Pyramid Pooling Module (PPM) used in PSPNet.
-    Args:    
         pool_scales (tuple[int]):
             Pooling scales used in Pooling Pyramid Module.
-        channels (int): 
+        channels (int):
             Channels after modules, before conv_seg.
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
@@ -1313,11 +1321,11 @@ class TFBeitFCNHead(tf.keras.layers.Layer):
     [FCNNet](https://arxiv.org/abs/1411.4038).
 
     Args:
-        config (BeitConfig): 
+        config (BeitConfig):
             Configuration.
-        kernel_size (int): 
+        kernel_size (int):
             The kernel size for convs in the head. Default: 3.
-        dilation (int): 
+        dilation (int):
             The dilation rate for convs in the head. Default: 1.
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
