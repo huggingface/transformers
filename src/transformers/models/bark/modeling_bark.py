@@ -1250,14 +1250,16 @@ class BarkFineModel(BarkPreTrainedModel):
             for n_inner in range(n_coarse, fine_generation_config.n_fine_codebooks):
                 logits = self.forward(n_inner, input_buffer).logits
                 if temperature is None:
-                    relevant_logits = logits[0, rel_start_fill_idx:, :codebook_size]
+                    relevant_logits = logits[:, rel_start_fill_idx:, :codebook_size]
                     codebook_preds = torch.argmax(relevant_logits, -1)
                 else:
-                    relevant_logits = logits[0, :, :codebook_size] / temperature
-                    probs = F.softmax(relevant_logits, dim=-1)
-                    codebook_preds = torch.multinomial(
-                        probs[rel_start_fill_idx:max_fine_input_length], num_samples=1
-                    ).reshape(-1)
+                    relevant_logits = logits[:, :, :codebook_size] / temperature
+                    # apply softmax
+                    probs = F.softmax(relevant_logits, dim=-1)[:, rel_start_fill_idx:max_fine_input_length]
+                    # reshape to 2D: (batch_size, seq_len, codebook_size) -> (batch_size*seq_len, codebook_size)
+                    probs = probs.reshape((-1, codebook_size))
+                    # multinomial then reshape : (batch_size*seq_len)-> (batch_size,seq_len)
+                    codebook_preds = torch.multinomial(probs, num_samples=1).view(batch_size, -1)
                 codebook_preds = codebook_preds.to(torch.int32)
                 input_buffer[:, rel_start_fill_idx:, n_inner] = codebook_preds
                 del logits, codebook_preds
