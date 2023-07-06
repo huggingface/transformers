@@ -415,7 +415,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         tokenizer._create_trie(tokenizer.all_special_tokens)
         # TODO ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
         # So the extra ids are split....
-        self.tokenizer = tokenizer
+        cls.tokenizer = tokenizer
 
     def test_add_dummy_prefix(self):
         # make sure `'▁'` is prepended, and outputs match sp_model's
@@ -478,15 +478,26 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode(" <extra_id_0> ,")
         self.assertEqual(input_ids, [999, 3, 2])
         tokens = self.tokenizer.tokenize(" <extra_id_0> ,")
-        # spaces are eaten by rstrip / lstrip + spm sp_model.encode("  ") = []
+        # spaces are eaten by rstrip / lstrip
         self.assertEqual(tokens, ["<extra_id_0>", ","])
 
-        input_ids = self.tokenizer.encode("No <extra_id_0> ▁He")
+        # test with a begin of word like `▁He`
+        input_ids = self.tokenizer.encode("No <extra_id_0> He")
         self.assertEqual(input_ids, [156, 46, 44, 999, 262, 15, 2])
-        tokens = self.tokenizer.tokenize("No <extra_id_0> ▁He")
-        self.assertEqual(
-            tokens, ["▁He", "▁is", "▁not", "<extra_id_0>", "H", "e"]
-        )  # spaces are eaten by rstrip / lstrip
+        # spaces are eaten by rstrip / lstrip, so this is expected. Don't strip otherwise you break
+        spm_out = self.tokenizer.sp_model.encode("No.He", out_type = str) # ['▁No', '.', 'H', 'e']
+        tokens = self.tokenizer.tokenize("No <extra_id_0> He")
+        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<extra_id_0>", "H", "e"])  
+        self.assertEqual(tokens[-2:], spm_out[-2:])  
+
+        # Make sure this does not happen if we don't strip
+        self.tokenizer.add_special_tokens({"bos_token":AddedToken("<bos>")})
+        input_ids = self.tokenizer.encode("No <bos> He")
+        self.assertEqual(input_ids, [284, 1000, 156, 2])
+        tokens = self.tokenizer.tokenize("No <bos> He")
+        # the first `' '` after `'No'` is eaten by spm:
+        self.assertEqual(self.tokenizer.sp_model.encode("No         ", out_type = str),['▁No'])
+        self.assertEqual(tokens, ["▁No", "<bos>", "▁He"])  
 
     @require_seqio
     def test_integration_seqio(self):
