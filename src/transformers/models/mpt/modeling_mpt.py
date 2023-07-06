@@ -118,30 +118,6 @@ class MptLPLayerNorm(torch.nn.LayerNorm):
             )
 
 
-class MptRMSNorm(torch.nn.Module):
-    def __init__(self, normalized_shape, eps=1e-05, weight=True, dtype=None, device=None):
-        super().__init__()
-        self.eps = eps
-        if weight:
-            self.weight = torch.nn.Parameter(torch.ones(normalized_shape, dtype=dtype, device=device))
-        else:
-            self.register_parameter("weight", None)
-
-    def forward(self, x):
-        return rms_norm(x.float(), self.weight, self.eps).to(dtype=x.dtype)
-
-
-class MptLPRMSNorm(MptRMSNorm):
-    def __init__(self, normalized_shape, eps=1e-05, weight=True, dtype=None, device=None):
-        super().__init__(normalized_shape=normalized_shape, eps=eps, weight=weight, dtype=dtype, device=device)
-
-    def forward(self, x):
-        downcast_x = _cast_if_autocast_enabled(x)
-        downcast_weight = _cast_if_autocast_enabled(self.weight) if self.weight is not None else self.weight
-        with torch.autocast(enabled=False, device_type=x.device.type):
-            return rms_norm(downcast_x, downcast_weight, self.eps).to(dtype=x.dtype)
-
-
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
     """
     Link to paper: https://arxiv.org/abs/2108.12409 Alibi tensor is not causal as the original paper mentions, it
