@@ -37,7 +37,14 @@ from .configuration_falcon import FalconConfig
 
 logger = logging.get_logger(__name__)
 
-FALCON_PRETRAINED_MODEL_ARCHIVE_LIST = ["Rocketknight1/falcon-rw-1b"]
+FALCON_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "tiiuae/falcon-40b",
+    "tiiuae/falcon-40b-instruct",
+    "tiiuae/falcon-7b",
+    "tiiuae/falcon-7b-instruct",
+    "tiiuae/falcon-rw-7b",
+    "tiiuae/falcon-rw-1b",
+]
 _CHECKPOINT_FOR_DOC = "Rocketknight1/falcon-rw-1b"
 _CONFIG_FOR_DOC = "FalconConfig"
 
