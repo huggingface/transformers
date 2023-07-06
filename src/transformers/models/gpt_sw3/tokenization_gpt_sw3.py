@@ -233,7 +233,6 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
             if token in self.all_special_tokens:
-
                 # TODO: Check if this is needed, as it ensures that decode(encode(doc)) != doc by adding extra whitespace in the decoded document
                 if not prev_is_special:
                     out_string += " "
@@ -342,12 +341,8 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
             - [2] https://huggingface.co/AI-Sweden-Models/gpt-sw3-126m-instruct
             - [3] https://github.com/openai/openai-python/blob/main/chatml.md
         """
-        all_responses = [
-            f"User: {text}" if is_user else f"Bot: {text}" for is_user, text in conversation.iter_texts()
-        ]
+        all_responses = [f"User: {text}" if is_user else f"Bot: {text}" for is_user, text in conversation.iter_texts()]
         prompt = (
-            f"{self.eos_token}{self.bos_token}"
-            + f"{self.bos_token}".join(all_responses)
-            + f"{self.bos_token}Bot: "
+            f"{self.eos_token}{self.bos_token}" + f"{self.bos_token}".join(all_responses) + f"{self.bos_token}Bot: "
         )
         return self.encode(text=prompt)
