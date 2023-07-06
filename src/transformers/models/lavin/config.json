@@ -1,0 +1,37 @@
+{
+  "architectures": [
+    "LaVIN"
+  ],
+
+  "dim": 512,
+  "n_layers": 8,
+  "n_heads": 8,
+  "vocab_size": 1,
+  "multiple_of": 256,
+  "norm_eps": 1e-,
+  "hidden_proj": 128,
+  "head_dim": 3,
+  "max_batch_size": 32,
+  "max_seq_len":  2048,
+  "drop_path": 0,
+
+  "attention_probs_dropout_prob": 0.1,
+  "bbox_scale": 100.0,
+  "hidden_act": "gelu",
+  "hidden_dropout_prob": 0.1,
+  "hidden_size": 1024,
+  "initializer_range": 0.02,
+  "intermediate_size": 4096,
+  "layer_norm_eps": 1e-12,
+  "max_position_embeddings": 512,
+  "model_type": "bros",
+  "num_attention_heads": 16,
+  "num_hidden_layers": 24,
+  "pad_token_id": 0,
+  "pe_type": "crel",
+  "torch_dtype": "float32",
+  "transformers_version": "4.10.0",
+  "type_vocab_size": 2,
+  "vocab_size": 30522
+}
+
