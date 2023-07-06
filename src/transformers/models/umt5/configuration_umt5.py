@@ -92,7 +92,7 @@ class UMT5Config(PretrainedConfig):
         is_encoder_decoder=True,
         use_cache=True,
         tokenizer_class="T5Tokenizer",
-        tie_word_embeddings=False,
+        tie_word_embeddings=True,
         pad_token_id=0,
         eos_token_id=1,
         decoder_start_token_id=0,
@@ -134,6 +134,9 @@ class UMT5Config(PretrainedConfig):
                 "Please make sure `feed_forward_proj` is of the format `gated-{ACT_FN}` or `{ACT_FN}`, e.g. "
                 "'gated-gelu' or 'relu'"
             )
+
+        if feed_forward_proj == "gated-gelu":
+            self.dense_act_fn = "gelu_new"
 
     @property
     def hidden_size(self):
