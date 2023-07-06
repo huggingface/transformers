@@ -268,7 +268,7 @@ class FalconAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        alibi: torch.Tensor,
+        alibi: Optional[torch.Tensor],
         attention_mask: torch.Tensor,
         layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -414,7 +414,7 @@ class FalconDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        alibi: torch.Tensor,
+        alibi: Optional[torch.Tensor],
         attention_mask: torch.Tensor,
         layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
