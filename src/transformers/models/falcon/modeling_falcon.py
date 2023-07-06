@@ -62,11 +62,7 @@ class FalconRotaryEmbedding(nn.Module):
     n_heads_per_partition, seq_len, head_dim]` (e.g. MinGPTAttention format).
     """
 
-    def __init__(
-        self,
-        head_dim: int,
-        base=10000,
-    ):
+    def __init__(self, head_dim: int, base=10000):
         super().__init__()
         inv_freq = 1.0 / (base ** (torch.arange(0, head_dim, 2).float() / head_dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
