@@ -200,7 +200,7 @@ class FalconAttention(nn.Module):
         self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
         self.beta = self.inv_norm_factor
         if config.new_decoder_architecture:
-            qkv_out_dim = config.n_head_kv * 2 + config.num_attention_heads * self.head_dim
+            qkv_out_dim = (config.n_head_kv * 2 + config.num_attention_heads) * self.head_dim
         elif config.multi_query:
             qkv_out_dim = self.hidden_size + 2 * self.head_dim
         else:
