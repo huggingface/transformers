@@ -144,7 +144,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         tokens = self.sp_model.encode(text, out_type=str)
 
-        if not is_first and not self.legacy and not text.startswith(" ") and tokens[0].startswith(SPIECE_UNDERLINE):
+        if not self.legacy and not is_first and not text.startswith(" ") and tokens[0].startswith(SPIECE_UNDERLINE):
             tokens = tokens[0][1:] if len(tokens[0]) > 1 else [] + tokens[1:]
         return tokens
 
