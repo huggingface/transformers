@@ -43,8 +43,65 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 ## use llama tokenizer 
 
-class lavin_tokenizer:
-  def __init__(self, model_path: str):
+class lavin_tokenizer(PreTrainedTokenizer):
+  vocab_files = VOCAB_FILES_NAMES
+  pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+  max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+  model_input_names = ["input_ids", "attention_mask"]
+
+  def __init__(self, vocab_file, unk_token="<unk>", bos_token="<s>", pad_token="None", sp_model_kwargs: Optional[Dict[str, Any]] = None, add_bos_token = True, add_eos_token = False, **kwargs,):
+
+    super().__init__(
+    self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+    bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
+    eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
+    unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
+    pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+    )
+
+    self.vocab_sile = vocab_file
+    self.add_bos_token = add_bos_token
+    self.add_eos_token = add_eos_token
+    self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+    self.sp_model.Load(vocab_file)
+
+
+  def get_vocab(self):
+    """Returns vocab as a dict"""
+    vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+    vocab.update(self.added_tokens_encoder)
+    return vocab
+
+  def _tokenize(self, text):
+    return self.sp_model.encode(text, out_type=str)
+
+  def _convert_token_to_id(self, token):
+    return self.sp_model.piece_to_id(toekn)
+
+  def _convert_id_to_token(self, index):
+    return self.sp_model.IdToPiece(index)
+
+  def convert_tokens_to_string(self, tokens):
+    """Converts a sequence of tokens (string) in a single string."""
+    current_sub_tokens = []
+    out_string = ""
+    prev_is_special = False
+    for i, token in enumerate(tokens):
+      # make sure that special tokens are not decoded using sentencepiece model
+      if token in self.all_special_tokens:
+        if not prev_is_special and i != 0:
+          out_string += " "
+        out_string += self.sp_model.decode(current_sub_tokens) + token
+        prev_is_special = True
+        current_sub_tokens = []
+      else:
+        current_sub_tokens.append(token)
+        prev_is_special = False
+    out_string += self.sp_model.decode(current_sub_tokens)
+    return out_string
+
+
+
     # reload tokenizer
     assert os.path.isfile(model_path), model_path
     self.sp_model = SentencePieceProcessor(model_file=model_path)

@@ -6,7 +6,7 @@
   "dim": 512,
   "n_layers": 8,
   "n_heads": 8,
-  "vocab_size": 1,
+  "vocab_size": -1,
   "multiple_of": 256,
   "norm_eps": 1e-,
   "hidden_proj": 128,
