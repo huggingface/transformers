@@ -45,11 +45,15 @@ The methods and tools covered in this guide can be classified based on the effec
 | [DeepSpeed Zero](#deepspeed-zero)                     | No                      | Yes                          |
 | [torch.compile](#using-torchcompile)                                     | Yes                      | No                           |
 
-Note: a bracket means there may be negligible effects on memory utilization. 
+<Tip>
+
+The parentheses mean there may be negligible effects on memory utilization.
+
+</Tip>
 
 You can combine the above methods to get a cumulative effect. These techniques are available to you whether you are 
 training your model with [`Trainer`] or writing a pure PyTorch loop, in which case you can [configure these optimizations 
-with 🤗 Accelerate](#using--accelerate).
+with 🤗 Accelerate](#using-accelerate).
 
 If these methods do not result in sufficient gains, you can explore the following options: 
 * [Look into building your own custom Docker container with efficient softare prebuilds](#efficient-software-prebuilds)
@@ -93,7 +97,7 @@ becomes possible to increase the **effective batch size** beyond the limitations
 However, it is important to note that the additional forward and backward passes introduced by gradient accumulation can 
 slow down the training process.
 
-You can enable gradient accumulation by adding `gradient_accumulation_steps` argument to  [`TrainingArguments`]: 
+You can enable gradient accumulation by adding the `gradient_accumulation_steps` argument to  [`TrainingArguments`]: 
 
 ```py
 training_args = TrainingArguments(per_device_train_batch_size=1, gradient_accumulation_steps=4, **default_args)
@@ -102,13 +106,13 @@ training_args = TrainingArguments(per_device_train_batch_size=1, gradient_accumu
 In the above example, your effective batch size becomes 4. 
 
 Alternatively, use 🤗 Accelerate to gain full control over the training loop. Find the 🤗 Accelerate example 
-[further down in this guide](#using--accelerate).
+[further down in this guide](#using-accelerate).
 
-Note:  While it is advised to max out GPU usage as much as possible, a high number of gradient accumulation steps can 
+While it is advised to max out GPU usage as much as possible, a high number of gradient accumulation steps can 
 result in a more pronounced training slowdown. Consider the following example. Let's say, the `per_device_train_batch_size=4` 
 without gradient accumulation hits the GPU's limit. If you would like to train with batches of size 64, do not set the 
-`per_device_train_batch_size` to 1 and `gradient_accumulation_steps` to 64. Instead, keep the `per_device_train_batch_size=4` 
-and set the `gradient_accumulation_steps=16`. This results in the same effective batch size while making better use of 
+`per_device_train_batch_size` to 1 and `gradient_accumulation_steps` to 64. Instead, keep `per_device_train_batch_size=4` 
+and set `gradient_accumulation_steps=16`. This results in the same effective batch size while making better use of 
 the available GPU resources.
 
 For additional information, please refer to batch size and gradient accumulation benchmarks for [RTX-3090](https://github.com/huggingface/transformers/issues/14608#issuecomment-1004392537)
@@ -127,7 +131,7 @@ during the backward pass, would introduce a considerable computational overhead 
 throughout the computational graph so only a fraction of the activations need to be re-computed for the gradients. For 
 an in-depth explanation of gradient checkpointing, refer to [this great article](https://medium.com/tensorflow/fitting-larger-networks-into-memory-583e3c758ff9).
 
-To enable gradient checkpointing in the [`Trainer`], pass corresponding a flag to the [`TrainingArguments`]:
+To enable gradient checkpointing in the [`Trainer`], pass the corresponding a flag to [`TrainingArguments`]:
 
 ```py
 training_args = TrainingArguments(
@@ -135,32 +139,35 @@ training_args = TrainingArguments(
 )
 ```
 
-Alternatively, use 🤗 Accelerate - find the 🤗 Accelerate example [further in this guide](#using--accelerate). 
+Alternatively, use 🤗 Accelerate - find the 🤗 Accelerate example [further in this guide](#using-accelerate). 
 
-Note that while improving memory efficiency, gradient checkpointing slows down training by approximately 20%.
+<Tip>
+
+While gradient checkpointing may improve memory efficiency, it slows training by approximately 20%.
+
+</Tip>
 
 ## Mixed precision training
 
 **Mixed precision training** is a technique that aims to optimize the computational efficiency of training models by 
 utilizing lower-precision numerical formats for certain variables. Traditionally, most models use 32-bit floating point 
-precision (fp32 (float32)) to represent and process variables. However, not all variables require this high precision 
+precision (fp32 or float32) to represent and process variables. However, not all variables require this high precision 
 level to achieve accurate results. By reducing the precision of certain variables to lower numerical formats like 16-bit 
-floating point (fp16 (float16)), we can speed up the computations. Because in this approach some computations are performed 
+floating point (fp16 or float16), we can speed up the computations. Because in this approach some computations are performed 
 in half-precision, while some are still in full precision, the approach is called mixed precision training.
 
 Most commonly mixed precision training is achieved by using fp16 (float16) data types, however, some GPU architectures 
 (such as the Ampere architecture) offer bf16 and tf32 (CUDA internal data type) data types. Check 
-out [NVIDIA Blog](https://developer.nvidia.com/blog/accelerating-ai-training-with-tf32-tensor-cores/)to learn more about 
+out the [NVIDIA Blog](https://developer.nvidia.com/blog/accelerating-ai-training-with-tf32-tensor-cores/) to learn more about 
 the differences between these data types.
 
-### FP16
+### fp16
 
-The main speed improvement of mixed precision training comes from saving the activations in half precision (fp16 (float16)). 
+The main speed improvement of mixed precision training comes from saving the activations in half precision (fp16). 
 Although the gradients are also computed in half precision they are converted back to full precision for the optimization 
 step so no memory is saved here. 
-While mixed precision training results in faster computations, it can also lead to more GPU memory (1.5x the original 
-model is on the GPU) being utilized, especially for small batch sizes.
-This is because the model is now present on the GPU in both 16-bit and 32-bit precision (1.5x the original model is on the GPU).
+While mixed precision training results in faster computations, it can also lead to more GPU memory being utilized, especially for small batch sizes.
+This is because the model is now present on the GPU in both 16-bit and 32-bit precision (1.5x the original model on the GPU).
 
 To enable mixed precision training, set the `fp16` flag to `True`:
 
@@ -168,7 +175,7 @@ To enable mixed precision training, set the `fp16` flag to `True`:
 training_args = TrainingArguments(per_device_train_batch_size=4, fp16=True, **default_args)
 ```
 
-If you prefer to use 🤗 Accelerate, find the 🤗 Accelerate example [further in this guide](#using--accelerate). 
+If you prefer to use 🤗 Accelerate, find the 🤗 Accelerate example [further in this guide](#using-accelerate). 
 
 ### BF16
 
@@ -218,13 +225,13 @@ For additional information on tf32 vs other precisions, please refer to the foll
 ## Optimizer choice
 
 The most common optimizer used to train transformer models is Adam or AdamW (Adam with weight decay). Adam achieves 
-good convergence by storing the rolling average of the previous gradients which, however, adds an additional memory 
-footprint of the order of the number of model parameters. One remedy to this is to use an alternative optimizer. 
+good convergence by storing the rolling average of the previous gradients; however, it adds an additional memory 
+footprint of the order of the number of model parameters. To remedy this, you can use an alternative optimizer. 
 For example if you have [NVIDIA/apex](https://github.com/NVIDIA/apex) installed, `adamw_apex_fused` will give you the 
 fastest training experience among all supported AdamW optimizers.
 
-[`Trainer`] integrates a variety of optimisers that can be used out of box: `adamw_hf`, `adamw_torch`, `adamw_torch_fused`, 
-`adamw_apex_fused`, `adamw_anyprecision or adafactor`. More optimizers can be plugged in via a third-party implementation.
+[`Trainer`] integrates a variety of optimizers that can be used out of box: `adamw_hf`, `adamw_torch`, `adamw_torch_fused`, 
+`adamw_apex_fused`, `adamw_anyprecision` or `adafactor`. More optimizers can be plugged in via a third-party implementation.
 
 Let's take a closer look at two alternatives to AdamW optimizer - Adafactor (available in Trainer), and 8bit BNB quantized 
 optimizer (third-party implementation).
@@ -299,8 +306,10 @@ adam_bnb_optim = bnb.optim.Adam8bit(
 ```
 
 <Tip>
-Note that in order to use the 8-bit optimizer with an existing pretrained model a change to the embedding layer is needed.
+
+To use the 8-bit optimizer with an existing pretrained model, you need to make a change to the embedding layer.
 Read [this issue](https://github.com/huggingface/transformers/issues/14819) for more information.
+
 </Tip>
 
 Finally, pass the custom optimizer as an argument to the `Trainer`:
@@ -312,26 +321,25 @@ trainer = Trainer(model=model, args=training_args, train_dataset=ds, optimizers=
 Combined with other approaches (gradient accumulation, gradient checkpointing, and mixed precision training), 
 you can expect to get about a 3x memory improvement and even slightly higher throughput as using Adafactor. 
 
-### `_multi_tensor`
+### multi_tensor
 
 pytorch-nightly introduced `torch.optim._multi_tensor` which should significantly speed up the optimizers for situations 
-with lots of small feature tensors. It should eventually become the default, but if you want to experiment with it sooner, 
-see: https://github.com/huggingface/transformers/issues/9965
+with lots of small feature tensors. It should eventually become the default, but if you want to experiment with it sooner, take a look at this GitHub [issue](https://github.com/huggingface/transformers/issues/9965).
 
 ## Data preloading
 
 One of the important requirements to reach great training speed is the ability to feed the GPU at the maximum speed it 
 can handle. By default, everything happens in the main process, and it might not be able to read the data from disk fast 
-enough, and thus create a bottleneck, leading to GPU under-utilization.
+enough, and thus create a bottleneck, leading to GPU under-utilization. Configure the following arguments to reduce the bottleneck:
 
-- `DataLoader(pin_memory=True, ...)` which ensures that the data gets preloaded into the pinned memory on CPU and typically leads to much faster transfers from CPU to GPU memory.
-- `DataLoader(num_workers=4, ...)` - spawn several workers to preload data faster - during training watch the GPU utilization stats and if it's far from 100% experiment with raising the number of workers. Of course, the problem could be elsewhere so a very big number of workers won't necessarily lead to a better performance.
+- `DataLoader(pin_memory=True, ...)` - ensures the data gets preloaded into the pinned memory on CPU and typically leads to much faster transfers from CPU to GPU memory.
+- `DataLoader(num_workers=4, ...)` - spawn several workers to preload data faster. During training, watch the GPU utilization stats; if it's far from 100%, experiment with increasing the number of workers. Of course, the problem could be elsewhere, so many workers won't necessarily lead to better performance.
 
-When using [`Trainer`], corresponding [`TrainingArguments`] are: `dataloader_pin_memory` (`True` by default), and `dataloader_num_workers` (defaults to `0`).
+When using [`Trainer`], the corresponding [`TrainingArguments`] are: `dataloader_pin_memory` (`True` by default), and `dataloader_num_workers` (defaults to `0`).
 
 ## DeepSpeed ZeRO
 
-DeepSpeed is an open-source deep learning optimization library that both 🤗 Transformers and 🤗 Accelerate integrate with.
+DeepSpeed is an open-source deep learning optimization library that is integrated with 🤗 Transformers and 🤗 Accelerate.
 It provides a wide range of features and optimizations designed to improve the efficiency and scalability of large-scale 
 deep learning training.
 
@@ -342,15 +350,15 @@ leverage DeepSpeed ZeRO + CPU Offload, or NVMe Offload for much larger models. I
 and launch DeepSpeed: 
  
 * For an in-depth guide on DeepSpeed integration with [`Trainer`], review [the corresponding documentation](main_classes/deepspeed), specifically the 
-[section for a single GPU](main_classes/deepspeed#deployment-with-one-gpu). Note that there are some adjustments required to use DeepSpeed in a Notebook, refer to a [corresponding guide](main_classes/deepspeed#deployment-in-notebooks)
-* If you prefer to use 🤗 Accelerate, refer to [🤗 Accelerate DeepSpeed guide](https://huggingface.co/docs/accelerate/en/usage_guides/deepspeed) 
+[section for a single GPU](main_classes/deepspeed#deployment-with-one-gpu). Some adjustments are required to use DeepSpeed in a notebook; please take a look at the [corresponding guide](main_classes/deepspeed#deployment-in-notebooks).
+* If you prefer to use 🤗 Accelerate, refer to [🤗 Accelerate DeepSpeed guide](https://huggingface.co/docs/accelerate/en/usage_guides/deepspeed).
 
 ## Using torch.compile
 
 PyTorch 2.0 introduced a new compile function that doesn't require any modification to existing PyTorch code but can 
 optimize your code by adding a single line of code: `model = torch.compile(model)`.
 
-If using [`Trainer`], you only need `to` pass the `torch_compile` option in the [`TrainingArguments`], e.g.: 
+If using [`Trainer`], you only need `to` pass the `torch_compile` option in the [`TrainingArguments`]: 
 
 ```python
 training_args = TrainingArguments(torch_compile=True, **default_args)
