@@ -532,7 +532,7 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         try:
             return self.ctx_encoder.bert_model.get_input_embeddings()
         except AttributeError:
-            self(self.dummy_inputs)
+            self.build()
             return self.ctx_encoder.bert_model.get_input_embeddings()
 
     @unpack_inputs
@@ -613,7 +613,7 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         try:
             return self.question_encoder.bert_model.get_input_embeddings()
         except AttributeError:
-            self(self.dummy_inputs)
+            self.build()
             return self.question_encoder.bert_model.get_input_embeddings()
 
     @unpack_inputs
@@ -693,7 +693,7 @@ class TFDPRReader(TFDPRPretrainedReader):
         try:
             return self.span_predictor.encoder.bert_model.get_input_embeddings()
         except AttributeError:
-            self(self.dummy_inputs)
+            self.build()
             return self.span_predictor.encoder.bert_model.get_input_embeddings()
 
     @unpack_inputs

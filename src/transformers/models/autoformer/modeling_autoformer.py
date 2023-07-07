@@ -17,12 +17,12 @@
 """ PyTorch Autoformer model."""
 
 import math
-import random
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
+import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -735,7 +735,7 @@ class AutoformerEncoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -1197,8 +1197,13 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
+            to_drop = False
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    to_drop = True
+
+            if to_drop:
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
@@ -1407,9 +1412,10 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
@@ -1495,7 +1501,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
     def __init__(self, config: AutoformerConfig):
         super().__init__(config)
 
-        if config.scaling == "mean" or config.scaling:
+        if config.scaling == "mean" or config.scaling is True:
             self.scaler = AutoformerMeanScaler(dim=1, keepdim=True)
         elif config.scaling == "std":
             self.scaler = AutoformerStdScaler(dim=1, keepdim=True)

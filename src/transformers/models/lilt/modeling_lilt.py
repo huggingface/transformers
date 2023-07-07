@@ -59,7 +59,9 @@ class LiltTextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
         # End copy
@@ -610,15 +612,6 @@ class LiltPreTrainedModel(PreTrainedModel):
         if isinstance(module, LiltEncoder):
             module.gradient_checkpointing = value
 
-    def update_keys_to_ignore(self, config, del_keys_to_ignore):
-        """Remove some keys from ignore list"""
-        if not config.tie_word_embeddings:
-            # must make a new list, or the class variable gets modified!
-            self._keys_to_ignore_on_save = [k for k in self._keys_to_ignore_on_save if k not in del_keys_to_ignore]
-            self._keys_to_ignore_on_load_missing = [
-                k for k in self._keys_to_ignore_on_load_missing if k not in del_keys_to_ignore
-            ]
-
 
 LILT_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -697,8 +690,6 @@ LILT_INPUTS_DOCSTRING = r"""
     LILT_START_DOCSTRING,
 )
 class LiltModel(LiltPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -847,8 +838,6 @@ class LiltModel(LiltPreTrainedModel):
     LILT_START_DOCSTRING,
 )
 class LiltForSequenceClassification(LiltPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification.__init__ with Roberta->Lilt, roberta->lilt
     def __init__(self, config):
         super().__init__(config)
@@ -967,9 +956,6 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
     LILT_START_DOCSTRING,
 )
 class LiltForTokenClassification(LiltPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification.__init__ with Roberta->Lilt, roberta->lilt
     def __init__(self, config):
         super().__init__(config)
@@ -1096,9 +1082,6 @@ class LiltClassificationHead(nn.Module):
     LILT_START_DOCSTRING,
 )
 class LiltForQuestionAnswering(LiltPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering.__init__ with Roberta->Lilt, roberta->lilt
     def __init__(self, config):
         super().__init__(config)

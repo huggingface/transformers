@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib.metadata
 import sys
 
 from transformers.testing_utils import TestCasePlus
-from transformers.utils.versions import importlib_metadata, require_version, require_version_core
+from transformers.utils.versions import require_version, require_version_core
 
 
-numpy_ver = importlib_metadata.version("numpy")
+numpy_ver = importlib.metadata.version("numpy")
 python_ver = ".".join([str(x) for x in sys.version_info[:3]])
 
 
@@ -65,7 +66,7 @@ class DependencyVersionCheckTest(TestCasePlus):
         for req in ["numpipypie>1", "numpipypie2"]:
             try:
                 require_version_core(req)
-            except importlib_metadata.PackageNotFoundError as e:
+            except importlib.metadata.PackageNotFoundError as e:
                 self.assertIn(f"The '{req}' distribution was not found and is required by this application", str(e))
                 self.assertIn("Try: pip install transformers -U", str(e))
 

@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import importlib.metadata
 import json
 import os
 from dataclasses import dataclass
@@ -23,7 +24,6 @@ from typing import Any, Dict, Union
 from packaging import version
 
 from ..utils import is_torch_available, logging
-from ..utils.import_utils import importlib_metadata
 
 
 if is_torch_available():
@@ -74,9 +74,9 @@ class BitsAndBytesConfig:
         bnb_4bit_compute_dtype (`torch.dtype` or str, *optional*, defaults to `torch.float32`):
             This sets the computational type which might be different than the input time. For example, inputs might be
             fp32, but computation can be set to bf16 for speedups.
-        bnb_4bit_quant_type (`str`, {fp4, fn4}, defaults to `fp4`):
+        bnb_4bit_quant_type (`str`, {fp4, nf4}, defaults to `fp4`):
             This sets the quantization data type in the bnb.nn.Linear4Bit layers. Options are FP4 and NF4 data types
-            which are specified by `fp4` or `fn4`.
+            which are specified by `fp4` or `nf4`.
         bnb_4bit_use_double_quant (`bool`, *optional*, defaults to `False`):
             This flag is used for nested quantization where the quantization constants from the first quantization are
             quantized again.
@@ -141,7 +141,7 @@ class BitsAndBytesConfig:
         if not isinstance(self.bnb_4bit_use_double_quant, bool):
             raise ValueError("bnb_4bit_use_double_quant must be a boolean")
 
-        if self.load_in_4bit and not version.parse(importlib_metadata.version("bitsandbytes")) >= version.parse(
+        if self.load_in_4bit and not version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
             "0.39.0"
         ):
             raise ValueError(
@@ -228,3 +228,46 @@ class BitsAndBytesConfig:
         output["bnb_4bit_compute_dtype"] = str(output["bnb_4bit_compute_dtype"]).split(".")[1]
 
         return output
+
+    def __repr__(self):
+        return f"{self.__class__.__name__} {self.to_json_string()}"
+
+    def to_json_string(self, use_diff: bool = True) -> str:
+        """
+        Serializes this instance to a JSON string.
+
+        Args:
+            use_diff (`bool`, *optional*, defaults to `True`):
+                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
+                is serialized to JSON string.
+
+        Returns:
+            `str`: String containing all the attributes that make up this configuration instance in JSON format.
+        """
+        if use_diff is True:
+            config_dict = self.to_diff_dict()
+        else:
+            config_dict = self.to_dict()
+        return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
+
+    def to_diff_dict(self) -> Dict[str, Any]:
+        """
+        Removes all attributes from config which correspond to the default config attributes for better readability and
+        serializes to a Python dictionary.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        config_dict = self.to_dict()
+
+        # get the default config dict
+        default_config_dict = BitsAndBytesConfig().to_dict()
+
+        serializable_config_dict = {}
+
+        # only serialize values that differ from the default config
+        for key, value in config_dict.items():
+            if value != default_config_dict[key]:
+                serializable_config_dict[key] = value
+
+        return serializable_config_dict

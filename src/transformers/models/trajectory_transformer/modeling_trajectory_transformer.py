@@ -284,6 +284,7 @@ class CausalSelfAttention(nn.Module):
             torch.tril(torch.ones(config.block_size, config.block_size)).view(
                 1, 1, config.block_size, config.block_size
             ),
+            persistent=False,
         )
 
         # mask previous value estimates

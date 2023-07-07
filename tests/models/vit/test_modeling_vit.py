@@ -45,7 +45,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import ViTImageProcessor
 
 
 class ViTModelTester:
@@ -264,16 +264,16 @@ def prepare_img():
 @require_vision
 class ViTModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
+    def default_image_processor(self):
+        return ViTImageProcessor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
         model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -295,9 +295,9 @@ class ViTModelIntegrationTest(unittest.TestCase):
         # to visualize self-attention on higher resolution images.
         model = ViTModel.from_pretrained("facebook/dino-vits8").to(torch_device)
 
-        feature_extractor = ViTFeatureExtractor.from_pretrained("facebook/dino-vits8", size=480)
+        image_processor = ViTImageProcessor.from_pretrained("facebook/dino-vits8", size=480)
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt")
+        inputs = image_processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
 
         # forward pass
@@ -322,10 +322,10 @@ class ViTModelIntegrationTest(unittest.TestCase):
         A small test to make sure that inference work in half precision without any problem.
         """
         model = ViTModel.from_pretrained("facebook/dino-vits8", torch_dtype=torch.float16, device_map="auto")
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
 
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt")
+        inputs = image_processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
 
         # forward pass to make sure inference works in fp16

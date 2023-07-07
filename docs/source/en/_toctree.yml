@@ -425,6 +425,8 @@
         title: Transformer XL
       - local: model_doc/ul2
         title: UL2
+      - local: model_doc/umt5
+        title: UMT5
       - local: model_doc/xmod
         title: X-MOD
       - local: model_doc/xglm
@@ -494,6 +496,8 @@
         title: MobileNetV2
       - local: model_doc/mobilevit
         title: MobileViT
+      - local: model_doc/mobilevitv2
+        title: MobileViTV2
       - local: model_doc/nat
         title: NAT
       - local: model_doc/poolformer
@@ -539,10 +543,16 @@
         title: Audio Spectrogram Transformer
       - local: model_doc/clap
         title: CLAP
+      - local: model_doc/encodec
+        title: EnCodec
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct
         title: MCTCT
+      - local: model_doc/mms
+        title: MMS
+      - local: model_doc/musicgen
+        title: MusicGen
       - local: model_doc/sew
         title: SEW
       - local: model_doc/sew-d
@@ -602,6 +612,8 @@
         title: GIT
       - local: model_doc/groupvit
         title: GroupViT
+      - local: model_doc/instructblip
+        title: InstructBLIP
       - local: model_doc/layoutlm
         title: LayoutLM
       - local: model_doc/layoutlmv2

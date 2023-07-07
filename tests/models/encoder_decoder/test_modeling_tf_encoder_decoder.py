@@ -1070,9 +1070,9 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
         # create two random BERT models for bert2bert & initialize weights (+cross_attention weights)
         encoder = TFBertModel(config.encoder)
-        encoder(encoder.dummy_inputs)
+        encoder.build()
         decoder = TFBertLMHeadModel(config.decoder)
-        decoder(decoder.dummy_inputs)
+        decoder.build()
 
         encoder_decoder_orig = TFEncoderDecoderModel(encoder=encoder, decoder=decoder)
 

@@ -646,7 +646,7 @@ def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> 
     model_files = list(model_module.glob("*.py"))
     model_files = filter_framework_files(model_files, frameworks=frameworks)
 
-    doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{model_type}.mdx"
+    doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{model_type}.md"
 
     # Basic pattern for test files
     test_files = [
@@ -1185,7 +1185,7 @@ def duplicate_doc_file(
         old_model_patterns (`ModelPatterns`): The patterns for the old model.
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         dest_file (`str` or `os.PathLike`, *optional*): Path to the new doc file.
-            Will default to the a file named `{new_model_patterns.model_type}.mdx` in the same folder as `module_file`.
+            Will default to the a file named `{new_model_patterns.model_type}.md` in the same folder as `module_file`.
         frameworks (`List[str]`, *optional*):
             If passed, will only keep the model classes corresponding to this list of frameworks in the new doc file.
     """
@@ -1196,7 +1196,7 @@ def duplicate_doc_file(
     if frameworks is None:
         frameworks = get_default_frameworks()
     if dest_file is None:
-        dest_file = Path(doc_file).parent / f"{new_model_patterns.model_type}.mdx"
+        dest_file = Path(doc_file).parent / f"{new_model_patterns.model_type}.md"
 
     # Parse the doc file in blocks. One block per section/header
     lines = content.split("\n")
@@ -1405,7 +1405,7 @@ def create_new_model_like(
     add_model_to_auto_classes(old_model_patterns, new_model_patterns, model_classes)
 
     # 5. Add doc file
-    doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{old_model_patterns.model_type}.mdx"
+    doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{old_model_patterns.model_type}.md"
     duplicate_doc_file(doc_file, old_model_patterns, new_model_patterns, frameworks=frameworks)
 
     # 6. Warn the user for duplicate patterns
