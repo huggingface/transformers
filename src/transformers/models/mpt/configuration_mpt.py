@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Mpt configuration"""
+import copy
 from typing import TYPE_CHECKING, Optional, Union
 
 
@@ -164,6 +165,7 @@ class MptConfig(PretrainedConfig):
         max_seq_len: int = 2048,
         vocab_size: int = 50368,
         resid_pdrop: float = 0.0,
+        layer_norm_epsilon: float = 1e-5,
         emb_pdrop: float = 0.0,
         learned_pos_emb: bool = True,
         attn_config: MptAttentionConfig = None,
@@ -279,27 +281,35 @@ class MptConfig(PretrainedConfig):
         self.verbose = verbose
         self.embedding_fraction = embedding_fraction
         self.norm_type = norm_type
+        self.layer_norm_epsilon = layer_norm_epsilon
         self.use_cache = use_cache
         self.init_config = init_config
+
+        if self.attn_config is None:
+            self.attn_config = MptAttentionConfig()
+        
+        if self.init_config is None:
+            self.init_config = MptIntializerConfig()
+
         if "name" in kwargs:
             del kwargs["name"]
         if "loss_fn" in kwargs:
             del kwargs["loss_fn"]
         super().__init__(**kwargs)
-        self._validate_config()
+        # self._validate_config()
 
     def _validate_config(self):
         if self.d_model % self.n_heads != 0:
             raise ValueError("d_model must be divisible by n_heads")
-        if any((prob < 0 or prob > 1 for prob in [self.attn_config["attn_pdrop"], self.resid_pdrop, self.emb_pdrop])):
+        if any((prob < 0 or prob > 1 for prob in [self.attn_config.attn_pdrop, self.resid_pdrop, self.emb_pdrop])):
             raise ValueError(
                 "self.attn_config['attn_pdrop'], resid_pdrop, emb_pdrop are probabilities and must be between 0 and 1"
             )
-        if self.attn_config["attn_impl"] not in ["torch", "flash", "triton"]:
+        if self.attn_config.attn_impl not in ["torch", "flash", "triton"]:
             raise ValueError(f"Unknown attn_impl={self.attn_config['attn_impl']}")
-        if self.attn_config["prefix_lm"] and self.attn_config["attn_impl"] not in ["torch", "triton"]:
+        if self.attn_config.prefix_lm and self.attn_config["attn_impl"] not in ["torch", "triton"]:
             raise NotImplementedError("prefix_lm only implemented with torch and triton attention.")
-        if self.attn_config["alibi"] and self.attn_config["attn_impl"] not in ["torch", "triton"]:
+        if self.attn_config.alibi and self.attn_config["attn_impl"] not in ["torch", "triton"]:
             raise NotImplementedError("alibi only implemented with torch and triton attention.")
         if self.attn_config["attn_uses_sequence_id"] and self.attn_config["attn_impl"] not in ["torch", "triton"]:
             raise NotImplementedError("attn_uses_sequence_id only implemented with torch and triton attention.")
@@ -315,3 +325,16 @@ class MptConfig(PretrainedConfig):
             raise ValueError(
                 "Positional information must be provided to the model using either learned_pos_emb or alibi."
             )
+    
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+
+        Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["attn_config"] = self.attn_config.to_dict() if not isinstance(self.attn_config, dict) else self.attn_config
+        output["init_config"] = self.init_config.to_dict() if not isinstance(self.init_config, dict) else self.init_config
+        output["model_type"] = self.__class__.model_type
+        return output

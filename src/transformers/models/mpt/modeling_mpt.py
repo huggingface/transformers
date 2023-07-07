@@ -255,15 +255,11 @@ class MptGelu(nn.Module):
 class MptAttention(nn.Module):
     def __init__(self, config: MptConfig):
         super().__init__()
-
-        self.pretraining_tp = config.pretraining_tp
-        self.slow_but_exact = config.slow_but_exact
-
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.n_head
+        self.hidden_size = config.d_model
+        self.num_heads = config.n_heads
         self.head_dim = self.hidden_size // self.num_heads
         self.split_size = self.hidden_size
-        self.hidden_dropout = config.hidden_dropout
+        self.hidden_dropout = config.attn_config["attn_pdrop"]
 
         if self.head_dim * self.num_heads != self.hidden_size:
             raise ValueError(
@@ -277,7 +273,7 @@ class MptAttention(nn.Module):
 
         self.Wqkv = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=False)
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
-        self.attention_dropout = nn.Dropout(config.attention_dropout)
+        self.attention_dropout = nn.Dropout(config.attn_config["attn_pdrop"])
 
     def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -416,28 +412,17 @@ class MptAttention(nn.Module):
 class MptMLP(nn.Module):
     def __init__(self, config: MptConfig):
         super().__init__()
-        hidden_size = config.hidden_size
+        hidden_size = config.d_model
 
-        self.pretraining_tp = config.pretraining_tp
-        self.slow_but_exact = config.slow_but_exact
         self.up_proj = nn.Linear(hidden_size, 4 * hidden_size, bias=False)
         self.gelu_impl = MptGelu()
         self.down_proj = nn.Linear(4 * hidden_size, hidden_size, bias=False)
-        self.hidden_dropout = config.hidden_dropout
+        self.hidden_dropout = config.attn_config["attn_pdrop"]
 
     def forward(self, hidden_states: torch.Tensor, residual: torch.Tensor) -> torch.Tensor:
         hidden_states = self.gelu_impl(self.dense_h_to_4h(hidden_states))
 
-        if self.pretraining_tp > 1 and self.slow_but_exact:
-            intermediate_output = torch.zeros_like(residual)
-            slices = self.dense_4h_to_h.weight.shape[-1] / self.pretraining_tp
-            for i in range(self.pretraining_tp):
-                intermediate_output = intermediate_output + F.linear(
-                    hidden_states[:, :, int(i * slices) : int((i + 1) * slices)],
-                    self.dense_4h_to_h.weight[:, int(i * slices) : int((i + 1) * slices)],
-                )
-        else:
-            intermediate_output = self.dense_4h_to_h(hidden_states)
+        intermediate_output = self.dense_4h_to_h(hidden_states)
 
         output = dropout_add(intermediate_output, residual, self.hidden_dropout, self.training)
 
@@ -448,18 +433,17 @@ class MptMLP(nn.Module):
 class MptBlock(nn.Module):
     def __init__(self, config: MptConfig):
         super().__init__()
-        hidden_size = config.hidden_size
+        hidden_size = config.d_model
 
         # self.norm_1 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.norm_1 = MptLPLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.num_heads = config.n_head
+        self.num_heads = config.n_heads
         self.attn = MptAttention(config)
         self.norm_2 = MptLPLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         self.ffn = MptMLP(config)
 
-        self.apply_residual_connection_post_layernorm = config.apply_residual_connection_post_layernorm
-        self.hidden_dropout = config.hidden_dropout
+        self.hidden_dropout = config.attn_config["attn_pdrop"]
 
     def forward(
         self,
@@ -669,14 +653,14 @@ class MptModel(MptPreTrainedModel):
     def __init__(self, config: MptConfig):
         super().__init__(config)
 
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.n_head
+        self.embed_dim = config.d_model
+        self.num_heads = config.n_heads
 
         # Embedding + LN Embedding
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
 
         # Transformer blocks
-        self.blocks = nn.ModuleList([MptBlock(config) for _ in range(config.num_hidden_layers)])
+        self.blocks = nn.ModuleList([MptBlock(config) for _ in range(config.n_layers)])
 
         # Final Layer Norm
         self.norm_f = MptLPLayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
@@ -876,7 +860,7 @@ class MptForCausalLM(MptPreTrainedModel):
     def __init__(self, config: MptConfig):
         super().__init__(config)
         self.transformer = MptModel(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1044,7 +1028,7 @@ class MptForSequenceClassification(MptPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = MptModel(config)
-        self.score = nn.Linear(config.hidden_size, config.num_labels, bias=False)
+        self.score = nn.Linear(config.d_model, config.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1179,7 +1163,7 @@ class MptForTokenClassification(MptPreTrainedModel):
         else:
             classifier_dropout = 0.1
         self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.classifier = nn.Linear(config.d_model, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1272,7 +1256,7 @@ class MptForQuestionAnswering(MptPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.transformer = MptModel(config)
-        self.qa_outputs = nn.Linear(config.hidden_size, 2)
+        self.qa_outputs = nn.Linear(config.d_model, 2)
 
         # Initialize weights and apply final processing
         self.post_init()
