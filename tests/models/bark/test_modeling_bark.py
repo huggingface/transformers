@@ -51,7 +51,7 @@ if is_torch_available():
     )
 
 
-class BarkSubModelTester:
+class BarkSemanticModelTester:
     def __init__(
         self,
         parent,
@@ -190,7 +190,194 @@ class BarkSubModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
 
-class BarkFineModelTester(BarkSubModelTester):
+class BarkCoarseModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=2,
+        seq_length=4,
+        is_training=False,  # for now training is not supported
+        use_input_mask=True,
+        use_labels=True,
+        vocab_size=33,
+        output_vocab_size=33,
+        hidden_size=16,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        intermediate_size=15,
+        dropout=0.1,
+        window_size=256,
+        initializer_range=0.02,
+        n_codes_total=8,  # for BarkFineModel
+        n_codes_given=1,  # for BarkFineModel
+        config_class=None,
+        model_class=None,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_input_mask = use_input_mask
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.output_vocab_size = output_vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.dropout = dropout
+        self.window_size = window_size
+        self.initializer_range = initializer_range
+        self.bos_token_id = output_vocab_size - 1
+        self.eos_token_id = output_vocab_size - 1
+        self.pad_token_id = output_vocab_size - 1
+
+        self.n_codes_total = n_codes_total
+        self.n_codes_given = n_codes_given
+
+        self.is_encoder_decoder = False
+        self.config_class = config_class
+        self.model_class = model_class
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        input_mask = None
+        if self.use_input_mask:
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+
+        config = self.get_config()
+
+        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
+
+        inputs_dict = {
+            "input_ids": input_ids,
+            "head_mask": head_mask,
+            "attention_mask": input_mask,
+        }
+
+        return config, inputs_dict
+
+    def get_config(self):
+        return self.config_class(
+            vocab_size=self.vocab_size,
+            output_vocab_size=self.output_vocab_size,
+            hidden_size=self.hidden_size,
+            num_layers=self.num_hidden_layers,
+            num_heads=self.num_attention_heads,
+            use_cache=True,
+            bos_token_id=self.bos_token_id,
+            eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
+            window_size=self.window_size,
+        )
+
+    def get_pipeline_config(self):
+        config = self.get_config()
+        config.vocab_size = 300
+        return config
+
+    def prepare_config_and_inputs_for_common(self):
+        config, inputs_dict = self.prepare_config_and_inputs()
+        return config, inputs_dict
+
+    def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
+        model = self.model_class(config=config).to(torch_device).eval()
+
+        input_ids = inputs_dict["input_ids"]
+        attention_mask = inputs_dict["attention_mask"]
+
+        # first forward pass
+        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
+
+        output, past_key_values = outputs.to_tuple()
+
+        # create hypothetical multiple next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_attn_mask = ids_tensor((self.batch_size, 3), 2)
+
+        # append to next input_ids and
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
+
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["logits"]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+            "logits"
+        ]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+
+        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+        # test no attention_mask works
+        outputs = model(input_ids, use_cache=True)
+        _, past_key_values = outputs.to_tuple()
+        output_from_no_past = model(next_input_ids)["logits"]
+
+        output_from_past = model(next_tokens, past_key_values=past_key_values)["logits"]
+
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+class BarkFineModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=2,
+        seq_length=4,
+        is_training=False,  # for now training is not supported
+        use_input_mask=True,
+        use_labels=True,
+        vocab_size=33,
+        output_vocab_size=33,
+        hidden_size=16,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        intermediate_size=15,
+        dropout=0.1,
+        window_size=256,
+        initializer_range=0.02,
+        n_codes_total=8,  # for BarkFineModel
+        n_codes_given=1,  # for BarkFineModel
+        config_class=None,
+        model_class=None,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_input_mask = use_input_mask
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.output_vocab_size = output_vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.dropout = dropout
+        self.window_size = window_size
+        self.initializer_range = initializer_range
+        self.bos_token_id = output_vocab_size - 1
+        self.eos_token_id = output_vocab_size - 1
+        self.pad_token_id = output_vocab_size - 1
+
+        self.n_codes_total = n_codes_total
+        self.n_codes_given = n_codes_given
+
+        self.is_encoder_decoder = False
+        self.config_class = config_class
+        self.model_class = model_class
+
+    
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length, self.n_codes_total], self.vocab_size)
 
@@ -214,6 +401,76 @@ class BarkFineModelTester(BarkSubModelTester):
 
         return config, inputs_dict
 
+    def get_config(self):
+        return self.config_class(
+            vocab_size=self.vocab_size,
+            output_vocab_size=self.output_vocab_size,
+            hidden_size=self.hidden_size,
+            num_layers=self.num_hidden_layers,
+            num_heads=self.num_attention_heads,
+            use_cache=True,
+            bos_token_id=self.bos_token_id,
+            eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
+            window_size=self.window_size,
+        )
+
+    def get_pipeline_config(self):
+        config = self.get_config()
+        config.vocab_size = 300
+        return config
+
+    def prepare_config_and_inputs_for_common(self):
+        config, inputs_dict = self.prepare_config_and_inputs()
+        return config, inputs_dict
+
+    def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
+        model = self.model_class(config=config).to(torch_device).eval()
+
+        input_ids = inputs_dict["input_ids"]
+        attention_mask = inputs_dict["attention_mask"]
+
+        # first forward pass
+        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
+
+        output, past_key_values = outputs.to_tuple()
+
+        # create hypothetical multiple next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_attn_mask = ids_tensor((self.batch_size, 3), 2)
+
+        # append to next input_ids and
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
+
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["logits"]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+            "logits"
+        ]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+
+        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+        # test no attention_mask works
+        outputs = model(input_ids, use_cache=True)
+        _, past_key_values = outputs.to_tuple()
+        output_from_no_past = model(next_input_ids)["logits"]
+
+        output_from_past = model(next_tokens, past_key_values=past_key_values)["logits"]
+
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
 
 @require_torch
 class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -228,7 +485,7 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     # no model_parallel for now
 
     def setUp(self):
-        self.model_tester = BarkSubModelTester(self, config_class=BarkSemanticConfig, model_class=BarkSemanticModel)
+        self.model_tester = BarkSemanticModelTester(self, config_class=BarkSemanticConfig, model_class=BarkSemanticModel)
         self.config_tester = ConfigTester(self, config_class=BarkSemanticConfig, n_embd=37)
 
     def test_config(self):
@@ -292,7 +549,7 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     # no model_parallel for now
 
     def setUp(self):
-        self.model_tester = BarkSubModelTester(self, config_class=BarkCoarseConfig, model_class=BarkCoarseModel)
+        self.model_tester = BarkCoarseModelTester(self, config_class=BarkCoarseConfig, model_class=BarkCoarseModel)
         self.config_tester = ConfigTester(self, config_class=BarkCoarseConfig, n_embd=37)
         
     def test_config(self):
