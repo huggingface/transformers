@@ -1246,6 +1246,11 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
                 cardinalities=config.cardinality,
                 embedding_dims=config.embedding_dimension,
             )
+        if config.num_dynamic_categorical_features > 0:
+            self.dynamic_embedder = TimeSeriesFeatureEmbedder(
+                cardinalities=config.dynamic_cardinality,
+                embedding_dims=config.dynamic_embedding_dimension,
+            )
 
         # transformer encoder-decoder and mask initializer
         self.encoder = TimeSeriesTransformerEncoder(config)
@@ -1294,11 +1299,13 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
+        past_categorical_features: Optional[torch.Tensor] = None,
         static_categorical_features: Optional[torch.Tensor] = None,
         static_real_features: Optional[torch.Tensor] = None,
         past_observed_mask: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
         future_time_features: Optional[torch.Tensor] = None,
+        future_categorical_features: Optional[torch.Tensor] = None,
     ):
         # time feature
         time_feat = (
@@ -1342,6 +1349,17 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         # all features
         features = torch.cat((expanded_static_feat, time_feat), dim=-1)
 
+        if self.config.num_dynamic_categorical_features > 0:
+            dynamic_categorical_features = torch.cat(
+                (
+                    past_categorical_features[:, -self.config.context_length :, ...],
+                    future_categorical_features,
+                ),
+                dim=1,
+            ) if future_values is not None else past_categorical_features[:, -self.config.context_length :, ...]
+            dynamic_feat = self.dynamic_embedder(dynamic_categorical_features)
+            features = torch.cat((features, dynamic_feat), dim=-1)
+
         # lagged features
         subsequences_length = (
             self.config.context_length + self.config.prediction_length
@@ -1375,10 +1393,12 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
         past_observed_mask: torch.Tensor,
+        past_categorical_features: Optional[torch.Tensor] = None,
         static_categorical_features: Optional[torch.Tensor] = None,
         static_real_features: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
         future_time_features: Optional[torch.Tensor] = None,
+        future_categorical_features: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
@@ -1412,11 +1432,13 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         >>> outputs = model(
         ...     past_values=batch["past_values"],
         ...     past_time_features=batch["past_time_features"],
+        ...     past_categorical_features=batch["past_categorical_features"],
         ...     past_observed_mask=batch["past_observed_mask"],
         ...     static_categorical_features=batch["static_categorical_features"],
         ...     static_real_features=batch["static_real_features"],
         ...     future_values=batch["future_values"],
         ...     future_time_features=batch["future_time_features"],
+        ...     future_categorical_features=batch["future_categorical_features"],
         ... )
 
         >>> last_hidden_state = outputs.last_hidden_state
@@ -1431,11 +1453,13 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         transformer_inputs, loc, scale, static_feat = self.create_network_inputs(
             past_values=past_values,
             past_time_features=past_time_features,
+            past_categorical_features=past_categorical_features,
             past_observed_mask=past_observed_mask,
             static_categorical_features=static_categorical_features,
             static_real_features=static_real_features,
             future_values=future_values,
             future_time_features=future_time_features,
+            future_categorical_features=future_categorical_features,
         )
 
         if encoder_outputs is None:

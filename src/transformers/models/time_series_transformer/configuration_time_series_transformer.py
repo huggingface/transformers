@@ -65,6 +65,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             `[1, 2, 3, 4, 5, 6, 7]` but we recommend to change it based on the dataset appropriately.
         num_time_features (`int`, *optional*, defaults to 0):
             The number of time features in the input time series.
+        num_dynamic_categorical_features (`int`, *optional*, defaults to 0):
+            The number of dynamic categorical features.
         num_dynamic_real_features (`int`, *optional*, defaults to 0):
             The number of dynamic real valued features.
         num_static_categorical_features (`int`, *optional*, defaults to 0):
@@ -79,6 +81,14 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             The dimension of the embedding for each of the static categorical features. Should be a list of integers,
             having the same length as `num_static_categorical_features`. Cannot be `None` if
             `num_static_categorical_features` is > 0.
+        dynamic_cardinality (`list[int]`, *optional*):
+            The cardinality (number of different values) for each of the dynamic categorical features. Should be a list
+            of integers, having the same length as `num_dynamic_categorical_features`. Cannot be `None` if
+            `num_dynamic_categorical_features` is > 0.
+        dynamic_embedding_dimension (`list[int]`, *optional*):
+            The dimension of the embedding for each of the dynamic categorical features. Should be a list of integers,
+            having the same length as `num_dynamic_categorical_features`. Cannot be `None` if
+            `num_dynamic_categorical_features` is > 0.
         d_model (`int`, *optional*, defaults to 64):
             Dimensionality of the transformer layers.
         encoder_layers (`int`, *optional*, defaults to 2):
@@ -143,12 +153,15 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         input_size: int = 1,
         lags_sequence: List[int] = [1, 2, 3, 4, 5, 6, 7],
         scaling: Optional[Union[str, bool]] = "mean",
+        num_dynamic_categorical_features: int = 0,
         num_dynamic_real_features: int = 0,
         num_static_categorical_features: int = 0,
         num_static_real_features: int = 0,
         num_time_features: int = 0,
         cardinality: Optional[List[int]] = None,
         embedding_dimension: Optional[List[int]] = None,
+        dynamic_cardinality: Optional[List[int]] = None,
+        dynamic_embedding_dimension: Optional[List[int]] = None,
         encoder_ffn_dim: int = 32,
         decoder_ffn_dim: int = 32,
         encoder_attention_heads: int = 2,
@@ -178,6 +191,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.lags_sequence = lags_sequence
         self.scaling = scaling
         self.num_dynamic_real_features = num_dynamic_real_features
+        self.num_dynamic_categorical_features = num_dynamic_categorical_features
         self.num_static_real_features = num_static_real_features
         self.num_static_categorical_features = num_static_categorical_features
         if cardinality and num_static_categorical_features > 0:
@@ -196,6 +210,23 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             self.embedding_dimension = embedding_dimension
         else:
             self.embedding_dimension = [min(50, (cat + 1) // 2) for cat in self.cardinality]
+        if dynamic_cardinality and num_dynamic_categorical_features > 0:
+            if len(dynamic_cardinality) != num_dynamic_categorical_features:
+                raise ValueError(
+                    "The cardinality should be a list of the same length as `num_dynamic_categorical_features`"
+                )
+            self.dynamic_cardinality = dynamic_cardinality
+        else:
+            self.dynamic_cardinality = [0]
+        if dynamic_embedding_dimension and num_dynamic_categorical_features > 0:
+            if len(dynamic_embedding_dimension) != num_dynamic_categorical_features:
+                raise ValueError(
+                    "The embedding dimension should be a list of the same length as `num_dynamic_categorical_features`"
+                )
+            self.dynamic_embedding_dimension = dynamic_embedding_dimension
+        else:
+            self.dynamic_embedding_dimension = [min(50, (cat + 1) // 2) for cat in self.dynamic_cardinality]
+        
         self.num_parallel_samples = num_parallel_samples
 
         # Transformer architecture configuration
@@ -225,6 +256,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
     def _number_of_features(self) -> int:
         return (
             sum(self.embedding_dimension)
+            + sum(self.dynamic_embedding_dimension)
             + self.num_dynamic_real_features
             + self.num_time_features
             + self.num_static_real_features
