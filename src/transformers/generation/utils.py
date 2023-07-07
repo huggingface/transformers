@@ -954,10 +954,11 @@ class GenerationMixin:
     ) -> StoppingCriteriaList:
         criteria = StoppingCriteriaList()
         if generation_config.max_length is not None:
+            max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
             criteria.append(
                 MaxLengthCriteria(
                     max_length=generation_config.max_length,
-                    max_position_embeddings=self.config.max_position_embeddings,
+                    max_position_embeddings=max_position_embeddings,
                 )
             )
         if generation_config.max_time is not None:
