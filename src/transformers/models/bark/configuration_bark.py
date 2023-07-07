@@ -60,9 +60,9 @@ BARK_SUBMODELCONFIG_START_DOCSTRING = """
             Dimensionality of the "intermediate" (often named feed-forward) layer in the architecture.
         dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        bias (`bool`, *optional*, defaults to ):
+        bias (`bool`, *optional*, defaults to `True`):
             Whether or not to use bias in the linear layers and layer norm layers.
-        use_cache (`bool`, *optional*, defaults to True):
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -229,13 +229,13 @@ class BarkConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-    semantic_config ([`BarkSemanticConfig`], *optional*, defaults to None):
+    semantic_config ([`BarkSemanticConfig`], *optional*):
         Configuration of the underlying semantic sub-model.
-    coarse_acoustics_config ([`BarkCoarseConfig`], *optional*, defaults to None):
+    coarse_acoustics_config ([`BarkCoarseConfig`], *optional*):
         Configuration of the underlying coarse acoustics sub-model.
-    fine_acoustics_config ([`BarkFineConfig`], *optional*, defaults to None):
+    fine_acoustics_config ([`BarkFineConfig`], *optional*):
         Configuration of the underlying fine acoustics sub-model.
-    codec_config ([`AutoConfig`], *optional*, defaults to None):
+    codec_config ([`AutoConfig`], *optional*):
         Configuration of the underlying codec sub-model.
 
     Example:

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -117,10 +117,7 @@ class BarkSubModelTester:
             "attention_mask": input_mask,
         }
 
-        return (
-            config,
-            inputs_dict,
-        )
+        return config, inputs_dict
 
     def get_config(self):
         return self.config_class(
@@ -216,10 +213,7 @@ class BarkFineModelTester(BarkSubModelTester):
             "attention_mask": input_mask,
         }
 
-        return (
-            config,
-            inputs_dict,
-        )
+        return config, inputs_dict
 
 
 @require_torch
@@ -385,10 +379,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_resize_tokens_embeddings(self):
         # resizing tokens_embeddings of a ModuleList
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
             return
 
@@ -439,10 +430,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_resize_embeddings_untied(self):
         # resizing tokens_embeddings of a ModuleList
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
             return
 

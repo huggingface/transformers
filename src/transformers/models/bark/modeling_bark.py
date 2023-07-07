@@ -346,15 +346,12 @@ class BarkBlock(nn.Module):
             # this handmade layerNorm is used to stick with Bark choice of leaving optional bias in
             # AutoRegressive models (corresponding to the "Text" and the "Coarse" modules)
             self.ln_1 = LayerNorm(config.hidden_size, bias=config.bias)
-        else:
-            self.ln_1 = nn.LayerNorm(config.hidden_size)
-
-        self.attn = BarkSelfAttention(config, is_causal=is_causal)
-
-        if is_causal:
             self.ln_2 = LayerNorm(config.hidden_size, bias=config.bias)
         else:
+            self.ln_1 = nn.LayerNorm(config.hidden_size)
             self.ln_2 = nn.LayerNorm(config.hidden_size)
+
+        self.attn = BarkSelfAttention(config, is_causal=is_causal)
 
         self.mlp = MLP(config)
 
@@ -470,9 +467,8 @@ class BarkCausalModel(BarkPreTrainedModel):
             seq_len = input_ids.shape[1]
             input_ids = input_ids[:, [-1]]
 
-            if input_embeds is not None:
-                # input_embeds have already been used and is not required anymore
-                input_embeds = None
+            # input_embeds have already been used and is not required anymore
+            input_embeds = None
         else:
             if input_embeds is not None and kwargs.get("use_cache"):
                 seq_len = input_embeds.shape[1]
@@ -766,7 +762,6 @@ class BarkSemanticModel(BarkCausalModel):
             input_embeds=input_embeds,
             logits_processor=[suppress_tokens_logits_processor],
             generation_config=semantic_generation_config,
-            # stopping_criteria=[semantic_stopping_criteria],
             **kwargs,
         )  # size: 10048
 
@@ -797,9 +792,8 @@ class BarkCoarseModel(BarkCausalModel):
     ):
         if history_prompt is not None:
             x_semantic_history = torch.repeat_interleave(history_prompt["semantic_prompt"][None], batch_size, dim=0)
-            x_coarse_history = history_prompt[
-                "coarse_prompt"
-            ].clone()  # clone to avoid modifying history_prompt.coarse_prompt
+            # clone to avoid modifying history_prompt.coarse_prompt
+            x_coarse_history = history_prompt["coarse_prompt"].clone()  
 
             # offset x_coarse_history
             if codebook_size is not None:
@@ -1067,7 +1061,11 @@ class BarkFineModel(BarkPreTrainedModel):
 
         if input_ids is not None and input_embeds is not None:
             raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
-        elif input_ids is not None:
+            
+       if input_ids is None and input_embeds is None:
+           raise ValueError("You have to specify either input_ids or input_embeds")
+            
+        if input_ids is not None:
             # the input_embeddings are the sum of the j previous codebooks embeddings before
             # the current codebook_idx codebook
 
@@ -1076,12 +1074,7 @@ class BarkFineModel(BarkPreTrainedModel):
                 wte(input_ids[:, :, i]).unsqueeze(-1) for i, wte in enumerate(self.wtes)
             ]  # token embeddings of shape (b, t, n_embd)
             input_embeds = torch.cat(input_embeds, dim=-1)
-            input_embeds = input_embeds[:, :, :, : codebook_idx + 1].sum(dim=-1)
-
-        elif input_embeds is not None:
-            pass
-        else:
-            raise ValueError("You have to specify either input_ids or input_embeds")
+            input_embeds = input_embeds[:, :, :, : codebook_idx + 1].sum(dim=-1)            
 
         input_shape = input_embeds.size()[:-1]
         batch_size = input_embeds.shape[0]
@@ -1335,11 +1328,11 @@ class BarkModel(BarkPreTrainedModel):
         Generates audio from an input prompt and an additional optional `Bark` speaker prompt.
 
         Args:
-            input_ids (`Optional[torch.Tensor]` of shape (batch_size, seq_len), *optional*, defaults to None):
+            input_ids (`Optional[torch.Tensor]` of shape (batch_size, seq_len), *optional*):
                 Input ids. Will be truncated up to 256 tokens. Note that the output audios will be as long as the
                 longest generation among the batch.
-            history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*, defaults to None):
-                Optional `Bark` speaker prompt. Defaults to None. Note that for now, this model takes only one speaker
+            history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
+                Optional `Bark` speaker prompt. Note that for now, this model takes only one speaker
                 prompt per batch.
         Returns:
             torch.LongTensor: Output generated audio.
@@ -1349,7 +1342,6 @@ class BarkModel(BarkPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, BarkModel
 
-
         >>> processor = AutoProcessor.from_pretrained("ylacombe/bark-small")
         >>> model = BarkModel.from_pretrained("ylacombe/bark-small")
 
@@ -1358,7 +1350,7 @@ class BarkModel(BarkPreTrainedModel):
 
         >>> inputs = processor("Hello, my dog is cute, I need him in my life", voice_preset=voice_preset)
 
-        >>> audio_ar - ray = model.generate_speech(**inputs)
+        >>> audio_array = model.generate_speech(**inputs)
         >>> audio_array = audio_array.cpu().numpy().squeeze()
         ```
         """

@@ -54,25 +54,25 @@ class BarkSemanticGenerationConfig(GenerationConfig):
         Args:
             eos_token_id (`int`, *optional*, defaults to 10_000):
                 The id of the *end-of-sequence* token.
-            renormalize_logits (`bool`, *optional*, defaults to True):
+            renormalize_logits (`bool`, *optional*, defaults to `True`):
                 Whether to renormalize the logits after applying all the logits processors or warpers (including the
                 custom ones). It's highly recommended to set this flag to `True` as the search algorithms suppose the
                 score logits are normalized but some logit processors or warpers break the normalization.
             max_new_tokens (`int`, *optional*, defaults to 768):
                 The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
-            output_scores (`bool`, *optional*, defaults to False):
+            output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
-            return_dict_in_generate (`bool`, *optional*, defaults to False):
+            return_dict_in_generate (`bool`, *optional*, defaults to `False`):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-            output_hidden_states (`bool`, *optional*, defaults to False):
+            output_hidden_states (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more details.
-            output_attentions (`bool`, *optional*, defaults to False):
+            output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
             temperature (`float`, *optional*, defaults to 0.7):
                 The value used to modulate the next token probabilities.
-            do_sample (`bool`, *optional*, defaults to True):
+            do_sample (`bool`, *optional*, defaults to `True`):
                 Whether or not to use sampling ; use greedy decoding otherwise.
             text_encoding_offset (`int`, *optional*, defaults to 10_048):
                 Text encoding offset.
@@ -83,7 +83,7 @@ class BarkSemanticGenerationConfig(GenerationConfig):
             semantic_vocab_size (`int`, *optional*, defaults to 10_000):
                 Semantic vocab size.
             max_input_semantic_length (`int`, *optional*, defaults to 256):
-                Max lenght of semantic input vector.
+                Max length of semantic input vector.
             semantic_rate_hz (`float`, *optional*, defaults to 49.9):
                 Semantic rate in Hertz.
         """
@@ -136,23 +136,23 @@ class BarkCoarseGenerationConfig(GenerationConfig):
         documentation from [`GenerationConfig`] for more information.
 
         Args:
-            renormalize_logits (`bool`, *optional*, defaults to True):
+            renormalize_logits (`bool`, *optional*, defaults to `True`):
                 Whether to renormalize the logits after applying all the logits processors or warpers (including the
                 custom ones). It's highly recommended to set this flag to `True` as the search algorithms suppose the
                 score logits are normalized but some logit processors or warpers break the normalization.
-            output_scores (`bool`, *optional*, defaults to False):
+            output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
-            return_dict_in_generate (`bool`, *optional*, defaults to False):
+            return_dict_in_generate (`bool`, *optional*, defaults to `False`):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-            output_hidden_states (`bool`, *optional*, defaults to False):
+            output_hidden_states (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more details.
-            output_attentions (`bool`, *optional*, defaults to False):
+            output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
             temperature (`float`, *optional*, defaults to 0.7):
                 The value used to modulate the next token probabilities.
-            do_sample (`bool`, *optional*, defaults to True):
+            do_sample (`bool`, *optional*, defaults to `True`):
                 Whether or not to use sampling ; use greedy decoding otherwise.
             coarse_semantic_pad_token (`int`, *optional*, defaults to 12_048):
                 Coarse semantic pad token.
@@ -250,11 +250,11 @@ class BarkGenerationConfig(GenerationConfig):
         documentation from [`GenerationConfig`] for more information.
 
         Args:
-            semantic_config (`Dict`, *optional*, defaults to None):
+            semantic_config (`Dict`, *optional*):
                 Semantic generation configuration.
-            coarse_acoustics_config (`Dict`, *optional*, defaults to None):
+            coarse_acoustics_config (`Dict`, *optional*):
                 Coarse generation configuration.
-            fine_acoustics_config (`Dict`, *optional*, defaults to None):
+            fine_acoustics_config (`Dict`, *optional*):
                 Fine generation configuration.
             sample_rate (`int`, *optional*, defaults to 24_000):
                 Sample rate.
