@@ -10,7 +10,7 @@ import torch.utils.checkpoint
 from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from transformers import CLIPModel as clip
+from ....transformers import CLIPModel as clip
 
 #from ...modeling_outputs import (
 #    BackboneOutput,

@@ -51,12 +51,22 @@ class lavin_tokenizer(PreTrainedTokenizer):
 
   def __init__(self, vocab_file, unk_token="<unk>", bos_token="<s>", pad_token="None", sp_model_kwargs: Optional[Dict[str, Any]] = None, add_bos_token = True, add_eos_token = False, **kwargs,):
 
-    super().__init__(
     self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
     bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
     eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
     unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
     pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+
+    super().__init__(
+      bos_token=bos_token,
+      eos_token=eos_token,
+      unk_token=unk_token,
+      pad_token=pad_token,
+      add_bos_token=add_bos_token,
+      add_eos_token=add_eos_token,
+      sp_model_kwargs=self.sp_model_kwargs,
+      clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+      **kwargs,
     )
 
     self.vocab_sile = vocab_file
@@ -100,3 +110,4 @@ class lavin_tokenizer(PreTrainedTokenizer):
     out_string += self.sp_model.decode(current_sub_tokens)
     return out_string
 
+model = LavinTokenizer()
