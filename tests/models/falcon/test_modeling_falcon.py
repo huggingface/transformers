@@ -390,8 +390,6 @@ class FalconLanguageGenerationTest(unittest.TestCase):
             model.eval()
             model.to(torch_device)
             inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
-            if "token_type_ids" in inputs:
-                del inputs["token_type_ids"]  # Workaround for odd tokenizer behavior, might remove later
 
             # We just test that these run without errors - the models are randomly initialized
             # and so the actual text outputs will be garbage
