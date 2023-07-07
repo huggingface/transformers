@@ -16,8 +16,15 @@ rendered properly in your Markdown viewer.
 # Methods and tools for efficient training on a single GPU
 
 This guide demonstrates practical techniques that you can use to increase the efficiency of your model's training by 
-optimizing memory utilization, speeding up the training, or both. If you have access to a machine with multiple GPUs, 
-these approaches are still valid, plus you can leverage additional methods outlined in the [multi-GPU section](perf_train_gpu_many).
+optimizing memory utilization, speeding up the training, or both. If you'd like to understand how GPU is utilized during 
+training, please refer to the [Model training anatomy](model_memory_anatomy.mdx) conceptual guide first. This guide 
+focuses on practical techniques.  
+
+<Tip>
+
+If you have access to a machine with multiple GPUs, these approaches are still valid, plus you can leverage additional methods outlined in the [multi-GPU section](perf_train_gpu_many).
+
+</Tip>
 
 When training large models, there are two aspects that should be considered at the same time: 
 
@@ -34,16 +41,16 @@ hyperparameter tuning, you should determine which batch size yields the best res
 
 The methods and tools covered in this guide can be classified based on the effect they have on the training process:
 
-| Method/tool                                           | Improves training speed | Optimizes memory utilization |
-|:------------------------------------------------------|:------------------------|:-----------------------------|
-| [Batch size choice](#batch-size-choice)               | Yes                     | Yes                          |
-| [Gradient accumulation](#gradient-accumulation)       | No                      | Yes                          |
-| [Gradient checkpointing](#gradient-checkpointing)     | No                      | Yes                          |
-| [Mixed precision training](#mixed-precision-training) | Yes                     | (No)                         |
-| [Optimizer choice](#optimizer-choice)                 | Yes                     | Yes                          |
-| [Data preloading](#data-preloading)                   | Yes                     | No                           |
-| [DeepSpeed Zero](#deepspeed-zero)                     | No                      | Yes                          |
-| [torch.compile](#using-torchcompile)                                     | Yes                      | No                           |
+| Method/tool                                                | Improves training speed | Optimizes memory utilization |
+|:-----------------------------------------------------------|:------------------------|:-----------------------------|
+| [Batch size choice](#batch-size-choice)                    | Yes                     | Yes                          |
+| [Gradient accumulation](#gradient-accumulation)            | No                      | Yes                          |
+| [Gradient checkpointing](#gradient-checkpointing)          | No                      | Yes                          |
+| [Mixed precision training](#mixed-precision-training)      | Yes                     | (No)                         |
+| [Optimizer choice](#optimizer-choice)                      | Yes                     | Yes                          |
+| [Data preloading](#data-preloading)                        | Yes                     | No                           |
+| [DeepSpeed Zero](#deepspeed-zero)                          | No                      | Yes                          |
+| [torch.compile](#using-torchcompile)                       | Yes                     | No                           |
 
 <Tip>
 
@@ -83,11 +90,6 @@ For parameters that are small, consider also [Dimension Quantization Effects](ht
 This is where tiling happens and the right multiplier can have a significant speedup.
 
 ## Gradient Accumulation
-
-Model weights are not the only thing that is stored in memory during the training process. Other components consuming GPU 
-memory are optimizer states, gradients, forward activations saved for gradient computation, temporary buffers, and 
-functionality-specific memory. By reducing the memory footprint of some of these components, you can optimize overall GPU 
-memory usage.
 
 The **gradient accumulation** method aims to calculate gradients in smaller increments instead of computing them for the 
 entire batch at once. This approach involves iteratively calculating gradients in smaller batches by performing forward 
@@ -163,7 +165,7 @@ the differences between these data types.
 
 ### fp16
 
-The main speed improvement of mixed precision training comes from saving the activations in half precision (fp16). 
+The main advantage of mixed precision training comes from saving the activations in half precision (fp16). 
 Although the gradients are also computed in half precision they are converted back to full precision for the optimization 
 step so no memory is saved here. 
 While mixed precision training results in faster computations, it can also lead to more GPU memory being utilized, especially for small batch sizes.
@@ -214,9 +216,11 @@ You can enable this mode in the 🤗 Trainer:
 TrainingArguments(tf32=True, **default_args)
 ```
 
-Note: tf32 mode is internal to CUDA and can't be accessed directly via `tensor.to(dtype=torch.tf32)` as `torch.tf32` doesn't exist.
+<Tip>
 
-Note: you need `torch>=1.7` to leverage this feature.
+tf32 can't be accessed directly via `tensor.to(dtype=torch.tf32)` because it is an internal CUDA data type. You need `torch>=1.7` to use tf32 data types.
+
+</Tip>
 
 For additional information on tf32 vs other precisions, please refer to the following benchmarks: 
 [RTX-3090](https://github.com/huggingface/transformers/issues/14608#issuecomment-1004390803) and
@@ -368,8 +372,7 @@ training_args = TrainingArguments(torch_compile=True, **default_args)
 capturing the graph, different backends can be deployed to lower the graph to an optimized engine. 
 You can find more details and benchmarks in [PyTorch documentation](https://pytorch.org/get-started/pytorch-2.0/).
 
-`torch.compile` has a growing list of backends, which can be found in [backends.py](https://github.com/pytorch/pytorch/blob/master/torch/_dynamo/optimizations/backends.py)
-or `torchdynamo.list_backends()` each of which with its optional dependencies.
+`torch.compile` has a growing list of backends, which can be found in by calling `torchdynamo.list_backends()`, each of which with its optional dependencies.
 
 Choose which backend to use by specifying it via `torch_compile_backend` in the [`TrainingArguments`].  Some of the most commonly used backends are:
 
