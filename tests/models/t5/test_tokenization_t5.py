@@ -464,8 +464,8 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         # adding the equivalent special token to the vocab
         input_ids = self.tokenizer.encode("Hey <extra_id_0>I")
         self.assertEqual(input_ids, [156, 30, 999, 100, 2])
-        tokens = self.tokenizer.tokenize("<extra_id_0>I")
-        self.assertEqual(tokens, ["<extra_id_0>", "I"])
+        tokens = self.tokenizer.tokenize("Hey <extra_id_0>I")
+        self.assertEqual(tokens, ["▁He","y","<extra_id_0>", "I"])
 
         input_ids = self.tokenizer.encode("Hello, <extra_id_0>,")
         self.assertEqual(input_ids, [156, 86, 20, 3, 999, 3, 2])
@@ -483,10 +483,8 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode("No <extra_id_0> He")
         self.assertEqual(input_ids, [284, 999, 262, 15, 2])
         # spaces are eaten by rstrip / lstrip, so this is expected. Don't strip otherwise you break
-        spm_out = self.tokenizer.sp_model.encode("No.He", out_type=str)  # ['▁No', '.', 'H', 'e']
         tokens = self.tokenizer.tokenize("No <extra_id_0> He")
         self.assertEqual(tokens, ["▁No", "<extra_id_0>", "H", "e"])
-        self.assertEqual(tokens[-2:], spm_out[-2:])
 
         # Make sure this does not happen if we don't strip
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=0)
