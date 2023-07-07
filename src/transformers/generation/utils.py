@@ -954,7 +954,12 @@ class GenerationMixin:
     ) -> StoppingCriteriaList:
         criteria = StoppingCriteriaList()
         if generation_config.max_length is not None:
-            criteria.append(MaxLengthCriteria(max_length=generation_config.max_length))
+            criteria.append(
+                MaxLengthCriteria(
+                    max_length=generation_config.max_length,
+                    max_position_embeddings=self.config.max_position_embeddings,
+                )
+            )
         if generation_config.max_time is not None:
             criteria.append(MaxTimeCriteria(max_time=generation_config.max_time))
         criteria = self._merge_criteria_processor_list(criteria, stopping_criteria)
