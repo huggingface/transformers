@@ -362,7 +362,7 @@ class FalconAttention(nn.Module):
                 attention_scores = attention_scores.to(torch.float32)
             # Matt (HF) note: We could possibly use F.scaled_dot_product_attention here too, by
             # adding (alibi * self.inv_norm_factor) to attention_mask_float. I think this would be mathematically
-            # equivalent and more performant, but there might be numerical difference. If you're reading this
+            # equivalent and more performant, but there might be a numerical difference. If you're reading this
             # and you'd like to experiment and maybe file a PR, feel free!
             attention_logits = attention_scores + alibi.view(batch_size, self.num_heads, 1, -1)
             attention_logits *= self.inv_norm_factor
