@@ -1062,13 +1062,13 @@ class BarkFineModel(BarkPreTrainedModel):
         if input_ids is not None and input_embeds is not None:
             raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
             
-       if input_ids is None and input_embeds is None:
+        if input_ids is None and input_embeds is None:
            raise ValueError("You have to specify either input_ids or input_embeds")
             
         if input_ids is not None:
             # the input_embeddings are the sum of the j previous codebooks embeddings before
             # the current codebook_idx codebook
-
+            
             # forward the GPT model itself
             input_embeds = [
                 wte(input_ids[:, :, i]).unsqueeze(-1) for i, wte in enumerate(self.wtes)
