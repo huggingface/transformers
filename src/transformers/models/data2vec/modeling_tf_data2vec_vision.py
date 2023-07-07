@@ -845,10 +845,10 @@ class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"relative_position_index"]
 
     @property
-    def dummy_inputs(self) -> dict[str, tf.Tensor]:
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
         """
         Dummy inputs to build the network. Returns:
-            `dict[str, tf.Tensor]`: The dummy inputs.
+            `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
             shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size),
