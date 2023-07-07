@@ -119,7 +119,7 @@ class MptLPLayerNorm(torch.nn.LayerNorm):
                 downcast_x, self.normalized_shape, downcast_weight, downcast_bias, self.eps
             )
 
-
+# Copied from transformers.models.bloom.modeling_bloom.build_alibi_tensor
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
     """
     Link to paper: https://arxiv.org/abs/2108.12409 Alibi tensor is not causal as the original paper mentions, it
@@ -163,7 +163,7 @@ def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torc
     alibi = slopes[..., None] * arange_tensor
     return alibi.reshape(batch_size * num_heads, 1, seq_length).to(dtype)
 
-
+# Copied from transformers.models.bloom.modeling_bloom.dropout_add with x->hidden_states
 def dropout_add(x: torch.Tensor, residual: torch.Tensor, prob: float, training: bool) -> torch.Tensor:
     """
     Dropout add function
