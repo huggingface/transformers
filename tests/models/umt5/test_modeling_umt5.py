@@ -35,7 +35,7 @@ if is_torch_available():
     from transformers import AutoTokenizer, UMT5ForConditionalGeneration, UMT5ForQuestionAnswering, UMT5Model
 
 
-# Copied from test.models.t5.test_modeling_t5.T5ModelTester with T5->UMT5,UMT5Config->T5Config
+# Copied from test.models.t5.test_modeling_t5.T5ModelTester with T5->UMT5
 class UMT5ModelTester:
     def __init__(
         self,

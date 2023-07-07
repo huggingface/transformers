@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch mT5 model."""
+""" PyTorch UMT5 model."""
 
 import copy
 import math
@@ -24,7 +24,6 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
-from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -42,6 +41,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from .configuration_umt5 import UMT5Config
 
 
 logger = logging.get_logger(__name__)
@@ -76,9 +76,9 @@ class UMT5LayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->UMT5,UMT5Config->PretrainedConfig
+# Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->UMT5
 class UMT5DenseActDense(nn.Module):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: UMT5Config):
         super().__init__()
         self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
@@ -99,9 +99,9 @@ class UMT5DenseActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5->UMT5,UMT5Config->PretrainedConfig
+# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5->UMT5
 class UMT5DenseGatedActDense(nn.Module):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: UMT5Config):
         super().__init__()
         self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
@@ -129,9 +129,9 @@ class UMT5DenseGatedActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5LayerFF with T5->UMT5,UMT5Config->PretrainedConfig
+# Copied from transformers.models.t5.modeling_t5.T5LayerFF with T5->UMT5
 class UMT5LayerFF(nn.Module):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: UMT5Config):
         super().__init__()
         if config.is_gated_act:
             self.DenseReluDense = UMT5DenseGatedActDense(config)
@@ -457,7 +457,7 @@ class UMT5PreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = PretrainedConfig
+    config_class = UMT5Config
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["UMT5Block"]
@@ -916,7 +916,7 @@ class UMT5Model(UMT5PreTrainedModel):
     >>> hidden_states = outputs.last_hidden_state
     ```"""
     model_type = "uumt5"
-    config_class = PretrainedConfig
+    config_class = UMT5Config
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config):

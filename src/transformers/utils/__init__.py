@@ -162,6 +162,7 @@ from .import_utils import (
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
+    is_torch_mps_available,
     is_torch_neuroncore_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
@@ -175,7 +176,6 @@ from .import_utils import (
     requires_backends,
     torch_only_method,
 )
-
 
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
