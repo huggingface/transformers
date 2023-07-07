@@ -53,7 +53,7 @@ BARK_SUBMODELCONFIG_START_DOCSTRING = """
             by the: `output_ids` when passing forward a [`{model}`]. Defaults to 10_048 but should be carefully thought
             with regards to the chosen sub-model.
         num_layers (`int`, *optional*, defaults to 12):
-            Number of layers.
+            Number of hidden layers in the given sub-model.
         num_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer architecture.
         hidden_size (`int`, *optional*, defaults to 768):
