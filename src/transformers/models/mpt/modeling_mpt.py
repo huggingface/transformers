@@ -108,6 +108,8 @@ class MptLPLayerNorm(torch.nn.LayerNorm):
             device=device,
             dtype=dtype,
         )
+        # TODO: remove this hack
+        self.bias = None
 
     def forward(self, x):
         module_device = x.device
@@ -273,8 +275,8 @@ class MptAttention(nn.Module):
         self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
         self.beta = 1.0
 
-        self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=True)
-        self.dense = nn.Linear(self.hidden_size, self.hidden_size)
+        self.Wqkv = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=False)
+        self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
 
     def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -418,9 +420,9 @@ class MptMLP(nn.Module):
 
         self.pretraining_tp = config.pretraining_tp
         self.slow_but_exact = config.slow_but_exact
-        self.dense_h_to_4h = nn.Linear(hidden_size, 4 * hidden_size)
+        self.up_proj = nn.Linear(hidden_size, 4 * hidden_size, bias=False)
         self.gelu_impl = MptGelu()
-        self.dense_4h_to_h = nn.Linear(4 * hidden_size, hidden_size)
+        self.down_proj = nn.Linear(4 * hidden_size, hidden_size, bias=False)
         self.hidden_dropout = config.hidden_dropout
 
     def forward(self, hidden_states: torch.Tensor, residual: torch.Tensor) -> torch.Tensor:
@@ -448,12 +450,13 @@ class MptBlock(nn.Module):
         super().__init__()
         hidden_size = config.hidden_size
 
-        self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        # self.norm_1 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.norm_1 = MptLPLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.num_heads = config.n_head
-        self.self_attention = MptAttention(config)
-        self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.attn = MptAttention(config)
+        self.norm_2 = MptLPLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
-        self.mlp = MptMLP(config)
+        self.ffn = MptMLP(config)
 
         self.apply_residual_connection_post_layernorm = config.apply_residual_connection_post_layernorm
         self.hidden_dropout = config.hidden_dropout
@@ -521,6 +524,7 @@ class MptPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MptBlock"]
     _skip_keys_device_placement = "past_key_values"
+    _keys_to_ignore_on_load_unexpected = [r".*.blocks\.(\d+)\.norm_1\.bias", r".*.blocks\.(\d+)\.norm_2\.bias"]
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -538,7 +542,8 @@ class MptPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, LayerNorm):
-            module.bias.data.zero_()
+            if module.bias is not None:
+                module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module: nn.Module, value: bool = False):
@@ -668,14 +673,13 @@ class MptModel(MptPreTrainedModel):
         self.num_heads = config.n_head
 
         # Embedding + LN Embedding
-        self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
-        self.word_embeddings_layernorm = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
 
         # Transformer blocks
-        self.h = nn.ModuleList([MptBlock(config) for _ in range(config.num_hidden_layers)])
+        self.blocks = nn.ModuleList([MptBlock(config) for _ in range(config.num_hidden_layers)])
 
         # Final Layer Norm
-        self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.norm_f = MptLPLayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.gradient_checkpointing = False
 
@@ -686,7 +690,7 @@ class MptModel(MptPreTrainedModel):
         return build_alibi_tensor(attention_mask, num_heads, dtype)
 
     def get_input_embeddings(self):
-        return self.word_embeddings
+        return self.wte
 
     def _prepare_attn_mask(
         self, attention_mask: torch.Tensor, input_shape: Tuple[int, int], past_key_values_length: int
@@ -711,7 +715,7 @@ class MptModel(MptPreTrainedModel):
         return combined_attention_mask
 
     def set_input_embeddings(self, new_embeddings: torch.Tensor):
-        self.word_embeddings = new_embeddings
+        self.wte = new_embeddings
 
     @add_start_docstrings_to_model_forward(MPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -768,9 +772,9 @@ class MptModel(MptPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.n_layer)
 
         if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
+            inputs_embeds = self.wte(input_ids)
 
-        hidden_states = self.word_embeddings_layernorm(inputs_embeds)
+        hidden_states = self.wte_layernorm(inputs_embeds)
 
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
