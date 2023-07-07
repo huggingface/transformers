@@ -279,14 +279,67 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
 
 
 @require_torch
-class BarkCoarseModelTest(BarkSemanticModelTest):
+class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     # Same tester as BarkSemanticModelTest, except for model_class and config_class
     all_model_classes = (BarkCoarseModel,) if is_torch_available() else ()
     all_generative_model_classes = (BarkCoarseModel,) if is_torch_available() else ()
+    
+    is_encoder_decoder = False
+    fx_compatible = False
+    test_missing_keys = False
+    test_pruning = False
+    test_model_parallel = False
+    # no model_parallel for now
 
     def setUp(self):
         self.model_tester = BarkSubModelTester(self, config_class=BarkCoarseConfig, model_class=BarkCoarseModel)
         self.config_tester = ConfigTester(self, config_class=BarkCoarseConfig, n_embd=37)
+        
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_save_load_strict(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+            self.assertEqual(info["missing_keys"], [])
+
+    def test_decoder_model_past_with_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+
+            wte = model.get_input_embeddings()
+            inputs["input_embeds"] = wte(input_ids)
+
+            with torch.no_grad():
+                model(**inputs)[0]
+
+    def test_generate_fp16(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        model = self.all_model_classes[0](config).eval().to(torch_device)
+        if torch_device == "cuda":
+            model.half()
+        model.generate(input_ids, attention_mask=attention_mask)
+        model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
 
 @require_torch
