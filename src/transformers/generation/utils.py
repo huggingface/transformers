@@ -596,7 +596,10 @@ class GenerationMixin:
         return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
 
     def _prepare_attention_mask_for_generation(
-        self, inputs: torch.Tensor, pad_token_id: Optional[int], eos_token_id: Optional[Union[int, List[int]]],
+        self,
+        inputs: torch.Tensor,
+        pad_token_id: Optional[int],
+        eos_token_id: Optional[Union[int, List[int]]],
     ) -> torch.LongTensor:
         is_input_ids = len(inputs.shape) == 2 and inputs.dtype in [torch.int, torch.long]
         is_pad_token_in_inputs = (pad_token_id is not None) and (pad_token_id in inputs)
@@ -680,7 +683,8 @@ class GenerationMixin:
             if "decoder_attention_mask" in model_kwargs:
                 decoder_attention_mask = model_kwargs["decoder_attention_mask"]
                 decoder_attention_mask = torch.cat(
-                    (torch.ones_like(decoder_attention_mask)[:, :1], decoder_attention_mask), dim=-1,
+                    (torch.ones_like(decoder_attention_mask)[:, :1], decoder_attention_mask),
+                    dim=-1,
                 )
                 model_kwargs["decoder_attention_mask"] = decoder_attention_mask
 
@@ -787,7 +791,10 @@ class GenerationMixin:
             f" enable beam search for {self.__class__}"
         )
 
-    def _get_logits_warper(self, generation_config: GenerationConfig,) -> LogitsProcessorList:
+    def _get_logits_warper(
+        self,
+        generation_config: GenerationConfig,
+    ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsWarper`] instances
         used for multinomial sampling.
@@ -2052,9 +2059,7 @@ class GenerationMixin:
                 all_last_hstates, all_hstates, all_logits = [], [], []
                 for i in range(top_k):
                     # compute the candidate tokens by the language model and collect their hidden_states
-                    next_model_inputs = self.prepare_inputs_for_generation(
-                        top_k_ids[:, i].view(-1, 1), **model_kwargs
-                    )
+                    next_model_inputs = self.prepare_inputs_for_generation(top_k_ids[:, i].view(-1, 1), **model_kwargs)
 
                     outputs = self(
                         **next_model_inputs,
@@ -2144,7 +2149,10 @@ class GenerationMixin:
                 )
 
                 selected_outputs = self(
-                    **next_model_input, return_dict=True, output_hidden_states=False, output_attentions=False,
+                    **next_model_input,
+                    return_dict=True,
+                    output_hidden_states=False,
+                    output_attentions=False,
                 )
                 next_past_key_values = selected_outputs["past_key_values"]
 
@@ -4525,7 +4533,11 @@ class GenerationMixin:
                         )
                     else:
                         decoder_attentions = _split_model_outputs(
-                            decoder_attentions, outputs.attentions, cur_len, added_len, is_decoder_attention=True,
+                            decoder_attentions,
+                            outputs.attentions,
+                            cur_len,
+                            added_len,
+                            is_decoder_attention=True,
                         )
                 if output_hidden_states:
                     if self.config.is_encoder_decoder:
@@ -4606,7 +4618,10 @@ def _crop_past_key_values(model, past_key_values, maximum_length):
     ):
         for idx in range(len(past_key_values)):
             new_past.append(
-                (past_key_values[idx][0][:, :, :maximum_length], past_key_values[idx][1][:, :maximum_length, :],)
+                (
+                    past_key_values[idx][0][:, :, :maximum_length],
+                    past_key_values[idx][1][:, :maximum_length, :],
+                )
             )
         past_key_values = tuple(new_past)
     # gptbigcode is too
@@ -4622,7 +4637,10 @@ def _crop_past_key_values(model, past_key_values, maximum_length):
     else:
         for idx in range(len(past_key_values)):
             new_past.append(
-                (past_key_values[idx][0][:, :, :maximum_length, :], past_key_values[idx][1][:, :, :maximum_length, :],)
+                (
+                    past_key_values[idx][0][:, :, :maximum_length, :],
+                    past_key_values[idx][1][:, :, :maximum_length, :],
+                )
             )
         past_key_values = tuple(new_past)
     return past_key_values
