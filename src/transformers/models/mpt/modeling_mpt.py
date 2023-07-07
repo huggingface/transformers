@@ -48,6 +48,7 @@ MPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# Copied from transformers.models.bloom.modeling_bloom._make_causal_mask
 def _make_causal_mask(
     input_ids_shape: torch.Size, device: torch.device, past_key_values_length: int
 ) -> torch.BoolTensor:
@@ -67,6 +68,7 @@ def _make_causal_mask(
     return expanded_mask
 
 
+# Copied from transformers.models.bloom.modeling_bloom._expand_mask
 def _expand_mask(mask: torch.Tensor, tgt_length: int) -> torch.BoolTensor:
     """
     Expands attention_mask from `[batch_size, src_length]` to `[batch_size, 1, tgt_length, src_length]`.
