@@ -147,7 +147,6 @@ class BarkSubModelTester:
 
         input_ids = inputs_dict["input_ids"]
         attention_mask = inputs_dict["attention_mask"]
-        inputs_dict["head_mask"]
 
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
