@@ -335,15 +335,15 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "AltCLIPVisionModel",
     "AltRobertaModel",
     "TvltForAudioVisualClassification",
-    "SpeechT5ForSpeechToSpeech",
-    "SpeechT5ForTextToSpeech",
-    "SpeechT5HifiGan",
     "BarkCausalModel",
     "BarkCoarseModel",
     "BarkFineModel",
     "BarkSemanticModel",
     "MusicgenModel",
     "MusicgenForConditionalGeneration",
+    "SpeechT5ForSpeechToSpeech",
+    "SpeechT5ForTextToSpeech",
+    "SpeechT5HifiGan",
 ]
 
 # DO NOT edit this list!
