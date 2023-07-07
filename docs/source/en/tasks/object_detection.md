@@ -481,7 +481,7 @@ Next, prepare an instance of a `CocoDetection` class that can be used with `coco
 ...         return {"pixel_values": pixel_values, "labels": target}
 
 
->>> im_processor = AutoImageProcessor.from_pretrained("MariaK/detr-resnet-50_finetuned_cppe5")
+>>> im_processor = AutoImageProcessor.from_pretrained("devonho/detr-resnet-50_finetuned_cppe5")
 
 >>> path_output_cppe5, path_anno = save_cppe5_annotation_file_images(cppe5["test"])
 >>> test_ds_coco_format = CocoDetection(path_output_cppe5, im_processor, path_anno)
@@ -493,7 +493,7 @@ Finally, load the metrics and run the evaluation.
 >>> import evaluate
 >>> from tqdm import tqdm
 
->>> model = AutoModelForObjectDetection.from_pretrained("MariaK/detr-resnet-50_finetuned_cppe5")
+>>> model = AutoModelForObjectDetection.from_pretrained("devonho/detr-resnet-50_finetuned_cppe5")
 >>> module = evaluate.load("ybelkada/cocoevaluate", coco=test_ds_coco_format.coco)
 >>> val_dataloader = torch.utils.data.DataLoader(
 ...     test_ds_coco_format, batch_size=8, shuffle=False, num_workers=4, collate_fn=collate_fn
@@ -522,18 +522,18 @@ Finally, load the metrics and run the evaluation.
 Accumulating evaluation results...
 DONE (t=0.08s).
 IoU metric: bbox
- Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.150
- Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.280
- Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.130
- Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.038
- Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.036
- Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.182
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.166
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.317
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.335
- Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.104
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.146
- Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.382
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.352
+ Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.681
+ Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.292
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.168
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.208
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.429
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.274
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.484
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.501
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.191
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.323
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.590
 ```
 These results can be further improved by adjusting the hyperparameters in [`~transformers.TrainingArguments`]. Give it a go!
 
@@ -549,15 +549,15 @@ for object detection with your model, and pass an image to it:
 >>> url = "https://i.imgur.com/2lnWoly.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> obj_detector = pipeline("object-detection", model="MariaK/detr-resnet-50_finetuned_cppe5")
+>>> obj_detector = pipeline("object-detection", model="devonho/detr-resnet-50_finetuned_cppe5")
 >>> obj_detector(image)
 ```
 
 You can also manually replicate the results of the pipeline if you'd like:
 
 ```py
->>> image_processor = AutoImageProcessor.from_pretrained("MariaK/detr-resnet-50_finetuned_cppe5")
->>> model = AutoModelForObjectDetection.from_pretrained("MariaK/detr-resnet-50_finetuned_cppe5")
+>>> image_processor = AutoImageProcessor.from_pretrained("devonho/detr-resnet-50_finetuned_cppe5")
+>>> model = AutoModelForObjectDetection.from_pretrained("devonho/detr-resnet-50_finetuned_cppe5")
 
 >>> with torch.no_grad():
 ...     inputs = image_processor(images=image, return_tensors="pt")
