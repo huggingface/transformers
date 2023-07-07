@@ -902,6 +902,11 @@ class LukePreTrainedModel(PreTrainedModel):
     base_model_prefix = "luke"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LukeAttention", "LukeEntityEmbeddings"]
+    _keys_to_ignore_on_load_unexpected = [
+        r"entity_predictions.*",
+        r"lm_head.*",
+        r"luke.encoder.layer.*.attention.self.*_query.*",
+    ]
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
