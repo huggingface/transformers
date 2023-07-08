@@ -2137,7 +2137,14 @@ else:
         ]
     )
     _import_structure["models.mt5"].extend(
-        ["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5ForQuestionAnswering", "MT5Model", "MT5PreTrainedModel"]
+        [
+            "MT5EncoderModel",
+            "MT5ForConditionalGeneration",
+            "MT5ForQuestionAnswering",
+            "MT5ForSequenceClassification",
+            "MT5Model",
+            "MT5PreTrainedModel",
+        ]
     )
     _import_structure["models.musicgen"].extend(
         [
@@ -5738,6 +5745,7 @@ if TYPE_CHECKING:
             MT5EncoderModel,
             MT5ForConditionalGeneration,
             MT5ForQuestionAnswering,
+            MT5ForSequenceClassification,
             MT5Model,
             MT5PreTrainedModel,
         )
