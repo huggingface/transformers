@@ -19,7 +19,7 @@ from tokenization_lavin import lavin_tokenizer
 #    BaseModelOutputWithPoolingAndNoAttention,
 #    ImageClassifierOutputWithNoAttention,
 #)
-#from ...modeling_utils import PreTrainedModel
+from transformers.modeling_utils import PreTrainedModel
 #from ...utils import (
 #    add_code_sample_docstrings,
 #    add_start_docstrings,
@@ -270,8 +270,8 @@ class transformer(nn.Module):
     c_loss = self.criterion(output, labels)
     return c_loss
 
-class lavin_generator:
-  def __init__(self, model: transformer, tokenizer:lavin_tokenizer):
+class lavin_generator(PreTrainedModel):
+  def __init__(self, model: transformer = transformer, tokenizer:lavin_tokenizer=lavin_tokenizer):
     self.model = model
     self.tokenizer = tokenizer
 
@@ -405,3 +405,6 @@ def sample_top_p(probs, p):
   next_token = torch.gather(probs_idx, -1, next_token)
   return next_token
 
+
+model = lavin_generator()
+model.generate()

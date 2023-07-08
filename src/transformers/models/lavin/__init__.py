@@ -16,10 +16,8 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_essentia_available,
-    is_librosa_available,
-    is_pretty_midi_available,
-    is_scipy_available,
+    is_sentencepiece_available,
+    is_tokenizers_available,
     is_torch_available,
 )
 
