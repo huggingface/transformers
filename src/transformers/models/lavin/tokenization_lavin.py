@@ -14,14 +14,13 @@
 # limitations under the License.
 """Tokenization classes for Bros."""
 
-
+from typing import Optional, Union, Dict, Any
 import collections
+from transformers.tokenization_utils import AddedToken, PreTrainedTokenizer
+#from ...utils import logging
 
-from ...utils import logging
-from ..bert.tokenization_bert import BertTokenizer
 
-
-logger = logging.get_logger(__name__)
+#logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json"}
 
@@ -110,4 +109,3 @@ class lavin_tokenizer(PreTrainedTokenizer):
     out_string += self.sp_model.decode(current_sub_tokens)
     return out_string
 
-model = LavinTokenizer()
