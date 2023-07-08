@@ -434,7 +434,7 @@ class PvtEncoder(nn.Module):
             # first, obtain patch embeddings
             hidden_states, height, width = embedding_layer(hidden_states)
             # second, send embeddings through blocks
-            for block in enumerate(block_layer):
+            for block in block_layer:
                 layer_outputs = block(hidden_states, height, width, output_attentions)
                 hidden_states = layer_outputs[0]
                 if output_attentions:
