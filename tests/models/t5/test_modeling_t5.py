@@ -43,8 +43,8 @@ if is_torch_available():
         ByT5Tokenizer,
         T5EncoderModel,
         T5ForConditionalGeneration,
-        T5ForSequenceClassification,
         T5ForQuestionAnswering,
+        T5ForSequenceClassification,
         T5Model,
         T5Tokenizer,
     )
@@ -522,7 +522,11 @@ class T5ModelTester:
 
 @require_torch
 class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (T5Model, T5ForConditionalGeneration, T5ForSequenceClassification, T5ForQuestionAnswering) if is_torch_available() else ()
+    all_model_classes = (
+        (T5Model, T5ForConditionalGeneration, T5ForSequenceClassification, T5ForQuestionAnswering)
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (T5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {

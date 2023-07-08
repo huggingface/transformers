@@ -19,11 +19,11 @@ import copy
 import math
 import os
 import warnings
-from typing import Optional, Tuple, Union, List
+from typing import List, Optional, Tuple, Union
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss, BCEWithLogitsLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
@@ -32,8 +32,8 @@ from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
-    Seq2SeqSequenceClassifierOutput,
     Seq2SeqQuestionAnsweringModelOutput,
+    Seq2SeqSequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
@@ -828,7 +828,10 @@ class T5PreTrainedModel(PreTrainedModel):
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, T5LayerNorm):
             module.weight.data.fill_(factor * 1.0)
-        elif isinstance(module, (T5Model, T5ForConditionalGeneration, T5EncoderModel, T5ForQuestionAnswering, T5ForSequenceClassification)):
+        elif isinstance(
+            module,
+            (T5Model, T5ForConditionalGeneration, T5EncoderModel, T5ForQuestionAnswering, T5ForSequenceClassification),
+        ):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
@@ -2122,9 +2125,9 @@ class T5ForSequenceClassification(T5PreTrainedModel):
 
         if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
-        sentence_representation = sequence_output[eos_mask, :].view(sequence_output.size(0), -1, sequence_output.size(-1))[
-            :, -1, :
-        ]
+        sentence_representation = sequence_output[eos_mask, :].view(
+            sequence_output.size(0), -1, sequence_output.size(-1)
+        )[:, -1, :]
         logits = self.classification_head(sentence_representation)
 
         loss = None
