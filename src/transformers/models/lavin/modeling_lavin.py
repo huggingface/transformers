@@ -292,7 +292,7 @@ class lavin_generator(PreTrainedModel):
     return new_examples
 
   @torch.inference_mode()
-  def generate(
+  def forward(
     self,
     prompts: List[str],
     images: torch.Tensor,
