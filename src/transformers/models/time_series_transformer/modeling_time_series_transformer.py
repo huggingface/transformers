@@ -1562,10 +1562,12 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
         past_observed_mask: torch.Tensor,
+        past_categorical_features: Optional[torch.Tensor] = None,
         static_categorical_features: Optional[torch.Tensor] = None,
         static_real_features: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
         future_time_features: Optional[torch.Tensor] = None,
+        future_categorical_features: Optional[torch.Tensor] = None,
         future_observed_mask: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -1602,11 +1604,13 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         >>> outputs = model(
         ...     past_values=batch["past_values"],
         ...     past_time_features=batch["past_time_features"],
+        ...     past_categorical_features=batch["past_categorical_features"],
         ...     past_observed_mask=batch["past_observed_mask"],
         ...     static_categorical_features=batch["static_categorical_features"],
         ...     static_real_features=batch["static_real_features"],
         ...     future_values=batch["future_values"],
         ...     future_time_features=batch["future_time_features"],
+        ...     future_categorical_features=batch["future_categorical_features"],
         ... )
 
         >>> loss = outputs.loss
@@ -1618,10 +1622,12 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         >>> outputs = model.generate(
         ...     past_values=batch["past_values"],
         ...     past_time_features=batch["past_time_features"],
+        ...     past_categorical_features=batch["past_categorical_features"],
         ...     past_observed_mask=batch["past_observed_mask"],
         ...     static_categorical_features=batch["static_categorical_features"],
         ...     static_real_features=batch["static_real_features"],
         ...     future_time_features=batch["future_time_features"],
+        ...     future_categorical_features=batch["future_categorical_features"],
         ... )
 
         >>> mean_prediction = outputs.sequences.mean(dim=1)
@@ -1635,10 +1641,12 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             past_values=past_values,
             past_time_features=past_time_features,
             past_observed_mask=past_observed_mask,
+            past_categorical_features=past_categorical_features,
             static_categorical_features=static_categorical_features,
             static_real_features=static_real_features,
             future_values=future_values,
             future_time_features=future_time_features,
+            future_categorical_features=future_categorical_features,
             decoder_attention_mask=decoder_attention_mask,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
@@ -1695,6 +1703,8 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
         future_time_features: torch.Tensor,
+        past_categorical_features: Optional[torch.Tensor] = None,
+        future_categorical_features: Optional[torch.Tensor] = None,
         past_observed_mask: Optional[torch.Tensor] = None,
         static_categorical_features: Optional[torch.Tensor] = None,
         static_real_features: Optional[torch.Tensor] = None,
@@ -1793,8 +1803,10 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             static_real_features=static_real_features,
             past_time_features=past_time_features,
             past_values=past_values,
+            past_categorical_features=past_categorical_features,
             past_observed_mask=past_observed_mask,
             future_time_features=future_time_features,
+            future_categorical_features=future_categorical_features,
             future_values=None,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
