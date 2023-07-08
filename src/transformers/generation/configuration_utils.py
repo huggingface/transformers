@@ -189,7 +189,7 @@ class GenerationConfig(PushToHubMixin):
             The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale > 1`.
             Higher guidance scale encourages the model to generate samples that are more closely linked to the input
             prompt, usually at the expense of poorer quality.
-        low_memory (`bool`, *optional*, defaults to False):
+        low_memory (`bool`, *optional*):
             Switch to sequential topk for contrastive search to reduce peak memory. Used with contrastive search.
 
 
