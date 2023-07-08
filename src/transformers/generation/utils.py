@@ -2185,6 +2185,7 @@ class GenerationMixin:
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ["It might be possible to get a better understanding of the nature of the problem, but it's not"]
         ```"""
+
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -2250,6 +2251,7 @@ class GenerationMixin:
                 return_dict=True,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                knockout_neurons=model_kwargs['knockout_neurons'],
             )
 
             if synced_gpus and this_peer_finished:
@@ -2812,6 +2814,7 @@ class GenerationMixin:
                 return_dict=True,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                knockout_neurons=model_kwargs['knockout_neurons']
             )
 
             if synced_gpus and this_peer_finished:

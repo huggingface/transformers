@@ -438,7 +438,6 @@ class LlamaModel(LlamaPreTrainedModel):
 
     def __init__(self, config: LlamaConfig):
         super().__init__(config)
-        print("LLaMa says Hi!!!!")
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
@@ -493,6 +492,7 @@ class LlamaModel(LlamaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         save_path: Optional[str] = None,
+        knockout_neurons: Optional[List[Tuple[int, int]]] = None
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -592,11 +592,17 @@ class LlamaModel(LlamaPreTrainedModel):
 
             hidden_states = layer_outputs[0]
 
+            # TODO: Knockout neurons
+            if knockout_neurons:
+                print("Knocking out neurons", knockout_neurons)
+
             if use_cache:
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
+
+        # TODO: Knockout neurons in last layer
 
         hidden_states = self.norm(hidden_states)
 
@@ -658,6 +664,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         save_path: Optional[str] = None,
+        knockout_neurons: Optional[List[Tuple[int, int]]] = None
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -703,6 +710,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             save_path=save_path,
+            knockout_neurons=knockout_neurons
         )
 
         hidden_states = outputs[0]
