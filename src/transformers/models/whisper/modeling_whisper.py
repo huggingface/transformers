@@ -1715,11 +1715,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             # Set the decoder_start_token_id to <|startofprev|>
             kwargs.update({"decoder_start_token_id": decoder_start_token_id})
 
-            # Update the max generation length to include the prompt
-            specified_max_length = kwargs.pop("max_new_tokens", None) or kwargs.pop("max_length", None)
-            default_max_length = generation_config.max_new_tokens or generation_config.max_length
-            non_prompt_max_length = specified_max_length or default_max_length
-            kwargs["max_new_tokens"] = non_prompt_max_length + len(text_prompt_ids)
+            # If the user passes `max_new_tokens`, increase its number to account for the prompt
+            if kwargs.get("max_new_tokens", None) is not None:
+                kwargs["max_new_tokens"] += len(text_prompt_ids)
 
             # Reformat the forced_decoder_ids to incorporate the prompt
             non_prompt_forced_decoder_ids = (
