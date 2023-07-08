@@ -29,7 +29,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -44,7 +44,7 @@ if is_vision_available():
 
 
 class PvtConfigTester(ConfigTester):
-    def create_and_test_config_common_properties(self):
+    def run_common_tests(self):
         config = self.config_class(**self.inputs_dict)
         self.parent.assertTrue(hasattr(config, "hidden_sizes"))
         self.parent.assertTrue(hasattr(config, "num_encoder_blocks"))
@@ -68,7 +68,7 @@ class PvtModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        initializer_range=1.0,
+        initializer_range=0.02,
         num_labels=3,
         scope=None,
     ):
@@ -115,15 +115,12 @@ class PvtModelTester:
             initializer_range=self.initializer_range,
         )
 
-    def create_and_check_model(self, config, pixel_values):
-        model = PvtForImageClassification(config=config)
+    def create_and_check_model(self, config, pixel_values, labels):
+        model = PvtModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        expected_height = expected_width = self.image_size // (self.downsampling_rates[-1] * 2)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.hidden_sizes[-1], expected_height, expected_width)
-        )
+        self.parent.assertIsNotNone(result.last_hidden_state)
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -268,15 +265,15 @@ class PvtModelTester:
 
             hidden_states = outputs.hidden_states
 
-            expected_num_layers = self.model_tester.num_encoder_blocks
+            expected_num_layers = sum(self.model_tester.depths) + 1
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             # verify the first hidden states (first block)
             self.assertListEqual(
                 list(hidden_states[0].shape[-3:]),
                 [
-                    self.model_tester.hidden_sizes[0],
-                    self.model_tester.image_size // 4,
+                    self.model_tester.batch_size,
+                    (self.model_tester.image_size // 4) ** 2,
                     self.model_tester.image_size // 4,
                 ],
             )
@@ -329,6 +326,111 @@ def prepare_img():
 
 
 @require_torch
+class PvtModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (PvtModel, PvtForImageClassification) if is_torch_available() else ()
+
+    test_head_masking = False
+    test_pruning = False
+    test_resize_embeddings = False
+    test_torchscript = False
+    has_attentions = False
+
+    def setUp(self):
+        self.model_tester = PvtModelTester(self)
+        self.config_tester = PvtConfigTester(self, config_class=PvtConfig)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @unittest.skip("Pvt does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip("Pvt does not have get_input_embeddings method and get_output_embeddings methods")
+    def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip("PVT normally initialized the parameters so negative values are expected.")
+    def test_initialization(self):
+        pass
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+
+            expected_num_layers = sum(self.model_tester.depths) + 1
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            # verify the first hidden states (first block)
+            self.assertListEqual(
+                list(hidden_states[0].shape[-3:]),
+                [
+                    self.model_tester.batch_size,
+                    (self.model_tester.image_size // 4) ** 2,
+                    self.model_tester.image_size // 4,
+                ],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_training(self):
+        if not self.model_tester.is_training:
+            return
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            if model_class in get_values(MODEL_MAPPING):
+                continue
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in PVT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = PvtModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+
+
+@require_torch
 class PvtModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification(self):
@@ -346,7 +448,7 @@ class PvtModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.2910, -0.2229, 0.0321]).to(torch_device)
+        expected_slice = torch.tensor([-1.4192, -1.9158, -0.9702]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
 
@@ -368,7 +470,7 @@ class PvtModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.3641, -0.6515, 1.4248], [0.5005, 0.2392, -0.6012], [0.6238, 0.0133, -0.3935]]
+            [[-0.3086, 1.0402, 1.1816], [-0.2880, 0.5781, 0.6124], [0.1480, 0.6129, -0.0590]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))

@@ -17,7 +17,7 @@
 """ Pvt model configuration"""
 
 from collections import OrderedDict
-from typing import Callable, Iterable, List, Mapping
+from typing import Callable, List, Mapping
 
 from packaging import version
 
@@ -73,7 +73,7 @@ class PvtConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 1.0):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
@@ -114,7 +114,7 @@ class PvtConfig(PretrainedConfig):
         hidden_act: Mapping[str, Callable] = "gelu",
         hidden_dropout_prob: float = 0.0,
         attention_probs_dropout_prob: float = 0.0,
-        initializer_range: float = 1.0,
+        initializer_range: float = 0.02,
         drop_path_rate: float = 0.0,
         layer_norm_eps: float = 1e-6,
         qkv_bias: bool = True,

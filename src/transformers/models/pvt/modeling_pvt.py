@@ -445,7 +445,7 @@ class PvtEncoder(nn.Module):
                 hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
         hidden_states = self.layer_norm(hidden_states)
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states)
+            all_hidden_states = all_hidden_states + (hidden_states,)
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
@@ -482,12 +482,12 @@ class PvtPreTrainedModel(PreTrainedModel):
                 mean=0.0,
                 std=self.config.initializer_range,
             )
-
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data,
-                mean=0.0,
-                std=self.config.initializer_range,
-            )
+            if module.cls_token is not None:
+                module.cls_token.data = nn.init.trunc_normal_(
+                    module.cls_token.data,
+                    mean=0.0,
+                    std=self.config.initializer_range,
+                )
 
     def _set_gradient_checkpointing(self, module: PvtEncoder, value: bool = False):
         if isinstance(module, PvtEncoder):
