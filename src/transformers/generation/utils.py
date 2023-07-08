@@ -2113,12 +2113,6 @@ class GenerationMixin:
                     next_hidden = outputs.hidden_states[-1]
                     full_hidden_states = outputs.hidden_states
 
-                next_hidden = next_hidden
-                final = []
-                for i in range(len(full_hidden_states)):
-                    final.append(full_hidden_states[i])
-                full_hidden_states = tuple(final)
-
                 logits = outputs.logits[:, -1, :]
 
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
