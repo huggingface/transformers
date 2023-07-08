@@ -2080,6 +2080,8 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+        self.model_parallel = False
+
     # Copied from transformers.models.t5.modeling_t5.T5ForSequenceClassification.get_input_embeddings
     def get_input_embeddings(self):
         return self.shared
