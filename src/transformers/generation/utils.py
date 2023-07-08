@@ -2096,7 +2096,7 @@ class GenerationMixin:
 
             else:
                 # compute the candidate tokens by the language model and collect their hidden_states
-                # assembles top_k_ids into batch of size k 
+                # assembles top_k_ids into batch of size k
                 next_model_inputs = self.prepare_inputs_for_generation(top_k_ids.view(-1, 1), **model_kwargs)
 
                 outputs = self(
