@@ -2096,7 +2096,7 @@ class GenerationMixin:
 
             else:
                 # compute the candidate tokens by the language model and collect their hidden_states
-                # assembles top_k_ids into batch of size k (leading to OOM for large models)
+                # assembles top_k_ids into batch of size k 
                 next_model_inputs = self.prepare_inputs_for_generation(top_k_ids.view(-1, 1), **model_kwargs)
 
                 outputs = self(
@@ -2112,12 +2112,6 @@ class GenerationMixin:
                 else:
                     next_hidden = outputs.hidden_states[-1]
                     full_hidden_states = outputs.hidden_states
-
-                next_hidden = next_hidden
-                final = []
-                for i in range(len(full_hidden_states)):
-                    final.append(full_hidden_states[i])
-                full_hidden_states = tuple(final)
 
                 logits = outputs.logits[:, -1, :]
 
@@ -2142,7 +2136,7 @@ class GenerationMixin:
                 layer = torch.stack(torch.split(layer, top_k))[range(batch_size), selected_idx, :]
                 next_decoder_hidden_states += (layer,)
 
-            # select the past_key_value
+            # generate past_key_values cache of only the selected token
             if low_memory:
                 next_model_input = self.prepare_inputs_for_generation(
                     top_k_ids[:, selected_idx].view(-1, 1), **model_kwargs
