@@ -151,12 +151,6 @@ class DonutImageProcessor(BaseImageProcessor):
 
         return image
 
-    def rotate_image(self, *args, **kwargs):
-        logger.info(
-            "rotate_image is deprecated and will be removed in version 4.27. Please use align_long_axis instead."
-        )
-        return self.align_long_axis(*args, **kwargs)
-
     def pad_image(
         self,
         image: np.ndarray,

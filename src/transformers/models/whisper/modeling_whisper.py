@@ -491,7 +491,7 @@ class WhisperEncoderLayer(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -1715,11 +1715,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             # Set the decoder_start_token_id to <|startofprev|>
             kwargs.update({"decoder_start_token_id": decoder_start_token_id})
 
-            # Update the max generation length to include the prompt
-            specified_max_length = kwargs.pop("max_new_tokens", None) or kwargs.pop("max_length", None)
-            default_max_length = generation_config.max_new_tokens or generation_config.max_length
-            non_prompt_max_length = specified_max_length or default_max_length
-            kwargs["max_new_tokens"] = non_prompt_max_length + len(text_prompt_ids)
+            # If the user passes `max_new_tokens`, increase its number to account for the prompt
+            if kwargs.get("max_new_tokens", None) is not None:
+                kwargs["max_new_tokens"] += len(text_prompt_ids)
 
             # Reformat the forced_decoder_ids to incorporate the prompt
             non_prompt_forced_decoder_ids = (

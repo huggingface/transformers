@@ -19,11 +19,15 @@ import os
 import re
 import warnings
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
+
+
+if TYPE_CHECKING:
+    from ...tokenization_utils_base import TextInput
 from ...utils import logging
 
 
@@ -50,6 +54,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "t5-3b": 512,
     "t5-11b": 512,
 }
+
+SPIECE_UNDERLINE = "▁"
 
 
 class T5Tokenizer(PreTrainedTokenizer):
@@ -294,9 +300,17 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
+    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
+        if not text.startswith(" "):
+            text = " " + text
+        return super().tokenize(text, **kwargs)
+
     def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
-        return self.sp_model.encode(text, out_type=str)
+        tokens = self.sp_model.encode(text, out_type=str)
+        if not text.startswith(" ") and tokens[0] == SPIECE_UNDERLINE:
+            tokens = tokens[1:]
+        return tokens
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""

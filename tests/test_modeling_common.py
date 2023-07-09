@@ -2206,7 +2206,7 @@ class ModelTesterMixin:
                 }
 
                 # convert inputs to Flax
-                fx_inputs = {k: np.array(v) for k, v in pt_inputs.items() if torch.is_tensor(v)}
+                fx_inputs = {k: np.array(v.to("cpu")) for k, v in pt_inputs.items() if torch.is_tensor(v)}
 
                 fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
                 fx_model.params = fx_state
@@ -2278,7 +2278,7 @@ class ModelTesterMixin:
                 }
 
                 # convert inputs to Flax
-                fx_inputs = {k: np.array(v) for k, v in pt_inputs.items() if torch.is_tensor(v)}
+                fx_inputs = {k: np.array(v.to("cpu")) for k, v in pt_inputs.items() if torch.is_tensor(v)}
 
                 pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
 

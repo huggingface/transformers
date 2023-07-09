@@ -593,7 +593,7 @@ class TFAutoModelForSemanticSegmentation(_BaseAutoModelClass):
     _model_mapping = TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
 
 
-TF_AutoModelForSemanticSegmentation = auto_class_update(
+TFAutoModelForSemanticSegmentation = auto_class_update(
     TFAutoModelForSemanticSegmentation, head_doc="semantic segmentation"
 )
 

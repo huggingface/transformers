@@ -425,6 +425,8 @@
         title: Transformer XL
       - local: model_doc/ul2
         title: UL2
+      - local: model_doc/umt5
+        title: UMT5
       - local: model_doc/xmod
         title: X-MOD
       - local: model_doc/xglm
@@ -549,6 +551,8 @@
         title: MCTCT
       - local: model_doc/mms
         title: MMS
+      - local: model_doc/musicgen
+        title: MusicGen
       - local: model_doc/sew
         title: SEW
       - local: model_doc/sew-d

@@ -1030,7 +1030,7 @@ class InstructBlipQFormerEmbeddings(nn.Module):
         if input_ids is not None:
             embeddings = self.word_embeddings(input_ids)
             if self.position_embedding_type == "absolute":
-                position_embeddings = self.position_embeddings(position_ids)
+                position_embeddings = self.position_embeddings(position_ids.to(embeddings.device))
                 embeddings = embeddings + position_embeddings
 
             if query_embeds is not None:

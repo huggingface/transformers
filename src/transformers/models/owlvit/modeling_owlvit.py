@@ -1065,7 +1065,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
-        self.logit_scale = nn.Parameter(torch.ones([]) * config.logit_scale_init_value)
+        self.logit_scale = nn.Parameter(torch.tensor(config.logit_scale_init_value))
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1294,8 +1294,8 @@ class OwlViTClassPredictionHead(nn.Module):
             return (pred_logits, image_class_embeds)
 
         # Normalize image and text features
-        image_class_embeds /= torch.linalg.norm(image_class_embeds, dim=-1, keepdim=True) + 1e-6
-        query_embeds /= torch.linalg.norm(query_embeds, dim=-1, keepdim=True) + 1e-6
+        image_class_embeds = image_class_embeds / (torch.linalg.norm(image_class_embeds, dim=-1, keepdim=True) + 1e-6)
+        query_embeds = query_embeds / (torch.linalg.norm(query_embeds, dim=-1, keepdim=True) + 1e-6)
 
         # Get class predictions
         pred_logits = torch.einsum("...pd,...qd->...pq", image_class_embeds, query_embeds)
