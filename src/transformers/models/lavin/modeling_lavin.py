@@ -271,9 +271,10 @@ class transformer(nn.Module):
     return c_loss
 
 class lavin_generator(PreTrainedModel):
-  def __init__(self, model: transformer = transformer, tokenizer:lavin_tokenizer=lavin_tokenizer):
+  def __init__(self, model: transformer = transformer, tokenizer:lavin_tokenizer=lavin_tokenizer, config):
     self.model = model
     self.tokenizer = tokenizer
+    self.config = config
 
   def insert_image_embeds(self, examples, image_embeds, prefix_img, prefix_nonimg, img_indicators):
     _bsz, seqlen,_ = exaples.shape
