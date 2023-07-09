@@ -587,16 +587,14 @@ class LlamaModel(LlamaPreTrainedModel):
                     use_cache=use_cache,
                 )
 
-                if save_path:
-                    print(layer_outputs.size())
-                    torch.save(layer_outputs[0], save_path + f"/layer_{idx}.pt")
-
 
             hidden_states = layer_outputs[0]
 
             # TODO: Knockout neurons
             if knockout_neurons:
-                print("Knocking out neurons", knockout_neurons)
+                for layer_id, emb_id in knockout_neurons:
+                    if layer_id-1 == idx and idx != 0:
+                        hidden_states[0][0][emb_id] = 0.0
 
             if use_cache:
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
