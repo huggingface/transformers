@@ -773,7 +773,6 @@ class T5Block(nn.Module):
         return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
 
-# TODO Check against other classification heads (e.g. Bloom)
 class T5ClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
