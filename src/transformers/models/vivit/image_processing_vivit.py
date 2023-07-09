@@ -318,7 +318,7 @@ class VivitImageProcessor(BaseImageProcessor):
 
         Args:
             videos (`ImageInput`):
-                Image to preprocess.
+                Video frames to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
