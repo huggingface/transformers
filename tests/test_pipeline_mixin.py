@@ -17,6 +17,7 @@ import copy
 import json
 import os
 import random
+import unittest
 from pathlib import Path
 
 from transformers.testing_utils import (
@@ -40,6 +41,7 @@ from .pipelines.test_pipelines_fill_mask import FillMaskPipelineTests
 from .pipelines.test_pipelines_image_classification import ImageClassificationPipelineTests
 from .pipelines.test_pipelines_image_segmentation import ImageSegmentationPipelineTests
 from .pipelines.test_pipelines_image_to_text import ImageToTextPipelineTests
+from .pipelines.test_pipelines_mask_generation import MaskGenerationPipelineTests
 from .pipelines.test_pipelines_object_detection import ObjectDetectionPipelineTests
 from .pipelines.test_pipelines_question_answering import QAPipelineTests
 from .pipelines.test_pipelines_summarization import SummarizationPipelineTests
@@ -68,6 +70,7 @@ pipeline_test_mapping = {
     "image-classification": {"test": ImageClassificationPipelineTests},
     "image-segmentation": {"test": ImageSegmentationPipelineTests},
     "image-to-text": {"test": ImageToTextPipelineTests},
+    "mask-generation": {"test": MaskGenerationPipelineTests},
     "object-detection": {"test": ObjectDetectionPipelineTests},
     "question-answering": {"test": QAPipelineTests},
     "summarization": {"test": SummarizationPipelineTests},
@@ -261,6 +264,15 @@ class PipelineTesterMixin:
             )
             return
 
+        pipeline_test_class_name = pipeline_test_mapping[task]["test"].__name__
+        if self.is_pipeline_test_to_skip_more(pipeline_test_class_name, model.config, model, tokenizer, processor):
+            logger.warning(
+                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: test is "
+                f"currently known to fail for: model `{model_architecture.__name__}` | tokenizer "
+                f"`{tokenizer_name}` | processor `{processor_name}`."
+            )
+            return
+
         # validate
         validate_test_components(self, task, model, tokenizer, processor)
 
@@ -303,7 +315,6 @@ class PipelineTesterMixin:
         run_batch_test(pipeline, examples)
 
     @is_pipeline_test
-    @require_torch
     def test_pipeline_audio_classification(self):
         self.run_task_tests(task="audio-classification")
 
@@ -354,6 +365,13 @@ class PipelineTesterMixin:
     @require_vision
     def test_pipeline_image_to_text(self):
         self.run_task_tests(task="image-to-text")
+
+    @unittest.skip(reason="`run_pipeline_test` is currently not implemented.")
+    @is_pipeline_test
+    @require_vision
+    @require_torch
+    def test_pipeline_mask_generation(self):
+        self.run_task_tests(task="mask-generation")
 
     @is_pipeline_test
     @require_vision
@@ -428,9 +446,37 @@ class PipelineTesterMixin:
     def test_pipeline_zero_shot_object_detection(self):
         self.run_task_tests(task="zero-shot-object-detection")
 
+    # This contains the test cases to be skipped without model architecture being involved.
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
+        """Skip some tests based on the classes or their names without the instantiated objects.
+
+        This is to avoid calling `from_pretrained` (so reducing the runtime) if we already know the tests will fail.
+        """
+        # No fix is required for this case.
+        if (
+            pipeline_test_casse_name == "DocumentQuestionAnsweringPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # `DocumentQuestionAnsweringPipelineTests` requires a fast tokenizer.
+            return True
+
+        return False
+
+    def is_pipeline_test_to_skip_more(self, pipeline_test_casse_name, config, model, tokenizer, processor):  # noqa
+        """Skip some more tests based on the information from the instantiated objects."""
+        # No fix is required for this case.
+        if (
+            pipeline_test_casse_name == "QAPipelineTests"
+            and tokenizer is not None
+            and getattr(tokenizer, "pad_token", None) is None
+            and not tokenizer.__class__.__name__.endswith("Fast")
+        ):
+            # `QAPipelineTests` doesn't work with a slow tokenizer that has no pad token.
+            return True
+
         return False
 
 

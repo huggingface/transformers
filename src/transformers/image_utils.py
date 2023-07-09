@@ -64,6 +64,10 @@ class ChannelDimension(ExplicitEnum):
     LAST = "channels_last"
 
 
+def is_pil_image(img):
+    return is_vision_available() and isinstance(img, PIL.Image.Image)
+
+
 def is_valid_image(img):
     return (
         (is_vision_available() and isinstance(img, PIL.Image.Image))

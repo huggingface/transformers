@@ -33,14 +33,17 @@ from .generic import (
     ModelOutput,
     PaddingStrategy,
     TensorType,
+    add_model_info_to_auto_map,
     cached_property,
     can_return_loss,
     expand_dims,
     find_labels,
     flatten_dict,
+    infer_framework,
     is_jax_tensor,
     is_numpy_array,
     is_tensor,
+    is_tf_symbolic_tensor,
     is_tf_tensor,
     is_torch_device,
     is_torch_dtype,
@@ -83,6 +86,7 @@ from .hub import (
     is_remote_url,
     move_cache,
     send_example_telemetry,
+    try_to_load_from_cache,
 )
 from .import_utils import (
     ENV_VARS_TRUE_AND_AUTO_VALUES,
@@ -96,6 +100,7 @@ from .import_utils import (
     _LazyModule,
     ccl_version,
     direct_transformers_import,
+    get_torch_version,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
@@ -110,6 +115,7 @@ from .import_utils import (
     is_ftfy_available,
     is_in_notebook,
     is_ipex_available,
+    is_jieba_available,
     is_jumanpp_available,
     is_kenlm_available,
     is_keras_nlp_available,
@@ -117,13 +123,17 @@ from .import_utils import (
     is_natten_available,
     is_ninja_available,
     is_onnx_available,
+    is_openai_available,
+    is_optimum_available,
     is_pandas_available,
+    is_peft_available,
     is_phonemizer_available,
     is_protobuf_available,
     is_psutil_available,
     is_py3nvml_available,
     is_pyctcdecode_available,
     is_pytesseract_available,
+    is_pytest_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
     is_sacremoses_available,
@@ -151,6 +161,7 @@ from .import_utils import (
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
+    is_torch_mps_available,
     is_torch_neuroncore_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
@@ -163,12 +174,23 @@ from .import_utils import (
     is_vision_available,
     requires_backends,
     torch_only_method,
-    torch_version,
 )
+
+
+if is_protobuf_available():
+    import google.protobuf
+
+    if version.parse(google.protobuf.__version__) < version.parse("4.0.0"):
+        from . import sentencepiece_model_pb2
+    else:
+        from . import sentencepiece_model_pb2_new as sentencepiece_model_pb2
 
 
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
+ADAPTER_CONFIG_NAME = "adapter_config.json"
+ADAPTER_WEIGHTS_NAME = "adapter_model.bin"
+ADAPTER_SAFE_WEIGHTS_NAME = "adapter_model.safetensors"
 TF2_WEIGHTS_NAME = "tf_model.h5"
 TF2_WEIGHTS_INDEX_NAME = "tf_model.h5.index.json"
 TF_WEIGHTS_NAME = "model.ckpt"
@@ -197,13 +219,13 @@ def check_min_version(min_version):
         if "dev" in min_version:
             error_message = (
                 "This example requires a source install from HuggingFace Transformers (see "
-                "`https://huggingface.co/transformers/installation.html#installing-from-source`),"
+                "`https://huggingface.co/docs/transformers/installation#install-from-source`),"
             )
         else:
             error_message = f"This example requires a minimum version of {min_version},"
         error_message += f" but the version found is {__version__}.\n"
         raise ImportError(
             error_message
-            + "Check out https://huggingface.co/transformers/examples.html for the examples corresponding to other "
+            + "Check out https://github.com/huggingface/transformers/tree/main/examples#important-note for the examples corresponding to other "
             "versions of HuggingFace Transformers."
         )

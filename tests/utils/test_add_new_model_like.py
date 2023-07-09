@@ -157,14 +157,14 @@ class SomeClass:
         self.assertEqual(
             add_content_to_text(test_text, line, add_before='    "bert": "BertConfig",', exact_match=True), expected
         )
-        self.assertEqual(add_content_to_text(test_text, line, add_before=re.compile('^\s*"bert":')), expected)
+        self.assertEqual(add_content_to_text(test_text, line, add_before=re.compile(r'^\s*"bert":')), expected)
 
         self.assertEqual(add_content_to_text(test_text, line, add_after="gpt"), expected)
         self.assertEqual(add_content_to_text(test_text, line, add_after="gpt", exact_match=True), test_text)
         self.assertEqual(
             add_content_to_text(test_text, line, add_after='    "gpt": "GPTConfig",', exact_match=True), expected
         )
-        self.assertEqual(add_content_to_text(test_text, line, add_after=re.compile('^\s*"gpt":')), expected)
+        self.assertEqual(add_content_to_text(test_text, line, add_after=re.compile(r'^\s*"gpt":')), expected)
 
     def test_add_content_to_file(self):
         test_text = """all_configs = {
@@ -197,7 +197,7 @@ class SomeClass:
             self.check_result(file_name, expected)
 
             self.init_file(file_name, test_text)
-            add_content_to_file(file_name, line, add_before=re.compile('^\s*"bert":'))
+            add_content_to_file(file_name, line, add_before=re.compile(r'^\s*"bert":'))
             self.check_result(file_name, expected)
 
             self.init_file(file_name, test_text)
@@ -213,7 +213,7 @@ class SomeClass:
             self.check_result(file_name, expected)
 
             self.init_file(file_name, test_text)
-            add_content_to_file(file_name, line, add_after=re.compile('^\s*"gpt":'))
+            add_content_to_file(file_name, line, add_after=re.compile(r'^\s*"gpt":'))
             self.check_result(file_name, expected)
 
     def test_simplify_replacements(self):
@@ -471,7 +471,7 @@ NEW_BERT_CONSTANT = "value"
         bert_files = get_model_files("bert")
 
         doc_file = str(Path(bert_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/bert.mdx")
+        self.assertEqual(doc_file, "docs/source/en/model_doc/bert.md")
 
         model_files = {str(Path(f).relative_to(REPO_PATH)) for f in bert_files["model_files"]}
         self.assertEqual(model_files, BERT_MODEL_FILES)
@@ -490,7 +490,7 @@ NEW_BERT_CONSTANT = "value"
         # VIT
         vit_files = get_model_files("vit")
         doc_file = str(Path(vit_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/vit.mdx")
+        self.assertEqual(doc_file, "docs/source/en/model_doc/vit.md")
 
         model_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["model_files"]}
         self.assertEqual(model_files, VIT_MODEL_FILES)
@@ -509,7 +509,7 @@ NEW_BERT_CONSTANT = "value"
         # Wav2Vec2
         wav2vec2_files = get_model_files("wav2vec2")
         doc_file = str(Path(wav2vec2_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/wav2vec2.mdx")
+        self.assertEqual(doc_file, "docs/source/en/model_doc/wav2vec2.md")
 
         model_files = {str(Path(f).relative_to(REPO_PATH)) for f in wav2vec2_files["model_files"]}
         self.assertEqual(model_files, WAV2VEC2_MODEL_FILES)
@@ -532,7 +532,7 @@ NEW_BERT_CONSTANT = "value"
         bert_files = get_model_files("bert", frameworks=["pt"])
 
         doc_file = str(Path(bert_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/bert.mdx")
+        self.assertEqual(doc_file, "docs/source/en/model_doc/bert.md")
 
         model_files = {str(Path(f).relative_to(REPO_PATH)) for f in bert_files["model_files"]}
         bert_model_files = BERT_MODEL_FILES - {
@@ -553,7 +553,7 @@ NEW_BERT_CONSTANT = "value"
         # VIT
         vit_files = get_model_files("vit", frameworks=["pt"])
         doc_file = str(Path(vit_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/vit.mdx")
+        self.assertEqual(doc_file, "docs/source/en/model_doc/vit.md")
 
         model_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["model_files"]}
         vit_model_files = VIT_MODEL_FILES - {
@@ -574,7 +574,7 @@ NEW_BERT_CONSTANT = "value"
         # Wav2Vec2
         wav2vec2_files = get_model_files("wav2vec2", frameworks=["pt"])
         doc_file = str(Path(wav2vec2_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/wav2vec2.mdx")
+        self.assertEqual(doc_file, "docs/source/en/model_doc/wav2vec2.md")
 
         model_files = {str(Path(f).relative_to(REPO_PATH)) for f in wav2vec2_files["model_files"]}
         wav2vec2_model_files = WAV2VEC2_MODEL_FILES - {
@@ -599,7 +599,7 @@ NEW_BERT_CONSTANT = "value"
         bert_files = get_model_files("bert", frameworks=["tf", "flax"])
 
         doc_file = str(Path(bert_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/bert.mdx")
+        self.assertEqual(doc_file, "docs/source/en/model_doc/bert.md")
 
         model_files = {str(Path(f).relative_to(REPO_PATH)) for f in bert_files["model_files"]}
         bert_model_files = BERT_MODEL_FILES - {"src/transformers/models/bert/modeling_bert.py"}
@@ -618,7 +618,7 @@ NEW_BERT_CONSTANT = "value"
         # VIT
         vit_files = get_model_files("vit", frameworks=["tf", "flax"])
         doc_file = str(Path(vit_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/vit.mdx")
+        self.assertEqual(doc_file, "docs/source/en/model_doc/vit.md")
 
         model_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["model_files"]}
         vit_model_files = VIT_MODEL_FILES - {"src/transformers/models/vit/modeling_vit.py"}
@@ -637,7 +637,7 @@ NEW_BERT_CONSTANT = "value"
         # Wav2Vec2
         wav2vec2_files = get_model_files("wav2vec2", frameworks=["tf", "flax"])
         doc_file = str(Path(wav2vec2_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/wav2vec2.mdx")
+        self.assertEqual(doc_file, "docs/source/en/model_doc/wav2vec2.md")
 
         model_files = {str(Path(f).relative_to(REPO_PATH)) for f in wav2vec2_files["model_files"]}
         wav2vec2_model_files = WAV2VEC2_MODEL_FILES - {"src/transformers/models/wav2vec2/modeling_wav2vec2.py"}
@@ -713,7 +713,7 @@ NEW_BERT_CONSTANT = "value"
         self.assertEqual(test_files, bert_test_files)
 
         doc_file = str(Path(all_bert_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/bert.mdx")
+        self.assertEqual(doc_file, "docs/source/en/model_doc/bert.md")
 
         self.assertEqual(all_bert_files["module_name"], "bert")
 
@@ -762,7 +762,7 @@ NEW_BERT_CONSTANT = "value"
         self.assertEqual(test_files, bert_test_files)
 
         doc_file = str(Path(all_bert_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/bert.mdx")
+        self.assertEqual(doc_file, "docs/source/en/model_doc/bert.md")
 
         self.assertEqual(all_bert_files["module_name"], "bert")
 
@@ -806,7 +806,7 @@ NEW_BERT_CONSTANT = "value"
         self.assertEqual(test_files, vit_test_files)
 
         doc_file = str(Path(all_vit_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/vit.mdx")
+        self.assertEqual(doc_file, "docs/source/en/model_doc/vit.md")
 
         self.assertEqual(all_vit_files["module_name"], "vit")
 
@@ -860,7 +860,7 @@ NEW_BERT_CONSTANT = "value"
         self.assertEqual(test_files, wav2vec2_test_files)
 
         doc_file = str(Path(all_wav2vec2_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/wav2vec2.mdx")
+        self.assertEqual(doc_file, "docs/source/en/model_doc/wav2vec2.md")
 
         self.assertEqual(all_wav2vec2_files["module_name"], "wav2vec2")
 
@@ -1476,8 +1476,8 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 """
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            doc_file = os.path.join(tmp_dir, "gpt2.mdx")
-            new_doc_file = os.path.join(tmp_dir, "gpt-new-new.mdx")
+            doc_file = os.path.join(tmp_dir, "gpt2.md")
+            new_doc_file = os.path.join(tmp_dir, "gpt-new-new.md")
 
             gpt2_model_patterns = ModelPatterns("GPT2", "gpt2", tokenizer_class="GPT2Tokenizer")
             new_model_patterns = ModelPatterns(

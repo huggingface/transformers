@@ -18,10 +18,10 @@ logger = logging.get_logger(__name__)
 class Conversation:
     """
     Utility class containing a conversation and its history. This class is meant to be used as an input to the
-    [`ConversationalPipeline`]. The conversation contains a number of utility function to manage the addition of new
-    user input and generated model responses. A conversation needs to contain an unprocessed user input before being
-    passed to the [`ConversationalPipeline`]. This user input is either created when the class is instantiated, or by
-    calling `conversational_pipeline.append_response("input")` after a conversation turn.
+    [`ConversationalPipeline`]. The conversation contains several utility functions to manage the addition of new user
+    inputs and generated model responses. A conversation needs to contain an unprocessed user input before being passed
+    to the [`ConversationalPipeline`]. This user input is either created when the class is instantiated, or by calling
+    `conversational_pipeline.append_response("input")` after a conversation turn.
 
     Arguments:
         text (`str`, *optional*):

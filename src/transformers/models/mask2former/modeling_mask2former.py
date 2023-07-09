@@ -15,7 +15,6 @@
 """ PyTorch Mask2Former model."""
 
 import math
-import random
 import warnings
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
@@ -24,7 +23,7 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from ... import AutoBackbone, SwinConfig
+from ... import AutoBackbone
 from ...activations import ACT2FN
 from ...file_utils import (
     ModelOutput,
@@ -810,7 +809,7 @@ def multi_scale_deformable_attention(
 ) -> Tensor:
     batch_size, _, num_heads, hidden_dim = value.shape
     _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
-    value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
+    value_list = value.split([height.item() * width.item() for height, width in value_spatial_shapes], dim=1)
     sampling_grids = 2 * sampling_locations - 1
     sampling_value_list = []
     for level_id, (height, width) in enumerate(value_spatial_shapes):
@@ -1340,7 +1339,7 @@ class Mask2FormerPixelDecoder(nn.Module):
             else:
                 split_sizes[i] = last_hidden_state.shape[1] - level_start_index[i]
 
-        encoder_output = torch.split(last_hidden_state, split_sizes, dim=1)
+        encoder_output = torch.split(last_hidden_state, [size.item() for size in split_sizes], dim=1)
 
         # Compute final features
         outputs = [
@@ -1389,10 +1388,7 @@ class Mask2FormerPixelLevelModule(nn.Module):
         """
         super().__init__()
 
-        backbone_config_dict = config.backbone_config.to_dict()
-        backbone_config = SwinConfig.from_dict(backbone_config_dict)
-
-        self.encoder = AutoBackbone.from_config(backbone_config)
+        self.encoder = AutoBackbone.from_config(config.backbone_config)
         self.decoder = Mask2FormerPixelDecoder(config, feature_channels=self.encoder.channels)
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> Mask2FormerPixelLevelModuleOutput:
@@ -1767,7 +1763,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
     of the predicted mask for each query, instead of attending to the full feature map.
 
     Args:
-        config: (`Mask2FormerConfig`):
+        config (`Mask2FormerConfig`):
             Configuration used to instantiate Mask2FormerMaskedAttentionDecoder.
     """
 
@@ -1862,7 +1858,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
 
             if self.training and (dropout_probability < self.layerdrop):
                 continue
@@ -2003,7 +1999,7 @@ class Mask2FormerMaskPredictor(nn.Module):
                 The feature dimension of the Mask2FormerMaskedAttentionDecoder
             num_heads (`int`):
                 The number of heads used in the Mask2FormerMaskedAttentionDecoder
-            mask_feature_size: (`torch.Tensor`):
+            mask_feature_size (`torch.Tensor`):
                 one of the output dimensions of the predicted masks for each query
         """
         super().__init__()
@@ -2110,8 +2106,8 @@ MASK2FORMER_START_DOCSTRING = r"""
 MASK2FORMER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`AutoImageProcessor.preprocess`] for details.
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
 

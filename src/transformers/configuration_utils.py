@@ -30,6 +30,7 @@ from .dynamic_module_utils import custom_object_save
 from .utils import (
     CONFIG_NAME,
     PushToHubMixin,
+    add_model_info_to_auto_map,
     cached_file,
     copy_func,
     download_url,
@@ -118,7 +119,7 @@ class PretrainedConfig(PushToHubMixin):
 
         max_length (`int`, *optional*, defaults to 20):
             Maximum length that will be used by default in the `generate` method of the model.
-        min_length (`int`, *optional*, defaults to 10):
+        min_length (`int`, *optional*, defaults to 0):
             Minimum length that will be used by default in the `generate` method of the model.
         do_sample (`bool`, *optional*, defaults to `False`):
             Flag that will be used by default in the `generate` method of the model. Whether or not to use sampling ;
@@ -135,7 +136,7 @@ class PretrainedConfig(PushToHubMixin):
         diversity_penalty (`float`, *optional*, defaults to 0.0):
             Value to control diversity for group beam search. that will be used by default in the `generate` method of
             the model. 0 means no diversity penalty. The higher the penalty, the more diverse are the outputs.
-        temperature (`float`, *optional*, defaults to 1):
+        temperature (`float`, *optional*, defaults to 1.0):
             The value used to module the next token probabilities that will be used by default in the `generate` method
             of the model. Must be strictly positive.
         top_k (`int`, *optional*, defaults to 50):
@@ -466,7 +467,43 @@ class PretrainedConfig(PushToHubMixin):
             )
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+    def _set_token_in_kwargs(self, kwargs, token=None):
+        """Temporary method to deal with `token` and `use_auth_token`.
+
+        This method is to avoid apply the same changes in all model config classes that overwrite `from_pretrained`.
+
+        Need to clean up `use_auth_token` in a follow PR.
+        """
+        # Some model config classes like CLIP define their own `from_pretrained` without the new argument `token` yet.
+        if token is None:
+            token = kwargs.pop("token", None)
+        use_auth_token = kwargs.pop("use_auth_token", None)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
+
+        if token is not None:
+            # change to `token` in a follow-up PR
+            kwargs["use_auth_token"] = token
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Union[str, os.PathLike],
+        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: Optional[Union[str, bool]] = None,
+        revision: str = "main",
+        **kwargs,
+    ) -> "PretrainedConfig":
         r"""
         Instantiate a [`PretrainedConfig`] (or a derived class) from a pretrained model configuration.
 
@@ -492,7 +529,7 @@ class PretrainedConfig(PushToHubMixin):
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            use_auth_token (`str` or `bool`, *optional*):
+            token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
                 the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
@@ -543,6 +580,13 @@ class PretrainedConfig(PushToHubMixin):
         assert config.output_attentions == True
         assert unused_kwargs == {"foo": False}
         ```"""
+        kwargs["cache_dir"] = cache_dir
+        kwargs["force_download"] = force_download
+        kwargs["local_files_only"] = local_files_only
+        kwargs["revision"] = revision
+
+        cls._set_token_in_kwargs(kwargs, token)
+
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
             logger.warning(
@@ -667,6 +711,10 @@ class PretrainedConfig(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
 
+        if "auto_map" in config_dict and not is_local:
+            config_dict["auto_map"] = add_model_info_to_auto_map(
+                config_dict["auto_map"], pretrained_model_name_or_path
+            )
         return config_dict, kwargs
 
     @classmethod
@@ -779,6 +827,13 @@ class PretrainedConfig(PushToHubMixin):
             ):
                 serializable_config_dict[key] = value
 
+        if hasattr(self, "quantization_config"):
+            serializable_config_dict["quantization_config"] = (
+                self.quantization_config.to_dict()
+                if not isinstance(self.quantization_config, dict)
+                else self.quantization_config
+            )
+
         self.dict_torch_dtype_to_str(serializable_config_dict)
 
         return serializable_config_dict
@@ -800,6 +855,13 @@ class PretrainedConfig(PushToHubMixin):
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
+
+        if hasattr(self, "quantization_config"):
+            output["quantization_config"] = (
+                self.quantization_config.to_dict()
+                if not isinstance(self.quantization_config, dict)
+                else self.quantization_config
+            )
 
         self.dict_torch_dtype_to_str(output)
 

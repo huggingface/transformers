@@ -75,6 +75,7 @@ else:
         "FlaxWhisperForConditionalGeneration",
         "FlaxWhisperModel",
         "FlaxWhisperPreTrainedModel",
+        "FlaxWhisperForAudioClassification",
     ]
 
 
@@ -126,6 +127,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_flax_whisper import (
+            FlaxWhisperForAudioClassification,
             FlaxWhisperForConditionalGeneration,
             FlaxWhisperModel,
             FlaxWhisperPreTrainedModel,

@@ -35,6 +35,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -48,6 +49,9 @@ if is_torch_available():
         Pix2StructVisionModel,
     )
     from transformers.models.pix2struct.modeling_pix2struct import PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_11
+else:
+    is_torch_greater_or_equal_than_1_11 = False
 
 
 if is_vision_available():
@@ -351,7 +355,7 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-class Pix2StructTextImageModelsModelTester:
+class Pix2StructModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
         if text_kwargs is None:
             text_kwargs = {}
@@ -391,8 +395,9 @@ class Pix2StructTextImageModelsModelTester:
 
 
 @require_torch
-class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
+class Pix2StructModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Pix2StructForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-to-text": Pix2StructForConditionalGeneration} if is_torch_available() else {}
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -401,7 +406,7 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
 
     def setUp(self):
-        self.model_tester = Pix2StructTextImageModelsModelTester(self)
+        self.model_tester = Pix2StructModelTester(self)
 
     def test_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -443,24 +448,22 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            if model.config.is_encoder_decoder:
-                expected_arg_names = [
-                    "input_ids",
-                    "attention_mask",
-                    "decoder_input_ids",
-                    "decoder_attention_mask",
-                ]
-                expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                    else ["encoder_outputs"]
-                )
-                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
-            else:
-                expected_arg_names = (
-                    ["input_ids"] if model_class != Pix2StructForConditionalGeneration else ["flattened_patches"]
-                )
-                self.assertListEqual(arg_names[:1], expected_arg_names)
+            expected_arg_names = [
+                "flattened_patches",
+                "attention_mask",
+                "decoder_input_ids",
+                "decoder_attention_mask",
+                "head_mask",
+                "decoder_head_mask",
+                "cross_attn_head_mask",
+                "encoder_outputs",
+                "past_key_values",
+                "labels",
+                "decoder_inputs_embeds",
+                "use_cache",
+            ]
+
+            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_training(self):
         if not self.model_tester.is_training:
@@ -666,7 +669,27 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
             model_state_dict = model.state_dict()
             loaded_model_state_dict = loaded_model.state_dict()
 
+            non_persistent_buffers = {}
+            for key in loaded_model_state_dict.keys():
+                if key not in model_state_dict.keys():
+                    non_persistent_buffers[key] = loaded_model_state_dict[key]
+
+            loaded_model_state_dict = {
+                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+            }
+
             self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+
+            model_buffers = list(model.buffers())
+            for non_persistent_buffer in non_persistent_buffers.values():
+                found_buffer = False
+                for i, model_buffer in enumerate(model_buffers):
+                    if torch.equal(non_persistent_buffer, model_buffer):
+                        found_buffer = True
+                        break
+
+                self.assertTrue(found_buffer)
+                model_buffers.pop(i)
 
             models_equal = True
             for layer_name, p1 in model_state_dict.items():
@@ -699,6 +722,10 @@ def prepare_img():
     return im
 
 
+@unittest.skipIf(
+    not is_torch_greater_or_equal_than_1_11,
+    reason="`Pix2StructImageProcessor` requires `torch>=1.11.0`.",
+)
 @require_vision
 @require_torch
 @slow
@@ -751,21 +778,24 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         texts = ["A picture of", "An photography of"]
 
         # image only
-        inputs = processor(images=[image_1, image_2], text=texts, return_tensors="pt").to(torch_device)
+        inputs = processor(images=[image_1, image_2], text=texts, return_tensors="pt", add_special_tokens=False).to(
+            torch_device
+        )
 
         predictions = model.generate(**inputs)
 
         self.assertEqual(
-            processor.decode(predictions[0], skip_special_tokens=True), "A picture of a stop sign that says yes."
+            processor.decode(predictions[0], skip_special_tokens=True),
+            "A picture of a stop sign with a red stop sign",
         )
 
         self.assertEqual(
             processor.decode(predictions[1], skip_special_tokens=True),
-            "An photography of the Temple Bar and a few other places.",
+            "An photography of the Temple Bar and other places in the city.",
         )
 
     def test_vqa_model(self):
-        model_id = "ybelkada/pix2struct-ai2d-base"
+        model_id = "google/pix2struct-ai2d-base"
 
         image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
         image = Image.open(requests.get(image_url, stream=True).raw)
@@ -784,7 +814,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         self.assertEqual(processor.decode(predictions[0], skip_special_tokens=True), "ash cloud")
 
     def test_vqa_model_batched(self):
-        model_id = "ybelkada/pix2struct-ai2d-base"
+        model_id = "google/pix2struct-ai2d-base"
 
         image_urls = [
             "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg",

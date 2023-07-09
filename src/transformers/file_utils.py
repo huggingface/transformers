@@ -72,6 +72,7 @@ from .utils import (
     get_cached_models,
     get_file_from_repo,
     get_full_repo_name,
+    get_torch_version,
     has_file,
     http_user_agent,
     is_apex_available,
@@ -115,6 +116,7 @@ from .utils import (
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
+    is_torch_mps_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
@@ -125,5 +127,4 @@ from .utils import (
     to_numpy,
     to_py_obj,
     torch_only_method,
-    torch_version,
 )

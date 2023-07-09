@@ -664,6 +664,8 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         """
         import tensorflow as tf
 
+        mask_token_id = tf.cast(mask_token_id, inputs.dtype)
+
         input_shape = tf.shape(inputs)
         # 1 for a special token, 0 for a normal token in the special tokens mask
         # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
@@ -677,8 +679,9 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         inputs = tf.where(indices_replaced, mask_token_id, inputs)
 
         # 10% of the time, we replace masked input tokens with random word
-        indices_random = self.tf_bernoulli(input_shape, 0.5) & masked_indices & ~indices_replaced
-        random_words = tf.random.uniform(input_shape, maxval=vocab_size, dtype=tf.int64)
+        indices_random = self.tf_bernoulli(input_shape, 0.1) & masked_indices & ~indices_replaced
+        random_words = tf.random.uniform(input_shape, maxval=vocab_size, dtype=inputs.dtype)
+
         inputs = tf.where(indices_random, random_words, inputs)
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged

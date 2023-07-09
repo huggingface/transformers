@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import os
+import pickle
 import shutil
 import tempfile
 import unittest
@@ -285,6 +286,13 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             padding=False,
         )
 
+    def test_picklable(self):
+        with tempfile.NamedTemporaryFile() as f:
+            shutil.copyfile(SAMPLE_VOCAB, f.name)
+            tokenizer = LlamaTokenizer(f.name, keep_accents=True)
+            pickled_tokenizer = pickle.dumps(tokenizer)
+        pickle.loads(pickled_tokenizer)
+
 
 @require_torch
 @require_sentencepiece
@@ -314,6 +322,39 @@ class LlamaIntegrationTest(unittest.TestCase):
                 "attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
             },
         )
+
+    def test_fast_special_tokens(self):
+        slow_tokenizer = self.tokenizer
+        fast_tokenizer = self.rust_tokenizer
+        slow = slow_tokenizer.encode("A sample test", add_special_tokens=True)
+        assert slow == [1, 319, 4559, 1243]
+
+        fast_tokenizer.add_eos_token = False
+        fast = fast_tokenizer.encode("A sample test", add_special_tokens=True)
+        assert fast == [1, 319, 4559, 1243]
+
+        fast_tokenizer.add_eos_token = True
+        fast = fast_tokenizer.encode("A sample test", add_special_tokens=True)
+        assert fast == [1, 319, 4559, 1243, 2]
+
+        slow_tokenizer.add_eos_token = True
+        slow = slow_tokenizer.encode("A sample test", add_special_tokens=True)
+        assert slow == [1, 319, 4559, 1243, 2]
+
+        fast_tokenizer = LlamaTokenizerFast.from_pretrained(
+            "hf-internal-testing/llama-tokenizer", add_eos_token=True, add_bos_token=False
+        )
+        fast = fast_tokenizer.encode("A sample test", add_special_tokens=True)
+        assert fast == [319, 4559, 1243, 2]
+
+        slow_tokenzier = LlamaTokenizer.from_pretrained(
+            "hf-internal-testing/llama-tokenizer", add_eos_token=True, add_bos_token=False
+        )
+        slow = slow_tokenzier.encode("A sample test", add_special_tokens=True)
+        assert slow == [319, 4559, 1243, 2]
+
+        self.tokenizer.add_eos_token = False
+        self.rust_tokenizer.add_eos_token = False
 
     @slow
     def test_conversion(self):

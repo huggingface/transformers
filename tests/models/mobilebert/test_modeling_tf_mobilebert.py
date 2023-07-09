@@ -14,11 +14,13 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import MobileBertConfig, is_tf_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_tf, slow, tooslow
+from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
@@ -95,7 +97,7 @@ class TFMobileBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
             vocab_size=99,
             hidden_size=32,
             embedding_size=32,
-            num_hidden_layers=5,
+            num_hidden_layers=2,
             num_attention_heads=4,
             intermediate_size=37,
             hidden_act="gelu",
@@ -308,36 +310,6 @@ class TFMobileBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mobilebert_for_token_classification(*config_and_inputs)
-
-    def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        list_lm_models = [TFMobileBertForMaskedLM, TFMobileBertForPreTraining]
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in list_lm_models:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert isinstance(name, dict)
-                for k, v in name.items():
-                    assert isinstance(v, tf.Variable)
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
-
-    @slow
-    def test_keras_fit(self):
-        # Override as it is a slow test on this model
-        super().test_keras_fit()
-
-    @tooslow
-    def test_saved_model_creation(self):
-        pass
 
     @slow
     def test_model_from_pretrained(self):

@@ -148,10 +148,10 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         with open(lyrics_file, encoding="utf-8") as vocab_handle:
             self.lyrics_encoder = json.load(vocab_handle)
 
-        oov = "[^A-Za-z0-9.,:;!?\-'\"()\[\] \t\n]+"
+        oov = r"[^A-Za-z0-9.,:;!?\-'\"()\[\] \t\n]+"
         # In v2, we had a n_vocab=80 and in v3 we missed + and so n_vocab=79 of characters.
         if len(self.lyrics_encoder) == 79:
-            oov = oov.replace("\-'", "\-+'")
+            oov = oov.replace(r"\-'", r"\-+'")
 
         self.out_of_vocab = regex.compile(oov)
         self.artists_decoder = {v: k for k, v in self.artists_encoder.items()}
@@ -230,7 +230,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 ]  # split is for the full dictionary with combined genres
 
         if self.version[0] == "v2":
-            self.out_of_vocab = regex.compile("[^A-Za-z0-9.,:;!?\-'\"()\[\] \t\n]+")
+            self.out_of_vocab = regex.compile(r"[^A-Za-z0-9.,:;!?\-'\"()\[\] \t\n]+")
             vocab = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:;!?-+'\"()[] \t\n"
             self.vocab = {vocab[index]: index + 1 for index in range(len(vocab))}
             self.vocab["<unk>"] = 0
@@ -239,7 +239,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             self.lyrics_decoder = {v: k for k, v in self.vocab.items()}
             self.lyrics_decoder[0] = ""
         else:
-            self.out_of_vocab = regex.compile("[^A-Za-z0-9.,:;!?\-+'\"()\[\] \t\n]+")
+            self.out_of_vocab = regex.compile(r"[^A-Za-z0-9.,:;!?\-+'\"()\[\] \t\n]+")
 
         lyrics = self._run_strip_accents(lyrics)
         lyrics = lyrics.replace("\\", "\n")

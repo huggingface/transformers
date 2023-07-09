@@ -62,7 +62,7 @@ if is_vision_available():
     import PIL
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import ViTImageProcessor
 
 
 @require_torch
@@ -749,7 +749,7 @@ class ViT2GPT2ModelIntegrationTest(unittest.TestCase):
     def test_inference_coco_en(self):
         loc = "ydshieh/vit-gpt2-coco-en"
 
-        feature_extractor = ViTFeatureExtractor.from_pretrained(loc)
+        image_processor = ViTImageProcessor.from_pretrained(loc)
         tokenizer = AutoTokenizer.from_pretrained(loc)
         model = VisionEncoderDecoderModel.from_pretrained(loc)
         model.to(torch_device)
@@ -757,7 +757,7 @@ class ViT2GPT2ModelIntegrationTest(unittest.TestCase):
 
         # We will verify our results on an image of cute cats
         img = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        pixel_values = feature_extractor(images=img, return_tensors="pt").pixel_values.to(torch_device)
+        pixel_values = image_processor(images=img, return_tensors="pt").pixel_values.to(torch_device)
 
         decoder_input_ids = torch.tensor([[model.config.decoder_start_token_id]]).to(torch_device)
 

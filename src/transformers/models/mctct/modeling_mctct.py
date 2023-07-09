@@ -16,7 +16,6 @@
 
 
 import math
-import random
 from typing import Optional, Tuple, Union
 
 import torch
@@ -150,7 +149,9 @@ class MCTCTEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
         self.register_buffer(
             "token_type_ids",
             torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
@@ -444,7 +445,6 @@ class MCTCTPreTrainedModel(PreTrainedModel):
     config_class = MCTCTConfig
     base_model_prefix = "mctct"
     main_input_name = "input_features"
-    _keys_to_ignore_on_load_missing = ["position_ids"]
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
@@ -610,7 +610,7 @@ class MCTCTEncoder(MCTCTPreTrainedModel):
                 encoder_states = encoder_states + (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
             if not skip_the_layer or deepspeed_zero3_is_enabled:

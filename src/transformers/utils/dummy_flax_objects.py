@@ -135,6 +135,9 @@ class FlaxAlbertPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+FLAX_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = None
+
+
 FLAX_MODEL_FOR_CAUSAL_LM_MAPPING = None
 
 
@@ -1176,6 +1179,13 @@ class FlaxWav2Vec2Model(metaclass=DummyObject):
 
 
 class FlaxWav2Vec2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxWhisperForAudioClassification(metaclass=DummyObject):
     _backends = ["flax"]
 
     def __init__(self, *args, **kwargs):

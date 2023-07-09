@@ -87,59 +87,85 @@ class SpeechT5Processor(ProcessorMixin):
             inputs = None
 
         if audio_target is not None:
-            audio_target_features = self.feature_extractor(
-                audio_target=audio_target, *args, sampling_rate=sampling_rate, **kwargs
-            )
-            if inputs is None:
-                return audio_target_features
-            else:
-                inputs["labels"] = audio_target_features["input_values"]
-                inputs["stop_labels"] = audio_target_features["stop_labels"]
-                decoder_attention_mask = audio_target_features.get("attention_mask")
-                if decoder_attention_mask is not None:
-                    inputs["decoder_attention_mask"] = decoder_attention_mask
+            targets = self.feature_extractor(audio_target=audio_target, *args, sampling_rate=sampling_rate, **kwargs)
+            labels = targets["input_values"]
+        elif text_target is not None:
+            targets = self.tokenizer(text_target, **kwargs)
+            labels = targets["input_ids"]
+        else:
+            targets = None
 
-        if text_target is not None:
-            encodings_target = self.tokenizer(text_target, **kwargs)
-            if inputs is None:
-                return encodings_target
-            else:
-                inputs["labels"] = encodings_target["input_ids"]
-                decoder_attention_mask = encodings_target.get("attention_mask")
-                if decoder_attention_mask is not None:
-                    inputs["decoder_attention_mask"] = decoder_attention_mask
+        if inputs is None:
+            return targets
+
+        if targets is not None:
+            inputs["labels"] = labels
+
+            decoder_attention_mask = targets.get("attention_mask")
+            if decoder_attention_mask is not None:
+                inputs["decoder_attention_mask"] = decoder_attention_mask
 
         return inputs
 
     def pad(self, *args, **kwargs):
         """
-        This method forwards all its arguments to SpeechT5FeatureExtractor's [`~SpeechT5FeatureExtractor.pad`] and
-        returns its output.
+        Collates the audio and text inputs, as well as their targets, into a padded batch.
 
-        You can process your labels by using the argument `text` (either in the same call as your audio inputs, or in a
-        separate call). This forwards its arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.pad`].
+        Audio inputs are padded by SpeechT5FeatureExtractor's [`~SpeechT5FeatureExtractor.pad`]. Text inputs are padded
+        by SpeechT5Tokenizer's [`~SpeechT5Tokenizer.pad`].
+
+        Valid input combinations are:
+
+        - `input_ids` only
+        - `input_values` only
+        - `labels` only, either log-mel spectrograms or text tokens
+        - `input_ids` and log-mel spectrogram `labels`
+        - `input_values` and text `labels`
 
         Please refer to the docstring of the above two methods for more information.
         """
-        input_features = kwargs.pop("input_features", None)
+        input_values = kwargs.pop("input_values", None)
+        input_ids = kwargs.pop("input_ids", None)
         labels = kwargs.pop("labels", None)
 
-        if len(args) > 0:
-            input_features = args[0]
-            args = args[1:]
+        if input_values is not None and input_ids is not None:
+            raise ValueError("Cannot process both `input_values` and `input_ids` inputs.")
+        if input_values is None and input_ids is None and labels is None:
+            raise ValueError(
+                "You need to specify either an `input_values`, `input_ids`, or `labels` input to be padded."
+            )
 
-        if input_features is not None:
-            input_features = self.feature_extractor.pad(input_features, *args, **kwargs)
-        if labels is not None:
-            labels = self.tokenizer.pad(labels, **kwargs)
-
-        if labels is None:
-            return input_features
-        elif input_features is None:
-            return labels
+        if input_values is not None:
+            inputs = self.feature_extractor.pad(input_values, *args, **kwargs)
+        elif input_ids is not None:
+            inputs = self.tokenizer.pad(input_ids, **kwargs)
         else:
-            input_features["labels"] = labels["input_ids"]
-            return input_features
+            inputs = None
+
+        if labels is not None:
+            if "input_ids" in labels or (isinstance(labels, list) and "input_ids" in labels[0]):
+                targets = self.tokenizer.pad(labels, **kwargs)
+                labels = targets["input_ids"]
+            else:
+                feature_size_hack = self.feature_extractor.feature_size
+                self.feature_extractor.feature_size = self.feature_extractor.num_mel_bins
+                targets = self.feature_extractor.pad(labels, *args, **kwargs)
+                self.feature_extractor.feature_size = feature_size_hack
+                labels = targets["input_values"]
+        else:
+            targets = None
+
+        if inputs is None:
+            return targets
+
+        if targets is not None:
+            inputs["labels"] = labels
+
+            decoder_attention_mask = targets.get("attention_mask")
+            if decoder_attention_mask is not None:
+                inputs["decoder_attention_mask"] = decoder_attention_mask
+
+        return inputs
 
     def batch_decode(self, *args, **kwargs):
         """

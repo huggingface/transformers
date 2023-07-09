@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Pix2Struct modeling file"""
 
-import copy
 import math
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -211,7 +210,7 @@ class Pix2StructVisionAttention(nn.Module):
                 attention_mask = torch.ones((batch_size, seq_length), device=scores.device, dtype=scores.dtype)
 
             if attention_mask.dim() == 2:
-                position_bias = position_bias + attention_mask[:, None, :, None].to(position_bias.device)
+                position_bias = position_bias + attention_mask[:, None, None, :].to(position_bias.device)
             else:
                 # (batch_size, n_heads, seq_length, key_length)
                 position_bias = position_bias + attention_mask.to(position_bias.device)
@@ -480,10 +479,11 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
 
-        assert decoder_start_token_id is not None, (
-            "self.model.config.decoder_start_token_id has to be defined. In Pix2Struct it is usually set to the pad_token_id."
-            " See Pix2Struct docs for more information"
-        )
+        if decoder_start_token_id is None:
+            raise ValueError(
+                "self.model.config.decoder_start_token_id has to be defined. In Pix2Struct it is usually set to the pad_token_id."
+                "See Pix2Struct docs for more information."
+            )
 
         # shift inputs to the right
         if is_torch_fx_proxy(input_ids):
@@ -495,7 +495,8 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
             shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
             shifted_input_ids[..., 0] = decoder_start_token_id
 
-        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+        if pad_token_id is None:
+            raise ValueError("self.model.config.pad_token_id has to be defined.")
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
@@ -1316,6 +1317,7 @@ PIX2STRUCT_INPUTS_DOCSTRING = r"""
 class Pix2StructTextModel(Pix2StructPreTrainedModel):
     config_class = Pix2StructTextConfig
     _no_split_modules = ["Pix2StructTextBlock"]
+    _tied_weights_keys = ["lm_head.weight"]
     supports_gradient_checkpointing = True
 
     def _set_gradient_checkpointing(self, module, value=False):
@@ -1357,8 +1359,14 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
                     layer_past_state.index_select(0, beam_idx.to(layer_past_state.device)),
                 )
 
-            assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
-            assert len(reordered_layer_past_states) == len(layer_past_states)
+            if reordered_layer_past_states[0].shape != layer_past_states[0].shape:
+                raise ValueError(
+                    f"reordered_layer_past_states[0] shape {reordered_layer_past_states[0].shape} and layer_past_states[0] shape {layer_past_states[0].shape} mismatched"
+                )
+            if len(reordered_layer_past_states) != len(layer_past_states):
+                raise ValueError(
+                    f"length of reordered_layer_past_states {len(reordered_layer_past_states)} and length of layer_past_states {len(layer_past_states)} mismatched"
+                )
 
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
         return reordered_decoder_past
@@ -1553,10 +1561,11 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = nn.CrossEntropyLoss(ignore_index=-100, reduction="mean", label_smoothing=0.1)
-            masked_labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(logits.device)
+            loss_fct = nn.CrossEntropyLoss(ignore_index=-100, reduction="mean")
 
-            loss = loss_fct(logits.contiguous().view(-1, logits.size(-1)), masked_labels.contiguous().view(-1))
+            loss = loss_fct(logits.contiguous().view(-1, logits.size(-1)), labels.contiguous().view(-1))
 
         if not return_dict:
             return tuple(
@@ -1580,25 +1589,6 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
             cross_attentions=all_cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
-        input_shape = input_ids.shape
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
-        # cut decoder_input_ids if past_key_values is used
-        if past_key_values is not None:
-            input_ids = input_ids[:, -1:]
-
-        return {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "encoder_hidden_states": model_kwargs.get("encoder_hidden_states", None),
-            "encoder_attention_mask": model_kwargs.get("encoder_attention_mask", None),
-            "is_decoder": True,
-        }
-
 
 @add_start_docstrings(
     "A conditional generation model with a language modeling head. Can be used for sequence generation tasks.",
@@ -1607,24 +1597,13 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
     config_class = Pix2StructConfig
     main_input_name = "flattened_patches"
-
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.embed_tokens.weight",
-        r"decoder.embed_tokens.weight",
-    ]
-    _keys_to_ignore_on_load_unexpected = [
-        r"decoder.layer.0.layer.1.EncDecAttention.relative_attention_bias.weight",
-    ]
+    _tied_weights_keys = ["decoder.lm_head.weight"]
 
     def __init__(self, config: Pix2StructConfig):
         super().__init__(config)
-        encoder_config = copy.deepcopy(config.vision_config)
-        self.encoder = Pix2StructVisionModel(encoder_config)
 
-        decoder_config = copy.deepcopy(config.text_config)
-        self.decoder_start_token_id = decoder_config.pad_token_id
-        self.decoder_eos_token_ids = decoder_config.eos_token_id
-        self.decoder = Pix2StructTextModel(decoder_config)
+        self.encoder = Pix2StructVisionModel(config.vision_config)
+        self.decoder = Pix2StructTextModel(config.text_config)
 
         self.is_vqa = config.is_vqa
 
@@ -1682,6 +1661,8 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
 
         Example:
 
+        Inference:
+
         ```python
         >>> from PIL import Image
         >>> import requests
@@ -1690,15 +1671,49 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("google/pix2struct-textcaps-base")
         >>> model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base")
 
-        >>> labels = "A stop sign is on the street corner."
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(images=image, text=labels, return_tensors="pt", add_special_tokens=True)
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> # autoregressive generation
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=50)
+        >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        >>> print(generated_text)
+        A stop sign is on a street corner.
+
+        >>> # conditional generation
+        >>> text = "A picture of"
+        >>> inputs = processor(text=text, images=image, return_tensors="pt", add_special_tokens=False)
+
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=50)
+        >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        >>> print(generated_text)
+        A picture of a stop sign with a red stop sign
+        ```
+
+        Training:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
+
+        >>> processor = AutoProcessor.from_pretrained("google/pix2struct-base")
+        >>> model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-base")
+
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "A stop sign is on the street corner."
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> labels = processor(text=text, return_tensors="pt").input_ids
 
         >>> # forward pass
-        >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.loss
+        >>> outputs = model(**inputs, labels=labels)
+        >>> loss = outputs.loss
+        >>> print(f"{loss.item():.5f}")
+        5.94282
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.text_config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1712,6 +1727,12 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+            )
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
         hidden_states = encoder_outputs[0]
@@ -1759,84 +1780,36 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
-    @torch.no_grad()
-    def generate(
+    def prepare_inputs_for_generation(
         self,
-        flattened_patches: torch.FloatTensor,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
+        input_ids,
+        flattened_patches: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        **generate_kwargs,
+        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        past_key_values=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        use_cache=None,
+        encoder_outputs=None,
+        **kwargs,
     ):
-        r"""
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
-
-        >>> processor = AutoProcessor.from_pretrained("google/pix2struct-textcaps-base")
-        >>> model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base")
-
-        >>> conditional_text = "A stop sign"
-        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, text=conditional_text, return_tensors="pt", add_special_tokens=True)
-
-        >>> # forward pass
-        >>> outputs = model.generate(**inputs)
-        >>> print(processor.batch_decode(outputs, skip_special_tokens=True))
-        ['A stop sign the street with a sign that says yes']
-        ```"""
-        batch_size, _, _ = flattened_patches.shape
-
-        vision_outputs = self.encoder(flattened_patches=flattened_patches, attention_mask=attention_mask)
-
-        image_embeds = vision_outputs[0]
-
-        if isinstance(decoder_input_ids, torch.Tensor):
-            # check if the first element of `input_ids` is equal to `decoder_input_ids`:
-            if (decoder_input_ids[:, 0] != self.decoder_start_token_id).all().item():
-                # add `decoder_input_ids` as first token to `input_ids`
-                decoder_input_ids = torch.cat(
-                    [
-                        torch.ones((decoder_input_ids.shape[0], 1), dtype=torch.long, device=decoder_input_ids.device)
-                        * self.decoder_start_token_id,
-                        decoder_input_ids,
-                    ],
-                    dim=-1,
-                )
-
-                if decoder_attention_mask is not None:
-                    decoder_attention_mask = torch.cat(
-                        [
-                            torch.ones(
-                                (decoder_attention_mask.shape[0], 1),
-                                dtype=torch.long,
-                                device=decoder_attention_mask.device,
-                            ),
-                            decoder_attention_mask,
-                        ],
-                        dim=-1,
-                    )
-        elif decoder_input_ids is None:
-            decoder_input_ids = (
-                torch.LongTensor([[self.decoder_start_token_id]]).repeat(batch_size, 1).to(image_embeds.device)
-            )
-
         if decoder_attention_mask is None:
-            decoder_attention_mask = torch.ones_like(decoder_input_ids).to(image_embeds.device)
+            decoder_attention_mask = torch.ones_like(input_ids).to(input_ids.device)
 
-        outputs = self.decoder.generate(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
-            encoder_hidden_states=image_embeds,
-            encoder_attention_mask=attention_mask,
-            **generate_kwargs,
-        )
+        # cut decoder_input_ids if past is used
+        if past_key_values is not None:
+            input_ids = input_ids[:, -1:]
 
-        return outputs
+        return {
+            "flattened_patches": flattened_patches,
+            "decoder_input_ids": input_ids,
+            "past_key_values": past_key_values,
+            "encoder_outputs": encoder_outputs,
+            "attention_mask": attention_mask,
+            "decoder_attention_mask": decoder_attention_mask,
+            "head_mask": head_mask,
+            "decoder_head_mask": decoder_head_mask,
+            "cross_attn_head_mask": cross_attn_head_mask,
+            "use_cache": use_cache,
+        }
