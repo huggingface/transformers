@@ -219,7 +219,7 @@ class VivitImageProcessor(BaseImageProcessor):
         """
         image = image.astype(np.float32)
         if offset:
-            image = image - 127.5
+            image = image - (scale / 2)
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
     def normalize(
