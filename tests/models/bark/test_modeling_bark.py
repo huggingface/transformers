@@ -328,6 +328,7 @@ class BarkCoarseModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+
 class BarkFineModelTester:
     def __init__(
         self,
@@ -377,7 +378,6 @@ class BarkFineModelTester:
         self.config_class = config_class
         self.model_class = model_class
 
-    
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length, self.n_codes_total], self.vocab_size)
 
@@ -484,8 +484,12 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     test_model_parallel = False
     # no model_parallel for now
 
+    test_resize_embeddings = True
+
     def setUp(self):
-        self.model_tester = BarkSemanticModelTester(self, config_class=BarkSemanticConfig, model_class=BarkSemanticModel)
+        self.model_tester = BarkSemanticModelTester(
+            self, config_class=BarkSemanticConfig, model_class=BarkSemanticModel
+        )
         self.config_tester = ConfigTester(self, config_class=BarkSemanticConfig, n_embd=37)
 
     def test_config(self):
@@ -540,7 +544,7 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     # Same tester as BarkSemanticModelTest, except for model_class and config_class
     all_model_classes = (BarkCoarseModel,) if is_torch_available() else ()
     all_generative_model_classes = (BarkCoarseModel,) if is_torch_available() else ()
-    
+
     is_encoder_decoder = False
     fx_compatible = False
     test_missing_keys = False
@@ -548,10 +552,12 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     test_model_parallel = False
     # no model_parallel for now
 
+    test_resize_embeddings = True
+
     def setUp(self):
         self.model_tester = BarkCoarseModelTester(self, config_class=BarkCoarseConfig, model_class=BarkCoarseModel)
         self.config_tester = ConfigTester(self, config_class=BarkCoarseConfig, n_embd=37)
-        
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -612,6 +618,8 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
 
     # torchscript disabled for now because forward with an int
     test_torchscript = False
+
+    test_resize_embeddings = True
 
     def setUp(self):
         self.model_tester = BarkFineModelTester(self, config_class=BarkFineConfig, model_class=BarkFineModel)
