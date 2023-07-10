@@ -100,9 +100,37 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def test_special_tokens_initialization_with_non_empty_additional_special_tokens(self):
         pass
 
+    def test_normalization(self):
+        tokenizer = self.get_tokenizer()
+
+        sequences = ["VITS; is a model for t-t-s!"]
+        normalized_sequences = ["vits is a model for t-t-s"]
+        unnormalized_sequences = [
+            "<unk><unk><unk><unk><unk> is a model for t-t-s<unk>"
+        ]  # can't handle upper-case or certain punctuations
+
+        encoded_normalized_ids = tokenizer(sequences, normalize=True)
+        encoded_unnormalized_ids = tokenizer(sequences, normalize=False)
+
+        decoded_normalized_sequences = [
+            tokenizer.decode(seq, skip_special_tokens=False) for seq in encoded_normalized_ids["input_ids"]
+        ]
+        decoded_unnormalized_sequences = [
+            tokenizer.decode(seq, skip_special_tokens=False) for seq in encoded_unnormalized_ids["input_ids"]
+        ]
+
+        self.assertEqual(decoded_normalized_sequences, normalized_sequences)
+        self.assertEqual(decoded_unnormalized_sequences, unnormalized_sequences)
+
     @slow
     def test_tokenizer_integration(self):
         sequences = [
+            "BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly "
+            "conditioning on both left and right context in all layers.",
+            "The quick brown fox! Jumps over the lazy dog...",
+        ]
+
+        normalized_sequences = [
             "bert is designed to pre-train deep bidirectional representations from unlabeled text by jointly "
             "conditioning on both left and right context in all layers",
             "the quick brown fox jumps over the lazy dog",
@@ -121,9 +149,21 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         }
         # fmt: on
 
-        self.tokenizer_integration_test_util(
-            expected_encoding=expected_encoding,
-            model_name="Matthijs/mms-tts-eng",
-            revision="55f109774a823f29e38e9d9fa555c1e914323c17",
-            sequences=sequences,
-        )
+        tokenizer_classes = [self.tokenizer_class]
+        if self.test_rust_tokenizer:
+            tokenizer_classes.append(self.rust_tokenizer_class)
+
+        for tokenizer_class in tokenizer_classes:
+            tokenizer = tokenizer_class.from_pretrained(
+                "Matthijs/mms-tts-eng",
+                revision="55f109774a823f29e38e9d9fa555c1e914323c17",  # to pin the tokenizer version
+            )
+
+            encoding = tokenizer(sequences, padding=True, normalize=True)
+            decoded_sequences = [tokenizer.decode(seq, skip_special_tokens=True) for seq in encoding["input_ids"]]
+
+            encoding_data = encoding.data
+            self.assertDictEqual(encoding_data, expected_encoding)
+
+            for expected, decoded in zip(normalized_sequences, decoded_sequences):
+                self.assertEqual(expected, decoded)

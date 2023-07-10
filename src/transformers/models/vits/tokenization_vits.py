@@ -18,7 +18,7 @@
 import json
 import os
 import re
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import is_phonemizer_available, logging
@@ -110,22 +110,38 @@ class VitsTokenizer(PreTrainedTokenizer):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         return vocab
 
-    def _tokenize(self, text: str) -> List[str]:
-        """Tokenize a string."""
-        text = self._preprocess_char(text.lower())
+    def _preprocess_char(self, text):
+        """Special treatment of characters in certain languages"""
+        if self.language == "ron":
+            text = text.replace("ț", "ţ")
+        return text
+
+    def prepare_for_tokenization(
+        self, text: str, is_split_into_words: bool = False, normalize: bool = True, **kwargs
+    ) -> Tuple[str, Dict[str, Any]]:
+        filtered_text = self._preprocess_char(text.lower() if normalize else text)
 
         if self.phonemize:
             if not is_phonemizer_available():
                 raise ImportError("Please install the `phonemizer` Python package to use this tokenizer.")
 
             filtered_text = phonemizer.phonemize(
-                text, language="en-us", backend="espeak", strip=True, preserve_punctuation=True, with_stress=True
+                filtered_text,
+                language="en-us",
+                backend="espeak",
+                strip=True,
+                preserve_punctuation=True,
+                with_stress=True,
             )
             filtered_text = re.sub(r"\s+", " ", filtered_text)
-        else:
-            filtered_text = "".join(list(filter(lambda char: char in self.encoder, text))).strip()
+        elif normalize:
+            filtered_text = "".join(list(filter(lambda char: char in self.encoder, filtered_text))).strip()
 
-        tokens = list(filtered_text)
+        return filtered_text, kwargs
+
+    def _tokenize(self, text: str) -> List[str]:
+        """Tokenize a string by inserting the `<pad>` token at the boundary between adjacent characters."""
+        tokens = list(text)
 
         if self.add_blank:
             interspersed = [self._convert_id_to_token(0)] * (len(tokens) * 2 + 1)
@@ -133,12 +149,6 @@ class VitsTokenizer(PreTrainedTokenizer):
             tokens = interspersed
 
         return tokens
-
-    def _preprocess_char(self, text):
-        """Special treatement of characters in certain languages"""
-        if self.language == "ron":
-            text = text.replace("ț", "ţ")
-        return text
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         if self.add_blank and len(tokens) > 1:
@@ -153,7 +163,7 @@ class VitsTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Union[Tuple[str], None]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
