@@ -698,6 +698,7 @@ class BarkSemanticModel(BarkCausalModel):
         input_ids: torch.Tensor,
         semantic_generation_config: BarkSemanticGenerationConfig = None,
         history_prompt: Optional[Dict[str, torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> torch.LongTensor:
         if semantic_generation_config is None:
@@ -709,9 +710,9 @@ class BarkSemanticModel(BarkCausalModel):
 
         input_ids = input_ids + semantic_generation_config.text_encoding_offset
 
-        if kwargs.get("attention_mask", None) is not None:
+        if attention_mask is not None:
             input_ids.masked_fill_(
-                (1 - kwargs.pop("attention_mask")).bool(), semantic_generation_config.text_pad_token
+                (1 - attention_mask).bool(), semantic_generation_config.text_pad_token
             )
 
         if history_prompt is not None:
