@@ -452,8 +452,11 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         # The big models are way too big for the CI, so we use tiny random models that resemble their
         # architectures but with much smaller and fewer layers
         with torch.no_grad():
-            torch_device = "cpu"
-            for repo in ["Rocketknight1/falcon-rw-1b", "Rocketknight1/tiny-random-falcon-7b"]:
+            for repo in [
+                "Rocketknight1/falcon-rw-1b",
+                "Rocketknight1/tiny-random-falcon-7b",
+                "Rocketknight1/tiny-random-falcon-40b",
+            ]:
                 tokenizer = AutoTokenizer.from_pretrained(repo)
                 model = FalconForCausalLM.from_pretrained(repo)
                 model.eval()
