@@ -220,11 +220,11 @@ class VitsModelIntegrationTests(unittest.TestCase):
 
         set_seed(555)  # make deterministic
 
-        input_text = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
+        input_text = "Mister quilter is the apostle of the middle classes and we are glad to welcome his gospel!"
         input_ids = tokenizer(text=input_text, return_tensors="pt").input_ids.to(torch_device)
 
         outputs = model(input_ids)
-        self.assertEqual(outputs.audio.shape, (1, 87040))
+        self.assertEqual(outputs.waveform.shape, (1, 87040))
 
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
@@ -236,4 +236,4 @@ class VitsModelIntegrationTests(unittest.TestCase):
             ]
         )
         # fmt: on
-        self.assertTrue(torch.allclose(outputs.audio[0, 10000:10030].cpu(), EXPECTED_LOGITS, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.waveform[0, 10000:10030].cpu(), EXPECTED_LOGITS, atol=1e-4))
