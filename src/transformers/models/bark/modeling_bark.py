@@ -343,11 +343,11 @@ class BarkBlock(nn.Module):
             # if causal, uses handmade LayerNorm, so that the layerNorm bias is optional
             # this handmade layerNorm is used to stick with Bark choice of leaving optional bias in
             # AutoRegressive models (corresponding to the "Text" and the "Coarse" modules)
-            self.ln_1 = BarkLayerNorm(config.hidden_size, bias=config.bias)
-            self.ln_2 = BarkLayerNorm(config.hidden_size, bias=config.bias)
+            self.layernorm_1 = BarkLayerNorm(config.hidden_size, bias=config.bias)
+            self.layernorm_2 = BarkLayerNorm(config.hidden_size, bias=config.bias)
         else:
-            self.ln_1 = nn.LayerNorm(config.hidden_size)
-            self.ln_2 = nn.LayerNorm(config.hidden_size)
+            self.layernorm_1 = nn.LayerNorm(config.hidden_size)
+            self.layernorm_2 = nn.LayerNorm(config.hidden_size)
 
         self.attn = BarkSelfAttention(config, is_causal=is_causal)
 
@@ -362,7 +362,7 @@ class BarkBlock(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
-        intermediary_hidden_states = self.ln_1(hidden_states)
+        intermediary_hidden_states = self.layernorm_1(hidden_states)
 
         attn_outputs = self.attn(
             intermediary_hidden_states,
@@ -377,7 +377,9 @@ class BarkBlock(nn.Module):
         outputs = attn_outputs[1:]
 
         intermediary_hidden_states = hidden_states + attn_output
-        intermediary_hidden_states = intermediary_hidden_states + self.mlp(self.ln_2(intermediary_hidden_states))
+        intermediary_hidden_states = intermediary_hidden_states + self.mlp(
+            self.layernorm_2(intermediary_hidden_states)
+        )
 
         if use_cache:
             outputs = (intermediary_hidden_states,) + outputs
@@ -433,14 +435,14 @@ class BarkCausalModel(BarkPreTrainedModel):
         self.config = config
 
         # initialize as an autoregressive GPT-like model
-        self.wte = nn.Embedding(config.input_vocab_size, config.hidden_size)
-        self.wpe = nn.Embedding(config.block_size, config.hidden_size)
+        self.input_embeds_layer = nn.Embedding(config.input_vocab_size, config.hidden_size)
+        self.position_embeds_layer = nn.Embedding(config.block_size, config.hidden_size)
 
         self.drop = nn.Dropout(config.dropout)
 
         self.layers = nn.ModuleList([BarkBlock(config, is_causal=True) for _ in range(config.num_layers)])
 
-        self.ln_f = BarkLayerNorm(config.hidden_size, bias=config.bias)
+        self.layernorm_final = BarkLayerNorm(config.hidden_size, bias=config.bias)
 
         self.lm_head = nn.Linear(config.hidden_size, config.output_vocab_size, bias=False)
         self.gradient_checkpointing = False
@@ -449,10 +451,10 @@ class BarkCausalModel(BarkPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.wte
+        return self.input_embeds_layer
 
     def set_input_embeddings(self, new_embeddings):
-        self.wte = new_embeddings
+        self.input_embeds_layer = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
         input_embeds = kwargs.get("input_embeds", None)
@@ -537,7 +539,7 @@ class BarkCausalModel(BarkPreTrainedModel):
             # of Bark which concatenate two bits of the input_embeds on the first forward pass of the semantic model
             pass
         elif input_ids is not None:
-            input_embeds = self.wte(input_ids)  # token embeddings of shape (b, t, n_embd)
+            input_embeds = self.input_embeds_layer(input_ids)  # token embeddings of shape (b, t, n_embd)
         elif input_embeds is not None:
             pass
         else:
@@ -559,7 +561,7 @@ class BarkCausalModel(BarkPreTrainedModel):
             position_ids = torch.arange(past_length, seq_length + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)  # shape (1, seq_length)
 
-        position_embeds = self.wpe(position_ids)  # position embeddings of shape (1, t, n_embd)
+        position_embeds = self.position_embeds_layer(position_ids)  # position embeddings of shape (1, t, n_embd)
 
         # Attention mask.
         if attention_mask is not None:
@@ -639,7 +641,7 @@ class BarkCausalModel(BarkPreTrainedModel):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
 
-        hidden_states = self.ln_f(hidden_states)
+        hidden_states = self.layernorm_final(hidden_states)
 
         hidden_states = hidden_states.view(output_shape)
 
@@ -758,9 +760,9 @@ class BarkSemanticModel(BarkCausalModel):
 
         input_embeds = torch.cat(
             [
-                self.wte(input_ids[:, :max_input_semantic_length])
-                + self.wte(semantic_history[:, : max_input_semantic_length + 1]),
-                self.wte(infer_array),
+                self.input_embeds_layer(input_ids[:, :max_input_semantic_length])
+                + self.input_embeds_layer(semantic_history[:, : max_input_semantic_length + 1]),
+                self.input_embeds_layer(infer_array),
             ],
             dim=1,
         )
@@ -1018,16 +1020,16 @@ class BarkFineModel(BarkPreTrainedModel):
 
         # initialize a modified non causal GPT-like model
         # note that for there is one embedding layer and one lm_head for each codebook of Encodec
-        self.wtes = nn.ModuleList(
+        self.input_embeds_layers = nn.ModuleList(
             [nn.Embedding(config.input_vocab_size, config.hidden_size) for _ in range(config.n_codes_total)]
         )
-        self.wpe = nn.Embedding(config.block_size, config.hidden_size)
+        self.position_embeds_layer = nn.Embedding(config.block_size, config.hidden_size)
 
         self.drop = nn.Dropout(config.dropout)
 
         self.layers = nn.ModuleList([BarkBlock(config, is_causal=False) for _ in range(config.num_layers)])
 
-        self.ln_f = nn.LayerNorm(config.hidden_size)
+        self.layernorm_final = nn.LayerNorm(config.hidden_size)
 
         self.lm_heads = nn.ModuleList(
             [
@@ -1043,11 +1045,11 @@ class BarkFineModel(BarkPreTrainedModel):
 
     def get_input_embeddings(self):
         # one embedding layers for each codebook
-        return self.wtes
+        return self.input_embeds_layers
 
     def set_input_embeddings(self, new_embeddings):
         # one embedding layers for each codebook
-        self.wtes = new_embeddings
+        self.input_embeds_layers = new_embeddings
 
     def get_output_embeddings(self):
         # one lm_head for each codebook
@@ -1087,7 +1089,7 @@ class BarkFineModel(BarkPreTrainedModel):
             input_embeddings = self.get_input_embeddings()
 
             for i in range(self.config.n_codes_total - self.config.n_codes_given):
-                # self.wtes[i + 1].weight = self.lm_heads[i].weight
+                # self.input_embeds_layers[i + 1].weight = self.lm_heads[i].weight
                 self._tie_or_clone_weights(output_embeddings[i], input_embeddings[i + 1])
                 self._tied_weights_keys.append(f"lm_heads.{i}.weight")
 
@@ -1130,7 +1132,8 @@ class BarkFineModel(BarkPreTrainedModel):
 
             # forward the GPT model itself
             input_embeds = [
-                wte(input_ids[:, :, i]).unsqueeze(-1) for i, wte in enumerate(self.wtes)
+                input_embeds_layer(input_ids[:, :, i]).unsqueeze(-1)
+                for i, input_embeds_layer in enumerate(self.input_embeds_layers)
             ]  # token embeddings of shape (b, t, n_embd)
             input_embeds = torch.cat(input_embeds, dim=-1)
             input_embeds = input_embeds[:, :, :, : codebook_idx + 1].sum(dim=-1)
@@ -1145,7 +1148,7 @@ class BarkFineModel(BarkPreTrainedModel):
             position_ids = torch.arange(0, seq_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)  # shape (1, seq_length)
 
-        position_embeds = self.wpe(position_ids)  # position embeddings of shape (1, t, n_embd)
+        position_embeds = self.position_embeds_layer(position_ids)  # position embeddings of shape (1, t, n_embd)
 
         # Attention mask.
         if attention_mask is not None:
@@ -1180,7 +1183,7 @@ class BarkFineModel(BarkPreTrainedModel):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[1],)
 
-        hidden_states = self.ln_f(hidden_states)
+        hidden_states = self.layernorm_final(hidden_states)
         hidden_states = hidden_states.view(output_shape)
 
         # Add last hidden state

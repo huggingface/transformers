@@ -7,21 +7,24 @@ import torch
 from bark.generation import _load_model as _bark_load_model
 from huggingface_hub import hf_hub_download
 
-from transformers import set_seed
+from transformers import set_seed, EncodecModel, EncodecConfig
 from transformers.models.bark.configuration_bark import (
     BarkCoarseConfig,
     BarkFineConfig,
     BarkSemanticConfig,
+    BarkConfig,
 )
 from transformers.models.bark.generation_configuration_bark import (
     BarkCoarseGenerationConfig,
     BarkFineGenerationConfig,
     BarkSemanticGenerationConfig,
+    BarkGenerationConfig,
 )
 from transformers.models.bark.modeling_bark import (
     BarkCoarseModel,
     BarkFineModel,
     BarkSemanticModel,
+    BarkModel
 )
 from transformers.utils import logging
 
@@ -38,6 +41,11 @@ new_layer_name_dict = {
     "c_fc": "in_proj",
     "transformer.": "",
     "h.": "layers.",
+    "ln_1": "layernorm_1",
+    "ln_2": "layernorm_2",
+    "ln_f": "layernorm_final",
+    "wpe": "position_embeds_layer",
+    "wte": "input_embeds_layer",
 }
 
 
@@ -198,7 +206,7 @@ def load_model(pytorch_dump_folder_path, use_small=False, model_type="text"):
     # output difference should come from the difference of self-attention implementation design
     if output_new_model.shape != output_old_model.shape:
         raise ValueError("initial and new outputs don't have the same shape")
-    if ((output_new_model - output_old_model).abs() < 1e-4).all().item():
+    if (output_new_model - output_old_model).abs().max().item() > 1e-3:
         raise ValueError("initial and new outputs are not equal")
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
