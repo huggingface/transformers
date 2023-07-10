@@ -123,6 +123,7 @@ class FalconModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             pad_token_id=1,
+            new_decoder_architecture=True,
         )
 
     def create_and_check_model(
@@ -397,7 +398,9 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
             batch_size, seq_length = inputs["input_ids"].shape
             for i in range(num_hidden_layers):
-                if config.multi_query:
+                if config.new_decoder_architecture:
+                    num_attention_heads = config.num_attention_heads
+                elif config.multi_query:
                     num_attention_heads = 1
                 self.assertEqual(len(past_kv[0]), 2)  # K V for the decoder = 2
                 self.assertEqual(

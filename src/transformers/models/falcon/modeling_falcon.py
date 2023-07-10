@@ -112,18 +112,19 @@ def _make_causal_mask(
     input_ids_shape: torch.Size, device: torch.device, past_key_values_length: int
 ) -> torch.BoolTensor:
     """
-    Make causal mask used for self-attention.
+    Make causal mask used for self-attention. This mask does not take the existing attention mask into account - it
+    just blocks tokens from attending forwards in the sequence. The output shape will be `[batch_size, 1,
+    target_length, target_length+past_key_values_length]`.
     """
     batch_size, target_length = input_ids_shape
-    mask = torch.empty((target_length, target_length + past_key_values_length), dtype=torch.bool, device=device)
-    # ONNX doesn't support `torch.Tensor.triu` properly, thus we use this workaround
-    seq_ids = torch.arange(target_length, device=device)
-    mask[:, past_key_values_length:] = seq_ids[:, None] < seq_ids[None, :]
 
-    if past_key_values_length > 0:
-        mask[:, :past_key_values_length] = False
-
-    expanded_mask = mask[None, None, :, :].expand(batch_size, 1, target_length, target_length)
+    mask = torch.triu(torch.ones((target_length, target_length), dtype=torch.bool, device=device), diagonal=1)
+    # If past_key_values_length is 0 this is an empty tensor and the concatenation is a no-op.
+    # This code style is an unfortunate consequence of getting your TF engineer to port models; doing it this
+    # way avoids a data-dependent conditional, which will help me when I have to port this to XLA later.
+    past_mask = torch.zeros((target_length, past_key_values_length), dtype=torch.bool, device=device)
+    mask = torch.cat([past_mask, mask], dim=-1)
+    expanded_mask = mask[None, None, :, :].expand(batch_size, 1, target_length, target_length + past_key_values_length)
     return expanded_mask
 
 
@@ -233,7 +234,7 @@ class FalconAttention(nn.Module):
         """
         if self.new_decoder_architecture:
             batch, seq_len, _ = fused_qkv.shape
-            qkv = fused_qkv.view(batch, seq_len, -1, self.num_heads // self.num_kv_heads + 2, 64)
+            qkv = fused_qkv.view(batch, seq_len, -1, self.num_heads // self.num_kv_heads + 2, self.head_dim)
             query = qkv[:, :, :, :-2]
             key = qkv[:, :, :, [-2]]
             value = qkv[:, :, :, [-1]]
@@ -306,8 +307,6 @@ class FalconAttention(nn.Module):
         query_layer, key_layer = self.maybe_rotary(query_layer, key_layer, past_kv_length)
 
         if layer_past is not None:
-            # TODO Matt: The new_decoder_architecture broadcasts the keys and values up - let's make sure
-            #            we're only caching the un-broadcasted version to avoid wasting space.
             past_key, past_value = layer_past
             # concatenate along seq_length dimension:
             #  - key: [batch_size * self.num_heads, kv_length, head_dim]
@@ -663,8 +662,16 @@ class FalconModel(FalconPreTrainedModel):
     def _prepare_attn_mask(
         attention_mask: torch.Tensor, input_shape: Tuple[int, int], past_key_values_length: int
     ) -> torch.BoolTensor:
-        # create causal mask
-        # [batch_size, seq_length] -> [batch_size, 1, seq_length - past_key_values_length, seq_length]
+        # Create a causal mask
+        # The attention mask we receive as input should cover the whole extended sequence, including any past
+        # cache, so its shape should be [batch_size, seq_length + past_key_values_length]
+        # The output shape will be [batch_size, 1, seq_length, seq_length + past_key_values_length]
+        if input_shape[1] + past_key_values_length != attention_mask.shape[1]:
+            raise ValueError(
+                "Attention mask shape should be (batch_size, seq_length + past_key_values_length)"
+                f" but is {attention_mask.shape} with input_ids shape {input_shape} and past length"
+                f" {past_key_values_length}."
+            )
         combined_attention_mask = None
         device = attention_mask.device
         _, seq_length = input_shape
