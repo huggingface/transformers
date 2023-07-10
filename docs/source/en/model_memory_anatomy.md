@@ -268,5 +268,5 @@ and writes once, gradInput).
 
 As you can see, there are potentially a few places where we could save GPU memory or speed up operations. 
 Now that you understand what affects GPU utilization and computation speed, refer to 
-the [Methods and tools for efficient training on a single GPU](perf_train_gpu_one.mdx) documentation page to learn about 
+the [Methods and tools for efficient training on a single GPU](perf_train_gpu_one) documentation page to learn about 
 performance optimization techniques. 
