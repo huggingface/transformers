@@ -568,8 +568,8 @@ class VitsDilatedDepthSeparableConv(nn.Module):
     def __init__(self, config: VitsConfig, dropout_rate=0.0):
         super().__init__()
         kernel_size = config.duration_predictor_kernel_size
-        channels = config.depth_separable_channels
-        self.num_layers = config.depth_separable_num_convs
+        channels = config.hidden_size
+        self.num_layers = config.depth_separable_num_layers
 
         self.dropout = nn.Dropout(dropout_rate)
         self.convs_dilated = nn.ModuleList()
@@ -613,14 +613,14 @@ class VitsDilatedDepthSeparableConv(nn.Module):
 class VitsConvFlow(nn.Module):
     def __init__(self, config: VitsConfig):
         super().__init__()
-        filter_channels = config.hidden_size
+        self.filter_channels = config.hidden_size
         self.half_channels = config.depth_separable_channels // 2
         self.num_bins = config.duration_predictor_flow_bins
         self.tail_bound = config.duration_predictor_tail_bound
 
-        self.conv_pre = nn.Conv1d(self.half_channels, filter_channels, 1)
+        self.conv_pre = nn.Conv1d(self.half_channels, self.filter_channels, 1)
         self.conv_dds = VitsDilatedDepthSeparableConv(config)
-        self.conv_proj = nn.Conv1d(filter_channels, self.half_channels * (self.num_bins * 3 - 1), 1)
+        self.conv_proj = nn.Conv1d(self.filter_channels, self.half_channels * (self.num_bins * 3 - 1), 1)
 
     def forward(self, inputs, padding_mask, global_conditioning=None, reverse=False):
         first_half, second_half = torch.split(inputs, [self.half_channels] * 2, dim=1)
@@ -660,7 +660,7 @@ class VitsElementwiseAffine(nn.Module):
         self.translate = nn.Parameter(torch.zeros(self.channels, 1))
         self.log_scale = nn.Parameter(torch.zeros(self.channels, 1))
 
-    def forward(self, inputs, padding_mask, reverse=False):
+    def forward(self, inputs, padding_mask, global_conditioning=None, reverse=False):
         if not reverse:
             outputs = self.translate + torch.exp(self.log_scale) * inputs
             outputs = outputs * padding_mask
@@ -974,8 +974,8 @@ class VitsAttention(nn.Module):
 class VitsFeedForward(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.conv_1 = nn.Conv1d(config.hidden_size, config.encoder_ffn_dim, config.ffn_kernel_size)
-        self.conv_2 = nn.Conv1d(config.encoder_ffn_dim, config.hidden_size, config.ffn_kernel_size)
+        self.conv_1 = nn.Conv1d(config.hidden_size, config.ffn_dim, config.ffn_kernel_size)
+        self.conv_2 = nn.Conv1d(config.ffn_dim, config.hidden_size, config.ffn_kernel_size)
         self.dropout = nn.Dropout(config.activation_dropout)
 
         if isinstance(config.hidden_act, str):
@@ -1056,9 +1056,9 @@ class VitsEncoder(nn.Module):
     def __init__(self, config: VitsConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([VitsEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([VitsEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
-        self.layerdrop = config.encoder_layerdrop
+        self.layerdrop = config.layerdrop
 
     def forward(
         self,
@@ -1161,7 +1161,7 @@ class VitsTextEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
-    ) -> tuple[Any, ...] | VitsTextEncoderOutput:
+    ) -> Union[Tuple[torch.Tensor], VitsTextEncoderOutput]:
         hidden_states = self.embed_tokens(input_ids) * math.sqrt(self.config.hidden_size)
 
         encoder_outputs = self.encoder(
