@@ -1255,7 +1255,7 @@ class BarkFineModel(BarkPreTrainedModel):
                 input_buffer[:, rel_start_fill_idx:, n_inner] = codebook_preds
                 del logits, codebook_preds
 
-            # transfer over info into model_in and convert to numpy
+            # transfer into fine_input
             for n_inner in range(n_coarse, fine_generation_config.n_fine_codebooks):
                 fine_input[
                     :, start_fill_idx : start_fill_idx + (max_fine_input_length - rel_start_fill_idx), n_inner
