@@ -1441,6 +1441,7 @@ class VitsModel(VitsPreTrainedModel):
                 for v in [
                     waveform,
                     sequence_lengths,
+                    spectrogram,
                     text_encoder_output.hidden_states,
                     text_encoder_output.attentions,
                 ]
