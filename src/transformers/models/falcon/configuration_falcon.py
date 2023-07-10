@@ -40,11 +40,11 @@ class FalconConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 65024):
             Vocabulary size of the Falcon model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`FalconModel`]
-        hidden_size (`int`, *optional*, defaults to 64):
+        hidden_size (`int`, *optional*, defaults to 4544):
             Dimension of the hidden representations.
-        num_hidden_layers (`int`, *optional*, defaults to 2):
+        num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
+        num_attention_heads (`int`, *optional*, defaults to 71):
             Number of attention heads for each attention layer in the Transformer encoder.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -57,11 +57,25 @@ class FalconConfig(PretrainedConfig):
             The dropout probability for MLP layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for attention layers.
-        n_head_kv (`int`, *optional*):
+        num_kv_heads (`int`, *optional*):
             Number of key-value heads to use per attention layer. If unset, defaults to the same value as
             `num_attention_heads`.
         alibi (`bool`, *optional*, defaults to `False`):
             Whether to use ALiBi positional biases during self-attention.
+        new_decoder_architecture (`bool`, *optional*, defaults to `False`):
+            Whether to use the new (Falcon-40B) decoder architecture. If `True`, the `multi_query` and `parallel_attn`
+            arguments are ignored, as the new decoder always uses parallel attention.
+        multi_query (`bool`, *optional*, defaults to `True`):
+            Whether to use multi-query attention in the decoder. Ignored when `new_decoder_architecture` is `True`.
+        parallel_attn (`bool`, *optional*, defaults to `True`):
+            Whether to compute attention in parallel with the feedforward layer. If False, they are consecutive
+            instead, as in the original Transformer architecture. Ignored when `new_decoder_architecture` is `True`.
+        bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias on Linear layers.
+        bos_token_id (`int`, *optional*, defaults to 11):
+            The id of the "beginning-of-sequence" token.
+        eos_token_id (`int`, *optional*, defaults to 11):
+            The id of the "end-of-sequence" token.
 
     Example:
 
