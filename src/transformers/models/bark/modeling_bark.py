@@ -810,7 +810,7 @@ class BarkCoarseModel(BarkCausalModel):
 
             max_semantic_history = int(np.floor(max_coarse_history / semantic_to_coarse_ratio))
             # trim histories correctly
-            n_semantic_hist_provided = np.min(
+            n_semantic_hist_provided = min(
                 [
                     max_semantic_history,
                     x_semantic_history.shape[1] - x_semantic_history.shape[1] % 2,
@@ -1231,9 +1231,9 @@ class BarkFineModel(BarkPreTrainedModel):
         n_loops = max(0, n_loops) + 1
 
         for n_outer in range(n_loops):
-            start_idx = np.min([n_outer * max_fine_history_length, fine_input.shape[1] - max_fine_input_length])
+            start_idx = min([n_outer * max_fine_history_length, fine_input.shape[1] - max_fine_input_length])
 
-            start_fill_idx = np.min(
+            start_fill_idx = min(
                 [n_history + n_outer * max_fine_history_length, fine_input.shape[1] - max_fine_history_length]
             )
             rel_start_fill_idx = start_fill_idx - start_idx
