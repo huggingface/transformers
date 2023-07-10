@@ -76,7 +76,7 @@ class LogitsProcessorList(list):
             scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
                 Prediction scores of a language modeling head. These can be logits for each vocabulary when not using
                 beam search or log softmax for each vocabulary token when using beam search
-            kwargs (`Dict[str, Any]`):
+            kwargs (`Dict[str, Any]`, *optional*):
                 Additional kwargs that are specific to a logits processor.
 
         Return:
