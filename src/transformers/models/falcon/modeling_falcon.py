@@ -422,7 +422,9 @@ class FalconDecoderLayer(nn.Module):
         self.config = config
 
         if config.new_decoder_architecture:
+            # The layer norm before self-attention
             self.ln_attn = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+            # The layer norm before the MLP
             self.ln_mlp = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         else:
             self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
@@ -442,14 +444,14 @@ class FalconDecoderLayer(nn.Module):
         residual = hidden_states
 
         if self.config.new_decoder_architecture:
-            ln_attn = self.ln_attn(hidden_states)
-            ln_mlp = self.ln_mlp(hidden_states)
+            attention_layernorm_out = self.ln_attn(hidden_states)
+            mlp_layernorm_out = self.ln_mlp(hidden_states)
         else:
-            ln_attn = self.input_layernorm(hidden_states)
+            attention_layernorm_out = self.input_layernorm(hidden_states)
 
         # Self attention.
         attn_outputs = self.self_attention(
-            ln_attn,
+            attention_layernorm_out,
             layer_past=layer_past,
             attention_mask=attention_mask,
             alibi=alibi,
@@ -462,17 +464,17 @@ class FalconDecoderLayer(nn.Module):
 
         if not self.config.new_decoder_architecture:
             if self.config.parallel_attn:
-                ln_mlp = ln_attn
+                mlp_layernorm_out = attention_layernorm_out
             else:
                 residual = dropout_add(
                     attention_output, residual, self.config.attention_dropout, training=self.training
                 )
-                ln_mlp = self.post_attention_layernorm(residual)
+                mlp_layernorm_out = self.post_attention_layernorm(residual)
 
         outputs = attn_outputs[1:]
 
         # MLP.
-        mlp_output = self.mlp(ln_mlp)
+        mlp_output = self.mlp(mlp_layernorm_out)
 
         if self.config.new_decoder_architecture or self.config.parallel_attn:
             mlp_output += attention_output
