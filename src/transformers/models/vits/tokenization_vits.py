@@ -89,14 +89,6 @@ class VitsTokenizer(PreTrainedTokenizer):
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
 
-        # The original model pads with token_id 0, but that doesn't work here
-        # as token_id 0 is an actual character. So we add a fake padding token
-        # and then filter that out in the model.
-        if pad_token not in self.encoder:
-            self.encoder[pad_token] = len(self.encoder)
-        if unk_token not in self.encoder:
-            self.encoder[unk_token] = len(self.encoder)
-
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.language = language
         self.add_blank = add_blank

@@ -1364,9 +1364,6 @@ class VitsModel(VitsPreTrainedModel):
         else:
             input_padding_mask = torch.ones_like(input_ids).unsqueeze(-1).float()
 
-        # Workaround for tokenizer: filter out padding tokens.
-        input_ids[input_ids >= self.config.vocab_size] = 0
-
         text_encoder_output = self.text_encoder(
             input_ids=input_ids,
             padding_mask=input_padding_mask,
