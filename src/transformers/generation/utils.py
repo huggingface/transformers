@@ -2345,6 +2345,15 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
 
         this_peer_finished = False  # used by synced_gpus only
+
+        # Setup knockout_neurons matrix
+        if model_kwargs['knockout_neurons']:
+            knockout_neurons_matrix = torch.ones(self.config.num_hidden_layers, self.config.hidden_size, device=input_ids.device)
+            for layer_id, emb_id in model_kwargs['knockout_neurons']:
+                knockout_neurons_matrix[layer_id, emb_id] = 0.0
+        else:
+            knockout_neurons_matrix = None
+
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -2365,7 +2374,7 @@ class GenerationMixin:
                 return_dict=True,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                knockout_neurons=model_kwargs['knockout_neurons'],
+                knockout_neurons=knockout_neurons_matrix, # need to have same arg as in model_kwargs
             )
 
             if synced_gpus and this_peer_finished:
@@ -2935,8 +2944,7 @@ class GenerationMixin:
                 **model_inputs,
                 return_dict=True,
                 output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                knockout_neurons=model_kwargs['knockout_neurons']
+                output_hidden_states=output_hidden_states
             )
 
             if synced_gpus and this_peer_finished:

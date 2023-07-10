@@ -587,14 +587,15 @@ class LlamaModel(LlamaPreTrainedModel):
                     use_cache=use_cache,
                 )
 
-
             hidden_states = layer_outputs[0]
 
-            # TODO: Knockout neurons
-            if knockout_neurons:
-                for layer_id, emb_id in knockout_neurons:
-                    if layer_id-1 == idx and idx != 0:
-                        hidden_states[0][0][emb_id] = 0.0
+            # if knockout_neurons:
+            #     for layer_id, emb_id in knockout_neurons:
+            #         if layer_id-1 == idx and idx != 0:
+            #             hidden_states[0][0][emb_id] = 0.0
+
+            if knockout_neurons is not None:
+                hidden_states *= knockout_neurons[idx]
 
             if use_cache:
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
