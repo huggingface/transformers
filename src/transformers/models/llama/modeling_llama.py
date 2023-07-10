@@ -493,6 +493,7 @@ class LlamaModel(LlamaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        last_hidden_state: Optional[torch.FloatTensor] = None,  # NOTE: これが入力された場合は、入力の初めに結合する。
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -540,6 +541,10 @@ class LlamaModel(LlamaPreTrainedModel):
         )
 
         hidden_states = inputs_embeds
+
+        # NOTE: ここで、last_hidden_state が入力された場合は、入力の初めに結合する。
+        if last_hidden_state is not None:
+            hidden_states = torch.cat([last_hidden_state, hidden_states], dim=1)
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
