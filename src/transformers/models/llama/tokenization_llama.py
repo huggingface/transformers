@@ -134,13 +134,13 @@ class LlamaTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
     def _tokenize(self, text):
         """
-        Returns a tokenized string. 
-        
-        Since the sentencepiece internal model always adds a SPIECE_UNDERLINE, at the
-        beginning of the provided text, we need to remove it by hand when the current text is a subsequence. This
-        happens whenever the `self.tokenize` function is called with specials tokens: the input is split on the special
-        tokens, and each subsequence is passed to `_tokenize`. Thus if a subsequence did not start with a `" "` or
-        SPIECE_UNDERLINE, we have to remove the extra `SPIECE_UNDERLINE` prepended.
+        Returns a tokenized string.
+
+        Since the sentencepiece internal model always adds a SPIECE_UNDERLINE, at the beginning of the provided text,
+        we need to remove it by hand when the current text is a subsequence. This happens whenever the `self.tokenize`
+        function is called with specials tokens: the input is split on the special tokens, and each subsequence is
+        passed to `_tokenize`. Thus if a subsequence did not start with a `" "` or SPIECE_UNDERLINE, we have to remove
+        the extra `SPIECE_UNDERLINE` prepended.
         """
         if not self.legacy:
             is_first = text.startswith(SPIECE_UNDERLINE)
@@ -150,7 +150,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         tokens = self.sp_model.encode(text, out_type=str)
 
         if not self.legacy and not is_first and not text.startswith(" ") and tokens[0].startswith(SPIECE_UNDERLINE):
-            tokens = tokens[0][1:] + tokens[1:]
+            tokens = ([tokens[0][1:]] if len(tokens[0]) > 1 else []) + tokens[1:]
         return tokens
 
     def _convert_token_to_id(self, token):

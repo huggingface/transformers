@@ -313,13 +313,13 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text, **kwargs):
         """
-        Returns a tokenized string. 
-        
-        Since the sentencepiece internal model always adds a SPIECE_UNDERLINE, at the
-        beginning of the provided text, we need to remove it by hand when the current text is a subsequence. This
-        happens whenever the `self.tokenize` function is called with specials tokens: the input is split on the special
-        tokens, and each subsequence is passed to `_tokenize`. Thus if a subsequence did not start with a `" "` or
-        SPIECE_UNDERLINE, we have to remove the extra `SPIECE_UNDERLINE` prepended.
+        Returns a tokenized string.
+
+        Since the sentencepiece internal model always adds a SPIECE_UNDERLINE, at the beginning of the provided text,
+        we need to remove it by hand when the current text is a subsequence. This happens whenever the `self.tokenize`
+        function is called with specials tokens: the input is split on the special tokens, and each subsequence is
+        passed to `_tokenize`. Thus if a subsequence did not start with a `" "` or SPIECE_UNDERLINE, we have to remove
+        the extra `SPIECE_UNDERLINE` prepended.
         """
         if not self.legacy:
             is_first = text.startswith(SPIECE_UNDERLINE)
