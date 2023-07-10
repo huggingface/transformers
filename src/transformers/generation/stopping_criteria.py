@@ -6,7 +6,10 @@ from typing import Optional
 
 import torch
 
-from ..utils import add_start_docstrings
+from ..utils import add_start_docstrings, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
@@ -46,14 +49,25 @@ class MaxLengthCriteria(StoppingCriteria):
     Args:
         max_length (`int`):
             The maximum length that the output sequence can have in number of tokens.
+        max_position_embeddings (`int`, `optional`):
+            The maximum model length, as defined by the model's `config.max_position_embeddings` attribute.
     """
 
-    def __init__(self, max_length: int):
+    def __init__(self, max_length: int, max_position_embeddings: Optional[int] = None):
         self.max_length = max_length
+        self.max_position_embeddings = max_position_embeddings
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
-        return input_ids.shape[-1] >= self.max_length
+        cur_len = input_ids.shape[-1]
+        is_done = cur_len >= self.max_length
+        if self.max_position_embeddings is not None and not is_done and cur_len >= self.max_position_embeddings:
+            logger.warning_once(
+                "This is a friendly reminder - the current text generation call will exceed the model's predefined "
+                f"maximum length ({self.max_position_embeddings}). Depending on the model, you may observe "
+                "exceptions, performance degradation, or nothing at all."
+            )
+        return is_done
 
 
 class MaxNewTokensCriteria(StoppingCriteria):

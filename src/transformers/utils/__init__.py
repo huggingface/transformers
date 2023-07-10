@@ -161,6 +161,7 @@ from .import_utils import (
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
+    is_torch_mps_available,
     is_torch_neuroncore_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
@@ -183,9 +184,6 @@ if is_protobuf_available():
         from . import sentencepiece_model_pb2
     else:
         from . import sentencepiece_model_pb2_new as sentencepiece_model_pb2
-else:
-    # just to get the expected `No module named 'google.protobuf'` error
-    from . import sentencepiece_model_pb2
 
 
 WEIGHTS_NAME = "pytorch_model.bin"

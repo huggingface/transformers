@@ -459,6 +459,8 @@ class TrainingSummary:
         metadata = {}
         metadata = _insert_values_as_list(metadata, "language", self.language)
         metadata = _insert_value(metadata, "license", self.license)
+        if self.finetuned_from is not None:
+            metadata = _insert_value(metadata, "base_model", self.finetuned_from)
         metadata = _insert_values_as_list(metadata, "tags", self.tags)
         metadata = _insert_values_as_list(metadata, "datasets", self.dataset_tags)
         metadata = _insert_values_as_list(metadata, "metrics", list(metric_mapping.keys()))
