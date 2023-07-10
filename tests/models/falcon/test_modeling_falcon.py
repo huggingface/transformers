@@ -331,6 +331,24 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
+    def test_cache_conversions(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = input_dict["input_ids"]
+        model = FalconForCausalLM(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, use_cache=True)
+        batch_size = input_ids.shape[0]
+        rw_cache = model._convert_to_rw_cache(result.past_key_values)
+        standard_cache = model._convert_cache_to_standard_format(rw_cache, batch_size)
+        for layer in range(len(rw_cache)):
+            for tensor_idx in range(2):
+                self.assertTrue(rw_cache[layer][tensor_idx].ndim == 3)
+                self.assertTrue(result.past_key_values[layer][tensor_idx].ndim == 4)
+                self.assertTrue(
+                    torch.all(result.past_key_values[layer][tensor_idx] == standard_cache[layer][tensor_idx])
+                )
+
     def test_falcon_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -396,3 +414,21 @@ class FalconLanguageGenerationTest(unittest.TestCase):
             model.generate(**inputs, do_sample=False, max_new_tokens=4)
             model.generate(**inputs, do_sample=True, max_new_tokens=4)
             model.generate(**inputs, num_beams=2, max_new_tokens=4)
+
+    @slow
+    def test_lm_generation_use_cache(self):
+        # The big models are way too big for the CI, so we use tiny random models that resemble their
+        # architectures but with much smaller and fewer layers
+        with torch.no_grad():
+            torch_device = "cpu"
+            for repo in ["Rocketknight1/falcon-rw-1b", "Rocketknight1/tiny-random-falcon-7b"]:
+                tokenizer = AutoTokenizer.from_pretrained(repo)
+                model = FalconForCausalLM.from_pretrained(repo)
+                model.eval()
+                model.to(device=torch_device)
+                inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
+
+                # Test results are the same with and without cache
+                outputs_no_cache = model.generate(**inputs, do_sample=False, max_new_tokens=20, use_cache=False)
+                outputs_cache = model.generate(**inputs, do_sample=False, max_new_tokens=20, use_cache=True)
+                self.assertTrue((outputs_cache - outputs_no_cache).sum().item() == 0)

@@ -99,9 +99,10 @@ class FalconRotaryEmbedding(nn.Module):
 
         return self.cos_cached.to(device), self.sin_cached.to(device)
 
-    def forward(self, query, key):
+    def forward(self, query, key, past_key_values_length=0):
         batch, seq_len, head_dim = query.shape
-        cos, sin = self.cos_sin(seq_len, query.device, query.dtype)
+        cos, sin = self.cos_sin(seq_len + past_key_values_length, query.device, query.dtype)
+        cos, sin = cos[:, past_key_values_length:], sin[:, past_key_values_length:]
         return (query * cos) + (rotate_half(query) * sin), (key * cos) + (rotate_half(key) * sin)
 
 
@@ -199,7 +200,7 @@ class FalconAttention(nn.Module):
                 f" {self.num_heads})."
             )
 
-        self.maybe_rotary = FalconRotaryEmbedding(config.head_dim) if config.rotary else lambda q, k: (q, k)
+        self.maybe_rotary = FalconRotaryEmbedding(config.head_dim) if config.rotary else lambda q, k, t: (q, k)
 
         # Layer-wise attention scaling
         self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
@@ -299,12 +300,15 @@ class FalconAttention(nn.Module):
         )
         value_layer = value_layer.transpose(1, 2).reshape(batch_size * num_kv_heads, query_length, self.head_dim)
 
-        query_layer, key_layer = self.maybe_rotary(query_layer, key_layer)
+        past_kv_length = 0 if layer_past is None else layer_past[0].shape[1]
+        query_layer, key_layer = self.maybe_rotary(query_layer, key_layer, past_kv_length)
 
         if layer_past is not None:
+            # TODO Matt: The new_decoder_architecture broadcasts the keys and values up - let's make sure
+            #            we're only caching the un-broadcasted version to avoid wasting space.
             past_key, past_value = layer_past
             # concatenate along seq_length dimension:
-            #  - key: [batch_size * self.num_heads, head_dim, kv_length]
+            #  - key: [batch_size * self.num_heads, kv_length, head_dim]
             #  - value: [batch_size * self.num_heads, kv_length, head_dim]
             key_layer = torch.cat((past_key, key_layer), dim=1)
             value_layer = torch.cat((past_value, value_layer), dim=1)
@@ -315,7 +319,7 @@ class FalconAttention(nn.Module):
         else:
             present = None
 
-        attention_mask_float = (attention_mask * 1.0).masked_fill(attention_mask, -1e9).to(query_layer.dtype)
+        attention_mask_float = (attention_mask * 1.0).masked_fill(attention_mask, float("-inf")).to(query_layer.dtype)
 
         query_layer_ = query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim)
         key_layer_ = key_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim)
@@ -385,7 +389,7 @@ class FalconAttention(nn.Module):
             output_tensor = self.dense(context_layer)
 
             if output_attentions:
-                return output_tensor, present, attention_scores
+                return output_tensor, present, attention_probs
             else:
                 return output_tensor, present
 
@@ -595,16 +599,15 @@ class FalconPreTrainedModel(PreTrainedModel):
         Standardizes the format of the cache so as to match most implementations, i.e. to tuple(tuple([batch_size,
         num_heads, ...]))
         """
-        batch_size_times_num_heads, head_dim, seq_length = past_key_value[0][0].shape
-        # key: [batch_size * num_heads, head_dim, seq_length] -> [batch_size, num_heads, head_dim, seq_length]
-        # value: [batch_size * num_heads, seq_length, head_dim] -> [batch_size, num_heads, seq_length, head_dim]
+        batch_size_times_num_heads, kv_length, head_dim = past_key_value[0][0].shape
+        # [batch_size * self.num_heads, kv_length, head_dim] -> [batch_size, num_heads, kv_length, head_dim]
         # Note that don't want to use self.num_attention_heads because the number of heads may vary depending
         # on whether we use multi_query attention.
         num_heads = batch_size_times_num_heads // batch_size
         return tuple(
             (
-                layer_past[0].reshape(batch_size, num_heads, seq_length, head_dim),
-                layer_past[1].reshape(batch_size, num_heads, seq_length, head_dim),
+                layer_past[0].view(batch_size, num_heads, kv_length, head_dim),
+                layer_past[1].view(batch_size, num_heads, kv_length, head_dim),
             )
             for layer_past in past_key_value
         )
@@ -613,14 +616,13 @@ class FalconPreTrainedModel(PreTrainedModel):
     def _convert_to_rw_cache(
         past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]]
     ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
-        batch_size, num_heads, head_dim, seq_length = past_key_value[0][0].shape
+        batch_size, num_heads, kv_length, head_dim = past_key_value[0][0].shape
         batch_size_times_num_heads = batch_size * num_heads
-        # key:  [batch_size, num_heads, head_dim, seq_length] -> [batch_size * num_heads, head_dim, seq_length]
-        # value: [batch_size, num_heads, seq_length, head_dim] -> [batch_size * num_heads, seq_length, head_dim]
+        # [batch_size, num_heads, kv_length, head_dim] -> [batch_size * num_heads, kv_length, head_dim]
         return tuple(
             (
-                layer_past[0].view(batch_size_times_num_heads, seq_length, head_dim),
-                layer_past[1].view(batch_size_times_num_heads, seq_length, head_dim),
+                layer_past[0].view(batch_size_times_num_heads, kv_length, head_dim),
+                layer_past[1].view(batch_size_times_num_heads, kv_length, head_dim),
             )
             for layer_past in past_key_value
         )
@@ -740,7 +742,7 @@ class FalconModel(FalconPreTrainedModel):
         if past_key_values[0] is not None:
             past_key_values_length = past_key_values[0][0].shape[1]  # 1 because RW-cache, not standard format
         if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_length), device=hidden_states.device)
+            attention_mask = torch.ones((batch_size, seq_length + past_key_values_length), device=hidden_states.device)
         else:
             attention_mask = attention_mask.to(hidden_states.device)
 
