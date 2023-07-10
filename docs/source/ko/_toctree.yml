@@ -133,8 +133,8 @@
       title: (번역중) Instantiating a big model
     - local: in_translation
       title: (번역중) Debugging
-    - local: in_translation
-      title: (번역중) Hyperparameter Search using Trainer API
+    - local: hpo_train
+      title: Trainer API를 사용한 하이퍼파라미터 탐색
     - local: in_translation
       title: (번역중) XLA Integration for TensorFlow Models
   title: (번역중) 성능 및 확장성
