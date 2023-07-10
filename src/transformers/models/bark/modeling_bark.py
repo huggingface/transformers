@@ -54,7 +54,7 @@ BARK_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-BARK_MODEL_START_DOCSTRING = r"""
+BARK_MODEL_START_DOCSTRING = """
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -64,7 +64,7 @@ BARK_MODEL_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`BarkSubModelConfig`]):
+        config ([`{config}`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -687,7 +687,7 @@ class BarkCausalModel(BarkPreTrainedModel):
 @add_start_docstrings(
     """Bark semantic (or text) model. It shares the same architecture as the coarse model.
     It is a GPT-2 like autoregressive model with a language modeling head on top.""",
-    BARK_MODEL_START_DOCSTRING,
+    BARK_MODEL_START_DOCSTRING.format(config="BarkSemanticConfig"),
 )
 class BarkSemanticModel(BarkCausalModel):
     base_model_prefix = "semantic"
@@ -711,9 +711,7 @@ class BarkSemanticModel(BarkCausalModel):
         input_ids = input_ids + semantic_generation_config.text_encoding_offset
 
         if attention_mask is not None:
-            input_ids.masked_fill_(
-                (1 - attention_mask).bool(), semantic_generation_config.text_pad_token
-            )
+            input_ids.masked_fill_((1 - attention_mask).bool(), semantic_generation_config.text_pad_token)
 
         if history_prompt is not None:
             semantic_history = history_prompt["semantic_prompt"][
@@ -774,7 +772,7 @@ class BarkSemanticModel(BarkCausalModel):
     """Bark coarse acoustics model.
     It shares the same architecture as the semantic (or text) model. It is a GPT-2 like autoregressive model with a
     language modeling head on top.""",
-    BARK_MODEL_START_DOCSTRING,
+    BARK_MODEL_START_DOCSTRING.format(config="BarkCoarseConfig"),
 )
 class BarkCoarseModel(BarkCausalModel):
     base_model_prefix = "coarse_acoustics"
@@ -792,7 +790,7 @@ class BarkCoarseModel(BarkCausalModel):
         if history_prompt is not None:
             x_semantic_history = torch.repeat_interleave(history_prompt["semantic_prompt"][None], batch_size, dim=0)
             # clone to avoid modifying history_prompt.coarse_prompt
-            x_coarse_history = history_prompt["coarse_prompt"].clone()  
+            x_coarse_history = history_prompt["coarse_prompt"].clone()
 
             # offset x_coarse_history
             if codebook_size is not None:
@@ -944,7 +942,7 @@ class BarkCoarseModel(BarkCausalModel):
 @add_start_docstrings(
     """Bark fine acoustics model. It is a non-causal GPT-like model with `config.n_codes_total` embedding layers and
     language modeling heads, one for each codebook.""",
-    BARK_MODEL_START_DOCSTRING,
+    BARK_MODEL_START_DOCSTRING.format(config="BarkFineConfig"),
 )
 class BarkFineModel(BarkPreTrainedModel):
     base_model_prefix = "fine_acoustics"
@@ -1060,20 +1058,20 @@ class BarkFineModel(BarkPreTrainedModel):
 
         if input_ids is not None and input_embeds is not None:
             raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
-            
+
         if input_ids is None and input_embeds is None:
-           raise ValueError("You have to specify either input_ids or input_embeds")
-            
+            raise ValueError("You have to specify either input_ids or input_embeds")
+
         if input_ids is not None:
             # the input_embeddings are the sum of the j previous codebooks embeddings before
             # the current codebook_idx codebook
-            
+
             # forward the GPT model itself
             input_embeds = [
                 wte(input_ids[:, :, i]).unsqueeze(-1) for i, wte in enumerate(self.wtes)
             ]  # token embeddings of shape (b, t, n_embd)
             input_embeds = torch.cat(input_embeds, dim=-1)
-            input_embeds = input_embeds[:, :, :, : codebook_idx + 1].sum(dim=-1)            
+            input_embeds = input_embeds[:, :, :, : codebook_idx + 1].sum(dim=-1)
 
         input_shape = input_embeds.size()[:-1]
         batch_size = input_embeds.shape[0]
@@ -1331,8 +1329,7 @@ class BarkModel(BarkPreTrainedModel):
                 Input ids. Will be truncated up to 256 tokens. Note that the output audios will be as long as the
                 longest generation among the batch.
             history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
-                Optional `Bark` speaker prompt. Note that for now, this model takes only one speaker
-                prompt per batch.
+                Optional `Bark` speaker prompt. Note that for now, this model takes only one speaker prompt per batch.
         Returns:
             torch.LongTensor: Output generated audio.
 
