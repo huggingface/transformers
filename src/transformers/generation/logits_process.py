@@ -32,7 +32,7 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -43,7 +43,8 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
             Additional logits processor specific kwargs.
 
     Return:
-        `torch.FloatTensor` of shape `(batch_size, config.vocab_size)`: The processed prediction scores.
+        `torch.FloatTensor` of shape `(batch_size, config.vocab_size)`:
+            The processed prediction scores.
 
 """
 
@@ -53,7 +54,6 @@ class LogitsProcessor:
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        """Torch method for processing logits."""
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
         )
@@ -64,7 +64,6 @@ class LogitsWarper:
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        """Torch method for warping logits."""
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
         )
