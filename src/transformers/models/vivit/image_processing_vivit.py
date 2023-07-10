@@ -91,7 +91,7 @@ class VivitImageProcessor(BaseImageProcessor):
         offset (`bool`, *optional*, defaults to `True`):
             Whether to scale the image in both negative and positive directions. Can be overriden by the `offset` in
             the `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `False`):
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
@@ -114,7 +114,7 @@ class VivitImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         offset: bool = True,
-        do_normalize: bool = False,
+        do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         **kwargs,
@@ -255,7 +255,7 @@ class VivitImageProcessor(BaseImageProcessor):
         crop_size: Dict[str, int] = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
-        offset: bool = True,
+        offset: bool = None,
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
