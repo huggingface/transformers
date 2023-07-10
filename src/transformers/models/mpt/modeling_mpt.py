@@ -251,168 +251,97 @@ class MptGelu(nn.Module):
             return mpt_gelu_forward(x)
 
 
-# Copied from transformers.models.bloom.modeling_bloom.BloomAttention with Bloom->Mpt
+def scaled_multihead_dot_product_attention(query, key, value, n_heads, past_key_value=None, softmax_scale=None, attn_bias=None, key_padding_mask=None, is_causal=False, dropout_p=0.0, training=False, needs_weights=False, multiquery=False):
+    from einops import rearrange
+
+    q = rearrange(query, 'b s (h d) -> b h s d', h=n_heads)
+    kv_n_heads = 1 if multiquery else n_heads
+    k = rearrange(key, 'b s (h d) -> b h d s', h=kv_n_heads)
+    v = rearrange(value, 'b s (h d) -> b h s d', h=kv_n_heads)
+    if past_key_value is not None:
+        if len(past_key_value) != 0:
+            k = torch.cat([past_key_value[0], k], dim=3)
+            v = torch.cat([past_key_value[1], v], dim=2)
+        past_key_value = (k, v)
+    (b, _, s_q, d) = q.shape
+    s_k = k.size(-1)
+    if softmax_scale is None:
+        softmax_scale = 1 / math.sqrt(d)
+    attn_weight = q.matmul(k) * softmax_scale
+    if attn_bias is not None:
+        _s_q = max(0, attn_bias.size(2) - s_q)
+        _s_k = max(0, attn_bias.size(3) - s_k)
+        attn_bias = attn_bias[:, :, _s_q:, _s_k:]
+        if attn_bias.size(-1) != 1 and attn_bias.size(-1) != s_k or (attn_bias.size(-2) != 1 and attn_bias.size(-2) != s_q):
+            raise RuntimeError(f'attn_bias (shape: {attn_bias.shape}) is expected to broadcast to shape: {attn_weight.shape}.')
+        attn_weight = attn_weight + attn_bias
+    min_val = torch.finfo(q.dtype).min
+    if key_padding_mask is not None:
+        if attn_bias is not None:
+            warnings.warn('Propogating key_padding_mask to the attention module ' + 'and applying it within the attention module can cause ' + 'unneccessary computation/memory usage. Consider integrating ' + 'into attn_bias once and passing that to each attention ' + 'module instead.')
+        attn_weight = attn_weight.masked_fill(~key_padding_mask.view((b, 1, 1, s_k)), min_val)
+    if is_causal and (not q.size(2) == 1):
+        s = max(s_q, s_k)
+        causal_mask = attn_weight.new_ones(s, s, dtype=torch.float16)
+        causal_mask = causal_mask.tril()
+        causal_mask = causal_mask.to(torch.bool)
+        causal_mask = ~causal_mask
+        causal_mask = causal_mask[-s_q:, -s_k:]
+        attn_weight = attn_weight.masked_fill(causal_mask.view(1, 1, s_q, s_k), min_val)
+    attn_weight = torch.softmax(attn_weight, dim=-1)
+    if dropout_p:
+        attn_weight = torch.nn.functional.dropout(attn_weight, p=dropout_p, training=training, inplace=True)
+    out = attn_weight.to(v.dtype).matmul(v)
+    out = rearrange(out, 'b h s d -> b s (h d)')
+    if needs_weights:
+        return (out, attn_weight, past_key_value)
+    return (out, None, past_key_value)
+
+
 class MptAttention(nn.Module):
+    """Multi-head self attention.
+    Using torch or triton attention implemetation enables user to also use
+    additive bias.
+    """
+
     def __init__(self, config: MptConfig):
         super().__init__()
-        self.hidden_size = config.d_model
-        self.num_heads = config.n_heads
-        self.head_dim = self.hidden_size // self.num_heads
-        self.split_size = self.hidden_size
-        self.hidden_dropout = config.attn_config["attn_pdrop"]
 
-        if self.head_dim * self.num_heads != self.hidden_size:
-            raise ValueError(
-                f"`hidden_size` must be divisible by num_heads (got `hidden_size`: {self.hidden_size} and `num_heads`:"
-                f" {self.num_heads})."
-            )
+        self.hidden_size = config.hidden_size
+        self.n_heads = config.n_heads
+        self.softmax_scale = config.attn_config["softmax_scale"]
 
-        # Layer-wise attention scaling
-        self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
-        self.beta = 1.0
+        if self.softmax_scale is None:
+            self.softmax_scale = 1 / math.sqrt(self.hidden_size / self.n_heads)
 
+        self.attn_dropout_p = config.attn_config["attn_pdrop"]
         self.Wqkv = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=False)
+
+        self.attn_fn = scaled_multihead_dot_product_attention
+
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
-        self.attention_dropout = nn.Dropout(config.attn_config["attn_pdrop"])
-
-    def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Split the last dimension into (num_heads, head_dim) without making any copies, results share same memory
-        storage as `fused_qkv`
-
-        Args:
-            fused_qkv (`torch.tensor`, *required*): [batch_size, seq_length, num_heads * 3 * head_dim]
-
-        Returns:
-            query: [batch_size, seq_length, num_heads, head_dim] key: [batch_size, seq_length, num_heads, head_dim]
-            value: [batch_size, seq_length, num_heads, head_dim]
-        """
-        batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
-        fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads, 3, self.head_dim)
-        return fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :]
-
-    def _merge_heads(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Merge heads together over the last dimenstion
-
-        Args:
-            x (`torch.tensor`, *required*): [batch_size * num_heads, seq_length, head_dim]
-
-        Returns:
-            torch.tensor: [batch_size, seq_length, num_heads * head_dim]
-        """
-        # What we want to achieve is:
-        # batch_size * num_heads, seq_length, head_dim -> batch_size, seq_length, num_heads * head_dim
-        batch_size_and_num_heads, seq_length, _ = x.shape
-        batch_size = batch_size_and_num_heads // self.num_heads
-
-        # First view to decompose the batch size
-        # batch_size * num_heads, seq_length, head_dim -> batch_size, num_heads, seq_length, head_dim
-        x = x.view(batch_size, self.num_heads, seq_length, self.head_dim)
-
-        # batch_size, num_heads, seq_length, head_dim -> batch_size, seq_length, num_heads, head_dim
-        x = x.permute(0, 2, 1, 3)
-
-        # batch_size, seq_length, num_heads, head_dim -> batch_size, seq_length, num_heads * head_dim
-        return x.reshape(batch_size, seq_length, self.num_heads * self.head_dim)
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        residual: torch.Tensor,
-        alibi: torch.Tensor,
-        attention_mask: torch.Tensor,
-        layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        use_cache: bool = False,
-        output_attentions: bool = False,
+        self, 
+        x, 
+        past_key_value=None, 
+        attn_bias=None, 
+        attention_mask=None, 
+        is_causal=True, 
+        needs_weights=False
     ):
-        fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
-
-        # 3 x [batch_size, seq_length, num_heads, head_dim]
-        (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
-
-        batch_size, q_length, _, _ = query_layer.shape
-
-        query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
-        key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * self.num_heads, self.head_dim, q_length)
-        value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
-        if layer_past is not None:
-            past_key, past_value = layer_past
-            # concatenate along seq_length dimension:
-            #  - key: [batch_size * self.num_heads, head_dim, kv_length]
-            #  - value: [batch_size * self.num_heads, kv_length, head_dim]
-            key_layer = torch.cat((past_key, key_layer), dim=2)
-            value_layer = torch.cat((past_value, value_layer), dim=1)
-
-        _, _, kv_length = key_layer.shape
-
-        if use_cache is True:
-            present = (key_layer, value_layer)
-        else:
-            present = None
-
-        # [batch_size * num_heads, q_length, kv_length]
-        # we use `torch.Tensor.baddbmm` instead of `torch.baddbmm` as the latter isn't supported by TorchScript v1.11
-        matmul_result = alibi.baddbmm(
-            batch1=query_layer,
-            batch2=key_layer,
-            beta=self.beta,
-            alpha=self.inv_norm_factor,
-        )
-
-        # change view to [batch_size, num_heads, q_length, kv_length]
-        attention_scores = matmul_result.view(batch_size, self.num_heads, q_length, kv_length)
-
-        # cast attention scores to fp32, compute scaled softmax and cast back to initial dtype - [batch_size, num_heads, q_length, kv_length]
-        input_dtype = attention_scores.dtype
-        # `float16` has a minimum value of -65504.0, whereas `bfloat16` and `float32` have a minimum value of `-3.4e+38`
-        if input_dtype == torch.float16:
-            attention_scores = attention_scores.to(torch.float)
-        attn_weights = torch.masked_fill(attention_scores, attention_mask, torch.finfo(attention_scores.dtype).min)
-        attention_probs = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
-
-        # [batch_size, num_heads, q_length, kv_length]
-        attention_probs = self.attention_dropout(attention_probs)
-
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        # change view [batch_size x num_heads, q_length, kv_length]
-        attention_probs_reshaped = attention_probs.view(batch_size * self.num_heads, q_length, kv_length)
-
-        # matmul: [batch_size * num_heads, q_length, head_dim]
-        context_layer = torch.bmm(attention_probs_reshaped, value_layer)
-
-        # change view [batch_size, num_heads, q_length, head_dim]
-        context_layer = self._merge_heads(context_layer)
-
-        # aggregate results across tp ranks. See here: https://github.com/pytorch/pytorch/issues/76232
-        if self.pretraining_tp > 1 and self.slow_but_exact:
-            slices = self.hidden_size / self.pretraining_tp
-            output_tensor = torch.zeros_like(context_layer)
-            for i in range(self.pretraining_tp):
-                output_tensor = output_tensor + F.linear(
-                    context_layer[:, :, int(i * slices) : int((i + 1) * slices)],
-                    self.dense.weight[:, int(i * slices) : int((i + 1) * slices)],
-                )
-        else:
-            output_tensor = self.dense(context_layer)
-
-        output_tensor = dropout_add(output_tensor, residual, self.hidden_dropout, self.training)
-
-        outputs = (output_tensor, present)
-        if output_attentions:
-            outputs += (attention_probs,)
-
-        return outputs
+        qkv = self.Wqkv(x)
+        (query, key, value) = qkv.chunk(3, dim=2)
+        key_padding_mask = attention_mask
+        (context, attn_weights, past_key_value) = self.attn_fn(query, key, value, self.n_heads, past_key_value=past_key_value, softmax_scale=self.softmax_scale, attn_bias=attn_bias, key_padding_mask=key_padding_mask, is_causal=is_causal, dropout_p=self.attn_dropout_p, training=self.training, needs_weights=needs_weights)
+        return (self.out_proj(context), attn_weights, past_key_value)
 
 
 # Copied from transformers.models.bloom.modeling_bloom.BloomMLP with Bloom->Mpt
 class MptMLP(nn.Module):
     def __init__(self, config: MptConfig):
         super().__init__()
-        hidden_size = config.d_model
+        hidden_size = config.hidden_size
 
         self.up_proj = nn.Linear(hidden_size, 4 * hidden_size, bias=False)
         self.gelu_impl = MptGelu()
@@ -420,9 +349,9 @@ class MptMLP(nn.Module):
         self.hidden_dropout = config.attn_config["attn_pdrop"]
 
     def forward(self, hidden_states: torch.Tensor, residual: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.gelu_impl(self.dense_h_to_4h(hidden_states))
+        hidden_states = self.gelu_impl(self.up_proj(hidden_states))
 
-        intermediate_output = self.dense_4h_to_h(hidden_states)
+        intermediate_output = self.down_proj(hidden_states)
 
         output = dropout_add(intermediate_output, residual, self.hidden_dropout, self.training)
 
@@ -433,7 +362,7 @@ class MptMLP(nn.Module):
 class MptBlock(nn.Module):
     def __init__(self, config: MptConfig):
         super().__init__()
-        hidden_size = config.d_model
+        hidden_size = config.hidden_size
 
         # self.norm_1 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.norm_1 = MptLPLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
@@ -456,42 +385,28 @@ class MptBlock(nn.Module):
         output_attentions: bool = False,
     ):
         # hidden_states: [batch_size, seq_length, hidden_size]
-
         # Layer norm at the beginning of the transformer layer.
-        layernorm_output = self.input_layernorm(hidden_states)
+        layernorm_output = self.norm_1(hidden_states)
 
         # Layer norm post the self attention.
-        if self.apply_residual_connection_post_layernorm:
-            residual = layernorm_output
-        else:
-            residual = hidden_states
+        residual = hidden_states
 
         # Self attention.
-        attn_outputs = self.self_attention(
+        attn_outputs = self.attn(
             layernorm_output,
-            residual,
-            layer_past=layer_past,
-            attention_mask=attention_mask,
-            alibi=alibi,
-            head_mask=head_mask,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
         )
 
         attention_output = attn_outputs[0]
 
         outputs = attn_outputs[1:]
 
-        layernorm_output = self.post_attention_layernorm(attention_output)
+        layernorm_output = self.norm_2(attention_output)
 
         # Get residual
-        if self.apply_residual_connection_post_layernorm:
-            residual = layernorm_output
-        else:
-            residual = attention_output
+        residual = attention_output
 
         # MLP.
-        output = self.mlp(layernorm_output, residual)
+        output = self.ffn(layernorm_output, residual)
 
         if use_cache:
             outputs = (output,) + outputs
@@ -653,17 +568,17 @@ class MptModel(MptPreTrainedModel):
     def __init__(self, config: MptConfig):
         super().__init__(config)
 
-        self.embed_dim = config.d_model
+        self.hidden_size = config.hidden_size
         self.num_heads = config.n_heads
 
         # Embedding + LN Embedding
-        self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
+        self.wte = nn.Embedding(config.vocab_size, self.hidden_size)
 
         # Transformer blocks
         self.blocks = nn.ModuleList([MptBlock(config) for _ in range(config.n_layers)])
 
         # Final Layer Norm
-        self.norm_f = MptLPLayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.norm_f = MptLPLayerNorm(self.hidden_size, eps=config.layer_norm_epsilon)
 
         self.gradient_checkpointing = False
 
@@ -747,18 +662,18 @@ class MptModel(MptPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if past_key_values is None:
-            past_key_values = tuple([None] * len(self.h))
+            past_key_values = tuple([None] * len(self.blocks))
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape batch_size x num_heads x N x N
         # head_mask has shape n_layer x batch x num_heads x N x N
-        head_mask = self.get_head_mask(head_mask, self.config.n_layer)
+        head_mask = self.get_head_mask(head_mask, self.config.n_layers)
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
 
-        hidden_states = self.wte_layernorm(inputs_embeds)
+        hidden_states = inputs_embeds
 
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
@@ -790,7 +705,7 @@ class MptModel(MptPreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
 
-        for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
+        for i, (block, layer_past) in enumerate(zip(self.blocks, past_key_values)):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -830,7 +745,7 @@ class MptModel(MptPreTrainedModel):
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
 
         # Add last hidden state
-        hidden_states = self.ln_f(hidden_states)
+        hidden_states = self.norm_f(hidden_states)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -860,7 +775,7 @@ class MptForCausalLM(MptPreTrainedModel):
     def __init__(self, config: MptConfig):
         super().__init__(config)
         self.transformer = MptModel(config)
-        self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1028,7 +943,7 @@ class MptForSequenceClassification(MptPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = MptModel(config)
-        self.score = nn.Linear(config.d_model, config.num_labels, bias=False)
+        self.score = nn.Linear(config.hidden_size, config.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1163,7 +1078,7 @@ class MptForTokenClassification(MptPreTrainedModel):
         else:
             classifier_dropout = 0.1
         self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = nn.Linear(config.d_model, config.num_labels)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1256,7 +1171,7 @@ class MptForQuestionAnswering(MptPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.transformer = MptModel(config)
-        self.qa_outputs = nn.Linear(config.d_model, 2)
+        self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
         # Initialize weights and apply final processing
         self.post_init()

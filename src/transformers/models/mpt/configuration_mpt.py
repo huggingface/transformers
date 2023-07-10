@@ -177,6 +177,7 @@ class MptConfig(PretrainedConfig):
         norm_type: str = "low_precision_layernorm",
         use_cache: bool = False,
         init_config: MptIntializerConfig = None,
+        initializer_range=0.02,
         **kwargs,
     ):
         """
@@ -284,6 +285,10 @@ class MptConfig(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.use_cache = use_cache
         self.init_config = init_config
+        self.initializer_range = initializer_range
+
+        # for backward compatiblity
+        self.hidden_size = self.d_model
 
         if self.attn_config is None:
             self.attn_config = MptAttentionConfig()
