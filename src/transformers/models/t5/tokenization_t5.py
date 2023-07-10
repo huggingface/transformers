@@ -106,6 +106,8 @@ class T5Tokenizer(PreTrainedTokenizer):
 
             - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
               BPE-dropout.
+        legacy (`bool`, *optional*, defaults to `True`):
+            Whether or not the `legacy` behaviour of the tokenizer should be used. Legacy is before the merge of #24622
 
     Attributes:
         sp_model (`SentencePieceProcessor`):
@@ -311,10 +313,12 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text, **kwargs):
         """
-        Returns a tokenized string. Since the sentencpiece internal model always adds a SPIECE_UNDERLINE, at the
+        Returns a tokenized string. 
+        
+        Since the sentencepiece internal model always adds a SPIECE_UNDERLINE, at the
         beginning of the provided text, we need to remove it by hand when the current text is a subsequence. This
         happens whenever the `self.tokenize` function is called with specials tokens: the input is split on the special
-        tokens, and each subsequence is passed to `_tokenize`. Thus is a subsequence did not start with a `" "` or
+        tokens, and each subsequence is passed to `_tokenize`. Thus if a subsequence did not start with a `" "` or
         SPIECE_UNDERLINE, we have to remove the extra `SPIECE_UNDERLINE` prepended.
         """
         if not self.legacy:

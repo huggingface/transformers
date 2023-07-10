@@ -54,6 +54,8 @@ class LlamaTokenizer(PreTrainedTokenizer):
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
+        legacy (`bool`, *optional*, defaults to `True`):
+            Whether or not the `legacy` behaviour of the tokenizer should be used. Legacy is before the merge of #24622
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

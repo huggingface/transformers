@@ -495,6 +495,10 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(tokens, ["▁No", "<bos>", "▁He"])
 
     @require_seqio
+    @unittest.skipIf(
+        os.getenv("RUN_TOKENIZER_INTEGRATION", "0") == "0",
+        "RUN_TOKENIZER_INTEGRATION=1 to run tokenizer integration tests",
+    )
     def test_integration_seqio(self):
         from datasets import load_dataset
         from seqio import SentencePieceVocabulary

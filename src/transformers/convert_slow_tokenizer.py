@@ -37,9 +37,6 @@ def import_protobuf():
             from transformers.utils import sentencepiece_model_pb2
         else:
             from transformers.utils import sentencepiece_model_pb2_new as sentencepiece_model_pb2
-    else:
-        # just to get the expected `No module named 'google.protobuf'` error
-        from transformers.utils import sentencepiece_model_pb2
     return sentencepiece_model_pb2
 
 
