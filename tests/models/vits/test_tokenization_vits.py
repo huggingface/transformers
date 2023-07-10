@@ -33,7 +33,7 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        vocab = "k ' z y u d h e s w – 3 c p - 1 j m i X f l o 0 b r a 4 2 n _ x v t q 5 6 g < > | <pad> <unk>".split(
+        vocab = "k ' z y u d h e s w – 3 c p - 1 j m i X f l o 0 b r a 4 2 n _ x v t q 5 6 g ț ţ < > | <pad> <unk>".split(
             " "
         )
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
@@ -99,6 +99,17 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("adding multicharacter tokens does not work this tokenizer")
     def test_special_tokens_initialization_with_non_empty_additional_special_tokens(self):
         pass
+
+    def test_ron_normalization(self):
+        tokenizer = self.get_tokenizer()
+        tokenizer.language = "ron"
+
+        sequences = ["vițs"]
+        normalized_sequences = ["viţs"]
+
+        encoded_ids = tokenizer(sequences, normalize=True)["input_ids"]
+        decoded_sequences = tokenizer.batch_decode(encoded_ids)
+        self.assertEqual(normalized_sequences, decoded_sequences)
 
     def test_normalization(self):
         tokenizer = self.get_tokenizer()
