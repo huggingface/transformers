@@ -75,7 +75,12 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask=False,
         **kwargs,
     ):
-        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+        super().__init__(
+            feature_size=feature_size,
+            sampling_rate=sampling_rate,
+            padding_value=padding_value,
+            **kwargs,
+        )
         self.num_mel_bins = num_mel_bins
         self.max_length = max_length
         self.do_normalize = do_normalize
@@ -135,8 +140,7 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         Args:
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
-                stereo, i.e. single float per timestep.
+                values, a list of numpy arrays or a list of list of float values.
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors.
@@ -161,11 +165,9 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
-        if is_batched_numpy and len(raw_speech.shape) > 2:
-            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
-        is_batched = is_batched_numpy or (
-            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
+        is_batched = bool(
+            isinstance(raw_speech, (list, tuple))
+            and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
         )
 
         if is_batched:
@@ -180,10 +182,20 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
             raw_speech = [raw_speech]
 
         # extract fbank features and pad/truncate to max_length
+        features_length = [len(waveform) for waveform in raw_speech]  # length before padding
         features = [self._extract_fbank_features(waveform, max_length=self.max_length) for waveform in raw_speech]
 
         # convert into BatchFeature
         padded_inputs = BatchFeature({"input_values": features})
+
+        # Generate attention masks if required
+        if self.return_attention_mask:
+            attention_masks = []
+            for length in features_length:
+                mask = np.zeros(self.max_length)
+                mask[:length] = 1  # Set mask to 1 for actual content
+                attention_masks.append(mask)
+            padded_inputs["attention_mask"] = attention_masks
 
         # make sure list is in array format
         input_values = padded_inputs.get("input_values")
