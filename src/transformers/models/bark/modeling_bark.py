@@ -701,6 +701,28 @@ class BarkSemanticModel(BarkCausalModel):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> torch.LongTensor:
+        """
+        Generates text semantic tokens from an input prompt and an additional optional `Bark` speaker prompt.
+
+        Args:
+            input_ids (`Optional[torch.Tensor]` of shape (batch_size, seq_len), *optional*):
+                Input ids, i.e tokenized input sentences. Will be truncated up to
+                semantic_generation_config.max_input_semantic_length tokens. Note that the output audios will be as
+                long as the longest generation among the batch.
+            semantic_generation_config (`BarkSemanticGenerationConfig`, *optional*):
+                Generation config indicating how to generate the semantic tokens.
+            history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
+                Optional `Bark` speaker prompt.
+            attention_mask (`Optional[torch.Tensor]`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+        Returns:
+            torch.LongTensor: Output semantic tokens.
+        """
         if semantic_generation_config is None:
             raise ValueError("`semantic_generation_config` has to be provided")
 
@@ -780,13 +802,34 @@ class BarkCoarseModel(BarkCausalModel):
 
     def preprocess_histories_before_coarse(
         self,
-        history_prompt,
-        max_coarse_history,
-        semantic_to_coarse_ratio,
-        batch_size,
-        semantic_generation_config,
-        codebook_size,
+        history_prompt: Dict[str, torch.Tensor],
+        max_coarse_history: int,
+        semantic_to_coarse_ratio: int,
+        batch_size: int,
+        semantic_generation_config: int,
+        codebook_size: int,
     ):
+        """
+        Preprocess the optional `Bark` speaker prompts before `self.generate_coarse`.
+
+        Args:
+            history_prompt (`Dict[str,torch.Tensor]`):
+                Optional `Bark` speaker prompt.
+            max_coarse_history (`int`):
+                Maximum size of coarse tokens used.
+            semantic_to_coarse_ratio (`int`):
+                Ratio of semantic to coarse frequency
+            batch_size (`int`):
+                Batch size, i.e the number of samples.
+            semantic_generation_config (`BarkSemanticGenerationConfig`):
+                Generation config indicating how to generate the semantic tokens.
+            codebook_size (`int`):
+                Codebook channel size, i.e. the size of the output vocabulary per codebook channel.
+        Returns: Returns:
+            `tuple(torch.FloatTensor)`:
+            - ** x_semantic_history** (`torch.FloatTensor` -- Processed semantic speaker prompt.
+            - **x_coarse_history** (`torch.FloatTensor`) -- Processed coarse speaker prompt.
+        """
         if history_prompt is not None:
             x_semantic_history = torch.repeat_interleave(history_prompt["semantic_prompt"][None], batch_size, dim=0)
             # clone to avoid modifying history_prompt.coarse_prompt
@@ -840,6 +883,25 @@ class BarkCoarseModel(BarkCausalModel):
         history_prompt: Optional[Dict[str, torch.Tensor]] = None,
         **kwargs,
     ) -> torch.LongTensor:
+        """
+        Generates coarse acoustics tokens from input text semantic tokens and an additional optional `Bark` speaker
+        prompt.
+
+        Args:
+            semantic_output (`torch.Tensor` of shape (batch_size, seq_len), *optional*):
+                Input text semantic ids, i.e the output of `BarkSemanticModel.generate_text_semantic`.
+            semantic_generation_config (`BarkSemanticGenerationConfig`, *optional*):
+                Generation config indicating how to generate the semantic tokens.
+            coarse_generation_config (`BarkCoarseGenerationConfig`, *optional*):
+                Generation config indicating how to generate the coarse tokens.
+            codebook_size (`int`, *optional*, defaults to 1024):
+                Codebook channel size, i.e. the size of the output vocabulary per codebook channel.
+            history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
+                Optional `Bark` speaker prompt.
+        Returns:
+            torch.LongTensor: Output coarse acoustics tokens.
+        """
+
         if semantic_generation_config is None:
             raise ValueError("`semantic_generation_config` has to be provided")
 
@@ -1158,6 +1220,26 @@ class BarkFineModel(BarkPreTrainedModel):
         history_prompt: Optional[Dict[str, torch.Tensor]] = None,
         **kwargs,
     ) -> torch.LongTensor:
+        """
+        Generates fine acoustics tokens from input coarse acoustics tokens and an additional optional `Bark` speaker
+        prompt.
+
+        Args:
+            coarse_output (`torch.Tensor` of shape (batch_size, seq_len), *optional*):
+                Input coarse acoustics ids, i.e the output of `BarkCoarseModel.generate_coarse`.
+            semantic_generation_config (`BarkSemanticGenerationConfig`, *optional*):
+                Generation config indicating how to generate the semantic tokens.
+            coarse_generation_config (`BarkCoarseGenerationConfig`, *optional*):
+                Generation config indicating how to generate the coarse tokens.
+            fine_generation_config (`BarkFineGenerationConfig`, *optional*):
+                Generation config indicating how to generate the fine tokens.
+            codebook_size (`int`, *optional*, defaults to 1024):
+                Codebook channel size, i.e. the size of the output vocabulary per codebook channel.
+            history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
+                Optional `Bark` speaker prompt.
+        Returns:
+            torch.LongTensor: Output fine acoustics tokens.
+        """
         if semantic_generation_config is None:
             raise ValueError("`semantic_generation_config` has to be provided")
 
