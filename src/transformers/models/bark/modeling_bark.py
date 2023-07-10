@@ -307,7 +307,7 @@ class BarkSelfAttention(nn.Module):
         return outputs
 
 
-class LayerNorm(nn.Module):
+class BarkLayerNorm(nn.Module):
     """LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False."""
 
     def __init__(self, hidden_size, bias=True):
@@ -319,7 +319,7 @@ class LayerNorm(nn.Module):
         return F.layer_norm(input, self.weight.shape, self.weight, self.bias, eps=1e-5)
 
 
-class MLP(nn.Module):
+class BarkMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.in_proj = nn.Linear(config.hidden_size, 4 * config.hidden_size, bias=config.bias)
@@ -343,15 +343,15 @@ class BarkBlock(nn.Module):
             # if causal, uses handmade LayerNorm, so that the layerNorm bias is optional
             # this handmade layerNorm is used to stick with Bark choice of leaving optional bias in
             # AutoRegressive models (corresponding to the "Text" and the "Coarse" modules)
-            self.ln_1 = LayerNorm(config.hidden_size, bias=config.bias)
-            self.ln_2 = LayerNorm(config.hidden_size, bias=config.bias)
+            self.ln_1 = BarkLayerNorm(config.hidden_size, bias=config.bias)
+            self.ln_2 = BarkLayerNorm(config.hidden_size, bias=config.bias)
         else:
             self.ln_1 = nn.LayerNorm(config.hidden_size)
             self.ln_2 = nn.LayerNorm(config.hidden_size)
 
         self.attn = BarkSelfAttention(config, is_causal=is_causal)
 
-        self.mlp = MLP(config)
+        self.mlp = BarkMLP(config)
 
     def forward(
         self,
@@ -440,7 +440,7 @@ class BarkCausalModel(BarkPreTrainedModel):
 
         self.layers = nn.ModuleList([BarkBlock(config, is_causal=True) for _ in range(config.num_layers)])
 
-        self.ln_f = LayerNorm(config.hidden_size, bias=config.bias)
+        self.ln_f = BarkLayerNorm(config.hidden_size, bias=config.bias)
 
         self.lm_head = nn.Linear(config.hidden_size, config.output_vocab_size, bias=False)
         self.gradient_checkpointing = False
