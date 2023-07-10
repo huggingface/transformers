@@ -252,12 +252,15 @@ class MptGelu(nn.Module):
 
 
 def scaled_multihead_dot_product_attention(query, key, value, n_heads, past_key_value=None, softmax_scale=None, attn_bias=None, key_padding_mask=None, is_causal=False, dropout_p=0.0, training=False, needs_weights=False, multiquery=False):
-    from einops import rearrange
+    batch_size, seq_length, hidden_size = query.shape
+    head_dim = hidden_size // n_heads
 
-    q = rearrange(query, 'b s (h d) -> b h s d', h=n_heads)
+    q = query.reshape(batch_size, n_heads, seq_length, head_dim).permute(0, 2, 1, 3)
+
     kv_n_heads = 1 if multiquery else n_heads
-    k = rearrange(key, 'b s (h d) -> b h d s', h=kv_n_heads)
-    v = rearrange(value, 'b s (h d) -> b h s d', h=kv_n_heads)
+
+    k = key.reshape(batch_size, kv_n_heads, seq_length, head_dim).permute(0, 2, 3, 1)
+    v = value.reshape(batch_size, kv_n_heads, seq_length, head_dim).permute(0, 2, 1, 3)
     if past_key_value is not None:
         if len(past_key_value) != 0:
             k = torch.cat([past_key_value[0], k], dim=3)
@@ -292,7 +295,8 @@ def scaled_multihead_dot_product_attention(query, key, value, n_heads, past_key_
     if dropout_p:
         attn_weight = torch.nn.functional.dropout(attn_weight, p=dropout_p, training=training, inplace=True)
     out = attn_weight.to(v.dtype).matmul(v)
-    out = rearrange(out, 'b h s d -> b s (h d)')
+    out = out.reshape(batch_size, seq_length, hidden_size)
+
     if needs_weights:
         return (out, attn_weight, past_key_value)
     return (out, None, past_key_value)
@@ -372,7 +376,8 @@ class MptBlock(nn.Module):
 
         self.ffn = MptMLP(config)
 
-        self.hidden_dropout = config.attn_config["attn_pdrop"]
+        self.dropout_rate = config.attn_config["attn_pdrop"]
+        self.resid_attn_dropout = nn.Dropout(self.dropout_rate)
 
     def forward(
         self,
@@ -397,13 +402,14 @@ class MptBlock(nn.Module):
         )
 
         attention_output = attn_outputs[0]
+        hidden_states = self.resid_attn_dropout(residual) + attention_output
 
         outputs = attn_outputs[1:]
 
         layernorm_output = self.norm_2(attention_output)
 
         # Get residual
-        residual = attention_output
+        residual = hidden_states
 
         # MLP.
         output = self.ffn(layernorm_output, residual)
