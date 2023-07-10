@@ -24,7 +24,7 @@ STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
         scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
             Prediction scores of a language modeling head. These can be scores for each vocabulary token before SoftMax
             or scores for each vocabulary token after SoftMax.
-        kwargs:
+        kwargs (`Dict[str, Any]`, *optional*):
             Additional stopping criteria specific kwargs.
 
     Return:

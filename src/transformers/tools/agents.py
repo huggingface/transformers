@@ -704,7 +704,7 @@ class LocalAgent(Agent):
         Args:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
                 The name of a repo on the Hub or a local path to a folder containing both model and tokenizer.
-            kwargs:
+            kwargs (`Dict[str, Any]`, *optional*):
                 Keyword arguments passed along to [`~PreTrainedModel.from_pretrained`].
 
         Example:
