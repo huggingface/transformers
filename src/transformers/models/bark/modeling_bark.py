@@ -948,7 +948,6 @@ class BarkFineModel(BarkPreTrainedModel):
     base_model_prefix = "fine_acoustics"
     config_class = BarkFineConfig
     main_input_name = "codebook_idx"
-    _tied_weights_keys = []
 
     def __init__(self, config):
         # non-causal gpt-like model with one embedding layer and one lm_head for each codebook of Encodec
@@ -1021,6 +1020,7 @@ class BarkFineModel(BarkPreTrainedModel):
         weights instead.
         """
         if getattr(self.config, "tie_word_embeddings", True):
+            self._tied_weights_keys = []
             output_embeddings = self.get_output_embeddings()
             input_embeddings = self.get_input_embeddings()
 
