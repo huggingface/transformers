@@ -944,8 +944,8 @@ class TrainingArguments:
             )
         },
     )
-    sharded_ddp: Optional[Union[str, bool, List[ShardedDDPOption]]] = field(
-        default="",
+    sharded_ddp: Optional[Union[List[ShardedDDPOption], str]] = field(
+        default='',
         metadata={
             "help": (
                 "Whether or not to use sharded DDP training (in distributed training only). The base option should be"
@@ -955,8 +955,8 @@ class TrainingArguments:
             ),
         },
     )
-    fsdp: Optional[Union[str, bool, List[FSDPOption]]] = field(
-        default="",
+    fsdp: Optional[Union[List[FSDPOption], str]] = field(
+        default='',
         metadata={
             "help": (
                 "Whether or not to use PyTorch Fully Sharded Data Parallel (FSDP) training (in distributed training"
