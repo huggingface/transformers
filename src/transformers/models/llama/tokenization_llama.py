@@ -116,7 +116,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
         if legacy:
-            logger.warn_once(
+            logger.warning_once(
                 f"You are using the legacy behaviour of the {self.__class__}. This means that tokens that come after special tokens will not be properly handled. We recommand you to"
                 "read the related pull request available at https://github.com/huggingface/transformers/pull/24565"
             )
