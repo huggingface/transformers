@@ -108,6 +108,26 @@ class T5Tokenizer(PreTrainedTokenizer):
               BPE-dropout.
         legacy (`bool`, *optional*, defaults to `True`):
             Whether or not the `legacy` behaviour of the tokenizer should be used. Legacy is before the merge of #24622
+            which includes fixes to properly handle tokens that appear after special tokens. A simple example:
+
+            - `legacy=True`:
+            ```python
+            >>> from transformers import T5Tokenizer
+
+            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=True)
+            >>> tokenizer.encode("Hello <extra_id_0>.")
+            [8774, 32099, 3, 5, 1]
+            ```
+            - `legacy=False`:
+            ```python
+            >>> from transformers import T5Tokenizer
+
+            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=True)
+            >>> tokenizer.encode("Hello <extra_id_0>.")
+            [8774, 32099, 5, 1] # the extra space `[3]` is no longer here
+            ```
+            Checkout the pull request and the issue [here](https://github.com/huggingface/transformers/pull/24565) for
+            more details.
 
     Attributes:
         sp_model (`SentencePieceProcessor`):
@@ -143,6 +163,10 @@ class T5Tokenizer(PreTrainedTokenizer):
                     " provided to T5Tokenizer. In this case the additional_special_tokens must include the extra_ids"
                     " tokens"
                 )
+        if legacy:
+            logger.warn_once(f"You are using the legacy behaviour of the {self.__class__}. This means that tokens that come after special tokens will not be properly handled. We recommand you to"
+                             "read the related pull request available at https://github.com/huggingface/transformers/pull/24565")
+        
         self.legacy = legacy
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
