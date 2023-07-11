@@ -110,6 +110,7 @@ from . import (
     levit,
     lilt,
     llama,
+    lagllama,
     longformer,
     longt5,
     luke,
