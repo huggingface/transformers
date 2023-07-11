@@ -2350,7 +2350,8 @@ class GenerationMixin:
         if model_kwargs['knockout_neurons']:
             knockout_neurons_matrix = torch.ones(self.config.num_hidden_layers, self.config.hidden_size, device=input_ids.device)
             for layer_id, emb_id in model_kwargs['knockout_neurons']:
-                knockout_neurons_matrix[layer_id, emb_id] = 0.0
+                # knockout_neurons_matrix[layer_id, emb_id] = 0.0
+                knockout_neurons_matrix[layer_id, emb_id] = 2.0
         else:
             knockout_neurons_matrix = None
 
