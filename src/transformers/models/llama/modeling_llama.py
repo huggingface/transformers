@@ -531,6 +531,11 @@ class LlamaModel(LlamaPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+
+        # NOTE: ここで、last_hidden_state が入力された場合は、入力の初めに結合する。
+        if last_hidden_state is not None:
+            inputs_embeds = torch.cat([last_hidden_state, inputs_embeds], dim=1)
+
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones(
@@ -541,10 +546,6 @@ class LlamaModel(LlamaPreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-
-        # NOTE: ここで、last_hidden_state が入力された場合は、入力の初めに結合する。
-        if last_hidden_state is not None:
-            hidden_states = torch.cat([last_hidden_state, hidden_states], dim=1)
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
