@@ -54,6 +54,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("chinese_clip", "ChineseCLIPModel"),
         ("clap", "ClapModel"),
         ("clip", "CLIPModel"),
+        ("clvp", "CLVPModel"),
         ("clipseg", "CLIPSegModel"),
         ("code_llama", "LlamaModel"),
         ("codegen", "CodeGenModel"),

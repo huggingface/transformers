@@ -45,6 +45,7 @@ from . import (
     chinese_clip,
     clap,
     clip,
+    clvp,
     clipseg,
     code_llama,
     codegen,
