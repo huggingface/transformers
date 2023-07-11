@@ -725,7 +725,7 @@ class LocalAgent(Agent):
     def _model_device(self):
         if hasattr(self.model, "hf_device_map"):
             return list(self.model.hf_device_map.values())[0]
-        for param in self.mode.parameters():
+        for param in self.model.parameters():
             return param.device
 
     def generate_one(self, prompt, stop):
