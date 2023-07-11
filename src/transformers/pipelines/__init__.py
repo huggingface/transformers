@@ -711,6 +711,8 @@ def pipeline(
         try:
             list_remote_files = list_repo_files(model, revision=revision, use_auth_token=use_auth_token)
         except EntryNotFoundError:
+            if not os.path.isdir(model):
+                raise ValueError(f"Local file or directory {model} does not exist.")
             list_remote_files = os.listdir(model)
 
         has_adapter_config = "adapter_config.json" in list_remote_files
