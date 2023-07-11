@@ -123,7 +123,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             >>> from transformers import T5Tokenizer
 
             >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
-            >>> tokenizer.encode("Hello <extra_id_0>.") # the extra space `[3]` is no longer here
+            >>> tokenizer.encode("Hello <extra_id_0>.")  # the extra space `[3]` is no longer here
             [8774, 32099, 5, 1]
             ```
             Checkout the pull request and the issue [here](https://github.com/huggingface/transformers/pull/24565) for
