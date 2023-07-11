@@ -710,31 +710,39 @@ def pipeline(
     # Config is the primordial information item.
     # Instantiate config if needed
     if isinstance(config, str):
-        try:
+        if is_peft_available():
+            try:
+                config = AutoConfig.from_pretrained(config, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+                hub_kwargs["_commit_hash"] = config._commit_hash
+            except EnvironmentError:
+                # try again with Peft Config.
+                peft_config = PeftConfig.from_pretrained(config, **hub_kwargs)
+                config = AutoConfig.from_pretrained(
+                    peft_config.base_model_name_or_path, _from_pipeline=task, **hub_kwargs, **model_kwargs
+                )
+                config._is_peft_model = True
+                config._peft_base_model_name_or_path = peft_config.base_model_name_or_path
+                config._peft_model_kwargs = peft_model_kwargs
+        else:
             config = AutoConfig.from_pretrained(config, _from_pipeline=task, **hub_kwargs, **model_kwargs)
             hub_kwargs["_commit_hash"] = config._commit_hash
-        except EnvironmentError:
-            # try again with Peft Config.
-            peft_config = PeftConfig.from_pretrained(config, **hub_kwargs)
-            config = AutoConfig.from_pretrained(
-                peft_config.base_model_name_or_path, _from_pipeline=task, **hub_kwargs, **model_kwargs
-            )
-            config._is_peft_model = True
-            config._peft_base_model_name_or_path = peft_config.base_model_name_or_path
-            config._peft_model_kwargs = peft_model_kwargs
 
     elif config is None and isinstance(model, str):
-        try:
+        if is_peft_available():
+            try:
+                config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+                hub_kwargs["_commit_hash"] = config._commit_hash
+            except EnvironmentError:
+                peft_config = PeftConfig.from_pretrained(model, **hub_kwargs)
+                config = AutoConfig.from_pretrained(
+                    peft_config.base_model_name_or_path, _from_pipeline=task, **hub_kwargs, **model_kwargs
+                )
+                config._is_peft_model = True
+                config._peft_base_model_name_or_path = peft_config.base_model_name_or_path
+                config._peft_model_kwargs = peft_model_kwargs
+        else:
             config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
             hub_kwargs["_commit_hash"] = config._commit_hash
-        except EnvironmentError:
-            peft_config = PeftConfig.from_pretrained(model, **hub_kwargs)
-            config = AutoConfig.from_pretrained(
-                peft_config.base_model_name_or_path, _from_pipeline=task, **hub_kwargs, **model_kwargs
-            )
-            config._is_peft_model = True
-            config._peft_base_model_name_or_path = peft_config.base_model_name_or_path
-            config._peft_model_kwargs = peft_model_kwargs
 
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:
