@@ -659,6 +659,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        last_hidden_state: Optional[torch.FloatTensor] = None,  # NOTE: これが入力された場合は、入力の初めに結合する。
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -703,6 +704,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            last_hidden_state=last_hidden_state,
         )
 
         hidden_states = outputs[0]
