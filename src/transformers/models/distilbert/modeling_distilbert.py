@@ -356,7 +356,7 @@ class Transformer(nn.Module):
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_state,)
-            
+
             if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
@@ -429,7 +429,7 @@ class DistilBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-    
+
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, Transformer):
             module.gradient_checkpointing = value
