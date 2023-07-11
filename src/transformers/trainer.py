@@ -689,7 +689,7 @@ class Trainer:
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
         # Internal variables to keep track of the original per-device batch size
-        self._train_batch_size = args.train_batch_size / max(1, self.args.n_gpu)
+        self._train_batch_size = args.train_batch_size // max(1, self.args.n_gpu)
 
         # very last
         self._memory_tracker.stop_and_update_metrics()
@@ -1504,7 +1504,7 @@ class Trainer:
             raise TypeError(f"train() received got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
-        self._train_batch_size = args.train_batch_size / max(1, self.args.n_gpu)
+        self._train_batch_size = args.train_batch_size // max(1, self.args.n_gpu)
 
         # Model re-init
         model_reloaded = False
@@ -1545,6 +1545,9 @@ class Trainer:
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
     ):
         self.accelerator.free_memory()
+        # We need to reset the scheduler, as its parameters may be different on subsequent calls
+        if hasattr(self, "lr_scheduler"):
+            self.lr_scheduler = None
         self._train_batch_size = batch_size
         logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
         # Data loader and number of training steps
