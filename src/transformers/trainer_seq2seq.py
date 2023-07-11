@@ -258,13 +258,8 @@ class Seq2SeqTrainer(Trainer):
         # Priority (handled in generate):
         # gen_kwargs > model.generation_config > default GenerationConfig()
 
-        if gen_kwargs:
-            # overriding gen_kwargs have been provided, use those
-            gen_kwargs = gen_kwargs.copy()
-        elif hasattr(self, "_gen_kwargs"):
+        if len(gen_kwargs) == 0 and hasattr(self, "_gen_kwargs"):
             gen_kwargs = self._gen_kwargs.copy()
-        else:
-            gen_kwargs = {}
 
         if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
             gen_kwargs["max_length"] = self.model.config.max_length
