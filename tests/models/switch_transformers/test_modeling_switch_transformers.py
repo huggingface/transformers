@@ -1143,6 +1143,9 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
 
         torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
 
+    @unittest.skip(
+        "Unless we stop stripping left and right by default for all special tokens, the expected ids obtained here will not match the original ones. Wait for https://github.com/huggingface/transformers/pull/23909 to be merged"
+    )
     def test_small_generate(self):
         # Generate test using the smalled switch-C model.
 
@@ -1169,6 +1172,9 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         EXPECTED_OUTPUT = "<pad><extra_id_0> man<extra_id_1> beer<extra_id_2> a<extra_id_3> whiskey<extra_id_4>.</s>"
         self.assertEqual(output_str, EXPECTED_OUTPUT)
 
+    @unittest.skip(
+        "Unless we stop stripping left and right by default for all special tokens, the expected ids obtained here will not match the original ones. Wait for https://github.com/huggingface/transformers/pull/23909 to be merged"
+    )
     def test_small_batch_generate(self):
         BATCH_SIZE = 4
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
