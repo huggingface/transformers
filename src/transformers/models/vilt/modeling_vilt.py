@@ -36,7 +36,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import (
     find_pruneable_heads_and_indices,
-    is_torch_greater_or_equal_than_1_10,
     meshgrid,
     prune_linear_layer,
 )
@@ -45,12 +44,6 @@ from .configuration_vilt import ViltConfig
 
 
 logger = logging.get_logger(__name__)
-
-if not is_torch_greater_or_equal_than_1_10:
-    logger.warning(
-        f"You are using torch=={torch.__version__}, but torch>=1.10.0 is required to use "
-        "ViltModel. Please upgrade torch."
-    )
 
 _CONFIG_FOR_DOC = "ViltConfig"
 _CHECKPOINT_FOR_DOC = "dandelin/vilt-b32-mlm"
@@ -256,7 +249,9 @@ class TextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
         self.register_buffer(
             "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
         )
@@ -615,7 +610,7 @@ VILT_START_DOCSTRING = r"""
 VILT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`BertTokenizer`]. See
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
 
@@ -670,7 +665,7 @@ VILT_INPUTS_DOCSTRING = r"""
 VILT_IMAGES_AND_TEXT_CLASSIFICATION_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`BertTokenizer`]. See
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
 
@@ -893,7 +888,7 @@ class ViltPooler(nn.Module):
     VILT_START_DOCSTRING,
 )
 class ViltForMaskedLM(ViltPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["mlm_score.decoder.bias"]
+    _tied_weights_keys = ["mlm_score.decoder.weight", "mlm_score.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1425,8 +1420,6 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
     VILT_START_DOCSTRING,
 )
 class ViltForTokenClassification(ViltPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     def __init__(self, config):
         super().__init__(config)
 

@@ -15,6 +15,7 @@
 
 
 import datetime
+import gc
 import math
 import unittest
 
@@ -500,6 +501,12 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.model_tester = GPT2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GPT2Config, n_embd=37)
 
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        torch.cuda.empty_cache()
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -683,6 +690,12 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
 @require_torch
 class GPT2ModelLanguageGenerationTest(unittest.TestCase):
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        torch.cuda.empty_cache()
+
     def _test_lm_generate_gpt2_helper(
         self,
         gradient_checkpointing=False,
@@ -755,7 +768,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         )
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
         self.assertTrue(
-            all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
+            all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
 
     @slow

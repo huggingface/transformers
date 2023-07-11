@@ -99,7 +99,7 @@ class OpenLlamaConfig(PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         tie_word_embeddings=False,
-        use_memorry_efficient_attention=True,
+        use_memory_efficient_attention=True,
         hidden_dropout_prob=0.1,
         attention_dropout_prob=0.1,
         use_stable_embedding=True,
@@ -116,7 +116,9 @@ class OpenLlamaConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.use_memorry_efficient_attention = use_memorry_efficient_attention
+        self.use_memory_efficient_attention = kwargs.pop(
+            "use_memorry_efficient_attention", use_memory_efficient_attention
+        )
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_dropout_prob = attention_dropout_prob
         self.use_stable_embedding = use_stable_embedding

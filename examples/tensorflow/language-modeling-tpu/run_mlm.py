@@ -235,8 +235,10 @@ def main(args):
             num_warmup_steps=total_train_steps // 20,
             init_lr=args.learning_rate,
             weight_decay_rate=args.weight_decay_rate,
-            # TODO Add the other Adam parameters?
         )
+
+        # Transformers models compute the right loss for their task by default when labels are passed, and will
+        # use this for training unless you specify your own loss function in compile().
         model.compile(optimizer=optimizer, metrics=["accuracy"])
 
     def decode_fn(example):

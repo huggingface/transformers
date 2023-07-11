@@ -102,7 +102,7 @@ class TextClassificationPipeline(Pipeline):
             postprocess_params["_legacy"] = False
         elif return_all_scores is not None:
             warnings.warn(
-                "`return_all_scores` is now deprecated,  if want a similar funcionality use `top_k=None` instead of"
+                "`return_all_scores` is now deprecated,  if want a similar functionality use `top_k=None` instead of"
                 " `return_all_scores=True` or `top_k=1` instead of `return_all_scores=False`.",
                 UserWarning,
             )

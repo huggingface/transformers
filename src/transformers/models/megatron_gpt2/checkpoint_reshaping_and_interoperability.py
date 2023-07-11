@@ -690,7 +690,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
             for j in range(args.target_tensor_model_parallel_size):
                 for k in range(args.target_data_parallel_size):
                     if args.target_pipeline_model_parallel_size == 1:
-                        checkpoint_dir = f"mp_rank_{j:02d}_{i:03d}"
+                        checkpoint_dir = f"mp_rank_{j:02d}_{k:03d}"
                     else:
                         checkpoint_dir = f"mp_rank_{j:02d}_{i:03d}_{k:03d}"
                     checkpoint_dir = os.path.join(release_dir, checkpoint_dir)

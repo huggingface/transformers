@@ -28,6 +28,10 @@ from ...test_image_processing_common import ImageProcessingSavingTestMixin, prep
 if is_torch_available():
     import torch
 
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_11
+else:
+    is_torch_greater_or_equal_than_1_11 = False
+
 if is_vision_available():
     from PIL import Image
 
@@ -70,6 +74,10 @@ class Pix2StructImageProcessingTester(unittest.TestCase):
         return raw_image
 
 
+@unittest.skipIf(
+    not is_torch_greater_or_equal_than_1_11,
+    reason="`Pix2StructImageProcessor` requires `torch>=1.11.0`.",
+)
 @require_torch
 @require_vision
 class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
@@ -237,6 +245,10 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
             )
 
 
+@unittest.skipIf(
+    not is_torch_greater_or_equal_than_1_11,
+    reason="`Pix2StructImageProcessor` requires `torch>=1.11.0`.",
+)
 @require_torch
 @require_vision
 class Pix2StructImageProcessingTestFourChannels(ImageProcessingSavingTestMixin, unittest.TestCase):

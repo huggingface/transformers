@@ -445,8 +445,6 @@ class LongformerEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
@@ -1423,7 +1421,6 @@ class LongformerPreTrainedModel(PreTrainedModel):
     config_class = LongformerConfig
     base_model_prefix = "longformer"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_unexpected = [r"position_ids"]
     _no_split_modules = ["LongformerSelfAttention"]
 
     def _init_weights(self, module):
@@ -1772,8 +1769,7 @@ class LongformerModel(LongformerPreTrainedModel):
 
 @add_start_docstrings("""Longformer Model with a `language modeling` head on top.""", LONGFORMER_START_DOCSTRING)
 class LongformerForMaskedLM(LongformerPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["lm_head.decoder"]
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _tied_weights_keys = ["lm_head.decoder"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1887,8 +1883,6 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForSequenceClassification(LongformerPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -2016,8 +2010,6 @@ class LongformerClassificationHead(nn.Module):
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForQuestionAnswering(LongformerPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -2155,8 +2147,6 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForTokenClassification(LongformerPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

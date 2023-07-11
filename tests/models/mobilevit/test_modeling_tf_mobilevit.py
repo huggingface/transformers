@@ -15,6 +15,8 @@
 """ Testing suite for the TensorFlow MobileViT model. """
 
 
+from __future__ import annotations
+
 import inspect
 import unittest
 
@@ -38,7 +40,7 @@ if is_tf_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import MobileViTFeatureExtractor
+    from transformers import MobileViTImageProcessor
 
 
 class TFMobileViTConfigTester(ConfigTester):
@@ -195,10 +197,6 @@ class TFMobileViTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     @unittest.skip(reason="MobileViT does not output attentions")
     def test_attention_outputs(self):
-        pass
-
-    @unittest.skip("Test was written for TF 1.x and isn't really relevant here")
-    def test_compile_tf_model(self):
         pass
 
     def test_forward_signature(self):
@@ -383,9 +381,9 @@ class TFMobileViTModelIntegrationTest(unittest.TestCase):
     def test_inference_image_classification_head(self):
         model = TFMobileViTForImageClassification.from_pretrained("apple/mobilevit-xx-small")
 
-        feature_extractor = MobileViTFeatureExtractor.from_pretrained("apple/mobilevit-xx-small")
+        image_processor = MobileViTImageProcessor.from_pretrained("apple/mobilevit-xx-small")
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="tf")
+        inputs = image_processor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(**inputs, training=False)
@@ -403,10 +401,10 @@ class TFMobileViTModelIntegrationTest(unittest.TestCase):
         # `from_pt` will be removed
         model = TFMobileViTForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
 
-        feature_extractor = MobileViTFeatureExtractor.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
+        image_processor = MobileViTImageProcessor.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
 
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="tf")
+        inputs = image_processor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(inputs.pixel_values, training=False)

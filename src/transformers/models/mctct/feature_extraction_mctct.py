@@ -19,9 +19,8 @@ Feature extractor class for M-CTC-T
 from typing import List, Optional, Union
 
 import numpy as np
-import torch
 
-from ...audio_utils import mel_filter_bank, optimal_fft_length, spectrogram
+from ...audio_utils import mel_filter_bank, optimal_fft_length, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...file_utils import PaddingStrategy, TensorType
@@ -110,11 +109,9 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         Extracts MFSC Features for one waveform vector (unbatched). Adapted from Flashlight's C++ MFSC code.
         """
         if self.win_function == "hamming_window":
-            window = torch.hamming_window(window_length=self.sample_size, periodic=False, alpha=0.54, beta=0.46)
+            window = window_function(window_length=self.sample_size, name=self.win_function, periodic=False)
         else:
-            window = getattr(torch, self.win_function)()
-
-        window = window.numpy()
+            window = window_function(window_length=self.sample_size, name=self.win_function)
 
         fbanks = mel_filter_bank(
             num_frequency_bins=self.n_freqs,
@@ -180,7 +177,8 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         Args:
             raw_speech (`torch.Tensor`, `np.ndarray`, `List[float]`, `List[torch.Tensor]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a tensor, a numpy array, a list
-                of float values, a list of tensors, a list of numpy arrays or a list of list of float values.
+                of float values, a list of tensors, a list of numpy arrays or a list of list of float values. Must be
+                mono channel audio, not stereo, i.e. single float per timestep.
             padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
@@ -231,9 +229,11 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched = bool(
-            isinstance(raw_speech, (list, tuple))
-            and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
+        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        if is_batched_numpy and len(raw_speech.shape) > 2:
+            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+        is_batched = is_batched_numpy or (
+            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
         )
 
         if is_batched:

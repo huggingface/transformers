@@ -705,7 +705,7 @@ class TFGenerationMixin:
             seed (`List[int]`, *optional*):
                 Random seed to control sampling, containing two integers, used when `do_sample` is `True`. See the
                 `seed` argument from stateless functions in `tf.random`.
-            kwargs:
+            kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
@@ -746,7 +746,7 @@ class TFGenerationMixin:
                         "You have modified the pretrained model configuration to control generation. This is a"
                         " deprecated strategy to control generation and will be removed soon, in a future version."
                         " Please use a generation configuration file (see"
-                        " https://huggingface.co/docs/transformers/main_classes/text_generation)"
+                        " https://huggingface.co/docs/transformers/main_classes/text_generation )"
                     )
                     self.generation_config = new_generation_config
             generation_config = self.generation_config
@@ -1638,7 +1638,7 @@ class TFGenerationMixin:
         # TODO (Joao): fix cache format or find programatic way to detect cache index
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
         model_name = str(self.decoder) if "EncoderDecoder" in str(self) else str(self)
-        cache_batch_axis = 1 if any([model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")]) else 0
+        cache_batch_axis = 1 if any(model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")) else 0
         # some models, like XLNet, need more than the last token in the presence of past_key_values
         needs_full_input = "use_mems" in set(inspect.signature(self.prepare_inputs_for_generation).parameters.keys())
 
@@ -1922,7 +1922,7 @@ class TFGenerationMixin:
         # TODO (Joao): fix cache format or find programatic way to detect cache index
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
         model_name = str(self.decoder) if "EncoderDecoder" in str(self) else str(self)
-        cache_batch_axis = 1 if any([model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")]) else 0
+        cache_batch_axis = 1 if any(model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")) else 0
         # some models, like XLNet, need more than the last token in the presence of past_key_values
         needs_full_input = "use_mems" in set(inspect.signature(self.prepare_inputs_for_generation).parameters.keys())
 
@@ -2265,7 +2265,7 @@ class TFGenerationMixin:
         # TODO (Joao): fix cache format or find programatic way to detect cache index
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
         model_name = str(self.decoder) if "EncoderDecoder" in str(self) else str(self)
-        cache_batch_axis = 1 if any([model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")]) else 0
+        cache_batch_axis = 1 if any(model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")) else 0
         # some models, like XLNet, need more than the last token in the presence of past_key_values
         needs_full_input = "use_mems" in set(inspect.signature(self.prepare_inputs_for_generation).parameters.keys())
 
@@ -2779,7 +2779,7 @@ class TFGenerationMixin:
         # TODO (Joao): fix cache format or find programatic way to detect cache index
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
         model_name = str(self.decoder) if "EncoderDecoder" in str(self) else str(self)
-        cache_batch_axis = 1 if any([model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")]) else 0
+        cache_batch_axis = 1 if any(model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")) else 0
 
         # 2. init `attentions`, `hidden_states`, and `scores` tuples
         scores = [] if (return_dict_in_generate and output_scores) else None

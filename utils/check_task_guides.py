@@ -55,29 +55,29 @@ def _find_text_in_file(filename, start_prompt, end_prompt):
 transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
 
 TASK_GUIDE_TO_MODELS = {
-    "asr.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_CTC_MAPPING_NAMES,
-    "audio_classification.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
-    "language_modeling.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
-    "image_classification.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
-    "masked_language_modeling.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_MASKED_LM_MAPPING_NAMES,
-    "multiple_choice.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
-    "object_detection.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES,
-    "question_answering.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
-    "semantic_segmentation.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
-    "sequence_classification.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
-    "summarization.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
-    "token_classification.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
-    "translation.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
-    "video_classification.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
-    "document_question_answering.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
-    "monocular_depth_estimation.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES,
+    "asr.md": transformers_module.models.auto.modeling_auto.MODEL_FOR_CTC_MAPPING_NAMES,
+    "audio_classification.md": transformers_module.models.auto.modeling_auto.MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
+    "language_modeling.md": transformers_module.models.auto.modeling_auto.MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+    "image_classification.md": transformers_module.models.auto.modeling_auto.MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    "masked_language_modeling.md": transformers_module.models.auto.modeling_auto.MODEL_FOR_MASKED_LM_MAPPING_NAMES,
+    "multiple_choice.md": transformers_module.models.auto.modeling_auto.MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
+    "object_detection.md": transformers_module.models.auto.modeling_auto.MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES,
+    "question_answering.md": transformers_module.models.auto.modeling_auto.MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
+    "semantic_segmentation.md": transformers_module.models.auto.modeling_auto.MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
+    "sequence_classification.md": transformers_module.models.auto.modeling_auto.MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+    "summarization.md": transformers_module.models.auto.modeling_auto.MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
+    "token_classification.md": transformers_module.models.auto.modeling_auto.MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+    "translation.md": transformers_module.models.auto.modeling_auto.MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
+    "video_classification.md": transformers_module.models.auto.modeling_auto.MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
+    "document_question_answering.md": transformers_module.models.auto.modeling_auto.MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
+    "monocular_depth_estimation.md": transformers_module.models.auto.modeling_auto.MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES,
 }
 
 # This list contains model types used in some task guides that are not in `CONFIG_MAPPING_NAMES` (therefore not in any
 # `MODEL_MAPPING_NAMES` or any `MODEL_FOR_XXX_MAPPING_NAMES`).
 SPECIAL_TASK_GUIDE_TO_MODEL_TYPES = {
-    "summarization.mdx": ("nllb",),
-    "translation.mdx": ("nllb",),
+    "summarization.md": ("nllb",),
+    "translation.md": ("nllb",),
 }
 
 

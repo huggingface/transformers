@@ -66,7 +66,7 @@ class TFTrainingArguments(TrainingArguments):
             The batch size per GPU/TPU core/CPU for training.
         per_device_eval_batch_size (`int`, *optional*, defaults to 8):
             The batch size per GPU/TPU core/CPU for evaluation.
-        gradient_accumulation_steps: (`int`, *optional*, defaults to 1):
+        gradient_accumulation_steps (`int`, *optional*, defaults to 1):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
             <Tip warning={true}>

@@ -39,7 +39,7 @@ if is_timm_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
 class TableTransformerModelTester:
@@ -501,13 +501,13 @@ def prepare_img():
 @slow
 class TableTransformerModelIntegrationTests(unittest.TestCase):
     def test_table_detection(self):
-        feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/table-transformer-detection")
+        image_processor = AutoImageProcessor.from_pretrained("microsoft/table-transformer-detection")
         model = TableTransformerForObjectDetection.from_pretrained("microsoft/table-transformer-detection")
         model.to(torch_device)
 
         file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename="example_pdf.png")
         image = Image.open(file_path).convert("RGB")
-        inputs = feature_extractor(image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():

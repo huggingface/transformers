@@ -50,9 +50,6 @@ if is_torch_available():
         BridgeTowerModel,
     )
     from transformers.models.bridgetower.modeling_bridgetower import BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10
-else:
-    is_torch_greater_or_equal_than_1_10 = False
 
 if is_vision_available():
     from PIL import Image
@@ -298,7 +295,6 @@ class BridgeTowerModelTester:
 
 
 @require_torch
-@unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "BridgeTower is only available in torch v1.10+")
 class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
@@ -516,7 +512,6 @@ def prepare_img():
 
 @require_torch
 @require_vision
-@unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "BridgeTower is only available in torch v1.10+")
 class BridgeTowerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_processor(self):
@@ -601,7 +596,6 @@ class BridgeTowerModelIntegrationTest(unittest.TestCase):
 
 @slow
 @require_torch
-@unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "BridgeTower is only available in torch v1.10+")
 class BridgeTowerModelTrainingTest(unittest.TestCase):
     all_training_supported_model_classes = (
         (BridgeTowerForImageAndTextRetrieval, BridgeTowerForMaskedLM, BridgeTowerForContrastiveLearning)
@@ -627,7 +621,8 @@ class BridgeTowerModelTrainingTest(unittest.TestCase):
         non_used_layer_names = ["text_model.pooler"]
         if model_class == BridgeTowerForMaskedLM:
             non_used_layer_names = non_used_layer_names + [
-                "cross_modal_image_layers.5",
+                # This number `1` actually depends on the number of layers in `cross_modal_image_layers` (by minus 1)
+                "cross_modal_image_layers.1",
                 "cross_modal_image_pooler",
                 "cross_modal_text_pooler",
             ]

@@ -143,7 +143,9 @@ class MarkupLMEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
 
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
@@ -713,7 +715,6 @@ class MarkupLMPreTrainedModel(PreTrainedModel):
     config_class = MarkupLMConfig
     pretrained_model_archive_map = MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST
     base_model_prefix = "markuplm"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with Bert->MarkupLM
     def _init_weights(self, module):
@@ -971,8 +972,6 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
     MARKUPLM_START_DOCSTRING,
 )
 class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering.__init__ with bert->markuplm, Bert->MarkupLM
     def __init__(self, config):
         super().__init__(config)
