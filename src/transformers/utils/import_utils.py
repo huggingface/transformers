@@ -112,6 +112,7 @@ _sacremoses_available = _is_package_available("sacremoses")
 _safetensors_available = _is_package_available("safetensors")
 _scipy_available = _is_package_available("scipy")
 _sentencepiece_available = _is_package_available("sentencepiece")
+_is_seqio_available = _is_package_available("seqio")
 _sklearn_available = importlib.util.find_spec("sklearn") is not None
 if _sklearn_available:
     try:
@@ -505,6 +506,10 @@ def is_sklearn_available():
 
 def is_sentencepiece_available():
     return _sentencepiece_available
+
+
+def is_seqio_available():
+    return _is_seqio_available
 
 
 def is_protobuf_available():
