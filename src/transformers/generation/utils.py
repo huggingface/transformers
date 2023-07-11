@@ -2376,6 +2376,7 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 knockout_neurons=knockout_neurons_matrix, # need to have same arg as in model_kwargs
+                ns_value=model_kwargs['ns_value']
             )
 
             if synced_gpus and this_peer_finished:
