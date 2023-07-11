@@ -122,8 +122,8 @@ class HfArgumentParser(ArgumentParser):
         Args:
             dataclass_types:
                 Dataclass type, or list of dataclass types for which we will "fill" instances with the parsed args.
-            kwargs:
-                (Optional) Passed to `argparse.ArgumentParser()` in the regular way.
+            kwargs (`Dict[str, Any]`, *optional*):
+                Passed to `argparse.ArgumentParser()` in the regular way.
         """
         # To make the default appear when using --help
         if "formatter_class" not in kwargs:

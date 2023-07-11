@@ -135,7 +135,7 @@ def dropout_add(x: torch.Tensor, residual: torch.Tensor, prob: float, training: 
         x (`torch.tensor`, *required*):
             input tensor
         residual (`torch.tensor`, *required*):
-            esidual tensor
+            residual tensor
         prob (`float`, *required*):
             dropout probability
         training (`bool`, *required*):
