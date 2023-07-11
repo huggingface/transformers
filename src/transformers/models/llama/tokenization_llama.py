@@ -70,7 +70,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             ```python
             >>> from transformers import T5Tokenizer
 
-            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=True)
+            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
             >>> tokenizer.encode("Hello <extra_id_0>.")
             [8774, 32099, 5, 1] # the extra space `[3]` is no longer here
             ```
