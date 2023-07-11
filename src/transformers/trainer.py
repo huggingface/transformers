@@ -688,7 +688,7 @@ class Trainer:
         self.can_return_loss = can_return_loss(self.model.__class__)
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
-        # Internal variables to keep track of the original per-device batch size
+        # Internal variables to keep track of the original batch size
         self._train_batch_size = args.train_batch_size
 
         # very last
