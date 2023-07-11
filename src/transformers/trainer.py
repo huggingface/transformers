@@ -688,8 +688,9 @@ class Trainer:
         self.can_return_loss = can_return_loss(self.model.__class__)
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
-        # Internal variables to keep track of the original batch size
+        # Internal variables to help with automatic batch size reduction
         self._train_batch_size = args.train_batch_size
+        self._created_lr_scheduler = False
 
         # very last
         self._memory_tracker.stop_and_update_metrics()
@@ -1150,6 +1151,7 @@ class Trainer:
                 num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
                 num_training_steps=num_training_steps,
             )
+            self._created_lr_scheduler = True
         return self.lr_scheduler
 
     def num_examples(self, dataloader: DataLoader) -> int:
@@ -1612,6 +1614,11 @@ class Trainer:
             or is_sagemaker_mp_enabled()
             or self.fsdp is not None
         )
+
+        # We need to reset the scheduler, as its parameters may be different on subsequent calls
+        if self._created_lr_scheduler:
+            self.lr_scheduler = None
+            self._created_lr_scheduler = False
 
         if self.is_deepspeed_enabled:
             self.optimizer, self.lr_scheduler = deepspeed_init(self, num_training_steps=max_steps)
