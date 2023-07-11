@@ -1547,7 +1547,6 @@ class Trainer:
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
     ):
         self.accelerator.free_memory()
-        # We need to reset the scheduler, as its parameters may be different on subsequent calls
         self._train_batch_size = batch_size
         logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
         # Data loader and number of training steps
@@ -1615,6 +1614,8 @@ class Trainer:
             or is_sagemaker_mp_enabled()
             or self.fsdp is not None
         )
+        
+        # We need to reset the scheduler, as its parameters may be different on subsequent calls
         if self._created_lr_scheduler:
             self.lr_scheduler = None
             self._created_lr_scheduler = False
