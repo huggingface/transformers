@@ -142,7 +142,7 @@ To immediately use a model on a given input (text, image, audio, ...), we provid
 >>> from transformers import pipeline
 
 # Allocate a pipeline for sentiment-analysis
->>> classifier = pipeline('sentiment-analysis')
+>>> classifier = pipeline(task='sentiment-analysis', model='distilbert-base-uncased-finetuned-sst-2-english')
 >>> classifier('We are very happy to introduce pipeline to the transformers repository.')
 [{'label': 'POSITIVE', 'score': 0.9996980428695679}]
 ```
@@ -162,7 +162,7 @@ Many tasks have a pre-trained `pipeline` ready to go, in NLP but also in compute
 >>> image = Image.open(image_data)
 
 # Allocate a pipeline for object detection
->>> object_detector = pipeline('object-detection')
+>>> object_detector = pipeline(task='object-detection', model='facebook/detr-resnet-50')
 >>> object_detector(image)
 [{'score': 0.9982201457023621,
   'label': 'remote',
@@ -194,10 +194,10 @@ In addition to `pipeline`, to download and use any of the pretrained models on y
 ```python
 >>> from transformers import AutoTokenizer, AutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
->>> model = AutoModel.from_pretrained("bert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path="bert-base-uncased")
+>>> model = AutoModel.from_pretrained(pretrained_model_name_or_path="bert-base-uncased")
 
->>> inputs = tokenizer("Hello world!", return_tensors="pt")
+>>> inputs = tokenizer(text="Hello world!", return_tensors="pt")
 >>> outputs = model(**inputs)
 ```
 
@@ -205,10 +205,10 @@ And here is the equivalent code for TensorFlow:
 ```python
 >>> from transformers import AutoTokenizer, TFAutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
->>> model = TFAutoModel.from_pretrained("bert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path="bert-base-uncased")
+>>> model = TFAutoModel.from_pretrained(pretrained_model_name_or_path="bert-base-uncased")
 
->>> inputs = tokenizer("Hello world!", return_tensors="tf")
+>>> inputs = tokenizer(text="Hello world!", return_tensors="tf")
 >>> outputs = model(**inputs)
 ```
 
