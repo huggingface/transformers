@@ -60,7 +60,7 @@ def run_with_tf_optimizations(do_eager_mode: bool, use_xla: bool):
             return func(*args, **kwargs)
 
         if do_eager_mode is True:
-            if use_xla is True:
+            if use_xla is not False:
                 raise ValueError(
                     "Cannot run model in XLA, if `args.eager_mode` is set to `True`. Please set `args.eager_mode=False`."
                 )
@@ -169,7 +169,7 @@ class TensorFlowBenchmark(Benchmark):
     def _prepare_train_func(self, model_name: str, batch_size: int, sequence_length: int) -> Callable[[], None]:
         config = self.config_dict[model_name]
 
-        if self.args.eager_mode:
+        if self.args.eager_mode is not False:
             raise ValueError("Training cannot be done in eager mode. Please make sure that `args.eager_mode = False`.")
 
         if self.args.fp16:
