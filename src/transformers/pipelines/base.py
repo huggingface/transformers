@@ -35,7 +35,15 @@ from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import ModelOutput, add_end_docstrings, infer_framework, is_tf_available, is_torch_available, logging
+from ..utils import (
+    ModelOutput,
+    add_end_docstrings,
+    infer_framework,
+    is_peft_available,
+    is_tf_available,
+    is_torch_available,
+    logging,
+)
 
 
 GenericTensor = Union[List["GenericTensor"], "torch.Tensor", "tf.Tensor"]
@@ -44,6 +52,9 @@ if is_tf_available():
     import tensorflow as tf
 
     from ..models.auto.modeling_tf_auto import TFAutoModel
+
+if is_peft_available():
+    from peft import PeftModel
 
 if is_torch_available():
     import torch
@@ -265,14 +276,32 @@ def infer_framework_load_model(
                     "Trying to load the model with Tensorflow."
                 )
 
-            try:
-                model = model_class.from_pretrained(model, **kwargs)
-                if hasattr(model, "eval"):
-                    model = model.eval()
-                # Stop loading on the first successful load.
-                break
-            except (OSError, ValueError):
-                continue
+            if getattr(config, "_is_peft_model", None) is not None:
+                if isinstance(model, str):
+                    peft_model_id = model
+                    try:
+                        model = model_class.from_pretrained(config._peft_base_model_name_or_path, **kwargs)
+                    except (OSError, ValueError):
+                        continue
+                try:
+                    adapter_name = config._peft_model_kwargs.get("adapter_name", "default")
+                    model = PeftModel.from_pretrained(model, peft_model_id, adapter_name=adapter_name)
+                    if hasattr(model, "eval"):
+                        model = model.eval()
+                    # Stop loading on the first successful load.
+                    break
+                except (OSError, ValueError):
+                    continue
+
+            else:
+                try:
+                    model = model_class.from_pretrained(model, **kwargs)
+                    if hasattr(model, "eval"):
+                        model = model.eval()
+                    # Stop loading on the first successful load.
+                    break
+                except (OSError, ValueError):
+                    continue
 
         if isinstance(model, str):
             raise ValueError(f"Could not load model {model} with any of the following classes: {class_tuple}.")
@@ -942,7 +971,9 @@ class Pipeline(_ScikitCompat):
         else:
             return inputs
 
-    def check_model_type(self, supported_models: Union[List[str], dict]):
+    def check_model_type(
+        self, supported_models: Union[List[str], dict], extra_custom_model_classes: Optional[dict] = None
+    ):
         """
         Check if the model class is in supported by the pipeline.
 
@@ -959,6 +990,12 @@ class Pipeline(_ScikitCompat):
                 else:
                     supported_models_names.append(model.__name__)
             supported_models = supported_models_names
+
+        if extra_custom_model_classes is not None and not isinstance(extra_custom_model_classes, list):
+            raise ValueError("extra_custom_models must be a list of model classes")
+        elif extra_custom_model_classes is not None:
+            supported_models = supported_models + [model_class.__name__ for model_class in extra_custom_model_classes]
+
         if self.model.__class__.__name__ not in supported_models:
             logger.error(
                 f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are"

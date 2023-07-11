@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from huggingface_hub import model_info
+from huggingface_hub.utils import EntryNotFoundError
 from numpy import isin
 
 from ..configuration_utils import PretrainedConfig
@@ -36,6 +37,7 @@ from ..utils import (
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     is_kenlm_available,
     is_offline_mode,
+    is_peft_available,
     is_pyctcdecode_available,
     is_tf_available,
     is_torch_available,
@@ -140,6 +142,9 @@ if is_torch_available():
         AutoModelForZeroShotImageClassification,
         AutoModelForZeroShotObjectDetection,
     )
+
+if is_peft_available():
+    from peft import PeftConfig
 
 
 if TYPE_CHECKING:
@@ -520,6 +525,7 @@ def pipeline(
     trust_remote_code: Optional[bool] = None,
     model_kwargs: Dict[str, Any] = None,
     pipeline_class: Optional[Any] = None,
+    peft_model_kwargs: Optional[Dict[str, Any]] = None,
     **kwargs,
 ) -> Pipeline:
     """
@@ -673,6 +679,11 @@ def pipeline(
         "trust_remote_code": trust_remote_code,
         "_commit_hash": None,
     }
+    if peft_model_kwargs is not None and not is_peft_available():
+        raise ImportError("To use `peft_model_kwargs`, you need to install PEFT library `pip install peft`.")
+
+    if peft_model_kwargs is None:
+        peft_model_kwargs = {}
 
     if task is None and model is None:
         raise RuntimeError(
@@ -699,11 +710,31 @@ def pipeline(
     # Config is the primordial information item.
     # Instantiate config if needed
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config, _from_pipeline=task, **hub_kwargs, **model_kwargs)
-        hub_kwargs["_commit_hash"] = config._commit_hash
+        try:
+            config = AutoConfig.from_pretrained(config, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+            hub_kwargs["_commit_hash"] = config._commit_hash
+        except EnvironmentError:
+            # try again with Peft Config.
+            peft_config = PeftConfig.from_pretrained(config, **hub_kwargs)
+            config = AutoConfig.from_pretrained(
+                peft_config.base_model_name_or_path, _from_pipeline=task, **hub_kwargs, **model_kwargs
+            )
+            config._is_peft_model = True
+            config._peft_base_model_name_or_path = peft_config.base_model_name_or_path
+            config._peft_model_kwargs = peft_model_kwargs
+
     elif config is None and isinstance(model, str):
-        config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
-        hub_kwargs["_commit_hash"] = config._commit_hash
+        try:
+            config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+            hub_kwargs["_commit_hash"] = config._commit_hash
+        except EnvironmentError:
+            peft_config = PeftConfig.from_pretrained(model, **hub_kwargs)
+            config = AutoConfig.from_pretrained(
+                peft_config.base_model_name_or_path, _from_pipeline=task, **hub_kwargs, **model_kwargs
+            )
+            config._is_peft_model = True
+            config._peft_base_model_name_or_path = peft_config.base_model_name_or_path
+            config._peft_model_kwargs = peft_model_kwargs
 
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:
@@ -881,6 +912,9 @@ def pipeline(
                 tokenizer_identifier = tokenizer
                 tokenizer_kwargs = model_kwargs.copy()
                 tokenizer_kwargs.pop("torch_dtype", None)
+
+                if getattr(config, "_is_peft_model", False):
+                    tokenizer_identifier = config._peft_base_model_name_or_path
 
             tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_identifier, use_fast=use_fast, _from_pipeline=task, **hub_kwargs, **tokenizer_kwargs
