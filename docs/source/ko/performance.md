@@ -18,79 +18,79 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Performance and Scalability
+# 성능 및 확장성 [[performance-and-scalability]]
 
-Training larger and larger transformer models and deploying them to production comes with a range of challenges. During training your model can require more GPU memory than is available or be very slow to train and when you deploy it for inference it can be overwhelmed with the throughput that is required in the production environment. This documentation is designed to help you navigate these challenges and find the best setting for your use-case. We split the guides into training and inference as they come with different challenges and solutions. Then within each of them we have separate guides for different kinds of hardware setting (e.g. single vs. multi-GPU for training or CPU vs. GPU for infrence).
+더 큰 트랜스포머 모델을 학습하고 제품에 배포하는 것은 다양한 도전과제와 함께 진행됩니다. 학습 중에는 모델이 사용 가능한 GPU 메모리보다 더 많은 메모리를 필요로 하거나 학습 속도가 매우 느릴 수 있으며, 추론을 위해 배포할 때는 제품 환경에서 요구되는 처리량으로 인해 과부하를 받을 수 있습니다. 이 문서는 이러한 도전과제를 극복하고 사용 사례에 가장 적합한 설정을 찾도록 도움을 주기 위해 설계되었습니다. 학습과 추론으로 가이드를 분할했는데, 각각 다른 도전과제와 해결책이 있습니다. 그리고 그 안에는 학습에 대한 단일 GPU 대 다중 GPU 또는 추론에 대한 CPU 대 GPU와 같은 다양한 종류의 하드웨어 설정에 대한 별도의 가이드가 있습니다.
 
 ![perf_overview](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/perf_overview.png)
 
-This document serves as an overview and entry point for the methods that could be useful for your scenario.
+이 문서는 시나리오에 유용한 방법들에 대한 개요와 진입점 역할을 합니다.
 
-## Training
+## 학습 [[training]]
 
-Training transformer models efficiently requires an accelerator such as a GPU or TPU. The most common case is where you only have a single GPU, but there is also a section about multi-GPU and CPU training (with more coming soon).
+효율적인 트랜스포머 모델 학습에는 GPU나 TPU와 같은 가속기가 필요합니다. 가장 일반적인 경우는 단일 GPU만 사용하는 경우지만, 다중 GPU 및 CPU 학습에 대한 섹션도 있습니다(곧 더 많은 내용이 추가될 예정).
 
-<Tip>
+<팁>
 
- Note: Most of the strategies introduced in the single GPU sections (such as mixed precision training or gradient accumulation) are generic and apply to training models in general so make sure to have a look at it before diving into the following sections such as multi-GPU or CPU training.
+ 참고: 단일 GPU 섹션에서 소개된 대부분의 전략(예: 혼합 정밀도 학습 또는 그라디언트 누적)은 일반적인 모델 학습에도 적용되므로, 다중 GPU나 CPU 학습과 같은 다음 섹션에 들어가기 전에 꼭 살펴보시기 바랍니다.
 
-</Tip>
+</팁>
 
-### Single GPU
+### 단일 GPU [[single-gpu]]
 
-Training large models on a single GPU can be challenging but there are a number of tools and methods that make it feasible. In this section methods such as mixed precision training, gradient accumulation and checkpointing, efficient optimizers, as well as strategies to determine the best batch size are discussed.
+단일 GPU에서 큰 모델을 학습하는 것은 도전적일 수 있지만, 가능하게 만드는 도구와 방법이 있습니다. 이 섹션에서는 혼합 정밀도 학습, 그라디언트 누적 및 체크포인팅, 효율적인 옵티마이저, 최적의 배치 크기를 결정하기 위한 전략 등에 대해 논의합니다.
 
-[Go to single GPU training section](perf_train_gpu_one)
+[단일 GPU 학습 섹션으로 이동](perf_train_gpu_one)
 
-### Multi-GPU
+### 다중 GPU [[multigpu]]
 
-In some cases training on a single GPU is still too slow or won't fit the large model. Moving to a multi-GPU setup is the logical step, but training on multiple GPUs at once comes with new decisions: does each GPU have a full copy of the model or is the model itself also distributed? In this section we look at data, tensor, and pipeline parallism.
+일부 경우에는 단일 GPU에서의 학습이 여전히 너무 느리거나 큰 모델을 수용할 수 없는 경우입니다. 다중 GPU 설정으로 전환하는 것은 논리적인 단계이지만, 한 번에 여러 GPU에서 학습하는 것은 새로운 결정을 요구합니다. 각 GPU에는 모델의 전체 복사본이 있는지 아니면 모델 자체도 분산되는지에 대한 문제입니다. 이 섹션에서는 데이터, 텐서 및 파이프라인 병렬성에 대해 살펴봅니다.
 
-[Go to multi-GPU training section](perf_train_gpu_many)
+[다중 GPU 학습 섹션으로 이동](perf_train_gpu_many)
 
-### CPU
-
-
-[Go to CPU training section](perf_train_cpu)
+### CPU [[cpu]]
 
 
-### TPU
-
-[_Coming soon_](perf_train_tpu)
-
-### Specialized Hardware
-
-[_Coming soon_](perf_train_special)
-
-## Inference
-
-Efficient inference with large models in a production environment can be as challenging as training them. In the following sections we go through the steps to run inference on CPU and single/multi-GPU setups.
-
-### CPU
-
-[Go to CPU inference section](perf_infer_cpu)
-
-### Single GPU
-
-[Go to single GPU inference section](perf_infer_gpu_one)
-
-### Multi-GPU
-
-[Go to multi-GPU inference section](perf_infer_gpu_many)
-
-### Specialized Hardware
-
-[_Coming soon_](perf_infer_special)
-
-## Hardware
-
-In the hardware section you can find tips and tricks when building your own deep learning rig.
-
-[Go to hardware section](perf_hardware)
+[CPU 학습 섹션으로 이동](perf_train_cpu)
 
 
-## Contribute
+### TPU [[tpu]]
 
-This document is far from being complete and a lot more needs to be added, so if you have additions or corrections to make please don't hesitate to open a PR or if you aren't sure start an Issue and we can discuss the details there.
+[_곧 제공될 예정_](perf_train_tpu)
 
-When making contributions that A is better than B, please try to include a reproducible benchmark and/or a link to the source of that information (unless it comes directly from you).
+### 특수한 하드웨어 [[specialized-hardware]]
+
+[_곧 제공될 예정_](perf_train_special)
+
+## 추론 [[inference]]
+
+제품 환경에서 큰 모델을 사용한 효율적인 추론은 학습과 마찬가지로 도전적일 수 있습니다. 다음 섹션에서는 CPU 및 단일/다중 GPU 설정에서 추론을 실행하는 단계에 대해 알아봅니다.
+
+### CPU [[cpu]]
+
+[CPU 추론 섹션으로 이동](perf_infer_cpu)
+
+### 단일 GPU [[single-gpu]]
+
+[단일 GPU 추론 섹션으로 이동](perf_infer_gpu_one)
+
+### 다중 GPU [[multigpu]]
+
+[다중 GPU 추론 섹션으로 이동](perf_infer_gpu_many)
+
+### 특수한 하드웨어 [[specialized-hardware]]
+
+[_곧 제공될 예정_](perf_infer_special)
+
+## 하드웨어 [[hardware]]
+
+하드웨어 섹션에서는 자신의 딥러닝 머신을 구축할 때 유용한 팁과 요령을 찾을 수 있습니다.
+
+[하드웨어 섹션으로 이동](perf_hardware)
+
+
+## 기여하기 [[contribute]]
+
+이 문서는 완성되지 않은 상태이며, 추가해야 할 내용이나 수정 사항이 많이 있습니다. 따라서 추가하거나 수정할 내용이 있으면 주저하지 말고 PR을 열어 주시거나, 자세한 내용을 논의하기 위해 Issue를 시작해 주시기 바랍니다.
+
+A가 B보다 좋다고 하는 기여를 할 때는, 재현 가능한 벤치마크와/또는 해당 정보의 출처 링크를 포함하도록 노력해 주세요(당신의 직접적인 정보가 아닌 경우).
