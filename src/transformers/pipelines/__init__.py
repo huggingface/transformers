@@ -19,7 +19,7 @@ import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
-from huggingface_hub import model_info
+from huggingface_hub import list_repo_files, model_info
 from huggingface_hub.utils import EntryNotFoundError
 from numpy import isin
 
@@ -707,39 +707,31 @@ def pipeline(
     if isinstance(model, Path):
         model = str(model)
 
+    if is_peft_available() and isinstance(model, str):
+        try:
+            list_remote_files = list_repo_files(model, revision=revision, use_auth_token=use_auth_token)
+        except EntryNotFoundError:
+            list_remote_files = os.listdir(model)
+
+        has_adapter_config = "adapter_config.json" in list_remote_files
+    else:
+        has_adapter_config = False
+
     # Config is the primordial information item.
     # Instantiate config if needed
     if isinstance(config, str):
-        if is_peft_available():
-            try:
-                config = AutoConfig.from_pretrained(config, _from_pipeline=task, **hub_kwargs, **model_kwargs)
-                hub_kwargs["_commit_hash"] = config._commit_hash
-            except EnvironmentError:
-                # try again with Peft Config.
-                peft_config = PeftConfig.from_pretrained(config, **hub_kwargs)
-                config = AutoConfig.from_pretrained(
-                    peft_config.base_model_name_or_path, _from_pipeline=task, **hub_kwargs, **model_kwargs
-                )
-                config._is_peft_model = True
-                config._peft_base_model_name_or_path = peft_config.base_model_name_or_path
-                config._peft_model_kwargs = peft_model_kwargs
-        else:
-            config = AutoConfig.from_pretrained(config, _from_pipeline=task, **hub_kwargs, **model_kwargs)
-            hub_kwargs["_commit_hash"] = config._commit_hash
+        config = AutoConfig.from_pretrained(config, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+        hub_kwargs["_commit_hash"] = config._commit_hash
 
     elif config is None and isinstance(model, str):
-        if is_peft_available():
-            try:
-                config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
-                hub_kwargs["_commit_hash"] = config._commit_hash
-            except EnvironmentError:
-                peft_config = PeftConfig.from_pretrained(model, **hub_kwargs)
-                config = AutoConfig.from_pretrained(
-                    peft_config.base_model_name_or_path, _from_pipeline=task, **hub_kwargs, **model_kwargs
-                )
-                config._is_peft_model = True
-                config._peft_base_model_name_or_path = peft_config.base_model_name_or_path
-                config._peft_model_kwargs = peft_model_kwargs
+        if has_adapter_config:
+            peft_config = PeftConfig.from_pretrained(model, **hub_kwargs)
+            config = AutoConfig.from_pretrained(
+                peft_config.base_model_name_or_path, _from_pipeline=task, **hub_kwargs, **model_kwargs
+            )
+            config._is_peft_model = True
+            config._peft_base_model_name_or_path = peft_config.base_model_name_or_path
+            config._peft_model_kwargs = peft_model_kwargs
         else:
             config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
             hub_kwargs["_commit_hash"] = config._commit_hash
