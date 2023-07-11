@@ -254,23 +254,27 @@ class MptGelu(nn.Module):
 def scaled_multihead_dot_product_attention(query, key, value, n_heads, past_key_value=None, softmax_scale=None, attn_bias=None, key_padding_mask=None, is_causal=False, dropout_p=0.0, training=False, needs_weights=False, multiquery=False):
     batch_size, seq_length, hidden_size = query.shape
     head_dim = hidden_size // n_heads
-
-    q = query.reshape(batch_size, n_heads, seq_length, head_dim).permute(0, 2, 1, 3)
-
     kv_n_heads = 1 if multiquery else n_heads
 
-    k = key.reshape(batch_size, kv_n_heads, seq_length, head_dim).permute(0, 2, 3, 1)
-    v = value.reshape(batch_size, kv_n_heads, seq_length, head_dim).permute(0, 2, 1, 3)
+    reshaped_query = query.reshape(batch_size, seq_length, n_heads, head_dim).permute(0, 2, 1, 3)
+    reshaped_key = key.reshape(batch_size, seq_length, kv_n_heads, head_dim).permute(0, 2, 3, 1)
+    reshaped_value = value.reshape(batch_size, seq_length, kv_n_heads, head_dim).permute(0, 2, 1, 3)
+
     if past_key_value is not None:
         if len(past_key_value) != 0:
-            k = torch.cat([past_key_value[0], k], dim=3)
-            v = torch.cat([past_key_value[1], v], dim=2)
-        past_key_value = (k, v)
-    (b, _, s_q, d) = q.shape
-    s_k = k.size(-1)
+            reshaped_key = torch.cat([past_key_value[0], reshaped_key], dim=3)
+            reshaped_value = torch.cat([past_key_value[1], reshaped_value], dim=2)
+        past_key_value = (reshaped_key, reshaped_value)
+    
+    (b, _, s_q, d) = reshaped_query.shape
+    s_k = reshaped_key.size(-1)
+
     if softmax_scale is None:
         softmax_scale = 1 / math.sqrt(d)
-    attn_weight = q.matmul(k) * softmax_scale
+    
+    attn_weight = reshaped_query.matmul(reshaped_key) * softmax_scale
+
+    # TODO: fix correct alibi
     if attn_bias is not None:
         _s_q = max(0, attn_bias.size(2) - s_q)
         _s_k = max(0, attn_bias.size(3) - s_k)
@@ -278,12 +282,13 @@ def scaled_multihead_dot_product_attention(query, key, value, n_heads, past_key_
         if attn_bias.size(-1) != 1 and attn_bias.size(-1) != s_k or (attn_bias.size(-2) != 1 and attn_bias.size(-2) != s_q):
             raise RuntimeError(f'attn_bias (shape: {attn_bias.shape}) is expected to broadcast to shape: {attn_weight.shape}.')
         attn_weight = attn_weight + attn_bias
-    min_val = torch.finfo(q.dtype).min
+
+    min_val = torch.finfo(reshaped_query.dtype).min
     if key_padding_mask is not None:
         if attn_bias is not None:
             warnings.warn('Propogating key_padding_mask to the attention module ' + 'and applying it within the attention module can cause ' + 'unneccessary computation/memory usage. Consider integrating ' + 'into attn_bias once and passing that to each attention ' + 'module instead.')
         attn_weight = attn_weight.masked_fill(~key_padding_mask.view((b, 1, 1, s_k)), min_val)
-    if is_causal and (not q.size(2) == 1):
+    if is_causal and (not reshaped_query.size(2) == 1):
         s = max(s_q, s_k)
         causal_mask = attn_weight.new_ones(s, s, dtype=torch.float16)
         causal_mask = causal_mask.tril()
@@ -294,7 +299,8 @@ def scaled_multihead_dot_product_attention(query, key, value, n_heads, past_key_
     attn_weight = torch.softmax(attn_weight, dim=-1)
     if dropout_p:
         attn_weight = torch.nn.functional.dropout(attn_weight, p=dropout_p, training=training, inplace=True)
-    out = attn_weight.to(v.dtype).matmul(v)
+    
+    out = attn_weight.to(reshaped_value.dtype).matmul(reshaped_value)
     out = out.reshape(batch_size, seq_length, hidden_size)
 
     if needs_weights:
@@ -334,9 +340,11 @@ class MptAttention(nn.Module):
         is_causal=True, 
         needs_weights=False
     ):
+        # TODO: refactor this
         qkv = self.Wqkv(x)
         (query, key, value) = qkv.chunk(3, dim=2)
         key_padding_mask = attention_mask
+        # I think we should leave `self.attn_fn` so that is can be modulable enough to support triton and flash attention
         (context, attn_weights, past_key_value) = self.attn_fn(query, key, value, self.n_heads, past_key_value=past_key_value, softmax_scale=self.softmax_scale, attn_bias=attn_bias, key_padding_mask=key_padding_mask, is_causal=is_causal, dropout_p=self.attn_dropout_p, training=self.training, needs_weights=needs_weights)
         return (self.out_proj(context), attn_weights, past_key_value)
 
