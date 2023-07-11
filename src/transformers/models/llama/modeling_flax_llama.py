@@ -335,7 +335,6 @@ class FlaxLlamaMLP(nn.Module):
         return hidden_states
 
 
-# TODO: make sure attention output format is same as Pytorch
 class FlaxLlamaDecoderLayer(nn.Module):
     config: LlamaConfig
     dtype: jnp.dtype = jnp.float32
@@ -514,7 +513,6 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         return outputs
 
 
-# TODO: implement
 class FlaxLlamaBlockCollection(nn.Module):
     config: LlamaConfig
     dtype: jnp.dtype = jnp.float32
@@ -556,70 +554,66 @@ class FlaxLlamaBlockCollection(nn.Module):
         return outputs
 
 
-# TODO: implement
 class FlaxLlamaModule(nn.Module):
     config: LlamaConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.embed_dim = self.config.hidden_size
+        self.hidden_size = self.config.hidden_size
         embedding_init = jax.nn.initializers.normal(stddev=self.config.initializer_range)
-        self.wte = nn.Embed(
+        self.embed_tokens = nn.Embed(
             self.config.vocab_size,
-            self.embed_dim,
+            self.hidden_size,
             embedding_init=embedding_init,
         )
-        self.dropout = nn.Dropout(rate=self.config.embed_dropout)
-        self.h = FlaxLlamaBlockCollection(self.config, dtype=self.dtype)
-        self.ln_f = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
+        self.layers = FlaxLlamaBlockCollection(self.config, dtype=self.dtype)
+        self.norm = FlaxLlamaRMSNorm(self.config.rms_norm_eps)
 
     def __call__(
         self,
         input_ids,
-        attention_mask,
-        position_ids,
+        position_ids=None,
+        attention_mask=None,
         deterministic=True,
         init_cache: bool = False,
         output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
+        # TODO: implement these args
+        # output_hidden_states: bool = False,
+        # return_dict: bool = True,
     ):
-        input_embeds = self.wte(input_ids.astype("i4"))
-        position_embeds = self.wpe(position_ids.astype("i4"))
+        input_embeds = self.embed_tokens(input_ids.astype("i4"))
 
-        hidden_states = input_embeds + position_embeds
-        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
-
-        outputs = self.h(
-            hidden_states,
-            attention_mask,
+        outputs = self.layers(
+            input_embeds,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            # output_hidden_states=output_hidden_states,
+            # return_dict=return_dict,
         )
 
         hidden_states = outputs[0]
-        hidden_states = self.ln_f(hidden_states)
+        hidden_states = self.norm(hidden_states)
 
-        hidden_states = outputs[0]
-        hidden_states = self.ln_f(hidden_states)
+        # TODO: implement this
+        # if output_hidden_states:
+            # all_hidden_states = outputs[1] + (hidden_states,)
+            # outputs = (hidden_states, all_hidden_states) + outputs[2:]
+        # else:
+            # outputs = (hidden_states,) + outputs[1:]
 
-        if output_hidden_states:
-            all_hidden_states = outputs[1] + (hidden_states,)
-            outputs = (hidden_states, all_hidden_states) + outputs[2:]
-        else:
-            outputs = (hidden_states,) + outputs[1:]
+        # if not return_dict:
+            # return tuple(v for v in outputs if v is not None)
 
-        if not return_dict:
-            return tuple(v for v in outputs if v is not None)
+        # return FlaxBaseModelOutput(
+            # last_hidden_state=hidden_states,
+            # hidden_states=outputs[1],
+            # attentions=outputs[-1],
+        # )
 
-        return FlaxBaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=outputs[1],
-            attentions=outputs[-1],
-        )
+        return hidden_states
 
 
 @add_start_docstrings(
@@ -728,6 +722,7 @@ if __name__ == "__main__":
     from .modeling_llama import LlamaModel, _make_causal_mask
     import torch
 
+
     # from .modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
     # x = torch.randn(4, 64, 32)
     # pt_x = x.view(4, 64, 2, 16).transpose(1, 2)
@@ -746,13 +741,15 @@ if __name__ == "__main__":
 
     key = jax.random.PRNGKey(0)
     torch.manual_seed(0)
-    config = LlamaConfig(num_hidden_layers=3)
+    config = LlamaConfig(num_hidden_layers=2, vocab_size=16)
+    print(config)
 
-    model = FlaxLlamaBlockCollection(config)
-    pt_model = LlamaModel(config).layers
+    model = FlaxLlamaModule(config)
+    pt_model = LlamaModel(config)
 
     key, subkey = jax.random.split(key)
-    x = jax.random.normal(subkey, (4, 128, config.hidden_size)) * 0.1
+    # x = jax.random.normal(subkey, (4, 128, config.hidden_size)) * 0.1
+    x = jax.random.randint(subkey, (4, 128), 0, 16)
     mask = jnp.ones((4, 128), dtype=bool)
     position_ids = jnp.arange(128)[jnp.newaxis, :].repeat(4, axis=0)
 
@@ -763,27 +760,37 @@ if __name__ == "__main__":
 
     params = flatten_dict(params['params'], sep='.')
 
-    for i, l in enumerate(pt_model):
+    # import ipdb; ipdb.set_trace()
+
+    for i, l in enumerate(pt_model.layers):
         pt_state = l.state_dict()
         l.load_state_dict({
-            'self_attn.q_proj.weight': torch.from_numpy(np.asarray(params[f'{i}.self_attn.q_proj.kernel'])).T,
-            'self_attn.k_proj.weight': torch.from_numpy(np.asarray(params[f'{i}.self_attn.k_proj.kernel'])).T,
-            'self_attn.v_proj.weight': torch.from_numpy(np.asarray(params[f'{i}.self_attn.v_proj.kernel'])).T,
-            'self_attn.o_proj.weight': torch.from_numpy(np.asarray(params[f'{i}.self_attn.o_proj.kernel'])).T,
+            'self_attn.q_proj.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.self_attn.q_proj.kernel'])).T,
+            'self_attn.k_proj.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.self_attn.k_proj.kernel'])).T,
+            'self_attn.v_proj.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.self_attn.v_proj.kernel'])).T,
+            'self_attn.o_proj.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.self_attn.o_proj.kernel'])).T,
             'self_attn.rotary_emb.inv_freq': pt_state[f'self_attn.rotary_emb.inv_freq'],
-            'input_layernorm.weight': torch.from_numpy(np.asarray(params[f'{i}.input_layernorm.weight'])),
-            'post_attention_layernorm.weight': torch.from_numpy(np.asarray(params[f'{i}.post_attention_layernorm.weight'])),
-            'mlp.down_proj.weight': torch.from_numpy(np.asarray(params[f'{i}.mlp.down_proj.kernel'])).T,
-            'mlp.up_proj.weight': torch.from_numpy(np.asarray(params[f'{i}.mlp.up_proj.kernel'])).T,
-            'mlp.gate_proj.weight': torch.from_numpy(np.asarray(params[f'{i}.mlp.gate_proj.kernel'])).T,
+            'input_layernorm.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.input_layernorm.weight'])),
+            'post_attention_layernorm.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.post_attention_layernorm.weight'])),
+            'mlp.down_proj.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.mlp.down_proj.kernel'])).T,
+            'mlp.up_proj.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.mlp.up_proj.kernel'])).T,
+            'mlp.gate_proj.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.mlp.gate_proj.kernel'])).T,
         })
 
-    h = torch.tensor(np.asarray(x))
-    for l in pt_model:
-        h = l(h, attention_mask=_make_causal_mask((4, 128), torch.float32, device='cpu'), position_ids=torch.from_numpy(np.asarray(position_ids)))[0]
+    pt_model.embed_tokens.weight = torch.nn.Parameter(torch.from_numpy(np.asarray(params['embed_tokens.embedding'])))
+    pt_model.norm.weight = torch.nn.Parameter(torch.from_numpy(np.asarray(params['norm.weight'])))
 
-    y = np.asarray(y[0])
-    pt_y = h.detach().numpy()
+    x_pt = torch.tensor(np.asarray(x))
+    # for l in pt_model:
+        # h = l(h, attention_mask=_make_causal_mask((4, 128), torch.float32, device='cpu'), position_ids=torch.from_numpy(np.asarray(position_ids)))[0]
+
+    # y = pt_model(x_pt, attention_mask=_make_causal_mask((4, 128), torch.float32, device='cpu'), position_ids=torch.from_numpy(np.asarray(position_ids)))[0]
+    pt_y = pt_model(x_pt, attention_mask=torch.from_numpy(np.asarray(mask)), position_ids=torch.from_numpy(np.asarray(position_ids)))[0]
+
+
+    pt_y = pt_y.detach().numpy()
+    #
+    # pt_y = h.detach().numpy()
 
     try:
         np.testing.assert_allclose(y, pt_y, atol=1e-2, rtol=1e-2)
@@ -792,5 +799,4 @@ if __name__ == "__main__":
         import ipdb; ipdb.set_trace()
 
 
-    print(config)
     print("done")
