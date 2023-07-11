@@ -244,7 +244,7 @@ class TensorFlowBenchmark(Benchmark):
         with self.args.strategy.scope():
             try:
                 if self.args.trace_memory_line_by_line:
-                    if self.args.eager_mode is False:
+                    if not self.args.eager_mode:
                         raise ValueError(
                             "`args.eager_mode` is set to `False`. Make sure to run model in eager mode to measure memory"
                             " consumption line by line."
