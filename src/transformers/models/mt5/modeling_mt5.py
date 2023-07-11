@@ -747,17 +747,11 @@ def load_tf_weights_in_mt5(model, config, tf_checkpoint_path):
 class MT5ClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
-    def __init__(
-        self,
-        input_dim: int,
-        inner_dim: int,
-        num_classes: int,
-        pooler_dropout: float,
-    ):
+    def __init__(self, config: MT5Config):
         super().__init__()
-        self.dense = nn.Linear(input_dim, inner_dim)
-        self.dropout = nn.Dropout(p=pooler_dropout)
-        self.out_proj = nn.Linear(inner_dim, num_classes)
+        self.dense = nn.Linear(config.d_model, config.d_model)
+        self.dropout = nn.Dropout(p=config.classifier_dropout)
+        self.out_proj = nn.Linear(config.d_model, config.num_labels)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dropout(hidden_states)
@@ -2070,12 +2064,7 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
 
         self.num_labels = config.num_labels
 
-        self.classification_head = MT5ClassificationHead(
-            config.d_model,
-            config.d_model,
-            config.num_labels,
-            config.classifier_dropout,
-        )
+        self.classification_head = MT5ClassificationHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
