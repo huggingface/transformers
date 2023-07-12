@@ -16,6 +16,12 @@ rendered properly in your Markdown viewer.
 
 # RetriBERT
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, so we won't accept any new PRs changing its code.
+
+</Tip>
+
 ## Overview
 
 The RetriBERT model was proposed in the blog post [Explain Anything Like I'm Five: A Model for Open Domain Long Form

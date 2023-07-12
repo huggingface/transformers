@@ -16,6 +16,12 @@ rendered properly in your Markdown viewer.
 
 # TAPEX
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, so we won't accept any new PRs changing its code.
+
+</Tip>
+
 ## Overview
 
 The TAPEX model was proposed in [TAPEX: Table Pre-training via Learning a Neural SQL Executor](https://arxiv.org/abs/2107.07653) by Qian Liu,

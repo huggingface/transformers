@@ -16,6 +16,12 @@ rendered properly in your Markdown viewer.
 
 # Trajectory Transformer
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, so we won't accept any new PRs changing its code.
+
+</Tip>
+
 ## Overview
 
 The Trajectory Transformer model was proposed in [Offline Reinforcement Learning as One Big Sequence Modeling Problem](https://arxiv.org/abs/2106.02039)  by Michael Janner, Qiyang Li, Sergey Levine.

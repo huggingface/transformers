@@ -16,6 +16,12 @@ rendered properly in your Markdown viewer.
 
 # BORT
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, so we won't accept any new PRs changing its code.
+
+</Tip>
+
 ## Overview
 
 The BORT model was proposed in [Optimal Subarchitecture Extraction for BERT](https://arxiv.org/abs/2010.10499) by
