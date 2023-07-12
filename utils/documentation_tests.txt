@@ -299,6 +299,8 @@ src/transformers/models/mobilevit/feature_extraction_mobilevit.py
 src/transformers/models/mobilevit/image_processing_mobilevit.py
 src/transformers/models/mobilevit/modeling_mobilevit.py
 src/transformers/models/mobilevit/modeling_tf_mobilevit.py
+src/transformers/models/mobilevitv2/configuration_mobilevitv2.py
+src/transformers/models/mobilevitv2/modeling_mobilevitv2.py
 src/transformers/models/mpnet/tokenization_mpnet.py
 src/transformers/models/mpnet/tokenization_mpnet_fast.py
 src/transformers/models/musicgen/configuration_musicgen.py
