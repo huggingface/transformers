@@ -33,7 +33,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, UMT5ForConditionalGeneration, UMT5ForQuestionAnswering, UMT5ForSequenceClassification, UMT5Model
+    from transformers import (
+        AutoTokenizer,
+        UMT5ForConditionalGeneration,
+        UMT5ForQuestionAnswering,
+        UMT5ForSequenceClassification,
+        UMT5Model,
+    )
 
 
 # Copied from test.models.t5.test_modeling_t5.T5ModelTester with T5->UMT5
@@ -273,7 +279,9 @@ class UMT5ModelTester:
 @require_torch
 class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (UMT5Model, UMT5ForConditionalGeneration, UMT5ForSequenceClassification, UMT5ForQuestionAnswering) if is_torch_available() else ()
+        (UMT5Model, UMT5ForConditionalGeneration, UMT5ForSequenceClassification, UMT5ForQuestionAnswering)
+        if is_torch_available()
+        else ()
     )
     all_generative_model_classes = (UMT5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
