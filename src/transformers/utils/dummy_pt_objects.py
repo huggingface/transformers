@@ -4955,7 +4955,7 @@ class MptForCausalLM(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-        
+
 MRA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -4971,7 +4971,8 @@ class MptForQuestionAnswering(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-  
+
+
 class MraForMultipleChoice(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -4984,7 +4985,8 @@ class MptForSequenceClassification(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-        
+
+
 class MraForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -4992,12 +4994,13 @@ class MraForQuestionAnswering(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-
 class MptForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+
 class MraForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -5010,6 +5013,8 @@ class MptModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+
 class MraForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -5017,13 +5022,13 @@ class MraForTokenClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-
 class MptPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-        
+
+
 class MraModel(metaclass=DummyObject):
     _backends = ["torch"]
 

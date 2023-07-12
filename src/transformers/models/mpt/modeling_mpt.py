@@ -121,6 +121,7 @@ class MptLPLayerNorm(torch.nn.LayerNorm):
                 downcast_x, self.normalized_shape, downcast_weight, downcast_bias, self.eps
             )
 
+
 # Copied from transformers.models.bloom.modeling_bloom.build_alibi_tensor
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
     """
@@ -164,6 +165,7 @@ def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torc
     arange_tensor = ((attention_mask.cumsum(dim=-1) - 1) * attention_mask)[:, None, :]
     alibi = slopes[..., None] * arange_tensor
     return alibi.reshape(batch_size * num_heads, 1, seq_length).to(dtype)
+
 
 # Copied from transformers.models.bloom.modeling_bloom.dropout_add with x->hidden_states
 def dropout_add(x: torch.Tensor, residual: torch.Tensor, prob: float, training: bool) -> torch.Tensor:
@@ -251,7 +253,21 @@ class MptGelu(nn.Module):
             return mpt_gelu_forward(x)
 
 
-def scaled_multihead_dot_product_attention(query, key, value, n_heads, past_key_value=None, softmax_scale=None, attn_bias=None, key_padding_mask=None, is_causal=False, dropout_p=0.0, training=False, needs_weights=False, multiquery=False):
+def scaled_multihead_dot_product_attention(
+    query,
+    key,
+    value,
+    n_heads,
+    past_key_value=None,
+    softmax_scale=None,
+    attn_bias=None,
+    key_padding_mask=None,
+    is_causal=False,
+    dropout_p=0.0,
+    training=False,
+    needs_weights=False,
+    multiquery=False,
+):
     batch_size, seq_length, hidden_size = query.shape
     head_dim = hidden_size // n_heads
     kv_n_heads = 1 if multiquery else n_heads
@@ -265,13 +281,13 @@ def scaled_multihead_dot_product_attention(query, key, value, n_heads, past_key_
             reshaped_key = torch.cat([past_key_value[0], reshaped_key], dim=3)
             reshaped_value = torch.cat([past_key_value[1], reshaped_value], dim=2)
         past_key_value = (reshaped_key, reshaped_value)
-    
+
     (b, _, s_q, d) = reshaped_query.shape
     s_k = reshaped_key.size(-1)
 
     if softmax_scale is None:
         softmax_scale = 1 / math.sqrt(d)
-    
+
     attn_weight = reshaped_query.matmul(reshaped_key) * softmax_scale
 
     # TODO: fix correct alibi
@@ -279,14 +295,26 @@ def scaled_multihead_dot_product_attention(query, key, value, n_heads, past_key_
         _s_q = max(0, attn_bias.size(2) - s_q)
         _s_k = max(0, attn_bias.size(3) - s_k)
         attn_bias = attn_bias[:, :, _s_q:, _s_k:]
-        if attn_bias.size(-1) != 1 and attn_bias.size(-1) != s_k or (attn_bias.size(-2) != 1 and attn_bias.size(-2) != s_q):
-            raise RuntimeError(f'attn_bias (shape: {attn_bias.shape}) is expected to broadcast to shape: {attn_weight.shape}.')
+        if (
+            attn_bias.size(-1) != 1
+            and attn_bias.size(-1) != s_k
+            or (attn_bias.size(-2) != 1 and attn_bias.size(-2) != s_q)
+        ):
+            raise RuntimeError(
+                f"attn_bias (shape: {attn_bias.shape}) is expected to broadcast to shape: {attn_weight.shape}."
+            )
         attn_weight = attn_weight + attn_bias
 
     min_val = torch.finfo(reshaped_query.dtype).min
     if key_padding_mask is not None:
         if attn_bias is not None:
-            warnings.warn('Propogating key_padding_mask to the attention module ' + 'and applying it within the attention module can cause ' + 'unneccessary computation/memory usage. Consider integrating ' + 'into attn_bias once and passing that to each attention ' + 'module instead.')
+            warnings.warn(
+                "Propogating key_padding_mask to the attention module "
+                + "and applying it within the attention module can cause "
+                + "unneccessary computation/memory usage. Consider integrating "
+                + "into attn_bias once and passing that to each attention "
+                + "module instead."
+            )
         attn_weight = attn_weight.masked_fill(~key_padding_mask.view((b, 1, 1, s_k)), min_val)
     if is_causal and (not reshaped_query.size(2) == 1):
         s = max(s_q, s_k)
@@ -299,7 +327,7 @@ def scaled_multihead_dot_product_attention(query, key, value, n_heads, past_key_
     attn_weight = torch.softmax(attn_weight, dim=-1)
     if dropout_p:
         attn_weight = torch.nn.functional.dropout(attn_weight, p=dropout_p, training=training, inplace=True)
-    
+
     out = attn_weight.to(reshaped_value.dtype).matmul(reshaped_value)
     out = out.reshape(batch_size, seq_length, hidden_size)
 
@@ -332,20 +360,27 @@ class MptAttention(nn.Module):
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
     def forward(
-        self, 
-        x, 
-        past_key_value=None, 
-        attn_bias=None, 
-        attention_mask=None, 
-        is_causal=True, 
-        needs_weights=False
+        self, x, past_key_value=None, attn_bias=None, attention_mask=None, is_causal=True, needs_weights=False
     ):
         # TODO: refactor this
         qkv = self.Wqkv(x)
         (query, key, value) = qkv.chunk(3, dim=2)
         key_padding_mask = attention_mask
         # I think we should leave `self.attn_fn` so that is can be modulable enough to support triton and flash attention
-        (context, attn_weights, past_key_value) = self.attn_fn(query, key, value, self.n_heads, past_key_value=past_key_value, softmax_scale=self.softmax_scale, attn_bias=attn_bias, key_padding_mask=key_padding_mask, is_causal=is_causal, dropout_p=self.attn_dropout_p, training=self.training, needs_weights=needs_weights)
+        (context, attn_weights, past_key_value) = self.attn_fn(
+            query,
+            key,
+            value,
+            self.n_heads,
+            past_key_value=past_key_value,
+            softmax_scale=self.softmax_scale,
+            attn_bias=attn_bias,
+            key_padding_mask=key_padding_mask,
+            is_causal=is_causal,
+            dropout_p=self.attn_dropout_p,
+            training=self.training,
+            needs_weights=needs_weights,
+        )
         return (self.out_proj(context), attn_weights, past_key_value)
 
 

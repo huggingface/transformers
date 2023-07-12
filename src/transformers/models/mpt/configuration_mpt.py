@@ -292,7 +292,7 @@ class MptConfig(PretrainedConfig):
 
         if self.attn_config is None:
             self.attn_config = MptAttentionConfig()
-        
+
         if self.init_config is None:
             self.init_config = MptIntializerConfig()
 
@@ -330,7 +330,7 @@ class MptConfig(PretrainedConfig):
             raise ValueError(
                 "Positional information must be provided to the model using either learned_pos_emb or alibi."
             )
-    
+
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
@@ -339,7 +339,11 @@ class MptConfig(PretrainedConfig):
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
-        output["attn_config"] = self.attn_config.to_dict() if not isinstance(self.attn_config, dict) else self.attn_config
-        output["init_config"] = self.init_config.to_dict() if not isinstance(self.init_config, dict) else self.init_config
+        output["attn_config"] = (
+            self.attn_config.to_dict() if not isinstance(self.attn_config, dict) else self.attn_config
+        )
+        output["init_config"] = (
+            self.init_config.to_dict() if not isinstance(self.init_config, dict) else self.init_config
+        )
         output["model_type"] = self.__class__.model_type
         return output

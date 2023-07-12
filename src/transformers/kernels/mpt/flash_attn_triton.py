@@ -661,8 +661,10 @@ def _flash_attn_forward(q, k, v, bias=None, causal=False, softmax_scale=None):
     BLOCK_HEADDIM = max(triton.next_power_of_2(d), 16)
     BLOCK = 128
     num_warps = 4 if d <= 64 else 8
+
     def grid(META):
         return triton.cdiv(seqlen_q, META["BLOCK_M"]), batch * nheads
+
     _fwd_kernel[grid](
         q,
         k,
@@ -717,8 +719,10 @@ def _flash_attn_backward(do, q, k, v, o, lse, dq, dk, dv, bias=None, causal=Fals
     dq_accum = torch.empty_like(q, dtype=torch.float32)
     delta = torch.empty_like(lse)
     BLOCK_HEADDIM = max(triton.next_power_of_2(d), 16)
+
     def grid(META):
         return triton.cdiv(seqlen_q, META["BLOCK_M"]), batch * nheads
+
     _bwd_preprocess_do_o_dot[grid](
         o,
         do,
@@ -751,8 +755,10 @@ def _flash_attn_backward(do, q, k, v, o, lse, dq, dk, dv, bias=None, causal=Fals
             raise RuntimeError("Last 2 dimensions of bias must be (1, seqlen_k) or (seqlen_q, seqlen_k)")
         bias = bias.expand(batch, nheads, seqlen_q, seqlen_k)
     bias_strides = (bias.stride(0), bias.stride(1), bias.stride(2)) if has_bias else (0, 0, 0)
+
     def grid(META):
         return triton.cdiv(seqlen_k, META["BLOCK_N"]) if META["SEQUENCE_PARALLEL"] else 1, batch * nheads
+
     _bwd_kernel[grid](
         q,
         k,
