@@ -642,7 +642,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
 
 DEPRECATED_MODELS = [
     "bort",
-    "mctc",
+    "mctct",
     "mmbt",
     "retribert",
     "trajectory_transformer",
