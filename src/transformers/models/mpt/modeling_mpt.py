@@ -353,7 +353,7 @@ class MptAttention(nn.Module):
         self.n_heads = config.n_heads
         self.head_dim = self.hidden_size // self.n_heads
         self.softmax_scale = config.attn_config["softmax_scale"]
-        
+
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.n_heads // self.num_key_value_heads
 
@@ -370,16 +370,20 @@ class MptAttention(nn.Module):
         position_bias: torch.Tensor,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = False,
-        output_attentions: Optional[bool] = False,
     ):
         batch_size, seq_length = hidden_states.shape[:2]
 
         mixed_qkv = self.Wqkv(hidden_states)
         query_states, key_states, value_states = mixed_qkv.chunk(3, dim=2)
-        query_states = query_states.reshape(batch_size, seq_length, self.num_key_value_heads, self.head_dim).permute(0, 2, 1, 3)
-        key_states = key_states.reshape(batch_size, seq_length, self.num_key_value_heads, self.head_dim).permute(0, 2, 1, 3)
-        value_states = value_states.reshape(batch_size, seq_length, self.num_key_value_heads, self.head_dim).permute(0, 2, 1, 3)
+        query_states = query_states.reshape(batch_size, seq_length, self.num_key_value_heads, self.head_dim).permute(
+            0, 2, 1, 3
+        )
+        key_states = key_states.reshape(batch_size, seq_length, self.num_key_value_heads, self.head_dim).permute(
+            0, 2, 1, 3
+        )
+        value_states = value_states.reshape(batch_size, seq_length, self.num_key_value_heads, self.head_dim).permute(
+            0, 2, 1, 3
+        )
 
         if past_key_value is not None:
             if len(past_key_value) != 0:
@@ -447,7 +451,7 @@ class MptBlock(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        alibi: torch.Tensor,
+        position_bias: torch.Tensor,
         attention_mask: torch.Tensor,
         layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: bool = False,
@@ -461,31 +465,26 @@ class MptBlock(nn.Module):
         residual = hidden_states
 
         # Self attention.
-        attn_outputs = self.attn(
-            layernorm_output,
-            position_bias=alibi,
-            attention_mask=attention_mask,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
+        attn_outputs, attn_weights, past_key_value = self.attn(
+            layernorm_output, position_bias=position_bias, attention_mask=attention_mask, past_key_value=layer_past
         )
 
-        attention_output = attn_outputs[0]
-        hidden_states = self.resid_attn_dropout(residual) + attention_output
+        hidden_states = self.resid_attn_dropout(residual) + attn_outputs
 
-        outputs = attn_outputs[1:]
-
-        layernorm_output = self.norm_2(attention_output)
+        layernorm_output = self.norm_2(attn_outputs)
 
         # Get residual
         residual = hidden_states
 
         # MLP.
         output = self.ffn(layernorm_output, residual)
+        outputs = (output,)
 
         if use_cache:
-            outputs = (output,) + outputs
-        else:
-            outputs = (output,) + outputs[1:]
+            outputs += outputs
+
+        if output_attentions:
+            outputs += outputs
 
         return outputs  # hidden_states, present, attentions
 
@@ -794,7 +793,7 @@ class MptModel(MptPreTrainedModel):
                     attention_mask=causal_mask,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
-                    alibi=alibi,
+                    position_bias=alibi,
                 )
 
             hidden_states = outputs[0]
@@ -870,7 +869,7 @@ class MptForCausalLM(MptPreTrainedModel):
 
         model_inputs.update(
             {
-                "past_key_values": past_key_values,
+                "past_key_values": past_key_values,  # NITS should it be layer_past?
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
             }
