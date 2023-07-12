@@ -14,7 +14,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ....utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {"configuration_mmbt": ["MMBTConfig"]}
