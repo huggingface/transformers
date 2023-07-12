@@ -18,9 +18,8 @@ import warnings
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
-import torch
 
-from ...audio_utils import mel_filter_bank, optimal_fft_length, spectrogram
+from ...audio_utils import mel_filter_bank, optimal_fft_length, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
@@ -113,8 +112,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         self.n_fft = optimal_fft_length(self.sample_size)
         self.n_freqs = (self.n_fft // 2) + 1
 
-        window = getattr(torch, self.win_function)(window_length=self.sample_size, periodic=True)
-        self.window = window.numpy().astype(np.float64)
+        self.window = window_function(window_length=self.sample_size, name=self.win_function, periodic=True)
 
         self.mel_filters = mel_filter_bank(
             num_frequency_bins=self.n_freqs,

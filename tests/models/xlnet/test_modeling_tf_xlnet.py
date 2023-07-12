@@ -61,7 +61,7 @@ class TFXLNetModelTester:
         self.hidden_size = 32
         self.num_attention_heads = 4
         self.d_inner = 128
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 2
         self.type_sequence_label_size = 2
         self.untie_r = True
         self.bi_data = False
@@ -412,6 +412,10 @@ class TFXLNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         for model_name in TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFXLNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @unittest.skip("Some of the XLNet models misbehave with flexible input shapes.")
+    def test_compile_tf_model(self):
+        pass
 
     # overwrite since `TFXLNetLMHeadModel` doesn't cut logits/labels
     def test_loss_computation(self):

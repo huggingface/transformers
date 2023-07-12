@@ -476,6 +476,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         self.mask_emb = self.add_weight(
             shape=(1, 1, self.d_model), initializer=initializer, trainable=True, name="mask_emb"
         )
+        super().build(input_shape)
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError

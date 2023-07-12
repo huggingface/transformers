@@ -88,6 +88,10 @@ class GPTNeoXAttention(nn.Module):
         super().__init__()
         self.num_attention_heads = config.num_attention_heads
         self.hidden_size = config.hidden_size
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                "The hidden size is not divisble by the number of attention heads! Make sure to update them"
+            )
         self.head_size = self.hidden_size // self.num_attention_heads
         self.rotary_ndims = int(self.head_size * config.rotary_pct)
         max_positions = config.max_position_embeddings
@@ -96,8 +100,9 @@ class GPTNeoXAttention(nn.Module):
             torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
                 1, 1, max_positions, max_positions
             ),
+            persistent=False,
         )
-        self.register_buffer("masked_bias", torch.tensor(-1e9))
+        self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
         self.rotary_emb = RotaryEmbedding(
             self.rotary_ndims, config.max_position_embeddings, base=config.rotary_emb_base
         )
@@ -108,6 +113,8 @@ class GPTNeoXAttention(nn.Module):
         )
         self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+
+        self.attention_dropout = nn.Dropout(config.attention_dropout)
 
     def forward(
         self,
@@ -240,6 +247,8 @@ class GPTNeoXAttention(nn.Module):
         if head_mask is not None:
             attn_weights = attn_weights * head_mask
 
+        attn_weights = self.attention_dropout(attn_weights)
+
         attn_output = torch.matmul(attn_weights, value)
         return attn_output, attn_weights
 
@@ -315,6 +324,8 @@ class GPTNeoXLayer(nn.Module):
         self.use_parallel_residual = config.use_parallel_residual
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_dropout = nn.Dropout(config.hidden_dropout)
+        self.post_mlp_dropout = nn.Dropout(config.hidden_dropout)
         self.attention = GPTNeoXAttention(config)
         self.mlp = GPTNeoXMLP(config)
 
@@ -338,12 +349,14 @@ class GPTNeoXLayer(nn.Module):
             output_attentions=output_attentions,
         )
         attn_output = attention_layer_outputs[0]  # output_attn: attn_output, present, (attn_weights)
+        attn_output = self.post_attention_dropout(attn_output)
         outputs = attention_layer_outputs[1:]
 
         if self.use_parallel_residual:
             # pseudocode:
             # x = x + attn(ln1(x)) + mlp(ln2(x))
             mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
+            mlp_output = self.post_mlp_dropout(mlp_output)
             hidden_states = mlp_output + attn_output + hidden_states
         else:
             # pseudocode:
@@ -351,6 +364,7 @@ class GPTNeoXLayer(nn.Module):
             # x = x + mlp(ln2(x))
             attn_output = attn_output + hidden_states
             mlp_output = self.mlp(self.post_attention_layernorm(attn_output))
+            mlp_output = self.post_mlp_dropout(mlp_output)
             hidden_states = mlp_output + attn_output
 
         if use_cache:
@@ -424,6 +438,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         self.config = config
 
         self.embed_in = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.emb_dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([GPTNeoXLayer(config) for _ in range(config.num_hidden_layers)])
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -528,7 +543,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_in(input_ids)
 
-        hidden_states = inputs_embeds
+        hidden_states = self.emb_dropout(inputs_embeds)
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -596,7 +611,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
     """GPTNeoX Model with a `language modeling` head on top for CLM fine-tuning.""", GPT_NEOX_START_DOCSTRING
 )
 class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
+    _tied_weights_keys = ["embed_out.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -770,8 +785,6 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
     GPT_NEOX_START_DOCSTRING,
 )
 class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -966,8 +979,6 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
     GPT_NEOX_START_DOCSTRING,
 )
 class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias", r"lm_head.weight"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

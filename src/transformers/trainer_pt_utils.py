@@ -257,7 +257,7 @@ class DistributedSamplerWithLoop(DistributedSampler):
             Dataset used for sampling.
         batch_size (`int`):
             The batch size used with this sampler
-        kwargs:
+        kwargs (`Dict[str, Any]`, *optional*):
             All other keyword arguments passed to `DistributedSampler`.
     """
 

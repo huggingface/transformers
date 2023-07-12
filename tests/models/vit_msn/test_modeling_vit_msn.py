@@ -38,7 +38,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import ViTImageProcessor
 
 
 class ViTMSNModelTester:
@@ -220,17 +220,17 @@ def prepare_img():
 @require_vision
 class ViTMSNModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("facebook/vit-msn-small") if is_vision_available() else None
+    def default_image_processor(self):
+        return ViTImageProcessor.from_pretrained("facebook/vit-msn-small") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
         torch.manual_seed(2)
         model = ViTMSNForImageClassification.from_pretrained("facebook/vit-msn-small").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():

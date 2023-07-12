@@ -1,0 +1,96 @@
+<!---
+Copyright 2021 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+
+# Performance and Scalability
+
+Training larger and larger transformer models and deploying them to production comes with a range of challenges. During training your model can require more GPU memory than is available or be very slow to train and when you deploy it for inference it can be overwhelmed with the throughput that is required in the production environment. This documentation is designed to help you navigate these challenges and find the best setting for your use-case. We split the guides into training and inference as they come with different challenges and solutions. Then within each of them we have separate guides for different kinds of hardware setting (e.g. single vs. multi-GPU for training or CPU vs. GPU for infrence).
+
+![perf_overview](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/perf_overview.png)
+
+This document serves as an overview and entry point for the methods that could be useful for your scenario.
+
+## Training
+
+Training transformer models efficiently requires an accelerator such as a GPU or TPU. The most common case is where you only have a single GPU, but there is also a section about multi-GPU and CPU training (with more coming soon).
+
+<Tip>
+
+ Note: Most of the strategies introduced in the single GPU sections (such as mixed precision training or gradient accumulation) are generic and apply to training models in general so make sure to have a look at it before diving into the following sections such as multi-GPU or CPU training.
+
+</Tip>
+
+### Single GPU
+
+Training large models on a single GPU can be challenging but there are a number of tools and methods that make it feasible. In this section methods such as mixed precision training, gradient accumulation and checkpointing, efficient optimizers, as well as strategies to determine the best batch size are discussed.
+
+[Go to single GPU training section](perf_train_gpu_one)
+
+### Multi-GPU
+
+In some cases training on a single GPU is still too slow or won't fit the large model. Moving to a multi-GPU setup is the logical step, but training on multiple GPUs at once comes with new decisions: does each GPU have a full copy of the model or is the model itself also distributed? In this section we look at data, tensor, and pipeline parallism.
+
+[Go to multi-GPU training section](perf_train_gpu_many)
+
+### CPU
+
+
+[Go to CPU training section](perf_train_cpu)
+
+
+### TPU
+
+[_Coming soon_](perf_train_tpu)
+
+### Specialized Hardware
+
+[_Coming soon_](perf_train_special)
+
+## Inference
+
+Efficient inference with large models in a production environment can be as challenging as training them. In the following sections we go through the steps to run inference on CPU and single/multi-GPU setups.
+
+### CPU
+
+[Go to CPU inference section](perf_infer_cpu)
+
+### Single GPU
+
+[Go to single GPU inference section](perf_infer_gpu_one)
+
+### Multi-GPU
+
+[Go to multi-GPU inference section](perf_infer_gpu_many)
+
+### Specialized Hardware
+
+[_Coming soon_](perf_infer_special)
+
+## Hardware
+
+In the hardware section you can find tips and tricks when building your own deep learning rig.
+
+[Go to hardware section](perf_hardware)
+
+
+## Contribute
+
+This document is far from being complete and a lot more needs to be added, so if you have additions or corrections to make please don't hesitate to open a PR or if you aren't sure start an Issue and we can discuss the details there.
+
+When making contributions that A is better than B, please try to include a reproducible benchmark and/or a link to the source of that information (unless it comes directly from you).

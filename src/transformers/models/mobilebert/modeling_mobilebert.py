@@ -191,7 +191,9 @@ class MobileBertEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
 
     def forward(
         self,
@@ -686,7 +688,6 @@ class MobileBertPreTrainedModel(PreTrainedModel):
     pretrained_model_archive_map = MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST
     load_tf_weights = load_tf_weights_in_mobilebert
     base_model_prefix = "mobilebert"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -760,7 +761,7 @@ MOBILEBERT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -923,11 +924,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
     MOBILEBERT_START_DOCSTRING,
 )
 class MobileBertForPreTraining(MobileBertPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        "cls.predictions.decoder.weight",
-        "cls.predictions.decoder.bias",
-        "embeddings.position_ids",
-    ]
+    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1035,12 +1032,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
 
 @add_start_docstrings("""MobileBert Model with a `language modeling` head on top.""", MOBILEBERT_START_DOCSTRING)
 class MobileBertForMaskedLM(MobileBertPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [
-        "cls.predictions.decoder.weight",
-        "cls.predictions.decoder.bias",
-        "embeddings.position_ids",
-    ]
+    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1348,8 +1340,6 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
 )
 # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering with Bert->MobileBert all-casing
 class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1551,8 +1541,6 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
 )
 # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification with Bert->MobileBert all-casing
 class MobileBertForTokenClassification(MobileBertPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

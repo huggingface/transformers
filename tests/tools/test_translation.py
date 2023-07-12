@@ -16,6 +16,7 @@
 import unittest
 
 from transformers import load_tool
+from transformers.tools.agent_types import AGENT_TYPE_MAPPING
 
 from .test_tools_common import ToolTesterMixin, output_types
 
@@ -51,3 +52,35 @@ class TranslationToolTester(unittest.TestCase, ToolTesterMixin):
             outputs = [outputs]
 
         self.assertListEqual(output_types(outputs), self.tool.outputs)
+
+    def test_agent_types_outputs(self):
+        inputs = ["Hey, what's up?", "English", "Spanish"]
+        outputs = self.tool(*inputs)
+
+        if not isinstance(outputs, list):
+            outputs = [outputs]
+
+        self.assertEqual(len(outputs), len(self.tool.outputs))
+
+        for output, output_type in zip(outputs, self.tool.outputs):
+            agent_type = AGENT_TYPE_MAPPING[output_type]
+            self.assertTrue(isinstance(output, agent_type))
+
+    def test_agent_types_inputs(self):
+        inputs = ["Hey, what's up?", "English", "Spanish"]
+
+        _inputs = []
+
+        for _input, input_type in zip(inputs, self.tool.inputs):
+            if isinstance(input_type, list):
+                _inputs.append([AGENT_TYPE_MAPPING[_input_type](_input) for _input_type in input_type])
+            else:
+                _inputs.append(AGENT_TYPE_MAPPING[input_type](_input))
+
+        # Should not raise an error
+        outputs = self.tool(*inputs)
+
+        if not isinstance(outputs, list):
+            outputs = [outputs]
+
+        self.assertEqual(len(outputs), len(self.tool.outputs))

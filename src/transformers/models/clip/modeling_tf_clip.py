@@ -151,7 +151,7 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
             name="patch_embedding",
         )
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape: tf.TensorShape = None):
         factor = self.config.initializer_factor
 
         self.class_embedding = self.add_weight(
@@ -204,7 +204,7 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
 
         self.config = config
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape: tf.TensorShape = None):
         with tf.name_scope("token_embedding"):
             self.weight = self.add_weight(
                 shape=(self.config.vocab_size, self.embed_dim),
@@ -739,7 +739,7 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
             name="text_projection",
         )
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape: tf.TensorShape = None):
         self.logit_scale = self.add_weight(
             shape=(1,),
             initializer=tf.keras.initializers.Constant(self.config.logit_scale_init_value),
@@ -943,7 +943,7 @@ CLIP_TEXT_INPUTS_DOCSTRING = r"""
         input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1000,7 +1000,7 @@ CLIP_INPUTS_DOCSTRING = r"""
         input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)

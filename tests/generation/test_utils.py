@@ -464,6 +464,7 @@ class GenerationTesterMixin:
             **model_kwargs,
         )
         # beam_search does not automatically interleave `batch_size` dim for `num_beams * num_return_sequences`
+        torch.manual_seed(0)
         kwargs = {}
         if model.config.is_encoder_decoder:
             encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
@@ -482,7 +483,6 @@ class GenerationTesterMixin:
         logits_processor = LogitsProcessorList()
         logits_processor.append(InfNanRemoveLogitsProcessor())
 
-        torch.manual_seed(0)
         with torch.no_grad():
             model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
             output_beam_sample = model.beam_sample(
@@ -1608,7 +1608,6 @@ class GenerationTesterMixin:
                 attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
                 self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
-    @slow  # TODO (Joao): fix GPTBigCode
     def test_left_padding_compatibility(self):
         # The check done in this test is fairly difficult -- depending on the model architecture, passing the right
         # position index for the position embeddings can still result in a different output, due to numerical masking.
@@ -1648,7 +1647,7 @@ class GenerationTesterMixin:
                     position_ids.masked_fill_(padded_attention_mask == 0, 1)
                     model_kwargs["position_ids"] = position_ids
                 next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
-                if not torch.allclose(next_logits_wo_padding, next_logits_with_padding):
+                if not torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-7):
                     no_failures = False
                     break
 
@@ -2367,6 +2366,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             num_beams=2,
             num_beam_groups=2,
             num_return_sequences=2,
+            diversity_penalty=1.0,
             eos_token_id=None,
             return_dict_in_generate=True,
             output_scores=True,

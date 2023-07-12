@@ -21,6 +21,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import transformers
 import transformers.models.auto
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.models.bert.configuration_bert import BertConfig
@@ -37,6 +38,9 @@ SAMPLE_ROBERTA_CONFIG = get_tests_dir("fixtures/dummy-config.json")
 
 
 class AutoConfigTest(unittest.TestCase):
+    def setUp(self):
+        transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
+
     def test_module_spec(self):
         self.assertIsNotNone(transformers.models.auto.__spec__)
         self.assertIsNotNone(importlib.util.find_spec("transformers.models.auto"))
@@ -108,6 +112,13 @@ class AutoConfigTest(unittest.TestCase):
             _ = AutoConfig.from_pretrained("hf-internal-testing/no-config-test-repo")
 
     def test_from_pretrained_dynamic_config(self):
+        # If remote code is not set, we will time out when asking whether to load the model.
+        with self.assertRaises(ValueError):
+            config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model")
+        # If remote code is disabled, we can't load this config.
+        with self.assertRaises(ValueError):
+            config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=False)
+
         config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
         self.assertEqual(config.__class__.__name__, "NewModelConfig")
 
@@ -116,3 +127,25 @@ class AutoConfigTest(unittest.TestCase):
             config.save_pretrained(tmp_dir)
             reloaded_config = AutoConfig.from_pretrained(tmp_dir, trust_remote_code=True)
         self.assertEqual(reloaded_config.__class__.__name__, "NewModelConfig")
+
+    def test_from_pretrained_dynamic_config_conflict(self):
+        class NewModelConfigLocal(BertConfig):
+            model_type = "new-model"
+
+        try:
+            AutoConfig.register("new-model", NewModelConfigLocal)
+            # If remote code is not set, the default is to use local
+            config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model")
+            self.assertEqual(config.__class__.__name__, "NewModelConfigLocal")
+
+            # If remote code is disabled, we load the local one.
+            config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=False)
+            self.assertEqual(config.__class__.__name__, "NewModelConfigLocal")
+
+            # If remote is enabled, we load from the Hub
+            config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
+            self.assertEqual(config.__class__.__name__, "NewModelConfig")
+
+        finally:
+            if "new-model" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["new-model"]

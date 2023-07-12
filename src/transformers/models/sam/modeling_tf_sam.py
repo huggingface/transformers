@@ -581,6 +581,7 @@ class TFSamPositionalEmbedding(tf.keras.layers.Layer):
             initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=self.scale),
             trainable=False,
         )
+        super().build(input_shape)
 
     def call(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
@@ -809,6 +810,7 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
         if self.use_rel_pos:
             if input_size is None:
                 raise ValueError("Input size must be provided if using relative positional encoding.")
+        self.config = config
 
     def build(self, input_shape):
         if self.input_size is not None:
@@ -927,7 +929,7 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
 
         attn_output = tf.reshape(attn_probs @ value, (batch_size, self.num_attention_heads, height, width, -1))
         attn_output = tf.transpose(attn_output, perm=(0, 2, 3, 1, 4))
-        attn_output = tf.reshape(attn_output, (batch_size, height, width, -1))
+        attn_output = tf.reshape(attn_output, (batch_size, height, width, self.config.hidden_size))
 
         attn_output = self.proj(attn_output)
 
@@ -1145,21 +1147,6 @@ class TFSamPreTrainedModel(TFPreTrainedModel):
     config_class = SamConfig
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
-
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        # We override the default dummy inputs here because SAM has some really explosive memory usage in the
-        # attention layers, so we want to pass the smallest possible batches
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(
-                1,
-                self.config.vision_config.num_channels,
-                self.config.vision_config.image_size,
-                self.config.vision_config.image_size,
-            ),
-            dtype=tf.float32,
-        )
-        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
 
 SAM_START_DOCSTRING = r"""

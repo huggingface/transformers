@@ -136,8 +136,10 @@ def write_model(model_path, input_base_path, model_size):
             }
         else:
             # Sharded
-            # Note that in the 13B checkpoint, not cloning the two following weights will result in the checkpoint
-            # becoming 37GB instead of 26GB for some reason.
+            # Note that attention.w{q,k,v,o}, feed_fordward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
+            # the same storage object, saving attention_norm and ffn_norm will save other weights too, which is
+            # redundant as other weights will be stitched from multiple shards. To avoid that, they are cloned.
+
             state_dict = {
                 f"model.layers.{layer_i}.input_layernorm.weight": loaded[0][
                     f"layers.{layer_i}.attention_norm.weight"

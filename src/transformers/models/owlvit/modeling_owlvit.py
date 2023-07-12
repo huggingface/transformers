@@ -304,7 +304,7 @@ class OwlViTVisionEmbeddings(nn.Module):
         self.num_patches = (config.image_size // config.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
@@ -325,7 +325,9 @@ class OwlViTTextEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(config.max_position_embeddings, config.hidden_size)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
 
     def forward(
         self,
@@ -530,7 +532,6 @@ class OwlViTPreTrainedModel(PreTrainedModel):
     config_class = OwlViTConfig
     base_model_prefix = "owlvit"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
     _no_split_modules = ["OwlViTEncoderLayer"]
 
     def _init_weights(self, module):
@@ -1064,7 +1065,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
-        self.logit_scale = nn.Parameter(torch.ones([]) * config.logit_scale_init_value)
+        self.logit_scale = nn.Parameter(torch.tensor(config.logit_scale_init_value))
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1293,8 +1294,8 @@ class OwlViTClassPredictionHead(nn.Module):
             return (pred_logits, image_class_embeds)
 
         # Normalize image and text features
-        image_class_embeds /= torch.linalg.norm(image_class_embeds, dim=-1, keepdim=True) + 1e-6
-        query_embeds /= torch.linalg.norm(query_embeds, dim=-1, keepdim=True) + 1e-6
+        image_class_embeds = image_class_embeds / (torch.linalg.norm(image_class_embeds, dim=-1, keepdim=True) + 1e-6)
+        query_embeds = query_embeds / (torch.linalg.norm(query_embeds, dim=-1, keepdim=True) + 1e-6)
 
         # Get class predictions
         pred_logits = torch.einsum("...pd,...qd->...pq", image_class_embeds, query_embeds)
