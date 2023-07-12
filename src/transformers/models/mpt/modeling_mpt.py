@@ -344,8 +344,7 @@ def scaled_multihead_dot_product_attention(
 
 class MptAttention(nn.Module):
     """Multi-head self attention.
-    Using torch or triton attention implemetation enables user to also use
-    additive bias.
+    Using torch or triton attention implemetation enables user to also use additive bias.
     """
 
     def __init__(self, config: MptConfig):
@@ -354,8 +353,9 @@ class MptAttention(nn.Module):
         self.n_heads = config.n_heads
         self.head_dim = self.hidden_size // self.n_heads
         self.softmax_scale = config.attn_config["softmax_scale"]
-        # self.num_key_value_heads = config.num_key_value_heads
-        # self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_key_value_groups = self.n_heads // self.num_key_value_heads
 
         if self.softmax_scale is None:
             self.softmax_scale = 1 / math.sqrt(self.hidden_size / self.n_heads)
@@ -377,9 +377,9 @@ class MptAttention(nn.Module):
 
         mixed_qkv = self.Wqkv(hidden_states)
         query_states, key_states, value_states = mixed_qkv.chunk(3, dim=2)
-        query_states = query_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).permute(0, 2, 1, 3)
-        key_states = key_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).permute(0, 2, 1, 3)
-        value_states = value_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).permute(0, 2, 1, 3)
+        query_states = query_states.reshape(batch_size, seq_length, self.num_key_value_heads, self.head_dim).permute(0, 2, 1, 3)
+        key_states = key_states.reshape(batch_size, seq_length, self.num_key_value_heads, self.head_dim).permute(0, 2, 1, 3)
+        value_states = value_states.reshape(batch_size, seq_length, self.num_key_value_heads, self.head_dim).permute(0, 2, 1, 3)
 
         if past_key_value is not None:
             if len(past_key_value) != 0:
@@ -404,6 +404,7 @@ class MptAttention(nn.Module):
         context_states = torch.matmul(attn_weights, value_states)
         context_states = context_states.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
         attn_output = self.out_proj(context_states)
+
         return attn_output, attn_weights, past_key_value
 
 

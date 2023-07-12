@@ -163,6 +163,7 @@ class MptConfig(PretrainedConfig):
         expansion_ratio: int = 4,
         max_seq_len: int = 2048,
         vocab_size: int = 50368,
+        num_key_value_heads: int = 16,
         resid_pdrop: float = 0.0,
         layer_norm_epsilon: float = 1e-5,
         emb_pdrop: float = 0.0,
@@ -285,6 +286,7 @@ class MptConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.init_config = init_config
         self.initializer_range = initializer_range
+        self.num_key_value_heads = num_key_value_heads
 
         # for backward compatiblity
         self.hidden_size = self.d_model
