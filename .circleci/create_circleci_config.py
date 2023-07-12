@@ -243,7 +243,7 @@ torch_and_tf_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng git-lfs cmake",
         "git lfs install",
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
+        "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
@@ -258,7 +258,7 @@ torch_and_flax_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install -U --upgrade-strategy eager --upgrade pip",
-        "pip install -U .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]",
+        "pip install -U --upgrade-strategy eager .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     marker="is_pt_flax_cross_test",
@@ -271,7 +271,7 @@ torch_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
+        "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     parallelism=1,
@@ -284,7 +284,7 @@ tf_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng cmake",
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
+        "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
     ],
     parallelism=1,
@@ -298,7 +298,7 @@ flax_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U .[flax,testing,sentencepiece,flax-speech,vision]",
+        "pip install -U --upgrade-strategy eager .[flax,testing,sentencepiece,flax-speech,vision]",
     ],
     parallelism=1,
     pytest_options={"rA": None},
@@ -311,7 +311,7 @@ pipelines_torch_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
+        "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
     ],
     pytest_options={"rA": None},
     marker="is_pipeline_test",
@@ -324,7 +324,7 @@ pipelines_tf_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y cmake",
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U .[sklearn,tf-cpu,testing,sentencepiece,vision]",
+        "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,testing,sentencepiece,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
     ],
     pytest_options={"rA": None},
@@ -348,7 +348,7 @@ custom_tokenizers_job = CircleCIJob(
                 "sudo make install\n",
         },
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]",
+        "pip install -U --upgrade-strategy eager .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]",
         "python -m unidic download",
     ],
     parallelism=None,
@@ -367,7 +367,7 @@ examples_torch_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U .[sklearn,torch,sentencepiece,testing,torch-speech]",
+        "pip install -U --upgrade-strategy eager .[sklearn,torch,sentencepiece,testing,torch-speech]",
         "pip install -U --upgrade-strategy eager -r examples/pytorch/_tests_requirements.txt",
     ],
 )
@@ -379,7 +379,7 @@ examples_tensorflow_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y cmake",
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U .[sklearn,tensorflow,sentencepiece,testing]",
+        "pip install -U --upgrade-strategy eager .[sklearn,tensorflow,sentencepiece,testing]",
         "pip install -U --upgrade-strategy eager -r examples/tensorflow/_tests_requirements.txt",
     ],
 )
@@ -390,7 +390,7 @@ examples_flax_job = CircleCIJob(
     cache_name="flax_examples",
     install_steps=[
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U .[flax,testing,sentencepiece]",
+        "pip install -U --upgrade-strategy eager .[flax,testing,sentencepiece]",
         "pip install -U --upgrade-strategy eager -r examples/flax/_tests_requirements.txt",
     ],
 )
@@ -403,7 +403,7 @@ hub_job = CircleCIJob(
         'git config --global user.email "ci@dummy.com"',
         'git config --global user.name "ci"',
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U .[torch,sentencepiece,testing]",
+        "pip install -U --upgrade-strategy eager .[torch,sentencepiece,testing]",
     ],
     marker="is_staging_test",
     pytest_num_workers=1,
@@ -415,7 +415,7 @@ onnx_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y cmake",
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
+        "pip install -U --upgrade-strategy eager .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
     ],
     pytest_options={"k onnx": None},
     pytest_num_workers=1,
@@ -427,7 +427,7 @@ exotic_models_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev",
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U .[torch,testing,vision]",
+        "pip install -U --upgrade-strategy eager .[torch,testing,vision]",
         "pip install -U --upgrade-strategy eager torchvision",
         "pip install -U --upgrade-strategy eager scipy",
         "pip install -U --upgrade-strategy eager 'git+https://github.com/facebookresearch/detectron2.git'",
@@ -451,7 +451,7 @@ repo_utils_job = CircleCIJob(
     "repo_utils",
     install_steps=[
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U .[quality,testing,torch]",
+        "pip install -U --upgrade-strategy eager .[quality,testing,torch]",
     ],
     parallelism=None,
     pytest_num_workers=1,
@@ -472,7 +472,7 @@ doc_test_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time ffmpeg",
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U .[dev]",
+        "pip install -U --upgrade-strategy eager -e .[dev]",
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
         "pip install --upgrade --upgrade-strategy eager pytest pytest-sugar",
         "pip install -U --upgrade-strategy eager natten",
