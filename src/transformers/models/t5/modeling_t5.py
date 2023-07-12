@@ -2057,9 +2057,8 @@ class T5ForSequenceClassification(T5PreTrainedModel):
         if labels is not None:
             use_cache = False
 
-        # Copied from models.bart.modeling_bart.BartModel.forward
-        #   different to other models, T5 automatically creates decoder_input_ids from
-        #   input_ids if no decoder_input_ids are provided
+        # Copied from models.bart.modeling_bart.BartModel.forward different to other models, T5 automatically creates
+        # decoder_input_ids from input_ids if no decoder_input_ids are provided
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             if input_ids is None:
                 raise ValueError(
@@ -2117,9 +2116,8 @@ class T5ForSequenceClassification(T5PreTrainedModel):
 
         if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
-        sentence_representation = sequence_output[eos_mask, :].view(
-            sequence_output.size(0), -1, sequence_output.size(-1)
-        )[:, -1, :]
+        sentence_representation = \
+            sequence_output[eos_mask, :].view(sequence_output.size(0), -1, sequence_output.size(-1))[:, -1, :]
         logits = self.classification_head(sentence_representation)
 
         loss = None
