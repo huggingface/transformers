@@ -15,7 +15,7 @@
 # limitations under the License.
 """ MMBT configuration"""
 
-from ...utils import logging
+from ....utils import logging
 
 
 logger = logging.get_logger(__name__)

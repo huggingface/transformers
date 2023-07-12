@@ -20,11 +20,11 @@ from typing import List, Optional, Union
 
 import numpy as np
 
-from ...audio_utils import mel_filter_bank, optimal_fft_length, spectrogram, window_function
-from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
-from ...feature_extraction_utils import BatchFeature
-from ...file_utils import PaddingStrategy, TensorType
-from ...utils import logging
+from ....audio_utils import mel_filter_bank, optimal_fft_length, spectrogram, window_function
+from ....feature_extraction_sequence_utils import SequenceFeatureExtractor
+from ....feature_extraction_utils import BatchFeature
+from ....file_utils import PaddingStrategy, TensorType
+from ....utils import logging
 
 
 logger = logging.get_logger(__name__)

@@ -24,9 +24,9 @@ import torch
 import torch.utils.checkpoint as checkpoint
 from torch import nn
 
-from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, logging
-from ..bert.modeling_bert import BertModel
+from ....modeling_utils import PreTrainedModel
+from ....utils import add_start_docstrings, logging
+from ...bert.modeling_bert import BertModel
 from .configuration_retribert import RetriBertConfig
 
 

@@ -18,7 +18,7 @@ Speech processor class for M-CTC-T
 import warnings
 from contextlib import contextmanager
 
-from ...processing_utils import ProcessorMixin
+from ....processing_utils import ProcessorMixin
 
 
 class MCTCTProcessor(ProcessorMixin):

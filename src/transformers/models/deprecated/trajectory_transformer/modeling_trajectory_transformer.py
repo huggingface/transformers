@@ -25,8 +25,8 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import functional as F
 
-from ...modeling_utils import PreTrainedModel
-from ...utils import (
+from ....modeling_utils import PreTrainedModel
+from ....utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
