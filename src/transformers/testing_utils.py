@@ -77,6 +77,7 @@ from .utils import (
     is_safetensors_available,
     is_scipy_available,
     is_sentencepiece_available,
+    is_seqio_available,
     is_soundfile_availble,
     is_spacy_available,
     is_sudachi_available,
@@ -440,6 +441,13 @@ def require_sentencepiece(test_case):
     Decorator marking a test that requires SentencePiece. These tests are skipped when SentencePiece isn't installed.
     """
     return unittest.skipUnless(is_sentencepiece_available(), "test requires SentencePiece")(test_case)
+
+
+def require_seqio(test_case):
+    """
+    Decorator marking a test that requires SentencePiece. These tests are skipped when SentencePiece isn't installed.
+    """
+    return unittest.skipUnless(is_seqio_available(), "test requires Seqio")(test_case)
 
 
 def require_scipy(test_case):
