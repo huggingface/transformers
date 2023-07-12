@@ -46,15 +46,15 @@ import torch
 from PIL import Image
 import requests
 import numpy as np
-from transformers import AutoFeatureExtractor, AutoModelForImageClassification
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
 url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 image = Image.open(requests.get(url, stream=True).raw)
 
-extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
+processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 model = AutoModelForImageClassification.from_pretrained("google/vit-base-patch16-224").to("cuda")
 
-extracted_input = extractor(image, return_tensors='pt').to(device="cuda")
+processed_input = processor(image, return_tensors='pt').to(device="cuda")
 
 with torch.no_grad():
     _ = model(**extracted_input)
