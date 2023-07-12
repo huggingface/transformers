@@ -95,14 +95,8 @@ class GPTNeoXAttention(nn.Module):
             )
         self.head_size = self.hidden_size // self.num_attention_heads
         self.rotary_ndims = int(self.head_size * config.rotary_pct)
-        max_positions = config.max_position_embeddings
-        self.register_buffer(
-            "bias",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
-                1, 1, max_positions, max_positions
-            ),
-            persistent=False,
-        )
+        self._init_bias(config.max_position_embeddings)
+
         self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
         self._init_rope()
 
@@ -113,6 +107,17 @@ class GPTNeoXAttention(nn.Module):
         )
         self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+
+    def _init_bias(self, max_positions, device=None):
+        self.register_buffer(
+            "bias",
+            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
+                1, 1, max_positions, max_positions
+            ),
+            persistent=False,
+        )
+        if device is not None:
+            self.bias = self.bias.to(device)
 
     def _init_rope(self):
         if self.config.rope_scaling is None:
@@ -240,6 +245,9 @@ class GPTNeoXAttention(nn.Module):
         batch_size, num_attention_heads, query_length, attn_head_size = query.size()
         key_length = key.size(-2)
 
+        # dynamically increase the causal mask with the key length, if needed.
+        if key_length > self.bias.shape[-1]:
+            self._init_bias(key_length, device=key.device)
         causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
 
         query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
@@ -297,9 +305,7 @@ class GPTNeoXRotaryEmbedding(torch.nn.Module):
         self.register_buffer("inv_freq", inv_freq)
 
         # Build here to make `torch.jit.trace` work.
-        self._set_cos_sin_cache(
-            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
-        )
+        self._set_cos_sin_cache(seq_len=max_position_embeddings, device=self.inv_freq.device)
 
     def _set_cos_sin_cache(self, seq_len, device):
         self.max_seq_len_cached = seq_len
@@ -314,7 +320,7 @@ class GPTNeoXRotaryEmbedding(torch.nn.Module):
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
         if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
+            self._set_cos_sin_cache(seq_len=seq_len, device=x.device)
         return self.cos_cached[:seq_len, ...].to(x.device), self.sin_cached[:seq_len, ...].to(x.device)
 
 
