@@ -18,19 +18,19 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The MPT model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The MPT model was proposed by the [MosaicML](https://www.mosaicml.com/) team and released with multiple sizes and finetuned variants. The MPT models is a series of open source and commercially usable LLMs pre-trained on 1T tokens. 
 
-The abstract from the paper is the following:
+- MPT base: MPT base pre-trained models on next token prediction 
+- MPT instruct: MPT base models fine-tuned on instruction based tasks
+- MPT storywriter: MPT base models fine-tuned for 2500 steps on 65k-token excerpts of fiction books contained in the books3 corpus, this enables the model to handle very long sequences
 
-*<INSERT PAPER ABSTRACT HERE>*
+The models have been trained using [`llm-foundry`](https://github.com/mosaicml/llm-foundry/tree/main) repository.
+
+Read more about it [in the release blogpost](https://www.mosaicml.com/blog/mpt-7b)
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+- Learn more about some techniques behind training of the model [in this section of llm-foundry repository](https://github.com/mosaicml/llm-foundry/blob/main/TUTORIAL.md#faqs)
 
 
 ## MptConfig
