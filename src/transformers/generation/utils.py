@@ -2347,7 +2347,7 @@ class GenerationMixin:
         this_peer_finished = False  # used by synced_gpus only
 
         # Setup knockout_neurons matrix
-        if model_kwargs['knockout_neurons']:
+        if model_kwargs['knockout_neurons'] is not None:
             knockout_neurons_matrix = torch.ones(self.config.num_hidden_layers, self.config.hidden_size, device=input_ids.device)
             for layer_id, emb_id in model_kwargs['knockout_neurons']:
                 # knockout_neurons_matrix[layer_id, emb_id] = 0.0
