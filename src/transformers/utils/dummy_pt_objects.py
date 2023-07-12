@@ -7127,6 +7127,13 @@ class UMT5ForQuestionAnswering(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class UMT5ForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class UMT5Model(metaclass=DummyObject):
     _backends = ["torch"]
 
