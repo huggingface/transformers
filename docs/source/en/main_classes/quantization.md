@@ -25,6 +25,8 @@ Learn more about the quantization method in the [LLM.int8()](https://arxiv.org/a
 
 Since its `0.39.0` release, you can load any model that supports `device_map` using 4-bit quantization, leveraging FP4 data type.
 
+If you want to quantize your own pytorch model, check out this [documentation](https://huggingface.co/docs/accelerate/main/en/usage_guides/quantization) from 🤗 Accelerate library. 
+
 Here are the things you can do using `bitsandbytes` integration
 
 ### FP4 quantization 
@@ -269,4 +271,3 @@ Note that you don't need to pass `device_map` when loading the model for trainin
 ## Quantization with 🤗 `optimum` 
 
 Please have a look at [Optimum documentation](https://huggingface.co/docs/optimum/index) to learn more about quantization methods that are supported by `optimum` and see if these are applicable for your usecase.
-
