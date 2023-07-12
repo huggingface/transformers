@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import tempfile
 import unittest
 
@@ -32,7 +33,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, UMT5ForConditionalGeneration, UMT5ForQuestionAnswering, UMT5Model
+    from transformers import AutoTokenizer, UMT5ForConditionalGeneration, UMT5ForQuestionAnswering, UMT5ForSequenceClassification, UMT5Model
 
 
 # Copied from test.models.t5.test_modeling_t5.T5ModelTester with T5->UMT5
@@ -43,7 +44,7 @@ class UMT5ModelTester:
         vocab_size=99,
         batch_size=13,
         encoder_seq_length=7,
-        decoder_seq_length=9,
+        decoder_seq_length=7,
         # For common tests
         is_training=True,
         use_attention_mask=True,
@@ -122,6 +123,7 @@ class UMT5ModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
+        input_ids[:, -1] = self.eos_token_id  # Eos Token
         decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
         # we need to clamp the input ids here to avoid having pad token in between
@@ -131,7 +133,7 @@ class UMT5ModelTester:
         # but when using past, there is no way of knowing if the past input ids had
         # pad tokens in them, which results in incorrect seq_lenth and which in turn results in
         # position_ids being off by num_pad_tokens in past input
-        input_ids = input_ids.clamp(self.pad_token_id + 1)
+        input_ids = input_ids.clamp(self.pad_token_id + 2)
         decoder_input_ids = decoder_input_ids.clamp(self.pad_token_id + 1)
 
         config = self.get_config()
@@ -255,11 +257,23 @@ class UMT5ModelTester:
         output = model(**input_dict)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
+    def create_and_check_with_sequence_classification_head(
+        self,
+        config,
+        input_dict,
+    ):
+        labels = torch.tensor([1] * self.batch_size, dtype=torch.long, device=torch_device)
+        model = UMT5ForSequenceClassification(config=config).to(torch_device).eval()
+        outputs = model(**input_dict, labels=labels)
+        # self.parent.assertEqual(len(outputs), 4)
+        self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, config.num_labels))
+        self.parent.assertEqual(outputs["loss"].size(), ())
+
 
 @require_torch
 class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (UMT5Model, UMT5ForConditionalGeneration, UMT5ForQuestionAnswering) if is_torch_available() else ()
+        (UMT5Model, UMT5ForConditionalGeneration, UMT5ForSequenceClassification, UMT5ForQuestionAnswering) if is_torch_available() else ()
     )
     all_generative_model_classes = (UMT5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -270,6 +284,8 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             "text2text-generation": UMT5ForConditionalGeneration,
             "translation": UMT5ForConditionalGeneration,
             "question-answering": UMT5ForQuestionAnswering,
+            "text-classification": UMT5ForSequenceClassification,
+            "zero-shot": UMT5ForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -284,6 +300,40 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def setUp(self):
         self.model_tester = UMT5ModelTester(self)
+
+    # UMT5ForSequenceClassification does not support inputs_embeds
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in (UMT5Model, UMT5ForConditionalGeneration, UMT5ForQuestionAnswering):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+
+            if not self.is_encoder_decoder:
+                input_ids = inputs["input_ids"]
+                del inputs["input_ids"]
+            else:
+                encoder_input_ids = inputs["input_ids"]
+                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                del inputs["input_ids"]
+                inputs.pop("decoder_input_ids", None)
+
+            wte = model.get_input_embeddings()
+            if not self.is_encoder_decoder:
+                inputs["inputs_embeds"] = wte(input_ids)
+            else:
+                inputs["inputs_embeds"] = wte(encoder_input_ids)
+                inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
+
+            with torch.no_grad():
+                model(**inputs)[0]
+
+    def test_with_sequence_classification_head(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_with_sequence_classification_head(*config_and_inputs)
 
     @unittest.skip("Test has a segmentation fault on torch 1.8.0")
     def test_export_to_onnx(self):
