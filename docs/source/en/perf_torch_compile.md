@@ -33,7 +33,7 @@ model = AutoModelForImageClassification.from_pretrained(MODEL_ID).to("cuda")
 
 `compile()` comes with multiple modes for compiling, which essentially differ in compilation time and inference overhead. `max-autotune` takes longer than `reduce-overhead` but results in faster inference. Default mode is fastest for compilation but is not as efficient compared to `reduce-overhead` for inference time. In this guide, we used the default mode. 
 
-We have benchmarked `torch.compile` with different computer vision models, tasks, different types of hardware and batch sizes. `torch` version used in this benchmark is 2.0.1.
+We benchmarked `torch.compile` with different computer vision models, tasks, types of hardware, and batch sizes on `torch` version 2.0.1.
 
 ## Benchmarking code 
 
