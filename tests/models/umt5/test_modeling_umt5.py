@@ -35,7 +35,7 @@ if is_torch_available():
     from transformers import AutoTokenizer, UMT5ForConditionalGeneration, UMT5ForQuestionAnswering, UMT5Model
 
 
-# Copied from test.models.t5.test_modeling_t5.T5ModelTester with T5->UMT5,UMT5Config->T5Config
+# Copied from test.models.t5.test_modeling_t5.T5ModelTester with T5->UMT5
 class UMT5ModelTester:
     def __init__(
         self,
@@ -347,13 +347,16 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 @require_tokenizers
 class Umt5IntegrationTest(unittest.TestCase):
     @slow
+    @unittest.skip(
+        "Unless we stop stripping left and right by default for all special tokens, the expected ids obtained here will not match the original ones. Wait for https://github.com/huggingface/transformers/pull/23909 to be merged"
+    )
     def test_small_integration_test(self):
         """
         For comparison run the kaggle notbook available here : https://www.kaggle.com/arthurzucker/umt5-inference
         """
 
         model = UMT5ForConditionalGeneration.from_pretrained("google/umt5-small", return_dict=True).to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained("google/umt5-small", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained("google/umt5-small", use_fast=False, legacy=False)
         input_text = [
             "Bonjour monsieur <extra_id_0> bien <extra_id_1>.",
             "No se como puedo <extra_id_0>.",
@@ -373,7 +376,7 @@ class Umt5IntegrationTest(unittest.TestCase):
             ]
         )
         # fmt: on
-        self.assertEqual(input_ids, EXPECTED_IDS)
+        torch.testing.assert_allclose(input_ids, EXPECTED_IDS)
 
         generated_ids = model.generate(input_ids.to(torch_device))
         EXPECTED_FILLING = [
@@ -384,4 +387,4 @@ class Umt5IntegrationTest(unittest.TestCase):
             "<pad><extra_id_0>nyone who<extra_id_1> drink<extra_id_2> a<extra_id_3> alcohol<extra_id_4> A<extra_id_5> A. This<extra_id_6> I<extra_id_7><extra_id_52><extra_id_53></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
         ]
         filling = tokenizer.batch_decode(generated_ids)
-        self.assertTrue(filling, EXPECTED_FILLING)
+        self.assertEqual(filling, EXPECTED_FILLING)

@@ -294,6 +294,7 @@ _import_structure = {
     ],
     "models.ernie_m": ["ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP", "ErnieMConfig"],
     "models.esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "EsmConfig", "EsmTokenizer"],
+    "models.falcon": ["FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP", "FalconConfig"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
         "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -403,6 +404,7 @@ _import_structure = {
     "models.mobilevitv2": ["MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTV2Config"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mpt": ["MPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MptConfig"],
+    "models.mra": ["MRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MraConfig"],
     "models.mt5": ["MT5Config"],
     "models.musicgen": [
         "MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -525,7 +527,7 @@ _import_structure = {
         "TvltFeatureExtractor",
         "TvltProcessor",
     ],
-    "models.umt5": [],
+    "models.umt5": ["UMT5Config"],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechConfig",
@@ -551,6 +553,10 @@ _import_structure = {
     "models.vit_hybrid": ["VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTHybridConfig"],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
+    "models.vivit": [
+        "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "VivitConfig",
+    ],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2Config",
@@ -932,6 +938,7 @@ else:
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
     _import_structure["models.vit_hybrid"].extend(["ViTHybridImageProcessor"])
+    _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
 
 
@@ -1638,6 +1645,17 @@ else:
             "EsmPreTrainedModel",
         ]
     )
+    _import_structure["models.falcon"].extend(
+        [
+            "FALCON_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FalconForCausalLM",
+            "FalconForQuestionAnswering",
+            "FalconForSequenceClassification",
+            "FalconForTokenClassification",
+            "FalconModel",
+            "FalconPreTrainedModel",
+        ]
+    )
     _import_structure["models.flaubert"].extend(
         [
             "FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2146,6 +2164,18 @@ else:
             "MptForTokenClassification",
             "MptModel",
             "MptPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mra"].extend(
+        [
+            "MRA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MraForMaskedLM",
+            "MraForMultipleChoice",
+            "MraForQuestionAnswering",
+            "MraForSequenceClassification",
+            "MraForTokenClassification",
+            "MraModel",
+            "MraPreTrainedModel",
         ]
     )
     _import_structure["models.mt5"].extend(
@@ -2786,6 +2816,14 @@ else:
             "ViTMSNForImageClassification",
             "ViTMSNModel",
             "ViTMSNPreTrainedModel",
+        ]
+    )
+    _import_structure["models.vivit"].extend(
+        [
+            "VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VivitForVideoClassification",
+            "VivitModel",
+            "VivitPreTrainedModel",
         ]
     )
     _import_structure["models.wav2vec2"].extend(
@@ -4187,6 +4225,7 @@ if TYPE_CHECKING:
     from .models.ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig
     from .models.ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
     from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer
+    from .models.falcon import FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP, FalconConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4289,6 +4328,7 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTV2Config
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mpt import MPT_PRETRAINED_CONFIG_ARCHIVE_MAP, MptConfig
+    from .models.mra import MRA_PRETRAINED_CONFIG_ARCHIVE_MAP, MraConfig
     from .models.mt5 import MT5Config
     from .models.musicgen import (
         MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4401,6 +4441,7 @@ if TYPE_CHECKING:
     )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
     from .models.tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig, TvltFeatureExtractor, TvltProcessor
+    from .models.umt5 import UMT5Config
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.upernet import UperNetConfig
@@ -4420,6 +4461,7 @@ if TYPE_CHECKING:
     from .models.vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
+    from .models.vivit import VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, VivitConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2Config,
@@ -4762,6 +4804,7 @@ if TYPE_CHECKING:
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
         from .models.vit_hybrid import ViTHybridImageProcessor
+        from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
 
     # Modeling
@@ -5348,6 +5391,15 @@ if TYPE_CHECKING:
             EsmModel,
             EsmPreTrainedModel,
         )
+        from .models.falcon import (
+            FALCON_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FalconForCausalLM,
+            FalconForQuestionAnswering,
+            FalconForSequenceClassification,
+            FalconForTokenClassification,
+            FalconModel,
+            FalconPreTrainedModel,
+        )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             FlaubertForMultipleChoice,
@@ -5754,6 +5806,16 @@ if TYPE_CHECKING:
             MptForTokenClassification,
             MptModel,
             MptPreTrainedModel,
+        )
+        from .models.mra import (
+            MRA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MraForMaskedLM,
+            MraForMultipleChoice,
+            MraForQuestionAnswering,
+            MraForSequenceClassification,
+            MraForTokenClassification,
+            MraModel,
+            MraPreTrainedModel,
         )
         from .models.mt5 import (
             MT5EncoderModel,
@@ -6275,6 +6337,12 @@ if TYPE_CHECKING:
             ViTMSNForImageClassification,
             ViTMSNModel,
             ViTMSNPreTrainedModel,
+        )
+        from .models.vivit import (
+            VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VivitForVideoClassification,
+            VivitModel,
+            VivitPreTrainedModel,
         )
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,

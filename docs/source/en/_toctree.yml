@@ -295,6 +295,8 @@
         title: ErnieM
       - local: model_doc/esm
         title: ESM
+      - local: model_doc/falcon
+        title: Falcon
       - local: model_doc/flan-t5
         title: FLAN-T5
       - local: model_doc/flan-ul2
@@ -361,6 +363,8 @@
         title: MobileBERT
       - local: model_doc/mpnet
         title: MPNet
+      - local: model_doc/mra
+        title: MRA
       - local: model_doc/mt5
         title: MT5
       - local: model_doc/mvp
@@ -534,6 +538,8 @@
         title: ViTMAE
       - local: model_doc/vit_msn
         title: ViTMSN
+      - local: model_doc/vivit
+        title: ViViT
       - local: model_doc/yolos
         title: YOLOS
       title: Vision models
