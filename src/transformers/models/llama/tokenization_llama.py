@@ -44,6 +44,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "hf-internal-testing/llama-tokenizer": 2048,
 }
+SPIECE_UNDERLINE = "▁"
 
 
 class LlamaTokenizer(PreTrainedTokenizer):
@@ -53,6 +54,29 @@ class LlamaTokenizer(PreTrainedTokenizer):
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
+        legacy (`bool`, *optional*, defaults to `True`):
+            Whether or not the `legacy` behaviour of the tokenizer should be used. Legacy is before the merge of #24622
+            which includes fixes to properly handle tokens that appear after special tokens. A simple example:
+
+            - `legacy=True`:
+            ```python
+            >>> from transformers import T5Tokenizer
+
+            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=True)
+            >>> tokenizer.encode("Hello <extra_id_0>.")
+            [8774, 32099, 3, 5, 1]
+            ```
+            - `legacy=False`:
+            ```python
+            >>> from transformers import T5Tokenizer
+
+            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
+            >>> tokenizer.encode("Hello <extra_id_0>.")  # the extra space `[3]` is no longer here
+            [8774, 32099, 5, 1]
+            ```
+            Checkout the pull request and the issue [here](https://github.com/huggingface/transformers/pull/24565) for
+            more details.
+
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -71,6 +95,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
+        legacy=True,
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -87,8 +112,15 @@ class LlamaTokenizer(PreTrainedTokenizer):
             add_eos_token=add_eos_token,
             sp_model_kwargs=self.sp_model_kwargs,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            legacy=legacy,
             **kwargs,
         )
+        if legacy:
+            logger.warning_once(
+                f"You are using the legacy behaviour of the {self.__class__}. This means that tokens that come after special tokens will not be properly handled. We recommend you to"
+                " read the related pull request available at https://github.com/huggingface/transformers/pull/24565"
+            )
+        self.legacy = legacy
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
@@ -117,9 +149,35 @@ class LlamaTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
+    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
+    def tokenize(self, text, **kwargs) -> List[str]:
+        # Replace the SPIECE_UNDERLINE with a space to make sure SPIECE_UNDERLINE is only used at
+        # the beginning of the text
+        if not self.legacy:
+            text = SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " ")
+        return super().tokenize(text, **kwargs)
+
+    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
     def _tokenize(self, text):
-        """Returns a tokenized string."""
-        return self.sp_model.encode(text, out_type=str)
+        """
+        Returns a tokenized string.
+
+        Since the sentencepiece internal model always adds a SPIECE_UNDERLINE, at the beginning of the provided text,
+        we need to remove it by hand when the current text is a subsequence. This happens whenever the `self.tokenize`
+        function is called with specials tokens: the input is split on the special tokens, and each subsequence is
+        passed to `_tokenize`. Thus if a subsequence did not start with a `" "` or SPIECE_UNDERLINE, we have to remove
+        the extra `SPIECE_UNDERLINE` prepended.
+        """
+        if not self.legacy:
+            is_first = text.startswith(SPIECE_UNDERLINE)
+            if is_first:
+                text = text[1:]
+
+        tokens = self.sp_model.encode(text, out_type=str)
+
+        if not self.legacy and not is_first and not text.startswith(" ") and tokens[0].startswith(SPIECE_UNDERLINE):
+            tokens = ([tokens[0][1:]] if len(tokens[0]) > 1 else []) + tokens[1:]
+        return tokens
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""

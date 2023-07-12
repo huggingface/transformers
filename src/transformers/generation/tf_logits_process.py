@@ -42,7 +42,7 @@ TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
         cur_len (`int`):
             The current length of valid input sequence tokens. In the TF implementation, the input_ids' sequence length
             is the maximum length generate can produce, and we need to know which of its tokens are valid.
-        kwargs:
+        kwargs (`Dict[str, Any]`, *optional*):
             Additional logits processor specific kwargs.
 
     Return:
