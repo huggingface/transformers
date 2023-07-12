@@ -411,7 +411,9 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        random_params = self.module.init(rngs, input_ids, attention_mask, position_ids, return_dict=False)["params"]
+        # TODO: add return_dict
+        # random_params = self.module.init(rngs, input_ids, position_ids=position_ids, attention_mask=attention_mask, return_dict=False)["params"]
+        random_params = self.module.init(rngs, input_ids, position_ids=position_ids, attention_mask=attention_mask)["params"]
 
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
@@ -437,8 +439,11 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         attention_mask = jnp.ones_like(input_ids)
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
+        # init_variables = self.module.init(
+            # jax.random.PRNGKey(0), input_ids, position_ids=position_ids, attention_mask=attention_mask, return_dict=False, init_cache=True
+        # )
         init_variables = self.module.init(
-            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True
+            jax.random.PRNGKey(0), input_ids, position_ids=position_ids, attention_mask=attention_mask, init_cache=True
         )
         return unfreeze(init_variables["cache"])
 
@@ -446,8 +451,8 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
     def __call__(
         self,
         input_ids,
-        attention_mask=None,
         position_ids=None,
+        attention_mask=None,
         params: dict = None,
         past_key_values: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
@@ -490,8 +495,8 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         outputs = self.module.apply(
             inputs,
             jnp.array(input_ids, dtype="i4"),
-            jnp.array(attention_mask, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
+            jnp.array(attention_mask, dtype="i4"),
             not train,
             False,
             output_attentions,
@@ -720,23 +725,6 @@ if __name__ == "__main__":
     from .modeling_llama import LlamaForCausalLM, _make_causal_mask
     import torch
 
-
-    # from .modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
-    # x = torch.randn(4, 64, 32)
-    # pt_x = x.view(4, 64, 2, 16).transpose(1, 2)
-    # layer = LlamaRotaryEmbedding(16, max_position_embeddings=64)
-    # cos, sin = layer(x, x.shape[-2])
-    # pt_y = apply_rotary_pos_emb(pt_x, pt_x, cos, sin, None)[0]
-
-    # from .modeling_flax_llama import create_sinusoidal_positions, apply_rotary_pos_emb
-    # sincos = create_sinusoidal_positions(64, 16)
-    
-    # sincos = jnp.split(sincos, 2, axis=-1)
-    # y = apply_rotary_pos_emb(x.detach().numpy().reshape(x.shape[:2] + (2, 16)), sincos)
-
-    # import ipdb; ipdb.set_trace()
-    # exit()
-
     key = jax.random.PRNGKey(0)
     torch.manual_seed(0)
     config = LlamaConfig(num_hidden_layers=2, vocab_size=16)
@@ -746,7 +734,6 @@ if __name__ == "__main__":
     pt_model = LlamaForCausalLM(config)
 
     key, subkey = jax.random.split(key)
-    # x = jax.random.normal(subkey, (4, 128, config.hidden_size)) * 0.1
     x = jax.random.randint(subkey, (4, 128), 0, 16)
     mask = jnp.ones((4, 128), dtype=bool)
     position_ids = jnp.arange(128)[jnp.newaxis, :].repeat(4, axis=0)
@@ -754,11 +741,7 @@ if __name__ == "__main__":
     key, model_key = jax.random.split(key)
     y, params = model.init_with_output(model_key, x, attention_mask=mask, position_ids=position_ids)
 
-    # y, = model.apply(params, x, attention_mask=mask, position_ids=position_ids)
-
     params = flatten_dict(params['params'], sep='.')
-
-    import ipdb; ipdb.set_trace()
 
     for i, l in enumerate(pt_model.model.layers):
         pt_state = l.state_dict()
@@ -780,16 +763,10 @@ if __name__ == "__main__":
     pt_model.lm_head.weight = torch.nn.Parameter(torch.from_numpy(np.asarray(params['lm_head.kernel'].T)))
 
     x_pt = torch.tensor(np.asarray(x))
-    # for l in pt_model:
-        # h = l(h, attention_mask=_make_causal_mask((4, 128), torch.float32, device='cpu'), position_ids=torch.from_numpy(np.asarray(position_ids)))[0]
-
-    # y = pt_model(x_pt, attention_mask=_make_causal_mask((4, 128), torch.float32, device='cpu'), position_ids=torch.from_numpy(np.asarray(position_ids)))[0]
     pt_y = pt_model(x_pt, attention_mask=torch.from_numpy(np.asarray(mask)), position_ids=torch.from_numpy(np.asarray(position_ids)))[0]
 
 
     pt_y = pt_y.detach().numpy()
-    #
-    # pt_y = h.detach().numpy()
 
     try:
         np.testing.assert_allclose(y, pt_y, atol=1e-2, rtol=1e-2)
