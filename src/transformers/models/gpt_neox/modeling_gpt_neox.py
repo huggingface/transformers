@@ -86,6 +86,7 @@ class GPTNeoXPreTrainedModel(PreTrainedModel):
 class GPTNeoXAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.num_attention_heads = config.num_attention_heads
         self.hidden_size = config.hidden_size
         if self.hidden_size % self.num_attention_heads != 0:
@@ -103,9 +104,8 @@ class GPTNeoXAttention(nn.Module):
             persistent=False,
         )
         self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
-        self.rotary_emb = RotaryEmbedding(
-            self.rotary_ndims, config.max_position_embeddings, base=config.rotary_emb_base
-        )
+        self._init_rope()
+
         self.register_buffer(
             "norm_factor",
             torch.sqrt(torch.tensor(self.head_size, dtype=torch.float32)).to(torch.get_default_dtype()),
@@ -113,6 +113,38 @@ class GPTNeoXAttention(nn.Module):
         )
         self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+
+    def _init_rope(self):
+        if self.config.rope_scaling is None:
+            self.rotary_emb = GPTNeoXRotaryEmbedding(
+                self.rotary_ndims, self.config.max_position_embeddings, base=self.config.rotary_emb_base
+            )
+        else:
+            scaling_type = self.config.rope_scaling["type"]
+            scaling_factor = self.config.rope_scaling["factor"]
+            if scaling_type == "linear":
+                self.rotary_emb = GPTNeoXLinearScalingRotaryEmbedding(
+                    self.rotary_ndims,
+                    self.config.max_position_embeddings,
+                    base=self.config.rotary_emb_base,
+                    scaling_factor=scaling_factor,
+                )
+            elif scaling_type == "ntk":
+                self.rotary_emb = GPTNeoXNTKScalingRotaryEmbedding(
+                    self.rotary_ndims,
+                    self.config.max_position_embeddings,
+                    base=self.config.rotary_emb_base,
+                    scaling_factor=scaling_factor,
+                )
+            elif scaling_type == "dynamic":
+                self.rotary_emb = GPTNeoXDynamicNTKScalingRotaryEmbedding(
+                    self.rotary_ndims,
+                    self.config.max_position_embeddings,
+                    base=self.config.rotary_emb_base,
+                    scaling_factor=scaling_factor,
+                )
+            else:
+                raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
     def forward(
         self,
@@ -254,15 +286,25 @@ def attention_mask_func(attention_scores, ltor_mask):
     return attention_scores
 
 
-class RotaryEmbedding(torch.nn.Module):
+class GPTNeoXRotaryEmbedding(torch.nn.Module):
     def __init__(self, dim, max_position_embeddings, base=10000, device=None):
         super().__init__()
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
+
+        self.dim = dim
+        self.max_position_embeddings = max_position_embeddings
+        self.base = base
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq)
 
         # Build here to make `torch.jit.trace` work.
-        self.max_seq_len_cached = max_position_embeddings
-        t = torch.arange(self.max_seq_len_cached, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        self._set_cos_sin_cache(
+            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
+        )
+
+    def _set_cos_sin_cache(self, seq_len, device):
+        self.max_seq_len_cached = seq_len
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
@@ -271,16 +313,63 @@ class RotaryEmbedding(torch.nn.Module):
 
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        # This `if` block is unlikely to be run after we build sin/cos in `__init__`. Keep the logic here just in case.
         if seq_len > self.max_seq_len_cached:
-            self.max_seq_len_cached = seq_len
-            t = torch.arange(self.max_seq_len_cached, device=x.device, dtype=self.inv_freq.dtype)
-            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-            # Different from paper, but it uses a different permutation in order to obtain the same calculation
-            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
-            self.cos_cached = emb.cos()[None, None, :, :]
-            self.sin_cached = emb.sin()[None, None, :, :]
+            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
         return self.cos_cached[:seq_len, ...].to(x.device), self.sin_cached[:seq_len, ...].to(x.device)
+
+
+class GPTNeoXLinearScalingRotaryEmbedding(GPTNeoXRotaryEmbedding):
+    """GPTNeoXRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+
+    def __init__(self, dim, max_position_embeddings, base=10000, device=None, scaling_factor=1.0):
+        self.scaling_factor = scaling_factor
+        super().__init__(dim, max_position_embeddings, base, device)
+
+    def _set_cos_sin_cache(self, seq_len, device):
+        self.max_seq_len_cached = seq_len
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = t / self.scaling_factor
+
+        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        emb = torch.cat((freqs, freqs), dim=-1)
+        self.cos_cached = emb.cos()[None, None, :, :]
+        self.sin_cached = emb.sin()[None, None, :, :]
+
+
+class GPTNeoXNTKScalingRotaryEmbedding(GPTNeoXRotaryEmbedding):
+    """GPTNeoXRotaryEmbedding extended with NTK scaling. Credits to the Reddit user /u/bloc97"""
+
+    def __init__(self, dim, max_position_embeddings, base=10000, device=None, scaling_factor=1.0):
+        self.scaling_factor = scaling_factor
+        base = base * scaling_factor ** (dim / (dim - 2))
+        super().__init__(dim, max_position_embeddings, base, device)
+
+
+class GPTNeoXDynamicNTKScalingRotaryEmbedding(GPTNeoXRotaryEmbedding):
+    """GPTNeoXRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit user /u/emozilla"""
+
+    def __init__(self, dim, max_position_embeddings, base=10000, device=None, scaling_factor=1.0):
+        self.scaling_factor = scaling_factor
+        super().__init__(dim, max_position_embeddings, base, device)
+
+    def _set_cos_sin_cache(self, seq_len, device):
+        self.max_seq_len_cached = seq_len
+
+        if seq_len > self.max_position_embeddings:
+            base = self.base * (
+                (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
+            ) ** (self.dim / (self.dim - 2))
+            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+            self.register_buffer("inv_freq", inv_freq)
+
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+
+        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        emb = torch.cat((freqs, freqs), dim=-1)
+        self.cos_cached = emb.cos()[None, None, :, :]
+        self.sin_cached = emb.sin()[None, None, :, :]
 
 
 def rotate_half(x):

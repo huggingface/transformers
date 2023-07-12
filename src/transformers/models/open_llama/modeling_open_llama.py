@@ -134,8 +134,9 @@ class OpenLlamaRotaryEmbedding(torch.nn.Module):
             self.sin_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
         )
 
+
 # Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->OpenLlama
-class LlamaLinearScalingRotaryEmbedding(OpenLlamaRotaryEmbedding):
+class OpenLlamaLinearScalingRotaryEmbedding(OpenLlamaRotaryEmbedding):
     """OpenLlamaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
@@ -155,7 +156,7 @@ class LlamaLinearScalingRotaryEmbedding(OpenLlamaRotaryEmbedding):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaNTKScalingRotaryEmbedding with Llama->OpenLlama
-class LlamaNTKScalingRotaryEmbedding(OpenLlamaRotaryEmbedding):
+class OpenLlamaNTKScalingRotaryEmbedding(OpenLlamaRotaryEmbedding):
     """OpenLlamaRotaryEmbedding extended with NTK scaling. Credits to the Reddit user /u/bloc97"""
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
@@ -165,7 +166,7 @@ class LlamaNTKScalingRotaryEmbedding(OpenLlamaRotaryEmbedding):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->OpenLlama
-class LlamaDynamicNTKScalingRotaryEmbedding(OpenLlamaRotaryEmbedding):
+class OpenLlamaDynamicNTKScalingRotaryEmbedding(OpenLlamaRotaryEmbedding):
     """OpenLlamaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit user /u/emozilla"""
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
@@ -249,11 +250,31 @@ class OpenLlamaAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.rotary_emb = OpenLlamaRotaryEmbedding(
-            dim=self.head_dim,
-            max_position_embeddings=self.max_position_embeddings,
-            rope_scaling=config.rope_scaling,
-        )
+        self._init_rope()
+
+    # Copied from transformers.models.llama.modeling_llama.LlamaAttention._init_rope with Llama->OpenLlama
+    def _init_rope(self):
+        if self.config.rope_scaling is None:
+            self.rotary_emb = OpenLlamaRotaryEmbedding(
+                self.head_dim, max_position_embeddings=self.max_position_embeddings
+            )
+        else:
+            scaling_type = self.config.rope_scaling["type"]
+            scaling_factor = self.config.rope_scaling["factor"]
+            if scaling_type == "linear":
+                self.rotary_emb = OpenLlamaLinearScalingRotaryEmbedding(
+                    self.head_dim, max_position_embeddings=self.max_position_embeddings, scaling_factor=scaling_factor
+                )
+            elif scaling_type == "ntk":
+                self.rotary_emb = OpenLlamaNTKScalingRotaryEmbedding(
+                    self.head_dim, max_position_embeddings=self.max_position_embeddings, scaling_factor=scaling_factor
+                )
+            elif scaling_type == "dynamic":
+                self.rotary_emb = OpenLlamaDynamicNTKScalingRotaryEmbedding(
+                    self.head_dim, max_position_embeddings=self.max_position_embeddings, scaling_factor=scaling_factor
+                )
+            else:
+                raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()

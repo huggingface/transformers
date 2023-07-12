@@ -68,12 +68,12 @@ class OpenLlamaConfig(PretrainedConfig):
         tie_word_embeddings(`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently
-            supports three scaling strategies: linear, ntk, and dynamic. Their scaling factor must be an float greater
-            than 1. The expected format is `{"type": strategy name, "factor": scaling factor}`. See the following
-            thread for more information on how these scaling strategies behave:
-            https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/.
-            This is an experimental feature, subject to breaking API changes in future versions.
+            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports three scaling
+            strategies: linear, ntk, and dynamic. Their scaling factor must be an float greater than 1. The expected
+            format is `{"type": strategy name, "factor": scaling factor}`. See the following thread for more
+            information on how these scaling strategies behave:
+            https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
+            experimental feature, subject to breaking API changes in future versions.
         Example:
 
     ```python
@@ -157,7 +157,7 @@ class OpenLlamaConfig(PretrainedConfig):
             **kwargs,
         )
 
-    #Copied from transformers.models.llama.configuration_llama.LlamaConfig._rope_scaling_validation
+    # Copied from transformers.models.llama.configuration_llama.LlamaConfig._rope_scaling_validation
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.
