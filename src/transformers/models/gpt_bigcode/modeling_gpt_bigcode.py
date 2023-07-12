@@ -160,15 +160,7 @@ class GPTBigCodeAttention(nn.Module):
             key = key.reshape(batch_size * self.num_heads, self.head_dim, key_length)
 
         attn_weights = torch.empty(attn_view, device=query.device, dtype=query.dtype)
-        if query.device.type == "cpu":
-            # This is needed because of a bug in pytorch https://github.com/pytorch/pytorch/issues/80588.
-            # The bug was fixed in https://github.com/pytorch/pytorch/pull/96086,
-            # but the fix has not been released as of pytorch version 2.0.0.
-            attn_weights.zero_()
-            beta = 1
-        else:
-            beta = 0
-        attn_weights = torch.baddbmm(attn_weights, query, key, beta=beta, alpha=scale_factor).view(attn_shape)
+        attn_weights = torch.baddbmm(attn_weights, query, key, beta=0, alpha=scale_factor).view(attn_shape)
 
         if upcast:
             # Use a fused kernel to prevent a large overhead from casting and scaling.
