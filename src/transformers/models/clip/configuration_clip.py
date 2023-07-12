@@ -106,10 +106,16 @@ class CLIPTextConfig(PretrainedConfig):
         initializer_range=0.02,
         initializer_factor=1.0,
         pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
+        bos_token_id=49406,
+        eos_token_id=49407,
         **kwargs,
     ):
+        # (TODO): remove this comment
+        #  we can't just reset `eos_token_id` to `vocab_size - 1`!
+        #    - we need to respect the value in the config file.
+        #    - (even if we want to reset, `eos_token_id` is not just `vocab_size - 1` when user adding more tokens)
+        #  Before all the config files on Hub repo. are updated, we can't use `config.eos_token_id` in the modeling.
+
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
         self.vocab_size = vocab_size
