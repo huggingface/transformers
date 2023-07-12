@@ -34,7 +34,9 @@ from ..models.auto.modeling_auto import AutoModelForDepthEstimation
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import (
+    ADAPTER_CONFIG_NAME,
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
+    cached_file,
     is_kenlm_available,
     is_offline_mode,
     is_peft_available,
@@ -707,17 +709,22 @@ def pipeline(
     if isinstance(model, Path):
         model = str(model)
 
+    has_adapter_config = False
     if is_peft_available() and isinstance(model, str):
         try:
-            list_remote_files = list_repo_files(model, revision=revision, use_auth_token=use_auth_token)
+            adapter_cached_filename = cached_file(
+                model,
+                ADAPTER_CONFIG_NAME,
+                revision=revision,
+                use_auth_token=use_auth_token,
+                _commit_hash=hub_kwargs["_commit_hash"],
+            )
+            has_adapter_config = adapter_cached_filename is not None
         except EntryNotFoundError:
             if not os.path.isdir(model):
                 raise ValueError(f"Local file or directory {model} does not exist.")
             list_remote_files = os.listdir(model)
-
-        has_adapter_config = "adapter_config.json" in list_remote_files
-    else:
-        has_adapter_config = False
+            has_adapter_config = ADAPTER_CONFIG_NAME in list_remote_files
 
     # Config is the primordial information item.
     # Instantiate config if needed
@@ -736,7 +743,7 @@ def pipeline(
             config._peft_model_kwargs = peft_model_kwargs
         else:
             config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
-            hub_kwargs["_commit_hash"] = config._commit_hash
+        hub_kwargs["_commit_hash"] = config._commit_hash
 
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:
