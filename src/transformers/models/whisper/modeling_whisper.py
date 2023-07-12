@@ -1608,7 +1608,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 Whether to return token-level timestamps with the text. This can be used with or without the
                 `return_timestamps` option. To get word-level timestamps, use the tokenizer to group the tokens into
                 words.
-            kwargs:
+            kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.

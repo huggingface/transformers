@@ -1043,7 +1043,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
                 </Tip>
 
-            kwargs:
+            kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):

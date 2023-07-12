@@ -1714,7 +1714,9 @@ class TrainingArguments:
             del os.environ["ACCELERATE_USE_DEEPSPEED"]
             self._n_gpu = 1
         else:
-            self.distributed_state = PartialState(backend=self.ddp_backend)
+            self.distributed_state = PartialState(
+                backend=self.ddp_backend, timeout=timedelta(seconds=self.ddp_timeout)
+            )
             self._n_gpu = 1
         if not is_sagemaker_mp_enabled():
             device = self.distributed_state.device
