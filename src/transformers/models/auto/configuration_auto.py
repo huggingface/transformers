@@ -85,6 +85,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("ernie", "ErnieConfig"),
         ("ernie_m", "ErnieMConfig"),
         ("esm", "EsmConfig"),
+        ("falcon", "FalconConfig"),
         ("flaubert", "FlaubertConfig"),
         ("flava", "FlavaConfig"),
         ("fnet", "FNetConfig"),
@@ -137,6 +138,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mobilevit", "MobileViTConfig"),
         ("mobilevitv2", "MobileViTV2Config"),
         ("mpnet", "MPNetConfig"),
+        ("mra", "MraConfig"),
         ("mt5", "MT5Config"),
         ("musicgen", "MusicgenConfig"),
         ("mvp", "MvpConfig"),
@@ -194,7 +196,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("transfo-xl", "TransfoXLConfig"),
         ("trocr", "TrOCRConfig"),
         ("tvlt", "TvltConfig"),
-        ("umt5", "MT5Config"),
+        ("umt5", "UMT5Config"),
         ("unispeech", "UniSpeechConfig"),
         ("unispeech-sat", "UniSpeechSatConfig"),
         ("upernet", "UperNetConfig"),
@@ -208,6 +210,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("vit_hybrid", "ViTHybridConfig"),
         ("vit_mae", "ViTMAEConfig"),
         ("vit_msn", "ViTMSNConfig"),
+        ("vivit", "VivitConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
         ("wavlm", "WavLMConfig"),
@@ -281,6 +284,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("ernie", "ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("ernie_m", "ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("esm", "ESM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("falcon", "FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("flaubert", "FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("flava", "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -329,6 +333,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("mobilevit", "MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilevitv2", "MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mpnet", "MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("mra", "MRA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("musicgen", "MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mvp", "MVP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("nat", "NAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -389,6 +394,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("vit_hybrid", "VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit_mae", "VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit_msn", "VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("vivit", "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2", "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2-conformer", "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("whisper", "WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -473,6 +479,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("ernie", "ERNIE"),
         ("ernie_m", "ErnieM"),
         ("esm", "ESM"),
+        ("falcon", "Falcon"),
         ("flan-t5", "FLAN-T5"),
         ("flan-ul2", "FLAN-UL2"),
         ("flaubert", "FlauBERT"),
@@ -534,6 +541,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mobilevit", "MobileViT"),
         ("mobilevitv2", "MobileViTV2"),
         ("mpnet", "MPNet"),
+        ("mra", "MRA"),
         ("mt5", "MT5"),
         ("musicgen", "MusicGen"),
         ("mvp", "MVP"),
@@ -610,6 +618,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("vit_hybrid", "ViT Hybrid"),
         ("vit_mae", "ViTMAE"),
         ("vit_msn", "ViTMSN"),
+        ("vivit", "ViViT"),
         ("wav2vec2", "Wav2Vec2"),
         ("wav2vec2-conformer", "Wav2Vec2-Conformer"),
         ("wav2vec2_phoneme", "Wav2Vec2Phoneme"),
@@ -707,11 +716,11 @@ class _LazyConfigMapping(OrderedDict):
     def __contains__(self, item):
         return item in self._mapping or item in self._extra_content
 
-    def register(self, key, value):
+    def register(self, key, value, exist_ok=False):
         """
         Register a new configuration in this mapping.
         """
-        if key in self._mapping.keys():
+        if key in self._mapping.keys() and not exist_ok:
             raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
         self._extra_content[key] = value
 

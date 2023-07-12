@@ -339,7 +339,7 @@ def main():
             use_auth_token=True if model_args.use_auth_token else None,
         )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading
     # endregion
 
     # region Load model config and tokenizer
