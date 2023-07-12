@@ -162,7 +162,6 @@ from . import (
     regnet,
     rembert,
     resnet,
-    retribert,
     roberta,
     roberta_prelayernorm,
     roc_bert,
