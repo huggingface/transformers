@@ -351,52 +351,66 @@ class MptAttention(nn.Module):
 
     def __init__(self, config: MptConfig):
         super().__init__()
-
         self.hidden_size = config.hidden_size
         self.n_heads = config.n_heads
+        self.head_dim = self.hidden_size // self.n_heads
         self.softmax_scale = config.attn_config["softmax_scale"]
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
 
         if self.softmax_scale is None:
             self.softmax_scale = 1 / math.sqrt(self.hidden_size / self.n_heads)
 
         self.attn_dropout_p = config.attn_config["attn_pdrop"]
         self.Wqkv = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=False)
-
-        self.attn_fn = scaled_multihead_dot_product_attention
-
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
+    
     def forward(
         self, 
         hidden_states: torch.Tensor, 
-        attention_mask: torch.Tensor = None, 
-        past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None, 
-        alibi: torch.Tensor =None, 
-        use_cache: bool = False,
-        output_attentions: bool = False,
+        position_bias: torch.Tensor, 
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
     ):
-        mixed_qkv = self.Wqkv(hidden_states)
-        query, key, value = mixed_qkv.chunk(3, dim=2)
+        batch_size, seq_length = hidden_states.shape[:2]
         
-        key_padding_mask = attention_mask
-        # I think we should leave `self.attn_fn` so that is can be modulable enough to support triton and flash attention
-        context, attn_weights, past_key_value = self.attn_fn(
-            query,
-            key,
-            value,
-            self.n_heads,
-            past_key_value=past_key_value,
-            softmax_scale=self.softmax_scale,
-            attn_bias=alibi,
-            key_padding_mask=key_padding_mask,
-            dropout_p=self.attn_dropout_p,
-            training=self.training,
-            output_attentions=output_attentions
-        )
+        mixed_qkv = self.Wqkv(hidden_states)
+        query_states, key_states, value_states = mixed_qkv.chunk(3, dim=2)
+        query_states = query_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).permute(0, 2, 1, 3)
+        key_states = key_states.reshape(batch_size, seq_length, self.num_key_value_heads, self.head_dim).permute(0, 2, 1, 3)
+        value_states = value_states.reshape(batch_size, seq_length, self.num_key_value_heads, self.head_dim).permute(0, 2, 1, 3)
+        
+        if past_key_value is not None:
+            if len(past_key_value) != 0:
+                key_states = torch.cat([past_key_value[0], key_states], dim=3)
+                value_states = torch.cat([past_key_value[1], value_states], dim=2)
+            past_key_value = (key_states, value_states)
+            
+        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
+        
+        query_length = seq_length
+        if past_key_value is not None:
+            query_length += past_key_value[0].shape[2]
 
-        hidden_states = self.out_proj(context)
+        attention_scores = (attention_scores + position_bias) * self.softmax_scale
+        if attention_mask is not None:
+            attention_scores = attention_scores + attention_mask
 
-        return (hidden_states, attn_weights, past_key_value)
+        # (batch_size, n_heads, seq_length, key_length)
+        attn_weights = nn.functional.softmax(attention_scores.float(), dim=-1).type_as(attention_scores)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+
+        # Mask heads if we want to
+        if layer_head_mask is not None:
+            attn_weights = attn_weights * layer_head_mask
+
+        context_states = torch.matmul(attn_weights, value_states)
+        context_states = context_states.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
+        attn_output = self.out_proj(context_states)
+        return attn_output, attn_weights, past_key_value
+
 
 
 # Copied from transformers.models.bloom.modeling_bloom.BloomMLP with Bloom->Mpt
