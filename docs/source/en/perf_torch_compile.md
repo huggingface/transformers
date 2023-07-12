@@ -64,14 +64,14 @@ with torch.no_grad():
 #### Object Detection with DETR
 
 ```python 
-from transformers import AutoFeatureExtractor, AutoModelForObjectDetection
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
-extractor = AutoFeatureExtractor.from_pretrained("facebook/detr-resnet-50")
+processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50")
 model = AutoModelForObjectDetection.from_pretrained("facebook/detr-resnet-50").to("cuda")
 model = torch.compile(model)
 
 texts = ["a photo of a cat", "a photo of a dog"]
-inputs = extractor(text=texts, images=image, return_tensors="pt").to("cuda")
+inputs = processor(text=texts, images=image, return_tensors="pt").to("cuda")
 
 with torch.no_grad():
     _ = model(**inputs)
