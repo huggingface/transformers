@@ -35,7 +35,7 @@ model = AutoModelForImageClassification.from_pretrained(MODEL_ID).to("cuda")
 
 We have benchmarked `torch.compile` with different computer vision models, tasks, different types of hardware and batch sizes. `torch` version used in this benchmark is 2.0.1.
 
-### Benchmarking code 
+## Benchmarking code 
 
 Below you can find the benchmarking code for each task. We warm up the GPU before inference and take the mean time of 300 inferences, using the same image each time.
 
