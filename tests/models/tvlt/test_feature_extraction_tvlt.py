@@ -22,7 +22,7 @@ import unittest
 
 import numpy as np
 
-from transformers import is_datasets_available, is_speech_available
+from transformers import TvltFeatureExtractor, is_datasets_available
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
 from transformers.utils.import_utils import is_torch_available
 
@@ -34,9 +34,6 @@ if is_torch_available():
 
 if is_datasets_available():
     from datasets import load_dataset
-
-if is_speech_available():
-    from transformers import TvltFeatureExtractor
 
 global_rng = random.Random()
 
@@ -111,7 +108,7 @@ class TvltFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_torchaudio
 class TvltFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-    feature_extraction_class = TvltFeatureExtractor if is_speech_available() else None
+    feature_extraction_class = TvltFeatureExtractor
 
     def setUp(self):
         self.feat_extract_tester = TvltFeatureExtractionTester(self)
@@ -160,7 +157,7 @@ class TvltFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
 
         # create three inputs of length 800, 1000, and 1200
-        speech_inputs = [floats_list((1, x))[0] for x in range(8000, 14000, 20000)]
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
 
         # Test not batched input
@@ -189,6 +186,15 @@ class TvltFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         self.assertTrue(encoded_audios.shape[-2] <= feature_extractor.spectrogram_length)
         self.assertTrue(encoded_audios.shape[-3] == feature_extractor.num_channels)
 
+        # Test 2-D numpy arrays are batched.
+        speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
+        np_speech_inputs = np.asarray(speech_inputs)
+        encoded_audios = feature_extractor(np_speech_inputs, return_tensors="np", sampling_rate=44100).audio_values
+        self.assertTrue(encoded_audios.ndim == 4)
+        self.assertTrue(encoded_audios.shape[-1] == feature_extractor.feature_size)
+        self.assertTrue(encoded_audios.shape[-2] <= feature_extractor.spectrogram_length)
+        self.assertTrue(encoded_audios.shape[-3] == feature_extractor.num_channels)
+
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
@@ -198,10 +204,10 @@ class TvltFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
 
     def test_integration(self):
         input_speech = self._load_datasamples(1)
-        feaure_extractor = TvltFeatureExtractor()
-        audio_values = feaure_extractor(input_speech, return_tensors="pt").audio_values
+        feature_extractor = TvltFeatureExtractor()
+        audio_values = feature_extractor(input_speech, return_tensors="pt").audio_values
 
-        self.assertTrue(audio_values.shape, [1, 1, 192, 128])
+        self.assertEquals(audio_values.shape, (1, 1, 192, 128))
 
         expected_slice = torch.tensor([[-0.3032, -0.2708], [-0.4434, -0.4007]])
         self.assertTrue(torch.allclose(audio_values[0, 0, :2, :2], expected_slice, atol=1e-4))

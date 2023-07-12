@@ -334,12 +334,12 @@ def export(
         preprocessor = tokenizer
 
     if is_torch_available():
-        from ..utils import torch_version
+        from ..utils import get_torch_version
 
         if not config.is_torch_support_available:
             logger.warning(
                 f"Unsupported PyTorch version for this model. Minimum required is {config.torch_onnx_minimum_version},"
-                f" got: {torch_version}"
+                f" got: {get_torch_version()}"
             )
 
     if is_torch_available() and issubclass(type(model), PreTrainedModel):

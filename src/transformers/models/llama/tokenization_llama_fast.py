@@ -16,6 +16,8 @@ import os
 from shutil import copyfile
 from typing import Optional, Tuple
 
+from tokenizers import processors
+
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
 from ...utils.versions import require_version
@@ -46,6 +48,12 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
     >>> [1, 15043, 445, 338, 263, 1243]
     ```
 
+    If you want to change the `bos_token` or the `eos_token`, make sure to specify them when initializing the model, or
+    call `tokenizer.update_post_processor()` to make sure that the post-processing is correctly done (otherwise the
+    values of the first token and final token of an encoded sequence will not be correct). For more details, checkout
+    [post-processors] (https://huggingface.co/docs/tokenizers/api/post-processors) documentation.
+
+
     This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
 
@@ -75,6 +83,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     slow_tokenizer_class = LlamaTokenizer
     padding_side = "left"
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,
@@ -84,6 +93,8 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         unk_token="<unk>",
         bos_token="<s>",
         eos_token="</s>",
+        add_bos_token=True,
+        add_eos_token=False,
         **kwargs,
     ):
         super().__init__(
@@ -95,9 +106,52 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             eos_token=eos_token,
             **kwargs,
         )
+        self._add_bos_token = add_bos_token
+        self._add_eos_token = add_eos_token
+        self.update_post_processor()
 
         self.vocab_file = vocab_file
         self.can_save_slow_tokenizer = False if not self.vocab_file else True
+
+    def update_post_processor(self):
+        """
+        Updates the underlying post processor with the current `bos_token` and `eos_token`.
+        """
+        bos = self.bos_token
+        bos_token_id = self.bos_token_id
+
+        eos = self.eos_token
+        eos_token_id = self.eos_token_id
+
+        single = f"{(bos+':0 ') * self.add_bos_token}$A:0{(' '+eos+':0') * self.add_eos_token}"
+        pair = f"{single}{(' '+bos+':1') * self.add_bos_token} $B:1{(' '+eos+':1') * self.add_eos_token}"
+
+        special_tokens = []
+        if self.add_bos_token:
+            special_tokens.append((bos, bos_token_id))
+        if self.add_eos_token:
+            special_tokens.append((eos, eos_token_id))
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=single, pair=pair, special_tokens=special_tokens
+        )
+
+    @property
+    def add_eos_token(self):
+        return self._add_eos_token
+
+    @property
+    def add_bos_token(self):
+        return self._add_bos_token
+
+    @add_eos_token.setter
+    def add_eos_token(self, value):
+        self._add_eos_token = value
+        self.update_post_processor()
+
+    @add_bos_token.setter
+    def add_bos_token(self, value):
+        self._add_bos_token = value
+        self.update_post_processor()
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:

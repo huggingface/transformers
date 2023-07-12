@@ -148,10 +148,10 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         with open(lyrics_file, encoding="utf-8") as vocab_handle:
             self.lyrics_encoder = json.load(vocab_handle)
 
-        oov = "[^A-Za-z0-9.,:;!?\-'\"()\[\] \t\n]+"
+        oov = r"[^A-Za-z0-9.,:;!?\-'\"()\[\] \t\n]+"
         # In v2, we had a n_vocab=80 and in v3 we missed + and so n_vocab=79 of characters.
         if len(self.lyrics_encoder) == 79:
-            oov = oov.replace("\-'", "\-+'")
+            oov = oov.replace(r"\-'", r"\-+'")
 
         self.out_of_vocab = regex.compile(oov)
         self.artists_decoder = {v: k for k, v in self.artists_encoder.items()}
@@ -202,9 +202,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         """
         Performs any necessary transformations before tokenization.
 
-        This method should pop the arguments from kwargs and return the remaining `kwargs` as well. We test the
-        `kwargs` at the end of the encoding process to be sure all the arguments have been used.
-
         Args:
             artist (`str`):
                 The artist name to prepare. This will mostly lower the string
@@ -216,8 +213,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 Whether or not the input is already pre-tokenized (e.g., split into words). If set to `True`, the
                 tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
                 which it will tokenize. This is useful for NER or token classification.
-            kwargs:
-                Keyword arguments to use for the tokenization.
         """
         for idx in range(len(self.version)):
             if self.version[idx] == "v3":
@@ -230,7 +225,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 ]  # split is for the full dictionary with combined genres
 
         if self.version[0] == "v2":
-            self.out_of_vocab = regex.compile("[^A-Za-z0-9.,:;!?\-'\"()\[\] \t\n]+")
+            self.out_of_vocab = regex.compile(r"[^A-Za-z0-9.,:;!?\-'\"()\[\] \t\n]+")
             vocab = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:;!?-+'\"()[] \t\n"
             self.vocab = {vocab[index]: index + 1 for index in range(len(vocab))}
             self.vocab["<unk>"] = 0
@@ -239,7 +234,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             self.lyrics_decoder = {v: k for k, v in self.vocab.items()}
             self.lyrics_decoder[0] = ""
         else:
-            self.out_of_vocab = regex.compile("[^A-Za-z0-9.,:;!?\-+'\"()\[\] \t\n]+")
+            self.out_of_vocab = regex.compile(r"[^A-Za-z0-9.,:;!?\-+'\"()\[\] \t\n]+")
 
         lyrics = self._run_strip_accents(lyrics)
         lyrics = lyrics.replace("\\", "\n")

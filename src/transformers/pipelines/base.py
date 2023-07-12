@@ -15,7 +15,6 @@
 import collections
 import csv
 import importlib
-import inspect
 import json
 import os
 import pickle
@@ -36,7 +35,7 @@ from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available, logging
+from ..utils import ModelOutput, add_end_docstrings, infer_framework, is_tf_available, is_torch_available, logging
 
 
 GenericTensor = Union[List["GenericTensor"], "torch.Tensor", "tf.Tensor"]
@@ -97,6 +96,8 @@ def _pad(items, key, padding_value, padding_side):
             tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
         elif dim == 3:
             tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
+        elif dim == 4:
+            tensor = torch.zeros((batch_size, max_length, shape[-2], shape[-1]), dtype=dtype) + padding_value
 
         for i, item in enumerate(items):
             if dim == 2:
@@ -109,6 +110,12 @@ def _pad(items, key, padding_value, padding_side):
                     tensor[i, -len(item[key][0]) :, :] = item[key][0].clone()
                 else:
                     tensor[i, : len(item[key][0]), :] = item[key][0].clone()
+            elif dim == 4:
+                if padding_side == "left":
+                    tensor[i, -len(item[key][0]) :, :, :] = item[key][0].clone()
+                else:
+                    tensor[i, : len(item[key][0]), :, :] = item[key][0].clone()
+
         return tensor
     else:
         return [item[key] for item in items]
@@ -270,7 +277,8 @@ def infer_framework_load_model(
         if isinstance(model, str):
             raise ValueError(f"Could not load model {model} with any of the following classes: {class_tuple}.")
 
-    framework = "tf" if "keras.engine.training.Model" in str(inspect.getmro(model.__class__)) else "pt"
+    if framework is None:
+        framework = infer_framework(model.__class__)
     return framework, model
 
 
@@ -343,7 +351,7 @@ def get_framework(model, revision: Optional[str] = None):
             except OSError:
                 model = TFAutoModel.from_pretrained(model, revision=revision)
 
-    framework = "tf" if "keras.engine.training.Model" in str(inspect.getmro(model.__class__)) else "pt"
+    framework = infer_framework(model.__class__)
     return framework
 
 
@@ -507,7 +515,7 @@ class PipelineDataFormat:
         Creates an instance of the right subclass of [`~pipelines.PipelineDataFormat`] depending on `format`.
 
         Args:
-            format: (`str`):
+            format (`str`):
                 The format of the desired pipeline. Acceptable values are `"json"`, `"csv"` or `"pipe"`.
             output_path (`str`, *optional*):
                 Where to save the outgoing data.
@@ -753,7 +761,7 @@ class Pipeline(_ScikitCompat):
         framework: Optional[str] = None,
         task: str = "",
         args_parser: ArgumentHandler = None,
-        device: Union[int, str, "torch.device"] = None,
+        device: Union[int, "torch.device"] = None,
         torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         binary_output: bool = False,
         **kwargs,
@@ -795,10 +803,12 @@ class Pipeline(_ScikitCompat):
         self.torch_dtype = torch_dtype
         self.binary_output = binary_output
 
-        # Update config with task specific parameters
+        # Update config and generation_config with task specific parameters
         task_specific_params = self.model.config.task_specific_params
         if task_specific_params is not None and task in task_specific_params:
             self.model.config.update(task_specific_params.get(task))
+            if self.model.can_generate():
+                self.model.generation_config.update(**task_specific_params.get(task))
 
         self.call_count = 0
         self._batch_size = kwargs.pop("batch_size", None)
@@ -812,13 +822,15 @@ class Pipeline(_ScikitCompat):
                 # then we should keep working
                 self.image_processor = self.feature_extractor
 
-    def save_pretrained(self, save_directory: str):
+    def save_pretrained(self, save_directory: str, safe_serialization: bool = False):
         """
         Save the pipeline's model and tokenizer.
 
         Args:
             save_directory (`str`):
                 A path to the directory where to saved. It will be created if it doesn't exist.
+            safe_serialization (`str`):
+                Whether to save the model using `safetensors` or the traditional way for PyTorch or Tensorflow
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -846,7 +858,7 @@ class Pipeline(_ScikitCompat):
             # Save the pipeline custom code
             custom_object_save(self, save_directory)
 
-        self.model.save_pretrained(save_directory)
+        self.model.save_pretrained(save_directory, safe_serialization=safe_serialization)
 
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(save_directory)
@@ -891,9 +903,10 @@ class Pipeline(_ScikitCompat):
                 yield
         else:
             if self.device.type == "cuda":
-                torch.cuda.set_device(self.device)
-
-            yield
+                with torch.cuda.device(self.device):
+                    yield
+            else:
+                yield
 
     def ensure_tensor_on_device(self, **inputs):
         """

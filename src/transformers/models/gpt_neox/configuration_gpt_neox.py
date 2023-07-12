@@ -56,6 +56,15 @@ class GPTNeoXConfig(PretrainedConfig):
             percentage of hidden dimensions to allocate to rotary embeddings
         rotary_emb_base (`int`, *optional*, defaults to 10000)
             base for computing rotary embeddings frequency
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio probability of the attention score.
+        hidden_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio of (1) the word embeddings, (2) the post-attention hidden states, and (3) the post-mlp
+            hidden states.
+        classifier_dropout (`float`, *optional*, defaults to 0.1):
+            Argument used when doing token classification, used in the model [`GPTNeoXForTokenClassification`].
+
+            The dropout ratio for the hidden layer.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -95,6 +104,9 @@ class GPTNeoXConfig(PretrainedConfig):
         hidden_act="gelu",
         rotary_pct=0.25,
         rotary_emb_base=10000,
+        attention_dropout=0.0,
+        hidden_dropout=0.0,
+        classifier_dropout=0.1,
         max_position_embeddings=2048,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
@@ -115,8 +127,15 @@ class GPTNeoXConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.rotary_pct = rotary_pct
         self.rotary_emb_base = rotary_emb_base
+        self.attention_dropout = attention_dropout
+        self.hidden_dropout = hidden_dropout
+        self.classifier_dropout = classifier_dropout
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.tie_word_embeddings = tie_word_embeddings
         self.use_parallel_residual = use_parallel_residual
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                "The hidden size is not divisble by the number of attention heads! Make sure to update them!"
+            )

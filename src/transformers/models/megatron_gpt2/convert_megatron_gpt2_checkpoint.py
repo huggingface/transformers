@@ -148,7 +148,7 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     transformer = lm["transformer"] if "transformer" in lm.keys() else lm["encoder"]
 
     # The regex to extract layer names.
-    layer_re = re.compile("layers\.(\d+)\.([a-z0-9_.]+)\.([a-z]+)")
+    layer_re = re.compile(r"layers\.(\d+)\.([a-z0-9_.]+)\.([a-z]+)")
 
     # The simple map of names for "automated" rules.
     megatron_to_transformers = {

@@ -115,6 +115,10 @@ jobs:
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
 
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
@@ -172,6 +176,10 @@ jobs:
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
 
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
@@ -216,6 +224,10 @@ jobs:
       - name: Update clone
         working-directory: /workspace/transformers
         run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /workspace/transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
       - name: Remove cached torch extensions
         run: rm -rf /github/home/.cache/torch_extensions/

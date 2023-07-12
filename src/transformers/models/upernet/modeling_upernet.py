@@ -22,8 +22,9 @@ from torch.nn import CrossEntropyLoss
 
 from ... import AutoBackbone
 from ...modeling_outputs import SemanticSegmenterOutput
-from ...modeling_utils import BackboneMixin, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...utils.backbone_utils import BackboneMixin
 from .configuration_upernet import UperNetConfig
 
 

@@ -47,7 +47,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.29.0.dev0")
+check_min_version("4.31.0.dev0")
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -453,6 +453,8 @@ def main():
             metrics = []
         else:
             metrics = ["accuracy"]
+        # Transformers models compute the right loss for their task by default when labels are passed, and will
+        # use this for training unless you specify your own loss function in compile().
         model.compile(optimizer=optimizer, metrics=metrics, jit_compile=training_args.xla)
         # endregion
 

@@ -37,6 +37,9 @@ if is_torch_available():
         GPTBigCodeModel,
     )
     from transformers.models.gpt_bigcode.modeling_gpt_bigcode import GPTBigCodeAttention
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_12
+else:
+    is_torch_greater_or_equal_than_1_12 = False
 
 
 class GPTBigCodeModelTester:
@@ -407,7 +410,7 @@ class GPTBigCodeModelTester:
 
 
 @require_torch
-class GPTBigCodeMQAModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # TODO: Update the tests to use valid pretrained models.
     all_model_classes = (
         (
@@ -420,11 +423,6 @@ class GPTBigCodeMQAModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         else ()
     )
     all_generative_model_classes = (GPTBigCodeForCausalLM,) if is_torch_available() else ()
-    fx_compatible = False
-    test_missing_keys = False
-    test_pruning = False
-    test_torchscript = False
-    multi_query = True
     pipeline_model_mapping = (
         {
             "feature-extraction": GPTBigCodeModel,
@@ -436,6 +434,11 @@ class GPTBigCodeMQAModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         if is_torch_available()
         else {}
     )
+    fx_compatible = False
+    test_missing_keys = False
+    test_pruning = False
+    test_torchscript = False
+    multi_query = True
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -473,6 +476,10 @@ class GPTBigCodeMQAModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
 
     @unittest.skip("Disk offload seems to be broken for some reason - tiny models keep hitting corner cases")
     def test_disk_offload(self):
+        pass
+
+    @unittest.skip("BigCodeGPT has a non-standard KV cache format.")
+    def test_past_key_values_format(self):
         pass
 
     def test_gpt_bigcode_model(self):
@@ -521,11 +528,15 @@ class GPTBigCodeMQAModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
 
 
 @require_torch
-class GPTBigCodeMHAModelTest(GPTBigCodeMQAModelTest):
+class GPTBigCodeMHAModelTest(GPTBigCodeModelTest):
     # `parameterized_class` breaks with mixins, so we use inheritance instead
     multi_query = False
 
 
+@unittest.skipIf(
+    not is_torch_greater_or_equal_than_1_12,
+    reason="`GPTBigCode` checkpoints use `PytorchGELUTanh` which requires `torch>=1.12.0`.",
+)
 @slow
 @require_torch
 class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):

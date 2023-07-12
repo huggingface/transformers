@@ -22,10 +22,22 @@ allow to make our dependency on SentencePiece optional.
 import warnings
 from typing import Dict, List, Tuple
 
+from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
-from .utils import requires_backends
+from .utils import is_protobuf_available, requires_backends
+
+
+def import_protobuf():
+    if is_protobuf_available():
+        import google.protobuf
+
+        if version.parse(google.protobuf.__version__) < version.parse("4.0.0"):
+            from transformers.utils import sentencepiece_model_pb2
+        else:
+            from transformers.utils import sentencepiece_model_pb2_new as sentencepiece_model_pb2
+    return sentencepiece_model_pb2
 
 
 class SentencePieceExtractor:
@@ -54,12 +66,15 @@ class SentencePieceExtractor:
 
         # Merges
         merges = []
-        for piece_l in vocab.keys():
-            for piece_r in vocab.keys():
-                merge = f"{piece_l}{piece_r}"
-                piece_score = vocab_scores.get(merge, None)
-                if piece_score:
-                    merges += [(piece_l, piece_r, piece_score)]
+        for merge, piece_score in vocab_scores.items():
+            local = []
+            for index in range(1, len(merge)):
+                piece_l, piece_r = merge[:index], merge[index:]
+                if piece_l in vocab and piece_r in vocab:
+                    local.append((piece_l, piece_r, piece_score))
+            local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]))
+            merges.extend(local)
+
         merges = sorted(merges, key=lambda val: val[2], reverse=reverse)
         merges = [(val[0], val[1]) for val in merges]
         return vocab, merges
@@ -442,7 +457,8 @@ class SpmConverter(Converter):
 
         super().__init__(*args)
 
-        from .utils import sentencepiece_model_pb2 as model_pb2
+        # from .utils import sentencepiece_model_pb2 as model_pb2
+        model_pb2 = import_protobuf()
 
         m = model_pb2.ModelProto()
         with open(self.original_tokenizer.vocab_file, "rb") as f:
@@ -548,7 +564,10 @@ class AlbertConverter(SpmConverter):
             list_normalizers.append(normalizers.Lowercase())
 
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-        list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+
+        if precompiled_charsmap:
+            list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+
         list_normalizers.append(normalizers.Replace(Regex(" {2,}"), " "))
         return normalizers.Sequence(list_normalizers)
 
@@ -799,7 +818,10 @@ class XLNetConverter(SpmConverter):
             list_normalizers.append(normalizers.Lowercase())
 
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-        list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+
+        if precompiled_charsmap:
+            list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+
         list_normalizers.append(normalizers.Replace(Regex(" {2,}"), " "))
         return normalizers.Sequence(list_normalizers)
 
@@ -833,7 +855,10 @@ class RemBertConverter(SpmConverter):
             list_normalizers.append(normalizers.Lowercase())
 
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-        list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+
+        if precompiled_charsmap:
+            list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+
         return normalizers.Sequence(list_normalizers)
 
     def post_processor(self):
@@ -1134,9 +1159,9 @@ class LlamaConverter(SpmConverter):
             )
             tokenizer.add_special_tokens(
                 [
-                    AddedToken("<unk>", normalized=True),
-                    AddedToken("<s>", normalized=True),
-                    AddedToken("</s>", normalized=True),
+                    AddedToken("<unk>"),
+                    AddedToken("<s>"),
+                    AddedToken("</s>"),
                 ]
             )
         else:
@@ -1158,13 +1183,32 @@ class LlamaConverter(SpmConverter):
         return None
 
     def post_processor(self):
-        return processors.TemplateProcessing(
-            single="<s> $A",
-            pair="<s> $A $B",
-            special_tokens=[
-                ("<s>", self.original_tokenizer.convert_tokens_to_ids("<s>")),
-            ],
-        )
+        # 3 possible case :
+        # - add_bos and add_eos : '<s>:0 $A:0 </s>:0' and '<s>:0 $A:0 </s>:0 <s>:1 $B:1 </s>:1'
+        # - add_bos: '<s>:0 $A:0' and '<s>:0 $A:0 <s>:1 $B:1'
+        # - add_eos: '$A:0 </s>:0' and '$A:0 </s>:0 $B:1 </s>:1'
+
+        add_bos = self.original_tokenizer.add_bos_token
+        add_eos = self.original_tokenizer.add_eos_token
+        if add_bos or add_eos:
+            bos = self.original_tokenizer.bos_token
+            bos_token_id = self.original_tokenizer.bos_token_id
+
+            eos = self.original_tokenizer.eos_token
+            eos_token_id = self.original_tokenizer.eos_token_id
+
+            single = f"{(bos+':0 ') * add_bos}$A:0{(' '+eos+':0') * add_eos}"
+            pair = f"{single}{(' '+bos+':1') * add_bos} $B:1{(' '+eos+':1') * add_eos}"
+
+            special_tokens = []
+            if add_bos:
+                special_tokens.append((bos, bos_token_id))
+            if add_eos:
+                special_tokens.append((eos, eos_token_id))
+            return processors.TemplateProcessing(single=single, pair=pair, special_tokens=special_tokens)
+
+        else:
+            return None
 
 
 class MarkupLMConverter(Converter):

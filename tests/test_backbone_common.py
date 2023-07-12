@@ -17,6 +17,7 @@ import copy
 import inspect
 
 from transformers.testing_utils import require_torch, torch_device
+from transformers.utils.backbone_utils import BackboneType
 
 
 @require_torch
@@ -81,9 +82,15 @@ class BackboneTesterMixin:
             out_channels = [num_features[idx] for idx in out_indices]
             self.assertListEqual(model.channels, out_channels)
 
-            config.out_features = None
-            config.out_indices = None
-            model = model_class(config)
+            new_config = copy.deepcopy(config)
+            new_config.out_features = None
+            model = model_class(new_config)
+            self.assertEqual(len(model.channels), 1)
+            self.assertListEqual(model.channels, [num_features[-1]])
+
+            new_config = copy.deepcopy(config)
+            new_config.out_indices = None
+            model = model_class(new_config)
             self.assertEqual(len(model.channels), 1)
             self.assertListEqual(model.channels, [num_features[-1]])
 
@@ -98,10 +105,21 @@ class BackboneTesterMixin:
 
             self.assertEqual(len(result.feature_maps), len(config.out_features))
             self.assertEqual(len(model.channels), len(config.out_features))
+            self.assertEqual(len(result.feature_maps), len(config.out_indices))
+            self.assertEqual(len(model.channels), len(config.out_indices))
 
             # Check output of last stage is taken if out_features=None, out_indices=None
             modified_config = copy.deepcopy(config)
             modified_config.out_features = None
+            model = model_class(modified_config)
+            model.to(torch_device)
+            model.eval()
+            result = model(**inputs_dict)
+
+            self.assertEqual(len(result.feature_maps), 1)
+            self.assertEqual(len(model.channels), 1)
+
+            modified_config = copy.deepcopy(config)
             modified_config.out_indices = None
             model = model_class(modified_config)
             model.to(torch_device)
@@ -125,6 +143,7 @@ class BackboneTesterMixin:
         for backbone_class in self.all_model_classes:
             backbone = backbone_class(config)
 
+            self.assertTrue(hasattr(backbone, "backbone_type"))
             self.assertTrue(hasattr(backbone, "stage_names"))
             self.assertTrue(hasattr(backbone, "num_features"))
             self.assertTrue(hasattr(backbone, "out_indices"))
@@ -132,6 +151,7 @@ class BackboneTesterMixin:
             self.assertTrue(hasattr(backbone, "out_feature_channels"))
             self.assertTrue(hasattr(backbone, "channels"))
 
+            self.assertIsInstance(backbone.backbone_type, BackboneType)
             # Verify num_features has been initialized in the backbone init
             self.assertIsNotNone(backbone.num_features)
             self.assertTrue(len(backbone.channels) == len(backbone.out_indices))

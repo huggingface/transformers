@@ -193,8 +193,9 @@ class Message:
             "text": {
                 "type": "plain_text",
                 "text": (
-                    f"There were {self.n_failures} failures, out of {self.n_tests} tests.\nThe suite ran in"
-                    f" {self.time}."
+                    f"There were {self.n_failures} failures, out of {self.n_tests} tests.\n"
+                    f"Number of model failures: {self.n_model_failures}.\n"
+                    f"The suite ran in {self.time}."
                 ),
                 "emoji": True,
             },
@@ -423,8 +424,11 @@ class Message:
                 artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
             )
 
-            # The last run doesn't produce `test_failure_tables` (by some issues or have no model failure at all)
-            if len(prev_tables) > 0:
+            # if the last run produces artifact named `test_failure_tables`
+            if (
+                "test_failure_tables" in prev_tables
+                and "model_failures_report.txt" in prev_tables["test_failure_tables"]
+            ):
                 # Compute the difference of the previous/current (model failure) table
                 prev_model_failures = prev_tables["test_failure_tables"]["model_failures_report.txt"]
                 entries_changed = self.compute_diff_for_failure_reports(model_failures_report, prev_model_failures)
@@ -655,7 +659,7 @@ class Message:
                         job_result,
                         failures,
                         device,
-                        text=f"Number of failures: {sum(job_result['failed'].values())}",
+                        text=f'Number of failures: {job_result["failed"][device]}',
                     )
 
                     print("Sending the following reply")
@@ -724,7 +728,7 @@ def retrieve_available_artifacts():
             _available_artifacts[artifact_name].add_path(directory, gpu="single")
 
         elif artifact_name.startswith("multi-gpu"):
-            artifact_name = directory[len("multi-gpu") + 1 :]
+            artifact_name = artifact_name[len("multi-gpu") + 1 :]
 
             if artifact_name in _available_artifacts:
                 _available_artifacts[artifact_name].multi_gpu = True
@@ -958,7 +962,7 @@ if __name__ == "__main__":
         "Torch CUDA extension tests": "run_tests_torch_cuda_extensions_gpu_test_reports",
     }
 
-    if ci_event == "push":
+    if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
         del additional_files["Examples directory"]
         del additional_files["PyTorch pipelines"]
         del additional_files["TensorFlow pipelines"]
@@ -982,12 +986,13 @@ if __name__ == "__main__":
             continue
 
         for artifact_path in available_artifacts[additional_files[key]].paths:
+            # Link to the GitHub Action job
+            job_name = key
             if artifact_path["gpu"] is not None:
-                additional_results[key]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(
-                    f"{key} ({artifact_path['gpu']}-gpu)"
-                )
-            else:
-                additional_results[key]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(key)
+                job_name = f"{key} ({artifact_path['gpu']}-gpu)"
+            if job_name_prefix:
+                job_name = f"{job_name_prefix} / {job_name}"
+            additional_results[key]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(job_name)
 
             artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             stacktraces = handle_stacktraces(artifact["failures_line"])

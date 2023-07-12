@@ -97,23 +97,23 @@ def fix_jukebox_keys(state_dict, model_state_dict, key_prefix, mapping):
     new_dict = {}
     import re
 
-    re_encoder_block_conv_in = re.compile("encoders.(\d*).level_blocks.(\d*).model.(\d*).(\d).(bias|weight)")
+    re_encoder_block_conv_in = re.compile(r"encoders.(\d*).level_blocks.(\d*).model.(\d*).(\d).(bias|weight)")
     re_encoder_block_resnet = re.compile(
-        "encoders.(\d*).level_blocks.(\d*).model.(\d*).(\d).model.(\d*).model.(\d*).(bias|weight)"
+        r"encoders.(\d*).level_blocks.(\d*).model.(\d*).(\d).model.(\d*).model.(\d*).(bias|weight)"
     )
-    re_encoder_block_proj_out = re.compile("encoders.(\d*).level_blocks.(\d*).model.(\d*).(bias|weight)")
+    re_encoder_block_proj_out = re.compile(r"encoders.(\d*).level_blocks.(\d*).model.(\d*).(bias|weight)")
 
-    re_decoder_block_conv_out = re.compile("decoders.(\d*).level_blocks.(\d*).model.(\d*).(\d).(bias|weight)")
+    re_decoder_block_conv_out = re.compile(r"decoders.(\d*).level_blocks.(\d*).model.(\d*).(\d).(bias|weight)")
     re_decoder_block_resnet = re.compile(
-        "decoders.(\d*).level_blocks.(\d*).model.(\d*).(\d).model.(\d*).model.(\d*).(bias|weight)"
+        r"decoders.(\d*).level_blocks.(\d*).model.(\d*).(\d).model.(\d*).model.(\d*).(bias|weight)"
     )
-    re_decoder_block_proj_in = re.compile("decoders.(\d*).level_blocks.(\d*).model.(\d*).(bias|weight)")
+    re_decoder_block_proj_in = re.compile(r"decoders.(\d*).level_blocks.(\d*).model.(\d*).(bias|weight)")
 
-    re_prior_cond_conv_out = re.compile("conditioner_blocks.(\d*).cond.model.(\d*).(\d).(bias|weight)")
+    re_prior_cond_conv_out = re.compile(r"conditioner_blocks.(\d*).cond.model.(\d*).(\d).(bias|weight)")
     re_prior_cond_resnet = re.compile(
-        "conditioner_blocks.(\d*).cond.model.(\d*).(\d).model.(\d*).model.(\d*).(bias|weight)"
+        r"conditioner_blocks.(\d*).cond.model.(\d*).(\d).model.(\d*).model.(\d*).(bias|weight)"
     )
-    re_prior_cond_proj_in = re.compile("conditioner_blocks.(\d*).cond.model.(\d*).(bias|weight)")
+    re_prior_cond_proj_in = re.compile(r"conditioner_blocks.(\d*).cond.model.(\d*).(bias|weight)")
 
     for original_key, value in state_dict.items():
         # rename vqvae.encoder keys
