@@ -21,8 +21,8 @@ This guide aims to provide a benchmark on the inference speed-ups introduced wit
    
 Depending on the model and the GPU, `torch.compile()` yields up to 30% speed-up during inference. To use `torch.compile()`, simply install any version of `torch` above 2.0. 
 
-Note that compiling the model takes time, so it's useful so long as you are compiling the model once and inferring repeatedly instead of compiling for each time you infer.
-To compile any computer vision model of your choice, simply call `torch.compile()` on the model like below.
+Compiling a model takes time, so it's useful if you are compiling the model only once instead of every time you infer.
+To compile any computer vision model of your choice, call `torch.compile()` on the model as shown below:
 
 ```diff
 from transformers import AutoModelForImageClassification
