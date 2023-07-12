@@ -42,7 +42,6 @@ class MptAttentionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-
         attn_type (str):
             type of attention to use. Options: multihead_attention, multiquery_attention
         attn_pdrop (float):
