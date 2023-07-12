@@ -287,7 +287,6 @@ def scaled_multihead_dot_product_attention(
     if softmax_scale is None:
         softmax_scale = 1 / math.sqrt(d)
 
-
     attn_weight = attn_bias.baddbmm(
         batch1=reshaped_query.squeeze(0),
         batch2=reshaped_key.squeeze(0),
@@ -322,7 +321,7 @@ def scaled_multihead_dot_product_attention(
                 + "module instead."
             )
         attn_weight = attn_weight.masked_fill(~key_padding_mask.view((b, 1, 1, s_k)), min_val)
-    if (not reshaped_query.size(2) == 1):
+    if not reshaped_query.size(2) == 1:
         s = max(s_q, s_k)
         causal_mask = attn_weight.new_ones(s, s, dtype=torch.float16)
         causal_mask = causal_mask.tril()
@@ -339,7 +338,7 @@ def scaled_multihead_dot_product_attention(
 
     if not output_attentions:
         attn_weight = None
-    
+
     return (out, attn_weight, past_key_value)
 
 
@@ -355,8 +354,8 @@ class MptAttention(nn.Module):
         self.n_heads = config.n_heads
         self.head_dim = self.hidden_size // self.n_heads
         self.softmax_scale = config.attn_config["softmax_scale"]
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        # self.num_key_value_heads = config.num_key_value_heads
+        # self.num_key_value_groups = self.num_heads // self.num_key_value_heads
 
         if self.softmax_scale is None:
             self.softmax_scale = 1 / math.sqrt(self.hidden_size / self.n_heads)
@@ -365,31 +364,31 @@ class MptAttention(nn.Module):
         self.Wqkv = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=False)
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
-    
     def forward(
-        self, 
-        hidden_states: torch.Tensor, 
-        position_bias: torch.Tensor, 
+        self,
+        hidden_states: torch.Tensor,
+        position_bias: torch.Tensor,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
     ):
         batch_size, seq_length = hidden_states.shape[:2]
-        
+
         mixed_qkv = self.Wqkv(hidden_states)
         query_states, key_states, value_states = mixed_qkv.chunk(3, dim=2)
         query_states = query_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).permute(0, 2, 1, 3)
-        key_states = key_states.reshape(batch_size, seq_length, self.num_key_value_heads, self.head_dim).permute(0, 2, 1, 3)
-        value_states = value_states.reshape(batch_size, seq_length, self.num_key_value_heads, self.head_dim).permute(0, 2, 1, 3)
-        
+        key_states = key_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).permute(0, 2, 1, 3)
+        value_states = value_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).permute(0, 2, 1, 3)
+
         if past_key_value is not None:
             if len(past_key_value) != 0:
                 key_states = torch.cat([past_key_value[0], key_states], dim=3)
                 value_states = torch.cat([past_key_value[1], value_states], dim=2)
             past_key_value = (key_states, value_states)
-            
+
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
-        
+
         query_length = seq_length
         if past_key_value is not None:
             query_length += past_key_value[0].shape[2]
@@ -400,17 +399,12 @@ class MptAttention(nn.Module):
 
         # (batch_size, n_heads, seq_length, key_length)
         attn_weights = nn.functional.softmax(attention_scores.float(), dim=-1).type_as(attention_scores)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        # Mask heads if we want to
-        if layer_head_mask is not None:
-            attn_weights = attn_weights * layer_head_mask
+        attn_weights = nn.functional.dropout(attn_weights, p=self.attn_dropout_p, training=self.training)
 
         context_states = torch.matmul(attn_weights, value_states)
         context_states = context_states.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
         attn_output = self.out_proj(context_states)
         return attn_output, attn_weights, past_key_value
-
 
 
 # Copied from transformers.models.bloom.modeling_bloom.BloomMLP with Bloom->Mpt
@@ -432,6 +426,7 @@ class MptMLP(nn.Module):
         output = dropout_add(intermediate_output, residual, self.hidden_dropout, self.training)
 
         return output
+
 
 class MptBlock(nn.Module):
     def __init__(self, config: MptConfig):
@@ -467,7 +462,7 @@ class MptBlock(nn.Module):
         # Self attention.
         attn_outputs = self.attn(
             layernorm_output,
-            alibi=alibi,
+            position_bias=alibi,
             attention_mask=attention_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
