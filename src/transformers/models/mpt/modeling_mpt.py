@@ -262,11 +262,10 @@ def scaled_multihead_dot_product_attention(
     softmax_scale=None,
     attn_bias=None,
     key_padding_mask=None,
-    is_causal=False,
     dropout_p=0.0,
     training=False,
-    needs_weights=False,
     multiquery=False,
+    output_attentions=False,
 ):
     batch_size, seq_length, hidden_size = query.shape
     head_dim = hidden_size // n_heads
@@ -288,22 +287,29 @@ def scaled_multihead_dot_product_attention(
     if softmax_scale is None:
         softmax_scale = 1 / math.sqrt(d)
 
-    attn_weight = reshaped_query.matmul(reshaped_key) * softmax_scale
+
+    attn_weight = attn_bias.baddbmm(
+        batch1=reshaped_query.squeeze(0),
+        batch2=reshaped_key.squeeze(0),
+        beta=1,
+        alpha=softmax_scale,
+    )
+    # attn_weight = reshaped_query.matmul(reshaped_key) * softmax_scale
 
     # TODO: fix correct alibi
-    if attn_bias is not None:
-        _s_q = max(0, attn_bias.size(2) - s_q)
-        _s_k = max(0, attn_bias.size(3) - s_k)
-        attn_bias = attn_bias[:, :, _s_q:, _s_k:]
-        if (
-            attn_bias.size(-1) != 1
-            and attn_bias.size(-1) != s_k
-            or (attn_bias.size(-2) != 1 and attn_bias.size(-2) != s_q)
-        ):
-            raise RuntimeError(
-                f"attn_bias (shape: {attn_bias.shape}) is expected to broadcast to shape: {attn_weight.shape}."
-            )
-        attn_weight = attn_weight + attn_bias
+    # if attn_bias is not None:
+    #     _s_q = max(0, attn_bias.size(2) - s_q)
+    #     _s_k = max(0, attn_bias.size(3) - s_k)
+    #     attn_bias = attn_bias[:, :, _s_q:, _s_k:]
+    #     if (
+    #         attn_bias.size(-1) != 1
+    #         and attn_bias.size(-1) != s_k
+    #         or (attn_bias.size(-2) != 1 and attn_bias.size(-2) != s_q)
+    #     ):
+    #         raise RuntimeError(
+    #             f"attn_bias (shape: {attn_bias.shape}) is expected to broadcast to shape: {attn_weight.shape}."
+    #         )
+    #     attn_weight = attn_weight + attn_bias
 
     min_val = torch.finfo(reshaped_query.dtype).min
     if key_padding_mask is not None:
@@ -316,7 +322,7 @@ def scaled_multihead_dot_product_attention(
                 + "module instead."
             )
         attn_weight = attn_weight.masked_fill(~key_padding_mask.view((b, 1, 1, s_k)), min_val)
-    if is_causal and (not reshaped_query.size(2) == 1):
+    if (not reshaped_query.size(2) == 1):
         s = max(s_q, s_k)
         causal_mask = attn_weight.new_ones(s, s, dtype=torch.float16)
         causal_mask = causal_mask.tril()
@@ -331,9 +337,10 @@ def scaled_multihead_dot_product_attention(
     out = attn_weight.to(reshaped_value.dtype).matmul(reshaped_value)
     out = out.reshape(batch_size, seq_length, hidden_size)
 
-    if needs_weights:
-        return (out, attn_weight, past_key_value)
-    return (out, None, past_key_value)
+    if not output_attentions:
+        attn_weight = None
+    
+    return (out, attn_weight, past_key_value)
 
 
 class MptAttention(nn.Module):
@@ -360,28 +367,36 @@ class MptAttention(nn.Module):
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
     def forward(
-        self, x, past_key_value=None, attn_bias=None, attention_mask=None, is_causal=True, needs_weights=False
+        self, 
+        hidden_states: torch.Tensor, 
+        attention_mask: torch.Tensor = None, 
+        past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None, 
+        alibi: torch.Tensor =None, 
+        use_cache: bool = False,
+        output_attentions: bool = False,
     ):
-        # TODO: refactor this
-        qkv = self.Wqkv(x)
-        (query, key, value) = qkv.chunk(3, dim=2)
+        mixed_qkv = self.Wqkv(hidden_states)
+        query, key, value = mixed_qkv.chunk(3, dim=2)
+        
         key_padding_mask = attention_mask
         # I think we should leave `self.attn_fn` so that is can be modulable enough to support triton and flash attention
-        (context, attn_weights, past_key_value) = self.attn_fn(
+        context, attn_weights, past_key_value = self.attn_fn(
             query,
             key,
             value,
             self.n_heads,
             past_key_value=past_key_value,
             softmax_scale=self.softmax_scale,
-            attn_bias=attn_bias,
+            attn_bias=alibi,
             key_padding_mask=key_padding_mask,
-            is_causal=is_causal,
             dropout_p=self.attn_dropout_p,
             training=self.training,
-            needs_weights=needs_weights,
+            output_attentions=output_attentions
         )
-        return (self.out_proj(context), attn_weights, past_key_value)
+
+        hidden_states = self.out_proj(context)
+
+        return (hidden_states, attn_weights, past_key_value)
 
 
 # Copied from transformers.models.bloom.modeling_bloom.BloomMLP with Bloom->Mpt
@@ -404,14 +419,11 @@ class MptMLP(nn.Module):
 
         return output
 
-
-# Copied from transformers.models.bloom.modeling_bloom.BloomBlock with Bloom->Mpt
 class MptBlock(nn.Module):
     def __init__(self, config: MptConfig):
         super().__init__()
         hidden_size = config.hidden_size
 
-        # self.norm_1 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.norm_1 = MptLPLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.num_heads = config.n_heads
         self.attn = MptAttention(config)
@@ -442,6 +454,10 @@ class MptBlock(nn.Module):
         # Self attention.
         attn_outputs = self.attn(
             layernorm_output,
+            alibi=alibi,
+            attention_mask=attention_mask,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
         )
 
         attention_output = attn_outputs[0]
