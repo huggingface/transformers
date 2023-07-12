@@ -2142,7 +2142,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 "60",
             ]
             execute_subprocess_async(command)
-            # successful return here == success - any errors would have caused an error in the sub-call
+            # successful return here == success - any errors would have caused an error or a timeout in the sub-call
 
 
 @require_torch
