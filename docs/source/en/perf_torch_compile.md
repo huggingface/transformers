@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Optimize inference using `torch.compile()`
 
-This guide aims to provide a benchmark on the inference speed-ups introduced with `torch.compile()` for computer vision models in `transformers`.
+This guide aims to provide a benchmark on the inference speed-ups introduced with [`torch.compile()`](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) for computer vision models in 🤗 Transformers.
 
 ## Benefits of `torch.compile` 
    
