@@ -80,48 +80,6 @@ def _expand_mask(mask: torch.Tensor, tgt_length: int) -> torch.BoolTensor:
     return expanded_mask.expand(batch_size, 1, tgt_length, src_length)
 
 
-def _cast_if_autocast_enabled(tensor):
-    if torch.is_autocast_enabled():
-        if tensor.device.type == "cuda":
-            dtype = torch.get_autocast_gpu_dtype()
-        elif tensor.device.type == "cpu":
-            dtype = torch.get_autocast_cpu_dtype()
-        else:
-            raise NotImplementedError()
-        return tensor.to(dtype=dtype)
-    return tensor
-
-
-def rms_norm(x, weight=None, eps=1e-05):
-    output = x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + eps)
-    if weight is not None:
-        return output * weight
-    return output
-
-
-class MptLPLayerNorm(torch.nn.LayerNorm):
-    def __init__(self, normalized_shape, eps=1e-05, elementwise_affine=True, device=None, dtype=None):
-        super().__init__(
-            normalized_shape=normalized_shape,
-            eps=eps,
-            elementwise_affine=elementwise_affine,
-            device=device,
-            dtype=dtype,
-        )
-        # TODO: remove this hack
-        self.bias = None
-
-    def forward(self, x):
-        module_device = x.device
-        downcast_x = _cast_if_autocast_enabled(x)
-        downcast_weight = _cast_if_autocast_enabled(self.weight) if self.weight is not None else self.weight
-        downcast_bias = _cast_if_autocast_enabled(self.bias) if self.bias is not None else self.bias
-        with torch.autocast(enabled=False, device_type=module_device.type):
-            return torch.nn.functional.layer_norm(
-                downcast_x, self.normalized_shape, downcast_weight, downcast_bias, self.eps
-            )
-
-
 # Copied from transformers.models.bloom.modeling_bloom.build_alibi_tensor
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
     """
@@ -165,26 +123,6 @@ def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torc
     arange_tensor = ((attention_mask.cumsum(dim=-1) - 1) * attention_mask)[:, None, :]
     alibi = slopes[..., None] * arange_tensor
     return alibi.reshape(batch_size * num_heads, 1, seq_length).to(dtype)
-
-
-# Copied from transformers.models.bloom.modeling_bloom.dropout_add with x->hidden_states
-def dropout_add(x: torch.Tensor, residual: torch.Tensor, prob: float, training: bool) -> torch.Tensor:
-    """
-    Dropout add function
-
-    Args:
-        x (`torch.tensor`, *required*):
-            input tensor
-        residual (`torch.tensor`, *required*):
-            esidual tensor
-        prob (`float`, *required*):
-            dropout probability
-        training (`bool`, *required*):
-            training mode
-    """
-    out = F.dropout(x, p=prob, training=training)
-    out = residual + out
-    return out
 
 
 # Copied from transformers.models.bloom.modeling_bloom.bloom_gelu_forward with bloom->mpt
@@ -251,95 +189,6 @@ class MptGelu(nn.Module):
             return GeLUFunction.apply(x)
         else:
             return mpt_gelu_forward(x)
-
-
-def scaled_multihead_dot_product_attention(
-    query,
-    key,
-    value,
-    n_heads,
-    past_key_value=None,
-    softmax_scale=None,
-    attn_bias=None,
-    key_padding_mask=None,
-    dropout_p=0.0,
-    training=False,
-    multiquery=False,
-    output_attentions=False,
-):
-    batch_size, seq_length, hidden_size = query.shape
-    head_dim = hidden_size // n_heads
-    kv_n_heads = 1 if multiquery else n_heads
-
-    reshaped_query = query.reshape(batch_size, seq_length, n_heads, head_dim).permute(0, 2, 1, 3)
-    reshaped_key = key.reshape(batch_size, seq_length, kv_n_heads, head_dim).permute(0, 2, 3, 1)
-    reshaped_value = value.reshape(batch_size, seq_length, kv_n_heads, head_dim).permute(0, 2, 1, 3)
-
-    if past_key_value is not None:
-        if len(past_key_value) != 0:
-            reshaped_key = torch.cat([past_key_value[0], reshaped_key], dim=3)
-            reshaped_value = torch.cat([past_key_value[1], reshaped_value], dim=2)
-        past_key_value = (reshaped_key, reshaped_value)
-
-    (b, _, s_q, d) = reshaped_query.shape
-    s_k = reshaped_key.size(-1)
-
-    if softmax_scale is None:
-        softmax_scale = 1 / math.sqrt(d)
-
-    attn_weight = attn_bias.baddbmm(
-        batch1=reshaped_query.squeeze(0),
-        batch2=reshaped_key.squeeze(0),
-        beta=1,
-        alpha=softmax_scale,
-    )
-    # attn_weight = reshaped_query.matmul(reshaped_key) * softmax_scale
-
-    # TODO: fix correct alibi
-    # if attn_bias is not None:
-    #     _s_q = max(0, attn_bias.size(2) - s_q)
-    #     _s_k = max(0, attn_bias.size(3) - s_k)
-    #     attn_bias = attn_bias[:, :, _s_q:, _s_k:]
-    #     if (
-    #         attn_bias.size(-1) != 1
-    #         and attn_bias.size(-1) != s_k
-    #         or (attn_bias.size(-2) != 1 and attn_bias.size(-2) != s_q)
-    #     ):
-    #         raise RuntimeError(
-    #             f"attn_bias (shape: {attn_bias.shape}) is expected to broadcast to shape: {attn_weight.shape}."
-    #         )
-    #     attn_weight = attn_weight + attn_bias
-
-    min_val = torch.finfo(reshaped_query.dtype).min
-    if key_padding_mask is not None:
-        if attn_bias is not None:
-            warnings.warn(
-                "Propogating key_padding_mask to the attention module "
-                + "and applying it within the attention module can cause "
-                + "unneccessary computation/memory usage. Consider integrating "
-                + "into attn_bias once and passing that to each attention "
-                + "module instead."
-            )
-        attn_weight = attn_weight.masked_fill(~key_padding_mask.view((b, 1, 1, s_k)), min_val)
-    if not reshaped_query.size(2) == 1:
-        s = max(s_q, s_k)
-        causal_mask = attn_weight.new_ones(s, s, dtype=torch.float16)
-        causal_mask = causal_mask.tril()
-        causal_mask = causal_mask.to(torch.bool)
-        causal_mask = ~causal_mask
-        causal_mask = causal_mask[-s_q:, -s_k:]
-        attn_weight = attn_weight.masked_fill(causal_mask.view(1, 1, s_q, s_k), min_val)
-    attn_weight = torch.softmax(attn_weight, dim=-1)
-    if dropout_p:
-        attn_weight = torch.nn.functional.dropout(attn_weight, p=dropout_p, training=training, inplace=True)
-
-    out = attn_weight.to(reshaped_value.dtype).matmul(reshaped_value)
-    out = out.reshape(batch_size, seq_length, hidden_size)
-
-    if not output_attentions:
-        attn_weight = None
-
-    return (out, attn_weight, past_key_value)
 
 
 class MptAttention(nn.Module):
@@ -428,7 +277,8 @@ class MptMLP(nn.Module):
 
         intermediate_output = self.down_proj(hidden_states)
 
-        output = dropout_add(intermediate_output, residual, self.hidden_dropout, self.training)
+        output = F.dropout(intermediate_output, p=self.hidden_dropout, training=self.training)
+        output = output + residual
 
         return output
 
@@ -438,10 +288,10 @@ class MptBlock(nn.Module):
         super().__init__()
         hidden_size = config.hidden_size
 
-        self.norm_1 = MptLPLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.norm_1 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.num_heads = config.n_heads
         self.attn = MptAttention(config)
-        self.norm_2 = MptLPLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.norm_2 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         self.ffn = MptMLP(config)
 
@@ -497,6 +347,7 @@ class MptPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["MptBlock"]
     _skip_keys_device_placement = "past_key_values"
     _keys_to_ignore_on_load_unexpected = [r".*.blocks\.(\d+)\.norm_1\.bias", r".*.blocks\.(\d+)\.norm_2\.bias"]
+    _keys_to_ignore_on_load_missing = [r".*.blocks\.(\d+)\.norm_1\.weight", r".*.blocks\.(\d+)\.norm_2\.weight"]
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -646,7 +497,7 @@ class MptModel(MptPreTrainedModel):
         self.blocks = nn.ModuleList([MptBlock(config) for _ in range(config.n_layers)])
 
         # Final Layer Norm
-        self.norm_f = MptLPLayerNorm(self.hidden_size, eps=config.layer_norm_epsilon)
+        self.norm_f = LayerNorm(self.hidden_size, eps=config.layer_norm_epsilon)
 
         self.gradient_checkpointing = False
 
