@@ -743,7 +743,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
     print("converting transformer layers")
     if config.num_attention_heads % args.target_tensor_model_parallel_size != 0:
         raise ValueError(
-            f"Number of layers ({config.num_attention_heads}) must be divisible by number of tensor parallelism"
+            f"Number of attention heads ({config.num_attention_heads}) must be divisible by number of tensor parallelism"
             f" ({args.target_tensor_model_parallel_size})"
         )
 
