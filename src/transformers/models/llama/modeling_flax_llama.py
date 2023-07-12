@@ -626,13 +626,12 @@ class FlaxLlamaModel(FlaxLlamaPreTrainedModel):
 # append_call_sample_docstring(FlaxLlamaModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC)
 
 
-# TODO: implement
 class FlaxLlamaForCausalLMModule(nn.Module):
     config: LlamaConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.transformer = FlaxLlamaModule(self.config, dtype=self.dtype)
+        self.model = FlaxLlamaModule(self.config, dtype=self.dtype)
         self.lm_head = nn.Dense(
             self.config.vocab_size,
             use_bias=False,
@@ -643,37 +642,36 @@ class FlaxLlamaForCausalLMModule(nn.Module):
     def __call__(
         self,
         input_ids,
-        attention_mask,
-        position_ids,
+        position_ids=None,
+        attention_mask=None,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
+        # output_hidden_states: bool = False,
+        # return_dict: bool = True,
     ):
-        outputs = self.transformer(
+        outputs = self.model(
             input_ids,
-            attention_mask,
-            position_ids,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            # output_hidden_states=output_hidden_states,
+            # return_dict=return_dict,
         )
 
-        hidden_states = outputs[0]
+        # TODO: add this back when we return `FlaxBaseModelOutput`
+        # hidden_states = outputs[0]
+        hidden_states = outputs
+        lm_logits = self.lm_head(hidden_states)
 
-        if self.config.tie_word_embeddings:
-            shared_kernel = self.transformer.variables["params"]["wte"]["embedding"].T
-            lm_logits = self.lm_head.apply({"params": {"kernel": shared_kernel}}, hidden_states)
-        else:
-            lm_logits = self.lm_head(hidden_states)
+        # if not return_dict:
+            # return (lm_logits,) + outputs[1:]
 
-        if not return_dict:
-            return (lm_logits,) + outputs[1:]
-
-        return FlaxCausalLMOutput(logits=lm_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
+        # TODO: return FlaxCausalLMOutput
+        # return FlaxCausalLMOutput(logits=lm_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
+        return lm_logits
 
 
 @add_start_docstrings(
@@ -719,7 +717,7 @@ if __name__ == "__main__":
     import flax
     from flax.traverse_util import flatten_dict
     from .configuration_llama import LlamaConfig
-    from .modeling_llama import LlamaModel, _make_causal_mask
+    from .modeling_llama import LlamaForCausalLM, _make_causal_mask
     import torch
 
 
@@ -744,8 +742,8 @@ if __name__ == "__main__":
     config = LlamaConfig(num_hidden_layers=2, vocab_size=16)
     print(config)
 
-    model = FlaxLlamaModule(config)
-    pt_model = LlamaModel(config)
+    model = FlaxLlamaForCausalLMModule(config)
+    pt_model = LlamaForCausalLM(config)
 
     key, subkey = jax.random.split(key)
     # x = jax.random.normal(subkey, (4, 128, config.hidden_size)) * 0.1
@@ -760,25 +758,26 @@ if __name__ == "__main__":
 
     params = flatten_dict(params['params'], sep='.')
 
-    # import ipdb; ipdb.set_trace()
+    import ipdb; ipdb.set_trace()
 
-    for i, l in enumerate(pt_model.layers):
+    for i, l in enumerate(pt_model.model.layers):
         pt_state = l.state_dict()
         l.load_state_dict({
-            'self_attn.q_proj.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.self_attn.q_proj.kernel'])).T,
-            'self_attn.k_proj.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.self_attn.k_proj.kernel'])).T,
-            'self_attn.v_proj.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.self_attn.v_proj.kernel'])).T,
-            'self_attn.o_proj.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.self_attn.o_proj.kernel'])).T,
+            'self_attn.q_proj.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.self_attn.q_proj.kernel'])).T,
+            'self_attn.k_proj.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.self_attn.k_proj.kernel'])).T,
+            'self_attn.v_proj.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.self_attn.v_proj.kernel'])).T,
+            'self_attn.o_proj.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.self_attn.o_proj.kernel'])).T,
             'self_attn.rotary_emb.inv_freq': pt_state[f'self_attn.rotary_emb.inv_freq'],
-            'input_layernorm.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.input_layernorm.weight'])),
-            'post_attention_layernorm.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.post_attention_layernorm.weight'])),
-            'mlp.down_proj.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.mlp.down_proj.kernel'])).T,
-            'mlp.up_proj.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.mlp.up_proj.kernel'])).T,
-            'mlp.gate_proj.weight': torch.from_numpy(np.asarray(params[f'layers.{i}.mlp.gate_proj.kernel'])).T,
+            'input_layernorm.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.input_layernorm.weight'])),
+            'post_attention_layernorm.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.post_attention_layernorm.weight'])),
+            'mlp.down_proj.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.mlp.down_proj.kernel'])).T,
+            'mlp.up_proj.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.mlp.up_proj.kernel'])).T,
+            'mlp.gate_proj.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.mlp.gate_proj.kernel'])).T,
         })
 
-    pt_model.embed_tokens.weight = torch.nn.Parameter(torch.from_numpy(np.asarray(params['embed_tokens.embedding'])))
-    pt_model.norm.weight = torch.nn.Parameter(torch.from_numpy(np.asarray(params['norm.weight'])))
+    pt_model.model.embed_tokens.weight = torch.nn.Parameter(torch.from_numpy(np.asarray(params['model.embed_tokens.embedding'])))
+    pt_model.model.norm.weight = torch.nn.Parameter(torch.from_numpy(np.asarray(params['model.norm.weight'])))
+    pt_model.lm_head.weight = torch.nn.Parameter(torch.from_numpy(np.asarray(params['lm_head.kernel'].T)))
 
     x_pt = torch.tensor(np.asarray(x))
     # for l in pt_model:
