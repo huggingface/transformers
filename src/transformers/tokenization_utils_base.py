@@ -753,12 +753,13 @@ class BatchEncoding(UserDict):
 
         return self
 
-    def to(self, device: Union[str, "torch.device"]) -> "BatchEncoding":
+    def to(self, device: Union[str, "torch.device"], dtype=None) -> "BatchEncoding":
         """
         Send all values to device by calling `v.to(device)` (PyTorch only).
 
         Args:
             device (`str` or `torch.device`): The device to put the tensors on.
+            dtype (`torch.dtype`, *optional*): The desired data type for the tensors. Defaults to None.
 
         Returns:
             [`BatchEncoding`]: The same instance after modification.
@@ -769,7 +770,11 @@ class BatchEncoding(UserDict):
         # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
         # into a HalfTensor
         if isinstance(device, str) or is_torch_device(device) or isinstance(device, int):
-            self.data = {k: v.to(device=device) for k, v in self.data.items()}
+            for k, v in self.items():
+                if dtype is not None:
+                    self.data[k] = v.to(device=device, dtype=dtype)
+                else:
+                    self.data[k] = v.to(device=device)
         else:
             logger.warning(f"Attempting to cast a BatchEncoding to type {str(device)}. This is not supported.")
         return self
