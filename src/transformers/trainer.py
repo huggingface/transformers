@@ -1784,6 +1784,8 @@ class Trainer:
                 rng_to_sync = True
 
             step = -1
+            last_scale = None
+            new_scale = False
             for step, inputs in enumerate(epoch_iterator):
                 total_batched_samples += 1
                 if rng_to_sync:
@@ -1879,11 +1881,18 @@ class Trainer:
                             # tpu-comment: accelerate wrapped optimizers call xm.optimizer_step
                             self.optimizer.step()
                     elif self.do_grad_scaling:
-                        scale_before = self.scaler.get_scale()
+                        if last_scale is None:
+                            # `get_scale` is an async operation requiring full synchronization
+                            # on CPU and GPUs before finishing. As a result, we store away
+                            # the prior one to reduce the call overhead
+                            last_scale = self.scaler.get_scale()
+                            new_scale = True
                         self.scaler.step(self.optimizer)
                         self.scaler.update()
                         scale_after = self.scaler.get_scale()
-                        optimizer_was_run = scale_before <= scale_after
+                        if not new_scale:
+                            optimizer_was_run = last_scale <= scale_after
+                        last_scale = scale_after
                     else:
                         self.optimizer.step()
                         optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
