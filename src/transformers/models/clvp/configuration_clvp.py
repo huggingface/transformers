@@ -69,6 +69,8 @@ class CLVPTextConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        use_attention_bias (`bool`, *optional*, defaults to `False`):
+            Wheater to use bias in Query, Key and Value representations of self-attention layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_factor (`float`, *optional*, defaults to 1):
@@ -100,9 +102,17 @@ class CLVPTextConfig(PretrainedConfig):
         num_hidden_layers=12,
         num_attention_heads=8,
         max_position_embeddings=77,
-        hidden_act="quick_gelu",
+        hidden_act="gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
+        use_attention_bias=False,
+        use_glu_in_ff=True,
+        ff_post_act_layer_norm=False,
+        use_pre_branch_norm=True,
+        use_post_branch_norm=False,
+        use_post_main_norm=False,
+        norm_type="rms_norm",
+
         initializer_range=0.02,
         initializer_factor=1.0,
         pad_token_id=1,
@@ -124,6 +134,13 @@ class CLVPTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
+        self.use_attention_bias = use_attention_bias
+        self.use_glu_in_ff = use_glu_in_ff
+        self.ff_post_act_layer_norm = ff_post_act_layer_norm
+        self.use_pre_branch_norm = use_pre_branch_norm
+        self.use_post_branch_norm = use_post_branch_norm
+        self.use_post_main_norm = use_post_main_norm
+        self.norm_type = norm_type
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -174,6 +191,8 @@ class CLVPVisionConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        use_attention_bias (`bool`, *optional*, defaults to `False`):
+            Wheater to use bias in Query, Key and Value representations of self-attention layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_factor (`float`, *optional*, defaults to 1):
@@ -207,9 +226,17 @@ class CLVPVisionConfig(PretrainedConfig):
         num_channels=3,
         image_size=224,
         patch_size=32,
-        hidden_act="quick_gelu",
+        hidden_act="gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
+        use_attention_bias=False,
+        use_glu_in_ff=True,
+        ff_post_act_layer_norm=False,
+        use_pre_branch_norm=True,
+        use_post_branch_norm=False,
+        use_post_main_norm=False,
+        norm_type="rms_norm",
+
         initializer_range=0.02,
         initializer_factor=1.0,
         **kwargs,
@@ -229,6 +256,13 @@ class CLVPVisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
+        self.use_attention_bias = use_attention_bias
+        self.use_glu_in_ff = use_glu_in_ff
+        self.ff_post_act_layer_norm = ff_post_act_layer_norm
+        self.use_pre_branch_norm = use_pre_branch_norm
+        self.use_post_branch_norm = use_post_branch_norm
+        self.use_post_main_norm = use_post_main_norm
+        self.norm_type = norm_type
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -410,49 +444,3 @@ class CLVPConfig(PretrainedConfig):
         output["vision_config"] = self.vision_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
-
-
-class CLVPOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("logits_per_image", {0: "batch"}),
-                ("logits_per_text", {0: "batch"}),
-                ("text_embeds", {0: "batch"}),
-                ("image_embeds", {0: "batch"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-    def generate_dummy_inputs(
-        self,
-        processor: "ProcessorMixin",
-        batch_size: int = -1,
-        seq_length: int = -1,
-        framework: Optional["TensorType"] = None,
-    ) -> Mapping[str, Any]:
-        text_input_dict = super().generate_dummy_inputs(
-            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
-        )
-        image_input_dict = super().generate_dummy_inputs(
-            processor.image_processor, batch_size=batch_size, framework=framework
-        )
-        return {**text_input_dict, **image_input_dict}
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 14

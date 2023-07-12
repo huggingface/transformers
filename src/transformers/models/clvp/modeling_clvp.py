@@ -259,9 +259,9 @@ class CLVPAttention(nn.Module):
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
 
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
@@ -345,32 +345,112 @@ class CLVPAttention(nn.Module):
 
         return attn_output, attn_weights_reshaped
 
+class CLVPScaleNorm(nn.Module):
+    def __init__(self, normalized_shape, eps):
+        super().__init__()
+        self.scale = normalized_shape ** -0.5
+        self.eps = eps
+        self.g = nn.Parameter(torch.ones(1))
 
-# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->CLVP
+    def forward(self, x):
+        norm = torch.norm(x, dim=-1, keepdim=True) * self.scale
+        return x / norm.clamp(min=self.eps) * self.g
+
+class CLVPRMSNorm(nn.Module):
+    def __init__(self, normalized_shape, eps):
+        super().__init__()
+        self.scale = normalized_shape ** -0.5
+        self.eps = eps
+        self.g = nn.Parameter(torch.ones(normalized_shape))
+
+    def forward(self, x):
+        norm = torch.norm(x, dim=-1, keepdim=True) * self.scale
+        return x / norm.clamp(min=self.eps) * self.g
+
+class CLVPRMSScaleShiftNorm(nn.Module):
+    def __init__(self, normalized_shape, eps):
+        super().__init__()
+        self.scale = normalized_shape ** -0.5
+        self.eps = eps
+        self.g = nn.Parameter(torch.ones(normalized_shape))
+        self.scale_shift_process = nn.Linear(normalized_shape * 2, normalized_shape * 2)
+
+    def forward(self, x, norm_scale_shift_inp):
+        norm = torch.norm(x, dim=-1, keepdim=True) * self.scale
+        norm = x / norm.clamp(min=self.eps) * self.g
+
+        ss_emb = self.scale_shift_process(norm_scale_shift_inp)
+        scale, shift = torch.chunk(ss_emb, 2, dim=1)
+        h = norm * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+        return h
+
+CLVP_NORM_TYPES = {"rms_norm":CLVPRMSNorm,
+                   "scale_norm":CLVPScaleNorm,
+                   "rms_scale_shift_norm":CLVPRMSScaleShiftNorm,
+                   "layer_norm":nn.LayerNorm,
+                   }
+
+class CLVPGatedLinearUnit(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.proj = nn.Linear(config.hidden_size, config.intermediate_size * 2)
+
+    def forward(self, x):
+        x, gate = self.proj(x).chunk(2, dim=-1)
+        return x * self.activation_fn(gate)
+
 class CLVPMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+
+        # Check if GLU is needed or not
+        if config.use_glu_in_ff:
+            self.fc1 = CLVPGatedLinearUnit(config)
+        else:
+            self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+            self.activation_fn = ACT2FN[config.hidden_act]
+
+        # Check if layer norm is applied after the Activation
+        if config.ff_post_act_layer_norm:
+            self.post_act_layer_norm = CLVP_NORM_TYPES[config.norm_type](config.intermediate_size, eps=config.layer_norm_eps)
+
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.dropout_layer = nn.Dropout(config.dropout)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
+        if self.config.use_glu_in_ff:
+            hidden_states = self.fc1(hidden_states)
+        else:
+            hidden_states = self.fc1(hidden_states)
+            hidden_states = self.activation_fn(hidden_states)
+
+        if self.config.ff_post_act_layer_norm:
+            hidden_states = self.post_act_layer_norm(hidden_states)
+
+        hidden_states = self.dropout_layer(hidden_states)
         hidden_states = self.fc2(hidden_states)
         return hidden_states
-
 
 # Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->CLVP
 class CLVPEncoderLayer(nn.Module):
     def __init__(self, config: CLVPConfig):
         super().__init__()
+        self.config = config
         self.embed_dim = config.hidden_size
         self.self_attn = CLVPAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = CLVPMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+
+        if config.use_pre_branch_norm:
+            self.pre_branch_norm1 = CLVP_NORM_TYPES[config.norm_type](self.embed_dim, eps=config.layer_norm_eps)
+            self.pre_branch_norm2 = CLVP_NORM_TYPES[config.norm_type](self.embed_dim, eps=config.layer_norm_eps)
+        if config.use_post_branch_norm:
+            self.post_branch_norm1 = CLVP_NORM_TYPES[config.norm_type](self.embed_dim, eps=config.layer_norm_eps)
+            self.post_branch_norm2 = CLVP_NORM_TYPES[config.norm_type](self.embed_dim, eps=config.layer_norm_eps)
+        if config.use_post_main_norm:
+            self.post_main_norm1 = CLVP_NORM_TYPES[config.norm_type](self.embed_dim, eps=config.layer_norm_eps)
+            self.post_main_norm2 = CLVP_NORM_TYPES[config.norm_type](self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -391,19 +471,31 @@ class CLVPEncoderLayer(nn.Module):
         """
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        if self.config.use_pre_branch_norm:
+            hidden_states = self.pre_branch_norm1(hidden_states)
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
         )
+        if self.config.use_post_branch_norm:
+            hidden_states = self.post_branch_norm1(hidden_states)
+
         hidden_states = residual + hidden_states
+        if self.config.use_post_main_norm:
+            hidden_states = self.post_main_norm1(hidden_states)
+
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        if self.config.use_pre_branch_norm:
+            hidden_states = self.pre_branch_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
+        if self.config.use_post_branch_norm:
+            hidden_states = self.post_branch_norm2(hidden_states)
         hidden_states = residual + hidden_states
+        if self.config.use_post_main_norm:
+            hidden_states = self.post_main_norm2(hidden_states)
 
         outputs = (hidden_states,)
 
