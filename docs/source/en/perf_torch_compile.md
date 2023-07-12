@@ -129,7 +129,7 @@ Below you can find inference durations in milliseconds for each model with and w
 | Image Classification/BeiT | 41.854 | 41.048 | 
 | Object Detection/DETR | 164.382 | 161.902 |
 
-### V100 (batch size: 1) (DONE)
+### V100 (batch size: 1)
 
 | **Task/Model** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** |
 |:---:|:---:|:---:|
