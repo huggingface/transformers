@@ -32,7 +32,7 @@ jobs:
             - checkout
             - run: pip install --upgrade --upgrade-strategy eager pip
             - run: pip install -U --upgrade-strategy eager GitPython
-            - run: pip install -U .
+            - run: pip install -U --upgrade-strategy eager .
             - run: mkdir -p test_preparation
             - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
             - store_artifacts:
@@ -106,7 +106,7 @@ jobs:
             - checkout
             - run: pip install --upgrade --upgrade-strategy eager pip
             - run: pip install -U --upgrade-strategy eager GitPython
-            - run: pip install -U .
+            - run: pip install -U --upgrade-strategy eager .
             - run: |
                   mkdir test_preparation
                   echo -n "tests" > test_preparation/test_list.txt
@@ -143,7 +143,7 @@ jobs:
                       - v0.7-code_quality-{{ checksum "setup.py" }}-site-packages
                       - v0.7-code-quality-site-packages
             - run: pip install --upgrade --upgrade-strategy eager pip
-            - run: pip install -U .[all,quality]
+            - run: pip install -U --upgrade-strategy eager .[all,quality]
             - save_cache:
                   key: v0.7-code_quality-{{ checksum "setup.py" }}
                   paths:
@@ -179,8 +179,12 @@ jobs:
                   keys:
                       - v0.7-repository_consistency-{{ checksum "setup.py" }}
                       - v0.7-repository_consistency
-            - run: pip install --upgrade pip
-            - run: pip install .[all,quality]
+            - restore_cache:
+                  keys:
+                      - v0.7-repository_consistency-{{ checksum "setup.py" }}-site-packages
+                      - v0.7-repository_consistency-site-packages
+            - run: pip install --upgrade --upgrade-strategy eager pip
+            - run: pip install -U --upgrade-strategy eager .[all,quality]
             - save_cache:
                   key: v0.7-repository_consistency-{{ checksum "setup.py" }}
                   paths:
