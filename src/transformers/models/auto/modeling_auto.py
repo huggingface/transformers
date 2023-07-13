@@ -180,7 +180,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertModel"),
         ("swiftformer", "SwiftFormerModel"),
         ("swin", "SwinModel"),
-        ("tinyvit", "TinyVitModel"),
         ("swin2sr", "Swin2SRModel"),
         ("swinv2", "Swinv2Model"),
         ("switch_transformers", "SwitchTransformersModel"),
@@ -190,6 +189,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("time_series_transformer", "TimeSeriesTransformerModel"),
         ("timesformer", "TimesformerModel"),
         ("timm_backbone", "TimmBackbone"),
+        ("tinyvit", "TinyVitModel"),
         ("trajectory_transformer", "TrajectoryTransformerModel"),
         ("transfo-xl", "TransfoXLModel"),
         ("tvlt", "TvltModel"),
@@ -445,8 +445,8 @@ MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
         ("deit", "DeiTForMaskedImageModeling"),
         ("focalnet", "FocalNetForMaskedImageModeling"),
         ("swin", "SwinForMaskedImageModeling"),
-        ("tinyvit", "TinyVitForMaskedImageModeling"),
         ("swinv2", "Swinv2ForMaskedImageModeling"),
+        ("tinyvit", "TinyVitForMaskedImageModeling"),
         ("vit", "ViTForMaskedImageModeling"),
     ]
 )
@@ -502,8 +502,8 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("segformer", "SegformerForImageClassification"),
         ("swiftformer", "SwiftFormerForImageClassification"),
         ("swin", "SwinForImageClassification"),
-        ("tinyvit", "TinyVitForImageClassification"),
         ("swinv2", "Swinv2ForImageClassification"),
+        ("tinyvit", "TinyVitForImageClassification"),
         ("van", "VanForImageClassification"),
         ("vit", "ViTForImageClassification"),
         ("vit_hybrid", "ViTHybridForImageClassification"),
@@ -1068,8 +1068,8 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("nat", "NatBackbone"),
         ("resnet", "ResNetBackbone"),
         ("swin", "SwinBackbone"),
-        ("tinyvit", "TinyVitBackbone"),
         ("timm_backbone", "TimmBackbone"),
+        ("tinyvit", "TinyVitBackbone"),
         ("vitdet", "VitDetBackbone"),
     ]
 )

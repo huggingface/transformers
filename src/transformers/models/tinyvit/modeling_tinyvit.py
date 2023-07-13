@@ -24,8 +24,8 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...modeling_outputs import ImageClassifierOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -56,26 +56,30 @@ TINYVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 class TinyVitConv2dBatchNorm(torch.nn.Sequential):
-    def __init__(self, a, b, ks=1, stride=1, pad=0, dilation=1,
-                 groups=1, bn_weight_init=1):
+    def __init__(self, a, b, ks=1, stride=1, pad=0, dilation=1, groups=1, bn_weight_init=1):
         super().__init__()
-        self.add_module('c', torch.nn.Conv2d(
-            a, b, ks, stride, pad, dilation, groups, bias=False))
+        self.add_module("c", torch.nn.Conv2d(a, b, ks, stride, pad, dilation, groups, bias=False))
         bn = torch.nn.BatchNorm2d(b)
         # TODO define in init_weights
         # torch.nn.init.constant_(bn.weight, bn_weight_init)
         # torch.nn.init.constant_(bn.bias, 0)
-        self.add_module('bn', bn)
+        self.add_module("bn", bn)
 
     @torch.no_grad()
     def fuse(self):
         c, bn = self._modules.values()
-        w = bn.weight / (bn.running_var + bn.eps)**0.5
+        w = bn.weight / (bn.running_var + bn.eps) ** 0.5
         w = c.weight * w[:, None, None, None]
-        b = bn.bias - bn.running_mean * bn.weight / \
-            (bn.running_var + bn.eps)**0.5
-        m = torch.nn.Conv2d(w.size(1) * self.c.groups, w.size(
-            0), w.shape[2:], stride=self.c.stride, padding=self.c.padding, dilation=self.c.dilation, groups=self.c.groups)
+        b = bn.bias - bn.running_mean * bn.weight / (bn.running_var + bn.eps) ** 0.5
+        m = torch.nn.Conv2d(
+            w.size(1) * self.c.groups,
+            w.size(0),
+            w.shape[2:],
+            stride=self.c.stride,
+            padding=self.c.padding,
+            dilation=self.c.dilation,
+            groups=self.c.groups,
+        )
         m.weight.data.copy_(w)
         m.bias.data.copy_(b)
         return m
@@ -97,7 +101,9 @@ class TinyVitEmbeddings(nn.Module):
 
     def forward(self, pixel_values):
         embeddings = self.seq(pixel_values)
-        return embeddings
+        _, _, height, width = embeddings.shape
+        output_dimensions = (height, width)
+        return embeddings, output_dimensions
 
 
 class TinyVitMBConv(nn.Module):
@@ -109,14 +115,15 @@ class TinyVitMBConv(nn.Module):
         self.conv1 = TinyVitConv2dBatchNorm(in_channels, self.hidden_chans, ks=1)
         self.activation1 = ACT2FN[config.hidden_act]
 
-        self.conv2 = TinyVitConv2dBatchNorm(self.hidden_chans, self.hidden_chans,
-                               ks=3, stride=1, pad=1, groups=self.hidden_chans)
+        self.conv2 = TinyVitConv2dBatchNorm(
+            self.hidden_chans, self.hidden_chans, ks=3, stride=1, pad=1, groups=self.hidden_chans
+        )
         self.activation2 = ACT2FN[config.hidden_act]
 
         self.conv3 = TinyVitConv2dBatchNorm(self.hidden_chans, out_channels, ks=1, bn_weight_init=0.0)
         self.activation3 = ACT2FN[config.hidden_act]
 
-        self.drop_path = TinyVitDropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.drop_path = TinyVitDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, hidden_state):
         shortcut = hidden_state
@@ -203,37 +210,49 @@ class TinyVitDropPath(nn.Module):
 
 
 class TinyVitConvStage(nn.Module):
-    def __init__(self, config, dim, input_resolution, depth, drop_path=0., downsample=None, out_dim=None):
+    def __init__(self, config, dim, input_resolution, depth, drop_path=0.0, downsample=None, out_dim=None):
         super().__init__()
-        
+
         self.input_resolution = input_resolution
         self.depth = depth
 
         # build layers
-        self.layers = nn.ModuleList([
-            TinyVitMBConv(config, dim, dim,
-                   drop_path[i] if isinstance(drop_path, list) else drop_path,
-                   )
-            for i in range(depth)])
+        self.layers = nn.ModuleList(
+            [
+                TinyVitMBConv(
+                    config,
+                    dim,
+                    dim,
+                    drop_path[i] if isinstance(drop_path, list) else drop_path,
+                )
+                for i in range(depth)
+            ]
+        )
 
         # patch merging layer
         if downsample is not None:
-            self.downsample = downsample(
-                config, input_resolution, dim=dim, out_dim=out_dim)
+            self.downsample = downsample(config, input_resolution, dim=dim, out_dim=out_dim)
         else:
             self.downsample = None
 
-    def forward(self, hidden_state, output_attentions=False, print_values=False):
+    def forward(self, hidden_state, input_dimensions, output_attentions=False, print_values=False):
+        height, width = input_dimensions
         for layer in self.layers:
             # TODO support gradient checkpointing
             # if self.gradient_checkpointing:
             #     hidden_state = torch.utils.checkpoint.checkpoint(layer, hidden_state)
             # else
             hidden_state = layer(hidden_state)
+
+        hidden_state_before_downsampling = hidden_state
         if self.downsample is not None:
+            height_downsampled, width_downsampled = (height + 1) // 2, (width + 1) // 2
+            output_dimensions = (height, width, height_downsampled, width_downsampled)
             hidden_state = self.downsample(hidden_state)
-        
-        return (hidden_state,)
+        else:
+            output_dimensions = (height, width, height, width)
+
+        return (hidden_state, hidden_state_before_downsampling, output_dimensions)
 
 
 class TinyVitMlp(nn.Module):
@@ -259,15 +278,19 @@ class TinyVitMlp(nn.Module):
 
 
 class TinyVitAttention(torch.nn.Module):
-    def __init__(self, dim, key_dim, num_heads=8,
-                 attn_ratio=4,
-                 resolution=(14, 14),
-                 ):
+    def __init__(
+        self,
+        dim,
+        key_dim,
+        num_heads=8,
+        attn_ratio=4,
+        resolution=(14, 14),
+    ):
         super().__init__()
         # (h, w)
         assert isinstance(resolution, tuple) and len(resolution) == 2
         self.num_heads = num_heads
-        self.scale = key_dim ** -0.5
+        self.scale = key_dim**-0.5
         self.key_dim = key_dim
         self.nh_kd = nh_kd = key_dim * num_heads
         self.d = int(attn_ratio * key_dim)
@@ -279,8 +302,7 @@ class TinyVitAttention(torch.nn.Module):
         self.qkv = nn.Linear(dim, h)
         self.proj = nn.Linear(self.dh, dim)
 
-        points = list(itertools.product(
-            range(resolution[0]), range(resolution[1])))
+        points = list(itertools.product(range(resolution[0]), range(resolution[1])))
         N = len(points)
         attention_offsets = {}
         idxs = []
@@ -290,16 +312,13 @@ class TinyVitAttention(torch.nn.Module):
                 if offset not in attention_offsets:
                     attention_offsets[offset] = len(attention_offsets)
                 idxs.append(attention_offsets[offset])
-        self.attention_biases = torch.nn.Parameter(
-            torch.zeros(num_heads, len(attention_offsets)))
-        self.register_buffer('attention_bias_idxs',
-                             torch.LongTensor(idxs).view(N, N),
-                             persistent=False)
+        self.attention_biases = torch.nn.Parameter(torch.zeros(num_heads, len(attention_offsets)))
+        self.register_buffer("attention_bias_idxs", torch.LongTensor(idxs).view(N, N), persistent=False)
 
     @torch.no_grad()
     def train(self, mode=True):
         super().train(mode)
-        if mode and hasattr(self, 'ab'):
+        if mode and hasattr(self, "ab"):
             del self.ab
         else:
             print("we are heeere")
@@ -312,12 +331,13 @@ class TinyVitAttention(torch.nn.Module):
         hidden_state = self.norm(hidden_state)
 
         if print_values:
-            print("Hidden states after layernorm:", hidden_state[0,:3,:3])
+            print("Hidden states after layernorm:", hidden_state[0, :3, :3])
 
         qkv = self.qkv(hidden_state)
         # (batch_size, seq_length, num_heads, d)
-        q, k, v = qkv.view(batch_size, seq_length, self.num_heads, -
-                           1).split([self.key_dim, self.key_dim, self.d], dim=3)
+        q, k, v = qkv.view(batch_size, seq_length, self.num_heads, -1).split(
+            [self.key_dim, self.key_dim, self.d], dim=3
+        )
         # (B, num_heads, N, d)
         q = q.permute(0, 2, 1, 3)
         k = k.permute(0, 2, 1, 3)
@@ -325,22 +345,19 @@ class TinyVitAttention(torch.nn.Module):
 
         if print_values:
             print("Shape of attention biases:", self.attention_biases.shape)
-            print("Attention biases:", self.attention_biases[:3,:3])
+            print("Attention biases:", self.attention_biases[:3, :3])
             print("Shape of attention bias idxs:", self.attention_bias_idxs.shape)
             print("Attention bias idxs:", self.attention_bias_idxs)
 
             print("Shape of self.ab:", self.ab.shape)
-            print("First values of self.ab:", self.ab[0,-3:,-3:])
-            print("Appropriate values:", self.attention_biases[:, self.attention_bias_idxs][0,:3,:3])
+            print("First values of self.ab:", self.ab[0, -3:, -3:])
+            print("Appropriate values:", self.attention_biases[:, self.attention_bias_idxs][0, :3, :3])
 
-        attn = (
-            (q @ k.transpose(-2, -1)) * self.scale
-            +
-            (self.attention_biases[:, self.attention_bias_idxs]
-             if self.training else self.ab)
+        attn = (q @ k.transpose(-2, -1)) * self.scale + (
+            self.attention_biases[:, self.attention_bias_idxs] if self.training else self.ab
         )
         if print_values:
-            print("Attention before softmax:", attn[0,0,:3,:3])
+            print("Attention before softmax:", attn[0, 0, :3, :3])
         attn = attn.softmax(dim=-1)
         hidden_state = (attn @ v).transpose(1, 2).reshape(batch_size, seq_length, self.dh)
         hidden_state = self.proj(hidden_state)
@@ -348,7 +365,7 @@ class TinyVitAttention(torch.nn.Module):
 
 
 class TinyViTLayer(nn.Module):
-    r""" TinyViT layer (block).
+    r"""TinyViT layer (block).
 
     Args:
         dim (int): Number of input channels.
@@ -363,19 +380,18 @@ class TinyViTLayer(nn.Module):
         activation: the activation function. Default: nn.GELU
     """
 
-    def __init__(self, config, dim, input_resolution, num_heads, window_size=7, drop_path=0.):
+    def __init__(self, config, dim, input_resolution, num_heads, window_size=7, drop_path=0.0):
         super().__init__()
         self.input_resolution = input_resolution
         self.num_heads = num_heads
         if not window_size > 0:
-            raise ValueError('window_size must be greater than 0')
+            raise ValueError("window_size must be greater than 0")
         self.window_size = window_size
 
-        self.drop_path = TinyVitDropPath(
-            drop_path) if drop_path > 0. else nn.Identity()
+        self.drop_path = TinyVitDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
         if dim % num_heads != 0:
-            raise ValueError('dim must be divisible by num_heads')
+            raise ValueError("dim must be divisible by num_heads")
         head_dim = dim // num_heads
 
         window_resolution = (window_size, window_size)
@@ -386,8 +402,7 @@ class TinyViTLayer(nn.Module):
 
         local_conv_size = config.local_conv_size
         pad = local_conv_size // 2
-        self.local_conv = TinyVitConv2dBatchNorm(
-            dim, dim, ks=local_conv_size, stride=1, pad=pad, groups=dim)
+        self.local_conv = TinyVitConv2dBatchNorm(dim, dim, ks=local_conv_size, stride=1, pad=pad, groups=dim)
 
     def forward(self, x, print_values=False):
         height, width = self.input_resolution
@@ -399,10 +414,8 @@ class TinyViTLayer(nn.Module):
             x = self.attn(x)
         else:
             x = x.view(batch_size, height, width, num_channels)
-            pad_b = (self.window_size - height %
-                     self.window_size) % self.window_size
-            pad_r = (self.window_size - width %
-                     self.window_size) % self.window_size
+            pad_b = (self.window_size - height % self.window_size) % self.window_size
+            pad_r = (self.window_size - width % self.window_size) % self.window_size
             padding = pad_b > 0 or pad_r > 0
 
             if padding:
@@ -412,19 +425,24 @@ class TinyViTLayer(nn.Module):
             nH = pH // self.window_size
             nW = pW // self.window_size
             # window partition
-            x = x.view(batch_size, nH, self.window_size, nW, self.window_size, num_channels).transpose(2, 3).reshape(
-                batch_size * nH * nW, self.window_size * self.window_size, num_channels
+            x = (
+                x.view(batch_size, nH, self.window_size, nW, self.window_size, num_channels)
+                .transpose(2, 3)
+                .reshape(batch_size * nH * nW, self.window_size * self.window_size, num_channels)
             )
             if print_values:
                 print("Shape of x before attention:", x.shape)
-                print("First values of x before attention:", x[0,:3,:3])
+                print("First values of x before attention:", x[0, :3, :3])
             x = self.attn(x, print_values=print_values)
             if print_values:
                 print("Shape of x after attention:", x.shape)
-                print("First values of x after attention:", x[0,:3,:3])
+                print("First values of x after attention:", x[0, :3, :3])
             # window reverse
-            x = x.view(batch_size, nH, nW, self.window_size, self.window_size,
-                       num_channels).transpose(2, 3).reshape(batch_size, pH, pW, num_channels)
+            x = (
+                x.view(batch_size, nH, nW, self.window_size, self.window_size, num_channels)
+                .transpose(2, 3)
+                .reshape(batch_size, pH, pW, num_channels)
+            )
 
             if padding:
                 x = x[:, :height, :width].contiguous()
@@ -445,7 +463,7 @@ class TinyViTLayer(nn.Module):
 
 
 class TinyVitStage(nn.Module):
-    """ A basic TinyViT layer for one stage.
+    """A basic TinyViT layer for one stage.
 
     Args:
         dim (int): Number of input channels.
@@ -460,37 +478,61 @@ class TinyVitStage(nn.Module):
         out_dim: the output dimension of the layer. Default: dim
     """
 
-    def __init__(self, config, dim, input_resolution, depth, num_heads, window_size, drop_path=0., downsample=None, out_dim=None):
-
+    def __init__(
+        self,
+        config,
+        dim,
+        input_resolution,
+        depth,
+        num_heads,
+        window_size,
+        drop_path=0.0,
+        downsample=None,
+        out_dim=None,
+    ):
         super().__init__()
         self.input_resolution = input_resolution
         self.depth = depth
 
         # build layers
-        self.layers = nn.ModuleList([
-            TinyViTLayer(config, dim=dim, input_resolution=input_resolution,
-                         num_heads=num_heads, window_size=window_size,
-                         drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
-                         )
-            for i in range(depth)])
+        self.layers = nn.ModuleList(
+            [
+                TinyViTLayer(
+                    config,
+                    dim=dim,
+                    input_resolution=input_resolution,
+                    num_heads=num_heads,
+                    window_size=window_size,
+                    drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
+                )
+                for i in range(depth)
+            ]
+        )
 
         # patch merging layer
         if downsample is not None:
-            self.downsample = downsample(
-                config, input_resolution, dim=dim, out_dim=out_dim)
+            self.downsample = downsample(config, input_resolution, dim=dim, out_dim=out_dim)
         else:
             self.downsample = None
 
-    def forward(self, hidden_state, output_attentions=False, print_values=False):
+    def forward(self, hidden_state, input_dimensions, output_attentions=False, print_values=False):
+        height, width = input_dimensions
         for layer in self.layers:
             # TODO support gradient checkpointing
             # if self.gradient_checkpointing:
             #     hidden_state = torch.utils.checkpoint.checkpoint(layer, hidden_state)
             # else:
             hidden_state = layer(hidden_state, print_values=print_values)
+
+        hidden_state_before_downsampling = hidden_state
         if self.downsample is not None:
+            height_downsampled, width_downsampled = (height + 1) // 2, (width + 1) // 2
+            output_dimensions = (height, width, height_downsampled, width_downsampled)
             hidden_state = self.downsample(hidden_state)
-        return (hidden_state,)
+        else:
+            output_dimensions = (height, width, height, width)
+
+        return (hidden_state, hidden_state_before_downsampling, output_dimensions)
 
 
 class TinyVitEncoder(nn.Module):
@@ -500,30 +542,29 @@ class TinyVitEncoder(nn.Module):
         self.config = config
         hidden_sizes = config.hidden_sizes
         depths = config.depths
-        
+
         # stochastic depth decay rule
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
-        
+
         self.stages = nn.ModuleList()
         for stage_idx in range(self.num_stages):
-            kwargs = dict(dim=hidden_sizes[stage_idx],
-                          input_resolution=(patches_resolution[0] // (2 ** stage_idx),
-                                            patches_resolution[1] // (2 ** stage_idx)),
-                          depth=depths[stage_idx],
-                          drop_path=dpr[sum(depths[:stage_idx]):sum(depths[:stage_idx + 1])],
-                          downsample=TinyVitPatchMerging if (
-                              stage_idx < self.num_stages - 1) else None,
-                          out_dim=hidden_sizes[min(
-                              stage_idx + 1, len(hidden_sizes) - 1)],
-                          )
+            kwargs = {
+                "dim": hidden_sizes[stage_idx],
+                "input_resolution": (
+                    patches_resolution[0] // (2**stage_idx),
+                    patches_resolution[1] // (2**stage_idx),
+                ),
+                "depth": depths[stage_idx],
+                "drop_path": dpr[sum(depths[:stage_idx]) : sum(depths[: stage_idx + 1])],
+                "downsample": TinyVitPatchMerging if (stage_idx < self.num_stages - 1) else None,
+                "out_dim": hidden_sizes[min(stage_idx + 1, len(hidden_sizes) - 1)],
+            }
             if stage_idx == 0:
                 stage = TinyVitConvStage(config, **kwargs)
             else:
                 stage = TinyVitStage(
-                    config,
-                    num_heads=config.num_heads[stage_idx],
-                    window_size=config.window_sizes[stage_idx],
-                    **kwargs)
+                    config, num_heads=config.num_heads[stage_idx], window_size=config.window_sizes[stage_idx], **kwargs
+                )
             self.stages.append(stage)
 
         self.gradient_checkpointing = False
@@ -531,6 +572,7 @@ class TinyVitEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        input_dimensions: Tuple[int, int],
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
@@ -538,10 +580,16 @@ class TinyVitEncoder(nn.Module):
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
+        all_reshaped_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
         if output_hidden_states:
+            batch_size, _, hidden_size = hidden_states.shape
+            # rearrange b (h w) c -> b c h w
+            reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size)
+            reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
             all_hidden_states += (hidden_states,)
+            all_reshaped_hidden_states += (reshaped_hidden_state,)
 
         for i, stage_module in enumerate(self.stages):
             layer_head_mask = head_mask[i] if head_mask is not None else None
@@ -555,26 +603,30 @@ class TinyVitEncoder(nn.Module):
                     return custom_forward
 
                 stage_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(stage_module), hidden_states, layer_head_mask
+                    create_custom_forward(stage_module), hidden_states, input_dimensions, layer_head_mask
                 )
             else:
                 # TODO support layer_head_mask similar to Swin
-                stage_outputs = stage_module(hidden_states, output_attentions, print_values=False)
+                stage_outputs = stage_module(hidden_states, input_dimensions, output_attentions, print_values=False)
 
             hidden_states = stage_outputs[0]
-            print(f"Hidden states after stage {i}:", hidden_states[0,:3,:3])
-            # hidden_states_before_downsampling = stage_outputs[1]
-            # output_dimensions = stage_outputs[2]
+            hidden_state_before_downsampling = stage_outputs[1]
+            output_dimensions = stage_outputs[2]
+
+            input_dimensions = (output_dimensions[-2], output_dimensions[-1])
+
+            print(f"Shape of hidden states after stage {i}", hidden_states.shape)
+            print(f"Hidden states after stage {i}:", hidden_states[0, :3, :3])
 
             if output_hidden_states and output_hidden_states_before_downsampling:
-                batch_size, _, hidden_size = hidden_states_before_downsampling.shape
+                batch_size, _, hidden_size = hidden_state_before_downsampling.shape
                 # rearrange b (h w) c -> b c h w
                 # here we use the original (not downsampled) height and width
-                reshaped_hidden_state = hidden_states_before_downsampling.view(
+                reshaped_hidden_state = hidden_state_before_downsampling.view(
                     batch_size, *(output_dimensions[0], output_dimensions[1]), hidden_size
                 )
                 reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
-                all_hidden_states += (hidden_states_before_downsampling,)
+                all_hidden_states += (hidden_state_before_downsampling,)
                 all_reshaped_hidden_states += (reshaped_hidden_state,)
             elif output_hidden_states and not output_hidden_states_before_downsampling:
                 batch_size, _, hidden_size = hidden_states.shape
@@ -719,13 +771,14 @@ class TinyVitModel(TinyVitPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, len(self.config.depths))
 
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output, input_dimensions = self.embeddings(pixel_values)
 
         print("Shape of embeddings:", embedding_output.shape)
-        print("First values of embeddings:", embedding_output[0,0,:3,:3])
+        print("First values of embeddings:", embedding_output[0, 0, :3, :3])
 
         encoder_outputs = self.encoder(
             embedding_output,
+            input_dimensions,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -754,8 +807,8 @@ class TinyVitModel(TinyVitPreTrainedModel):
 
 @add_start_docstrings(
     """
-    TinyVit Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
+    TinyVit Model transformer with an image classification head on top (a linear layer on top of the final hidden state
+    of the [CLS] token) e.g. for ImageNet.
     """,
     TINYVIT_START_DOCSTRING,
 )

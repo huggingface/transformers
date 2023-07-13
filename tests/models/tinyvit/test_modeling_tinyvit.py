@@ -32,7 +32,12 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import TinyVitBackbone, TinyVitForImageClassification, TinyVitForMaskedImageModeling, TinyVitModel
+    from transformers import (
+        TinyVitBackbone,
+        TinyVitForImageClassification,
+        TinyVitForMaskedImageModeling,
+        TinyVitModel,
+    )
     from transformers.models.tinyvit.modeling_tinyvit import TINYVIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -478,11 +483,7 @@ class TinyVitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 class TinyVitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            AutoImageProcessor.from_pretrained("microsoft/tinyvit-21m-224")
-            if is_vision_available()
-            else None
-        )
+        return AutoImageProcessor.from_pretrained("microsoft/tinyvit-21m-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):

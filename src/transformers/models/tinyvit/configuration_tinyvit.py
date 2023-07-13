@@ -25,14 +25,12 @@ TINYVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class TinyVitConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`TinyVitModel`]. It is used to instantiate a TinyVit
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the TinyVit
-    [microsoft/tinyvit-21m-224](https://huggingface.co/microsoft/tinyvit-21m-224)
-    architecture.
+    This is the configuration class to store the configuration of a [`TinyVitModel`]. It is used to instantiate a
+    TinyVit model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the TinyVit
+    [microsoft/tinyvit-21m-224](https://huggingface.co/microsoft/tinyvit-21m-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

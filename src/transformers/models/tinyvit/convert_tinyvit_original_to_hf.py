@@ -1,13 +1,11 @@
 import argparse
-import json
 
-import requests
-from huggingface_hub import hf_hub_download
-from PIL import Image
-
-from transformers import AutoImageProcessor, TinyVitConfig, TinyVitForImageClassification
-from torchvision.transforms import Normalize, Resize, CenterCrop, Compose, ToTensor, InterpolationMode
 import torch
+from PIL import Image
+from torchvision.transforms import CenterCrop, Compose, InterpolationMode, Normalize, Resize, ToTensor
+
+from transformers import TinyVitConfig, TinyVitForImageClassification
+
 
 def get_tinyvit_config(model_name):
     config = TinyVitConfig()
@@ -40,7 +38,6 @@ def get_tinyvit_config(model_name):
     return config
 
 
-
 def convert_tinyvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     config = get_tinyvit_config(model_name)
     model = TinyVitForImageClassification(config)
@@ -70,14 +67,18 @@ def convert_tinyvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     model.load_state_dict(state_dict)
     model.eval()
 
-    image = Image.open("/Users/nielsrogge/Documents/python_projecten/transformers/tests/fixtures/tests_samples/COCO/000000039769.png").convert("RGB")
+    image = Image.open(
+        "/Users/nielsrogge/Documents/python_projecten/transformers/tests/fixtures/tests_samples/COCO/000000039769.png"
+    ).convert("RGB")
 
-    transforms = Compose([
-        Resize(size=256, interpolation=InterpolationMode.BICUBIC),
-        CenterCrop(size=224),
-        ToTensor(),
-        Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-    ])
+    transforms = Compose(
+        [
+            Resize(size=256, interpolation=InterpolationMode.BICUBIC),
+            CenterCrop(size=224),
+            ToTensor(),
+            Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+        ]
+    )
 
     pixel_values = transforms(image).unsqueeze(0)
 
@@ -94,7 +95,10 @@ def convert_tinyvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     print("First values of logits:", logits[0, :3])
     print("Shape of logits:", logits.shape)
     print(logits.argmax(-1).item())
-    # assert torch.allclose(timm_outs, hf_outs, atol=1e-3)
+
+    expected_slice = torch.tensor([0.1848, -0.0826, -0.2939])
+    assert torch.allclose(logits[0, :3], expected_slice, atol=1e-4)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and processor to {pytorch_dump_folder_path}")

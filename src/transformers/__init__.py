@@ -532,7 +532,6 @@ _import_structure = {
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
     "models.swiftformer": ["SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwiftFormerConfig"],
     "models.swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
-    "models.tinyvit": ["TINYVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "TinyVitConfig"],
     "models.swin2sr": ["SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swin2SRConfig"],
     "models.swinv2": ["SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swinv2Config"],
     "models.switch_transformers": ["SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwitchTransformersConfig"],
@@ -545,6 +544,11 @@ _import_structure = {
     ],
     "models.timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
+    "models.tinyvit": ["TINYVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "TinyVitConfig"],
+    "models.trajectory_transformer": [
+        "TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TrajectoryTransformerConfig",
+    ],
     "models.transfo_xl": [
         "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TransfoXLConfig",
@@ -2725,14 +2729,6 @@ else:
             "SwinPreTrainedModel",
         ]
     )
-    _import_structure["models.tinyvit"].extend(
-        [
-            "TINYVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TinyVitForImageClassification",
-            "TinyVitModel",
-            "TinyVitPreTrainedModel",
-        ]
-    )
     _import_structure["models.swin2sr"].extend(
         [
             "SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2809,6 +2805,21 @@ else:
         ]
     )
     _import_structure["models.timm_backbone"].extend(["TimmBackbone"])
+    _import_structure["models.tinyvit"].extend(
+        [
+            "TINYVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TinyVitForImageClassification",
+            "TinyVitModel",
+            "TinyVitPreTrainedModel",
+        ]
+    )
+    _import_structure["models.trajectory_transformer"].extend(
+        [
+            "TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TrajectoryTransformerModel",
+            "TrajectoryTransformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.transfo_xl"].extend(
         [
             "TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4624,7 +4635,6 @@ if TYPE_CHECKING:
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.swiftformer import SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SwiftFormerConfig
     from .models.swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
-    from .models.tinyvit import TINYVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, TinyVitConfig
     from .models.swin2sr import SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP, Swin2SRConfig
     from .models.swinv2 import SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Swinv2Config
     from .models.switch_transformers import SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP, SwitchTransformersConfig
@@ -4637,6 +4647,11 @@ if TYPE_CHECKING:
     )
     from .models.timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimesformerConfig
     from .models.timm_backbone import TimmBackboneConfig
+    from .models.tinyvit import TINYVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, TinyVitConfig
+    from .models.trajectory_transformer import (
+        TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TrajectoryTransformerConfig,
+    )
     from .models.transfo_xl import (
         TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TransfoXLConfig,
@@ -6455,12 +6470,6 @@ if TYPE_CHECKING:
             SwinModel,
             SwinPreTrainedModel,
         )
-        from .models.tinyvit import (
-            TINYVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TinyVitForImageClassification,
-            TinyVitModel,
-            TinyVitPreTrainedModel,
-        )
         from .models.swin2sr import (
             SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST,
             Swin2SRForImageSuperResolution,
@@ -6521,6 +6530,17 @@ if TYPE_CHECKING:
             TimesformerPreTrainedModel,
         )
         from .models.timm_backbone import TimmBackbone
+        from .models.tinyvit import (
+            TINYVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TinyVitForImageClassification,
+            TinyVitModel,
+            TinyVitPreTrainedModel,
+        )
+        from .models.trajectory_transformer import (
+            TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TrajectoryTransformerModel,
+            TrajectoryTransformerPreTrainedModel,
+        )
         from .models.transfo_xl import (
             TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
             AdaptiveEmbedding,
