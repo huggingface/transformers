@@ -29,6 +29,7 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("RefinedWebModel", "FalconConfig"),  # TODO Matt remove once repos are updated
         ("albert", "AlbertConfig"),
         ("align", "AlignConfig"),
         ("altclip", "AltCLIPConfig"),
@@ -231,6 +232,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
+        ("RefinedWebModel", "FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP"),  # TODO Matt Remove once repos are updated
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("align", "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("altclip", "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -413,6 +415,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("RefinedWebModel", "Falcon"),  # TODO Matt remove once repos are updated
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),
@@ -649,6 +652,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("donut-swin", "donut"),
         ("maskformer-swin", "maskformer"),
         ("xclip", "x_clip"),
+        ("RefinedWebModel", "falcon"),  # TODO Matt remove once repos are updated
     ]
 )
 
