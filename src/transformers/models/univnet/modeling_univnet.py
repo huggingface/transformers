@@ -25,6 +25,14 @@ from .configuration_univnet import UnivNetGanConfig
 logger = logging.get_logger(__name__)
 
 
+_CHECKPOINT_FOR_DOC = "dg845/univnet-dev"
+
+UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "dg845/univnet-dev",
+    # See all UnivNet models at https://huggingface.co/models?filter=univnet
+]
+
+
 class UnivNetKernelPredictorResidualBlock(nn.Module):
     def __init__(
         self,
@@ -274,6 +282,7 @@ class UnivNetLVCBlock(nn.Module):
         dilations=[1, 3, 9, 27],
         leaky_relu_slope=0.2,
         cond_hop_length=256,
+        kernel_pred_net_num_blocks=3,
         kernel_pred_net_hidden_channels=64,
         kernel_pred_net_conv_size=3,
         kernel_pred_net_dropout=0.0,
@@ -297,6 +306,7 @@ class UnivNetLVCBlock(nn.Module):
             conv_out_channels=2 * in_channels,
             conv_layers=len(dilations),
             conv_kernel_size=conv_kernel_size,
+            num_blocks=kernel_pred_net_num_blocks,
             resnet_hidden_channels=kernel_pred_net_hidden_channels,
             resnet_kernel_size=kernel_pred_net_conv_size,
             dropout=kernel_pred_net_dropout,
@@ -385,6 +395,7 @@ class UnivNetGan(PreTrainedModel):
                     dilations=config.resblock_dilation_sizes[i],
                     leaky_relu_slope=config.leaky_relu_slope,
                     cond_hop_length=hop_lengths[i],
+                    kernel_pred_net_num_blocks=config.kernel_predictor_num_blocks,
                     kernel_pred_net_hidden_channels=config.kernel_predictor_hidden_channels,
                     kernel_pred_net_conv_size=config.kernel_predictor_conv_size,
                     kernel_pred_net_dropout=config.kernel_predictor_dropout,

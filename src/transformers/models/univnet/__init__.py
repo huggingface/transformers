@@ -9,6 +9,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_univnet": [
+        "UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UnivNetGanConfig",
     ]
 }
@@ -20,12 +21,14 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_univnet"] = [
+        "UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "UnivNetGan",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_univnet import (
+        UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
         UnivNetGanConfig,
     )
 
@@ -36,7 +39,8 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_univnet import (
-            UnivNetGan
+            UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UnivNetGan,
         )
 
 else:

@@ -535,6 +535,7 @@ _import_structure = {
         "UniSpeechSatConfig",
     ],
     "models.univnet": [
+        "UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UnivNetGanConfig",
     ],
     "models.upernet": ["UperNetConfig"],
@@ -2709,6 +2710,7 @@ else:
     )
     _import_structure["models.univnet"].extend(
         [
+            "UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST",
             "UnivNetGan",
         ]
     )
@@ -4413,7 +4415,7 @@ if TYPE_CHECKING:
     from .models.umt5 import UMT5Config
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
-    from .models.univnet import UnivNetGanConfig
+    from .models.univnet import UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP, UnivNetGanConfig
     from .models.upernet import UperNetConfig
     from .models.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
     from .models.videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
@@ -6223,7 +6225,7 @@ if TYPE_CHECKING:
             UniSpeechSatModel,
             UniSpeechSatPreTrainedModel,
         )
-        from .models.univnet import UnivNetGan
+        from .models.univnet import UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST, UnivNetGan
         from .models.upernet import UperNetForSemanticSegmentation, UperNetPreTrainedModel
         from .models.van import (
             VAN_PRETRAINED_MODEL_ARCHIVE_LIST,

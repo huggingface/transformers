@@ -5,8 +5,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-# TODO: Add UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP?
-# Should be a dict mapping model ids to huggingface hub config.json file
+UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "dg845/univnet-dev": "https://huggingface.co/dg845/univnet-dev/resolve/main/config.json",
+}
 
 
 class UnivNetGanConfig(PretrainedConfig):
@@ -57,6 +58,7 @@ class UnivNetGanConfig(PretrainedConfig):
         resblock_kernel_sizes=[3, 3, 3],
         resblock_stride_sizes = [8, 8, 4],
         resblock_dilation_sizes=[[1, 3, 9, 27], [1, 3, 9, 27], [1, 3, 9, 27]],
+        kernel_predictor_num_blocks=3,
         kernel_predictor_hidden_channels=64,
         kernel_predictor_conv_size=3,
         kernel_predictor_dropout=0.0,
@@ -70,6 +72,7 @@ class UnivNetGanConfig(PretrainedConfig):
         self.resblock_kernel_sizes = resblock_kernel_sizes
         self.resblock_stride_sizes = resblock_stride_sizes
         self.resblock_dilation_sizes = resblock_dilation_sizes
+        self.kernel_predictor_num_blocks = kernel_predictor_num_blocks
         self.kernel_predictor_hidden_channels = kernel_predictor_hidden_channels
         self.kernel_predictor_conv_size = kernel_predictor_conv_size
         self.kernel_predictor_dropout = kernel_predictor_dropout
