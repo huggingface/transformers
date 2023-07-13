@@ -422,7 +422,7 @@ class _BaseAutoModelClass:
             if os.path.isdir(config._name_or_path):
                 model_class.register_for_auto_class(cls.__name__)
             else:
-                cls._model_mapping.register(config.__class__, model_class, exist_ok=True)
+                cls.register(config.__class__, model_class, exist_ok=True)
             _ = kwargs.pop("code_revision", None)
             return model_class._from_config(config, **kwargs)
         elif type(config) in cls._model_mapping.keys():
@@ -484,7 +484,7 @@ class _BaseAutoModelClass:
             if os.path.isdir(pretrained_model_name_or_path):
                 model_class.register_for_auto_class(cls.__name__)
             else:
-                cls._model_mapping.register(config.__class__, model_class, exist_ok=True)
+                cls.register(config.__class__, model_class, exist_ok=True)
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )

@@ -641,6 +641,15 @@ MODEL_NAMES_MAPPING = OrderedDict(
     ]
 )
 
+DEPRECATED_MODELS = [
+    "bort",
+    "mctct",
+    "mmbt",
+    "retribert",
+    "trajectory_transformer",
+    "van",
+]
+
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
     [
         ("openai-gpt", "openai"),
@@ -660,7 +669,11 @@ def model_type_to_module_name(key):
     if key in SPECIAL_MODEL_TYPE_TO_MODULE_NAME:
         return SPECIAL_MODEL_TYPE_TO_MODULE_NAME[key]
 
-    return key.replace("-", "_")
+    key = key.replace("-", "_")
+    if key in DEPRECATED_MODELS:
+        key = f"deprecated.{key}"
+
+    return key
 
 
 def config_class_to_model_type(config):
