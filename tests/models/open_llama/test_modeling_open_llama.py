@@ -338,7 +338,7 @@ class OpenLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @parameterized.expand([("linear",), ("ntk",), ("dynamic",)])
+    @parameterized.expand([("linear",), ("dynamic",)])
     def test_model_rope_scaling(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)

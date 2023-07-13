@@ -155,19 +155,9 @@ class OpenLlamaLinearScalingRotaryEmbedding(OpenLlamaRotaryEmbedding):
         self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaNTKScalingRotaryEmbedding with Llama->OpenLlama
-class OpenLlamaNTKScalingRotaryEmbedding(OpenLlamaRotaryEmbedding):
-    """OpenLlamaRotaryEmbedding extended with NTK scaling. Credits to the Reddit user /u/bloc97"""
-
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
-        self.scaling_factor = scaling_factor
-        base = base * scaling_factor ** (dim / (dim - 2))
-        super().__init__(dim, max_position_embeddings, base, device)
-
-
 # Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->OpenLlama
 class OpenLlamaDynamicNTKScalingRotaryEmbedding(OpenLlamaRotaryEmbedding):
-    """OpenLlamaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit user /u/emozilla"""
+    """OpenLlamaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
@@ -263,10 +253,6 @@ class OpenLlamaAttention(nn.Module):
             scaling_factor = self.config.rope_scaling["factor"]
             if scaling_type == "linear":
                 self.rotary_emb = OpenLlamaLinearScalingRotaryEmbedding(
-                    self.head_dim, max_position_embeddings=self.max_position_embeddings, scaling_factor=scaling_factor
-                )
-            elif scaling_type == "ntk":
-                self.rotary_emb = OpenLlamaNTKScalingRotaryEmbedding(
                     self.head_dim, max_position_embeddings=self.max_position_embeddings, scaling_factor=scaling_factor
                 )
             elif scaling_type == "dynamic":

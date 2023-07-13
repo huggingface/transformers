@@ -135,13 +135,6 @@ class GPTNeoXAttention(nn.Module):
                     base=self.config.rotary_emb_base,
                     scaling_factor=scaling_factor,
                 )
-            elif scaling_type == "ntk":
-                self.rotary_emb = GPTNeoXNTKScalingRotaryEmbedding(
-                    self.rotary_ndims,
-                    self.config.max_position_embeddings,
-                    base=self.config.rotary_emb_base,
-                    scaling_factor=scaling_factor,
-                )
             elif scaling_type == "dynamic":
                 self.rotary_emb = GPTNeoXDynamicNTKScalingRotaryEmbedding(
                     self.rotary_ndims,
@@ -346,17 +339,8 @@ class GPTNeoXLinearScalingRotaryEmbedding(GPTNeoXRotaryEmbedding):
         self.sin_cached = emb.sin()[None, None, :, :]
 
 
-class GPTNeoXNTKScalingRotaryEmbedding(GPTNeoXRotaryEmbedding):
-    """GPTNeoXRotaryEmbedding extended with NTK scaling. Credits to the Reddit user /u/bloc97"""
-
-    def __init__(self, dim, max_position_embeddings, base=10000, device=None, scaling_factor=1.0):
-        self.scaling_factor = scaling_factor
-        base = base * scaling_factor ** (dim / (dim - 2))
-        super().__init__(dim, max_position_embeddings, base, device)
-
-
 class GPTNeoXDynamicNTKScalingRotaryEmbedding(GPTNeoXRotaryEmbedding):
-    """GPTNeoXRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit user /u/emozilla"""
+    """GPTNeoXRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
     def __init__(self, dim, max_position_embeddings, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor

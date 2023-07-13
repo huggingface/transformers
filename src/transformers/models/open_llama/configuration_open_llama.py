@@ -69,8 +69,8 @@ class OpenLlamaConfig(PretrainedConfig):
             Whether to tie weight embeddings
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports three scaling
-            strategies: linear, ntk, and dynamic. Their scaling factor must be an float greater than 1. The expected
-            format is `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
+            strategies: linear and dynamic. Their scaling factor must be an float greater than 1. The expected format
+            is `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
             `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
             these scaling strategies behave:
             https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
@@ -165,8 +165,8 @@ class OpenLlamaConfig(PretrainedConfig):
         Validate the `rope_scaling` configuration.
         """
         if self.rope_scaling is None:
-            return 
-        
+            return
+
         if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
             raise ValueError(
                 "`rope_scaling` must be a dictionary with with two fields, `name` and `factor`, "
@@ -174,9 +174,9 @@ class OpenLlamaConfig(PretrainedConfig):
             )
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)
-        if rope_scaling_type is None or rope_scaling_type not in ["linear", "ntk", "dynamic"]:
+        if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic"]:
             raise ValueError(
-                f"`rope_scaling`'s name field must be one of ['linear', 'ntk', 'dynamic'], got {rope_scaling_type}"
+                f"`rope_scaling`'s name field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
             raise ValueError(f"`rope_scaling`'s factor field must be an float > 1, got {rope_scaling_factor}")
