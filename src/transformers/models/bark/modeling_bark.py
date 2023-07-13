@@ -1429,7 +1429,6 @@ class BarkModel(BarkPreTrainedModel):
         fine_generation_config = BarkFineGenerationConfig(**self.generation_config.fine_acoustics_config)
 
         # 1. Generate from the semantic model
-
         semantic_output = self.semantic.generate_text_semantic(
             input_ids,
             history_prompt=history_prompt,
@@ -1439,7 +1438,6 @@ class BarkModel(BarkPreTrainedModel):
         )
 
         # 2. Generate from the coarse model
-
         coarse_output = self.coarse_acoustics.generate_coarse(
             semantic_output,
             history_prompt=history_prompt,
@@ -1450,7 +1448,6 @@ class BarkModel(BarkPreTrainedModel):
         )
 
         # 3. "generate" from the fine model
-
         output = self.fine_acoustics.generate_fine(
             coarse_output,
             history_prompt=history_prompt,
@@ -1462,7 +1459,6 @@ class BarkModel(BarkPreTrainedModel):
         )
 
         # 4. Decode the output and generate audio array
-
         audio = self.codec_decode(output)
 
         return audio
