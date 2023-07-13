@@ -53,7 +53,7 @@ class ConditionalDetrModelTester:
         batch_size=8,
         is_training=True,
         use_labels=True,
-        hidden_size=256,
+        hidden_size=128,
         num_hidden_layers=2,
         num_attention_heads=8,
         intermediate_size=4,
@@ -111,6 +111,16 @@ class ConditionalDetrModelTester:
         return config, pixel_values, pixel_mask, labels
 
     def get_config(self):
+        resnet_config = ResNetConfig(
+            num_channels=3,
+            embeddings_size=10,
+            hidden_sizes=[10, 20, 30, 40],
+            depths=[1, 1, 2, 1],
+            hidden_act="relu",
+            num_labels=3,
+            out_features=["stage2", "stage3", "stage4"],
+            out_indices=[2, 3, 4],
+        )
         return ConditionalDetrConfig(
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -123,6 +133,8 @@ class ConditionalDetrModelTester:
             attention_dropout=self.attention_probs_dropout_prob,
             num_queries=self.num_queries,
             num_labels=self.num_labels,
+            use_timm_backbone=False,
+            backbone_config=resnet_config,
         )
 
     def prepare_config_and_inputs_for_common(self):

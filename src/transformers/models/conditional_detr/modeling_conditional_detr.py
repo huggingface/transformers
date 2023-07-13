@@ -499,10 +499,11 @@ def build_position_encoding(config):
 
 
 # function to generate sine positional embedding for 2d coordinates
-def gen_sine_position_embeddings(pos_tensor):
+def gen_sine_position_embeddings(pos_tensor, d_model):
     scale = 2 * math.pi
-    dim_t = torch.arange(128, dtype=torch.float32, device=pos_tensor.device)
-    dim_t = 10000 ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / 128)
+    dim = d_model // 2
+    dim_t = torch.arange(dim, dtype=torch.float32, device=pos_tensor.device)
+    dim_t = 10000 ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / dim)
     x_embed = pos_tensor[:, :, 0] * scale
     y_embed = pos_tensor[:, :, 1] * scale
     pos_x = x_embed[:, :, None] / dim_t
@@ -1376,7 +1377,7 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         reference_points = reference_points_before_sigmoid.sigmoid().transpose(0, 1)
         obj_center = reference_points[..., :2].transpose(0, 1)
         # get sine embedding for the query vector
-        query_sine_embed_before_transformation = gen_sine_position_embeddings(obj_center)
+        query_sine_embed_before_transformation = gen_sine_position_embeddings(obj_center, self.config.d_model)
 
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
