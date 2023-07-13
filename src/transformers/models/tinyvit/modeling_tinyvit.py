@@ -584,11 +584,8 @@ class TinyVitEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
 
         if output_hidden_states:
-            batch_size, _, hidden_size = hidden_states.shape
-            # rearrange b (h w) c -> b c h w
-            reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size)
-            reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
-            all_hidden_states += (hidden_states,)
+            reshaped_hidden_state = hidden_states.flatten(2).transpose(1, 2)
+            all_hidden_states += (reshaped_hidden_state,)
             all_reshaped_hidden_states += (reshaped_hidden_state,)
 
         for i, stage_module in enumerate(self.stages):
@@ -812,7 +809,6 @@ class TinyVitModel(TinyVitPreTrainedModel):
     """,
     TINYVIT_START_DOCSTRING,
 )
-# Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with SWIN->TINYVIT,Swin->TinyVit,swin->tinyvit
 class TinyVitForImageClassification(TinyVitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

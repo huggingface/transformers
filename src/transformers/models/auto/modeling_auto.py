@@ -446,7 +446,6 @@ MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
         ("focalnet", "FocalNetForMaskedImageModeling"),
         ("swin", "SwinForMaskedImageModeling"),
         ("swinv2", "Swinv2ForMaskedImageModeling"),
-        ("tinyvit", "TinyVitForMaskedImageModeling"),
         ("vit", "ViTForMaskedImageModeling"),
     ]
 )

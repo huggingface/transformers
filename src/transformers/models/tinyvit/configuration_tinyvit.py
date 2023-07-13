@@ -52,8 +52,6 @@ class TinyVitConfig(PretrainedConfig):
             Ratio of MLP hidden dimensionality to embedding dimensionality.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings and encoder.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
         drop_path_rate (`float`, *optional*, defaults to 0.1):
             Stochastic depth rate.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -61,8 +59,6 @@ class TinyVitConfig(PretrainedConfig):
             `"selu"` and `"gelu_new"` are supported.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
         local_conv_size ():
             The kernel size of the depthwise convolution between attention and MLP.
 
@@ -97,11 +93,9 @@ class TinyVitConfig(PretrainedConfig):
         window_sizes=[7, 7, 14, 7],
         mlp_ratio=4.0,
         hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
         drop_path_rate=0.0,
         hidden_act="gelu",
         initializer_range=0.02,
-        layer_norm_eps=1e-5,
         local_conv_size=3,
         mbconv_expand_ratio=4.0,
         **kwargs,
@@ -117,10 +111,8 @@ class TinyVitConfig(PretrainedConfig):
         self.window_sizes = window_sizes
         self.mlp_ratio = mlp_ratio
         self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.drop_path_rate = drop_path_rate
         self.hidden_act = hidden_act
-        self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         self.local_conv_size = local_conv_size
         self.mbconv_expand_ratio = mbconv_expand_ratio
