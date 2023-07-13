@@ -142,7 +142,7 @@ class BarkSelfAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        past_kv=None,
+        past_key_values=None,
         head_mask=None,
         use_cache=False,
         output_attentions=False,
@@ -154,9 +154,9 @@ class BarkSelfAttention(nn.Module):
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
-        if past_kv is not None:
-            past_key = past_kv[0]
-            past_value = past_kv[1]
+        if past_key_values is not None:
+            past_key = past_key_values[0]
+            past_value = past_key_values[1]
             key = torch.cat((past_key, key), dim=-2)
             value = torch.cat((past_value, value), dim=-2)
 
@@ -227,7 +227,7 @@ class BarkBlock(nn.Module):
     def forward(
         self,
         hidden_states,
-        past_kv=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         use_cache=False,
@@ -237,14 +237,14 @@ class BarkBlock(nn.Module):
 
         attn_outputs = self.attn(
             intermediary_hidden_states,
-            past_kv=past_kv,
+            past_key_values=past_key_values,
             attention_mask=attention_mask,
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
 
-        attn_output = attn_outputs[0]  # output_attn: output, present_kv, (attn_weights)
+        attn_output = attn_outputs[0]  # output_attn: output, present_key_values, (attn_weights)
         outputs = attn_outputs[1:]
 
         intermediary_hidden_states = hidden_states + attn_output
@@ -602,7 +602,7 @@ class BarkCausalModel(BarkPreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
-        for i, (block, past_layer_kv) in enumerate(zip(self.layers, past_key_values)):
+        for i, (block, past_layer_key_values) in enumerate(zip(self.layers, past_key_values)):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -625,7 +625,7 @@ class BarkCausalModel(BarkPreTrainedModel):
             else:
                 outputs = block(
                     hidden_states,
-                    past_kv=past_layer_kv,
+                    past_key_values=past_layer_key_values,
                     attention_mask=attention_mask,
                     head_mask=head_mask[i],
                     use_cache=use_cache,
