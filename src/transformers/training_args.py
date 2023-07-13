@@ -376,7 +376,7 @@ class TrainingArguments:
             `["start_positions", "end_positions"]` keys.
         load_best_model_at_end (`bool`, *optional*, defaults to `False`):
             Whether or not to load the best model found during training at the end of training. When this option is
-            enabled, the best checkpoint will always be saved. See `save_total_limit` for more.
+            enabled, the best checkpoint will always be saved. See [`save_total_limit`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.save_total_limit) for more.
 
             <Tip>
 
