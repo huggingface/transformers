@@ -774,3 +774,22 @@ class ImageArrayFunctionTester(unittest.TestCase):
         self.assertTrue(np.array_equal(sliced_array, sliced_image_array))
         self.assertTrue(isinstance(sliced_image_array, ImageArray))
         self.assertTrue(isinstance(sliced_image_array, np.ndarray))
+
+    def test_image_array_item_assignment(self):
+        image = np.random.randint(0, 256, (32, 64, 3))
+        image_array = ImageArray(image)
+
+        # Single item assignment
+        image_array[0:10, 0:10] = 0
+        image[0:10, 0:10] = 0
+        self.assertIsInstance(image_array, ImageArray)
+        self.assertTrue(np.array_equal(image, image_array))
+
+        # ImageArray assignment
+        image = np.random.randint(0, 256, (32, 64, 3))
+        image_array = ImageArray(image)
+        new_channel = ImageArray(np.random.randint(0, 256, (32, 64)))
+        image_array[:, :, 0] = new_channel
+        image[:, :, 0] = new_channel
+        self.assertIsInstance(image_array, ImageArray)
+        self.assertTrue(np.array_equal(image, image_array))
