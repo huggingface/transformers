@@ -32,7 +32,7 @@ RUN echo torch=$VERSION
 # TODO: We might need to specify proper versions that work with a specific torch version (especially for past CI).
 RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA || python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
 
-RUN python3 -m pip install --no-cache-dir -U tensorflow==2.12 tensorflow_text tensorflow_probability
+RUN python3 -m pip install --no-cache-dir -U tensorflow==2.12 protobuf==3.20.3 tensorflow_text tensorflow_probability
 RUN python3 -m pip uninstall -y flax jax
 
 RUN python3 -m pip install --no-cache-dir intel_extension_for_pytorch==$INTEL_TORCH_EXT+cpu -f https://developer.intel.com/ipex-whl-stable-cpu
