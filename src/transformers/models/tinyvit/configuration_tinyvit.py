@@ -84,7 +84,7 @@ class TinyVitConfig(PretrainedConfig):
 
     attribute_map = {
         "num_attention_heads": "num_heads",
-        "num_hidden_layers": "num_layers",
+        "num_hidden_layers": "num_stages",
     }
 
     def __init__(
@@ -102,6 +102,8 @@ class TinyVitConfig(PretrainedConfig):
         hidden_act="gelu",
         initializer_range=0.02,
         layer_norm_eps=1e-5,
+        local_conv_size=3,
+        mbconv_expand_ratio=4.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -110,7 +112,7 @@ class TinyVitConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.hidden_sizes = hidden_sizes
         self.depths = depths
-        self.num_layers = len(depths)
+        self.num_stages = len(depths)
         self.num_heads = num_heads
         self.window_sizes = window_sizes
         self.mlp_ratio = mlp_ratio
@@ -120,3 +122,5 @@ class TinyVitConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
+        self.local_conv_size = local_conv_size
+        self.mbconv_expand_ratio = mbconv_expand_ratio
