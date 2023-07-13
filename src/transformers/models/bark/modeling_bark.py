@@ -1410,8 +1410,8 @@ class BarkModel(BarkPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, BarkModel
 
-        >>> processor = AutoProcessor.from_pretrained("suno/bark-small")
-        >>> model = BarkModel.from_pretrained("suno/bark-small")
+        >>> processor = AutoProcessor.from_pretrained("ylacombe/bark-small")
+        >>> model = BarkModel.from_pretrained("ylacombe/bark-small")
 
         >>> # To add a voice preset, you can pass `voice_preset` to `BarkProcessor.__call__(...)`
         >>> voice_preset = "v2/en_speaker_6"
