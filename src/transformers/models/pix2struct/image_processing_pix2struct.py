@@ -24,7 +24,6 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import convert_to_rgb, normalize, to_channel_dimension_format, to_pil_image
 from ...image_utils import (
     ChannelDimension,
-    ImageArray,
     ImageInput,
     get_image_size,
     infer_channel_dimension_format,
@@ -257,7 +256,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         _check_torch_version()
 
         # convert to torch
-        image = np.array(image)
         image = to_channel_dimension_format(image, ChannelDimension.FIRST)
         image = torch.from_numpy(image)
 
@@ -398,7 +396,8 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
 
-        images = [ImageArray(image) for image in images]
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
 
         if is_vqa:
             if header_text is None:

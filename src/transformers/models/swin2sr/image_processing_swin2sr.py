@@ -20,7 +20,7 @@ import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import get_image_size, pad, rescale, to_channel_dimension_format
-from ...image_utils import ChannelDimension, ImageArray, ImageInput, make_list_of_images, valid_images
+from ...image_utils import ChannelDimension, ImageInput, make_list_of_images, to_numpy_array, valid_images
 from ...utils import TensorType, logging
 
 
@@ -157,7 +157,8 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
-        images = [ImageArray(image) for image in images]
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
 
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor) for image in images]

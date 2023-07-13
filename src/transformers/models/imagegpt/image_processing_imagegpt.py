@@ -22,10 +22,10 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size
 from ...image_transforms import rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
-    ImageArray,
     ImageInput,
     PILImageResampling,
     make_list_of_images,
+    to_numpy_array,
     valid_images,
 )
 from ...utils import TensorType, is_vision_available, logging
@@ -215,7 +215,8 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         if do_color_quantize and clusters is None:
             raise ValueError("Clusters must be specified if do_color_quantize is True.")
 
-        images = [ImageArray(image) for image in images]
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
 
         if do_resize:
             images = [self.resize(image=image, size=size, resample=resample) for image in images]

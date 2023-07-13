@@ -559,7 +559,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """Preprocesses a single image."""
-
+        # All transformations expect numpy arrays.
         image = to_numpy_array(image)
         image = self._preprocess(
             image=image,

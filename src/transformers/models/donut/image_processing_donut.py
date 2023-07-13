@@ -31,11 +31,11 @@ from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
-    ImageArray,
     ImageInput,
     PILImageResampling,
     get_image_size,
     make_list_of_images,
+    to_numpy_array,
     valid_images,
 )
 from ...utils import TensorType, logging
@@ -409,7 +409,8 @@ class DonutImageProcessor(BaseImageProcessor):
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
-        images = [ImageArray(image) for image in images]
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
 
         if do_align_long_axis:
             images = [self.align_long_axis(image, size=size) for image in images]

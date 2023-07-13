@@ -29,10 +29,10 @@ from ...image_transforms import (
 )
 from ...image_utils import (
     ChannelDimension,
-    ImageArray,
     ImageInput,
     PILImageResampling,
     make_list_of_images,
+    to_numpy_array,
     valid_images,
 )
 from ...utils import TensorType, is_torch_available, is_torch_tensor, is_vision_available, logging
@@ -276,7 +276,8 @@ class MobileViTImageProcessor(BaseImageProcessor):
         if do_center_crop and crop_size is None:
             raise ValueError("Crop size must be specified if do_center_crop is True.")
 
-        images = [ImageArray(image) for image in images]
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
 
         if do_resize:
             images = [self.resize(image=image, size=size, resample=resample) for image in images]

@@ -31,10 +31,10 @@ from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
-    ImageArray,
     ImageInput,
     PILImageResampling,
     is_batched,
+    to_numpy_array,
     valid_images,
 )
 from ...utils import TensorType, logging
@@ -316,7 +316,8 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
-        images = [ImageArray(image) for image in images]
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
 
         if do_resize:
             images = [self.resize(image=image, size=size_dict, resample=resample) for image in images]
