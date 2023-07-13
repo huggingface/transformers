@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Auto Config class."""
 import importlib
+import os
 import re
 import warnings
 from collections import OrderedDict
@@ -984,6 +985,8 @@ class AutoConfig:
         if has_remote_code and trust_remote_code:
             class_ref = config_dict["auto_map"]["AutoConfig"]
             config_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
+            if os.path.isdir(pretrained_model_name_or_path):
+                config_class.register_for_auto_class()
             _ = kwargs.pop("code_revision", None)
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
