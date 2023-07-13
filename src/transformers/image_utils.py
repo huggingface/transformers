@@ -166,9 +166,6 @@ class ImageArray(np.lib.mixins.NDArrayOperatorsMixin):
     def __setitem__(self, key: Any, value: Any) -> None:
         self._data[key] = value
 
-    def __array__(self, dtype=None):
-        return self._data.astype(dtype)
-
     def __array_ufunc__(self, ufunc, method, *inputs: Iterable[Any], **kwargs: Mapping[str, Any]) -> Any:
         """
         Defines the behavior of ufuncs on ImageArrays.
