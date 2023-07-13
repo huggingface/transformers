@@ -164,17 +164,19 @@ class OpenLlamaConfig(PretrainedConfig):
         """
         Validate the `rope_scaling` configuration.
         """
-        if self.rope_scaling is not None:
-            if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
-                raise ValueError(
-                    "`rope_scaling` must be a dictionary with with two fields, `name` and `factor`, "
-                    f"got {self.rope_scaling}"
-                )
-            rope_scaling_type = self.rope_scaling.get("type", None)
-            rope_scaling_factor = self.rope_scaling.get("factor", None)
-            if rope_scaling_type is None or rope_scaling_type not in ["linear", "ntk", "dynamic"]:
-                raise ValueError(
-                    f"`rope_scaling`'s name field must be one of ['linear', 'ntk', 'dynamic'], got {rope_scaling_type}"
-                )
-            if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
-                raise ValueError(f"`rope_scaling`'s factor field must be an float > 1, got {rope_scaling_factor}")
+        if self.rope_scaling is None:
+            return 
+        
+        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
+            raise ValueError(
+                "`rope_scaling` must be a dictionary with with two fields, `name` and `factor`, "
+                f"got {self.rope_scaling}"
+            )
+        rope_scaling_type = self.rope_scaling.get("type", None)
+        rope_scaling_factor = self.rope_scaling.get("factor", None)
+        if rope_scaling_type is None or rope_scaling_type not in ["linear", "ntk", "dynamic"]:
+            raise ValueError(
+                f"`rope_scaling`'s name field must be one of ['linear', 'ntk', 'dynamic'], got {rope_scaling_type}"
+            )
+        if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
+            raise ValueError(f"`rope_scaling`'s factor field must be an float > 1, got {rope_scaling_factor}")
