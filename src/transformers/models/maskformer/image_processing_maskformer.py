@@ -32,8 +32,8 @@ from ...image_transforms import (
 )
 from ...image_utils import (
     ChannelDimension,
+    ImageArray,
     ImageInput,
-    ImageObject,
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
@@ -573,7 +573,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
     ) -> np.ndarray:
         """Preprocesses a single image."""
 
-        image = ImageObject(image)
+        image = ImageArray(image)
         image = self._preprocess(
             image=image,
             do_resize=do_resize,
@@ -598,7 +598,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         size_divisor: int = 0,
     ) -> np.ndarray:
         """Preprocesses a single mask."""
-        segmentation_map = ImageObject(segmentation_map)
+        segmentation_map = ImageArray(segmentation_map)
         # Add channel dimension if missing - needed for certain transformations
         added_channel_dim = False
         if segmentation_map.ndim == 2:

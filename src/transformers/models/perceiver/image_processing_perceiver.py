@@ -24,8 +24,8 @@ from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
+    ImageArray,
     ImageInput,
-    ImageObject,
     PILImageResampling,
     get_image_size,
     make_list_of_images,
@@ -306,7 +306,7 @@ class PerceiverImageProcessor(BaseImageProcessor):
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and image standard deviation must be specified if do_normalize is True.")
 
-        images = [ImageObject(image) for image in images]
+        images = [ImageArray(image) for image in images]
 
         if do_center_crop:
             images = [self.center_crop(image, crop_size, size=size) for image in images]

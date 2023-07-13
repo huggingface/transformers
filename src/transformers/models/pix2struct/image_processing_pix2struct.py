@@ -24,8 +24,8 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import convert_to_rgb, normalize, to_channel_dimension_format, to_pil_image
 from ...image_utils import (
     ChannelDimension,
+    ImageArray,
     ImageInput,
-    ImageObject,
     get_image_size,
     infer_channel_dimension_format,
     make_list_of_images,
@@ -398,7 +398,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
 
-        images = [ImageObject(image) for image in images]
+        images = [ImageArray(image) for image in images]
 
         if is_vqa:
             if header_text is None:

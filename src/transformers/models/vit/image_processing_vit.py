@@ -24,8 +24,8 @@ from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
+    ImageArray,
     ImageInput,
-    ImageObject,
     PILImageResampling,
     make_list_of_images,
     valid_images,
@@ -255,7 +255,7 @@ class ViTImageProcessor(BaseImageProcessor):
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
-        images = [ImageObject(image) for image in images]
+        images = [ImageArray(image) for image in images]
 
         if do_resize:
             images = [self.resize(image=image, size=size_dict, resample=resample) for image in images]

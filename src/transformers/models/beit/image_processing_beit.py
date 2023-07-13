@@ -25,8 +25,8 @@ from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
+    ImageArray,
     ImageInput,
-    ImageObject,
     PILImageResampling,
     make_list_of_images,
     to_numpy_array,
@@ -290,7 +290,7 @@ class BeitImageProcessor(BaseImageProcessor):
     ) -> np.ndarray:
         """Preprocesses a single image."""
 
-        image = ImageObject(image)
+        image = ImageArray(image)
         image = self._preprocess(
             image,
             do_reduce_labels=False,
@@ -321,7 +321,7 @@ class BeitImageProcessor(BaseImageProcessor):
     ):
         """Preprocesses a single segmentation map."""
 
-        segmentation_map = ImageObject(segmentation_map)
+        segmentation_map = ImageArray(segmentation_map)
         # Add an axis to the segmentation maps for transformations.
         if segmentation_map.ndim == 2:
             segmentation_map = segmentation_map[None, ...]

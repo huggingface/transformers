@@ -29,8 +29,8 @@ from ...image_transforms import (
 )
 from ...image_utils import (
     ChannelDimension,
+    ImageArray,
     ImageInput,
-    ImageObject,
     PILImageResampling,
     make_list_of_images,
     valid_images,
@@ -276,7 +276,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         if do_center_crop and crop_size is None:
             raise ValueError("Crop size must be specified if do_center_crop is True.")
 
-        images = [ImageObject(image) for image in images]
+        images = [ImageArray(image) for image in images]
 
         if do_resize:
             images = [self.resize(image=image, size=size, resample=resample) for image in images]

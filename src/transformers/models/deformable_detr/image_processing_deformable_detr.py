@@ -39,8 +39,8 @@ from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
+    ImageArray,
     ImageInput,
-    ImageObject,
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
@@ -1171,7 +1171,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
             )
 
         # All transformations expect numpy arrays
-        images = [ImageObject(image) for image in images]
+        images = [ImageArray(image) for image in images]
 
         # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
         if annotations is not None:

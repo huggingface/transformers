@@ -25,8 +25,8 @@ from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
+    ImageArray,
     ImageInput,
-    ImageObject,
     PILImageResampling,
     make_list_of_images,
     to_numpy_array,
@@ -250,7 +250,7 @@ class SegformerImageProcessor(BaseImageProcessor):
     ) -> np.ndarray:
         """Preprocesses a single image."""
 
-        image = ImageObject(image)
+        image = ImageArray(image)
         image = self._preprocess(
             image=image,
             do_reduce_labels=False,
@@ -275,7 +275,7 @@ class SegformerImageProcessor(BaseImageProcessor):
         size: Dict[str, int] = None,
     ) -> np.ndarray:
         """Preprocesses a single mask."""
-        segmentation_map = ImageObject(segmentation_map)
+        segmentation_map = ImageArray(segmentation_map)
         # Add channel dimension if missing - needed for certain transformations
         added_channel_dim = False
         if segmentation_map.ndim == 2:

@@ -23,7 +23,7 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
-    ImageObject,
+    ImageArray,
     PILImageResampling,
     get_image_size,
     make_list_of_images,
@@ -175,7 +175,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         if not valid_images(images):
             raise ValueError("Invalid image(s)")
 
-        images = [ImageObject(img) for img in images]
+        images = [ImageArray(img) for img in images]
 
         if do_resize:
             images = [self.resize(image, size_divisor=size_divisor, resample=resample) for image in images]

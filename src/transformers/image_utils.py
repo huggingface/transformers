@@ -67,32 +67,32 @@ class ChannelDimension(ExplicitEnum):
 
 def _output_wrapper(output):
     """
-    Utility function to wrap the output of a method to cast the output to an `ImageObject` if it is a NumPy array.
+    Utility function to wrap the output of a method to cast the output to an `ImageArray` if it is a NumPy array.
 
-    If the output is a method, we need to wrap it with a decorator to cast the output to an `ImageObject`.
+    If the output is a method, we need to wrap it with a decorator to cast the output to an `ImageArray`.
     """
 
     def _cast_to_image_object(result):
         """
-        Casts `result` to an `ImageObject` if it is a NumPy array.
+        Casts `result` to an `ImageArray` if it is a NumPy array.
         """
-        return ImageObject(result) if isinstance(result, np.ndarray) else result
+        return ImageArray(result) if isinstance(result, np.ndarray) else result
 
     def _method_decorator(*args, **kwargs):
         """
-        Decorate a method to cast its output to an `ImageObject` if it is a NumPy array when called.
+        Decorate a method to cast its output to an `ImageArray` if it is a NumPy array when called.
         """
         result = output(*args, **kwargs)
         return _cast_to_image_object(result)
 
-    # If the output is a method, we wrap it to cast the output to an `ImageObject` if it is a NumPy array.
+    # If the output is a method, we wrap it to cast the output to an `ImageArray` if it is a NumPy array.
     if callable(output) and not isinstance(output, type):
         return _method_decorator
 
     return _cast_to_image_object(output)
 
 
-class ImageObject(np.lib.mixins.NDArrayOperatorsMixin):
+class ImageArray(np.lib.mixins.NDArrayOperatorsMixin):
     """
     Array container for images. This class is a wrapper around `np.ndarray` that includes image specific information
     such as the channel dimension format and the number of channels.
@@ -111,6 +111,11 @@ class ImageObject(np.lib.mixins.NDArrayOperatorsMixin):
     def __init__(
         self, data: ImageInput, data_format: Optional[ChannelDimension] = None, num_channels: int = None
     ) -> None:
+        if isinstance(data, ImageArray):
+            data = data._data
+            data_format = data._data_format
+            num_channels = data._num_channels
+
         if isinstance(data, PIL.Image.Image):
             if data.mode in ("1", "L", "P", "I;16", "I", "F"):
                 data_format = ChannelDimension.NONE
@@ -166,21 +171,21 @@ class ImageObject(np.lib.mixins.NDArrayOperatorsMixin):
 
     def __array_ufunc__(self, ufunc, method, *inputs: Iterable[Any], **kwargs: Mapping[str, Any]) -> Any:
         """
-        Defines the behavior of ufuncs on ImageObjects.
+        Defines the behavior of ufuncs on ImageArrays.
 
-        This allows us to use ufuncs on ImageObjects and return an `ImageObject` instead of a `np.ndarray` when
-        possible. Ufuncs are functions that operate element-by-element on arrays. e.g. `image + 1`, `image + image`
+        This allows us to use ufuncs on ImageArrays and return an `ImageArray` instead of a `np.ndarray` when possible.
+        Ufuncs are functions that operate element-by-element on arrays. e.g. `image + 1`, `image + image`
 
         See:
         - https://numpy.org/doc/stable/reference/generated/numpy.lib.mixins.NDArrayOperatorsMixin.html
         - https://numpy.org/doc/stable/reference/ufuncs.html
         """
-        if not all(isinstance(input, (np.ndarray, ImageObject) + np.ScalarType) for input in inputs):
+        if not all(isinstance(input, (np.ndarray, ImageArray) + np.ScalarType) for input in inputs):
             return NotImplemented
 
         scalars = ()
         for input in inputs:
-            if isinstance(input, ImageObject):
+            if isinstance(input, ImageArray):
                 scalars += (input._data,)
             else:
                 scalars += (input,)
@@ -191,21 +196,21 @@ class ImageObject(np.lib.mixins.NDArrayOperatorsMixin):
         self, func: Callable[..., Any], types: Iterable[type], args: Iterable[any], kwargs: Mapping[str, Any]
     ) -> Any:
         """
-        Defines the behavior of array functions on ImageObjects.
+        Defines the behavior of array functions on ImageArrays.
 
-        This allows us to use array functions on ImageObjects, e.g. `np.sum(image)` and return an `ImageObject`
-        instead of a `np.ndarray` when possible.
+        This allows us to use array functions on ImageArrays, e.g. `np.sum(image)` and return an `ImageArray` instead
+        of a `np.ndarray` when possible.
         """
-        if not all(issubclass(_type, (np.ndarray, ImageObject) + np.ScalarType) for _type in types):
+        if not all(issubclass(_type, (np.ndarray, ImageArray) + np.ScalarType) for _type in types):
             return NotImplemented
 
-        types = tuple(_type for _type in types if not issubclass(_type, ImageObject))
-        args = tuple(arg._data if isinstance(arg, ImageObject) else arg for arg in args)
+        types = tuple(_type for _type in types if not issubclass(_type, ImageArray))
+        args = tuple(arg._data if isinstance(arg, ImageArray) else arg for arg in args)
         result = func(*args, **kwargs)
         return _output_wrapper(result)
 
     def __repr__(self) -> str:
-        return f"ImageObject({self._data}, data_format={self._data_format}, num_channels={self._num_channels}, shape={self.shape})"
+        return f"ImageArray({self._data}, data_format={self._data_format}, num_channels={self._num_channels}, shape={self.shape})"
 
 
 def is_pil_image(img):

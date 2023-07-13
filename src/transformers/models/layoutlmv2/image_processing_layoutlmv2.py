@@ -22,8 +22,8 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size
 from ...image_transforms import flip_channel_order, resize, to_channel_dimension_format, to_pil_image
 from ...image_utils import (
     ChannelDimension,
+    ImageArray,
     ImageInput,
-    ImageObject,
     PILImageResampling,
     make_list_of_images,
     valid_images,
@@ -223,7 +223,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         if do_resize and size is None:
             raise ValueError("Size must be specified if do_resize is True.")
 
-        images = [ImageObject(image) for image in images]
+        images = [ImageArray(image) for image in images]
 
         if apply_ocr:
             requires_backends(self, "pytesseract")

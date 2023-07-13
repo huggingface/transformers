@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 
 from transformers import is_tf_available, is_torch_available, is_vision_available
-from transformers.image_utils import ChannelDimension, ImageObject, get_channel_dimension_axis, make_list_of_images
+from transformers.image_utils import ChannelDimension, ImageArray, get_channel_dimension_axis, make_list_of_images
 from transformers.testing_utils import require_tf, require_torch, require_vision
 
 
@@ -618,159 +618,159 @@ class UtilFunctionTester(unittest.TestCase):
         self.assertEqual(inferred_axis, 1)
 
 
-class ImageObjectFunctionTester(unittest.TestCase):
-    def test_create_image_object_from_numpy(self):
+class ImageArrayFunctionTester(unittest.TestCase):
+    def test_create_image_array_from_numpy(self):
         image = np.random.randint(0, 256, (32, 64, 3))
-        image_object = ImageObject(image)
-        self.assertTrue(np.array_equal(image_object, image))
-        self.assertIsInstance(image_object, np.ndarray)
-        self.assertEqual(image_object.shape, (32, 64, 3))
-        self.assertEqual(image_object._height, 32)
-        self.assertEqual(image_object._width, 64)
-        self.assertEqual(image_object._num_channels, 3)
-        self.assertEqual(image_object._data_format, ChannelDimension.LAST)
+        image_array = ImageArray(image)
+        self.assertTrue(np.array_equal(image_array, image))
+        self.assertIsInstance(image_array, np.ndarray)
+        self.assertEqual(image_array.shape, (32, 64, 3))
+        self.assertEqual(image_array._height, 32)
+        self.assertEqual(image_array._width, 64)
+        self.assertEqual(image_array._num_channels, 3)
+        self.assertEqual(image_array._data_format, ChannelDimension.LAST)
 
         image = np.random.randint(0, 256, (1, 32, 64))
-        image_object = ImageObject(image)
-        self.assertTrue(np.array_equal(image_object, image))
-        self.assertIsInstance(image_object, np.ndarray)
-        self.assertEqual(image_object.shape, (1, 32, 64))
-        self.assertEqual(image_object._height, 32)
-        self.assertEqual(image_object._width, 64)
-        self.assertEqual(image_object._num_channels, 1)
-        self.assertEqual(image_object._data_format, ChannelDimension.FIRST)
+        image_array = ImageArray(image)
+        self.assertTrue(np.array_equal(image_array, image))
+        self.assertIsInstance(image_array, np.ndarray)
+        self.assertEqual(image_array.shape, (1, 32, 64))
+        self.assertEqual(image_array._height, 32)
+        self.assertEqual(image_array._width, 64)
+        self.assertEqual(image_array._num_channels, 1)
+        self.assertEqual(image_array._data_format, ChannelDimension.FIRST)
 
         image = np.random.randint(0, 256, (32, 64))
-        image_object = ImageObject(image)
-        self.assertTrue(np.array_equal(image_object, image))
-        self.assertIsInstance(image_object, np.ndarray)
-        self.assertEqual(image_object.shape, (32, 64))
-        self.assertEqual(image_object._height, 32)
-        self.assertEqual(image_object._width, 64)
-        self.assertEqual(image_object._num_channels, 0)
-        self.assertEqual(image_object._data_format, ChannelDimension.NONE)
+        image_array = ImageArray(image)
+        self.assertTrue(np.array_equal(image_array, image))
+        self.assertIsInstance(image_array, np.ndarray)
+        self.assertEqual(image_array.shape, (32, 64))
+        self.assertEqual(image_array._height, 32)
+        self.assertEqual(image_array._width, 64)
+        self.assertEqual(image_array._num_channels, 0)
+        self.assertEqual(image_array._data_format, ChannelDimension.NONE)
 
     @require_vision
-    def test_create_image_object_from_pil(self):
+    def test_create_image_array_from_pil(self):
         image = load_image("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        image_object = ImageObject(image)
-        self.assertIsInstance(image_object, np.ndarray)
-        self.assertEqual(image_object.shape, (480, 640, 3))
-        self.assertEqual(image_object._height, 480)
-        self.assertEqual(image_object._width, 640)
-        self.assertEqual(image_object._num_channels, 3)
-        self.assertEqual(image_object._data_format, ChannelDimension.LAST)
+        image_array = ImageArray(image)
+        self.assertIsInstance(image_array, np.ndarray)
+        self.assertEqual(image_array.shape, (480, 640, 3))
+        self.assertEqual(image_array._height, 480)
+        self.assertEqual(image_array._width, 640)
+        self.assertEqual(image_array._num_channels, 3)
+        self.assertEqual(image_array._data_format, ChannelDimension.LAST)
 
         image = image.convert("L")
-        image_object = ImageObject(image)
-        self.assertIsInstance(image_object, np.ndarray)
-        self.assertEqual(image_object.shape, (480, 640))
-        self.assertEqual(image_object._height, 480)
-        self.assertEqual(image_object._width, 640)
-        self.assertEqual(image_object._num_channels, 0)
-        self.assertEqual(image_object._data_format, ChannelDimension.NONE)
+        image_array = ImageArray(image)
+        self.assertIsInstance(image_array, np.ndarray)
+        self.assertEqual(image_array.shape, (480, 640))
+        self.assertEqual(image_array._height, 480)
+        self.assertEqual(image_array._width, 640)
+        self.assertEqual(image_array._num_channels, 0)
+        self.assertEqual(image_array._data_format, ChannelDimension.NONE)
 
     @require_torch
-    def test_create_image_object_from_torch(self):
+    def test_create_image_array_from_torch(self):
         image = torch.randint(0, 256, (32, 64, 3))
-        image_object = ImageObject(image)
-        self.assertTrue(np.array_equal(image_object, image))
-        self.assertIsInstance(image_object, np.ndarray)
-        self.assertEqual(image_object.shape, (32, 64, 3))
-        self.assertEqual(image_object._height, 32)
-        self.assertEqual(image_object._width, 64)
-        self.assertEqual(image_object._num_channels, 3)
-        self.assertEqual(image_object._data_format, ChannelDimension.LAST)
+        image_array = ImageArray(image)
+        self.assertTrue(np.array_equal(image_array, image))
+        self.assertIsInstance(image_array, np.ndarray)
+        self.assertEqual(image_array.shape, (32, 64, 3))
+        self.assertEqual(image_array._height, 32)
+        self.assertEqual(image_array._width, 64)
+        self.assertEqual(image_array._num_channels, 3)
+        self.assertEqual(image_array._data_format, ChannelDimension.LAST)
 
     @require_tf
-    def test_create_image_object_from_tf(self):
+    def test_create_image_array_from_tf(self):
         image = tf.random.uniform((32, 64, 3))
-        image_object = ImageObject(image)
-        self.assertTrue(np.array_equal(image_object, image))
-        self.assertIsInstance(image_object, np.ndarray)
-        self.assertEqual(image_object.shape, (32, 64, 3))
-        self.assertEqual(image_object._height, 32)
-        self.assertEqual(image_object._width, 64)
+        image_array = ImageArray(image)
+        self.assertTrue(np.array_equal(image_array, image))
+        self.assertIsInstance(image_array, np.ndarray)
+        self.assertEqual(image_array.shape, (32, 64, 3))
+        self.assertEqual(image_array._height, 32)
+        self.assertEqual(image_array._width, 64)
 
-    def test_image_object_array_operations(self):
+    def test_image_array_array_operations(self):
         image_1 = np.random.randint(0, 256, (32, 64, 3))
         image_2 = np.random.randint(0, 256, (32, 64, 3))
 
-        image_object_1 = ImageObject(image_1)
-        image_object_2 = ImageObject(image_2)
+        image_array_1 = ImageArray(image_1)
+        image_array_2 = ImageArray(image_2)
 
         # Test addition
-        image_object_3 = image_object_1 + image_object_2
-        self.assertTrue(np.array_equal(image_object_3, image_1 + image_2))
-        self.assertIsInstance(image_object_3, ImageObject)
-        self.assertIsInstance(image_object_3, np.ndarray)
+        image_array_3 = image_array_1 + image_array_2
+        self.assertTrue(np.array_equal(image_array_3, image_1 + image_2))
+        self.assertIsInstance(image_array_3, ImageArray)
+        self.assertIsInstance(image_array_3, np.ndarray)
 
         # Test multiplication
-        image_object_3 = image_object_1 * image_object_2
-        self.assertTrue(np.array_equal(image_object_3, image_1 * image_2))
-        self.assertIsInstance(image_object_3, ImageObject)
-        self.assertIsInstance(image_object_3, np.ndarray)
+        image_array_3 = image_array_1 * image_array_2
+        self.assertTrue(np.array_equal(image_array_3, image_1 * image_2))
+        self.assertIsInstance(image_array_3, ImageArray)
+        self.assertIsInstance(image_array_3, np.ndarray)
 
         # Test comparison
-        image_object_3 = image_object_1 > image_object_2
-        self.assertTrue(np.array_equal(image_object_3, image_1 > image_2))
-        self.assertIsInstance(image_object_3, ImageObject)
-        self.assertIsInstance(image_object_3, np.ndarray)
+        image_array_3 = image_array_1 > image_array_2
+        self.assertTrue(np.array_equal(image_array_3, image_1 > image_2))
+        self.assertIsInstance(image_array_3, ImageArray)
+        self.assertIsInstance(image_array_3, np.ndarray)
 
-    def test_image_object_scalar_operations(self):
+    def test_image_array_scalar_operations(self):
         image = np.random.randint(0, 256, (32, 64, 3))
-        image_object = ImageObject(image)
+        image_array = ImageArray(image)
 
         # Test addition
-        image_object_2 = image_object + 2
-        self.assertTrue(np.array_equal(image_object_2, image + 2))
-        self.assertIsInstance(image_object_2, ImageObject)
-        self.assertIsInstance(image_object_2, np.ndarray)
+        image_array_2 = image_array + 2
+        self.assertTrue(np.array_equal(image_array_2, image + 2))
+        self.assertIsInstance(image_array_2, ImageArray)
+        self.assertIsInstance(image_array_2, np.ndarray)
 
         # Test multiplication
-        image_object_2 = image_object * 2
-        self.assertTrue(np.array_equal(image_object_2, image * 2))
-        self.assertIsInstance(image_object_2, ImageObject)
-        self.assertIsInstance(image_object_2, np.ndarray)
+        image_array_2 = image_array * 2
+        self.assertTrue(np.array_equal(image_array_2, image * 2))
+        self.assertIsInstance(image_array_2, ImageArray)
+        self.assertIsInstance(image_array_2, np.ndarray)
 
         # Test comparison
-        image_object_2 = image_object > 2
-        self.assertTrue(np.array_equal(image_object_2, image > 2))
-        self.assertIsInstance(image_object_2, ImageObject)
-        self.assertIsInstance(image_object_2, np.ndarray)
+        image_array_2 = image_array > 2
+        self.assertTrue(np.array_equal(image_array_2, image > 2))
+        self.assertIsInstance(image_array_2, ImageArray)
+        self.assertIsInstance(image_array_2, np.ndarray)
 
-    def test_image_object_np_operation(self):
+    def test_image_array_np_operation(self):
         image = np.random.randint(0, 256, (32, 64, 3))
-        image_object = ImageObject(image)
+        image_array = ImageArray(image)
 
         image_mean = np.mean(image, axis=0)
-        image_object_mean = np.mean(image_object, axis=0)
-        self.assertTrue(np.array_equal(image_mean, image_object_mean))
+        image_array_mean = np.mean(image_array, axis=0)
+        self.assertTrue(np.array_equal(image_mean, image_array_mean))
 
         reshaped_image = np.reshape(image, (64, 96))
-        reshaped_image_object = np.reshape(image_object, (64, 96))
-        self.assertTrue(np.array_equal(reshaped_image, reshaped_image_object))
-        self.assertTrue(isinstance(reshaped_image_object, ImageObject))
-        self.assertTrue(isinstance(reshaped_image_object, np.ndarray))
-        self.assertEqual(reshaped_image_object._height, 64)
-        self.assertEqual(reshaped_image_object._width, 96)
-        self.assertEqual(reshaped_image_object._num_channels, 0)
+        reshaped_image_array = np.reshape(image_array, (64, 96))
+        self.assertTrue(np.array_equal(reshaped_image, reshaped_image_array))
+        self.assertTrue(isinstance(reshaped_image_array, ImageArray))
+        self.assertTrue(isinstance(reshaped_image_array, np.ndarray))
+        self.assertEqual(reshaped_image_array._height, 64)
+        self.assertEqual(reshaped_image_array._width, 96)
+        self.assertEqual(reshaped_image_array._num_channels, 0)
 
-    def test_image_object_methods(self):
+    def test_image_array_methods(self):
         image = np.random.randint(0, 256, (32, 64, 3))
-        image_object = ImageObject(image)
+        image_array = ImageArray(image)
 
-        reshaped_image_object = image_object.reshape((64, 96))
+        reshaped_image_array = image_array.reshape((64, 96))
         reshaped_image = image.reshape((64, 96))
-        self.assertTrue(np.array_equal(reshaped_image, reshaped_image_object))
-        self.assertTrue(isinstance(reshaped_image_object, ImageObject))
-        self.assertTrue(isinstance(reshaped_image_object, np.ndarray))
-        self.assertEqual(reshaped_image_object._height, 64)
-        self.assertEqual(reshaped_image_object._width, 96)
-        self.assertEqual(reshaped_image_object._num_channels, 0)
+        self.assertTrue(np.array_equal(reshaped_image, reshaped_image_array))
+        self.assertTrue(isinstance(reshaped_image_array, ImageArray))
+        self.assertTrue(isinstance(reshaped_image_array, np.ndarray))
+        self.assertEqual(reshaped_image_array._height, 64)
+        self.assertEqual(reshaped_image_array._width, 96)
+        self.assertEqual(reshaped_image_array._num_channels, 0)
 
         sliced_array = image[0:10, 0:10]
-        sliced_image_object = image_object[0:10, 0:10]
-        self.assertTrue(np.array_equal(sliced_array, sliced_image_object))
-        self.assertTrue(isinstance(sliced_image_object, ImageObject))
-        self.assertTrue(isinstance(sliced_image_object, np.ndarray))
+        sliced_image_array = image_array[0:10, 0:10]
+        self.assertTrue(np.array_equal(sliced_array, sliced_image_array))
+        self.assertTrue(isinstance(sliced_image_array, ImageArray))
+        self.assertTrue(isinstance(sliced_image_array, np.ndarray))

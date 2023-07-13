@@ -31,8 +31,8 @@ from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
+    ImageArray,
     ImageInput,
-    ImageObject,
     PILImageResampling,
     is_valid_image,
     valid_images,
@@ -258,7 +258,7 @@ class VideoMAEImageProcessor(BaseImageProcessor):
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
-        image = ImageObject(image)
+        image = ImageArray(image)
 
         if do_resize:
             image = self.resize(image=image, size=size, resample=resample)

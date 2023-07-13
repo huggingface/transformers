@@ -32,8 +32,8 @@ from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
+    ImageArray,
     ImageInput,
-    ImageObject,
     PILImageResampling,
     make_list_of_images,
     valid_images,
@@ -317,7 +317,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
             )
 
         # All transformations expect numpy arrays
-        images = [ImageObject(image) for image in images]
+        images = [ImageArray(image) for image in images]
 
         if do_resize:
             images = [self.resize(image, size=size, resample=resample) for image in images]
