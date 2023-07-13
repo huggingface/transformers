@@ -795,7 +795,7 @@ class BarkCoarseModel(BarkCausalModel):
     base_model_prefix = "coarse_acoustics"
     config_class = BarkCoarseConfig
 
-    def preprocess_histories_before_coarse(
+    def preprocess_histories(
         self,
         max_coarse_history: int,
         semantic_to_coarse_ratio: int,
