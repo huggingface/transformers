@@ -271,11 +271,7 @@ class BarkPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, BarkCausalModel) and not isinstance(self, BarkCausalModel):
-            module.apply(module._init_weights)
-        if isinstance(module, BarkFineModel) and not isinstance(self, BarkFineModel):
-            module.apply(module._init_weights)
-        elif isinstance(module, (nn.Linear,)):
+        if isinstance(module, (nn.Linear,)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -1285,13 +1281,7 @@ class BarkFineModel(BarkPreTrainedModel):
 
         # prepend history if available (max max_fine_history_length)
         if x_fine_history is not None:
-            fine_input = torch.cat(
-                [
-                    x_fine_history[:, -max_fine_history_length:, :],
-                    fine_input,
-                ],
-                dim=1,
-            )
+            fine_input = torch.cat([x_fine_history[:, -max_fine_history_length:, :], fine_input], dim=1)
 
             # len of the fine_history that has been added to fine_input
             n_history = x_fine_history[:, -max_fine_history_length:, :].shape[1]
