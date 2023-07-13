@@ -706,7 +706,7 @@ class BarkSemanticModel(BarkCausalModel):
                 Input ids, i.e tokenized input sentences. Will be truncated up to
                 semantic_generation_config.max_input_semantic_length tokens. Note that the output audios will be as
                 long as the longest generation among the batch.
-            semantic_generation_config (`BarkSemanticGenerationConfig`, *optional*):
+            semantic_generation_config (`BarkSemanticGenerationConfig`):
                 Generation config indicating how to generate the semantic tokens.
             history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
                 Optional `Bark` speaker prompt.
@@ -797,19 +797,17 @@ class BarkCoarseModel(BarkCausalModel):
 
     def preprocess_histories_before_coarse(
         self,
-        history_prompt: Dict[str, torch.Tensor],
         max_coarse_history: int,
         semantic_to_coarse_ratio: int,
         batch_size: int,
         semantic_generation_config: int,
         codebook_size: int,
+        history_prompt: Optional[Dict[str, torch.Tensor]],
     ):
         """
         Preprocess the optional `Bark` speaker prompts before `self.generate_coarse`.
 
         Args:
-            history_prompt (`Dict[str,torch.Tensor]`):
-                Optional `Bark` speaker prompt.
             max_coarse_history (`int`):
                 Maximum size of coarse tokens used.
             semantic_to_coarse_ratio (`int`):
@@ -820,9 +818,11 @@ class BarkCoarseModel(BarkCausalModel):
                 Generation config indicating how to generate the semantic tokens.
             codebook_size (`int`):
                 Codebook channel size, i.e. the size of the output vocabulary per codebook channel.
+            history_prompt (`Optional[Dict[str,torch.Tensor]]`):
+                Optional `Bark` speaker prompt.
         Returns: Returns:
             `tuple(torch.FloatTensor)`:
-            - ** x_semantic_history** (`torch.FloatTensor` -- Processed semantic speaker prompt.
+            - **x_semantic_history** (`torch.FloatTensor` -- Processed semantic speaker prompt.
             - **x_coarse_history** (`torch.FloatTensor`) -- Processed coarse speaker prompt.
         """
         if history_prompt is not None:
@@ -885,9 +885,9 @@ class BarkCoarseModel(BarkCausalModel):
         Args:
             semantic_output (`torch.Tensor` of shape (batch_size, seq_len), *optional*):
                 Input text semantic ids, i.e the output of `BarkSemanticModel.generate_text_semantic`.
-            semantic_generation_config (`BarkSemanticGenerationConfig`, *optional*):
+            semantic_generation_config (`BarkSemanticGenerationConfig`):
                 Generation config indicating how to generate the semantic tokens.
-            coarse_generation_config (`BarkCoarseGenerationConfig`, *optional*):
+            coarse_generation_config (`BarkCoarseGenerationConfig`):
                 Generation config indicating how to generate the coarse tokens.
             codebook_size (`int`, *optional*, defaults to 1024):
                 Codebook channel size, i.e. the size of the output vocabulary per codebook channel.
@@ -932,12 +932,12 @@ class BarkCoarseModel(BarkCausalModel):
         batch_size = semantic_output.shape[0]
 
         x_semantic_history, x_coarse = self.preprocess_histories_before_coarse(
-            history_prompt,
-            max_coarse_history,
-            semantic_to_coarse_ratio,
-            batch_size,
-            semantic_generation_config,
-            codebook_size,
+            history_prompt=history_prompt,
+            max_coarse_history=max_coarse_history,
+            semantic_to_coarse_ratio=semantic_to_coarse_ratio,
+            batch_size=batch_size,
+            semantic_generation_config=semantic_generation_config,
+            codebook_size=codebook_size,
         )
         base_semantic_idx = x_semantic_history.shape[1]
 
@@ -1221,13 +1221,13 @@ class BarkFineModel(BarkPreTrainedModel):
         prompt.
 
         Args:
-            coarse_output (`torch.Tensor` of shape (batch_size, seq_len), *optional*):
+            coarse_output (`torch.Tensor` of shape (batch_size, seq_len)):
                 Input coarse acoustics ids, i.e the output of `BarkCoarseModel.generate_coarse`.
-            semantic_generation_config (`BarkSemanticGenerationConfig`, *optional*):
+            semantic_generation_config (`BarkSemanticGenerationConfig`):
                 Generation config indicating how to generate the semantic tokens.
-            coarse_generation_config (`BarkCoarseGenerationConfig`, *optional*):
+            coarse_generation_config (`BarkCoarseGenerationConfig`):
                 Generation config indicating how to generate the coarse tokens.
-            fine_generation_config (`BarkFineGenerationConfig`, *optional*):
+            fine_generation_config (`BarkFineGenerationConfig`):
                 Generation config indicating how to generate the fine tokens.
             codebook_size (`int`, *optional*, defaults to 1024):
                 Codebook channel size, i.e. the size of the output vocabulary per codebook channel.
