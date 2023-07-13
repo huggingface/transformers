@@ -202,7 +202,6 @@ _import_structure = {
         "Blip2VisionConfig",
     ],
     "models.bloom": ["BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP", "BloomConfig"],
-    "models.bort": [],
     "models.bridgetower": [
         "BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BridgeTowerConfig",
@@ -263,6 +262,26 @@ _import_structure = {
     "models.decision_transformer": ["DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "DecisionTransformerConfig"],
     "models.deformable_detr": ["DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeformableDetrConfig"],
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
+    "models.deprecated": [],
+    "models.deprecated.bort": [],
+    "models.deprecated.mctct": [
+        "MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MCTCTConfig",
+        "MCTCTFeatureExtractor",
+        "MCTCTProcessor",
+    ],
+    "models.deprecated.mmbt": ["MMBTConfig"],
+    "models.deprecated.retribert": [
+        "RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "RetriBertConfig",
+        "RetriBertTokenizer",
+    ],
+    "models.deprecated.tapex": ["TapexTokenizer"],
+    "models.deprecated.trajectory_transformer": [
+        "TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TrajectoryTransformerConfig",
+    ],
+    "models.deprecated.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
     "models.deta": ["DETA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetaConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
     "models.dialogpt": [],
@@ -390,13 +409,11 @@ _import_structure = {
     "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig", "MaskFormerSwinConfig"],
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
-    "models.mctct": ["MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCTConfig", "MCTCTFeatureExtractor", "MCTCTProcessor"],
     "models.mega": ["MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegaConfig"],
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
     "models.megatron_gpt2": [],
     "models.mgp_str": ["MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP", "MgpstrConfig", "MgpstrProcessor", "MgpstrTokenizer"],
     "models.mluke": [],
-    "models.mmbt": ["MMBTConfig"],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
     "models.mobilenet_v1": ["MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV1Config"],
     "models.mobilenet_v2": ["MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV2Config"],
@@ -451,7 +468,6 @@ _import_structure = {
     "models.regnet": ["REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "RegNetConfig"],
     "models.rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
     "models.resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig"],
-    "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
     "models.roberta_prelayernorm": ["ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaPreLayerNormConfig"],
     "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig", "RoCBertTokenizer"],
@@ -498,17 +514,12 @@ _import_structure = {
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
     "models.table_transformer": ["TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TableTransformerConfig"],
     "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
-    "models.tapex": ["TapexTokenizer"],
     "models.time_series_transformer": [
         "TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TimeSeriesTransformerConfig",
     ],
     "models.timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
-    "models.trajectory_transformer": [
-        "TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "TrajectoryTransformerConfig",
-    ],
     "models.transfo_xl": [
         "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TransfoXLConfig",
@@ -536,7 +547,6 @@ _import_structure = {
         "UniSpeechSatConfig",
     ],
     "models.upernet": ["UperNetConfig"],
-    "models.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
     "models.videomae": ["VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VideoMAEConfig"],
     "models.vilt": [
         "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -783,6 +793,7 @@ else:
     _import_structure["models.cpm"].append("CpmTokenizerFast")
     _import_structure["models.deberta"].append("DebertaTokenizerFast")
     _import_structure["models.deberta_v2"].append("DebertaV2TokenizerFast")
+    _import_structure["models.deprecated.retribert"].append("RetriBertTokenizerFast")
     _import_structure["models.distilbert"].append("DistilBertTokenizerFast")
     _import_structure["models.dpr"].extend(
         ["DPRContextEncoderTokenizerFast", "DPRQuestionEncoderTokenizerFast", "DPRReaderTokenizerFast"]
@@ -815,7 +826,6 @@ else:
     _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.reformer"].append("ReformerTokenizerFast")
     _import_structure["models.rembert"].append("RemBertTokenizerFast")
-    _import_structure["models.retribert"].append("RetriBertTokenizerFast")
     _import_structure["models.roberta"].append("RobertaTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
@@ -1497,6 +1507,33 @@ else:
             "DeiTPreTrainedModel",
         ]
     )
+    _import_structure["models.deprecated.mctct"].extend(
+        [
+            "MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MCTCTForCTC",
+            "MCTCTModel",
+            "MCTCTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.deprecated.mmbt"].extend(["MMBTForClassification", "MMBTModel", "ModalEmbeddings"])
+    _import_structure["models.deprecated.retribert"].extend(
+        ["RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST", "RetriBertModel", "RetriBertPreTrainedModel"]
+    )
+    _import_structure["models.deprecated.trajectory_transformer"].extend(
+        [
+            "TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TrajectoryTransformerModel",
+            "TrajectoryTransformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.deprecated.van"].extend(
+        [
+            "VAN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VanForImageClassification",
+            "VanModel",
+            "VanPreTrainedModel",
+        ]
+    )
     _import_structure["models.deta"].extend(
         [
             "DETA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2043,14 +2080,6 @@ else:
             "MBartPreTrainedModel",
         ]
     )
-    _import_structure["models.mctct"].extend(
-        [
-            "MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MCTCTForCTC",
-            "MCTCTModel",
-            "MCTCTPreTrainedModel",
-        ]
-    )
     _import_structure["models.mega"].extend(
         [
             "MEGA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2087,7 +2116,6 @@ else:
             "MgpstrPreTrainedModel",
         ]
     )
-    _import_structure["models.mmbt"].extend(["MMBTForClassification", "MMBTModel", "ModalEmbeddings"])
     _import_structure["models.mobilebert"].extend(
         [
             "MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2419,9 +2447,6 @@ else:
             "ResNetPreTrainedModel",
         ]
     )
-    _import_structure["models.retribert"].extend(
-        ["RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST", "RetriBertModel", "RetriBertPreTrainedModel"]
-    )
     _import_structure["models.roberta"].extend(
         [
             "ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2660,13 +2685,6 @@ else:
         ]
     )
     _import_structure["models.timm_backbone"].extend(["TimmBackbone"])
-    _import_structure["models.trajectory_transformer"].extend(
-        [
-            "TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TrajectoryTransformerModel",
-            "TrajectoryTransformerPreTrainedModel",
-        ]
-    )
     _import_structure["models.transfo_xl"].extend(
         [
             "TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2725,14 +2743,6 @@ else:
         [
             "UperNetForSemanticSegmentation",
             "UperNetPreTrainedModel",
-        ]
-    )
-    _import_structure["models.van"].extend(
-        [
-            "VAN_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "VanForImageClassification",
-            "VanModel",
-            "VanPreTrainedModel",
         ]
     )
     _import_structure["models.videomae"].extend(
@@ -4187,6 +4197,24 @@ if TYPE_CHECKING:
     )
     from .models.deformable_detr import DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DeformableDetrConfig
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
+    from .models.deprecated.mctct import (
+        MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MCTCTConfig,
+        MCTCTFeatureExtractor,
+        MCTCTProcessor,
+    )
+    from .models.deprecated.mmbt import MMBTConfig
+    from .models.deprecated.retribert import (
+        RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        RetriBertConfig,
+        RetriBertTokenizer,
+    )
+    from .models.deprecated.tapex import TapexTokenizer
+    from .models.deprecated.trajectory_transformer import (
+        TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TrajectoryTransformerConfig,
+    )
+    from .models.deprecated.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
     from .models.deta import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP, DetaConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DinatConfig
@@ -4304,11 +4332,9 @@ if TYPE_CHECKING:
     from .models.mask2former import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Mask2FormerConfig
     from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskFormerSwinConfig
     from .models.mbart import MBartConfig
-    from .models.mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig, MCTCTFeatureExtractor, MCTCTProcessor
     from .models.mega import MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP, MegaConfig
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mgp_str import MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP, MgpstrConfig, MgpstrProcessor, MgpstrTokenizer
-    from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
     from .models.mobilenet_v1 import MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV1Config
     from .models.mobilenet_v2 import MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV2Config
@@ -4359,7 +4385,6 @@ if TYPE_CHECKING:
     from .models.regnet import REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP, RegNetConfig
     from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
     from .models.resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig
-    from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
     from .models.roberta_prelayernorm import (
         ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4409,17 +4434,12 @@ if TYPE_CHECKING:
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.table_transformer import TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TableTransformerConfig
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
-    from .models.tapex import TapexTokenizer
     from .models.time_series_transformer import (
         TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TimeSeriesTransformerConfig,
     )
     from .models.timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimesformerConfig
     from .models.timm_backbone import TimmBackboneConfig
-    from .models.trajectory_transformer import (
-        TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        TrajectoryTransformerConfig,
-    )
     from .models.transfo_xl import (
         TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TransfoXLConfig,
@@ -4432,7 +4452,6 @@ if TYPE_CHECKING:
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.upernet import UperNetConfig
-    from .models.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
     from .models.videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
     from .models.vilt import (
         VILT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4667,6 +4686,7 @@ if TYPE_CHECKING:
         from .models.cpm import CpmTokenizerFast
         from .models.deberta import DebertaTokenizerFast
         from .models.deberta_v2 import DebertaV2TokenizerFast
+        from .models.deprecated.retribert import RetriBertTokenizerFast
         from .models.distilbert import DistilBertTokenizerFast
         from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
         from .models.electra import ElectraTokenizerFast
@@ -4697,7 +4717,6 @@ if TYPE_CHECKING:
         from .models.realm import RealmTokenizerFast
         from .models.reformer import ReformerTokenizerFast
         from .models.rembert import RemBertTokenizerFast
-        from .models.retribert import RetriBertTokenizerFast
         from .models.roberta import RobertaTokenizerFast
         from .models.roformer import RoFormerTokenizerFast
         from .models.splinter import SplinterTokenizerFast
@@ -5262,6 +5281,29 @@ if TYPE_CHECKING:
             DeiTModel,
             DeiTPreTrainedModel,
         )
+        from .models.deprecated.mctct import (
+            MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MCTCTForCTC,
+            MCTCTModel,
+            MCTCTPreTrainedModel,
+        )
+        from .models.deprecated.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
+        from .models.deprecated.retribert import (
+            RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RetriBertModel,
+            RetriBertPreTrainedModel,
+        )
+        from .models.deprecated.trajectory_transformer import (
+            TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TrajectoryTransformerModel,
+            TrajectoryTransformerPreTrainedModel,
+        )
+        from .models.deprecated.van import (
+            VAN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VanForImageClassification,
+            VanModel,
+            VanPreTrainedModel,
+        )
         from .models.deta import (
             DETA_PRETRAINED_MODEL_ARCHIVE_LIST,
             DetaForObjectDetection,
@@ -5698,7 +5740,6 @@ if TYPE_CHECKING:
             MBartModel,
             MBartPreTrainedModel,
         )
-        from .models.mctct import MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST, MCTCTForCTC, MCTCTModel, MCTCTPreTrainedModel
         from .models.mega import (
             MEGA_PRETRAINED_MODEL_ARCHIVE_LIST,
             MegaForCausalLM,
@@ -5729,7 +5770,6 @@ if TYPE_CHECKING:
             MgpstrModel,
             MgpstrPreTrainedModel,
         )
-        from .models.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
         from .models.mobilebert import (
             MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             MobileBertForMaskedLM,
@@ -6011,7 +6051,6 @@ if TYPE_CHECKING:
             ResNetModel,
             ResNetPreTrainedModel,
         )
-        from .models.retribert import RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST, RetriBertModel, RetriBertPreTrainedModel
         from .models.roberta import (
             ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             RobertaForCausalLM,
@@ -6204,11 +6243,6 @@ if TYPE_CHECKING:
             TimesformerPreTrainedModel,
         )
         from .models.timm_backbone import TimmBackbone
-        from .models.trajectory_transformer import (
-            TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TrajectoryTransformerModel,
-            TrajectoryTransformerPreTrainedModel,
-        )
         from .models.transfo_xl import (
             TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
             AdaptiveEmbedding,
@@ -6252,12 +6286,6 @@ if TYPE_CHECKING:
             UniSpeechSatPreTrainedModel,
         )
         from .models.upernet import UperNetForSemanticSegmentation, UperNetPreTrainedModel
-        from .models.van import (
-            VAN_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VanForImageClassification,
-            VanModel,
-            VanPreTrainedModel,
-        )
         from .models.videomae import (
             VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
             VideoMAEForPreTraining,
