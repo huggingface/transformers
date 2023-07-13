@@ -52,7 +52,6 @@ class UnivNetGanConfig(PretrainedConfig):
     def __init__(
         self,
         model_in_dim=64,
-        sampling_rate=24000,
         channel_size=32,
         num_mel_channels=100,
         resblock_kernel_sizes=[3, 3, 3],
@@ -66,14 +65,13 @@ class UnivNetGanConfig(PretrainedConfig):
         **kwargs,
     ):
         self.model_in_dim = model_in_dim
-        self.sampling_rate = sampling_rate
         self.channel_size = channel_size
         self.num_mel_channels = num_mel_channels
         self.resblock_kernel_sizes = resblock_kernel_sizes
         self.resblock_stride_sizes = resblock_stride_sizes
         self.resblock_dilation_sizes = resblock_dilation_sizes
         self.kernel_predictor_hidden_channels = kernel_predictor_hidden_channels
-        self.kernel_predictor_conv_size = kernel_predictor_conv_size,
+        self.kernel_predictor_conv_size = kernel_predictor_conv_size
         self.kernel_predictor_dropout = kernel_predictor_dropout
         self.initializer_range = initializer_range
         self.leaky_relu_slope = leaky_relu_slope

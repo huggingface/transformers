@@ -117,7 +117,7 @@ class UnivNetKernelPredictor(nn.Module):
                     dropout=dropout,
                     leaky_relu_slope=leaky_relu_slope
                 )
-                for _ in range(len(num_blocks))
+                for _ in range(num_blocks)
             ]
         )
 

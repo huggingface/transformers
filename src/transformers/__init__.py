@@ -536,7 +536,7 @@ _import_structure = {
     ],
     "models.univnet": [
         "UnivNetGanConfig",
-    ]
+    ],
     "models.upernet": ["UperNetConfig"],
     "models.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
     "models.videomae": ["VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VideoMAEConfig"],
