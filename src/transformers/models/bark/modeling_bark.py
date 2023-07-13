@@ -1428,13 +1428,36 @@ class BarkModel(BarkPreTrainedModel):
         coarse_generation_config = BarkCoarseGenerationConfig(**self.generation_config.coarse_acoustics_config)
         fine_generation_config = BarkFineGenerationConfig(**self.generation_config.fine_acoustics_config)
 
+        kwargs_semantic = {
+            argument[len("semantic_") :]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("semantic_")
+        }
+
+        kwargs_coarse = {
+            argument[len("coarse_") :]: value for argument, value in kwargs.items() if argument.startswith("coarse_")
+        }
+
+        kwargs_fine = {
+            argument[len("fine_") :]: value for argument, value in kwargs.items() if argument.startswith("fine_")
+        }
+
+        # remove semantic, coarse and fine kwargs from kwargs
+        for key in kwargs_semantic.keys():
+            del kwargs["semantic_" + key]
+        for key in kwargs_coarse.keys():
+            del kwargs["coarse_" + key]
+        for key in kwargs_fine.keys():
+            del kwargs["fine_" + key]
+
         # 1. Generate from the semantic model
         semantic_output = self.semantic.generate(
             input_ids,
             history_prompt=history_prompt,
             attention_mask=kwargs.pop("attention_mask", None),
             semantic_generation_config=semantic_generation_config,
-            **kwargs,
+            **kwargs_semantic,
+            **{k: kwargs[k] for k in kwargs if k not in kwargs_semantic},
         )
 
         # 2. Generate from the coarse model
@@ -1444,7 +1467,8 @@ class BarkModel(BarkPreTrainedModel):
             semantic_generation_config=semantic_generation_config,
             coarse_generation_config=coarse_generation_config,
             codebook_size=self.generation_config.codebook_size,
-            **kwargs,
+            **kwargs_coarse,
+            **{k: kwargs[k] for k in kwargs if k not in kwargs_coarse},
         )
 
         # 3. "generate" from the fine model
@@ -1455,7 +1479,8 @@ class BarkModel(BarkPreTrainedModel):
             coarse_generation_config=coarse_generation_config,
             fine_generation_config=fine_generation_config,
             codebook_size=self.generation_config.codebook_size,
-            **kwargs,
+            **kwargs_fine,
+            **{k: kwargs[k] for k in kwargs if k not in kwargs_fine},
         )
 
         # 4. Decode the output and generate audio array
