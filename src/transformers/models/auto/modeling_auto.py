@@ -188,6 +188,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("umt5", "UMT5Model"),
         ("unispeech", "UniSpeechModel"),
         ("unispeech-sat", "UniSpeechSatModel"),
+        ("univnet", "UnivNetGan"),
         ("van", "VanModel"),
         ("videomae", "VideoMAEModel"),
         ("vilt", "ViltModel"),

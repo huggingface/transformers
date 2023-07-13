@@ -48,7 +48,7 @@ class UnivNetGanConfig(PretrainedConfig):
         normalize_before (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the spectrogram before vocoding using the vocoder's learned mean and variance.
     """
-    model_type = "univnetgan"
+    model_type = "univnet"
 
     def __init__(
         self,
