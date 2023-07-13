@@ -103,7 +103,7 @@ t0pp.hf_device_map
  'lm_head': 'cpu'}
 ```
 
-You can also write your own device map following the same format (a dictionary layer name to device). It should map all parameters of the model to a given device, but you don't have to detail where all the submosules of one layer go if that layer is entirely on the same device. For instance, the following device map would work properly for T0pp (as long as you have the GPU memory):
+You can also write your own device map following the same format (a dictionary layer name to device). It should map all parameters of the model to a given device, but you don't have to detail where all the submodules of one layer go if that layer is entirely on the same device. For instance, the following device map would work properly for T0pp (as long as you have the GPU memory):
 
 ```python
 device_map = {"shared": 0, "encoder": 0, "decoder": 1, "lm_head": 1}
