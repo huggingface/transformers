@@ -730,12 +730,10 @@ class BarkSemanticModel(BarkCausalModel):
         input_ids = input_ids + semantic_generation_config.text_encoding_offset
 
         if attention_mask is not None:
-            input_ids.masked_fill_((1 - attention_mask).bool(), semantic_generation_config.text_pad_token)
+            input_ids = input_ids.masked_fill((1 - attention_mask).bool(), semantic_generation_config.text_pad_token)
 
         if history_prompt is not None:
-            semantic_history = history_prompt["semantic_prompt"][
-                -semantic_generation_config.max_input_semantic_length :
-            ]
+            semantic_history = history_prompt["semantic_prompt"][-max_input_semantic_length:]
             semantic_history = nn.functional.pad(
                 semantic_history,
                 (0, max_input_semantic_length - len(semantic_history)),
