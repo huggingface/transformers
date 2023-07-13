@@ -1470,8 +1470,8 @@ class TFBeitForSemanticSegmentation(TFBeitPreTrainedModel):
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
-        >>> model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
+        >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k", from_pt=True)
+        >>> model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k", from_pt=True)
         >>> inputs = image_processor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs)
         >>> # logits are of shape (batch_size, num_labels, height, width)
