@@ -1,9 +1,17 @@
 from ...configuration_utils import PretrainedConfig
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
+
+
+# TODO: Add UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP?
+# Should be a dict mapping model ids to huggingface hub config.json file
 
 
 class UnivNetGanConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`UnivNetGanConfig`]. It is used to instantiate
+    This is the configuration class to store the configuration of a [`UnivNetGan`]. It is used to instantiate
     a UnivNet vocoder model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the UnivNet
     [microsoft/speecht5_hifigan](https://huggingface.co/microsoft/speecht5_hifigan) architecture.

@@ -367,8 +367,6 @@ class UnivNetGan(PreTrainedModel):
             padding_mode="reflect",
         )
 
-        # TODO: no upsampler in UnivNet GAN?
-
         # Initialize location-variable convolution ResNet Blocks.
         num_layers = len(config.resblock_stride_sizes)
         hop_length = 1
