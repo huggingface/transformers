@@ -283,7 +283,11 @@ class TrainingArguments:
             float in range `[0,1)`. If smaller than 1, will be interpreted as ratio of total training steps.
         save_total_limit (`int`, *optional*):
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
-            `output_dir`.
+            `output_dir`. When `load_best_model_at_end` is enabled, the "best" checkpoint according to
+            `metric_for_best_model` will always be retained in addition to the most recent ones. For example, for
+            `save_total_limit=5` and `load_best_model_at_end`, the four last checkpoints will always be retained
+            alongside the best model. When `save_total_limit=1` and `load_best_model_at_end`, it is possible that two
+            checkpoints are saved: the last one and the best one (if they are different).
         save_safetensors (`bool`, *optional*, defaults to `False`):
             Use [safetensors](https://huggingface.co/docs/safetensors) saving and loading for state dicts instead of
             default `torch.load` and `torch.save`.
@@ -371,7 +375,10 @@ class TrainingArguments:
             except if the model used is one of the `XxxForQuestionAnswering` in which case it will also include the
             `["start_positions", "end_positions"]` keys.
         load_best_model_at_end (`bool`, *optional*, defaults to `False`):
-            Whether or not to load the best model found during training at the end of training.
+            Whether or not to load the best model found during training at the end of training. When this option is
+            enabled, the best checkpoint will always be saved. See
+            [`save_total_limit`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.save_total_limit)
+            for more.
 
             <Tip>
 
@@ -761,8 +768,13 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Limit the total amount of checkpoints. "
-                "Deletes the older checkpoints in the output_dir. Default is unlimited checkpoints"
+                "If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in"
+                " `output_dir`. When `load_best_model_at_end` is enabled, the 'best' checkpoint according to"
+                " `metric_for_best_model` will always be retained in addition to the most recent ones. For example,"
+                " for `save_total_limit=5` and `load_best_model_at_end=True`, the four last checkpoints will always be"
+                " retained alongside the best model. When `save_total_limit=1` and `load_best_model_at_end=True`,"
+                " it is possible that two checkpoints are saved: the last one and the best one (if they are different)."
+                " Default is unlimited checkpoints"
             )
         },
     )
@@ -924,10 +936,14 @@ class TrainingArguments:
     label_names: Optional[List[str]] = field(
         default=None, metadata={"help": "The list of keys in your dictionary of inputs that correspond to the labels."}
     )
-
     load_best_model_at_end: Optional[bool] = field(
         default=False,
-        metadata={"help": "Whether or not to load the best model found during training at the end of training."},
+        metadata={
+            "help": (
+                "Whether or not to load the best model found during training at the end of training. When this option"
+                " is enabled, the best checkpoint will always be saved. See `save_total_limit` for more."
+            )
+        },
     )
     metric_for_best_model: Optional[str] = field(
         default=None, metadata={"help": "The metric to use to compare two different models."}
