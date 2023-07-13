@@ -354,7 +354,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         # TODO: (amy) add support for other frameworks
         warnings.warn(
             "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_object_detection`",
+            " `post_process_object_detection` instead, with `threshold=0.` for equivalent results.",
             FutureWarning,
         )
 

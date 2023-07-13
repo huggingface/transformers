@@ -30,9 +30,9 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: pip install --upgrade pip
-            - run: pip install -U GitPython
-            - run: pip install -U .
+            - run: pip install --upgrade --upgrade-strategy eager pip
+            - run: pip install -U --upgrade-strategy eager GitPython
+            - run: pip install -U --upgrade-strategy eager .
             - run: mkdir -p test_preparation
             - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
             - store_artifacts:
@@ -104,9 +104,9 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: pip install --upgrade pip
-            - run: pip install -U GitPython
-            - run: pip install -U .
+            - run: pip install --upgrade --upgrade-strategy eager pip
+            - run: pip install -U --upgrade-strategy eager GitPython
+            - run: pip install -U --upgrade-strategy eager .
             - run: |
                   mkdir test_preparation
                   echo -n "tests" > test_preparation/test_list.txt
@@ -136,20 +136,20 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.6-code_quality-{{ checksum "setup.py" }}
-                      - v0.6-code-quality
+                      - v0.7-code_quality-{{ checksum "setup.py" }}
+                      - v0.7-code-quality
             - restore_cache:
                   keys:
-                      - v0.6-code_quality-{{ checksum "setup.py" }}-site-packages
-                      - v0.6-code-quality-site-packages
-            - run: pip install --upgrade pip
-            - run: pip install -U .[all,quality]
+                      - v0.7-code_quality-{{ checksum "setup.py" }}-site-packages
+                      - v0.7-code-quality-site-packages
+            - run: pip install --upgrade --upgrade-strategy eager pip
+            - run: pip install -U --upgrade-strategy eager .[all,quality]
             - save_cache:
-                  key: v0.6-code_quality-{{ checksum "setup.py" }}
+                  key: v0.7-code_quality-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - save_cache:
-                  key: v0.6-code_quality-{{ checksum "setup.py" }}-site-packages
+                  key: v0.7-code_quality-{{ checksum "setup.py" }}-site-packages
                   paths:
                       - '~/.pyenv/versions/'
             - run:
@@ -177,20 +177,20 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.6-repository_consistency-{{ checksum "setup.py" }}
-                      - v0.6-repository_consistency
+                      - v0.7-repository_consistency-{{ checksum "setup.py" }}
+                      - v0.7-repository_consistency
             - restore_cache:
                   keys:
-                      - v0.6-repository_consistency-{{ checksum "setup.py" }}-site-packages
-                      - v0.6-repository_consistency-site-packages
-            - run: pip install --upgrade pip
-            - run: pip install -U .[all,quality]
+                      - v0.7-repository_consistency-{{ checksum "setup.py" }}-site-packages
+                      - v0.7-repository_consistency-site-packages
+            - run: pip install --upgrade --upgrade-strategy eager pip
+            - run: pip install -U --upgrade-strategy eager .[all,quality]
             - save_cache:
-                  key: v0.6-repository_consistency-{{ checksum "setup.py" }}
+                  key: v0.7-repository_consistency-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - save_cache:
-                  key: v0.6-repository_consistency-{{ checksum "setup.py" }}-site-packages
+                  key: v0.7-repository_consistency-{{ checksum "setup.py" }}-site-packages
                   paths:
                       - '~/.pyenv/versions/'
             - run:
