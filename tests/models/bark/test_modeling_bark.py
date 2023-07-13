@@ -753,10 +753,6 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
 
         original_config.tie_word_embeddings = False
 
-        # if model cannot untied embeddings -> leave test
-        if original_config.tie_word_embeddings:
-            return
-
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
