@@ -802,7 +802,7 @@ class BarkCoarseModel(BarkCausalModel):
         batch_size: int,
         semantic_generation_config: int,
         codebook_size: int,
-        history_prompt: Optional[Dict[str, torch.Tensor]],
+        history_prompt: Optional[Dict[str, torch.Tensor]] = None,
     ):
         """
         Preprocess the optional `Bark` speaker prompts before `self.generate_coarse`.
