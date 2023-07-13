@@ -931,7 +931,7 @@ class BarkCoarseModel(BarkCausalModel):
 
         batch_size = semantic_output.shape[0]
 
-        x_semantic_history, x_coarse = self.preprocess_histories_before_coarse(
+        x_semantic_history, x_coarse = self.preprocess_histories(
             history_prompt=history_prompt,
             max_coarse_history=max_coarse_history,
             semantic_to_coarse_ratio=semantic_to_coarse_ratio,
