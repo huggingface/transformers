@@ -209,6 +209,12 @@ class ImageArray(np.lib.mixins.NDArrayOperatorsMixin):
         result = func(*args, **kwargs)
         return _output_wrapper(result)
 
+    def numpy(self):
+        """
+        Returns the image as a NumPy array.
+        """
+        return self._data
+
     def __repr__(self) -> str:
         return f"ImageArray({self._data}, data_format={self._data_format}, num_channels={self._num_channels}, shape={self.shape})"
 
