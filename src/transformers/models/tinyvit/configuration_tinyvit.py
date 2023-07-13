@@ -65,6 +65,8 @@ class TinyVitConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        local_conv_size ():
+            The kernel size of the depthwise convolution between attention and MLP.
 
     Example:
 
@@ -98,7 +100,7 @@ class TinyVitConfig(PretrainedConfig):
         mlp_ratio=4.0,
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
-        drop_path_rate=0.1,
+        drop_path_rate=0.0,
         hidden_act="gelu",
         initializer_range=0.02,
         layer_norm_eps=1e-5,
