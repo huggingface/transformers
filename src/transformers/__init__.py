@@ -532,6 +532,7 @@ _import_structure = {
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
     "models.swiftformer": ["SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwiftFormerConfig"],
     "models.swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
+    "models.tinyvit": ["TINYVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "TinyVitConfig"],
     "models.swin2sr": ["SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swin2SRConfig"],
     "models.swinv2": ["SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swinv2Config"],
     "models.switch_transformers": ["SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwitchTransformersConfig"],
@@ -2724,6 +2725,14 @@ else:
             "SwinPreTrainedModel",
         ]
     )
+    _import_structure["models.tinyvit"].extend(
+        [
+            "TINYVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TinyVitForImageClassification",
+            "TinyVitModel",
+            "TinyVitPreTrainedModel",
+        ]
+    )
     _import_structure["models.swin2sr"].extend(
         [
             "SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4615,6 +4624,7 @@ if TYPE_CHECKING:
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.swiftformer import SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SwiftFormerConfig
     from .models.swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
+    from .models.tinyvit import TINYVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, TinyVitConfig
     from .models.swin2sr import SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP, Swin2SRConfig
     from .models.swinv2 import SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Swinv2Config
     from .models.switch_transformers import SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP, SwitchTransformersConfig
@@ -6444,6 +6454,12 @@ if TYPE_CHECKING:
             SwinForMaskedImageModeling,
             SwinModel,
             SwinPreTrainedModel,
+        )
+        from .models.tinyvit import (
+            TINYVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TinyVitForImageClassification,
+            TinyVitModel,
+            TinyVitPreTrainedModel,
         )
         from .models.swin2sr import (
             SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST,

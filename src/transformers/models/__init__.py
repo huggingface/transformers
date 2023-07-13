@@ -185,6 +185,7 @@ from . import (
     squeezebert,
     swiftformer,
     swin,
+    tinyvit,
     swin2sr,
     swinv2,
     switch_transformers,
