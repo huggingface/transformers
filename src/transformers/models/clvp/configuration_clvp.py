@@ -112,6 +112,7 @@ class CLVPTextConfig(PretrainedConfig):
         use_post_branch_norm=False,
         use_post_main_norm=False,
         norm_type="rms_norm",
+        use_rotary_embedding=True,
 
         initializer_range=0.02,
         initializer_factor=1.0,
@@ -141,6 +142,7 @@ class CLVPTextConfig(PretrainedConfig):
         self.use_post_branch_norm = use_post_branch_norm
         self.use_post_main_norm = use_post_main_norm
         self.norm_type = norm_type
+        self.use_rotary_embedding = use_rotary_embedding
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -236,6 +238,7 @@ class CLVPVisionConfig(PretrainedConfig):
         use_post_branch_norm=False,
         use_post_main_norm=False,
         norm_type="rms_norm",
+        use_rotary_embedding=True,
 
         initializer_range=0.02,
         initializer_factor=1.0,
@@ -263,6 +266,7 @@ class CLVPVisionConfig(PretrainedConfig):
         self.use_post_branch_norm = use_post_branch_norm
         self.use_post_main_norm = use_post_main_norm
         self.norm_type = norm_type
+        self.use_rotary_embedding = use_rotary_embedding
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":

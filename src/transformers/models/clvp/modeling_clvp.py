@@ -240,6 +240,16 @@ class CLVPTextEmbeddings(nn.Module):
 
         return embeddings
 
+def rotate_half(x):
+    x_shape = x.size()
+    x = x.view([*x_shape[:-1]]+[2, x_shape[-1]//2])
+    x1, x2 = x.unbind(dim=-2)
+    return torch.cat((-x2, x1), dim=-1)
+
+def apply_rotary_pos_emb(t, freqs):
+    seq_len = t.shape[-2]
+    freqs = freqs[:, -seq_len:]
+    return (t * freqs.cos()) + (rotate_half(t) * freqs.sin())
 
 # Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->CLVP
 class CLVPAttention(nn.Module):
@@ -270,6 +280,7 @@ class CLVPAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        rotary_pos_emb: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
@@ -287,6 +298,18 @@ class CLVPAttention(nn.Module):
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
+
+        if rotary_pos_emb is not None:
+            l = rotary_pos_emb.shape[-1]
+            (query_states_l, query_states_r), (key_states_l, key_states_r), (value_states_l, value_states_r) = \
+                map(lambda t: (t[..., :l], t[..., l:]), (query_states, key_states, value_states))
+            query_states_l, key_states_l, value_states_l = \
+                map(lambda t: apply_rotary_pos_emb(t, rotary_pos_emb), (query_states_l, key_states_l, value_states_l))
+            query_states, key_states, value_states = \
+                map(lambda t: torch.cat(t, dim=-1), ((query_states_l, query_states_r), (key_states_l, key_states_r),
+                                                     (value_states_l, value_states_r)
+                                                     )
+                    )
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
@@ -433,6 +456,19 @@ class CLVPMLP(nn.Module):
         hidden_states = self.fc2(hidden_states)
         return hidden_states
 
+class CLVPRotaryEmbedding(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        dim = max(config.projection_dim // (config.num_attention_heads * 2), 32)
+        inv_freq = 1. / (10000 ** (torch.arange(0, dim, 2).float() / dim))
+        self.register_buffer('inv_freq', inv_freq)
+
+    def forward(self, max_seq_len):
+        t = torch.arange(max_seq_len).type_as(self.inv_freq)
+        freqs = torch.einsum('i , j -> i j', t, self.inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        return emb[None, ...]
+
 # Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->CLVP
 class CLVPEncoderLayer(nn.Module):
     def __init__(self, config: CLVPConfig):
@@ -455,6 +491,7 @@ class CLVPEncoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        rotary_pos_emb: torch.Tensor,
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
@@ -475,6 +512,7 @@ class CLVPEncoderLayer(nn.Module):
             hidden_states = self.pre_branch_norm1(hidden_states)
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
+            rotary_pos_emb=rotary_pos_emb,
             attention_mask=attention_mask,
             causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
@@ -687,6 +725,7 @@ class CLVPEncoder(nn.Module):
     def __init__(self, config: CLVPConfig):
         super().__init__()
         self.config = config
+        self.rotary_pos_emb = CLVPRotaryEmbedding(config) if config.use_rotary_embedding else None
         self.layers = nn.ModuleList([CLVPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
@@ -737,6 +776,8 @@ class CLVPEncoder(nn.Module):
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
+        rotary_pos_emb = self.rotary_pos_emb(inputs_embeds.shape[1]) if self.rotary_pos_emb is not None else None
+
         hidden_states = inputs_embeds
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -752,12 +793,14 @@ class CLVPEncoder(nn.Module):
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(encoder_layer),
                     hidden_states,
+                    rotary_pos_emb,
                     attention_mask,
                     causal_attention_mask,
                 )
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
+                    rotary_pos_emb,
                     attention_mask,
                     causal_attention_mask,
                     output_attentions=output_attentions,
