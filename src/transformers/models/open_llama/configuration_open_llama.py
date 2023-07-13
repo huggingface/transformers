@@ -136,21 +136,6 @@ class OpenLlamaConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self._rope_scaling_validation()
 
-        # RoPE scaling validation
-        if self.rope_scaling is not None:
-            if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
-                raise ValueError(
-                    f"`rope_scaling` must be a dictionary with with two fields, `name` and `factor`, got {self.rope_scaling}"
-                )
-            rope_scaling_name = self.rope_scaling.get("name", None)
-            rope_scaling_factor = self.rope_scaling.get("factor", None)
-            if rope_scaling_name is None or rope_scaling_name not in ["linear", "ntk", "dynamic"]:
-                raise ValueError(
-                    f"`rope_scaling`'s name field must be one of ['linear', 'ntk', 'dynamic'], got {rope_scaling_name}"
-                )
-            if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
-                raise ValueError(f"`rope_scaling`'s factor field must be an float > 1, got {rope_scaling_factor}")
-
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
