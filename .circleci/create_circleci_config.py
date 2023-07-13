@@ -32,7 +32,7 @@ COMMON_ENV_VARIABLES = {
     "RUN_PT_TF_CROSS_TESTS": False,
     "RUN_PT_FLAX_CROSS_TESTS": False,
 }
-COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "s": None}
+COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "s": None, "durations": 0}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
 
@@ -248,7 +248,7 @@ torch_and_tf_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     marker="is_pt_tf_cross_test",
-    pytest_options={"rA": None, "durations": 0},
+    pytest_options={"rA": None},
 )
 
 
@@ -262,7 +262,7 @@ torch_and_flax_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     marker="is_pt_flax_cross_test",
-    pytest_options={"rA": None, "durations": 0},
+    pytest_options={"rA": None},
 )
 
 
@@ -443,7 +443,6 @@ exotic_models_job = CircleCIJob(
         "tests/models/deta",
     ],
     pytest_num_workers=1,
-    pytest_options={"durations": 100},
 )
 
 
