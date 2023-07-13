@@ -32,7 +32,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_clvp import CLVPConfig, CLVPTextConfig, CLVPVisionConfig
+from .configuration_clvp import CLVPConfig, CLVPTextConfig, CLVPSpeechConfig
 
 
 logger = logging.get_logger(__name__)
@@ -75,10 +75,10 @@ def clvp_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->CLVP
-class CLVPVisionModelOutput(ModelOutput):
+# Copied from transformers.models.clip.modeling_clip.CLIPSpeechModelOutput with CLIP->CLVP
+class CLVPSpeechModelOutput(ModelOutput):
     """
-    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
+    Base class for speech model's outputs that also contains image embeddings of the pooling of the last hidden states.
 
     Args:
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
@@ -150,11 +150,11 @@ class CLVPOutput(ModelOutput):
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`CLVPTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`CLVPVisionModel`].
+            The image embeddings obtained by applying the projection layer to the pooled output of [`CLVPSpeechModel`].
         text_model_output(`BaseModelOutputWithPooling`):
             The output of the [`CLVPTextModel`].
-        vision_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`CLVPVisionModel`].
+        speech_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`CLVPSpeechModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -163,18 +163,18 @@ class CLVPOutput(ModelOutput):
     text_embeds: torch.FloatTensor = None
     image_embeds: torch.FloatTensor = None
     text_model_output: BaseModelOutputWithPooling = None
-    vision_model_output: BaseModelOutputWithPooling = None
+    speech_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> Tuple[Any]:
         return tuple(
-            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
+            self[k] if k not in ["text_model_output", "speech_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
         )
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->CLVP
-class CLVPVisionEmbeddings(nn.Module):
-    def __init__(self, config: CLVPVisionConfig):
+# Copied from transformers.models.clip.modeling_clip.CLIPSpeechEmbeddings with CLIP->CLVP
+class CLVPSpeechEmbeddings(nn.Module):
+    def __init__(self, config: CLVPSpeechConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -547,8 +547,8 @@ class CLVPPreTrainedModel(PreTrainedModel):
         factor = self.config.initializer_factor
         if isinstance(module, CLVPTextEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        elif isinstance(module, CLVPVisionEmbeddings):
+            # module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
+        elif isinstance(module, CLVPSpeechEmbeddings):
             factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
@@ -567,7 +567,10 @@ class CLVPPreTrainedModel(PreTrainedModel):
                 (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             )
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            nn.init.normal_(module.fc1.weight, std=fc_std)
+            try:
+                nn.init.normal_(module.fc1.proj.weight, std=fc_std)
+            except:
+                nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
         elif isinstance(module, CLVPModel):
             nn.init.normal_(
@@ -575,12 +578,12 @@ class CLVPPreTrainedModel(PreTrainedModel):
                 std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
             )
             nn.init.normal_(
-                module.visual_projection.weight,
-                std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
+                module.speech_projection.weight,
+                std=module.speech_embed_dim**-0.5 * self.config.initializer_factor,
             )
-        elif isinstance(module, CLVPVisionModelWithProjection):
+        elif isinstance(module, CLVPSpeechModelWithProjection):
             nn.init.normal_(
-                module.visual_projection.weight,
+                module.speech_projection.weight,
                 std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
             )
         elif isinstance(module, CLVPTextModelWithProjection):
@@ -1073,19 +1076,19 @@ class CLVPTextModel(CLVPPreTrainedModel):
         )
 
 
-class CLVPVisionTransformer(nn.Module):
-    def __init__(self, config: CLVPVisionConfig):
+class CLVPSpeechTransformer(nn.Module):
+    def __init__(self, config: CLVPSpeechConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
 
-        self.embeddings = CLVPVisionEmbeddings(config)
+        self.embeddings = CLVPSpeechEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = CLVPEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(CLVP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLVPVisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLVPSpeechConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1132,24 +1135,24 @@ class CLVPVisionTransformer(nn.Module):
 
 
 @add_start_docstrings(
-    """The vision model from CLVP without any head or projection on top.""",
+    """The speech model from CLVP without any head or projection on top.""",
     CLVP_START_DOCSTRING,
 )
-class CLVPVisionModel(CLVPPreTrainedModel):
-    config_class = CLVPVisionConfig
+class CLVPSpeechModel(CLVPPreTrainedModel):
+    config_class = CLVPSpeechConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: CLVPVisionConfig):
+    def __init__(self, config: CLVPSpeechConfig):
         super().__init__(config)
-        self.vision_model = CLVPVisionTransformer(config)
+        self.speech_model = CLVPSpeechTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
+        return self.speech_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(CLVP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLVPVisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLVPSpeechConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1165,9 +1168,9 @@ class CLVPVisionModel(CLVPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, CLVPVisionModel
+        >>> from transformers import AutoProcessor, CLVPSpeechModel
 
-        >>> model = CLVPVisionModel.from_pretrained("susnato/clvp_dev")
+        >>> model = CLVPSpeechModel.from_pretrained("susnato/clvp_dev")
         >>> processor = AutoProcessor.from_pretrained("susnato/clvp_dev")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1181,7 +1184,7 @@ class CLVPVisionModel(CLVPPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        return self.vision_model(
+        return self.speech_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1202,24 +1205,25 @@ class CLVPModel(CLVPPreTrainedModel):
                 f" {type(config.text_config)}."
             )
 
-        if not isinstance(config.vision_config, CLVPVisionConfig):
+        if not isinstance(config.speech_config, CLVPSpeechConfig):
             raise ValueError(
-                "config.vision_config is expected to be of type CLVPVisionConfig but is of type"
-                f" {type(config.vision_config)}."
+                "config.speech_config is expected to be of type CLVPSpeechConfig but is of type"
+                f" {type(config.speech_config)}."
             )
 
         text_config = config.text_config
-        vision_config = config.vision_config
+        speech_config = config.speech_config
 
         self.projection_dim = config.projection_dim
         self.text_embed_dim = text_config.hidden_size
-        self.vision_embed_dim = vision_config.hidden_size
+        self.speech_embed_dim = speech_config.hidden_size
 
         self.text_model = CLVPTextTransformer(text_config)
-        self.vision_model = CLVPVisionTransformer(vision_config)
+        # self.speech_model = CLVPSpeechTransformer(speech_config)
+        self.speech_model = CLVPTextTransformer(speech_config)
 
-        self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
+        self.speech_projection = nn.Linear(self.speech_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
 
         # Initialize weights and apply final processing
@@ -1251,7 +1255,7 @@ class CLVPModel(CLVPPreTrainedModel):
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
-        # Use CLVP model's config for some fields (if specified) instead of those of vision & text components.
+        # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1273,7 +1277,7 @@ class CLVPModel(CLVPPreTrainedModel):
         return text_features
 
     @add_start_docstrings_to_model_forward(CLVP_VISION_INPUTS_DOCSTRING)
-    def get_image_features(
+    def get_speech_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1283,7 +1287,7 @@ class CLVPModel(CLVPPreTrainedModel):
         r"""
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`CLVPVisionModel`].
+            applying the projection layer to the pooled output of [`CLVPSpeechModel`].
 
         Examples:
 
@@ -1300,24 +1304,24 @@ class CLVPModel(CLVPPreTrainedModel):
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
-        >>> image_features = model.get_image_features(**inputs)
+        >>> image_features = model.get_speech_features(**inputs)
         ```"""
-        # Use CLVP model's config for some fields (if specified) instead of those of vision & text components.
+        # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_outputs = self.vision_model(
+        speech_outputs = self.speech_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
+        pooled_output = speech_outputs[1]  # pooled_output
+        image_features = self.speech_projection(pooled_output)
 
         return image_features
 
@@ -1358,15 +1362,23 @@ class CLVPModel(CLVPPreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
-        # Use CLVP model's config for some fields (if specified) instead of those of vision & text components.
+        # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
+        # speech_outputs = self.speech_model(
+        #     pixel_values=pixel_values,
+        #     output_attentions=output_attentions,
+        #     output_hidden_states=output_hidden_states,
+        #     return_dict=return_dict,
+        # )
+        speech_outputs = self.speech_model(
+            input_ids=pixel_values,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1381,8 +1393,8 @@ class CLVPModel(CLVPPreTrainedModel):
             return_dict=return_dict,
         )
 
-        image_embeds = vision_outputs[1]
-        image_embeds = self.visual_projection(image_embeds)
+        image_embeds = speech_outputs[1]
+        image_embeds = self.speech_projection(image_embeds)
 
         text_embeds = text_outputs[1]
         text_embeds = self.text_projection(text_embeds)
@@ -1401,7 +1413,7 @@ class CLVPModel(CLVPPreTrainedModel):
             loss = clvp_loss(logits_per_text)
 
         if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
+            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, speech_outputs)
             return ((loss,) + output) if loss is not None else output
 
         return CLVPOutput(
@@ -1411,7 +1423,7 @@ class CLVPModel(CLVPPreTrainedModel):
             text_embeds=text_embeds,
             image_embeds=image_embeds,
             text_model_output=text_outputs,
-            vision_model_output=vision_outputs,
+            speech_model_output=speech_outputs,
         )
 
 
@@ -1498,36 +1510,36 @@ class CLVPTextModelWithProjection(CLVPPreTrainedModel):
 
 @add_start_docstrings(
     """
-    CLVP Vision Model with a projection layer on top (a linear layer on top of the pooled output).
+    CLVP Speech Model with a projection layer on top (a linear layer on top of the pooled output).
     """,
     CLVP_START_DOCSTRING,
 )
-class CLVPVisionModelWithProjection(CLVPPreTrainedModel):
-    config_class = CLVPVisionConfig
+class CLVPSpeechModelWithProjection(CLVPPreTrainedModel):
+    config_class = CLVPSpeechConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: CLVPVisionConfig):
+    def __init__(self, config: CLVPSpeechConfig):
         super().__init__(config)
 
-        self.vision_model = CLVPVisionTransformer(config)
+        self.speech_model = CLVPSpeechTransformer(config)
 
-        self.visual_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
+        self.speech_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
+        return self.speech_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(CLVP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLVPVisionModelOutput, config_class=CLVPVisionConfig)
+    @replace_return_docstrings(output_type=CLVPSpeechModelOutput, config_class=CLVPSpeechConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CLVPVisionModelOutput]:
+    ) -> Union[Tuple, CLVPSpeechModelOutput]:
         r"""
         Returns:
 
@@ -1536,9 +1548,9 @@ class CLVPVisionModelWithProjection(CLVPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, CLVPVisionModelWithProjection
+        >>> from transformers import AutoProcessor, CLVPSpeechModelWithProjection
 
-        >>> model = CLVPVisionModelWithProjection.from_pretrained("susnato/clvp_dev")
+        >>> model = CLVPSpeechModelWithProjection.from_pretrained("susnato/clvp_dev")
         >>> processor = AutoProcessor.from_pretrained("susnato/clvp_dev")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1551,24 +1563,24 @@ class CLVPVisionModelWithProjection(CLVPPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_outputs = self.vision_model(
+        speech_outputs = self.speech_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        pooled_output = vision_outputs[1]  # pooled_output
+        pooled_output = speech_outputs[1]  # pooled_output
 
-        image_embeds = self.visual_projection(pooled_output)
+        image_embeds = self.speech_projection(pooled_output)
 
         if not return_dict:
-            outputs = (image_embeds, vision_outputs[0]) + vision_outputs[2:]
+            outputs = (image_embeds, speech_outputs[0]) + speech_outputs[2:]
             return tuple(output for output in outputs if output is not None)
 
-        return CLVPVisionModelOutput(
+        return CLVPSpeechModelOutput(
             image_embeds=image_embeds,
-            last_hidden_state=vision_outputs.last_hidden_state,
-            hidden_states=vision_outputs.hidden_states,
-            attentions=vision_outputs.attentions,
+            last_hidden_state=speech_outputs.last_hidden_state,
+            hidden_states=speech_outputs.hidden_states,
+            attentions=speech_outputs.attentions,
         )

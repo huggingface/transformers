@@ -105,6 +105,7 @@ class CLVPTextConfig(PretrainedConfig):
         hidden_act="gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
+        dropout=0.1,
         use_attention_bias=False,
         use_glu_in_ff=True,
         ff_post_act_layer_norm=False,
@@ -136,6 +137,7 @@ class CLVPTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
+        self.dropout = dropout
         self.use_attention_bias = use_attention_bias
         self.use_glu_in_ff = use_glu_in_ff
         self.ff_post_act_layer_norm = ff_post_act_layer_norm
@@ -166,11 +168,11 @@ class CLVPTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class CLVPVisionConfig(PretrainedConfig):
+class CLVPSpeechConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLVPVisionModel`]. It is used to instantiate a
-    CLVP vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the vision encoder of the CLVP
+    This is the configuration class to store the configuration of a [`CLVPSpeechModel`]. It is used to instantiate a
+    CLVP speech encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the speech encoder of the CLVP
     [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -207,33 +209,34 @@ class CLVPVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CLVPVisionConfig, CLVPVisionModel
+    >>> from transformers import CLVPSpeechConfig, CLVPSpeechModel
 
-    >>> # Initializing a CLVPVisionConfig with susnato/clvp_dev style configuration
-    >>> configuration = CLVPVisionConfig()
+    >>> # Initializing a CLVPSpeechConfig with susnato/clvp_dev style configuration
+    >>> configuration = CLVPSpeechConfig()
 
-    >>> # Initializing a CLVPVisionModel (with random weights) from the susnato/clvp_dev style configuration
-    >>> model = CLVPVisionModel(configuration)
+    >>> # Initializing a CLVPSpeechModel (with random weights) from the susnato/clvp_dev style configuration
+    >>> model = CLVPSpeechModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "clvp_vision_model"
+    model_type = "clvp_speech_model"
 
     def __init__(
         self,
         hidden_size=768,
         intermediate_size=3072,
-        projection_dim=512,
+        projection_dim=768,
         num_hidden_layers=12,
         num_attention_heads=12,
         num_channels=3,
-        image_size=224,
+        vocab_size=8192,
         patch_size=32,
         hidden_act="gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
+        dropout=0.1,
         use_attention_bias=False,
         use_glu_in_ff=True,
         ff_post_act_layer_norm=False,
@@ -257,10 +260,11 @@ class CLVPVisionConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.num_channels = num_channels
         self.patch_size = patch_size
-        self.image_size = image_size
+        self.vocab_size = vocab_size
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
+        self.dropout = dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.use_attention_bias = use_attention_bias
@@ -279,9 +283,9 @@ class CLVPVisionConfig(PretrainedConfig):
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the vision config dict if we are loading from CLVPConfig
+        # get the speech config dict if we are loading from CLVPConfig
         if config_dict.get("model_type") == "clvp":
-            config_dict = config_dict["vision_config"]
+            config_dict = config_dict["speech_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
             logger.warning(
@@ -295,7 +299,7 @@ class CLVPVisionConfig(PretrainedConfig):
 class CLVPConfig(PretrainedConfig):
     r"""
     [`CLVPConfig`] is the configuration class to store the configuration of a [`CLVPModel`]. It is used to instantiate
-    a CLVP model according to the specified arguments, defining the text model and vision model configs. Instantiating
+    a CLVP model according to the specified arguments, defining the text model and speech model configs. Instantiating
     a configuration with the defaults will yield a similar configuration to that of the CLVP
     [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
 
@@ -305,10 +309,10 @@ class CLVPConfig(PretrainedConfig):
     Args:
         text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`CLVPTextConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`CLVPVisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimentionality of text and vision projection layers.
+        speech_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`CLVPSpeechConfig`].
+        projection_dim (`int`, *optional*, defaults to 768):
+            Dimentionality of text and speech projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The inital value of the *logit_scale* paramter. Default is used as per the original CLVP implementation.
         kwargs (*optional*):
@@ -328,32 +332,32 @@ class CLVPConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a CLVPConfig from a CLVPTextConfig and a CLVPVisionConfig
-    >>> from transformers import CLVPTextConfig, CLVPVisionConfig
+    >>> # We can also initialize a CLVPConfig from a CLVPTextConfig and a CLVPSpeechConfig
+    >>> from transformers import CLVPTextConfig, CLVPSpeechConfig
 
-    >>> # Initializing a CLVPText and CLVPVision configuration
+    >>> # Initializing a CLVPText and CLVPSpeech configuration
     >>> config_text = CLVPTextConfig()
-    >>> config_vision = CLVPVisionConfig()
+    >>> config_speech = CLVPSpeechConfig()
 
-    >>> config = CLVPConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = CLVPConfig.from_text_speech_configs(config_text, config_speech)
     ```"""
 
     model_type = "clvp"
     is_composition = True
 
     def __init__(
-        self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
+        self, text_config=None, speech_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
     ):
         # If `_config_dict` exist, we use them for the backward compatibility.
         # We pop out these 2 attributes before calling `super().__init__` to avoid them being saved (which causes a lot
         # of confusion!).
         text_config_dict = kwargs.pop("text_config_dict", None)
-        vision_config_dict = kwargs.pop("vision_config_dict", None)
+        speech_config_dict = kwargs.pop("speech_config_dict", None)
 
         super().__init__(**kwargs)
 
-        # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
-        # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
+        # Instead of simply assigning `[text|speech]_config_dict` to `[text|speech]_config`, we use the values in
+        # `[text|speech]_config_dict` to update the values in `[text|speech]_config`. The values should be same in most
         # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
         if text_config_dict is not None:
             if text_config is None:
@@ -382,64 +386,64 @@ class CLVPConfig(PretrainedConfig):
             # Update all values in `text_config` with the ones in `_text_config_dict`.
             text_config.update(_text_config_dict)
 
-        if vision_config_dict is not None:
-            if vision_config is None:
-                vision_config = {}
+        if speech_config_dict is not None:
+            if speech_config is None:
+                speech_config = {}
 
-            # This is the complete result when using `vision_config_dict`.
-            _vision_config_dict = CLVPVisionConfig(**vision_config_dict).to_dict()
+            # This is the complete result when using `speech_config_dict`.
+            _speech_config_dict = CLVPSpeechConfig(**speech_config_dict).to_dict()
             # convert keys to string instead of integer
-            if "id2label" in _vision_config_dict:
-                _vision_config_dict["id2label"] = {
-                    str(key): value for key, value in _vision_config_dict["id2label"].items()
+            if "id2label" in _speech_config_dict:
+                _speech_config_dict["id2label"] = {
+                    str(key): value for key, value in _speech_config_dict["id2label"].items()
                 }
 
-            # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
-            for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
-                    # If specified in `vision_config_dict`
-                    if key in vision_config_dict:
+            # Give a warning if the values exist in both `_speech_config_dict` and `speech_config` but being different.
+            for key, value in _speech_config_dict.items():
+                if key in speech_config and value != speech_config[key] and key not in ["transformers_version"]:
+                    # If specified in `speech_config_dict`
+                    if key in speech_config_dict:
                         message = (
-                            f"`{key}` is found in both `vision_config_dict` and `vision_config` but with different "
-                            f'values. The value `vision_config_dict["{key}"]` will be used instead.'
+                            f"`{key}` is found in both `speech_config_dict` and `speech_config` but with different "
+                            f'values. The value `speech_config_dict["{key}"]` will be used instead.'
                         )
                     # If inferred from default argument values (just to be super careful)
                     else:
                         message = (
-                            f"`vision_config_dict` is provided which will be used to initialize `CLVPVisionConfig`. "
-                            f'The value `vision_config["{key}"]` will be overriden.'
+                            f"`speech_config_dict` is provided which will be used to initialize `CLVPSpeechConfig`. "
+                            f'The value `speech_config["{key}"]` will be overriden.'
                         )
                     logger.warning(message)
 
-            # Update all values in `vision_config` with the ones in `_vision_config_dict`.
-            vision_config.update(_vision_config_dict)
+            # Update all values in `speech_config` with the ones in `_speech_config_dict`.
+            speech_config.update(_speech_config_dict)
 
         if text_config is None:
             text_config = {}
             logger.info("`text_config` is `None`. Initializing the `CLVPTextConfig` with default values.")
 
-        if vision_config is None:
-            vision_config = {}
-            logger.info("`vision_config` is `None`. initializing the `CLVPVisionConfig` with default values.")
+        if speech_config is None:
+            speech_config = {}
+            logger.info("`speech_config` is `None`. initializing the `CLVPSpeechConfig` with default values.")
 
         self.text_config = CLVPTextConfig(**text_config)
-        self.vision_config = CLVPVisionConfig(**vision_config)
+        self.speech_config = CLVPSpeechConfig(**speech_config)
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: CLVPTextConfig, vision_config: CLVPVisionConfig, **kwargs):
+    def from_text_speech_configs(cls, text_config: CLVPTextConfig, speech_config: CLVPSpeechConfig, **kwargs):
         r"""
-        Instantiate a [`CLVPConfig`] (or a derived class) from clvp text model configuration and clvp vision model
+        Instantiate a [`CLVPConfig`] (or a derived class) from clvp text model configuration and clvp speech model
         configuration.
 
         Returns:
             [`CLVPConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        return cls(text_config=text_config.to_dict(), speech_config=speech_config.to_dict(), **kwargs)
 
     def to_dict(self):
         """
@@ -450,6 +454,6 @@ class CLVPConfig(PretrainedConfig):
         """
         output = copy.deepcopy(self.__dict__)
         output["text_config"] = self.text_config.to_dict()
-        output["vision_config"] = self.vision_config.to_dict()
+        output["speech_config"] = self.speech_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
