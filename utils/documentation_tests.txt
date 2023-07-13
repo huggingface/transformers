@@ -28,6 +28,9 @@ src/transformers/models/auto/feature_extraction_auto.py
 src/transformers/models/auto/image_processing_auto.py
 src/transformers/models/auto/processing_auto.py
 src/transformers/models/auto/tokenization_auto.py
+src/transformers/models/bark/configuration_bark.py
+src/transformers/models/bark/modeling_bark.py
+src/transformers/models/bark/processing_bark.py
 src/transformers/models/bart/configuration_bart.py
 src/transformers/models/bart/modeling_bart.py
 src/transformers/models/bart/tokenization_bart.py
