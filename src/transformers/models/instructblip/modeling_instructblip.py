@@ -1360,7 +1360,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         >>> processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
 
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-        >>> model.to(device)
+        >>> model.to(device)  # doctest: +IGNORE_RESULT
 
         >>> url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
@@ -1380,7 +1380,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         ... )
         >>> generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
         >>> print(generated_text)
-        What is unusual about this image? The image is unusual because it depicts a person standing on top of a car, which is parked on the side of the road. This is an unusual position for a person to be in, as they are typically not expected to stand on top of a car while it is parked. Additionally, the person in the image appears to be wearing a suit and tie, which is not typical attire for someone who is standing on top of a car. It is unclear why the person is in this unusual position or what they are doing there.
+        The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV, which is parked in the middle of a busy city street. This is an unconventional approach to ironing clothes, as it requires the man to balance himself and his ironing equipment on top of the vehicle while navigating through traffic. Additionally, the presence of taxis and other vehicles in the scene further emphasizes the unusual nature of this situation.
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1553,5 +1553,11 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
             attention_mask=attention_mask,
             **generate_kwargs,
         )
+
+        # the InstructBLIP authors used inconsistent tokenizer/model files during training,
+        # with the tokenizer's bos token being set to </s> which has ID=2,
+        # whereas the model's text config has bos token id = 0
+        if self.config.text_config.architectures[0] == "LLaMAForCausalLM":
+            outputs[outputs == 0] = 2
 
         return outputs
