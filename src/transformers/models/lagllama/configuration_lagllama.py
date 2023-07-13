@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ LLaMA model configuration"""
+from typing import List
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -30,16 +31,15 @@ LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 class LagLlamaConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LlamaModel`]. It is used to instantiate an LLaMA
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the LLaMA-7B.
+    This is the configuration class to store the configuration of a [`LagLlamaModel`]. It is used to instantiate an LagLLaMA
+    model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
+        input_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the LLaMA model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`LlamaModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
@@ -62,18 +62,16 @@ class LagLlamaConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings(`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
         Example:
 
     ```python
-    >>> from transformers import LlamaModel, LlamaConfig
+    >>> from transformers import LagLlamaModel, LagLlamaConfig
 
-    >>> # Initializing a LLaMA llama-7b style configuration
+    >>> # Initializing a LagLLaMA configuration
     >>> configuration = LlamaConfig()
 
     >>> # Initializing a model from the llama-7b style configuration
-    >>> model = LlamaModel(configuration)
+    >>> model = LagLlamaModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -83,25 +81,30 @@ class LagLlamaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
+        distribution_output: str = "student_t",
+        loss: str = "nll",
+        input_size: int = 1,
+        lags_sequence: List[int] = [1, 2, 3, 4, 5, 6, 7],
+        scaling: str = "mean",
         hidden_size=4096,
         intermediate_size=11008,
         num_hidden_layers=32,
         num_attention_heads=32,
         hidden_act="silu",
-        max_position_embeddings=2048,
+        max_context_length=2048,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=False,
         **kwargs,
     ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
+        self.distribution_output = distribution_output
+        self.loss = loss
+        self.input_size = input_size
+        self.scaling = scaling
+        self.lags_sequence = lags_sequence
+        self.max_position_embeddings = max_context_length
         self.hidden_size = hidden_size
+        self.feature_size = input_size * len(lags_sequence) + self._number_of_features
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -109,10 +112,10 @@ class LagLlamaConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+
+        super().__init__(**kwargs)
+
+    @property
+    def _number_of_features(self) -> int:
+        # the log1p(abs(loc)) and log(scale) features of the context window
+        return self.input_size * 2

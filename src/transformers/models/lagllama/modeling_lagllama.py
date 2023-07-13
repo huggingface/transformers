@@ -29,13 +29,139 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
+from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_llama import LlamaConfig
+from .configuration_lagllama import LagLlamaConfig
 
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LagLlamaConfig"
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeries->LagLlama
+class LagLlamaStdScaler(nn.Module):
+    """
+    Standardize features by calculating the mean and scaling along some given dimension `dim`, and then normalizes it
+    by subtracting from the mean and dividing by the standard deviation.
+
+    Args:
+        dim (`int`):
+            Dimension along which to calculate the mean and standard deviation.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+        minimum_scale (`float`, *optional*, defaults to 1e-5):
+            Default scale that is used for elements that are constantly zero along dimension `dim`.
+    """
+
+    def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-5):
+        super().__init__()
+        if not dim > 0:
+            raise ValueError("Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0")
+        self.dim = dim
+        self.keepdim = keepdim
+        self.minimum_scale = minimum_scale
+
+    @torch.no_grad()
+    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        denominator = weights.sum(self.dim, keepdim=self.keepdim)
+        denominator = denominator.clamp_min(1.0)
+        loc = (data * weights).sum(self.dim, keepdim=self.keepdim) / denominator
+
+        variance = (((data - loc) * weights) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
+        scale = torch.sqrt(variance + self.minimum_scale)
+        return (data - loc) / scale, loc, scale
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesMeanScaler with TimeSeries->LagLlama
+class LagLlamaMeanScaler(nn.Module):
+    """
+    Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
+    accordingly.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+        default_scale (`float`, *optional*, defaults to `None`):
+            Default scale that is used for elements that are constantly zero. If `None`, we use the scale of the batch.
+        minimum_scale (`float`, *optional*, defaults to 1e-10):
+            Default minimum possible scale that is used for any item.
+    """
+
+    def __init__(
+        self, dim: int = -1, keepdim: bool = True, default_scale: Optional[float] = None, minimum_scale: float = 1e-10
+    ):
+        super().__init__()
+        self.dim = dim
+        self.keepdim = keepdim
+        self.minimum_scale = minimum_scale
+        self.default_scale = default_scale
+
+    @torch.no_grad()
+    def forward(
+        self, data: torch.Tensor, observed_indicator: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # shape: (N, [C], T=1)
+        ts_sum = (data * observed_indicator).abs().sum(self.dim, keepdim=True)
+        num_observed = observed_indicator.sum(self.dim, keepdim=True)
+
+        scale = ts_sum / torch.clamp(num_observed, min=1)
+
+        # If `default_scale` is provided, we use it, otherwise we use the scale
+        # of the batch.
+        if self.default_scale is None:
+            batch_sum = ts_sum.sum(dim=0)
+            batch_observations = torch.clamp(num_observed.sum(0), min=1)
+            default_scale = torch.squeeze(batch_sum / batch_observations)
+        else:
+            default_scale = self.default_scale * torch.ones_like(scale)
+
+        # apply default scale where there are no observations
+        scale = torch.where(num_observed > 0, scale, default_scale)
+
+        # ensure the scale is at least `self.minimum_scale`
+        scale = torch.clamp(scale, min=self.minimum_scale)
+        scaled_data = data / scale
+
+        if not self.keepdim:
+            scale = scale.squeeze(dim=self.dim)
+
+        return scaled_data, torch.zeros_like(scale), scale
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesNOPScaler with TimeSeries->LagLlama
+class LagLlamaNOPScaler(nn.Module):
+    """
+    Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+    """
+
+    def __init__(self, dim: int, keepdim: bool = False):
+        super().__init__()
+        self.dim = dim
+        self.keepdim = keepdim
+
+    def forward(
+        self, data: torch.Tensor, observed_indicator: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        scale = torch.ones_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
+        loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
+        return data, loc, scale
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.nll
+def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the negative log likelihood loss from input distribution with respect to target.
+    """
+    return -input.log_prob(target)
 
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
@@ -90,7 +216,7 @@ class LagLlamaRMSNorm(nn.Module):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->LagLlama
-class LlamaRotaryEmbedding(torch.nn.Module):
+class LagLlamaRotaryEmbedding(torch.nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
@@ -144,7 +270,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaMLP with Llama->LagLlama
-class LlamaMLP(nn.Module):
+class LagLlamaMLP(nn.Module):
     def __init__(
         self,
         hidden_size: int,
@@ -162,7 +288,7 @@ class LlamaMLP(nn.Module):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->LagLlama
-class LlamaAttention(nn.Module):
+class LagLlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: LagLlamaConfig):
@@ -257,7 +383,7 @@ class LlamaAttention(nn.Module):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->LagLlama
-class LlamaDecoderLayer(nn.Module):
+class LagLlamaDecoderLayer(nn.Module):
     def __init__(self, config: LagLlamaConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -335,7 +461,7 @@ LAGLLAMA_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`LlamaConfig`]):
+        config ([`LagLlamaConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -346,11 +472,12 @@ LAGLLAMA_START_DOCSTRING = r"""
     "The bare LagLLaMA Model outputting raw hidden-states without any specific head on top.",
     LAGLLAMA_START_DOCSTRING,
 )
-class LlamaPreTrainedModel(PreTrainedModel):
-    config_class = LlamaConfig
+# Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->LagLlama
+class LagLlamaPreTrainedModel(PreTrainedModel):
+    config_class = LagLlamaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
+    _no_split_modules = ["LagLlamaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
@@ -365,20 +492,16 @@ class LlamaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, LlamaModel):
+        if isinstance(module, LagLlamaModel):
             module.gradient_checkpointing = value
 
 
 LAGLLAMA_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -415,10 +538,6 @@ LAGLLAMA_INPUTS_DOCSTRING = r"""
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -434,25 +553,30 @@ LAGLLAMA_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    LLAMA_START_DOCSTRING,
+    "The bare LagLLaMA Model outputting raw hidden-states without any specific head on top.",
+    LAGLLAMA_START_DOCSTRING,
 )
-class LlamaModel(LlamaPreTrainedModel):
+class LagLlamaModel(LagLlamaPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LagLlamaDecoderLayer`]
 
     Args:
-        config: LlamaConfig
+        config: LagLlamaConfig
     """
 
-    def __init__(self, config: LlamaConfig):
+    def __init__(self, config: LagLlamaConfig):
         super().__init__(config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        if config.scaling == "mean" or config.scaling is True:
+            self.scaler = LagLlamaMeanScaler(dim=1, keepdim=True)
+        elif config.scaling == "std":
+            self.scaler = LagLlamaStdScaler(dim=1, keepdim=True)
+        else:
+            self.scaler = LagLlamaNOPScaler(dim=1, keepdim=True)
+
+        self.embed_inputs = nn.Linear(config.feature_size, config.hidden_size, bias=True)
+        self.layers = nn.ModuleList([LagLlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.norm = LagLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -464,34 +588,81 @@ class LlamaModel(LlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
+    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, dtype, device, past_key_values_length):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(
                 input_shape,
-                inputs_embeds.dtype,
-                device=inputs_embeds.device,
+                dtype=dtype,
+                device=device,
                 past_key_values_length=past_key_values_length,
             )
 
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
-                inputs_embeds.device
-            )
+            expanded_attn_mask = _expand_mask(attention_mask, dtype=dtype, tgt_len=input_shape[-1]).to(device)
             combined_attention_mask = (
                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
             )
 
         return combined_attention_mask
 
-    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    def get_lagged_subsequences(
+        self, sequence: torch.Tensor, subsequences_length: int, shift: int = 0
+    ) -> torch.Tensor:
+        """
+        Returns lagged subsequences of a given sequence. Returns a tensor of shape (N, S, C, I),
+            where S = subsequences_length and I = len(indices), containing lagged subsequences. Specifically, lagged[i,
+            j, :, k] = sequence[i, -indices[k]-S+j, :].
+
+        Args:
+            sequence: Tensor
+                The sequence from which lagged subsequences should be extracted. Shape: (N, T, C).
+            subsequences_length : int
+                Length of the subsequences to be extracted.
+            shift: int
+                Shift the lags by this amount back.
+        """
+        sequence_length = sequence.shape[1]
+        indices = [lag - shift for lag in self.config.lags_sequence]
+
+        if max(indices) + subsequences_length > sequence_length:
+            raise ValueError(
+                f"lags cannot go further than history length, found lag {max(indices)} "
+                f"while history length is only {sequence_length}"
+            )
+
+        lagged_values = []
+        for lag_index in indices:
+            begin_index = -lag_index - subsequences_length
+            end_index = -lag_index if lag_index > 0 else None
+            lagged_values.append(sequence[:, begin_index:end_index, ...])
+        return torch.stack(lagged_values, dim=-1)
+
+    def prepare_input(
+        self,
+        past_target: torch.Tensor,
+        past_observed_values: torch.Tensor,
+    ):
+        # calculate loc and scale from all but the very last past target
+        _, loc, scale = self.scaler(past_target[..., :-1], past_observed_values[..., :-1])
+
+        scaled_past_target = (past_target - loc) / scale
+        input = scaled_past_target[..., max(self.config.lags_sequence) :]
+        prior_input = scaled_past_target[..., : max(self.config.lags_sequence)]
+        lags = self.get_lagged_subsequences(prior_input, input, dim=-1)
+
+        static_feat = torch.cat((loc.abs().log1p(), scale.log()), dim=-1)
+        expanded_static_feat = static_feat.unsqueeze(1).expand(-1, lags.shape[-2], -1)
+
+        return torch.cat((lags, expanded_static_feat), dim=-1), loc, scale
+
+    @add_start_docstrings_to_model_forward(LAGLLAMA_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        past_values: torch.Tensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -510,14 +681,18 @@ class LlamaModel(LlamaPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        elif input_ids is not None:
-            batch_size, seq_length = input_ids.shape
+        if past_values is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both past_values and inputs_embeds at the same time")
+        elif past_values is not None:
+            batch_size, seq_length = past_values.shape
+            device = past_values.device
+            dtype = past_values.dtype
         elif inputs_embeds is not None:
             batch_size, seq_length, _ = inputs_embeds.shape
+            device = inputs_embeds.device
+            dtype = inputs_embeds.dtype
         else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+            raise ValueError("You have to specify either past_values or inputs_embeds")
 
         seq_length_with_past = seq_length
         past_key_values_length = 0
@@ -527,7 +702,7 @@ class LlamaModel(LlamaPreTrainedModel):
             seq_length_with_past = seq_length_with_past + past_key_values_length
 
         if position_ids is None:
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
+            device = past_values.device if past_values is not None else inputs_embeds.device
             position_ids = torch.arange(
                 past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
             )
@@ -535,16 +710,18 @@ class LlamaModel(LlamaPreTrainedModel):
         else:
             position_ids = position_ids.view(-1, seq_length).long()
 
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones(
                 (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
             )
         attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+            attention_mask, (batch_size, seq_length), dtype, device, past_key_values_length
         )
+
+        if inputs_embeds is None:
+            transformer_inputs, loc, scale = self.prepare_input(past_values, attention_mask)
+            inputs_embeds = self.embed_tokens(transformer_inputs)
 
         hidden_states = inputs_embeds
 
@@ -617,14 +794,29 @@ class LlamaModel(LlamaPreTrainedModel):
         )
 
 
-class LlamaForCausalLM(LlamaPreTrainedModel):
+class LlamaForPrediction(LagLlamaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = LlamaModel(config)
+        self.model = LagLlamaModel(config)
 
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        if config.distribution_output == "student_t":
+            self.distribution_output = StudentTOutput(dim=config.hidden_size)
+        elif config.distribution_output == "normal":
+            self.distribution_output = NormalOutput(dim=config.hidden_size)
+        elif config.distribution_output == "negative_binomial":
+            self.distribution_output = NegativeBinomialOutput(dim=config.hidden_size)
+        else:
+            raise ValueError(f"Unknown distribution output {config.distribution_output}")
+
+        self.parameter_projection = self.distribution_output.get_parameter_projection(self.model.config.d_model)
+        self.target_shape = self.distribution_output.event_shape
+
+        if config.loss == "nll":
+            self.loss = nll
+        else:
+            raise ValueError(f"Unknown loss function {config.loss}")
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -647,11 +839,11 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
     def get_decoder(self):
         return self.model
 
-    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(LAGLLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        past_values: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -696,7 +888,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
-            input_ids=input_ids,
+            past_values=past_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -777,9 +969,9 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The LLaMa Model transformer with a sequence classification head on top (linear layer).
+    The LagLLaMa Model transformer with a sequence classification head on top (linear layer).
 
-    [`LlamaForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    [`LagLlamaForSequenceClassification`] uses the last token in order to do the classification, as other causal models
     (e.g. GPT-2) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
@@ -788,13 +980,13 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
     padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
     each row of the batch).
     """,
-    LLAMA_START_DOCSTRING,
+    LAGLLAMA_START_DOCSTRING,
 )
-class LlamaForSequenceClassification(LlamaPreTrainedModel):
+class LlamaForSequenceClassification(LagLlamaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = LlamaModel(config)
+        self.model = LagLlamaModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
@@ -806,7 +998,7 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(LAGLLAMA_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,

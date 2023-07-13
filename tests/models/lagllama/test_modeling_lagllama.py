@@ -17,7 +17,7 @@
 
 import unittest
 
-from transformers import LlamaConfig, is_torch_available
+from transformers import LagLlamaConfig, is_torch_available
 from transformers.testing_utils import require_torch, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -29,10 +29,10 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel
+    from transformers import LagLlamaForPrediction, LagLlamaForSequenceClassification, LagLlamaModel
 
 
-class LlamaModelTester:
+class LagLlamaModelTester:
     def __init__(
         self,
         parent,
@@ -105,7 +105,7 @@ class LlamaModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return LlamaConfig(
+        return LagLlamaConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -123,7 +123,7 @@ class LlamaModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = LlamaModel(config=config)
+        model = LagLlamaModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -143,7 +143,7 @@ class LlamaModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = LlamaModel(config)
+        model = LagLlamaModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -172,7 +172,7 @@ class LlamaModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = LlamaForCausalLM(config=config)
+        model = LagLlamaForPrediction(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -192,7 +192,7 @@ class LlamaModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = LlamaForCausalLM(config=config)
+        model = LagLlamaForPrediction(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -256,15 +256,17 @@ class LlamaModelTester:
 
 
 @require_torch
-class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (LlamaModel, LlamaForCausalLM, LlamaForSequenceClassification) if is_torch_available() else ()
-    all_generative_model_classes = (LlamaForCausalLM,) if is_torch_available() else ()
+class LagLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (
+        (LagLlamaModel, LagLlamaForPrediction, LagLlamaForSequenceClassification) if is_torch_available() else ()
+    )
+    all_generative_model_classes = (LagLlamaForPrediction,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": LlamaModel,
-            "text-classification": LlamaForSequenceClassification,
-            "text-generation": LlamaForCausalLM,
-            "zero-shot": LlamaForSequenceClassification,
+            "feature-extraction": LagLlamaModel,
+            "timeseries-classification": LagLlamaForSequenceClassification,
+            "timeseries-prediction": LagLlamaForPrediction,
+            "zero-shot-timeseries-classification": LagLlamaForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -273,8 +275,8 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_pruning = False
 
     def setUp(self):
-        self.model_tester = LlamaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LlamaConfig, hidden_size=37)
+        self.model_tester = LagLlamaModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=LagLlamaConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -295,7 +297,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = LlamaForSequenceClassification(config)
+        model = LagLlamaForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
@@ -308,7 +310,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = LlamaForSequenceClassification(config)
+        model = LagLlamaForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
@@ -323,7 +325,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         sequence_labels = ids_tensor(
             [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
         ).to(torch.float)
-        model = LlamaForSequenceClassification(config)
+        model = LagLlamaForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
