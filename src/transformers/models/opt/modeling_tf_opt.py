@@ -61,17 +61,17 @@ _CAUSAL_LM_EXPECTED_OUTPUT = (
 LARGE_NEGATIVE = -1e8
 
 
-# Copied from transformers.models.bart.modeling_tf_bart._make_causal_mask
 def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: int = 0):
     """
     Make causal mask used for bi-directional self-attention.
     """
     bsz = input_ids_shape[0]
     tgt_len = input_ids_shape[1]
-    mask = tf.ones((tgt_len, tgt_len)) * LARGE_NEGATIVE
-    mask_cond = tf.range(shape_list(mask)[-1])
-
-    mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (shape_list(mask)[-1], 1)), 0.0, mask)
+    # mask = tf.ones((tgt_len, tgt_len)) * LARGE_NEGATIVE
+    # mask_cond = tf.range(shape_list(mask)[-1])
+    #
+    # mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (shape_list(mask)[-1], 1)), 0.0, mask)
+    mask = tf.experimental.numpy.triu(tf.fill((tgt_len, tgt_len), tf.cast(LARGE_NEGATIVE, tf.float32)), k=1)
 
     if past_key_values_length > 0:
         mask = tf.concat([tf.zeros((tgt_len, past_key_values_length)), mask], axis=-1)
@@ -167,6 +167,9 @@ class TFOPTAttention(tf.keras.layers.Layer):
         # for the decoder
         is_cross_attention = key_value_states is not None
         bsz, tgt_len, embed_dim = shape_list(hidden_states)
+        if tgt_len == 0:
+            import pdb
+            pdb.set_trace()
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -516,16 +519,23 @@ class TFOPTDecoder(tf.keras.layers.Layer):
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, past_key_values_length):
         # create causal mask
         # # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
-        else:
-            combined_attention_mask = _expand_mask(
-                tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
+        _, seq_length = input_shape
+        if seq_length + past_key_values_length != tf.shape(attention_mask)[1]:
+            raise ValueError(
+                "Attention mask shape should be (batch_size, seq_length + past_key_values_length)"
+                f" but is {attention_mask.shape} with input_ids shape {input_shape} and past length"
+                f" {past_key_values_length}."
             )
+        if seq_length > 1:
+            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
 
         if attention_mask is not None:
-            combined_attention_mask = combined_attention_mask + _expand_mask(attention_mask, tgt_len=input_shape[-1])
+            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
+                inputs_embeds.device
+            )
+            combined_attention_mask = (
+                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
+            )
 
         return combined_attention_mask
 
@@ -615,7 +625,7 @@ class TFOPTDecoder(tf.keras.layers.Layer):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if attention_mask is None:
-            attention_mask = tf.ones(inputs_embeds.shape[:2], dtype=tf.bool)
+            attention_mask = tf.ones(inputs_embeds.shape[:2] + past_key_values_length, dtype=tf.bool)
         else:
             tf.debugging.assert_equal(
                 tf.shape(attention_mask)[1],
@@ -625,8 +635,10 @@ class TFOPTDecoder(tf.keras.layers.Layer):
                     f"{past_key_values_length + input_shape[1]} (sum of the lengths of current and past inputs)"
                 ),
             )
-
         pos_embeds = self.embed_positions(attention_mask, past_key_values_length)
+        if pos_embeds.shape[1] == 0:
+            import pdb
+            pdb.set_trace()
 
         attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values_length)
 
