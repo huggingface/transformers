@@ -690,7 +690,7 @@ class BarkSemanticModel(BarkCausalModel):
     base_model_prefix = "semantic"
     config_class = BarkSemanticConfig
 
-    def generate_text_semantic(
+    def generate(
         self,
         input_ids: torch.Tensor,
         semantic_generation_config: BarkSemanticGenerationConfig = None,
@@ -771,7 +771,7 @@ class BarkSemanticModel(BarkCausalModel):
 
         # pass input_ids in order to stay consistent with the transformers generate method even though it is not used
         # (except to get the input seq_len - that's why we keep the first 257 tokens)
-        semantic_output = self.generate(
+        semantic_output = super().generate(
             torch.ones((batch_size, max_input_semantic_length + 1), dtype=torch.int).to(self.device),
             input_embeds=input_embeds,
             logits_processor=[suppress_tokens_logits_processor],
@@ -805,7 +805,7 @@ class BarkCoarseModel(BarkCausalModel):
         history_prompt: Optional[Dict[str, torch.Tensor]] = None,
     ):
         """
-        Preprocess the optional `Bark` speaker prompts before `self.generate_coarse`.
+        Preprocess the optional `Bark` speaker prompts before `self.generate`.
 
         Args:
             max_coarse_history (`int`):
@@ -869,7 +869,7 @@ class BarkCoarseModel(BarkCausalModel):
 
         return x_semantic_history, x_coarse_history
 
-    def generate_coarse(
+    def generate(
         self,
         semantic_output: torch.Tensor,
         semantic_generation_config: BarkSemanticGenerationConfig = None,
@@ -884,7 +884,7 @@ class BarkCoarseModel(BarkCausalModel):
 
         Args:
             semantic_output (`torch.Tensor` of shape (batch_size, seq_len), *optional*):
-                Input text semantic ids, i.e the output of `BarkSemanticModel.generate_text_semantic`.
+                Input text semantic ids, i.e the output of `BarkSemanticModel.generate`.
             semantic_generation_config (`BarkSemanticGenerationConfig`):
                 Generation config indicating how to generate the semantic tokens.
             coarse_generation_config (`BarkCoarseGenerationConfig`):
@@ -976,7 +976,7 @@ class BarkCoarseModel(BarkCausalModel):
                 codebook_size,
             )
 
-            output_coarse = self.generate(
+            output_coarse = super().generate(
                 input_coarse,
                 logits_processor=[alternatingLogitsProcessor],
                 max_new_tokens=min(sliding_window_len, max_generated_len - total_generated_len),
@@ -1206,7 +1206,7 @@ class BarkFineModel(BarkPreTrainedModel):
         """
         return True
 
-    def generate_fine(
+    def generate(
         self,
         coarse_output: torch.Tensor,
         semantic_generation_config: BarkSemanticGenerationConfig = None,
@@ -1222,7 +1222,7 @@ class BarkFineModel(BarkPreTrainedModel):
 
         Args:
             coarse_output (`torch.Tensor` of shape (batch_size, seq_len)):
-                Input coarse acoustics ids, i.e the output of `BarkCoarseModel.generate_coarse`.
+                Input coarse acoustics ids, i.e the output of `BarkCoarseModel.generate`.
             semantic_generation_config (`BarkSemanticGenerationConfig`):
                 Generation config indicating how to generate the semantic tokens.
             coarse_generation_config (`BarkCoarseGenerationConfig`):
@@ -1387,7 +1387,7 @@ class BarkModel(BarkPreTrainedModel):
         return audio_arr
 
     @torch.no_grad()
-    def generate_speech(
+    def generate(
         self,
         input_ids: Optional[torch.Tensor] = None,
         history_prompt: Optional[Dict[str, torch.Tensor]] = None,
@@ -1418,7 +1418,7 @@ class BarkModel(BarkPreTrainedModel):
 
         >>> inputs = processor("Hello, my dog is cute, I need him in my life", voice_preset=voice_preset)
 
-        >>> audio_array = model.generate_speech(**inputs)
+        >>> audio_array = model.generate(**inputs)
         >>> audio_array = audio_array.cpu().numpy().squeeze()
         ```
         """
@@ -1429,7 +1429,7 @@ class BarkModel(BarkPreTrainedModel):
         fine_generation_config = BarkFineGenerationConfig(**self.generation_config.fine_acoustics_config)
 
         # 1. Generate from the semantic model
-        semantic_output = self.semantic.generate_text_semantic(
+        semantic_output = self.semantic.generate(
             input_ids,
             history_prompt=history_prompt,
             attention_mask=kwargs.pop("attention_mask", None),
@@ -1438,7 +1438,7 @@ class BarkModel(BarkPreTrainedModel):
         )
 
         # 2. Generate from the coarse model
-        coarse_output = self.coarse_acoustics.generate_coarse(
+        coarse_output = self.coarse_acoustics.generate(
             semantic_output,
             history_prompt=history_prompt,
             semantic_generation_config=semantic_generation_config,
@@ -1448,7 +1448,7 @@ class BarkModel(BarkPreTrainedModel):
         )
 
         # 3. "generate" from the fine model
-        output = self.fine_acoustics.generate_fine(
+        output = self.fine_acoustics.generate(
             coarse_output,
             history_prompt=history_prompt,
             semantic_generation_config=semantic_generation_config,
@@ -1465,7 +1465,7 @@ class BarkModel(BarkPreTrainedModel):
 
     def can_generate(self) -> bool:
         """
-        Returns True. Despite not having a `self.generate` method, this model can `generate_speech` and thus needs a
+        Returns True. Despite not having a `self.generate` method, this model can `generate` and thus needs a
         BarkGenerationConfig.
         """
         return True

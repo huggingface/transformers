@@ -43,6 +43,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        BarkCausalModel,
         BarkCoarseModel,
         BarkFineModel,
         BarkModel,
@@ -475,7 +476,7 @@ class BarkFineModelTester:
 @require_torch
 class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BarkSemanticModel,) if is_torch_available() else ()
-    all_generative_model_classes = (BarkSemanticModel,) if is_torch_available() else ()
+    all_generative_model_classes = (BarkCausalModel,) if is_torch_available() else ()
 
     is_encoder_decoder = False
     fx_compatible = False
@@ -532,7 +533,7 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        model = self.all_model_classes[0](config).eval().to(torch_device)
+        model = self.all_generative_model_classes[0](config).eval().to(torch_device)
         if torch_device == "cuda":
             model.half()
         model.generate(input_ids, attention_mask=attention_mask)
@@ -543,7 +544,7 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
 class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     # Same tester as BarkSemanticModelTest, except for model_class and config_class
     all_model_classes = (BarkCoarseModel,) if is_torch_available() else ()
-    all_generative_model_classes = (BarkCoarseModel,) if is_torch_available() else ()
+    all_generative_model_classes = (BarkCausalModel,) if is_torch_available() else ()
 
     is_encoder_decoder = False
     fx_compatible = False
@@ -598,7 +599,7 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        model = self.all_model_classes[0](config).eval().to(torch_device)
+        model = self.all_generative_model_classes[0](config).eval().to(torch_device)
         if torch_device == "cuda":
             model.half()
         model.generate(input_ids, attention_mask=attention_mask)
@@ -831,7 +832,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
         return fine_generation_config
 
     @slow
-    def test_generate_text_semantic(self):
+    def test_generate_semantic(self):
         input_ids = self.inputs
 
         # fmt: off
@@ -841,7 +842,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
         # greedy decoding
         with torch.no_grad():
-            output_ids = self.model.semantic.generate_text_semantic(
+            output_ids = self.model.semantic.generate(
                 **input_ids,
                 do_sample=False,
                 semantic_generation_config=self.semantic_generation_config,
@@ -861,13 +862,13 @@ class BarkModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         with torch.no_grad():
-            output_ids = self.model.semantic.generate_text_semantic(
+            output_ids = self.model.semantic.generate(
                 **input_ids,
                 do_sample=False,
                 semantic_generation_config=self.semantic_generation_config,
             )
 
-            output_ids = self.model.coarse_acoustics.generate_coarse(
+            output_ids = self.model.coarse_acoustics.generate(
                 output_ids,
                 history_prompt=history_prompt,
                 do_sample=False,
@@ -898,13 +899,13 @@ class BarkModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         with torch.no_grad():
-            output_ids = self.model.semantic.generate_text_semantic(
+            output_ids = self.model.semantic.generate(
                 **input_ids,
                 do_sample=False,
                 semantic_generation_config=self.semantic_generation_config,
             )
 
-            output_ids = self.model.coarse_acoustics.generate_coarse(
+            output_ids = self.model.coarse_acoustics.generate(
                 output_ids,
                 history_prompt=history_prompt,
                 do_sample=False,
@@ -914,7 +915,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
             )
 
             # greedy decoding
-            output_ids = self.model.fine_acoustics.generate_fine(
+            output_ids = self.model.fine_acoustics.generate(
                 output_ids,
                 history_prompt=history_prompt,
                 temperature=None,
@@ -931,13 +932,13 @@ class BarkModelIntegrationTests(unittest.TestCase):
         input_ids = self.inputs
 
         with torch.no_grad():
-            self.model.generate_speech(**input_ids)
-            self.model.generate_speech(**{key: val for (key, val) in input_ids.items() if key != "history_prompt"})
+            self.model.generate(**input_ids)
+            self.model.generate(**{key: val for (key, val) in input_ids.items() if key != "history_prompt"})
 
     @slow
     def test_generate_end_to_end_with_args(self):
         input_ids = self.inputs
 
         with torch.no_grad():
-            self.model.generate_speech(**input_ids, do_sample=True, temperature=0.6, penalty_alpha=0.6)
-            self.model.generate_speech(**input_ids, do_sample=True, temperature=0.6, num_beams=4)
+            self.model.generate(**input_ids, do_sample=True, temperature=0.6, penalty_alpha=0.6)
+            self.model.generate(**input_ids, do_sample=True, temperature=0.6, num_beams=4)
