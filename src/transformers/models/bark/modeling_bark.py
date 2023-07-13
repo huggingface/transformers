@@ -43,13 +43,12 @@ from .generation_configuration_bark import (
 logger = logging.get_logger(__name__)
 
 
-# TODO: change checkpoint
-_CHECKPOINT_FOR_DOC = "ylacombe/bark-small"
+_CHECKPOINT_FOR_DOC = "suno/bark-small"
 _CONFIG_FOR_DOC = "BarkConfig"
 
 BARK_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ylacombe/bark-small",
-    "ylacombe/bark-large",
+    "suno/bark-small",
+    "suno/barh",
     # See all Bark models at https://huggingface.co/models?filter=bark
 ]
 
@@ -1423,8 +1422,8 @@ class BarkModel(BarkPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, BarkModel
 
-        >>> processor = AutoProcessor.from_pretrained("ylacombe/bark-small")
-        >>> model = BarkModel.from_pretrained("ylacombe/bark-small")
+        >>> processor = AutoProcessor.from_pretrained("suno/bark-small")
+        >>> model = BarkModel.from_pretrained("suno/bark-small")
 
         >>> # To add a voice preset, you can pass `voice_preset` to `BarkProcessor.__call__(...)`
         >>> voice_preset = "v2/en_speaker_6"

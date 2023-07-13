@@ -30,7 +30,7 @@ It should be noted that each of the first three modules can support conditional 
 ### Tips:
 
 Suno offers a library of voice presets in a number of languages [here](https://suno-ai.notion.site/8b8e8749ed514b0cbf3f699013548683?v=bc67cff786b04b50b3ceb756fd05f68c).
-These presets are also uploaded in the hub [here](https://huggingface.co/ylacombe/bark-small/tree/main/speaker_embeddings) or [here](https://huggingface.co/ylacombe/bark-large/tree/main/speaker_embeddings).
+These presets are also uploaded in the hub [here](https://huggingface.co/suno/bark-small/tree/main/speaker_embeddings) or [here](https://huggingface.co/suno/bark/tree/main/speaker_embeddings).
 
 ```python
 >>> from transformers import AutoProcessor, BarkModel
