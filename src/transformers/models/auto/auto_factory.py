@@ -15,12 +15,14 @@
 """Factory function to build auto-model classes."""
 import copy
 import importlib
+import json
 import os
 from collections import OrderedDict
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...utils import copy_func, logging, requires_backends
+from ...utils import ADAPTER_CONFIG_NAME, cached_file, copy_func, is_peft_available, logging, requires_backends
 from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
 
 
@@ -458,6 +460,29 @@ class _BaseAutoModelClass:
             if kwargs.get("torch_dtype", None) == "auto":
                 _ = kwargs.pop("torch_dtype")
 
+            if is_peft_available():
+                raw_adapter_config_dict_path = cls._check_and_return_if_adapter_model(
+                    pretrained_model_name_or_path,
+                    revision=hub_kwargs.get("revision", None),
+                    use_auth_token=hub_kwargs.get("use_auth_token", None),
+                )
+
+                if raw_adapter_config_dict_path is not None:
+                    adapter_model_id = pretrained_model_name_or_path
+                    raw_adapter_config_dict = json.load(open(raw_adapter_config_dict_path, "r"))
+
+                    if "base_model_name_or_path" in raw_adapter_config_dict:
+                        pretrained_model_name_or_path = raw_adapter_config_dict["base_model_name_or_path"]
+                    else:
+                        raise ValueError(
+                            "Found an adapter file but no 'base_model_name_or_path' key in the adapter config. Make sure to use a "
+                            "correct adapter configuration file."
+                        )
+
+                    kwargs["_peft_adapter_model_id"] = adapter_model_id
+                else:
+                    kwargs["_peft_adapter_model_id"] = None
+
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path,
                 return_unused_kwargs=True,
@@ -516,6 +541,33 @@ class _BaseAutoModelClass:
                 "one of those so they match!"
             )
         cls._model_mapping.register(config_class, model_class, exist_ok=exist_ok)
+
+    @classmethod
+    def _check_and_return_if_adapter_model(
+        cls,
+        model_id: str,
+        revision: str = None,
+        use_auth_token: Optional[str] = None,
+        commit_hash: Optional[str] = None,
+    ) -> bool:
+        r"""
+        Simply checks if the model stored on the Hub or locally is an adapter model or not
+        """
+        adapter_cached_filename = None
+        try:
+            adapter_cached_filename = cached_file(
+                model_id,
+                ADAPTER_CONFIG_NAME,
+                revision=revision,
+                use_auth_token=use_auth_token,
+                _commit_hash=commit_hash,
+            )
+        except EnvironmentError:
+            if os.path.isdir(model_id):
+                list_remote_files = os.listdir(model_id)
+                if ADAPTER_CONFIG_NAME in list_remote_files:
+                    adapter_cached_filename = os.path.join(model_id, ADAPTER_CONFIG_NAME)
+        return adapter_cached_filename
 
 
 class _BaseAutoBackboneClass(_BaseAutoModelClass):

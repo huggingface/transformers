@@ -67,6 +67,7 @@ from .utils import (
     is_bitsandbytes_available,
     is_offline_mode,
     is_optimum_available,
+    is_peft_available,
     is_remote_url,
     is_safetensors_available,
     is_torch_tpu_available,
@@ -2188,6 +2189,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
+        kwargs.pop("peft_adapter_name", None)
+        peft_adapter_model_id = kwargs.pop("_peft_adapter_model_id", None)
+
+        is_adapter_file = False
+        if is_peft_available():
+            is_adapter_file = peft_adapter_model_id is not None
+
+        if is_adapter_file:
+            logger.info(
+                "Found adapter file at {}. Automatically loading adapter model using the base model from {}".format(
+                    peft_adapter_model_id, pretrained_model_name_or_path
+                )
+            )
 
         if use_auth_token is not None:
             warnings.warn(
@@ -2957,6 +2971,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if "skip_keys" in inspect.signature(dispatch_model).parameters:
                 kwargs["skip_keys"] = model._skip_keys_device_placement
             dispatch_model(model, **kwargs)
+
+        if is_peft_available() and is_adapter_file:
+            from peft import PeftModel
+
+            model = PeftModel.from_pretrained(
+                model,
+                peft_adapter_model_id,
+            )
 
         if output_loading_info:
             if loading_info is None:
