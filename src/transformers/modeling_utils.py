@@ -2975,6 +2975,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if is_peft_available() and is_adapter_file:
             from peft import PeftModel
 
+            # TODO: handle correctly PeftModel kwargs here
             model = PeftModel.from_pretrained(
                 model,
                 peft_adapter_model_id,
