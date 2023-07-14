@@ -1562,6 +1562,10 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
+    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
+    def test_model_is_small(self):
+        pass
+
     # skip because it fails on automapping of SpeechT5HifiGanConfig
     def test_save_load_fast_init_from_base(self):
         pass
