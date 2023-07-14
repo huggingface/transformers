@@ -26,7 +26,6 @@ from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
-from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_llama import LlamaConfig
@@ -115,40 +114,24 @@ LLAMA_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 def create_sinusoidal_positions(num_pos, dim):
     inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2) / dim))
     freqs = np.einsum("i , j -> i j", np.arange(num_pos), inv_freq).astype("float32")
 
-    # sin, cos = np.sin(freqs), np.cos(freqs)
-    # sentinel = dim // 2 + dim % 2
-    # out = np.zeros((num_pos, dim))
-    # out[:, 0:sentinel] = sin
-    # out[:, sentinel:] = cos
-
     emb = np.concatenate((freqs, freqs), axis=-1)
+    out = np.concatenate((np.sin(emb)[:, None, :], np.cos(emb)[:, None, :]), axis=-1)
+    return jnp.array(out[:, :, :num_pos])  # TODO: don't think slice is needed
 
-    out = np.concatenate((
-        np.sin(emb)[:, None, :],
-        np.cos(emb)[:, None, :]
-    ), axis=-1)
-    return jnp.array(out[:, :, :num_pos]) # TODO: don't think slice is needed
-
-
-# def rotate_every_two(tensor):
-    # rotate_half_tensor = jnp.stack((-tensor[:, :, :, 1::2], tensor[:, :, :, ::2]), axis=-1)
-    # rotate_half_tensor = rotate_half_tensor.reshape(rotate_half_tensor.shape[:-2] + (-1,))
-    # return rotate_half_tensor
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
-    rotate_half_tensor = jnp.concatenate((-x[..., x.shape[-1] // 2:], x[..., :x.shape[-1] // 2]), axis=-1)
-    # rotate_half_tensor = rotate_half_tensor.reshape(rotate_half_tensor.shape[:-2] + (-1,))
+    rotate_half_tensor = jnp.concatenate((-x[..., x.shape[-1] // 2 :], x[..., : x.shape[-1] // 2]), axis=-1)
     return rotate_half_tensor
 
 
 def apply_rotary_pos_emb(tensor, sincos):
     sin_pos, cos_pos = sincos
-    # sin_pos = sin_pos[:, :, None, :]
     return (tensor * cos_pos) + (rotate_half(tensor) * sin_pos)
 
 
@@ -163,7 +146,7 @@ class FlaxLlamaRMSNorm(nn.Module):
         variance = variance.mean(-1, keepdims=True)
         hidden_states = hidden_states * jax.lax.rsqrt(variance + self.eps)
 
-        weight = self.param('weight', lambda _, shape: jnp.ones(shape), hidden_states.shape[-1])
+        weight = self.param("weight", lambda _, shape: jnp.ones(shape), hidden_states.shape[-1])
 
         return jnp.asarray(weight * hidden_states, dtype=input_dtype)
 
@@ -185,14 +168,13 @@ class FlaxLlamaAttention(nn.Module):
             self.embed_dim,
             use_bias=False,
             dtype=self.dtype,
-            # kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
         self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
         self.o_proj = dense()
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
-
         self.embed_positions = create_sinusoidal_positions(config.max_position_embeddings, self.head_dim)
 
     def _split_heads(self, hidden_states):
@@ -250,22 +232,9 @@ class FlaxLlamaAttention(nn.Module):
         key = self._split_heads(key)
         value = self._split_heads(value)
 
-        # sincos = jnp.take(self.embed_positions, position_ids, axis=1)
         sincos = self.embed_positions[position_ids]
         sincos = jnp.split(sincos, 2, axis=-1)
-        # if self.rotary_dim is not None:
-            # k_rot = key[:, :, :, : self.rotary_dim]
-            # k_pass = key[:, :, :, self.rotary_dim :]
 
-            # q_rot = query[:, :, :, : self.rotary_dim]
-            # q_pass = query[:, :, :, self.rotary_dim :]
-
-            # k_rot = apply_rotary_pos_emb(k_rot, sincos)
-            # q_rot = apply_rotary_pos_emb(q_rot, sincos)
-
-            # key = jnp.concatenate([k_rot, k_pass], axis=-1)
-            # query = jnp.concatenate([q_rot, q_pass], axis=-1)
-        # else:
         key = apply_rotary_pos_emb(key, sincos)
         query = apply_rotary_pos_emb(query, sincos)
 
@@ -351,8 +320,8 @@ class FlaxLlamaDecoderLayer(nn.Module):
     def __call__(
         self,
         hidden_states,
-        position_ids = None,
-        attention_mask = None,
+        position_ids=None,
+        attention_mask=None,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -376,7 +345,7 @@ class FlaxLlamaDecoderLayer(nn.Module):
         hidden_states = self.mlp(hidden_states)
         # residual connection
         hidden_states = residual + hidden_states
-        
+
         return (hidden_states,) + outputs[1:]
 
 
@@ -413,7 +382,9 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
 
         # TODO: add return_dict
         # random_params = self.module.init(rngs, input_ids, position_ids=position_ids, attention_mask=attention_mask, return_dict=False)["params"]
-        random_params = self.module.init(rngs, input_ids, position_ids=position_ids, attention_mask=attention_mask)["params"]
+        random_params = self.module.init(rngs, input_ids, position_ids=position_ids, attention_mask=attention_mask)[
+            "params"
+        ]
 
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
@@ -440,7 +411,7 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
         # init_variables = self.module.init(
-            # jax.random.PRNGKey(0), input_ids, position_ids=position_ids, attention_mask=attention_mask, return_dict=False, init_cache=True
+        # jax.random.PRNGKey(0), input_ids, position_ids=position_ids, attention_mask=attention_mask, return_dict=False, init_cache=True
         # )
         init_variables = self.module.init(
             jax.random.PRNGKey(0), input_ids, position_ids=position_ids, attention_mask=attention_mask, init_cache=True
@@ -604,18 +575,18 @@ class FlaxLlamaModule(nn.Module):
 
         # TODO: implement this
         # if output_hidden_states:
-            # all_hidden_states = outputs[1] + (hidden_states,)
-            # outputs = (hidden_states, all_hidden_states) + outputs[2:]
+        # all_hidden_states = outputs[1] + (hidden_states,)
+        # outputs = (hidden_states, all_hidden_states) + outputs[2:]
         # else:
-            # outputs = (hidden_states,) + outputs[1:]
+        # outputs = (hidden_states,) + outputs[1:]
 
         # if not return_dict:
-            # return tuple(v for v in outputs if v is not None)
+        # return tuple(v for v in outputs if v is not None)
 
         # return FlaxBaseModelOutput(
-            # last_hidden_state=hidden_states,
-            # hidden_states=outputs[1],
-            # attentions=outputs[-1],
+        # last_hidden_state=hidden_states,
+        # hidden_states=outputs[1],
+        # attentions=outputs[-1],
         # )
 
         return hidden_states
@@ -627,6 +598,7 @@ class FlaxLlamaModule(nn.Module):
 )
 class FlaxLlamaModel(FlaxLlamaPreTrainedModel):
     module_class = FlaxLlamaModule
+
 
 # append_call_sample_docstring(FlaxLlamaModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC)
 
@@ -672,7 +644,7 @@ class FlaxLlamaForCausalLMModule(nn.Module):
         lm_logits = self.lm_head(hidden_states)
 
         # if not return_dict:
-            # return (lm_logits,) + outputs[1:]
+        # return (lm_logits,) + outputs[1:]
 
         # TODO: return FlaxCausalLMOutput
         # return FlaxCausalLMOutput(logits=lm_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
@@ -719,11 +691,10 @@ class FlaxLlamaForCausalLM(FlaxLlamaPreTrainedModel):
 # append_call_sample_docstring(FlaxLlamaForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC)
 
 if __name__ == "__main__":
-    import flax
-    from flax.traverse_util import flatten_dict
-    from .configuration_llama import LlamaConfig
-    from .modeling_llama import LlamaForCausalLM, _make_causal_mask
     import torch
+
+    from .configuration_llama import LlamaConfig
+    from .modeling_llama import LlamaForCausalLM
 
     key = jax.random.PRNGKey(0)
     torch.manual_seed(0)
@@ -741,30 +712,53 @@ if __name__ == "__main__":
     key, model_key = jax.random.split(key)
     y, params = model.init_with_output(model_key, x, attention_mask=mask, position_ids=position_ids)
 
-    params = flatten_dict(params['params'], sep='.')
+    params = flatten_dict(params["params"], sep=".")
 
     for i, l in enumerate(pt_model.model.layers):
         pt_state = l.state_dict()
-        l.load_state_dict({
-            'self_attn.q_proj.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.self_attn.q_proj.kernel'])).T,
-            'self_attn.k_proj.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.self_attn.k_proj.kernel'])).T,
-            'self_attn.v_proj.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.self_attn.v_proj.kernel'])).T,
-            'self_attn.o_proj.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.self_attn.o_proj.kernel'])).T,
-            'self_attn.rotary_emb.inv_freq': pt_state[f'self_attn.rotary_emb.inv_freq'],
-            'input_layernorm.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.input_layernorm.weight'])),
-            'post_attention_layernorm.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.post_attention_layernorm.weight'])),
-            'mlp.down_proj.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.mlp.down_proj.kernel'])).T,
-            'mlp.up_proj.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.mlp.up_proj.kernel'])).T,
-            'mlp.gate_proj.weight': torch.from_numpy(np.asarray(params[f'model.layers.{i}.mlp.gate_proj.kernel'])).T,
-        })
+        l.load_state_dict(
+            {
+                "self_attn.q_proj.weight": torch.from_numpy(
+                    np.asarray(params[f"model.layers.{i}.self_attn.q_proj.kernel"])
+                ).T,
+                "self_attn.k_proj.weight": torch.from_numpy(
+                    np.asarray(params[f"model.layers.{i}.self_attn.k_proj.kernel"])
+                ).T,
+                "self_attn.v_proj.weight": torch.from_numpy(
+                    np.asarray(params[f"model.layers.{i}.self_attn.v_proj.kernel"])
+                ).T,
+                "self_attn.o_proj.weight": torch.from_numpy(
+                    np.asarray(params[f"model.layers.{i}.self_attn.o_proj.kernel"])
+                ).T,
+                "self_attn.rotary_emb.inv_freq": pt_state["self_attn.rotary_emb.inv_freq"],
+                "input_layernorm.weight": torch.from_numpy(
+                    np.asarray(params[f"model.layers.{i}.input_layernorm.weight"])
+                ),
+                "post_attention_layernorm.weight": torch.from_numpy(
+                    np.asarray(params[f"model.layers.{i}.post_attention_layernorm.weight"])
+                ),
+                "mlp.down_proj.weight": torch.from_numpy(
+                    np.asarray(params[f"model.layers.{i}.mlp.down_proj.kernel"])
+                ).T,
+                "mlp.up_proj.weight": torch.from_numpy(np.asarray(params[f"model.layers.{i}.mlp.up_proj.kernel"])).T,
+                "mlp.gate_proj.weight": torch.from_numpy(
+                    np.asarray(params[f"model.layers.{i}.mlp.gate_proj.kernel"])
+                ).T,
+            }
+        )
 
-    pt_model.model.embed_tokens.weight = torch.nn.Parameter(torch.from_numpy(np.asarray(params['model.embed_tokens.embedding'])))
-    pt_model.model.norm.weight = torch.nn.Parameter(torch.from_numpy(np.asarray(params['model.norm.weight'])))
-    pt_model.lm_head.weight = torch.nn.Parameter(torch.from_numpy(np.asarray(params['lm_head.kernel'].T)))
+    pt_model.model.embed_tokens.weight = torch.nn.Parameter(
+        torch.from_numpy(np.asarray(params["model.embed_tokens.embedding"]))
+    )
+    pt_model.model.norm.weight = torch.nn.Parameter(torch.from_numpy(np.asarray(params["model.norm.weight"])))
+    pt_model.lm_head.weight = torch.nn.Parameter(torch.from_numpy(np.asarray(params["lm_head.kernel"].T)))
 
     x_pt = torch.tensor(np.asarray(x))
-    pt_y = pt_model(x_pt, attention_mask=torch.from_numpy(np.asarray(mask)), position_ids=torch.from_numpy(np.asarray(position_ids)))[0]
-
+    pt_y = pt_model(
+        x_pt,
+        attention_mask=torch.from_numpy(np.asarray(mask)),
+        position_ids=torch.from_numpy(np.asarray(position_ids)),
+    )[0]
 
     pt_y = pt_y.detach().numpy()
 
@@ -772,7 +766,8 @@ if __name__ == "__main__":
         np.testing.assert_allclose(y, pt_y, atol=1e-2, rtol=1e-2)
     except AssertionError as e:
         print(e)
-        import ipdb; ipdb.set_trace()
+        import ipdb
 
+        ipdb.set_trace()
 
     print("done")
