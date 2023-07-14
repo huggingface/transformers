@@ -59,7 +59,7 @@ def convert_tinyvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         if "blocks" in key:
             key = key.replace("blocks", "layers")
         if "norm_head" in key:
-            key = key.replace("norm_head", "tinyvit.layernorm")
+            key = key.replace("norm_head", "layernorm")
         if "head" in key:
             key = key.replace("head", "classifier")
         state_dict[key] = val

@@ -725,8 +725,6 @@ class TinyVitModel(TinyVitPreTrainedModel):
         self.embeddings = TinyVitEmbeddings(config)
         self.encoder = TinyVitEncoder(config, self.embeddings.patches_resolution)
 
-        self.layernorm = nn.LayerNorm(config.hidden_sizes[-1])
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -787,7 +785,6 @@ class TinyVitModel(TinyVitPreTrainedModel):
         sequence_output = encoder_outputs[0]
 
         pooled_output = sequence_output.mean(1)
-        pooled_output = self.layernorm(pooled_output)
 
         if not return_dict:
             output = (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -806,8 +803,8 @@ class TinyVitModel(TinyVitPreTrainedModel):
 
 @add_start_docstrings(
     """
-    TinyVit Model transformer with an image classification head on top (a linear layer on top of the final hidden state
-    of the [CLS] token) e.g. for ImageNet.
+    TinyVit Model transformer with an image classification head on top (a linear layer on top of the mean pooled final
+    hidden states) e.g. for ImageNet.
     """,
     TINYVIT_START_DOCSTRING,
 )
@@ -819,6 +816,7 @@ class TinyVitForImageClassification(TinyVitPreTrainedModel):
         self.tinyvit = TinyVitModel(config)
 
         # Classifier head
+        self.layernorm = nn.LayerNorm(config.hidden_sizes[-1])
         self.classifier = (
             nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
         )
@@ -859,7 +857,7 @@ class TinyVitForImageClassification(TinyVitPreTrainedModel):
         )
 
         pooled_output = outputs[1]
-
+        pooled_output = self.layernorm(pooled_output)
         logits = self.classifier(pooled_output)
 
         loss = None
