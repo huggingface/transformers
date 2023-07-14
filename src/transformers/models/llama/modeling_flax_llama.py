@@ -381,7 +381,6 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        # TODO: add return_dict
         random_params = self.module.init(rngs, input_ids, position_ids=position_ids, attention_mask=attention_mask, return_dict=False)["params"]
 
         if params is not None:
@@ -572,7 +571,6 @@ class FlaxLlamaModule(nn.Module):
         hidden_states = outputs[0]
         hidden_states = self.norm(hidden_states)
 
-        # TODO: implement this
         if output_hidden_states:
             all_hidden_states = outputs[1] + (hidden_states,)
             outputs = (hidden_states, all_hidden_states) + outputs[2:]
@@ -691,10 +689,12 @@ if __name__ == "__main__":
 
     key = jax.random.PRNGKey(0)
     torch.manual_seed(0)
+
     config = LlamaConfig(num_hidden_layers=2, vocab_size=16)
+    model = FlaxLlamaForCausalLM(config)
     print(config)
 
-    model = FlaxLlamaForCausalLMModule(config)
+    model = FlaxLlamaForCausalLM(config)
     pt_model = LlamaForCausalLM(config)
 
     key, subkey = jax.random.split(key)
@@ -703,10 +703,14 @@ if __name__ == "__main__":
     position_ids = jnp.arange(128)[jnp.newaxis, :].repeat(4, axis=0)
 
     key, model_key = jax.random.split(key)
-    y, params = model.init_with_output(model_key, x, attention_mask=mask, position_ids=position_ids)
+    # y, params = model.init_with_output(model_key, x, attention_mask=mask, position_ids=position_ids)
+    params = model.params
+    # y = model(model_key, x, attention_mask=mask, position_ids=position_ids)
+    y = model(x, attention_mask=mask, position_ids=position_ids)
     y = y[0]
 
-    params = flatten_dict(params["params"], sep=".")
+    # params = flatten_dict(params["params"], sep=".")
+    params = flatten_dict(params, sep=".")
 
     for i, l in enumerate(pt_model.model.layers):
         pt_state = l.state_dict()
