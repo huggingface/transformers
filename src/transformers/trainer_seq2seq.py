@@ -254,7 +254,6 @@ class Seq2SeqTrainer(Trainer):
         has_labels = "labels" in inputs
         inputs = self._prepare_inputs(inputs)
 
-        # XXX: adapt synced_gpus for fairscale as well
         # Priority (handled in generate):
         # gen_kwargs > model.generation_config > default GenerationConfig()
 

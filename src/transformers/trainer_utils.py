@@ -618,12 +618,12 @@ def number_of_arguments(func):
     return len(inspect.signature(func).parameters)
 
 
-class ShardedDDPOption(ExplicitEnum):
-    SIMPLE = "simple"
-    ZERO_DP_2 = "zero_dp_2"
-    ZERO_DP_3 = "zero_dp_3"
-    OFFLOAD = "offload"
-    AUTO_WRAP = "auto_wrap"
+# class ShardedDDPOption(ExplicitEnum):
+#     SIMPLE = "simple"
+#     ZERO_DP_2 = "zero_dp_2"
+#     ZERO_DP_3 = "zero_dp_3"
+#     OFFLOAD = "offload"
+#     AUTO_WRAP = "auto_wrap"
 
 
 def find_executable_batch_size(
