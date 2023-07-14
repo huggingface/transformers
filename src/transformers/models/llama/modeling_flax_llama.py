@@ -27,6 +27,7 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel
+from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_llama import LlamaConfig
 
@@ -381,10 +382,7 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
         # TODO: add return_dict
-        # random_params = self.module.init(rngs, input_ids, position_ids=position_ids, attention_mask=attention_mask, return_dict=False)["params"]
-        random_params = self.module.init(rngs, input_ids, position_ids=position_ids, attention_mask=attention_mask)[
-            "params"
-        ]
+        random_params = self.module.init(rngs, input_ids, position_ids=position_ids, attention_mask=attention_mask, return_dict=False)["params"]
 
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
@@ -410,11 +408,8 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         attention_mask = jnp.ones_like(input_ids)
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
-        # init_variables = self.module.init(
-        # jax.random.PRNGKey(0), input_ids, position_ids=position_ids, attention_mask=attention_mask, return_dict=False, init_cache=True
-        # )
         init_variables = self.module.init(
-            jax.random.PRNGKey(0), input_ids, position_ids=position_ids, attention_mask=attention_mask, init_cache=True
+            jax.random.PRNGKey(0), input_ids, position_ids=position_ids, attention_mask=attention_mask, return_dict=False, init_cache=True
         )
         return unfreeze(init_variables["cache"])
 
@@ -507,10 +502,15 @@ class FlaxLlamaBlockCollection(nn.Module):
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = False
     ):
         all_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
 
         for block in self.blocks:
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
             layer_outputs = block(
                 hidden_states,
                 attention_mask=attention_mask,
@@ -525,7 +525,7 @@ class FlaxLlamaBlockCollection(nn.Module):
                 all_attentions += (layer_outputs[1],)
 
         # this contains possible `None` values - `FlaxLlamaModule` will filter them out
-        outputs = (hidden_states, all_attentions)
+        outputs = (hidden_states, all_hidden_states, all_attentions)
 
         return outputs
 
@@ -553,9 +553,8 @@ class FlaxLlamaModule(nn.Module):
         deterministic=True,
         init_cache: bool = False,
         output_attentions: bool = False,
-        # TODO: implement these args
-        # output_hidden_states: bool = False,
-        # return_dict: bool = True,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         input_embeds = self.embed_tokens(input_ids.astype("i4"))
 
@@ -566,30 +565,28 @@ class FlaxLlamaModule(nn.Module):
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
-            # output_hidden_states=output_hidden_states,
-            # return_dict=return_dict,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
         hidden_states = outputs[0]
         hidden_states = self.norm(hidden_states)
 
         # TODO: implement this
-        # if output_hidden_states:
-        # all_hidden_states = outputs[1] + (hidden_states,)
-        # outputs = (hidden_states, all_hidden_states) + outputs[2:]
-        # else:
-        # outputs = (hidden_states,) + outputs[1:]
+        if output_hidden_states:
+            all_hidden_states = outputs[1] + (hidden_states,)
+            outputs = (hidden_states, all_hidden_states) + outputs[2:]
+        else:
+            outputs = (hidden_states,) + outputs[1:]
 
-        # if not return_dict:
-        # return tuple(v for v in outputs if v is not None)
+        if not return_dict:
+            return tuple(v for v in outputs if v is not None)
 
-        # return FlaxBaseModelOutput(
-        # last_hidden_state=hidden_states,
-        # hidden_states=outputs[1],
-        # attentions=outputs[-1],
-        # )
-
-        return hidden_states
+        return FlaxBaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=outputs[1],
+            attentions=outputs[-1],
+        )
 
 
 @add_start_docstrings(
@@ -624,8 +621,8 @@ class FlaxLlamaForCausalLMModule(nn.Module):
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
-        # output_hidden_states: bool = False,
-        # return_dict: bool = True,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         outputs = self.model(
             input_ids,
@@ -634,21 +631,17 @@ class FlaxLlamaForCausalLMModule(nn.Module):
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
-            # output_hidden_states=output_hidden_states,
-            # return_dict=return_dict,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
-        # TODO: add this back when we return `FlaxBaseModelOutput`
-        # hidden_states = outputs[0]
-        hidden_states = outputs
+        hidden_states = outputs[0]
         lm_logits = self.lm_head(hidden_states)
 
-        # if not return_dict:
-        # return (lm_logits,) + outputs[1:]
+        if not return_dict:
+            return (lm_logits,) + outputs[1:]
 
-        # TODO: return FlaxCausalLMOutput
-        # return FlaxCausalLMOutput(logits=lm_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
-        return lm_logits
+        return FlaxCausalLMOutput(logits=lm_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
 
 
 @add_start_docstrings(
@@ -711,6 +704,7 @@ if __name__ == "__main__":
 
     key, model_key = jax.random.split(key)
     y, params = model.init_with_output(model_key, x, attention_mask=mask, position_ids=position_ids)
+    y = y[0]
 
     params = flatten_dict(params["params"], sep=".")
 
