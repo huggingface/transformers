@@ -287,8 +287,8 @@ class TinyVitAttention(torch.nn.Module):
         resolution=(14, 14),
     ):
         super().__init__()
-        # (h, w)
-        assert isinstance(resolution, tuple) and len(resolution) == 2
+        if not isinstance(resolution, tuple) or len(resolution) != 2:
+            raise ValueError("Resolution should be a tuple of (height, width)")
         self.num_heads = num_heads
         self.scale = key_dim**-0.5
         self.key_dim = key_dim
@@ -357,16 +357,18 @@ class TinyViTLayer(nn.Module):
     r"""TinyViT layer (block).
 
     Args:
-        dim (int): Number of input channels.
-        input_resolution (tuple[int, int]): Input resulotion.
-        num_heads (int): Number of attention heads.
-        window_size (int): Window size.
-        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-        drop (float, optional): Dropout rate. Default: 0.0
-        drop_path (float, optional): Stochastic depth rate. Default: 0.0
-        local_conv_size (int): the kernel size of the convolution between
-                               Attention and MLP. Default: 3
-        activation: the activation function. Default: nn.GELU
+        config (`TinyVitConfig`):
+            Model configuration.
+        dim (`int`):
+            Number of input channels.
+        input_resolution (`Ttuple[int, int]`):
+            Input resolution.
+        num_heads (`int`):
+            Number of attention heads.
+        window_size (`int`, *optional*, defaults to 7):
+            Window size.
+        drop_path (`float`, *optional*, defaults to 0.0):
+            Stochastic depth rate.
     """
 
     def __init__(self, config, dim, input_resolution, num_heads, window_size=7, drop_path=0.0):
@@ -615,15 +617,19 @@ class TinyVitEncoder(nn.Module):
             print(f"Hidden states after stage {i}:", hidden_states[0, :3, :3])
 
             if output_hidden_states and output_hidden_states_before_downsampling:
-                batch_size, _, hidden_size = hidden_state_before_downsampling.shape
-                # rearrange b (h w) c -> b c h w
-                # here we use the original (not downsampled) height and width
-                reshaped_hidden_state = hidden_state_before_downsampling.view(
-                    batch_size, *(output_dimensions[0], output_dimensions[1]), hidden_size
-                )
-                reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
+                if i != 0:
+                    print("Shape of hidden states before downsampling:", hidden_state_before_downsampling.shape)
+                    batch_size, _, hidden_size = hidden_state_before_downsampling.shape
+                    # rearrange b (h w) c -> b c h w
+                    # here we use the original (not downsampled) height and width
+                    reshaped_hidden_state = hidden_state_before_downsampling.view(
+                        batch_size, *(output_dimensions[0], output_dimensions[1]), hidden_size
+                    )
+                    reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
                 all_hidden_states += (hidden_state_before_downsampling,)
-                all_reshaped_hidden_states += (reshaped_hidden_state,)
+                all_reshaped_hidden_states += (
+                    (hidden_state_before_downsampling,) if i == 0 else (reshaped_hidden_state,)
+                )
             elif output_hidden_states and not output_hidden_states_before_downsampling:
                 batch_size, _, hidden_size = hidden_states.shape
                 # rearrange b (h w) c -> b c h w
