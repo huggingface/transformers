@@ -13,184 +13,126 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# How to add a model to 🤗 Transformers?
+# Hugging Face Transformers를 추가하는 방법은 무엇인가요? [[how-to-add-a-model-to-transformers]]
 
-The 🤗 Transformers library is often able to offer new models thanks to community contributors. But this can be a challenging project and requires an in-depth knowledge of the 🤗 Transformers library and the model to implement. At Hugging Face, we're trying to empower more of the community to actively add models and we've put together this guide to walk you through the process of adding a PyTorch model (make sure you have [PyTorch installed](https://pytorch.org/get-started/locally/)).
+Hugging Face Transformers 라이브러리는 커뮤니티 기여자들의 덕분에 새로운 모델을 제공할 수 있는 경우가 많습니다. 하지만 이는 도전적인 프로젝트이며 Hugging Face Transformers 라이브러리와 구현할 모델에 대한 깊은 이해가 필요합니다. Hugging Face에서는 더 많은 커뮤니티 멤버가 모델을 적극적으로 추가할 수 있도록 지원하고자 하며, 이 가이드를 통해 PyTorch 모델을 추가하는 과정을 안내하고 있습니다 (PyTorch가 설치되어 있는지 확인해주세요).
 
 <Tip>
 
-If you're interested in implementing a TensorFlow model, take a look at the [How to convert a 🤗 Transformers model to TensorFlow](add_tensorflow_model) guide!
+TensorFlow 모델을 구현하고자 하는 경우, [Hugging Face Transformers 모델을 TensorFlow로 변환하는 방법](add_tensorflow_model) 가이드를 살펴보세요!
 
 </Tip>
 
-Along the way, you'll:
+이 과정을 진행하면 다음과 같은 내용을 이해하게 됩니다:
 
-- get insights into open-source best practices
-- understand the design principles behind one of the most popular deep learning libraries
-- learn how to efficiently test large models
-- learn how to integrate Python utilities like `black`, `ruff`, and `make fix-copies` to ensure clean and readable code
+- 오픈 소스에서의 최선의 실천 방법에 대한 통찰력을 얻습니다.
+- 가장 인기 있는 딥러닝 라이브러리의 설계 원칙을 이해합니다.
+- 대규모 모델을 효율적으로 테스트하는 방법을 배웁니다.
+- `black`, `ruff`, `make fix-copies`와 같은 Python 유틸리티를 통합하여 깨끗하고 가독성 있는 코드를 보장하는 방법을 배웁니다.
 
-A Hugging Face team member will be available to help you along the way so you'll never be alone. 🤗 ❤️
+Hugging Face 팀의 구성원은 항상 도움을 줄 준비가 되어 있으므로 혼자가 아니라는 점을 기억하세요. 🤗 ❤️
 
-To get started, open a [New model addition](https://github.com/huggingface/transformers/issues/new?assignees=&labels=New+model&template=new-model-addition.yml) issue for the model you want to see in 🤗 Transformers. If you're not especially picky about contributing a specific model, you can filter by the [New model label](https://github.com/huggingface/transformers/labels/New%20model) to see if there are any unclaimed model requests and work on it.
+시작하려면 🤗 Transformers에 원하는 모델을 추가하기 위해 [New model addition](https://github.com/huggingface/transformers/issues/new?assignees=&labels=New+model&template=new-model-addition.yml) 이슈를 열어야 합니다. 특정 모델을 기여하는 데 특별히 엄격한 기준을 가지지 않는 경우 [New model label](https://github.com/huggingface/transformers/labels/New%20model)을 필터링하여 요청되지 않은 모델 요청이 있는지 확인하고 작업할 수 있습니다.
 
-Once you've opened a new model request, the first step is to get familiar with 🤗 Transformers if you aren't already!
+새로운 모델 요청을 열었다면 첫 번째 단계는 이미 🤗 Transformers에 익숙하지 않은 경우 🤗 Transformers에 익숙해지는 것입니다!
 
-## General overview of 🤗 Transformers
+## 🤗 Transformers의 전반적인 개요 [[general-overview-of-transformers]]
 
-First, you should get a general overview of 🤗 Transformers. 🤗 Transformers is a very opinionated library, so there is a
-chance that you don't agree with some of the library's philosophies or design choices. From our experience, however, we
-found that the fundamental design choices and philosophies of the library are crucial to efficiently scale 🤗
-Transformers while keeping maintenance costs at a reasonable level.
+먼저, 🤗 Transformers에 대한 전반적인 개요를 파악해야 합니다. 🤗 Transformers는 매우 주관적인 라이브러리이기 때문에 해당 라이브러리의 철학이나 설계 선택 사항에 동의하지 않을 수도 있습니다. 그러나 우리의 경험상 라이브러리의 기본적인 설계 선택과 철학은 🤗 Transformers의 규모를 효율적으로 확장하면서 유지 보수 비용을 합리적인 수준으로 유지하는 데 중요합니다.
 
-A good first starting point to better understand the library is to read the [documentation of our philosophy](philosophy). As a result of our way of working, there are some choices that we try to apply to all models:
+라이브러리의 철학에 대한 문서를 읽는 것이 라이브러리를 더 잘 이해하는 좋은 시작점입니다. 작업 방식으로 인해 모든 모델에 적용하려는 몇 가지 선택 사항이 있습니다:
 
-- Composition is generally favored over-abstraction
-- Duplicating code is not always bad if it strongly improves the readability or accessibility of a model
-- Model files are as self-contained as possible so that when you read the code of a specific model, you ideally only
-  have to look into the respective `modeling_....py` file.
+- 일반적으로 추상화보다는 구성을 선호합니다.
+- 코드를 복제하는 것은 모든 경우에 나쁜 것은 아닙니다. 코드의 가독성이나 접근성을 크게 향상시킨다면 복제하는 것은 좋습니다.
+- 모델 파일은 가능한 한 독립적으로 유지되어야 합니다. 따라서 특정 모델의 코드를 읽을 때 해당 `modeling_....py` 파일만 확인하면 됩니다.
 
-In our opinion, the library's code is not just a means to provide a product, *e.g.* the ability to use BERT for
-inference, but also as the very product that we want to improve. Hence, when adding a model, the user is not only the
-person that will use your model, but also everybody that will read, try to understand, and possibly tweak your code.
+우리는 라이브러리의 코드가 제품을 제공하는 수단뿐만 아니라 개선하고자 하는 제품 자체라고 생각합니다. 따라서 모델을 추가할 때 사용자는 모델을 사용할 사람뿐만 아니라 코드를 읽고 이해하고 필요한 경우 조정할 수 있는 모든 사람이라는 점을 기억해야 합니다.
 
-With this in mind, let's go a bit deeper into the general library design.
+이를 염두에 두고 일반적인 라이브러리 설계에 대해 조금 더 자세히 알아보겠습니다.
 
-### Overview of models
+### 모델 개요 [[overview-of-models]]
 
-To successfully add a model, it is important to understand the interaction between your model and its config,
-[`PreTrainedModel`], and [`PretrainedConfig`]. For exemplary purposes, we will
-call the model to be added to 🤗 Transformers `BrandNewBert`.
+모델을 성공적으로 추가하려면 모델과 해당 구성인 [`PreTrainedModel`] 및 [`PretrainedConfig`] 간의 상호작용을 이해하는 것이 중요합니다. 예를 들어, 🤗 Transformers에 추가하려는 모델을 `BrandNewBert`라고 부르겠습니다.
 
-Let's take a look:
+다음을 살펴보겠습니다:
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers_overview.png"/>
 
-As you can see, we do make use of inheritance in 🤗 Transformers, but we keep the level of abstraction to an absolute
-minimum. There are never more than two levels of abstraction for any model in the library. `BrandNewBertModel`
-inherits from `BrandNewBertPreTrainedModel` which in turn inherits from [`PreTrainedModel`] and
-that's it. As a general rule, we want to make sure that a new model only depends on
-[`PreTrainedModel`]. The important functionalities that are automatically provided to every new
-model are [`~PreTrainedModel.from_pretrained`] and
-[`~PreTrainedModel.save_pretrained`], which are used for serialization and deserialization. All of the
-other important functionalities, such as `BrandNewBertModel.forward` should be completely defined in the new
-`modeling_brand_new_bert.py` script. Next, we want to make sure that a model with a specific head layer, such as
-`BrandNewBertForMaskedLM` does not inherit from `BrandNewBertModel`, but rather uses `BrandNewBertModel`
-as a component that can be called in its forward pass to keep the level of abstraction low. Every new model requires a
-configuration class, called `BrandNewBertConfig`. This configuration is always stored as an attribute in
-[`PreTrainedModel`], and thus can be accessed via the `config` attribute for all classes
-inheriting from `BrandNewBertPreTrainedModel`:
+보다시피, 🤗 Transformers에서는 상속을 사용하지만 추상화 수준을 절대 최소한으로 유지합니다. 라이브러리의 어떤 모델에서도 두 수준 이상의 추상화가 존재하지 않습니다. `BrandNewBertModel`은 `BrandNewBertPreTrainedModel`에서 상속받고, 이 클래스는 [`PreTrainedModel`]에서 상속받습니다. 이로써 새로운 모델은 [`PreTrainedModel`]에만 의존하도록 하려고 합니다. 모든 새로운 모델에 자동으로 제공되는 중요한 기능은 [`~PreTrainedModel.from_pretrained`] 및 [`~PreTrainedModel.save_pretrained`]입니다. 이러한 기능 외에도 `BrandNewBertModel.forward`와 같은 다른 중요한 기능은 새로운 `modeling_brand_new_bert.py` 스크립트에서 완전히 정의되어야 합니다. 또한 `BrandNewBertForMaskedLM`과 같은 특정 헤드 레이어를 가진 모델은 `BrandNewBertModel`을 상속받지 않고 낮은 추상화 수준을 유지하기 위해 `BrandNewBertModel`을 전방 통과하여 호출할 수 있도록 합니다. 모든 새로운 모델은 `BrandNewBertConfig`라는 구성 클래스를 필요로 합니다. 이 구성은 항상 [`PreTrainedModel`]의 속성으로 저장되며, 따라서 `BrandNewBertPreTrainedModel`을 상속받는 모든 클래스에서 `config` 속성을 통해 액세스할 수 있습니다:
 
 ```python
 model = BrandNewBertModel.from_pretrained("brandy/brand_new_bert")
 model.config  # model has access to its config
 ```
 
-Similar to the model, the configuration inherits basic serialization and deserialization functionalities from
-[`PretrainedConfig`]. Note that the configuration and the model are always serialized into two
-different formats - the model to a *pytorch_model.bin* file and the configuration to a *config.json* file. Calling
-[`~PreTrainedModel.save_pretrained`] will automatically call
-[`~PretrainedConfig.save_pretrained`], so that both model and configuration are saved.
+모델과 마찬가지로 구성은 [`PretrainedConfig`]에서 기본 직렬화 및 역직렬화 기능을 상속받습니다. 구성과 모델은 항상 *pytorch_model.bin* 파일과 *config.json* 파일로 각각 별도로 직렬화됩니다. [`~PreTrainedModel.save_pretrained`]를 호출하면 자동으로 [`~PretrainedConfig.save_pretrained`]도 호출되므로 모델과 구성이 모두 저장됩니다.
 
 
-### Code style
+### 코드 스타일 [[code-style]]
 
-When coding your new model, keep in mind that Transformers is an opinionated library and we have a few quirks of our
-own regarding how code should be written :-)
+새로운 모델을 작성할 때, Transformers는 주관적인 라이브러리이며 몇 가지 독특한 코딩 스타일이 있습니다:
 
-1. The forward pass of your model should be fully written in the modeling file while being fully independent of other
-   models in the library. If you want to reuse a block from another model, copy the code and paste it with a
-   `# Copied from` comment on top (see [here](https://github.com/huggingface/transformers/blob/v4.17.0/src/transformers/models/roberta/modeling_roberta.py#L160)
-   for a good example).
-2. The code should be fully understandable, even by a non-native English speaker. This means you should pick
-   descriptive variable names and avoid abbreviations. As an example, `activation` is preferred to `act`.
-   One-letter variable names are strongly discouraged unless it's an index in a for loop.
-3. More generally we prefer longer explicit code to short magical one.
-4. Avoid subclassing `nn.Sequential` in PyTorch but subclass `nn.Module` and write the forward pass, so that anyone
-   using your code can quickly debug it by adding print statements or breaking points.
-5. Your function signature should be type-annotated. For the rest, good variable names are way more readable and
-   understandable than type annotations.
+1. 모델의 forward pass는 모델 파일에 완전히 작성되어야 합니다. 라이브러리의 다른 모델에서 블록을 재사용하려면 코드를 복사하여 위에 `# Copied from` 주석과 함께 붙여넣으면 됩니다 (예: [여기](https://github.com/huggingface/transformers/blob/v4.17.0/src/transformers/models/roberta/modeling_roberta.py#L160)를 참조하세요).
+2. 코드는 완전히 이해하기 쉬워야 합니다. 변수 이름을 명확하게 지정하고 약어를 사용하지 않는 것이 좋습니다. 예를 들어, `act`보다는 `activation`을 선호합니다. 한 글자 변수 이름은 루프의 인덱스인 경우를 제외하고 강력히 권장되지 않습니다.
+3. 더 일반적으로, 짧은 마법 같은 코드보다는 길고 명시적인 코드를 선호합니다.
+4. PyTorch에서 `nn.Sequential`을 하위 클래스로 만들지 말고 `nn.Module`을 하위 클래스로 만들고 forward pass를 작성하여 다른 사람이 코드를 빠르게 디버그할 수 있도록 합니다. print 문이나 중단점을 추가할 수 있습니다.
+5. 함수 시그니처에는 타입 주석을 사용해야 합니다. 그 외에는 타입 주석보다 변수 이름이 훨씬 읽기 쉽고 이해하기 쉽습니다.
 
-### Overview of tokenizers
+### 토크나이저 개요 [[overview-of-tokenizers]]
 
-Not quite ready yet :-( This section will be added soon!
+아직 준비되지 않았습니다 :-( 이 섹션은 곧 추가될 예정입니다!
 
-## Step-by-step recipe to add a model to 🤗 Transformers
+## 🤗 Transformers에 모델 추가하는 단계별 방법 [[stepbystep-recipe-to-add-a-model-to-transformers]]
 
-Everyone has different preferences of how to port a model so it can be very helpful for you to take a look at summaries
-of how other contributors ported models to Hugging Face. Here is a list of community blog posts on how to port a model:
+각각 다른 모델을 이식하는 방법에 대한 요약을 살펴보는 것은 매우 도움이 될 수 있으므로 다른 기여자들이 Hugging Face에 모델을 이식하는 방법에 대한 요약을 살펴보는 것이 매우 유용할 수 있습니다. 다음은 모델을 이식하는 방법에 대한 커뮤니티 블로그 게시물 목록입니다:
 
-1. [Porting GPT2 Model](https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28) by [Thomas](https://huggingface.co/thomwolf)
-2. [Porting WMT19 MT Model](https://huggingface.co/blog/porting-fsmt) by [Stas](https://huggingface.co/stas)
+1. [GPT2 모델 이식하기](https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28) - [Thomas](https://huggingface.co/thomwolf)
+2. [WMT19 MT 모델 이식하기](https://huggingface.co/blog/porting-fsmt) - [Stas](https://huggingface.co/stas)
 
-From experience, we can tell you that the most important things to keep in mind when adding a model are:
+경험상 모델을 추가할 때 주의해야 할 가장 중요한 사항은 다음과 같습니다:
 
--  Don't reinvent the wheel! Most parts of the code you will add for the new 🤗 Transformers model already exist
-  somewhere in 🤗 Transformers. Take some time to find similar, already existing models and tokenizers you can copy
-  from. [grep](https://www.gnu.org/software/grep/) and [rg](https://github.com/BurntSushi/ripgrep) are your
-  friends. Note that it might very well happen that your model's tokenizer is based on one model implementation, and
-  your model's modeling code on another one. *E.g.* FSMT's modeling code is based on BART, while FSMT's tokenizer code
-  is based on XLM.
--  It's more of an engineering challenge than a scientific challenge. You should spend more time on creating an
-  efficient debugging environment than trying to understand all theoretical aspects of the model in the paper.
--  Ask for help, when you're stuck! Models are the core component of 🤗 Transformers so that we at Hugging Face are more
-  than happy to help you at every step to add your model. Don't hesitate to ask if you notice you are not making
-  progress.
+-  흔들림 없이 뒤를 따르세요! 새로운 🤗 Transformers 모델을 위해 추가할 코드의 대부분은 이미 🤗 Transformers 어딘가에 존재합니다. 유사한 이미 존재하는 모델과 토크나이저를 찾아서 복사할 수 있는 시간을 투자하세요. [grep](https://www.gnu.org/software/grep/)와 [rg](https://github.com/BurntSushi/ripgrep)는 친구입니다. 모델의 토크나이저가 한 모델 구현을 기반으로 하고 모델링 코드가 다른 구현을 기반으로 하는 것이 충분히 가능할 수 있습니다. 예를 들어 FSMT의 모델링 코드는 BART를 기반으로 하고 FSMT의 토크나이저 코드는 XLM을 기반으로 합니다.
+-  이것은 과학적인 도전보다는 공학적인 도전입니다. 논문의 모델의 모든 이론적 측면을 이해하려는 것보다 효율적인 디버깅 환경을 만드는 데 더 많은 시간을 소비해야 합니다.
+-  막힐 때 도움을 요청하세요! 모델은 🤗 Transformers의 핵심 구성 요소이므로 Hugging Face의 우리는 당신이 모델을 추가하는 각 단계에서 도움을 주는 데 기꺼이 도움을 줄 준비가 되어 있습니다. 진전이 없다고 느끼면 주저하지 말고 도움을 요청하세요.
 
-In the following, we try to give you a general recipe that we found most useful when porting a model to 🤗 Transformers.
+다음에서는 모델을 🤗 Transformers로 이식하는 데 가장 유용한 일반적인 절차를 제공하려고 노력합니다.
 
-The following list is a summary of everything that has to be done to add a model and can be used by you as a To-Do
-List:
+다음 목록은 모델을 추가하는 데 수행해야 할 모든 작업의 요약이며 To-Do 목록으로 사용할 수 있습니다:
 
-☐ (Optional) Understood the model's theoretical aspects<br>
-☐ Prepared 🤗 Transformers dev environment<br>
-☐ Set up debugging environment of the original repository<br>
-☐ Created script that successfully runs the `forward()` pass using the original repository and checkpoint<br>
-☐ Successfully added the model skeleton to 🤗 Transformers<br>
-☐ Successfully converted original checkpoint to 🤗 Transformers checkpoint<br>
-☐ Successfully ran `forward()` pass in 🤗 Transformers that gives identical output to original checkpoint<br>
-☐ Finished model tests in 🤗 Transformers<br>
-☐ Successfully added tokenizer in 🤗 Transformers<br>
-☐ Run end-to-end integration tests<br>
-☐ Finished docs<br>
-☐ Uploaded model weights to the Hub<br>
-☐ Submitted the pull request<br>
-☐ (Optional) Added a demo notebook
+☐ (선택 사항) BrandNewBert의 이론적 측면 이해<br>
+☐ Hugging Face 개발 환경 준비<br>
+☐ 원본 리포지토리의 디버깅 환경 설정<br>
+☐ 원본 리포지토리와 체크포인트를 사용하여 `forward()` pass가 성공적으로 실행되는 스크립트 작성<br>
+☐ 🤗 Transformers에 모델 스켈레톤 성공적으로 추가<br>
+☐ 원본 체크포인트를 🤗 Transformers 체크포인트로 성공적으로 변환<br>
+☐ 🤗 Transformers에서 원본 체크포인트와 동일한 출력을 내주는 `forward()` pass 성공적으로 실행<br>
+☐ 🤗 Transformers에서 모델 테스트 완료<br>
+☐ 🤗 Transformers에 토크나이저 성공적으로 추가<br>
+☐ 종단 간 통합 테스트 실행<br>
+☐ 문서 작성 완료<br>
+☐ 모델 가중치를 허브에 업로드<br>
+☐ 풀 리퀘스트 제출<br>
+☐ (선택 사항) 데모 노트북 추가
 
-To begin with, we usually recommend to start by getting a good theoretical understanding of `BrandNewBert`. However,
-if you prefer to understand the theoretical aspects of the model *on-the-job*, then it is totally fine to directly dive
-into the `BrandNewBert`'s code-base. This option might suit you better, if your engineering skills are better than
-your theoretical skill, if you have trouble understanding `BrandNewBert`'s paper, or if you just enjoy programming
-much more than reading scientific papers.
+우선, 일반적으로는 `BrandNewBert`의 이론적인 이해를 시작하는 것을 권장합니다. 그러나 이론적 측면을 직접 이해하는 대신 *직접 해보면서* 모델의 이론적 측면을 이해하는 것을 선호하는 경우 바로 `BrandNewBert` 코드 베이스로 빠져드는 것도 괜찮습니다. 이 옵션은 엔지니어링 기술이 이론적 기술보다 더 뛰어난 경우, `BrandNewBert`의 논문을 이해하는 데 어려움이 있는 경우, 또는 과학적인 논문을 읽는 것보다 프로그래밍에 훨씬 더 흥미 있는 경우에 더 적합할 수 있습니다.
 
-### 1. (Optional) Theoretical aspects of BrandNewBert
+### 1. (선택 사항) BrandNewBert의 이론적 측면 [[1-optional-theoretical-aspects-of-brandnewbert]]
 
-You should take some time to read *BrandNewBert's* paper, if such descriptive work exists. There might be large
-sections of the paper that are difficult to understand. If this is the case, this is fine - don't worry! The goal is
-not to get a deep theoretical understanding of the paper, but to extract the necessary information required to
-effectively re-implement the model in 🤗 Transformers. That being said, you don't have to spend too much time on the
-theoretical aspects, but rather focus on the practical ones, namely:
+만약 그런 서술적인 작업이 존재한다면, *BrandNewBert*의 논문을 읽어보는 시간을 가져야 합니다. 이해하기 어려운 섹션이 많을 수 있습니다. 그렇더라도 걱정하지 마세요! 목표는 논문의 깊은 이론적 이해가 아니라 *BrandNewBert*를 🤗 Transformers에서 효과적으로 재구현하기 위해 필요한 정보를 추출하는 것입니다. 이를 위해 이론적 측면에 너무 많은 시간을 투자할 필요는 없지만 다음과 같은 실제적인 측면에 집중해야 합니다:
 
--  What type of model is *brand_new_bert*? BERT-like encoder-only model? GPT2-like decoder-only model? BART-like
-  encoder-decoder model? Look at the [model_summary](model_summary) if you're not familiar with the differences between those.
--  What are the applications of *brand_new_bert*? Text classification? Text generation? Seq2Seq tasks, *e.g.,*
-  summarization?
--  What is the novel feature of the model making it different from BERT/GPT-2/BART?
--  Which of the already existing [🤗 Transformers models](https://huggingface.co/transformers/#contents) is most
-  similar to *brand_new_bert*?
--  What type of tokenizer is used? A sentencepiece tokenizer? Word piece tokenizer? Is it the same tokenizer as used
-  for BERT or BART?
+- *BrandNewBert*는 어떤 유형의 모델인가요? BERT와 유사한 인코더 모델인가요? GPT2와 유사한 디코더 모델인가요? BART와 유사한 인코더-디코더 모델인가요? [model_summary](model_summary)를 참조하여 이들 간의 차이점에 익숙하지 않은 경우를 확인하세요.
+- *BrandNewBert*의 응용 분야는 무엇인가요? 텍스트 분류인가요? 텍스트 생성인가요? 요약과 같은 Seq2Seq 작업인가요?
+- *brand_new_bert*와 BERT/GPT-2/BART와 다른 특징은 무엇인가요?
+- *brand_new_bert*와 가장 유사한 [🤗 Transformers 모델](https://huggingface.co/transformers/#contents)은 무엇인가요?
+- 어떤 종류의 토크나이저가 사용되나요? 문장 조각 분할 토크나이저인가요? 단어 조각 분할 토크나이저인가요? BERT 또는 BART에 사용되는 동일한 토크나이저인가요?
 
-After you feel like you have gotten a good overview of the architecture of the model, you might want to write to the
-Hugging Face team with any questions you might have. This might include questions regarding the model's architecture,
-its attention layer, etc. We will be more than happy to help you.
+모델의 아키텍처에 대한 좋은 개요를 얻은 후, 궁금한 사항이 있으면 Hugging Face 팀에 문의하십시오. 이는 모델의 아키텍처, 어텐션 레이어 등에 관한 질문을 포함할 수 있습니다. Hugging Face의 유지 관리자들은 보통 코드를 검토하는 것에 대해 매우 기뻐하므로 자신들의 코드를 살펴보는 누군가에 대해 문제를 개방하거나 심지어 풀 리퀘스트를 제출하는 데 매우 흥분할 것입니다!
 
-### 2. Next prepare your environment
+### 2. 개발 환경 설정 [[2-next-prepare-your-environment]]
 
-1. Fork the [repository](https://github.com/huggingface/transformers) by clicking on the ‘Fork' button on the
-   repository's page. This creates a copy of the code under your GitHub user account.
+1. 리포지토리 페이지에서 "Fork" 버튼을 클릭하여 리포지토리의 사본을 GitHub 사용자 계정으로 만듭니다.
 
-2. Clone your `transformers` fork to your local disk, and add the base repository as a remote:
+2. `transformers` 포크를 로컬 디스크에 클론하고 기본 리포지토리를 원격 저장소로 추가합니다:
 
 ```bash
 git clone https://github.com/[your Github handle]/transformers.git
@@ -198,7 +140,7 @@ cd transformers
 git remote add upstream https://github.com/huggingface/transformers.git
 ```
 
-3. Set up a development environment, for instance by running the following command:
+3. 개발 환경을 설정합니다. 다음 명령을 실행하여 개발 환경을 설정할 수 있습니다:
 
 ```bash
 python -m venv .env
@@ -206,26 +148,23 @@ source .env/bin/activate
 pip install -e ".[dev]"
 ```
 
-Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
-failure with this command. If that's the case make sure to install the Deep Learning framework you are working with
-(PyTorch, TensorFlow and/or Flax) then do:
+각 운영 체제에 따라 Transformers의 선택적 종속성 수가 증가하면이 명령으로 실패할 수 있습니다. 그런 경우에는 작업 중인 딥 러닝 프레임워크 (PyTorch, TensorFlow 및/또는 Flax)을 설치한 다음 다음 명령을 수행하면 됩니다:
 
 ```bash
 pip install -e ".[quality]"
 ```
 
-which should be enough for most use cases. You can then return to the parent directory
+대부분의 사용 사례에는 이것으로 충분합니다. 그런 다음 상위 디렉토리로 돌아갑니다.
 
 ```bash
 cd ..
 ```
 
-4. We recommend adding the PyTorch version of *brand_new_bert* to Transformers. To install PyTorch, please follow the
-   instructions on https://pytorch.org/get-started/locally/.
+4. Transformers에 *brand_new_bert*의 PyTorch 버전을 추가하는 것을 권장합니다. PyTorch를 설치하려면 다음 링크의 지침을 따르십시오: https://pytorch.org/get-started/locally/.
 
-**Note:** You don't need to have CUDA installed. Making the new model work on CPU is sufficient.
+**참고:** CUDA를 설치할 필요는 없습니다. 새로운 모델이 CPU에서 작동하도록 만드는 것이 충분합니다.
 
-5. To port *brand_new_bert*, you will also need access to its original repository:
+5. *brand_new_bert*를 이식하기 위해서는 해당 원본 저장소에 접근할 수 있어야 합니다:
 
 ```bash
 git clone https://github.com/org_that_created_brand_new_bert_org/brand_new_bert.git
@@ -233,62 +172,37 @@ cd brand_new_bert
 pip install -e .
 ```
 
-Now you have set up a development environment to port *brand_new_bert* to 🤗 Transformers.
+이제 *brand_new_bert*를 🤗 Transformers로 이식하기 위한 개발 환경을 설정하였습니다.
 
-### 3.-4. Run a pretrained checkpoint using the original repository
+### 3. 원본 저장소에서 사전 훈련된 체크포인트 실행하기 [[34-run-a-pretrained-checkpoint-using-the-original-repository]]
 
-At first, you will work on the original *brand_new_bert* repository. Often, the original implementation is very
-“researchy”. Meaning that documentation might be lacking and the code can be difficult to understand. But this should
-be exactly your motivation to reimplement *brand_new_bert*. At Hugging Face, one of our main goals is to *make people
-stand on the shoulders of giants* which translates here very well into taking a working model and rewriting it to make
-it as **accessible, user-friendly, and beautiful** as possible. This is the number-one motivation to re-implement
-models into 🤗 Transformers - trying to make complex new NLP technology accessible to **everybody**.
+먼저, 원본 *brand_new_bert* 저장소에서 작업을 시작합니다. 원본 구현은 보통 "연구용"으로 많이 사용됩니다. 즉, 문서화가 부족하고 코드가 이해하기 어려울 수 있습니다. 그러나 이것이 바로 *brand_new_bert*를 다시 구현하려는 동기가 되어야 합니다. Hugging Face에서의 주요 목표 중 하나는 **거인의 어깨 위에 서는 것**이며, 이는 여기에서 쉽게 해석되어 동작하는 모델을 가져와서 가능한 한 **접근 가능하고 사용자 친화적이며 아름답게** 만드는 것입니다. 이것은 🤗 Transformers에서 모델을 다시 구현하는 가장 중요한 동기입니다 - 새로운 복잡한 NLP 기술을 **모두에게** 접근 가능하게 만드는 것을 목표로 합니다.
 
-You should start thereby by diving into the original repository.
+따라서 원본 저장소에 대해 자세히 살펴보는 것으로 시작해야 합니다.
 
-Successfully running the official pretrained model in the original repository is often **the most difficult** step.
-From our experience, it is very important to spend some time getting familiar with the original code-base. You need to
-figure out the following:
+원본 저장소에서 공식 사전 훈련된 모델을 성공적으로 실행하는 것은 종종 **가장 어려운** 단계입니다. 우리의 경험에 따르면, 원본 코드 베이스에 익숙해지는 데 시간을 투자하는 것이 매우 중요합니다. 다음을 파악해야 합니다:
 
-- Where to find the pretrained weights?
-- How to load the pretrained weights into the corresponding model?
-- How to run the tokenizer independently from the model?
-- Trace one forward pass so that you know which classes and functions are required for a simple forward pass. Usually,
-  you only have to reimplement those functions.
-- Be able to locate the important components of the model: Where is the model's class? Are there model sub-classes,
-  *e.g.* EncoderModel, DecoderModel? Where is the self-attention layer? Are there multiple different attention layers,
-  *e.g.* *self-attention*, *cross-attention*...?
-- How can you debug the model in the original environment of the repo? Do you have to add *print* statements, can you
-  work with an interactive debugger like *ipdb*, or should you use an efficient IDE to debug the model, like PyCharm?
+- 사전 훈련된 가중치를 어디서 찾을 수 있는지?
+- 사전 훈련된 가중치를 해당 모델에로드하는 방법은?
+- 모델과 독립적으로 토크나이저를 실행하는 방법은?
+- 간단한 forward pass에 필요한 클래스와 함수를 파악하기 위해 한 번 추적해 보세요. 일반적으로 해당 함수들만 다시 구현하면 됩니다.
+- 모델의 중요한 구성 요소를 찾을 수 있어야 합니다. 모델 클래스는 어디에 있나요? 모델 하위 클래스(*EncoderModel*, *DecoderModel* 등)가 있나요? self-attention 레이어는 어디에 있나요? self-attention, cross-attention 등 여러 가지 다른 어텐션 레이어가 있나요?
+- 원본 환경에서 모델을 디버그할 수 있는 방법은 무엇인가요? *print* 문을 추가해야 하나요? *ipdb*와 같은 대화식 디버거를 사용할 수 있나요? PyCharm과 같은 효율적인 IDE를 사용해 모델을 디버그할 수 있나요?
 
-It is very important that before you start the porting process, that you can **efficiently** debug code in the original
-repository! Also, remember that you are working with an open-source library, so do not hesitate to open an issue, or
-even a pull request in the original repository. The maintainers of this repository are most likely very happy about
-someone looking into their code!
+원본 저장소에서 코드를 이식하는 작업을 시작하기 전에 원본 저장소에서 코드를 **효율적으로** 디버그할 수 있어야 합니다! 또한, 이것은 오픈 소스 라이브러리로 작업하고 있다는 것을 기억해야 합니다. 따라서 원본 저장소에서 문제를 열거나 풀 리퀘스트를 열기를 주저하지 마십시오. 이 저장소의 유지 관리자들은 자신들의 코드를 살펴볼 사람에게 대단히 만족할 것입니다!
 
-At this point, it is really up to you which debugging environment and strategy you prefer to use to debug the original
-model. We strongly advise against setting up a costly GPU environment, but simply work on a CPU both when starting to
-dive into the original repository and also when starting to write the 🤗 Transformers implementation of the model. Only
-at the very end, when the model has already been successfully ported to 🤗 Transformers, one should verify that the
-model also works as expected on GPU.
+현재 시점에서, 원래 모델을 디버깅하기 위해 어떤 디버깅 환경과 전략을 선호하는지는 당신에게 달렸습니다. 우리는 고가의 GPU 환경을 구축하는 것을 강력히 비추천합니다. 대신, 원래 저장소로 들어가서 작업을 시작할 때와 🤗 Transformers 모델의 구현을 시작할 때에도 CPU에서 작업하는 것이 좋습니다. 모델이 이미 🤗 Transformers로 성공적으로 이식되었을 때에만 모델이 GPU에서도 예상대로 작동하는지 확인해야합니다.
 
-In general, there are two possible debugging environments for running the original model
+일반적으로, 원래 모델을 실행하기 위한 두 가지 가능한 디버깅 환경이 있습니다.
 
--  [Jupyter notebooks](https://jupyter.org/) / [google colab](https://colab.research.google.com/notebooks/intro.ipynb)
--  Local python scripts.
+- [Jupyter 노트북](https://jupyter.org/) / [Google Colab](https://colab.research.google.com/notebooks/intro.ipynb)
+- 로컬 Python 스크립트
 
-Jupyter notebooks have the advantage that they allow for cell-by-cell execution which can be helpful to better split
-logical components from one another and to have faster debugging cycles as intermediate results can be stored. Also,
-notebooks are often easier to share with other contributors, which might be very helpful if you want to ask the Hugging
-Face team for help. If you are familiar with Jupyter notebooks, we strongly recommend you to work with them.
+Jupyter 노트북의 장점은 셀 단위로 실행할 수 있다는 것입니다. 이는 논리적인 구성 요소를 더 잘 분리하고 중간 결과를 저장할 수 있으므로 디버깅 사이클이 더 빨라질 수 있습니다. 또한, 노트북은 다른 기여자와 쉽게 공유할 수 있으므로 Hugging Face 팀의 도움을 요청하려는 경우 매우 유용할 수 있습니다. Jupyter 노트북에 익숙하다면 이를 사용하는 것을 강력히 추천합니다.
 
-The obvious disadvantage of Jupyter notebooks is that if you are not used to working with them you will have to spend
-some time adjusting to the new programming environment and that you might not be able to use your known debugging tools
-anymore, like `ipdb`.
+Jupyter 노트북의 단점은 사용에 익숙하지 않은 경우 새로운 프로그래밍 환경에 적응하는 데 시간을 할애해야 하며, `ipdb`와 같은 알려진 디버깅 도구를 더 이상 사용할 수 없을 수도 있다는 것입니다.
 
-For each code-base, a good first step is always to load a **small** pretrained checkpoint and to be able to reproduce a
-single forward pass using a dummy integer vector of input IDs as an input. Such a script could look like this (in
-pseudocode):
+각 코드 베이스에 대해 좋은 첫 번째 단계는 항상 **작은** 사전 훈련된 체크포인트를 로드하고 더미 정수 벡터 입력을 사용하여 단일 forward pass를 재현하는 것입니다. 이와 같은 스크립트는 다음과 같을 수 있습니다(의사 코드로 작성):
 
 ```python
 model = BrandNewBertModel.load_pretrained_checkpoint("/path/to/checkpoint/")
@@ -296,55 +210,38 @@ input_ids = [0, 4, 5, 2, 3, 7, 9]  # vector of input ids
 original_output = model.predict(input_ids)
 ```
 
-Next, regarding the debugging strategy, there are generally a few from which to choose from:
+다음으로, 디버깅 전략에 대해 일반적으로 다음과 같은 몇 가지 선택지가 있습니다:
 
-- Decompose the original model into many small testable components and run a forward pass on each of those for
-  verification
-- Decompose the original model only into the original *tokenizer* and the original *model*, run a forward pass on
-  those, and use intermediate print statements or breakpoints for verification
+- 원본 모델을 많은 작은 테스트 가능한 구성 요소로 분해하고 각각에 대해 forward pass를 실행하여 검증합니다.
+- 원본 모델을 원본 *tokenizer*과 원본 *model*로만 분해하고 해당 부분에 대해 forward pass를 실행한 후 검증을 위해 중간 출력(print 문 또는 중단점)을 사용합니다.
 
-Again, it is up to you which strategy to choose. Often, one or the other is advantageous depending on the original code
-base.
+다시 말하지만, 어떤 전략을 선택할지는 당신에게 달려 있습니다. 원본 코드 베이스에 따라 하나 또는 다른 전략이 유리할 수 있습니다.
 
-If the original code-base allows you to decompose the model into smaller sub-components, *e.g.* if the original
-code-base can easily be run in eager mode, it is usually worth the effort to do so. There are some important advantages
-to taking the more difficult road in the beginning:
+원본 코드 베이스를 모델의 작은 하위 구성 요소로 분해할 수 있는지 여부, 예를 들어 원본 코드 베이스가 즉시 실행 모드에서 간단히 실행될 수 있는 경우, 그런 경우에는 그 노력이 가치가 있다는 것이 일반적입니다. 초기에 더 어려운 방법을 선택하는 것에는 몇 가지 중요한 장점이 있습니다.
 
-- at a later stage when comparing the original model to the Hugging Face implementation, you can verify automatically
-  for each component individually that the corresponding component of the 🤗 Transformers implementation matches instead
-  of relying on visual comparison via print statements
-- it can give you some rope to decompose the big problem of porting a model into smaller problems of just porting
-  individual components and thus structure your work better
-- separating the model into logical meaningful components will help you to get a better overview of the model's design
-  and thus to better understand the model
-- at a later stage those component-by-component tests help you to ensure that no regression occurs as you continue
-  changing your code
+- 원본 모델을 🤗 Transformers 구현과 비교할 때 각 구성 요소가 일치하는지 자동으로 확인할 수 있습니다. 즉, 시각적인 비교(print 문을 통한 비교가 아닌) 대신 🤗 Transformers 구현의 해당 구성 요소가 일치하는지 확인할 수 있습니다.
+- 전체 모델을 모듈별로 작은 구성 요소로 분해함으로써 모델을 이식하는 큰 문제를 단순히 개별 구성 요소를 이식하는 작은 문제로 분해할 수 있으므로 작업을 더 잘 구조화할 수 있습니다.
+- 모델을 논리적으로 의미 있는 구성 요소로 분리하는 것은 모델의 설계에 대한 더 나은 개요를 얻고 모델을 더 잘 이해하는 데 도움이 됩니다.
+- 이러한 구성 요소별 테스트를 통해 코드를 변경하면서 회귀가 발생하지 않도록 보장할 수 있습니다.
 
-[Lysandre's](https://gist.github.com/LysandreJik/db4c948f6b4483960de5cbac598ad4ed) integration checks for ELECTRA
-gives a nice example of how this can be done.
+[Lysandre의 ELECTRA 통합 검사](https://gist.github.com/LysandreJik/db4c948f6b4483960de5cbac598ad4ed)는 이를 수행하는 좋은 예제입니다.
 
-However, if the original code-base is very complex or only allows intermediate components to be run in a compiled mode,
-it might be too time-consuming or even impossible to separate the model into smaller testable sub-components. A good
-example is [T5's MeshTensorFlow](https://github.com/tensorflow/mesh/tree/master/mesh_tensorflow) library which is
-very complex and does not offer a simple way to decompose the model into its sub-components. For such libraries, one
-often relies on verifying print statements.
+그러나 원본 코드 베이스가 매우 복잡하거나 중간 구성 요소를 컴파일된 모드에서 실행하는 것만 허용하는 경우, 모델을 테스트 가능한 작은 하위 구성 요소로 분해하는 것이 시간이 많이 소요되거나 불가능할 수도 있습니다. [T5의 MeshTensorFlow](https://github.com/tensorflow/mesh/tree/master/mesh_tensorflow) 라이브러리는 매우 복잡하며 모델을 하위 구성 요소로 분해하는 간단한 방법을 제공하지 않습니다. 이러한 라이브러리의 경우, 보통 print 문을 통해 확인합니다.
 
-No matter which strategy you choose, the recommended procedure is often the same in that you should start to debug the
-starting layers first and the ending layers last.
+어떤 전략을 선택하더라도 권장되는 절차는 동일합니다. 먼저 시작 레이어를 디버그하고 마지막 레이어를 마지막에 디버그하는 것이 좋습니다.
 
-It is recommended that you retrieve the output, either by print statements or sub-component functions, of the following
-layers in the following order:
+다음 순서로 각 레이어의 출력을 검색하는 것이 좋습니다:
 
-1. Retrieve the input IDs passed to the model
-2. Retrieve the word embeddings
-3. Retrieve the input of the first Transformer layer
-4. Retrieve the output of the first Transformer layer
-5. Retrieve the output of the following n - 1 Transformer layers
-6. Retrieve the output of the whole BrandNewBert Model
+1. 모델에 전달된 입력 ID 가져오기
+2. 워드 임베딩 가져오기
+3. 첫 번째 Transformer 레이어의 입력 가져오기
+4. 첫 번째 Transformer 레이어의 출력 가져오기
+5. 다음 n-1개의 Transformer 레이어의 출력 가져오기
+6. BrandNewBert 모델의 출력 가져오기
 
-Input IDs should thereby consists of an array of integers, *e.g.* `input_ids = [0, 4, 4, 3, 2, 4, 1, 7, 19]`
+입력 ID는 정수 배열로 구성되며, 예를 들어 `input_ids = [0, 4, 4, 3, 2, 4, 1, 7, 19]`와 같을 수 있습니다.
 
-The outputs of the following layers often consist of multi-dimensional float arrays and can look like this:
+다음 레이어의 출력은 종종 다차원 실수 배열로 구성되며, 다음과 같이 나타낼 수 있습니다:
 
 ```
 [[
@@ -357,143 +254,89 @@ The outputs of the following layers often consist of multi-dimensional float arr
  [-0.5334, -0.6403,  0.4271,  ..., -0.3339,  0.6533,  0.8694]]],
 ```
 
-We expect that every model added to 🤗 Transformers passes a couple of integration tests, meaning that the original
-model and the reimplemented version in 🤗 Transformers have to give the exact same output up to a precision of 0.001!
-Since it is normal that the exact same model written in different libraries can give a slightly different output
-depending on the library framework, we accept an error tolerance of 1e-3 (0.001). It is not enough if the model gives
-nearly the same output, they have to be the almost identical. Therefore, you will certainly compare the intermediate
-outputs of the 🤗 Transformers version multiple times against the intermediate outputs of the original implementation of
-*brand_new_bert* in which case an **efficient** debugging environment of the original repository is absolutely
-important. Here is some advice is to make your debugging environment as efficient as possible.
+🤗 Transformers에 추가되는 모든 모델은 통합 테스트를 통과해야 합니다. 즉, 원본 모델과 🤗 Transformers의 재구현 버전이 0.001의 정밀도로 정확히 동일한 출력을 내야 합니다! 동일한 모델이 다른 라이브러리에서 작성되었을 때 라이브러리 프레임워크에 따라 약간 다른 출력을 얻는 것은 정상이므로 1e-3(0.001)의 오차 허용을 받아들입니다. 거의 동일한 출력을 내는 것만으로는 충분하지 않으며, 거의 동일해야 합니다. 따라서 🤗 Transformers 버전의 중간 출력을 *brand_new_bert*의 원래 구현의 중간 출력과 여러 번 비교하게 될 것입니다. 이 경우 원본 저장소의 **효율적인** 디버깅 환경이 절대적으로 중요합니다. 디버깅 환경을 가능한 한 효율적으로 만드는 몇 가지 조언을 제시합니다.
 
-- Find the best way of debugging intermediate results. Is the original repository written in PyTorch? Then you should
-  probably take the time to write a longer script that decomposes the original model into smaller sub-components to
-  retrieve intermediate values. Is the original repository written in Tensorflow 1? Then you might have to rely on
-  TensorFlow print operations like [tf.print](https://www.tensorflow.org/api_docs/python/tf/print) to output
-  intermediate values. Is the original repository written in Jax? Then make sure that the model is **not jitted** when
-  running the forward pass, *e.g.* check-out [this link](https://github.com/google/jax/issues/196).
-- Use the smallest pretrained checkpoint you can find. The smaller the checkpoint, the faster your debug cycle
-  becomes. It is not efficient if your pretrained model is so big that your forward pass takes more than 10 seconds.
-  In case only very large checkpoints are available, it might make more sense to create a dummy model in the new
-  environment with randomly initialized weights and save those weights for comparison with the 🤗 Transformers version
-  of your model
-- Make sure you are using the easiest way of calling a forward pass in the original repository. Ideally, you want to
-  find the function in the original repository that **only** calls a single forward pass, *i.e.* that is often called
-  `predict`, `evaluate`, `forward` or `__call__`. You don't want to debug a function that calls `forward`
-  multiple times, *e.g.* to generate text, like `autoregressive_sample`, `generate`.
-- Try to separate the tokenization from the model's *forward* pass. If the original repository shows examples where
-  you have to input a string, then try to find out where in the forward call the string input is changed to input ids
-  and start from this point. This might mean that you have to possibly write a small script yourself or change the
-  original code so that you can directly input the ids instead of an input string.
-- Make sure that the model in your debugging setup is **not** in training mode, which often causes the model to yield
-  random outputs due to multiple dropout layers in the model. Make sure that the forward pass in your debugging
-  environment is **deterministic** so that the dropout layers are not used. Or use *transformers.utils.set_seed*
-  if the old and new implementations are in the same framework.
+- 중간 결과를 디버그하는 가장 좋은 방법을 찾으세요. 원본 저장소가 PyTorch로 작성되었다면 원본 모델을 더 작은 하위 구성 요소로 분해하여 중간 값을 검색하는 긴 스크립트를 작성하는 것이 시간을 투자하는 가치가 있습니다. 원본 저장소가 Tensorflow 1로 작성되었다면 [tf.print](https://www.tensorflow.org/api_docs/python/tf/print)와 같은 Tensorflow 출력 작업을 사용하여 중간 값을 출력해야 할 수도 있습니다. 원본 저장소가 Jax로 작성되었다면 forward pass를 실행할 때 모델이 **jit 되지 않도록** 해야 합니다. 예를 들어 [이 링크](https://github.com/google/jax/issues/196)를 확인해 보세요.
+- 사용 가능한 가장 작은 사전 훈련된 체크포인트를 사용하세요. 체크포인트가 작을수록 디버그 사이클이 더 빨라집니다. 전반적으로 forward pass에 10초 이상이 걸리는 경우 효율적이지 않습니다. 매우 큰 체크포인트만 사용할 수 있는 경우, 새 환경에서 임의로 초기화된 가중치로 더미 모델을 만들고 해당 가중치를 🤗 Transformers 버전과 비교하기 위해 저장하는 것이 더 의미가 있을 수 있습니다.
+- 디버깅 설정에서 가장 쉽게 forward pass를 호출하는 방법을 사용하세요. 원본 저장소에서 **단일** forward pass만 호출하는 함수를 찾는 것이 이상적입니다. 이 함수는 일반적으로 `predict`, `evaluate`, `forward`, `__call__`과 같이 호출됩니다. `forward`를 여러 번 호출하여 텍스트를 생성하는 등의 작업을 수행하는 함수를 디버그하고 싶지 않습니다.
+- 토큰화 과정을 모델의 *forward* pass와 분리하려고 노력하세요. 원본 저장소에서 입력 문자열을 입력해야 하는 예제가 있는 경우, 입력 문자열이 입력 ID로 변경되는 순간을 찾아서 시작하세요. 이 경우 직접 ID를 입력할 수 있도록 작은 스크립트를 작성하거나 원본 코드를 수정해야 할 수도 있습니다.
+- 디버깅 설정에서 모델이 훈련 모드가 아니라는 것을 확인하세요. 훈련 모드에서는 모델의 여러 드롭아웃 레이어 때문에 무작위 출력이 생성될 수 있습니다. 디버깅 환경에서 forward pass가 **결정론적**이도록 해야 합니다. 또는 동일한 프레임워크에 있는 경우 *transformers.utils.set_seed*를 사용하세요.
 
-The following section gives you more specific details/tips on how you can do this for *brand_new_bert*.
+다음 섹션에서는 *brand_new_bert*에 대해 이 작업을 수행하는 데 더 구체적인 세부 사항/팁을 제공합니다.
 
-### 5.-14. Port BrandNewBert to 🤗 Transformers
+### 4. 🤗 Transformers에 BrandNewBert를 이식하기 [[514-port-brandnewbert-to-transformers]]
 
-Next, you can finally start adding new code to 🤗 Transformers. Go into the clone of your 🤗 Transformers' fork:
+이제, 마침내 🤗 Transformers에 새로운 코드를 추가할 수 있습니다. 🤗 Transformers 포크의 클론으로 이동하세요:
 
 ```bash
 cd transformers
 ```
 
-In the special case that you are adding a model whose architecture exactly matches the model architecture of an
-existing model you only have to add a conversion script as described in [this section](#write-a-conversion-script).
-In this case, you can just re-use the whole model architecture of the already existing model.
+다음 특별한 경우는 이미 존재하는 모델의 모델 아키텍처와 정확히 일치하는 모델을 추가하는 경우입니다. [이 섹션](#write-a-conversion-script)에 설명된대로 변환 스크립트만 추가하면 됩니다. 이 경우에는 이미 존재하는 모델의 전체 모델 아키텍처를 그대로 재사용할 수 있습니다.
 
-Otherwise, let's start generating a new model. You have two choices here:
+그렇지 않으면 새로운 모델 생성을 시작합시다. 여기에서 두 가지 선택지가 있습니다:
 
-- `transformers-cli add-new-model-like` to add a new model like an existing one
-- `transformers-cli add-new-model` to add a new model from our template (will look like BERT or Bart depending on the type of model you select)
+- `transformers-cli add-new-model-like`를 사용하여 기존 모델과 유사한 새로운 모델 추가하기
+- `transformers-cli add-new-model`을 사용하여 템플릿을 기반으로 한 새로운 모델 추가하기 (선택한 모델 유형에 따라 BERT 또는 Bart와 유사한 모습일 것입니다)
 
-In both cases, you will be prompted with a questionnaire to fill the basic information of your model. The second command requires to install `cookiecutter`, you can find more information on it [here](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model).
+두 경우 모두, 모델의 기본 정보를 입력하는 설문조사가 제시됩니다. 두 번째 명령어는 `cookiecutter`를 설치해야 합니다. 자세한 정보는 [여기](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model)에서 확인할 수 있습니다.
 
-**Open a Pull Request on the main huggingface/transformers repo**
+**huggingface/transformers 메인 저장소에 Pull Request 열기**
 
-Before starting to adapt the automatically generated code, now is the time to open a “Work in progress (WIP)” pull
-request, *e.g.* “[WIP] Add *brand_new_bert*”, in 🤗 Transformers so that you and the Hugging Face team can work
-side-by-side on integrating the model into 🤗 Transformers.
+자동으로 생성된 코드를 수정하기 전에, 지금은 "작업 진행 중 (WIP)" 풀 리퀘스트를 열기 위한 시기입니다. 예를 들어, 🤗 Transformers에 "*brand_new_bert* 추가"라는 제목의 "[WIP] Add *brand_new_bert*" 풀 리퀘스트를 엽니다. 이렇게 하면 당신과 Hugging Face 팀이 🤗 Transformers에 모델을 통합하는 작업을 함께할 수 있습니다.
 
-You should do the following:
+다음을 수행해야 합니다:
 
-1. Create a branch with a descriptive name from your main branch
+1. 메인 브랜치에서 설명적인 이름으로 브랜치 생성
 
 ```bash
 git checkout -b add_brand_new_bert
 ```
 
-2. Commit the automatically generated code:
+2. 자동으로 생성된 코드 커밋
 
 ```bash
 git add .
 git commit
 ```
 
-3. Fetch and rebase to current main
+3. 현재 메인을 가져오고 리베이스
 
 ```bash
 git fetch upstream
 git rebase upstream/main
 ```
 
-4. Push the changes to your account using:
+4. 변경 사항을 계정에 푸시
 
 ```bash
 git push -u origin a-descriptive-name-for-my-changes
 ```
 
-5. Once you are satisfied, go to the webpage of your fork on GitHub. Click on “Pull request”. Make sure to add the
-   GitHub handle of some members of the Hugging Face team as reviewers, so that the Hugging Face team gets notified for
-   future changes.
+5. 만족스러울 때, GitHub에서 자신의 포크 웹 페이지로 이동합니다. "Pull request"를 클릭합니다. Hugging Face 팀의 일부 멤버의 GitHub 핸들을 리뷰어로 추가하여 Hugging Face 팀이 앞으로의 변경 사항에 대해 알림을 받을 수 있도록 합니다.
 
-6. Change the PR into a draft by clicking on “Convert to draft” on the right of the GitHub pull request web page.
+6. GitHub 풀 리퀘스트 웹 페이지 오른쪽에 있는 "Convert to draft"를 클릭하여 PR을 초안으로 변경합니다.
 
-In the following, whenever you have done some progress, don't forget to commit your work and push it to your account so
-that it shows in the pull request. Additionally, you should make sure to update your work with the current main from
-time to time by doing:
+다음으로, 어떤 진전을 이루었다면 작업을 커밋하고 계정에 푸시하여 풀 리퀘스트에 표시되도록 해야 합니다. 또한, 다음과 같이 현재 메인과 작업을 업데이트해야 합니다:
 
 ```bash
 git fetch upstream
 git merge upstream/main
 ```
 
-In general, all questions you might have regarding the model or your implementation should be asked in your PR and
-discussed/solved in the PR. This way, the Hugging Face team will always be notified when you are committing new code or
-if you have a question. It is often very helpful to point the Hugging Face team to your added code so that the Hugging
-Face team can efficiently understand your problem or question.
+일반적으로, 모델 또는 구현에 관한 모든 질문은 자신의 PR에서 해야 하며, PR에서 토론되고 해결되어야 합니다. 이렇게 하면 Hugging Face 팀이 새로운 코드를 커밋하거나 질문을 할 때 항상 알림을 받을 수 있습니다. Hugging Face 팀에게 문제 또는 질문을 효율적으로 이해할 수 있도록 추가한 코드를 가리키는 것이 도움이 될 때가 많습니다.
 
-To do so, you can go to the “Files changed” tab where you see all of your changes, go to a line regarding which you
-want to ask a question, and click on the “+” symbol to add a comment. Whenever a question or problem has been solved,
-you can click on the “Resolve” button of the created comment.
+이를 위해, "Files changed" 탭으로 이동하여 변경 사항을 모두 볼 수 있는 곳에서 질문하고자 하는 줄로 이동한 다음 " " + " 기호를 클릭하여 코멘트를 추가할 수 있습니다. 질문이나 문제가 해결되면, 생성된 코멘트의 "Resolve" 버튼을 클릭할 수 있습니다.
 
-In the same way, the Hugging Face team will open comments when reviewing your code. We recommend asking most questions
-on GitHub on your PR. For some very general questions that are not very useful for the public, feel free to ping the
-Hugging Face team by Slack or email.
+마찬가지로, Hugging Face 팀은 코드를 리뷰할 때 코멘트를 남길 것입니다. 우리는 PR에서 대부분의 질문을 GitHub에서 묻는 것을 권장합니다. 공개에 크게 도움이 되지 않는 매우 일반적인 질문의 경우, Slack이나 이메일을 통해 Hugging Face 팀에게 문의할 수 있습니다.
 
-**5. Adapt the generated models code for brand_new_bert**
+**5. 새로운 bert에 대한 생성된 모델 코드를 적용합니다.**
 
-At first, we will focus only on the model itself and not care about the tokenizer. All the relevant code should be
-found in the generated files `src/transformers/models/brand_new_bert/modeling_brand_new_bert.py` and
-`src/transformers/models/brand_new_bert/configuration_brand_new_bert.py`.
+먼저, 우리는 모델 자체에만 초점을 맞추고 토크나이저에 대해서는 신경 쓰지 않을 것입니다. 모든 관련 코드는 다음의 생성된 파일에서 찾을 수 있습니다: `src/transformers/models/brand_new_bert/modeling_brand_new_bert.py` 및 `src/transformers/models/brand_new_bert/configuration_brand_new_bert.py`.
 
-Now you can finally start coding :). The generated code in
-`src/transformers/models/brand_new_bert/modeling_brand_new_bert.py` will either have the same architecture as BERT if
-it's an encoder-only model or BART if it's an encoder-decoder model. At this point, you should remind yourself what
-you've learned in the beginning about the theoretical aspects of the model: *How is the model different from BERT or
-BART?*". Implement those changes which often means to change the *self-attention* layer, the order of the normalization
-layer, etc… Again, it is often useful to look at the similar architecture of already existing models in Transformers to
-get a better feeling of how your model should be implemented.
+이제 마침내 코딩을 시작할 수 있습니다 :). `src/transformers/models/brand_new_bert/modeling_brand_new_bert.py`의 생성된 코드는 인코더 전용 모델인 경우 BERT와 동일한 아키텍처를 가지거나, 인코더-디코더 모델인 경우 BART와 동일한 아키텍처를 가질 것입니다. 이 시점에서, 모델의 이론적 측면에 대해 배운 내용을 다시 상기해야 합니다: *모델이 BERT 또는 BART와 어떻게 다른가요?*. 자주 변경해야 하는 것은 *self-attention* 레이어, 정규화 레이어의 순서 등을 변경하는 것입니다. 다시 말하지만, 자신의 모델을 구현하는 데 도움이 되도록 Transformers에서 이미 존재하는 모델의 유사한 아키텍처를 살펴보는 것이 유용할 수 있습니다.
 
-**Note** that at this point, you don't have to be very sure that your code is fully correct or clean. Rather, it is
-advised to add a first *unclean*, copy-pasted version of the original code to
-`src/transformers/models/brand_new_bert/modeling_brand_new_bert.py` until you feel like all the necessary code is
-added. From our experience, it is much more efficient to quickly add a first version of the required code and
-improve/correct the code iteratively with the conversion script as described in the next section. The only thing that
-has to work at this point is that you can instantiate the 🤗 Transformers implementation of *brand_new_bert*, *i.e.* the
-following command should work:
+**참고로** 이 시점에서, 코드가 완전히 정확하거나 깨끗하다고 확신할 필요는 없습니다. 오히려 처음에는 원본 코드의 첫 번째 *불완전하고* 복사된 버전을 `src/transformers/models/brand_new_bert/modeling_brand_new_bert.py`에 추가하는 것이 좋습니다. 필요한 모든 코드가 추가될 때까지 이러한 작업을 진행한 후, 다음 섹션에서 설명한 변환 스크립트를 사용하여 코드를 점진적으로 개선하고 수정하는 것이 훨씬 효율적입니다. 이 시점에서 작동해야 하는 유일한 것은 다음 명령이 작동하는 것입니다:
 
 ```python
 from transformers import BrandNewBertModel, BrandNewBertConfig
@@ -501,12 +344,9 @@ from transformers import BrandNewBertModel, BrandNewBertConfig
 model = BrandNewBertModel(BrandNewBertConfig())
 ```
 
-The above command will create a model according to the default parameters as defined in `BrandNewBertConfig()` with
-random weights, thus making sure that the `init()` methods of all components works.
+위의 명령은 `BrandNewBertConfig()`에 정의된 기본 매개변수에 따라 무작위 가중치로 모델을 생성하며, 이로써 모든 구성 요소의 `init()` 메서드가 작동함을 보장합니다.
 
-Note that all random initialization should happen in the `_init_weights` method of your `BrandnewBertPreTrainedModel`
-class. It should initialize all leaf modules depending on the variables of the config. Here is an example with the
-BERT `_init_weights` method:
+모든 무작위 초기화는 `BrandnewBertPreTrainedModel` 클래스의 `_init_weights` 메서드에서 수행되어야 합니다. 이 메서드는 구성 설정 변수에 따라 모든 리프 모듈을 초기화해야 합니다. BERT의 `_init_weights` 메서드 예제는 다음과 같습니다:
 
 ```py
 def _init_weights(self, module):
@@ -524,9 +364,7 @@ def _init_weights(self, module):
         module.weight.data.fill_(1.0)
 ```
 
-You can have some more custom schemes if you need a special initialization for some modules. For instance, in
-`Wav2Vec2ForPreTraining`, the last two linear layers need to have the initialization of the regular PyTorch `nn.Linear`
-but all the other ones should use an initialization as above. This is coded like this:
+몇 가지 모듈에 대해 특별한 초기화가 필요한 경우 사용자 정의 방식을 사용할 수도 있습니다. 예를 들어, `Wav2Vec2ForPreTraining`에서 마지막 두 개의 선형 레이어는 일반적인 PyTorch `nn.Linear`의 초기화를 가져야 하지만, 다른 모든 레이어는 위와 같은 초기화를 사용해야 합니다. 이는 다음과 같이 코드화됩니다:
 
 ```py
 def _init_weights(self, module):
@@ -542,26 +380,16 @@ def _init_weights(self, module):
             module.bias.data.zero_()
 ```
 
-The `_is_hf_initialized` flag is internally used to make sure we only initialize a submodule once. By setting it to
-`True` for `module.project_q` and `module.project_hid`, we make sure the custom initialization we did is not overridden later on,
-the `_init_weights` function won't be applied to them.
+`_is_hf_initialized` 플래그는 서브모듈을 한 번만 초기화하도록 내부적으로 사용됩니다. `module.project_q` 및 `module.project_hid`에 대해 `True`로 설정함으로써, 우리가 수행한 사용자 정의 초기화가 이후에 덮어쓰이지 않도록 합니다. 즉, `_init_weights` 함수가 이들에게 적용되지 않습니다.
 
 **6. Write a conversion script**
 
-Next, you should write a conversion script that lets you convert the checkpoint you used to debug *brand_new_bert* in
-the original repository to a checkpoint compatible with your just created 🤗 Transformers implementation of
-*brand_new_bert*. It is not advised to write the conversion script from scratch, but rather to look through already
-existing conversion scripts in 🤗 Transformers for one that has been used to convert a similar model that was written in
-the same framework as *brand_new_bert*. Usually, it is enough to copy an already existing conversion script and
-slightly adapt it for your use case. Don't hesitate to ask the Hugging Face team to point you to a similar already
-existing conversion script for your model.
+다음으로, 디버그에 사용한 체크포인트를 기존 저장소에서 만든 🤗 Transformers 구현과 호환되는 체크포인트로 변환할 수 있는 변환 스크립트를 작성해야 합니다. 변환 스크립트를 처음부터 작성하는 것보다는 *brand_new_bert*와 동일한 프레임워크로 작성된 유사한 모델을 변환한 기존 변환 스크립트를 찾아보는 것이 좋습니다. 일반적으로 기존 변환 스크립트를 복사하여 사용 사례에 맞게 약간 수정하는 것이 충분합니다. 모델에 대해 유사한 기존 변환 스크립트를 어디에서 찾을 수 있는지 Hugging Face 팀에게 문의하는 것을 망설이지 마십시오.
 
-- If you are porting a model from TensorFlow to PyTorch, a good starting point might be BERT's conversion script [here](https://github.com/huggingface/transformers/blob/7acfa95afb8194f8f9c1f4d2c6028224dbed35a2/src/transformers/models/bert/modeling_bert.py#L91)
-- If you are porting a model from PyTorch to PyTorch, a good starting point might be BART's conversion script [here](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py)
+- TensorFlow에서 PyTorch로 모델을 이전하는 경우, 좋은 참고 자료로 BERT의 변환 스크립트 [여기](https://github.com/huggingface/transformers/blob/7acfa95afb8194f8f9c1f4d2c6028224dbed35a2/src/transformers/models/bert/modeling_bert.py#L91)를 참조할 수 있습니다.
+- PyTorch에서 PyTorch로 모델을 이전하는 경우, 좋은 참고 자료로 BART의 변환 스크립트 [여기](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py)를 참조할 수 있습니다.
 
-In the following, we'll quickly explain how PyTorch models store layer weights and define layer names. In PyTorch, the
-name of a layer is defined by the name of the class attribute you give the layer. Let's define a dummy model in
-PyTorch, called `SimpleModel` as follows:
+다음에서는 PyTorch 모델이 레이어 가중치를 저장하고 레이어 이름을 정의하는 방법에 대해 간단히 설명하겠습니다. PyTorch에서 레이어의 이름은 레이어에 지정한 클래스 속성의 이름으로 정의됩니다. 다음과 같이 PyTorch에서 `SimpleModel`이라는 더미 모델을 정의해 봅시다:
 
 ```python
 from torch import nn
@@ -575,8 +403,7 @@ class SimpleModel(nn.Module):
         self.layer_norm = nn.LayerNorm(10)
 ```
 
-Now we can create an instance of this model definition which will fill all weights: `dense`, `intermediate`,
-`layer_norm` with random weights. We can print the model to see its architecture
+이제 이 모델 정의의 인스턴스를 생성할 수 있으며 `dense`, `intermediate`, `layer_norm` 등의 가중치가 랜덤하게 할당됩니다. 모델을 출력하여 아키텍처를 확인할 수 있습니다.
 
 ```python
 model = SimpleModel()
@@ -584,7 +411,7 @@ model = SimpleModel()
 print(model)
 ```
 
-This will print out the following:
+이는 다음과 같이 출력됩니다:
 
 ```
 SimpleModel(
@@ -594,14 +421,13 @@ SimpleModel(
 )
 ```
 
-We can see that the layer names are defined by the name of the class attribute in PyTorch. You can print out the weight
-values of a specific layer:
+우리는 레이어의 이름이 PyTorch에서 클래스 속성의 이름으로 정의되어 있는 것을 볼 수 있습니다. 특정 레이어의 가중치 값을 출력하여 확인할 수 있습니다:
 
 ```python
 print(model.dense.weight.data)
 ```
 
-to see that the weights were randomly initialized
+가중치가 무작위로 초기화되었음을 확인할 수 있습니다.
 
 ```
 tensor([[-0.0818,  0.2207, -0.0749, -0.0030,  0.0045, -0.1569, -0.1598,  0.0212,
@@ -626,8 +452,7 @@ tensor([[-0.0818,  0.2207, -0.0749, -0.0030,  0.0045, -0.1569, -0.1598,  0.0212,
           0.2220,  0.2358]]).
 ```
 
-In the conversion script, you should fill those randomly initialized weights with the exact weights of the
-corresponding layer in the checkpoint. *E.g.*
+변환 스크립트에서는 이러한 무작위로 초기화된 가중치를 체크포인트의 해당 레이어의 정확한 가중치로 채워야 합니다. 예를 들면 다음과 같습니다:
 
 ```python
 # retrieve matching layer weights, e.g. by
@@ -640,9 +465,7 @@ model_pointer = getattr(model, "dense")
 model_pointer.weight.data = torch.from_numpy(pretrained_weight)
 ```
 
-While doing so, you must verify that each randomly initialized weight of your PyTorch model and its corresponding
-pretrained checkpoint weight exactly match in both **shape and name**. To do so, it is **necessary** to add assert
-statements for the shape and print out the names of the checkpoints weights. E.g. you should add statements like:
+이렇게 하면 PyTorch 모델의 무작위로 초기화된 각 가중치와 해당 체크포인트 가중치가 **모양과 이름** 모두에서 정확히 일치하는지 확인해야 합니다. 이를 위해 모양에 대한 assert 문을 추가하고 체크포인트 가중치의 이름을 출력해야 합니다. 예를 들어 다음과 같은 문장을 추가해야 합니다:
 
 ```python
 assert (
@@ -650,41 +473,27 @@ assert (
 ), f"Pointer shape of random weight {model_pointer.shape} and array shape of checkpoint weight {pretrained_weight.shape} mismatched"
 ```
 
-Besides, you should also print out the names of both weights to make sure they match, *e.g.*
+또한 두 가중치의 이름을 출력하여 일치하는지 확인해야 합니다. *예시*:
 
 ```python
 logger.info(f"Initialize PyTorch weight {layer_name} from {pretrained_weight.name}")
 ```
 
-If either the shape or the name doesn't match, you probably assigned the wrong checkpoint weight to a randomly
-initialized layer of the 🤗 Transformers implementation.
+모양 또는 이름이 일치하지 않는 경우, 랜덤으로 초기화된 레이어에 잘못된 체크포인트 가중치를 할당한 것으로 추측됩니다.
 
-An incorrect shape is most likely due to an incorrect setting of the config parameters in `BrandNewBertConfig()` that
-do not exactly match those that were used for the checkpoint you want to convert. However, it could also be that
-PyTorch's implementation of a layer requires the weight to be transposed beforehand.
+잘못된 모양은 `BrandNewBertConfig()`의 구성 매개변수 설정이 변환하려는 체크포인트에 사용된 설정과 정확히 일치하지 않기 때문일 가능성이 가장 큽니다. 그러나 PyTorch의 레이어 구현 자체에서 가중치를 전치해야 할 수도 있습니다.
 
-Finally, you should also check that **all** required weights are initialized and print out all checkpoint weights that
-were not used for initialization to make sure the model is correctly converted. It is completely normal, that the
-conversion trials fail with either a wrong shape statement or wrong name assignment. This is most likely because either
-you used incorrect parameters in `BrandNewBertConfig()`, have a wrong architecture in the 🤗 Transformers
-implementation, you have a bug in the `init()` functions of one of the components of the 🤗 Transformers
-implementation or you need to transpose one of the checkpoint weights.
+마지막으로, **모든** 필요한 가중치가 초기화되었는지 확인하고 초기화에 사용되지 않은 모든 체크포인트 가중치를 출력하여 모델이 올바르게 변환되었는지 확인해야 합니다. 잘못된 모양 문장이나 잘못된 이름 할당으로 인해 변환 시도가 실패하는 것은 완전히 정상입니다. 이는 `BrandNewBertConfig()`에서 잘못된 매개변수를 사용하거나 🤗 Transformers 구현에서 잘못된 아키텍처, 🤗 Transformers 구현의 구성 요소 중 하나의 `init()` 함수에 버그가 있는 경우이거나 체크포인트 가중치 중 하나를 전치해야 하는 경우일 가능성이 가장 높습니다.
 
-This step should be iterated with the previous step until all weights of the checkpoint are correctly loaded in the
-Transformers model. Having correctly loaded the checkpoint into the 🤗 Transformers implementation, you can then save
-the model under a folder of your choice `/path/to/converted/checkpoint/folder` that should then contain both a
-`pytorch_model.bin` file and a `config.json` file:
+이 단계는 이전 단계와 함께 반복되어야 하며 모든 체크포인트의 가중치가 Transformers 모델에 올바르게 로드되었을 때까지 계속되어야 합니다. 🤗 Transformers 구현에 체크포인트를 올바르게 로드한 후에는 `/path/to/converted/checkpoint/folder`와 같은 원하는 폴더에 모델을 저장할 수 있어야 합니다. 해당 폴더에는 `pytorch_model.bin` 파일과 `config.json` 파일이 모두 포함되어야 합니다.
 
 ```python
 model.save_pretrained("/path/to/converted/checkpoint/folder")
 ```
 
-**7. Implement the forward pass**
+**7. 전방향 패스 구현하기**
 
-Having managed to correctly load the pretrained weights into the 🤗 Transformers implementation, you should now make
-sure that the forward pass is correctly implemented. In [Get familiar with the original repository](#34-run-a-pretrained-checkpoint-using-the-original-repository), you have already created a script that runs a forward
-pass of the model using the original repository. Now you should write an analogous script using the 🤗 Transformers
-implementation instead of the original one. It should look as follows:
+🤗 Transformers 구현에 사전 훈련된 가중치를 정확하게 로드한 후에는 전방향 패스가 올바르게 구현되었는지 확인해야 합니다. [원본 저장소에 익숙해지기](#34-run-a-pretrained-checkpoint-using-the-original-repository)에서 이미 원본 저장소를 사용하여 모델의 전방향 패스를 실행하는 스크립트를 만들었습니다. 이제 원본 대신 🤗 Transformers 구현을 사용하는 유사한 스크립트를 작성해야 합니다. 다음과 같이 작성되어야 합니다:
 
 ```python
 model = BrandNewBertModel.from_pretrained("/path/to/converted/checkpoint/folder")
@@ -692,61 +501,33 @@ input_ids = [0, 4, 4, 3, 2, 4, 1, 7, 19]
 output = model(input_ids).last_hidden_states
 ```
 
-It is very likely that the 🤗 Transformers implementation and the original model implementation don't give the exact
-same output the very first time or that the forward pass throws an error. Don't be disappointed - it's expected! First,
-you should make sure that the forward pass doesn't throw any errors. It often happens that the wrong dimensions are
-used leading to a *Dimensionality mismatch* error or that the wrong data type object is used, *e.g.* `torch.long`
-instead of `torch.float32`. Don't hesitate to ask the Hugging Face team for help, if you don't manage to solve
-certain errors.
+🤗 Transformers 구현과 원본 모델 구현이 처음부터 정확히 동일한 출력을 제공하지 않거나 전방향 패스에서 오류가 발생하는 것은 매우 가능성이 높습니다. 실망하지 마세요. 이는 예상되는 동작입니다! 먼저, 전방향 패스에서 오류가 발생하지 않도록 해야 합니다. 종종 잘못된 차원이 사용되어 *차원 불일치* 오류가 발생하거나 잘못된 데이터 유형 개체가 사용되는 경우가 있습니다. 예를 들면 `torch.long` 대신에 `torch.float32`와 같이 사용됩니다. 풀지 못하는 오류가 발생하면 Hugging Face 팀에 도움을 요청하는 것이 좋습니다.
 
-The final part to make sure the 🤗 Transformers implementation works correctly is to ensure that the outputs are
-equivalent to a precision of `1e-3`. First, you should ensure that the output shapes are identical, *i.e.*
-`outputs.shape` should yield the same value for the script of the 🤗 Transformers implementation and the original
-implementation. Next, you should make sure that the output values are identical as well. This one of the most difficult
-parts of adding a new model. Common mistakes why the outputs are not identical are:
+🤗 Transformers 구현이 올바르게 작동하는지 확인하는 마지막 단계는 출력이 `1e-3`의 정밀도로 동일한지 확인하는 것입니다. 먼저, 출력 모양이 동일하도록 보장해야 합니다. 즉, 🤗 Transformers 구현 스크립트와 원본 구현 사이에서 `outputs.shape`는 동일한 값을 반환해야 합니다. 그 다음으로, 출력 값이도 동일하도록 해야 합니다. 이는 새로운 모델을 추가하는 가장 어려운 부분 중 하나입니다. 출력이 동일하지 않은 일반적인 실수 사례는 다음과 같습니다:
 
-- Some layers were not added, *i.e.* an *activation* layer was not added, or the residual connection was forgotten
-- The word embedding matrix was not tied
-- The wrong positional embeddings are used because the original implementation uses on offset
-- Dropout is applied during the forward pass. To fix this make sure *model.training is False* and that no dropout
-  layer is falsely activated during the forward pass, *i.e.* pass *self.training* to [PyTorch's functional dropout](https://pytorch.org/docs/stable/nn.functional.html?highlight=dropout#torch.nn.functional.dropout)
+- 일부 레이어가 추가되지 않았습니다. 즉, *활성화* 레이어가 추가되지 않았거나 잔차 연결이 빠졌습니다.
+- 단어 임베딩 행렬이 연결되지 않았습니다.
+- 잘못된 위치 임베딩이 사용되었습니다. 원본 구현에서는 오프셋을 사용합니다.
+- 전방향 패스 중에 Dropout이 적용되었습니다. 이를 수정하려면 *model.training이 False*인지 확인하고 전방향 패스 중에 Dropout 레이어가 잘못으로 활성화되지 않도록 하세요. 즉, [PyTorch의 기능적 Dropout](https://pytorch.org/docs/stable/nn.functional.html?highlight=dropout#torch.nn.functional.dropout)에 *self.training*을 전달하세요.
 
-The best way to fix the problem is usually to look at the forward pass of the original implementation and the 🤗
-Transformers implementation side-by-side and check if there are any differences. Ideally, you should debug/print out
-intermediate outputs of both implementations of the forward pass to find the exact position in the network where the 🤗
-Transformers implementation shows a different output than the original implementation. First, make sure that the
-hard-coded `input_ids` in both scripts are identical. Next, verify that the outputs of the first transformation of
-the `input_ids` (usually the word embeddings) are identical. And then work your way up to the very last layer of the
-network. At some point, you will notice a difference between the two implementations, which should point you to the bug
-in the 🤗 Transformers implementation. From our experience, a simple and efficient way is to add many print statements
-in both the original implementation and 🤗 Transformers implementation, at the same positions in the network
-respectively, and to successively remove print statements showing the same values for intermediate presentations.
+문제를 해결하는 가장 좋은 방법은 일반적으로 원본 구현과 🤗 Transformers 구현의 전방향 패스를 나란히 놓고 차이점이 있는지 확인하는 것입니다. 이상적으로는 전방향 패스의 중간 출력을 디버그/출력하여 원본 구현과 🤗 Transformers 구현의 정확한 위치를 찾을 수 있어야 합니다. 먼저, 두 스크립트의 하드코딩된 `input_ids`가 동일한지 확인하세요. 다음으로, `input_ids`의 첫 번째 변환의 출력(일반적으로 단어 임베딩)이 동일한지 확인하세요. 그런 다음 네트워크의 가장 마지막 레이어까지 진행해보세요. 어느 시점에서 두 구현 사이에 차이가 있는 것을 알게 되는데, 이는 🤗 Transformers 구현의 버그 위치를 가리킬 것입니다. 저희 경험상으로는 원본 구현과 🤗 Transformers 구현 모두에서 동일한 위치에 많은 출력 문을 추가하고 이들의 중간 표현에 대해 동일한 값을 보이는 출력 문을 연속적으로 제거하는 것이 간단하고 효과적인 방법입니다.
 
-When you're confident that both implementations yield the same output, verifying the outputs with
-`torch.allclose(original_output, output, atol=1e-3)`, you're done with the most difficult part! Congratulations - the
-work left to be done should be a cakewalk 😊.
+두 구현이 동일한 출력을 제공하는 것을 확신한다면 `torch.allclose(original_output, output, atol=1e-3)`로 출력을 확인하면, 가장 어려운 부분은 끝났습니다! 축하드립니다. 남은 작업은 쉬운 부분이 될 것입니다 😊.
 
 **8. Adding all necessary model tests**
 
-At this point, you have successfully added a new model. However, it is very much possible that the model does not yet
-fully comply with the required design. To make sure, the implementation is fully compatible with 🤗 Transformers, all
-common tests should pass. The Cookiecutter should have automatically added a test file for your model, probably under
-the same `tests/models/brand_new_bert/test_modeling_brand_new_bert.py`. Run this test file to verify that all common
-tests pass:
+이 시점에서 새로운 모델을 성공적으로 추가했습니다. 그러나 해당 모델이 필요한 디자인에 완전히 부합하지 않을 수도 있습니다. 🤗 Transformers와 완벽하게 호환되는 구현인지 확인하기 위해 모든 일반 테스트를 통과해야 합니다. Cookiecutter는 아마도 모델을 위한 테스트 파일을 자동으로 추가했을 것입니다. 아마도 `tests/models/brand_new_bert/test_modeling_brand_new_bert.py`와 같은 경로에 위치할 것입니다. 이 테스트 파일을 실행하여 일반 테스트가 모두 통과하는지 확인하세요.
 
 ```bash
 pytest tests/models/brand_new_bert/test_modeling_brand_new_bert.py
 ```
 
-Having fixed all common tests, it is now crucial to ensure that all the nice work you have done is well tested, so that
+모든 일반 테스트를 수정한 후, 이제 수행한 작업을 충분히 테스트하여 다음 사항을 보장해야 합니다.
 
-- a) The community can easily understand your work by looking at specific tests of *brand_new_bert*
-- b) Future changes to your model will not break any important feature of the model.
+- a) 커뮤니티가 *brand_new_bert*의 특정 테스트를 살펴봄으로써 작업을 쉽게 이해할 수 있도록 함
+- b) 모델에 대한 향후 변경 사항이 모델의 중요한 기능을 손상시키지 않도록 함
 
-At first, integration tests should be added. Those integration tests essentially do the same as the debugging scripts
-you used earlier to implement the model to 🤗 Transformers. A template of those model tests is already added by the
-Cookiecutter, called `BrandNewBertModelIntegrationTests` and only has to be filled out by you. To ensure that those
-tests are passing, run
+먼저 통합 테스트를 추가해야 합니다. 이러한 통합 테스트는 이전에 모델을 🤗 Transformers로 구현하기 위해 사용한 디버깅 스크립트와 동일한 작업을 수행합니다. Cookiecutter에 이미 이러한 모델 테스트의 템플릿인 `BrandNewBertModelIntegrationTests`가 추가되어 있으며, 여러분이 작성해야 할 내용으로만 채워 넣으면 됩니다. 이러한 테스트가 통과하는지 확인하려면 다음을 실행하세요.
 
 ```bash
 RUN_SLOW=1 pytest -sv tests/models/brand_new_bert/test_modeling_brand_new_bert.py::BrandNewBertModelIntegrationTests
@@ -754,29 +535,23 @@ RUN_SLOW=1 pytest -sv tests/models/brand_new_bert/test_modeling_brand_new_bert.p
 
 <Tip>
 
-In case you are using Windows, you should replace `RUN_SLOW=1` with `SET RUN_SLOW=1`
+Windows를 사용하는 경우 `RUN_SLOW=1`을 `SET RUN_SLOW=1`로 바꿔야 합니다.
 
 </Tip>
 
-Second, all features that are special to *brand_new_bert* should be tested additionally in a separate test under
-`BrandNewBertModelTester`/``BrandNewBertModelTest`. This part is often forgotten but is extremely useful in two
-ways:
+둘째로, *brand_new_bert*에 특화된 모든 기능도 별도의 테스트에서 추가로 테스트해야 합니다. 이 부분은 종종 잊히는데, 두 가지 측면에서 굉장히 유용합니다.
 
-- It helps to transfer the knowledge you have acquired during the model addition to the community by showing how the
-  special features of *brand_new_bert* should work.
-- Future contributors can quickly test changes to the model by running those special tests.
+- *brand_new_bert*의 특수 기능이 어떻게 작동해야 하는지 보여줌으로써 커뮤니티에게 모델 추가 과정에서 습득한 지식을 전달하는 데 도움이 됩니다.
+- 향후 기여자는 이러한 특수 테스트를 실행하여 모델에 대한 변경 사항을 빠르게 테스트할 수 있습니다.
 
 
 **9. Implement the tokenizer**
 
-Next, we should add the tokenizer of *brand_new_bert*. Usually, the tokenizer is equivalent or very similar to an
-already existing tokenizer of 🤗 Transformers.
+다음으로, *brand_new_bert*의 토크나이저를 추가해야 합니다. 보통 토크나이저는 🤗 Transformers의 기존 토크나이저와 동일하거나 매우 유사합니다.
 
-It is very important to find/extract the original tokenizer file and to manage to load this file into the 🤗
-Transformers' implementation of the tokenizer.
+토크나이저가 올바르게 작동하는지 확인하기 위해 먼저 원본 리포지토리에서 문자열을 입력하고 `input_ids`를 반환하는 스크립트를 생성하는 것이 좋습니다. 다음과 같은 유사한 스크립트일 수 있습니다 (의사 코드로 작성):
 
-To ensure that the tokenizer works correctly, it is recommended to first create a script in the original repository
-that inputs a string and returns the `input_ids``. It could look similar to this (in pseudo-code):
+원본 리포지토리에서 올바른 토크나이저 함수를 찾거나 복제한 리포지토리에서 `input_ids`만 출력하도록 변경해야 할 수도 있습니다. 원본 리포지토리를 자세히 살펴보거나 복제본에서 변경 사항을 수행하여 `input_ids`만 출력하도록 해야 합니다. 원본 리포지토리를 사용하는 기능적인 토큰화 스크립트를 작성한 후, 🤗 Transformers의 유사한 스크립트를 생성해야 합니다. 다음과 같이 작성되어야 합니다:
 
 ```python
 input_str = "This is a long example input string containing special characters .$?-, numbers 2872 234 12 and words."
@@ -784,10 +559,7 @@ model = BrandNewBertModel.load_pretrained_checkpoint("/path/to/checkpoint/")
 input_ids = model.tokenize(input_str)
 ```
 
-You might have to take a deeper look again into the original repository to find the correct tokenizer function or you
-might even have to do changes to your clone of the original repository to only output the `input_ids`. Having written
-a functional tokenization script that uses the original repository, an analogous script for 🤗 Transformers should be
-created. It should look similar to this:
+두 개의 `input_ids`가 동일한 값을 반환할 때, 마지막 단계로 토크나이저 테스트 파일도 추가해야 합니다.
 
 ```python
 from transformers import BrandNewBertTokenizer
@@ -799,68 +571,43 @@ tokenizer = BrandNewBertTokenizer.from_pretrained("/path/to/tokenizer/folder/")
 input_ids = tokenizer(input_str).input_ids
 ```
 
-When both `input_ids` yield the same values, as a final step a tokenizer test file should also be added.
+*brand_new_bert*의 모델링 테스트 파일과 유사하게, *brand_new_bert*의 토크나이제이션 테스트 파일에는 몇 가지 하드코딩된 통합 테스트가 포함되어야 합니다.
 
-Analogous to the modeling test files of *brand_new_bert*, the tokenization test files of *brand_new_bert* should
-contain a couple of hard-coded integration tests.
+**10. 실행하고 종단 간 통합 테스트**
 
-**10. Run End-to-end integration tests**
+토크나이저를 추가한 후에는 모델과 토크나이저를 사용하여 몇 가지 종단 간 통합 테스트를 추가해야 합니다. `tests/models/brand_new_bert/test_modeling_brand_new_bert.py`에 추가해주세요. 이러한 테스트는 🤗 Transformers 구현이 예상대로 작동하는지를 의미 있는 텍스트 대 텍스트 예시로 보여줘야 합니다. 의미 있는 텍스트 대 텍스트 예시로는 *예를 들어* 소스 대 대상 번역 쌍, 기사 대 요약 쌍, 질문 대 답변 쌍 등이 포함될 수 있습니다. 포팅된 체크포인트 중 어느 것도 하위 작업에서 세부 조정되지 않았다면, 모델 테스트만으로 충분합니다. 모델이 완전히 기능을 갖추었는지 확인하기 위해 마지막 단계로 GPU에서 모든 테스트를 실행하는 것이 좋습니다. 모델의 내부 텐서에 일부 `.to(self.device)` 문을 추가하는 것을 잊었을 수 있으며, 이러한 테스트에서는 오류로 표시됩니다. GPU에 액세스할 수 없는 경우, Hugging Face 팀이 이러한 테스트를 대신 실행할 수 있습니다.
 
-Having added the tokenizer, you should also add a couple of end-to-end integration tests using both the model and the
-tokenizer to `tests/models/brand_new_bert/test_modeling_brand_new_bert.py` in 🤗 Transformers.
-Such a test should show on a meaningful
-text-to-text sample that the 🤗 Transformers implementation works as expected. A meaningful text-to-text sample can
-include *e.g.* a source-to-target-translation pair, an article-to-summary pair, a question-to-answer pair, etc… If none
-of the ported checkpoints has been fine-tuned on a downstream task it is enough to simply rely on the model tests. In a
-final step to ensure that the model is fully functional, it is advised that you also run all tests on GPU. It can
-happen that you forgot to add some `.to(self.device)` statements to internal tensors of the model, which in such a
-test would show in an error. In case you have no access to a GPU, the Hugging Face team can take care of running those
-tests for you.
+**11. 독스트링 추가**
 
-**11. Add Docstring**
+이제 *brand_new_bert*에 필요한 모든 기능이 추가되었습니다. 거의 끝났습니다! 추가해야 할 것은 멋진 독스트링과 독 페이지입니다. Cookiecutter가 `docs/source/model_doc/brand_new_bert.md`라는 템플릿 파일을 추가해줬을 것입니다. 이 페이지를 사용하기 전에 모델을 사용하는 사용자들은 일반적으로 이 페이지를 먼저 확인합니다. 따라서 문서는 이해하기 쉽고 간결해야 합니다. 모델을 사용하는 방법을 보여주기 위해 *팁*을 추가하는 것이 커뮤니티에 매우 유용합니다. 독스트링에 관련하여 Hugging Face 팀에 문의하는 것을 주저하지 마세요.
 
-Now, all the necessary functionality for *brand_new_bert* is added - you're almost done! The only thing left to add is
-a nice docstring and a doc page. The Cookiecutter should have added a template file called
-`docs/source/model_doc/brand_new_bert.md` that you should fill out. Users of your model will usually first look at
-this page before using your model. Hence, the documentation must be understandable and concise. It is very useful for
-the community to add some *Tips* to show how the model should be used. Don't hesitate to ping the Hugging Face team
-regarding the docstrings.
+다음으로, `src/transformers/models/brand_new_bert/modeling_brand_new_bert.py`에 추가된 독스트링이 올바르며 필요한 모든 입력 및 출력을 포함하도록 확인하세요. [여기](writing-documentation)에서 우리의 문서 작성 가이드와 독스트링 형식에 대한 상세 가이드가 있습니다. 문서는 일반적으로 커뮤니티와 모델의 첫 번째 접촉점이므로, 코드와 최소한 같은 주의를 기울여야 합니다.
 
-Next, make sure that the docstring added to `src/transformers/models/brand_new_bert/modeling_brand_new_bert.py` is
-correct and included all necessary inputs and outputs. We have a detailed guide about writing documentation and our docstring format [here](writing-documentation). It is always to good to remind oneself that documentation should
-be treated at least as carefully as the code in 🤗 Transformers since the documentation is usually the first contact
-point of the community with the model.
+**코드 리팩토링**
 
-**Code refactor**
+좋아요, 이제 *brand_new_bert*를 위한 모든 필요한 코드를 추가했습니다. 이 시점에서 다음을 실행하여 잠재적으로 잘못된 코드 스타일을 수정해야 합니다:
 
-Great, now you have added all the necessary code for *brand_new_bert*. At this point, you should correct some potential
-incorrect code style by running:
+그리고 코딩 스타일이 품질 점검을 통과하는지 확인하기 위해 다음을 실행하고 확인해야 합니다:
 
 ```bash
 make style
 ```
 
-and verify that your coding style passes the quality check:
+🤗 Transformers에는 여전히 실패할 수 있는 몇 가지 매우 엄격한 디자인 테스트가 있습니다. 이는 docstring에 누락된 정보나 잘못된 명명 때문에 종종 발생합니다. 여기서 막히면 Hugging Face 팀이 도움을 줄 것입니다.
 
 ```bash
 make quality
 ```
 
-There are a couple of other very strict design tests in 🤗 Transformers that might still be failing, which shows up in
-the tests of your pull request. This is often because of some missing information in the docstring or some incorrect
-naming. The Hugging Face team will surely help you if you're stuck here.
+마지막으로, 코드가 정확히 작동하는 것을 확인한 후에는 항상 코드를 리팩토링하는 것이 좋은 생각입니다. 모든 테스트가 통과된 지금은 추가한 코드를 다시 검토하고 리팩토링하는 좋은 시기입니다.
 
-Lastly, it is always a good idea to refactor one's code after having ensured that the code works correctly. With all
-tests passing, now it's a good time to go over the added code again and do some refactoring.
+이제 코딩 부분을 완료했습니다. 축하합니다! 🎉 멋져요! 😎
 
-You have now finished the coding part, congratulation! 🎉 You are Awesome! 😎
+**12. 모델을 모델 허브에 업로드하세요**
 
-**12. Upload the models to the model hub**
+이 마지막 파트에서는 모든 체크포인트를 변환하여 모델 허브에 업로드하고 각 업로드된 모델 체크포인트에 대한 모델 카드를 추가해야 합니다. [Model sharing and uploading Page](model_sharing)를 읽어 허브 기능에 익숙해지세요. *brand_new_bert*의 저자 조직 아래에 모델을 업로드할 수 있는 필요한 액세스 권한을 얻기 위해 Hugging Face 팀과 협업해야 합니다. `transformers`의 모든 모델에 있는 `push_to_hub` 메서드는 체크포인트를 허브에 빠르고 효율적으로 업로드하는 방법입니다. 아래에 작은 코드 조각이 붙여져 있습니다:
 
-In this final part, you should convert and upload all checkpoints to the model hub and add a model card for each
-uploaded model checkpoint. You can get familiar with the hub functionalities by reading our [Model sharing and uploading Page](model_sharing). You should work alongside the Hugging Face team here to decide on a fitting name for each
-checkpoint and to get the required access rights to be able to upload the model under the author's organization of
-*brand_new_bert*. The `push_to_hub` method, present in all models in `transformers`, is a quick and efficient way to push your checkpoint to the hub. A little snippet is pasted below:
+각 체크포인트에 적합한 모델 카드를 만드는 데 시간을 할애하는 것이 가치가 있습니다. 모델 카드는 이 특정 체크포인트의 특성을 강조해야 합니다. *예를 들어* 이 체크포인트는 어떤 데이터셋에서 사전 훈련/세부 훈련되었는지? 이 모델은 어떤 하위 작업에서 사용해야 하는지? 그리고 모델을 올바르게 사용하는 방법에 대한 몇 가지 코드도 포함해야 합니다.
 
 ```python
 brand_new_bert.push_to_hub("brand_new_bert")
@@ -868,28 +615,16 @@ brand_new_bert.push_to_hub("brand_new_bert")
 # brand_new_bert.push_to_hub("<organization>/brand_new_bert")
 ```
 
-It is worth spending some time to create fitting model cards for each checkpoint. The model cards should highlight the
-specific characteristics of this particular checkpoint, *e.g.* On which dataset was the checkpoint
-pretrained/fine-tuned on? On what down-stream task should the model be used? And also include some code on how to
-correctly use the model.
+**13. (선택 사항) 노트북 추가**
 
-**13. (Optional) Add notebook**
+*brand_new_bert*를 추론 또는 세부 훈련에 사용하는 방법을 자세히 보여주는 노트북을 추가하는 것이 매우 유용합니다. 이것은 PR을 병합하는 데 필수적은 않지만 커뮤니티에 매우 유용합니다.
 
-It is very helpful to add a notebook that showcases in-detail how *brand_new_bert* can be used for inference and/or
-fine-tuned on a downstream task. This is not mandatory to merge your PR, but very useful for the community.
+**14. 완료된 PR 제출**
 
-**14. Submit your finished PR**
+이제 프로그래밍을 마쳤으며, 마지막 단계로 PR을 메인 브랜치에 병합해야 합니다. 보통 Hugging Face 팀은 이미 여기까지 도움을 주었을 것입니다. 그러나 PR에 멋진 설명을 추가하고 리뷰어에게 특정 디자인 선택 사항을 강조하려면 완료된 PR에 약간의 설명을 추가하는 시간을 할애하는 것이 가치가 있습니다.
 
-You're done programming now and can move to the last step, which is getting your PR merged into main. Usually, the
-Hugging Face team should have helped you already at this point, but it is worth taking some time to give your finished
-PR a nice description and eventually add comments to your code, if you want to point out certain design choices to your
-reviewer.
+### 작업물을 공유하세요!! [[share-your-work]]
 
-### Share your work!!
+이제 작업물에 대해 커뮤니티로부터 인정을 받을 시간입니다! 모델 추가 작업을 완료하는 것은 Transformers와 전체 NLP 커뮤니티에 큰 기여입니다. 당신의 코드와 이식된 사전 훈련된 모델은 수백, 심지어 수천 명의 개발자와 연구원에 의해 확실히 사용될 것입니다. 당신의 작업에 자랑스러워해야 하며 이를 커뮤니티와 공유해야 합니다.
 
-Now, it's time to get some credit from the community for your work! Having completed a model addition is a major
-contribution to Transformers and the whole NLP community. Your code and the ported pre-trained models will certainly be
-used by hundreds and possibly even thousands of developers and researchers. You should be proud of your work and share
-your achievement with the community.
-
-**You have made another model that is super easy to access for everyone in the community! 🤯**
+**당신은 커뮤니티 내 모든 사람들에게 매우 쉽게 접근 가능한 또 다른 모델을 만들었습니다! 🤯**
