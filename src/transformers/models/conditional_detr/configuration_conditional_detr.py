@@ -237,7 +237,7 @@ class ConditionalDetrConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
-    
+
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].

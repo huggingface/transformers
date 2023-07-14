@@ -281,7 +281,10 @@ class BridgeTowerModelTester:
         result = model(input_ids, attention_mask=attention_mask, pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(input_ids, attention_mask=attention_mask, pixel_values=pixel_values)
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.text_model_tester.seq_length, self.text_model_tester.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape,
+            (self.batch_size, self.text_model_tester.seq_length, self.text_model_tester.vocab_size),
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
