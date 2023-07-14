@@ -2708,7 +2708,7 @@ class ModelTesterMixin:
     def test_model_is_small(self):
         # Just a consistency check to make sure we are not running tests on 80M parameter models.
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        # print(config)
+        print(config)
 
         for model_class in self.all_model_classes:
             model = model_class(config)
