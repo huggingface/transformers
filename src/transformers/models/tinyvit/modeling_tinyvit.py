@@ -402,6 +402,7 @@ class TinyViTLayer(nn.Module):
             raise ValueError("input feature has wrong size")
         res_x = x
         if height == self.window_size and width == self.window_size:
+            print("we are here")
             attention_outputs = self.attn(x, output_attentions)
             x = attention_outputs[0]
         else:
@@ -437,9 +438,6 @@ class TinyViTLayer(nn.Module):
             x = x.view(batch_size, seq_length, num_channels)
 
         x = res_x + self.drop_path(x)
-
-        if print_values:
-            print("Shape of x after residual:", x.shape)
 
         x = x.transpose(1, 2).reshape(batch_size, num_channels, height, width)
         x = self.local_conv(x)
@@ -514,12 +512,13 @@ class TinyVitStage(nn.Module):
 
     def forward(self, hidden_state, input_dimensions, output_attentions=False, print_values=False):
         height, width = input_dimensions
-        for layer in self.layers:
+        for idx, layer in enumerate(self.layers):
             # TODO support gradient checkpointing
             # if self.gradient_checkpointing:
             #     hidden_state = torch.utils.checkpoint.checkpoint(layer, hidden_state)
             # else:
             layer_outputs = layer(hidden_state, output_attentions, print_values=print_values)
+            print(f"Shape of hidden state after layer {idx}:", layer_outputs[0].shape)
             hidden_state = layer_outputs[0]
 
         hidden_state_before_downsampling = hidden_state
@@ -605,6 +604,7 @@ class TinyVitEncoder(nn.Module):
                 )
             else:
                 # TODO support layer_head_mask similar to Swin
+                print(f"Hidden states before stage {i}:", hidden_states.shape)
                 stage_outputs = stage_module(hidden_states, input_dimensions, output_attentions, print_values=False)
 
             hidden_states = stage_outputs[0]
@@ -613,12 +613,8 @@ class TinyVitEncoder(nn.Module):
 
             input_dimensions = (output_dimensions[-2], output_dimensions[-1])
 
-            print(f"Shape of hidden states after stage {i}", hidden_states.shape)
-            print(f"Hidden states after stage {i}:", hidden_states[0, :3, :3])
-
             if output_hidden_states and output_hidden_states_before_downsampling:
                 if i != 0:
-                    print("Shape of hidden states before downsampling:", hidden_state_before_downsampling.shape)
                     batch_size, _, hidden_size = hidden_state_before_downsampling.shape
                     # rearrange b (h w) c -> b c h w
                     # here we use the original (not downsampled) height and width
@@ -638,7 +634,7 @@ class TinyVitEncoder(nn.Module):
                 all_hidden_states += (hidden_states,)
                 all_reshaped_hidden_states += (reshaped_hidden_state,)
 
-            if output_attentions:
+            if output_attentions and i != 0:
                 all_self_attentions += stage_outputs[3:]
 
         if not return_dict:

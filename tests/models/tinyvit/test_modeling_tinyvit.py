@@ -111,7 +111,7 @@ class TinyVitModelTester:
         model.eval()
         result = model(pixel_values)
 
-        expected_seq_len = config.image_size // 32
+        expected_seq_len = (config.image_size // 16) ** 2  # 8, 4, 2 (reduction of 4, 8, 16)
         expected_dim = config.hidden_sizes[-1]
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
@@ -229,13 +229,13 @@ class TinyVitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            expected_num_attentions = len(self.model_tester.depths)
+            expected_num_attentions = len(self.model_tester.depths) - 1
             self.assertEqual(len(attentions), expected_num_attentions)
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
-            window_size_squared = config.window_size**2
+            window_size_squared = self.model_tester.window_sizes[0] ** 2
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -259,9 +259,7 @@ class TinyVitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            # also another +1 for reshaped_hidden_states
-            added_hidden_states = 2
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
+            self.assertEqual(out_len + 1, len(outputs))
 
             self_attentions = outputs.attentions
 
@@ -288,17 +286,11 @@ class TinyVitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         self.assertEqual(len(hidden_states), expected_num_layers)
 
         # TinyVit has a different seq_length
-        patch_size = (
-            config.patch_size
-            if isinstance(config.patch_size, collections.abc.Iterable)
-            else (config.patch_size, config.patch_size)
-        )
-
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        seq_length = (self.model_tester.image_size // 4) ** 2
 
         self.assertListEqual(
             list(hidden_states[0].shape[-2:]),
-            [num_patches, self.model_tester.embed_dim],
+            [seq_length, self.model_tester.hidden_sizes[0]],
         )
 
     def test_hidden_states_output(self):
@@ -319,33 +311,6 @@ class TinyVitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             config.output_hidden_states = True
 
             self.check_hidden_states_output(inputs_dict, config, model_class, image_size)
-
-    def test_hidden_states_output_with_padding(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.patch_size = 3
-
-        image_size = (
-            self.model_tester.image_size
-            if isinstance(self.model_tester.image_size, collections.abc.Iterable)
-            else (self.model_tester.image_size, self.model_tester.image_size)
-        )
-        patch_size = (
-            config.patch_size
-            if isinstance(config.patch_size, collections.abc.Iterable)
-            else (config.patch_size, config.patch_size)
-        )
-
-        padded_height = image_size[0] + patch_size[0] - (image_size[0] % patch_size[0])
-        padded_width = image_size[1] + patch_size[1] - (image_size[1] % patch_size[1])
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-            self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
 
     @slow
     def test_model_from_pretrained(self):

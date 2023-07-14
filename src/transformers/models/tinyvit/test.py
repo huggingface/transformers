@@ -7,7 +7,7 @@ config = TinyVitConfig()
 
 model = TinyVitModel(config)
 
-outputs = model(torch.randn(1, 3, 224, 224), output_hidden_states=True)
+outputs = model(torch.randn(1, 3, 224, 224), output_attentions=True)
 
-for i in outputs.hidden_states:
+for i in outputs.attentions:
     print(i.shape)
