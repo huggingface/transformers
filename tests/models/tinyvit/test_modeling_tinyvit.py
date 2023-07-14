@@ -29,7 +29,6 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-    from torch import nn
 
     from transformers import TinyVitForImageClassification, TinyVitModel
     from transformers.models.tinyvit.modeling_tinyvit import TINYVIT_PRETRAINED_MODEL_ARCHIVE_LIST
@@ -200,7 +199,7 @@ class TinyVitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="TinyVit does not support get_input_embeddings")        
+    @unittest.skip(reason="TinyVit does not support get_input_embeddings")
     def test_model_common_attributes(self):
         pass
 

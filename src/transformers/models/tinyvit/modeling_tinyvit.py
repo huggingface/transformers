@@ -324,41 +324,33 @@ class TinyVitAttention(torch.nn.Module):
             self.ab = self.attention_biases[:, self.attention_bias_idxs]
 
     # TODO remove print_values
-    def forward(self, hidden_state, print_values=False):
+    def forward(self, hidden_state, output_attentions, print_values=False):
         batch_size, seq_length, _ = hidden_state.shape
 
         # Normalization
         hidden_state = self.norm(hidden_state)
 
         qkv = self.qkv(hidden_state)
-        # (batch_size, seq_length, num_heads, d)
-        q, k, v = qkv.view(batch_size, seq_length, self.num_heads, -1).split(
+        # (batch_size, seq_length, num_heads, dim)
+        queries, keys, values = qkv.view(batch_size, seq_length, self.num_heads, -1).split(
             [self.key_dim, self.key_dim, self.d], dim=3
         )
-        # (B, num_heads, N, d)
-        q = q.permute(0, 2, 1, 3)
-        k = k.permute(0, 2, 1, 3)
-        v = v.permute(0, 2, 1, 3)
+        # (batch_size, num_heads, seq_length, dim)
+        queries = queries.permute(0, 2, 1, 3)
+        keys = keys.permute(0, 2, 1, 3)
+        values = values.permute(0, 2, 1, 3)
 
-        if print_values:
-            print("Shape of attention biases:", self.attention_biases.shape)
-            print("Attention biases:", self.attention_biases[:3, :3])
-            print("Shape of attention bias idxs:", self.attention_bias_idxs.shape)
-            print("Attention bias idxs:", self.attention_bias_idxs)
-
-            print("Shape of self.ab:", self.ab.shape)
-            print("First values of self.ab:", self.ab[0, -3:, -3:])
-            print("Appropriate values:", self.attention_biases[:, self.attention_bias_idxs][0, :3, :3])
-
-        attn = (q @ k.transpose(-2, -1)) * self.scale + (
+        attention_scores = (queries @ keys.transpose(-2, -1)) * self.scale + (
             self.attention_biases[:, self.attention_bias_idxs] if self.training else self.ab
         )
-        if print_values:
-            print("Attention before softmax:", attn[0, 0, :3, :3])
-        attn = attn.softmax(dim=-1)
-        hidden_state = (attn @ v).transpose(1, 2).reshape(batch_size, seq_length, self.dh)
+        # Normalize the attention scores to probabilities.
+        attention_probs = attention_scores.softmax(dim=-1)
+        hidden_state = (attention_probs @ values).transpose(1, 2).reshape(batch_size, seq_length, self.dh)
         hidden_state = self.proj(hidden_state)
-        return hidden_state
+
+        outputs = (hidden_state, attention_probs) if output_attentions else (hidden_state,)
+
+        return outputs
 
 
 class TinyViTLayer(nn.Module):
@@ -408,7 +400,8 @@ class TinyViTLayer(nn.Module):
             raise ValueError("input feature has wrong size")
         res_x = x
         if height == self.window_size and width == self.window_size:
-            x = self.attn(x)
+            attention_outputs = self.attn(x, output_attentions)
+            x = attention_outputs[0]
         else:
             x = x.view(batch_size, height, width, num_channels)
             pad_b = (self.window_size - height % self.window_size) % self.window_size
@@ -427,13 +420,8 @@ class TinyViTLayer(nn.Module):
                 .transpose(2, 3)
                 .reshape(batch_size * nH * nW, self.window_size * self.window_size, num_channels)
             )
-            if print_values:
-                print("Shape of x before attention:", x.shape)
-                print("First values of x before attention:", x[0, :3, :3])
-            x = self.attn(x, print_values=print_values)
-            if print_values:
-                print("Shape of x after attention:", x.shape)
-                print("First values of x after attention:", x[0, :3, :3])
+            attention_outputs = self.attn(x, output_attentions, print_values=print_values)
+            x = attention_outputs[0]
             # window reverse
             x = (
                 x.view(batch_size, nH, nW, self.window_size, self.window_size, num_channels)
@@ -456,23 +444,33 @@ class TinyViTLayer(nn.Module):
         x = x.view(batch_size, num_channels, seq_length).transpose(1, 2)
 
         x = x + self.drop_path(self.mlp(x))
-        return x
+
+        layer_outputs = (x, attention_outputs[1]) if output_attentions else (x,)
+        return layer_outputs
 
 
 class TinyVitStage(nn.Module):
-    """A basic TinyViT layer for one stage.
+    """A basic TinyViT module for one stage.
 
     Args:
-        dim (int): Number of input channels.
-        input_resolution (tuple[int]): Input resolution.
-        depth (int): Number of blocks.
-        num_heads (int): Number of attention heads.
-        window_size (int): Local window size.
-        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-        drop (float, optional): Dropout rate. Default: 0.0
-        drop_path (float | tuple[float], optional): Stochastic depth rate. Default: 0.0
-        downsample (nn.Module | None, optional): Downsample layer at the end of the layer. Default: None
-        out_dim: the output dimension of the layer. Default: dim
+        config (`TinyVitConfig`):
+            Model configuration.
+        dim (`int`):
+            Number of input channels.
+        input_resolution (`Tuple[int]`):
+            Input resolution.
+        depth (`int`):
+            Number of layers.
+        num_heads (`int`):
+            Number of attention heads.
+        window_size (`int`):
+            Local window size.
+        drop_path (`float` or `Tuple[float]`, *optional*, defaults to 0.0):
+            Stochastic depth rate.
+        downsample (`nn.Module`, *optional*):
+            Optional downsample layer at the end of the stage.
+        out_dim (`int`, *optional*):
+            The output dimension of the stage.
     """
 
     def __init__(
@@ -519,7 +517,8 @@ class TinyVitStage(nn.Module):
             # if self.gradient_checkpointing:
             #     hidden_state = torch.utils.checkpoint.checkpoint(layer, hidden_state)
             # else:
-            hidden_state = layer(hidden_state, output_attentions, print_values=print_values)
+            layer_outputs = layer(hidden_state, output_attentions, print_values=print_values)
+            hidden_state = layer_outputs[0]
 
         hidden_state_before_downsampling = hidden_state
         if self.downsample is not None:
@@ -529,7 +528,11 @@ class TinyVitStage(nn.Module):
         else:
             output_dimensions = (height, width, height, width)
 
-        return (hidden_state, hidden_state_before_downsampling, output_dimensions)
+        stage_outputs = (hidden_state, hidden_state_before_downsampling, output_dimensions)
+
+        if output_attentions:
+            stage_outputs += layer_outputs[1:]
+        return stage_outputs
 
 
 class TinyVitEncoder(nn.Module):
