@@ -80,11 +80,11 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
 
-# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->clvp
+# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->clvp, image_loss->speech_loss
 def clvp_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
-    image_loss = contrastive_loss(similarity.t())
-    return (caption_loss + image_loss) / 2.0
+    speech_loss = contrastive_loss(similarity.t())
+    return (caption_loss + speech_loss) / 2.0
 
 
 def rotate_half(x):
@@ -95,8 +95,8 @@ def rotate_half(x):
 
 
 def apply_rotary_pos_emb(t, freqs):
-    seq_len = t.shape[-2]
-    freqs = freqs[:, -seq_len:]
+    seq_len = t.shape[-1]
+    freqs = freqs[:, :, -seq_len:]
     return (t * freqs.cos()) + (rotate_half(t) * freqs.sin())
 
 
@@ -1012,6 +1012,7 @@ class CLVPSpeechTransformer(CLVPTextTransformer):
 )
 class CLVPSpeechModel(CLVPPreTrainedModel):
     config_class = CLVPSpeechConfig
+    main_input_name = "speech_ids"
 
     _no_split_modules = ["CLVPEncoderLayer"]
 
@@ -1022,7 +1023,10 @@ class CLVPSpeechModel(CLVPPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.speech_model.embeddings.patch_embedding
+        return self.speech_model.embeddings.token_embedding
+
+    def set_input_embeddings(self, value):
+        self.speech_model.embeddings.token_embedding = value
 
     @add_start_docstrings_to_model_forward(CLVP_SPEECH_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLVPSpeechConfig)
@@ -1156,9 +1160,9 @@ class CLVPModel(CLVPPreTrainedModel):
         )
 
         pooled_output = speech_outputs[1]  # pooled_output
-        image_features = self.speech_projection(pooled_output)
+        speech_features = self.speech_projection(pooled_output)
 
-        return image_features
+        return speech_features
 
     @add_start_docstrings_to_model_forward(CLVP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CLVPOutput, config_class=CLVPConfig)
@@ -1346,6 +1350,7 @@ class CLVPTextModelWithProjection(CLVPPreTrainedModel):
 )
 class CLVPSpeechModelWithProjection(CLVPPreTrainedModel):
     config_class = CLVPSpeechConfig
+    main_input_name = "speech_ids"
 
     _no_split_modules = ["CLVPEncoderLayer"]
 
@@ -1360,7 +1365,10 @@ class CLVPSpeechModelWithProjection(CLVPPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.speech_model.embeddings.patch_embedding
+        return self.speech_model.embeddings.token_embedding
+
+    def set_input_embeddings(self, value):
+        self.speech_model.embeddings.token_embedding = value
 
     @add_start_docstrings_to_model_forward(CLVP_SPEECH_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CLVPSpeechModelOutput, config_class=CLVPSpeechConfig)
@@ -1407,14 +1415,14 @@ class CLVPSpeechModelWithProjection(CLVPPreTrainedModel):
 
         pooled_output = speech_outputs[1]  # pooled_output
 
-        image_embeds = self.speech_projection(pooled_output)
+        speech_embeds = self.speech_projection(pooled_output)
 
         if not return_dict:
-            outputs = (image_embeds, speech_outputs[0]) + speech_outputs[2:]
+            outputs = (speech_embeds, speech_outputs[0]) + speech_outputs[2:]
             return tuple(output for output in outputs if output is not None)
 
         return CLVPSpeechModelOutput(
-            image_embeds=image_embeds,
+            speech_embeds=speech_embeds,
             last_hidden_state=speech_outputs.last_hidden_state,
             hidden_states=speech_outputs.hidden_states,
             attentions=speech_outputs.attentions,

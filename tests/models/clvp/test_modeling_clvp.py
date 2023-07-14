@@ -15,35 +15,29 @@
 """ Testing suite for the PyTorch CLVP model. """
 
 
+import copy
 import inspect
 import os
 import tempfile
 import unittest
 
 import numpy as np
-import requests
 
-import transformers
 from transformers import CLVPConfig, CLVPSpeechConfig, CLVPTextConfig
 from transformers.testing_utils import (
-    is_flax_available,
-    is_pt_flax_cross_test,
     require_torch,
-    require_vision,
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
     _config_zero_init,
-    floats_tensor,
     ids_tensor,
     random_attention_mask,
 )
-from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -60,45 +54,28 @@ if is_torch_available():
     from transformers.models.clvp.modeling_clvp import CLVP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
-if is_vision_available():
-    from PIL import Image
-
-    from transformers import CLIPProcessor
-
-
-if is_flax_available():
-    import jax.numpy as jnp
-
-    from transformers.modeling_flax_pytorch_utils import (
-        convert_pytorch_state_dict_to_flax,
-        load_flax_weights_in_pytorch_model,
-    )
-
-
 class CLVPSpeechModelTester:
     def __init__(
         self,
         parent,
         batch_size=12,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
+        vocab_size=30,
+        seq_length=10,
         is_training=True,
         hidden_size=32,
-        projection_dim=32,
+        projection_dim=8,
         num_hidden_layers=5,
         num_attention_heads=4,
-        intermediate_size=37,
+        intermediate_size=64,
         dropout=0.1,
         attention_dropout=0.1,
         initializer_range=0.02,
         scope=None,
     ):
         self.parent = parent
+        self.seq_length = seq_length
         self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
+        self.vocab_size = vocab_size
         self.is_training = is_training
         self.hidden_size = hidden_size
         self.projection_dim = projection_dim
@@ -110,61 +87,51 @@ class CLVPSpeechModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
 
-        # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
-
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        speech_ids = ids_tensor([self.batch_size, self.seq_length], vocab_size=self.vocab_size)
         config = self.get_config()
 
-        return config, pixel_values
+        return config, speech_ids
 
     def get_config(self):
         return CLVPSpeechConfig(
-            image_size=self.image_size,
-            patch_size=self.patch_size,
-            num_channels=self.num_channels,
+            vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
             projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
             dropout=self.dropout,
             attention_dropout=self.attention_dropout,
             initializer_range=self.initializer_range,
         )
 
-    def create_and_check_model(self, config, pixel_values):
+    def create_and_check_model(self, config, speech_ids):
         model = CLVPSpeechModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(pixel_values)
+            result = model(speech_ids)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        image_size = (self.image_size, self.image_size)
-        patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        seq_len = speech_ids.size()[1]
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, seq_len, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    def create_and_check_model_with_projection(self, config, pixel_values):
+    def create_and_check_model_with_projection(self, config, speech_ids):
         model = CLVPSpeechModelWithProjection(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(pixel_values)
+            result = model(speech_ids)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        image_size = (self.image_size, self.image_size)
-        patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.image_embeds.shape, (self.batch_size, self.projection_dim))
+        seq_len = speech_ids.size()[1]
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, seq_len, self.hidden_size))
+        self.parent.assertEqual(result.speech_embeds.shape, (self.batch_size, self.projection_dim))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
+        config, speech_ids = config_and_inputs
+        inputs_dict = {"speech_ids": speech_ids}
         return config, inputs_dict
 
 
@@ -178,12 +145,11 @@ class CLVPSpeechModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (CLVPSpeechModel, CLVPSpeechModelWithProjection) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
-    test_resize_embeddings = False
     test_head_masking = False
 
     def setUp(self):
         self.model_tester = CLVPSpeechModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CLVPSpeechConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=CLVPSpeechConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -210,7 +176,7 @@ class CLVPSpeechModelTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["pixel_values"]
+            expected_arg_names = ["speech_ids"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
@@ -220,6 +186,58 @@ class CLVPSpeechModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_with_projection(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
+
+    def test_resize_tokens_embeddings(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+
+            if self.model_tester.is_training is False:
+                model.eval()
+
+            model_vocab_size = config.vocab_size
+            # Retrieve the embeddings and clone theme
+            model_embed = model.resize_token_embeddings(model_vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # Input ids should be clamped to the maximum size of the vocabulary
+            inputs_dict["speech_ids"].clamp_(max=model_vocab_size - 15 - 1)
+
+            # make sure that decoder_input_ids are resized as well
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
+            models_equal = True
+            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+
+            self.assertTrue(models_equal)
 
     def test_training(self):
         pass
@@ -246,7 +264,7 @@ class CLVPSpeechModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in CLVP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = CLVPSpeechModelWithProjection.from_pretrained(model_name)
             self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "visual_projection"))
+            self.assertTrue(hasattr(model, "speech_projection"))
 
 
 class CLVPTextModelTester:
@@ -263,10 +281,9 @@ class CLVPTextModelTester:
         projection_dim=32,
         num_hidden_layers=5,
         num_attention_heads=4,
-        intermediate_size=37,
+        intermediate_size=64,
         dropout=0.1,
         attention_dropout=0.1,
-        max_position_embeddings=512,
         initializer_range=0.02,
         scope=None,
     ):
@@ -284,7 +301,6 @@ class CLVPTextModelTester:
         self.intermediate_size = intermediate_size
         self.dropout = dropout
         self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.scope = scope
 
@@ -316,7 +332,6 @@ class CLVPTextModelTester:
             intermediate_size=self.intermediate_size,
             dropout=self.dropout,
             attention_dropout=self.attention_dropout,
-            max_position_embeddings=self.max_position_embeddings,
             initializer_range=self.initializer_range,
         )
 
@@ -356,7 +371,7 @@ class CLVPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = CLVPTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CLVPTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=CLVPTextConfig, hidden_size=64)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -402,55 +417,55 @@ class CLVPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class CLVPModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+    def __init__(self, parent, text_kwargs=None, speech_kwargs=None, is_training=True):
         if text_kwargs is None:
             text_kwargs = {}
-        if vision_kwargs is None:
-            vision_kwargs = {}
+        if speech_kwargs is None:
+            speech_kwargs = {}
 
         self.parent = parent
         self.text_model_tester = CLVPTextModelTester(parent, **text_kwargs)
-        self.vision_model_tester = CLVPSpeechModelTester(parent, **vision_kwargs)
+        self.speech_model_tester = CLVPSpeechModelTester(parent, **speech_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        vision_config, speech_ids = self.speech_model_tester.prepare_config_and_inputs()
 
         config = self.get_config()
 
-        return config, input_ids, attention_mask, pixel_values
+        return config, input_ids, attention_mask, speech_ids
 
     def get_config(self):
-        return CLVPConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+        return CLVPConfig.from_text_speech_configs(
+            self.text_model_tester.get_config(), self.speech_model_tester.get_config(), projection_dim=64
         )
 
-    def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
+    def create_and_check_model(self, config, input_ids, text_attention_mask, speech_ids):
         model = CLVPModel(config).to(torch_device).eval()
         with torch.no_grad():
-            result = model(input_ids, pixel_values, attention_mask)
+            result = model(input_ids, speech_ids, text_attention_mask)
         self.parent.assertEqual(
-            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
+            result.logits_per_speech.shape, (self.speech_model_tester.batch_size, self.text_model_tester.batch_size)
         )
         self.parent.assertEqual(
-            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
+            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.speech_model_tester.batch_size)
         )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, attention_mask, pixel_values = config_and_inputs
+        config, input_ids, attention_mask, speech_ids = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "pixel_values": pixel_values,
+            "text_attention_mask": attention_mask,
+            "speech_ids": speech_ids,
             "return_loss": True,
         }
         return config, inputs_dict
 
 
 @require_torch
-class CLVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class CLVPModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (CLVPModel,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
@@ -519,8 +534,8 @@ class CLVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             try:
                 input_ids = inputs_dict["input_ids"]
-                pixel_values = inputs_dict["pixel_values"]  # CLVP needs pixel_values
-                traced_model = torch.jit.trace(model, (input_ids, pixel_values))
+                speech_ids = inputs_dict["speech_ids"]  # CLVP needs speech_ids
+                traced_model = torch.jit.trace(model, (input_ids, speech_ids))
             except RuntimeError:
                 self.fail("Couldn't trace module.")
 
@@ -576,138 +591,20 @@ class CLVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             self.assertTrue(models_equal)
 
-    def test_load_vision_text_config(self):
+    def test_load_speech_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         # Save CLVPConfig and check if we can load CLVPSpeechConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
-            vision_config = CLVPSpeechConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
+            speech_config = CLVPSpeechConfig.from_pretrained(tmp_dir_name)
+            self.assertDictEqual(config.speech_config.to_dict(), speech_config.to_dict())
 
         # Save CLVPConfig and check if we can load CLVPTextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
             text_config = CLVPTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
-    # overwrite from common since FlaxCLVPModel returns nested output
-    # which is not supported in the common test
-    @is_pt_flax_cross_test
-    def test_equivalence_pt_to_flax(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                # load PyTorch class
-                pt_model = model_class(config).eval()
-                # Flax models don't use the `use_cache` option and cache is not returned as a default.
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-
-                fx_model_class_name = "Flax" + model_class.__name__
-
-                if not hasattr(transformers, fx_model_class_name):
-                    return
-
-                fx_model_class = getattr(transformers, fx_model_class_name)
-
-                # load Flax class
-                fx_model = fx_model_class(config, dtype=jnp.float32)
-                # make sure only flax inputs are forward that actually exist in function args
-                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
-
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove function args that don't exist in Flax
-                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
-
-                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
-                fx_model.params = fx_state
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs).to_tuple()
-
-                # convert inputs to Flax
-                fx_inputs = {k: np.array(v.to("cpu")) for k, v in pt_inputs.items() if torch.is_tensor(v)}
-                fx_outputs = fx_model(**fx_inputs).to_tuple()
-                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
-                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    pt_model.save_pretrained(tmpdirname)
-                    fx_model_loaded = fx_model_class.from_pretrained(tmpdirname, from_pt=True)
-
-                fx_outputs_loaded = fx_model_loaded(**fx_inputs).to_tuple()
-                self.assertEqual(
-                    len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
-                )
-                for fx_output_loaded, pt_output in zip(fx_outputs_loaded[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 4e-2)
-
-    # overwrite from common since FlaxCLVPModel returns nested output
-    # which is not supported in the common test
-    @is_pt_flax_cross_test
-    def test_equivalence_flax_to_pt(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                # load corresponding PyTorch class
-                pt_model = model_class(config).eval()
-
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-
-                fx_model_class_name = "Flax" + model_class.__name__
-
-                if not hasattr(transformers, fx_model_class_name):
-                    # no flax model exists for this class
-                    return
-
-                fx_model_class = getattr(transformers, fx_model_class_name)
-
-                # load Flax class
-                fx_model = fx_model_class(config, dtype=jnp.float32)
-                # make sure only flax inputs are forward that actually exist in function args
-                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
-
-                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
-
-                # make sure weights are tied in PyTorch
-                pt_model.tie_weights()
-
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove function args that don't exist in Flax
-                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs).to_tuple()
-
-                fx_inputs = {k: np.array(v.to("cpu")) for k, v in pt_inputs.items() if torch.is_tensor(v)}
-
-                fx_outputs = fx_model(**fx_inputs).to_tuple()
-                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
-
-                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = model_class.from_pretrained(tmpdirname, from_flax=True)
-
-                with torch.no_grad():
-                    pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
-
-                self.assertEqual(
-                    len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
-                )
-                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs_loaded[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
 
     @slow
     def test_model_from_pretrained(self):
@@ -716,26 +613,17 @@ class CLVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-# We will verify our results on an image of cute cats
-def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
-
-
-@require_vision
 @require_torch
 class CLVPModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "susnato/clvp_dev"
         model = CLVPModel.from_pretrained(model_name).to(torch_device)
-        processor = CLIPProcessor.from_pretrained(model_name)
+        model.eval()
 
-        image = prepare_img()
-        inputs = processor(
-            text=["a photo of a cat", "a photo of a dog"], images=image, padding=True, return_tensors="pt"
-        ).to(torch_device)
+        text = torch.tensor([[5, 241, 41, 22, 39, 105, 98], [8, 95, 46, 45, 159, 54, 6]]).long().to(torch_device)
+        speech = torch.tensor([[11, 255, 25, 57, 10, 7, 41], [9, 20, 226, 15, 5, 97, 32]]).long().to(torch_device)
+        inputs = {"input_ids": text, "speech_ids": speech}
 
         # forward pass
         with torch.no_grad():
@@ -743,14 +631,14 @@ class CLVPModelIntegrationTest(unittest.TestCase):
 
         # verify the logits
         self.assertEqual(
-            outputs.logits_per_image.shape,
-            torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
+            outputs.logits_per_speech.shape,
+            torch.Size((inputs["speech_ids"].shape[0], inputs["input_ids"].shape[0])),
         )
         self.assertEqual(
             outputs.logits_per_text.shape,
-            torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
+            torch.Size((inputs["input_ids"].shape[0], inputs["speech_ids"].shape[0])),
         )
 
-        expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
+        expected_logits = torch.tensor([[32.028324, 11.421426], [4.789056, 7.113933]], device=torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+        self.assertTrue(torch.allclose(outputs.logits_per_speech, expected_logits, atol=1e-3))
