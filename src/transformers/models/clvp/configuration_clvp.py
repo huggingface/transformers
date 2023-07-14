@@ -62,28 +62,26 @@ class CLVPTextConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
+        attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the feed forward layers in [`CLVPMLP`].
+        dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the feed-forward layers in [`CLVPMLP`].
         use_attention_bias (`bool`, *optional*, defaults to `False`):
-            Wheater to use bias in Query, Key and Value representations of self-attention layers.
+            Whether to use bias in Query, Key and Value representations of self-attention layers.
         use_glu_in_ff (`bool`, *optional*, defaults to `True`):
-            Whether to use [`CLVPGatedLinearUnit`] instead of a vanilla feed-forward layer in the first feedforward
+            Whether to use [`CLVPGatedLinearUnit`] instead of a vanilla feed-forward layer in the first feed-forward
             layer in [`CLVPMLP`].
         ff_post_act_layer_norm (`bool`, *optional*, defaults to `False`):
             Whether to use norm after activation function of first feed-forward layer in [`CLVPMLP`].
         use_pre_branch_norm (`bool`, *optional*, defaults to `True`):
-            Whether to apply norm to hidden_states before the [`CLVPAttention`] and [`CLVPMLP`] blocks in
+            Whether to apply norm to hidden_states before applying the [`CLVPAttention`] and [`CLVPMLP`] blocks in
             [`CLVPEncoderLayer`].
         use_post_branch_norm (`bool`, *optional*, defaults to `False`):
             Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks before the residual
-            addition
-             in [`CLVPEncoderLayer`].
+            addition in [`CLVPEncoderLayer`].
         use_post_main_norm (`bool`, *optional*, defaults to `False`):
             Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks after the residual
-            addition
-             in [`CLVPEncoderLayer`].
+            addition in [`CLVPEncoderLayer`].
         norm_type (`str`, *optional*, defaults to `"rms_norm"`):
             What type of norm to use in [`CLVPEncoder`]. `"rms_norm"`, `"scale_norm"`, `"rms_scale_shift_norm"` and
             `"layer_norm"` are supported.
@@ -92,8 +90,6 @@ class CLVPTextConfig(PretrainedConfig):
         summary_type (`str`, *optional*, defaults to `"mean"`):
             What strategy to use to get pooler_output from the last_hidden_state. `"last"`, `"first"`, `"mean"` and
             `"cls_index"` are supported.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
@@ -124,7 +120,7 @@ class CLVPTextConfig(PretrainedConfig):
         num_attention_heads=12,
         hidden_act="gelu",
         layer_norm_eps=1e-5,
-        attention_dropout=0.0,
+        attention_dropout=0.1,
         dropout=0.1,
         use_attention_bias=False,
         use_glu_in_ff=True,
@@ -135,7 +131,6 @@ class CLVPTextConfig(PretrainedConfig):
         norm_type="rms_norm",
         use_rotary_embedding=True,
         summary_type="mean",
-        initializer_range=0.02,
         initializer_factor=1.0,
         pad_token_id=1,
         bos_token_id=0,
@@ -152,7 +147,6 @@ class CLVPTextConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.dropout = dropout
@@ -214,28 +208,26 @@ class CLVPSpeechConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
+        attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        dropout (`float`, *optional*, defaults to 0.0):
+        dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the feed forward layers in [`CLVPMLP`].
         use_attention_bias (`bool`, *optional*, defaults to `False`):
             Wheater to use bias in Query, Key and Value representations of self-attention layers.
         use_glu_in_ff (`bool`, *optional*, defaults to `True`):
-            Whether to use [`CLVPGatedLinearUnit`] instead of a vanilla feed-forward layer in the first feedforward
+            Whether to use [`CLVPGatedLinearUnit`] instead of a vanilla feed-forward layer in the first feed-forward
             layer in [`CLVPMLP`].
         ff_post_act_layer_norm (`bool`, *optional*, defaults to `False`):
             Whether to use norm after activation function of first feed-forward layer in [`CLVPMLP`].
         use_pre_branch_norm (`bool`, *optional*, defaults to `True`):
-            Whether to apply norm to hidden_states before the [`CLVPAttention`] and [`CLVPMLP`] blocks in
+            Whether to apply norm to hidden_states before applying the [`CLVPAttention`] and [`CLVPMLP`] blocks in
             [`CLVPEncoderLayer`].
         use_post_branch_norm (`bool`, *optional*, defaults to `False`):
             Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks before the residual
-            addition
-             in [`CLVPEncoderLayer`].
+            addition in [`CLVPEncoderLayer`].
         use_post_main_norm (`bool`, *optional*, defaults to `False`):
             Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks after the residual
-            addition
-             in [`CLVPEncoderLayer`].
+            addition in [`CLVPEncoderLayer`].
         norm_type (`str`, *optional*, defaults to `"rms_norm"`):
             What type of norm to use in [`CLVPEncoder`]. `"rms_norm"`, `"scale_norm"`, `"rms_scale_shift_norm"` and
             `"layer_norm"` are supported.
@@ -244,8 +236,6 @@ class CLVPSpeechConfig(PretrainedConfig):
         summary_type (`str`, *optional*, defaults to `"mean"`):
             What strategy to use to get pooler_output from the last_hidden_state. `"last"`, `"first"`, `"mean"` and
             `"cls_index"` are supported.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
@@ -277,7 +267,7 @@ class CLVPSpeechConfig(PretrainedConfig):
         num_attention_heads=12,
         hidden_act="gelu",
         layer_norm_eps=1e-5,
-        attention_dropout=0.0,
+        attention_dropout=0.1,
         dropout=0.1,
         use_attention_bias=False,
         use_glu_in_ff=True,
@@ -288,7 +278,6 @@ class CLVPSpeechConfig(PretrainedConfig):
         norm_type="rms_norm",
         use_rotary_embedding=True,
         summary_type="mean",
-        initializer_range=0.02,
         initializer_factor=1.0,
         pad_token_id=1,
         bos_token_id=0,
@@ -305,7 +294,6 @@ class CLVPSpeechConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.dropout = dropout

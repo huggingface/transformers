@@ -32,7 +32,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_clvp import CLVPConfig, CLVPSpeechConfig, CLVPTextConfig
+from .configuration_clvp import CLVPConfig, CLVPSpeechConfig, CLVPTextConfig, PretrainedConfig
 
 
 try:
@@ -248,26 +248,8 @@ class CLVPOutput(ModelOutput):
         )
 
 
-class CLVPSpeechEmbeddings(nn.Module):
-    """CLVP Speech Embedding Layer"""
-
-    def __init__(self, config: CLVPSpeechConfig):
-        super().__init__()
-        self.token_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
-
-    def forward(
-        self,
-        speech_ids: Optional[torch.LongTensor] = None,
-        speech_embeds: Optional[torch.FloatTensor] = None,
-    ) -> torch.Tensor:
-        if speech_embeds is None:
-            speech_embeds = self.token_embedding(speech_ids)
-
-        return speech_embeds
-
-
-class CLVPTextEmbeddings(nn.Module):
-    """CLVP Text Embedding Layer"""
+class CLVPEmbeddings(nn.Module):
+    """CLVP Embedding Layer for both text and speech models"""
 
     def __init__(self, config: CLVPTextConfig):
         super().__init__()
@@ -455,6 +437,11 @@ class CLVPMLP(nn.Module):
 
 
 class CLVPRotaryEmbedding(nn.Module):
+    """
+    Rotary Position Embedding Class for CLVP. It was proposed in the paper 'ROFORMER: ENHANCED TRANSFORMER WITH ROTARY
+    POSITION EMBEDDING', Please see https://arxiv.org/pdf/2104.09864v1.pdf .
+    """
+
     def __init__(self, config):
         super().__init__()
         dim = max(config.projection_dim // (config.num_attention_heads * 2), 32)
@@ -553,14 +540,8 @@ class CLVPPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
-        if isinstance(module, CLVPTextEmbeddings):
+        if isinstance(module, CLVPEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            # module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        elif isinstance(module, CLVPSpeechEmbeddings):
-            factor = self.config.initializer_factor
-            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-            nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
         elif isinstance(module, CLVPAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
@@ -839,18 +820,21 @@ def _make_causal_mask(
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-class CLVPTextTransformer(nn.Module):
-    def __init__(self, config: CLVPTextConfig):
+class CLVPTransformer(nn.Module):
+    """
+    Transformer Encoder Block from 'Attention Is All You Need' paper.
+    """
+
+    def __init__(self, config: PretrainedConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
-        self.embeddings = CLVPTextEmbeddings(config)
+        self.embeddings = CLVPEmbeddings(config)
         self.encoder = CLVPEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.sequence_summary = SequenceSummary(config)
 
-    @add_start_docstrings_to_model_forward(CLVP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLVPTextConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=PretrainedConfig)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -916,6 +900,35 @@ class CLVPTextTransformer(nn.Module):
         )
 
 
+class CLVPTextTransformer(CLVPTransformer):
+    def __init__(self, config: CLVPTextConfig):
+        super().__init__(config=config)
+
+    @add_start_docstrings_to_model_forward(CLVP_TEXT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLVPTextConfig)
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        use_causal_attention_mask: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        Returns:
+
+        """
+        return super().forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            use_causal_attention_mask=use_causal_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+
 @add_start_docstrings(
     """The text model from CLVP without any head or projection on top.""",
     CLVP_START_DOCSTRING,
@@ -955,7 +968,7 @@ class CLVPTextModel(CLVPPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import AutoTokenizer, CLVPTextModel
+        >>> from transformers import CLVPTextModel
 
         >>> model = CLVPTextModel.from_pretrained("susnato/clvp_dev")
 
@@ -963,7 +976,7 @@ class CLVPTextModel(CLVPPreTrainedModel):
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
+        >>> pooled_output = outputs.pooler_output
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -977,7 +990,7 @@ class CLVPTextModel(CLVPPreTrainedModel):
         )
 
 
-class CLVPSpeechTransformer(CLVPTextTransformer):
+class CLVPSpeechTransformer(CLVPTransformer):
     def __init__(self, config: CLVPSpeechConfig):
         super().__init__(config=config)
 
@@ -1042,7 +1055,19 @@ class CLVPSpeechModel(CLVPPreTrainedModel):
         r"""
         Returns:
 
-        """
+        Example:
+        ```python
+        >>> import torch
+        >>> from transformers import CLVPSpeechModel
+
+        >>> model = CLVPSpeechModel.from_pretrained("susnato/clvp_dev")
+
+        >>> inputs = {"speech_ids": torch.tensor([[56, 8, 48, 7, 11, 23]]).long()}
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1184,24 +1209,21 @@ class CLVPModel(CLVPPreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, CLVPModel
+        >>> import torch
+        >>> from transformers import CLVPModel
 
         >>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
-        >>> processor = AutoProcessor.from_pretrained("susnato/clvp_dev")
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(
-        ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
-        ... )
+        >>> inputs = {
+        ...     "input_ids": torch.tensor([[5, 62, 1, 9, 44]]).long(),
+        ...     "speech_ids": torch.tensor([[10, 55, 101, 37, 21, 102, 41]]).long(),
+        ... }
 
         >>> outputs = model(**inputs)
-        >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
-        >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+        >>> logits_per_speech = outputs.logits_per_speech  # this is the speech-text similarity score
+        >>> probs = logits_per_speech.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
+
         # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1305,12 +1327,12 @@ class CLVPTextModelWithProjection(CLVPPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoTokenizer, CLVPTextModelWithProjection
+        >>> import torch
+        >>> from transformers import CLVPTextModelWithProjection
 
         >>> model = CLVPTextModelWithProjection.from_pretrained("susnato/clvp_dev")
-        >>> tokenizer = AutoTokenizer.from_pretrained("susnato/clvp_dev")
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> inputs = {"input_ids": torch.tensor([[5, 62, 1, 5, 9, 10]]).long()}
 
         >>> outputs = model(**inputs)
         >>> text_embeds = outputs.text_embeds
@@ -1387,20 +1409,15 @@ class CLVPSpeechModelWithProjection(CLVPPreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, CLVPSpeechModelWithProjection
+        >>> import torch
+        >>> from transformers import CLVPSpeechModelWithProjection
 
         >>> model = CLVPSpeechModelWithProjection.from_pretrained("susnato/clvp_dev")
-        >>> processor = AutoProcessor.from_pretrained("susnato/clvp_dev")
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> inputs = {"speech_ids": torch.tensor([[5, 62, 1, 5, 9, 10]]).long()}
 
         >>> outputs = model(**inputs)
-        >>> image_embeds = outputs.image_embeds
+        >>> speech_embeds = outputs.speech_embeds
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
