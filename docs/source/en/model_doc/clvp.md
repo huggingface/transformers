@@ -44,7 +44,7 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 ## CLVPVisionConfig
 
-[[autodoc]] CLVPVisionConfig
+[[autodoc]] CLVPSpeechConfig
 
 ## CLVPModel
 
@@ -65,11 +65,11 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 ## CLVPVisionModelWithProjection
 
-[[autodoc]] CLVPVisionModelWithProjection
+[[autodoc]] CLVPSpeechModelWithProjection
     - forward
 
 
 ## CLVPVisionModel
 
-[[autodoc]] CLVPVisionModel
+[[autodoc]] CLVPSpeechModel
     - forward

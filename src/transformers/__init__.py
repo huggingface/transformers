@@ -249,14 +249,6 @@ _import_structure = {
         "CLIPTokenizer",
         "CLIPVisionConfig",
     ],
-    "models.clvp": [
-        "CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "CLVPConfig",
-       
-        "CLVPTextConfig",
-       
-        "CLVPVisionConfig",
-    ],
     "models.clipseg": [
         "CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPSegConfig",
@@ -265,6 +257,12 @@ _import_structure = {
         "CLIPSegVisionConfig",
     ],
     "models.code_llama": [],
+    "models.clvp": [
+        "CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CLVPConfig",
+        "CLVPSpeechConfig",
+        "CLVPTextConfig",
+    ],
     "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
     "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
@@ -1456,17 +1454,6 @@ else:
             "CLIPVisionModelWithProjection",
         ]
     )
-    _import_structure["models.clvp"].extend(
-        [
-            "CLVP_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CLVPModel",
-            "CLVPPreTrainedModel",
-            "CLVPTextModel",
-            "CLVPTextModelWithProjection",
-            "CLVPVisionModel",
-            "CLVPVisionModelWithProjection",
-        ]
-    )
     _import_structure["models.clipseg"].extend(
         [
             "CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1475,6 +1462,17 @@ else:
             "CLIPSegPreTrainedModel",
             "CLIPSegTextModel",
             "CLIPSegVisionModel",
+        ]
+    )
+    _import_structure["models.clvp"].extend(
+        [
+            "CLVP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CLVPModel",
+            "CLVPPreTrainedModel",
+            "CLVPSpeechModel",
+            "CLVPSpeechModelWithProjection",
+            "CLVPTextModel",
+            "CLVPTextModelWithProjection",
         ]
     )
     _import_structure["models.codegen"].extend(
@@ -4458,20 +4456,18 @@ if TYPE_CHECKING:
         CLIPTokenizer,
         CLIPVisionConfig,
     )
-    from .models.clvp import (
-        CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        CLVPConfig,
-       
-        CLVPTextConfig,
-       
-        CLVPVisionConfig,
-    )
     from .models.clipseg import (
         CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPSegConfig,
         CLIPSegProcessor,
         CLIPSegTextConfig,
         CLIPSegVisionConfig,
+    )
+    from .models.clvp import (
+        CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CLVPConfig,
+        CLVPSpeechConfig,
+        CLVPTextConfig,
     )
     from .models.codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig, CodeGenTokenizer
     from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig
@@ -5535,15 +5531,6 @@ if TYPE_CHECKING:
             CLIPVisionModel,
             CLIPVisionModelWithProjection,
         )
-        from .models.clvp import (
-            CLVP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CLVPModel,
-            CLVPPreTrainedModel,
-            CLVPTextModel,
-            CLVPTextModelWithProjection,
-            CLVPVisionModel,
-            CLVPVisionModelWithProjection,
-        )
         from .models.clipseg import (
             CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST,
             CLIPSegForImageSegmentation,
@@ -5551,6 +5538,15 @@ if TYPE_CHECKING:
             CLIPSegPreTrainedModel,
             CLIPSegTextModel,
             CLIPSegVisionModel,
+        )
+        from .models.clvp import (
+            CLVP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CLVPModel,
+            CLVPPreTrainedModel,
+            CLVPSpeechModel,
+            CLVPSpeechModelWithProjection,
+            CLVPTextModel,
+            CLVPTextModelWithProjection,
         )
         from .models.codegen import (
             CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -24,7 +24,7 @@ import numpy as np
 import requests
 
 import transformers
-from transformers import CLVPConfig, CLVPTextConfig, CLVPVisionConfig
+from transformers import CLVPConfig, CLVPSpeechConfig, CLVPTextConfig
 from transformers.testing_utils import (
     is_flax_available,
     is_pt_flax_cross_test,
@@ -52,10 +52,10 @@ if is_torch_available():
 
     from transformers import (
         CLVPModel,
+        CLVPSpeechModel,
+        CLVPSpeechModelWithProjection,
         CLVPTextModel,
         CLVPTextModelWithProjection,
-        CLVPVisionModel,
-        CLVPVisionModelWithProjection,
     )
     from transformers.models.clvp.modeling_clvp import CLVP_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -75,7 +75,7 @@ if is_flax_available():
     )
 
 
-class CLVPVisionModelTester:
+class CLVPSpeechModelTester:
     def __init__(
         self,
         parent,
@@ -121,7 +121,7 @@ class CLVPVisionModelTester:
         return config, pixel_values
 
     def get_config(self):
-        return CLVPVisionConfig(
+        return CLVPSpeechConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -136,7 +136,7 @@ class CLVPVisionModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = CLVPVisionModel(config=config)
+        model = CLVPSpeechModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -149,7 +149,7 @@ class CLVPVisionModelTester:
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_model_with_projection(self, config, pixel_values):
-        model = CLVPVisionModelWithProjection(config=config)
+        model = CLVPSpeechModelWithProjection(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -169,21 +169,21 @@ class CLVPVisionModelTester:
 
 
 @require_torch
-class CLVPVisionModelTest(ModelTesterMixin, unittest.TestCase):
+class CLVPSpeechModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as CLVP does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (CLVPVisionModel, CLVPVisionModelWithProjection) if is_torch_available() else ()
+    all_model_classes = (CLVPSpeechModel, CLVPSpeechModelWithProjection) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = CLVPVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CLVPVisionConfig, has_text_modality=False, hidden_size=37)
+        self.model_tester = CLVPSpeechModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=CLVPSpeechConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -227,24 +227,24 @@ class CLVPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="CLVPVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="CLVPSpeechModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="CLVPVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="CLVPSpeechModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
         for model_name in CLVP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLVPVisionModel.from_pretrained(model_name)
+            model = CLVPSpeechModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
         for model_name in CLVP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLVPVisionModelWithProjection.from_pretrained(model_name)
+            model = CLVPSpeechModelWithProjection.from_pretrained(model_name)
             self.assertIsNotNone(model)
             self.assertTrue(hasattr(model, "visual_projection"))
 
@@ -410,7 +410,7 @@ class CLVPModelTester:
 
         self.parent = parent
         self.text_model_tester = CLVPTextModelTester(parent, **text_kwargs)
-        self.vision_model_tester = CLVPVisionModelTester(parent, **vision_kwargs)
+        self.vision_model_tester = CLVPSpeechModelTester(parent, **vision_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -579,10 +579,10 @@ class CLVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # Save CLVPConfig and check if we can load CLVPVisionConfig from it
+        # Save CLVPConfig and check if we can load CLVPSpeechConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
-            vision_config = CLVPVisionConfig.from_pretrained(tmp_dir_name)
+            vision_config = CLVPSpeechConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
 
         # Save CLVPConfig and check if we can load CLVPTextConfig from it

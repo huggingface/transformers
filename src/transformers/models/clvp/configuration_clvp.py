@@ -16,16 +16,13 @@
 
 import copy
 import os
-from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 
 if TYPE_CHECKING:
-    from ...processing_utils import ProcessorMixin
-    from ...utils import TensorType
+    pass
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -60,8 +57,6 @@ class CLVPTextConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 350):
-            The maximum sequence length that this model might ever be used with.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
@@ -70,21 +65,24 @@ class CLVPTextConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio  for the feed forward layers in [`CLVPMLP`].
+            The dropout ratio for the feed forward layers in [`CLVPMLP`].
         use_attention_bias (`bool`, *optional*, defaults to `False`):
             Wheater to use bias in Query, Key and Value representations of self-attention layers.
         use_glu_in_ff (`bool`, *optional*, defaults to `True`):
-            Whether to use [`CLVPGatedLinearUnit`] instead of a vanilla feed-forward layer in the first feedforward layer
-            in [`CLVPMLP`].
+            Whether to use [`CLVPGatedLinearUnit`] instead of a vanilla feed-forward layer in the first feedforward
+            layer in [`CLVPMLP`].
         ff_post_act_layer_norm (`bool`, *optional*, defaults to `False`):
             Whether to use norm after activation function of first feed-forward layer in [`CLVPMLP`].
         use_pre_branch_norm (`bool`, *optional*, defaults to `True`):
-            Whether to apply norm to hidden_states before the [`CLVPAttention`] and [`CLVPMLP`] blocks in [`CLVPEncoderLayer`].
+            Whether to apply norm to hidden_states before the [`CLVPAttention`] and [`CLVPMLP`] blocks in
+            [`CLVPEncoderLayer`].
         use_post_branch_norm (`bool`, *optional*, defaults to `False`):
-            Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks before the residual addition
+            Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks before the residual
+            addition
              in [`CLVPEncoderLayer`].
         use_post_main_norm (`bool`, *optional*, defaults to `False`):
-            Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks after the residual addition
+            Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks after the residual
+            addition
              in [`CLVPEncoderLayer`].
         norm_type (`str`, *optional*, defaults to `"rms_norm"`):
             What type of norm to use in [`CLVPEncoder`]. `"rms_norm"`, `"scale_norm"`, `"rms_scale_shift_norm"` and
@@ -124,7 +122,6 @@ class CLVPTextConfig(PretrainedConfig):
         projection_dim=768,
         num_hidden_layers=20,
         num_attention_heads=12,
-        max_position_embeddings=350,
         hidden_act="gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
@@ -153,7 +150,6 @@ class CLVPTextConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.max_position_embeddings = max_position_embeddings
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
@@ -169,7 +165,6 @@ class CLVPTextConfig(PretrainedConfig):
         self.norm_type = norm_type
         self.use_rotary_embedding = use_rotary_embedding
         self.summary_type = summary_type
-
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -214,8 +209,6 @@ class CLVPSpeechConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 430):
-            The maximum sequence length that this model might ever be used with.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
@@ -224,21 +217,24 @@ class CLVPSpeechConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio  for the feed forward layers in [`CLVPMLP`].
+            The dropout ratio for the feed forward layers in [`CLVPMLP`].
         use_attention_bias (`bool`, *optional*, defaults to `False`):
             Wheater to use bias in Query, Key and Value representations of self-attention layers.
         use_glu_in_ff (`bool`, *optional*, defaults to `True`):
-            Whether to use [`CLVPGatedLinearUnit`] instead of a vanilla feed-forward layer in the first feedforward layer
-            in [`CLVPMLP`].
+            Whether to use [`CLVPGatedLinearUnit`] instead of a vanilla feed-forward layer in the first feedforward
+            layer in [`CLVPMLP`].
         ff_post_act_layer_norm (`bool`, *optional*, defaults to `False`):
             Whether to use norm after activation function of first feed-forward layer in [`CLVPMLP`].
         use_pre_branch_norm (`bool`, *optional*, defaults to `True`):
-            Whether to apply norm to hidden_states before the [`CLVPAttention`] and [`CLVPMLP`] blocks in [`CLVPEncoderLayer`].
+            Whether to apply norm to hidden_states before the [`CLVPAttention`] and [`CLVPMLP`] blocks in
+            [`CLVPEncoderLayer`].
         use_post_branch_norm (`bool`, *optional*, defaults to `False`):
-            Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks before the residual addition
+            Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks before the residual
+            addition
              in [`CLVPEncoderLayer`].
         use_post_main_norm (`bool`, *optional*, defaults to `False`):
-            Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks after the residual addition
+            Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks after the residual
+            addition
              in [`CLVPEncoderLayer`].
         norm_type (`str`, *optional*, defaults to `"rms_norm"`):
             What type of norm to use in [`CLVPEncoder`]. `"rms_norm"`, `"scale_norm"`, `"rms_scale_shift_norm"` and
@@ -279,7 +275,6 @@ class CLVPSpeechConfig(PretrainedConfig):
         projection_dim=768,
         num_hidden_layers=20,
         num_attention_heads=12,
-        max_position_embeddings=430,
         hidden_act="gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
@@ -308,7 +303,6 @@ class CLVPSpeechConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.max_position_embeddings = max_position_embeddings
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range

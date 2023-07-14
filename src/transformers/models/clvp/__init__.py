@@ -24,8 +24,8 @@ _import_structure = {
     "configuration_clvp": [
         "CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLVPConfig",
-        "CLVPTextConfig",
         "CLVPSpeechConfig",
+        "CLVPTextConfig",
     ],
 }
 
@@ -49,8 +49,8 @@ if TYPE_CHECKING:
     from .configuration_clvp import (
         CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLVPConfig,
-        CLVPTextConfig,
         CLVPSpeechConfig,
+        CLVPTextConfig,
     )
 
     try:
@@ -63,10 +63,10 @@ if TYPE_CHECKING:
             CLVP_PRETRAINED_MODEL_ARCHIVE_LIST,
             CLVPModel,
             CLVPPreTrainedModel,
-            CLVPTextModel,
-            CLVPTextModelWithProjection,
             CLVPSpeechModel,
             CLVPSpeechModelWithProjection,
+            CLVPTextModel,
+            CLVPTextModelWithProjection,
         )
 
 else:
