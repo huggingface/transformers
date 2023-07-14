@@ -24,7 +24,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, SequenceSummary
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -32,7 +32,21 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+
 from .configuration_clvp import CLVPConfig, CLVPTextConfig, CLVPSpeechConfig
+
+try:
+    from torch.nn import Identity
+except ImportError:
+    # Older PyTorch compatibility
+    class Identity(nn.Module):
+        r"""A placeholder identity operator that is argument-insensitive."""
+
+        def __init__(self, *args, **kwargs):
+            super().__init__()
+
+        def forward(self, input):
+            return input
 
 
 logger = logging.get_logger(__name__)
@@ -43,7 +57,6 @@ CLVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "susnato/clvp_dev",
     # See all CLVP models at https://huggingface.co/models?filter=clvp
 ]
-
 
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
@@ -74,15 +87,72 @@ def clvp_loss(similarity: torch.Tensor) -> torch.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
+def rotate_half(x):
+    x_shape = x.size()
+    x = x.view([*x_shape[:-1]]+[2, x_shape[-1]//2])
+    x1, x2 = x.unbind(dim=-2)
+    return torch.cat((-x2, x1), dim=-1)
+
+def apply_rotary_pos_emb(t, freqs):
+    seq_len = t.shape[-2]
+    freqs = freqs[:, -seq_len:]
+    return (t * freqs.cos()) + (rotate_half(t) * freqs.sin())
+
+
+class CLVPScaleNorm(nn.Module):
+    def __init__(self, normalized_shape, eps):
+        super().__init__()
+        self.scale = normalized_shape ** -0.5
+        self.eps = eps
+        self.g = nn.Parameter(torch.ones(1))
+
+    def forward(self, x):
+        norm = torch.norm(x, dim=-1, keepdim=True) * self.scale
+        return x / norm.clamp(min=self.eps) * self.g
+
+class CLVPRMSNorm(nn.Module):
+    def __init__(self, normalized_shape, eps):
+        super().__init__()
+        self.scale = normalized_shape ** -0.5
+        self.eps = eps
+        self.g = nn.Parameter(torch.ones(normalized_shape))
+
+    def forward(self, x):
+        norm = torch.norm(x, dim=-1, keepdim=True) * self.scale
+        return x / norm.clamp(min=self.eps) * self.g
+
+class CLVPRMSScaleShiftNorm(nn.Module):
+    def __init__(self, normalized_shape, eps):
+        super().__init__()
+        self.scale = normalized_shape ** -0.5
+        self.eps = eps
+        self.g = nn.Parameter(torch.ones(normalized_shape))
+        self.scale_shift_process = nn.Linear(normalized_shape * 2, normalized_shape * 2)
+
+    def forward(self, x, norm_scale_shift_inp):
+        norm = torch.norm(x, dim=-1, keepdim=True) * self.scale
+        norm = x / norm.clamp(min=self.eps) * self.g
+
+        ss_emb = self.scale_shift_process(norm_scale_shift_inp)
+        scale, shift = torch.chunk(ss_emb, 2, dim=1)
+        h = norm * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+        return h
+
+CLVP_NORM_TYPES = {"rms_norm":CLVPRMSNorm,
+                   "scale_norm":CLVPScaleNorm,
+                   "rms_scale_shift_norm":CLVPRMSScaleShiftNorm,
+                   "layer_norm":nn.LayerNorm,
+                   }
+
+
 @dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPSpeechModelOutput with CLIP->CLVP
 class CLVPSpeechModelOutput(ModelOutput):
     """
-    Base class for speech model's outputs that also contains image embeddings of the pooling of the last hidden states.
+    Base class for speech model's outputs that also contains speech embeddings of the pooling of the last hidden states.
 
     Args:
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The image embeddings obtained by applying the projection layer to the pooler_output.
+        speech_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+            The speech embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -98,7 +168,7 @@ class CLVPSpeechModelOutput(ModelOutput):
             heads.
     """
 
-    image_embeds: Optional[torch.FloatTensor] = None
+    speech_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -135,22 +205,21 @@ class CLVPTextModelOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->CLVP
 class CLVPOutput(ModelOutput):
     """
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for image-text similarity.
-        logits_per_image:(`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
-            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+            Contrastive loss for speech-text similarity.
+        logits_per_speech:(`torch.FloatTensor` of shape `(speech_batch_size, text_batch_size)`):
+            The scaled dot product scores between `speech_embeds` and `text_embeds`. This represents the speech-text
             similarity scores.
-        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, speech_batch_size)`):
+            The scaled dot product scores between `text_embeds` and `speech_embeds`. This represents the text-speech
             similarity scores.
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`CLVPTextModel`].
-        image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`CLVPSpeechModel`].
+        speech_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The speech embeddings obtained by applying the projection layer to the pooled output of [`CLVPSpeechModel`].
         text_model_output(`BaseModelOutputWithPooling`):
             The output of the [`CLVPTextModel`].
         speech_model_output(`BaseModelOutputWithPooling`):
@@ -158,10 +227,10 @@ class CLVPOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits_per_image: torch.FloatTensor = None
+    logits_per_speech: torch.FloatTensor = None
     logits_per_text: torch.FloatTensor = None
     text_embeds: torch.FloatTensor = None
-    image_embeds: torch.FloatTensor = None
+    speech_embeds: torch.FloatTensor = None
     text_model_output: BaseModelOutputWithPooling = None
     speech_model_output: BaseModelOutputWithPooling = None
 
@@ -172,53 +241,32 @@ class CLVPOutput(ModelOutput):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPSpeechEmbeddings with CLIP->CLVP
 class CLVPSpeechEmbeddings(nn.Module):
+    """CLVP Speech Embedding Layer"""
     def __init__(self, config: CLVPSpeechConfig):
         super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.image_size = config.image_size
-        self.patch_size = config.patch_size
+        self.token_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
 
-        self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
+    def forward(
+            self,
+            speech_ids: Optional[torch.LongTensor] = None,
+            speech_embeds: Optional[torch.FloatTensor] = None,
+    ) -> torch.Tensor:
+        if speech_embeds is None:
+            speech_embeds = self.token_embedding(speech_ids)
 
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.embed_dim,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
-            bias=False,
-        )
-
-        self.num_patches = (self.image_size // self.patch_size) ** 2
-        self.num_positions = self.num_patches + 1
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
-
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
-        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
-        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
-
-        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
-        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids)
-        return embeddings
+        return speech_embeds
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPTextEmbeddings with CLIP->CLVP
 class CLVPTextEmbeddings(nn.Module):
+    """CLVP Text Embedding Layer"""
     def __init__(self, config: CLVPTextConfig):
         super().__init__()
-        embed_dim = config.hidden_size
-
-        self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
+        self.token_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
 
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
 
@@ -228,21 +276,10 @@ class CLVPTextEmbeddings(nn.Module):
         return inputs_embeds
 
 
-def rotate_half(x):
-    x_shape = x.size()
-    x = x.view([*x_shape[:-1]]+[2, x_shape[-1]//2])
-    x1, x2 = x.unbind(dim=-2)
-    return torch.cat((-x2, x1), dim=-1)
-
-def apply_rotary_pos_emb(t, freqs):
-    seq_len = t.shape[-2]
-    freqs = freqs[:, -seq_len:]
-    return (t * freqs.cos()) + (rotate_half(t) * freqs.sin())
-
-# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->CLVP
 class CLVPAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
+    # Copied from transformers.models.clip.modeling_clip.CLIPAttention.__init__
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -262,6 +299,7 @@ class CLVPAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
+    # Copied from transformers.models.clip.modeling_clip.CLIPAttention._shape
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
@@ -356,50 +394,6 @@ class CLVPAttention(nn.Module):
 
         return attn_output, attn_weights_reshaped
 
-class CLVPScaleNorm(nn.Module):
-    def __init__(self, normalized_shape, eps):
-        super().__init__()
-        self.scale = normalized_shape ** -0.5
-        self.eps = eps
-        self.g = nn.Parameter(torch.ones(1))
-
-    def forward(self, x):
-        norm = torch.norm(x, dim=-1, keepdim=True) * self.scale
-        return x / norm.clamp(min=self.eps) * self.g
-
-class CLVPRMSNorm(nn.Module):
-    def __init__(self, normalized_shape, eps):
-        super().__init__()
-        self.scale = normalized_shape ** -0.5
-        self.eps = eps
-        self.g = nn.Parameter(torch.ones(normalized_shape))
-
-    def forward(self, x):
-        norm = torch.norm(x, dim=-1, keepdim=True) * self.scale
-        return x / norm.clamp(min=self.eps) * self.g
-
-class CLVPRMSScaleShiftNorm(nn.Module):
-    def __init__(self, normalized_shape, eps):
-        super().__init__()
-        self.scale = normalized_shape ** -0.5
-        self.eps = eps
-        self.g = nn.Parameter(torch.ones(normalized_shape))
-        self.scale_shift_process = nn.Linear(normalized_shape * 2, normalized_shape * 2)
-
-    def forward(self, x, norm_scale_shift_inp):
-        norm = torch.norm(x, dim=-1, keepdim=True) * self.scale
-        norm = x / norm.clamp(min=self.eps) * self.g
-
-        ss_emb = self.scale_shift_process(norm_scale_shift_inp)
-        scale, shift = torch.chunk(ss_emb, 2, dim=1)
-        h = norm * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
-        return h
-
-CLVP_NORM_TYPES = {"rms_norm":CLVPRMSNorm,
-                   "scale_norm":CLVPScaleNorm,
-                   "rms_scale_shift_norm":CLVPRMSScaleShiftNorm,
-                   "layer_norm":nn.LayerNorm,
-                   }
 
 class CLVPGatedLinearUnit(nn.Module):
     def __init__(self, config):
@@ -457,7 +451,6 @@ class CLVPRotaryEmbedding(nn.Module):
         emb = torch.cat((freqs, freqs), dim=-1)
         return emb[None, ...]
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->CLVP
 class CLVPEncoderLayer(nn.Module):
     def __init__(self, config: CLVPConfig):
         super().__init__()
@@ -531,7 +524,6 @@ class CLVPEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPPreTrainedModel with CLIP->CLVP,clip->clvp
 class CLVPPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -567,10 +559,7 @@ class CLVPPreTrainedModel(PreTrainedModel):
                 (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             )
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            try:
-                nn.init.normal_(module.fc1.proj.weight, std=fc_std)
-            except:
-                nn.init.normal_(module.fc1.weight, std=fc_std)
+            nn.init.normal_(module.fc1.proj.weight if getattr(module.fc1, "proj") else module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
         elif isinstance(module, CLVPModel):
             nn.init.normal_(
@@ -624,9 +613,6 @@ CLVP_TEXT_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -635,11 +621,8 @@ CLVP_TEXT_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
+        use_causal_attention_mask (`bool`, *optional*, defaults to `False`):
+            Whether to use causal attention mask. 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -650,11 +633,19 @@ CLVP_TEXT_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-CLVP_VISION_INPUTS_DOCSTRING = r"""
+CLVP_SPEECH_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
+        speech_ids (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Speech Tokens. Padding will be ignored by default should you provide it.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        use_causal_attention_mask (`bool`, *optional*, defaults to `False`):
+            Whether to use causal attention mask. 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -675,21 +666,24 @@ CLVP_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+        speech_ids (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Speech Tokens. Padding will be ignored by default should you provide it.
+        text_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding text token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
+        speech_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding speech token indices. Mask values selected in `[0, 1]`:
 
-            [What are position IDs?](../glossary#position-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        use_causal_attention_mask (`bool`, *optional*, defaults to `False`):
+            Whether to use causal attention mask. 
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -703,7 +697,6 @@ CLVP_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->CLVP
 class CLVPEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -829,117 +822,6 @@ def _make_causal_mask(
         mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
-try:
-    from torch.nn import Identity
-except ImportError:
-    # Older PyTorch compatibility
-    class Identity(nn.Module):
-        r"""A placeholder identity operator that is argument-insensitive."""
-
-        def __init__(self, *args, **kwargs):
-            super().__init__()
-
-        def forward(self, input):
-            return input
-
-# Copied from
-class SequenceSummary(nn.Module):
-    r"""
-    Compute a single vector summary of a sequence hidden states.
-
-    Args:
-        config ([`PretrainedConfig`]):
-            The config used by the model. Relevant arguments in the config class of the model are (refer to the actual
-            config class of your model for the default values it uses):
-
-            - **summary_type** (`str`) -- The method to use to make this summary. Accepted values are:
-
-                - `"last"` -- Take the last token hidden state (like XLNet)
-                - `"first"` -- Take the first token hidden state (like Bert)
-                - `"mean"` -- Take the mean of all tokens hidden states
-                - `"cls_index"` -- Supply a Tensor of classification token position (GPT/GPT-2)
-                - `"attn"` -- Not implemented now, use multi-head attention
-
-            - **summary_use_proj** (`bool`) -- Add a projection after the vector extraction.
-            - **summary_proj_to_labels** (`bool`) -- If `True`, the projection outputs to `config.num_labels` classes
-              (otherwise to `config.hidden_size`).
-            - **summary_activation** (`Optional[str]`) -- Set to `"tanh"` to add a tanh activation to the output,
-              another string or `None` will add no activation.
-            - **summary_first_dropout** (`float`) -- Optional dropout probability before the projection and activation.
-            - **summary_last_dropout** (`float`)-- Optional dropout probability after the projection and activation.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-
-        self.summary_type = getattr(config, "summary_type", "last")
-        if self.summary_type == "attn":
-            # We should use a standard multi-head attention module with absolute positional embedding for that.
-            # Cf. https://github.com/zihangdai/xlnet/blob/master/modeling.py#L253-L276
-            # We can probably just use the multi-head attention module of PyTorch >=1.1.0
-            raise NotImplementedError
-
-        self.summary = Identity()
-        if hasattr(config, "summary_use_proj") and config.summary_use_proj:
-            if hasattr(config, "summary_proj_to_labels") and config.summary_proj_to_labels and config.num_labels > 0:
-                num_classes = config.num_labels
-            else:
-                num_classes = config.hidden_size
-            self.summary = nn.Linear(config.hidden_size, num_classes)
-
-        activation_string = getattr(config, "summary_activation", None)
-        self.activation: Callable = get_activation(activation_string) if activation_string else Identity()
-
-        self.first_dropout = Identity()
-        if hasattr(config, "summary_first_dropout") and config.summary_first_dropout > 0:
-            self.first_dropout = nn.Dropout(config.summary_first_dropout)
-
-        self.last_dropout = Identity()
-        if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
-            self.last_dropout = nn.Dropout(config.summary_last_dropout)
-
-    def forward(
-        self, hidden_states: torch.FloatTensor, cls_index: Optional[torch.LongTensor] = None
-    ) -> torch.FloatTensor:
-        """
-        Compute a single vector summary of a sequence hidden states.
-
-        Args:
-            hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_len, hidden_size]`):
-                The hidden states of the last layer.
-            cls_index (`torch.LongTensor` of shape `[batch_size]` or `[batch_size, ...]` where ... are optional leading dimensions of `hidden_states`, *optional*):
-                Used if `summary_type == "cls_index"` and takes the last token of the sequence as classification token.
-
-        Returns:
-            `torch.FloatTensor`: The summary of the sequence hidden states.
-        """
-        if self.summary_type == "last":
-            output = hidden_states[:, -1]
-        elif self.summary_type == "first":
-            output = hidden_states[:, 0]
-        elif self.summary_type == "mean":
-            output = hidden_states.mean(dim=1)
-        elif self.summary_type == "cls_index":
-            if cls_index is None:
-                cls_index = torch.full_like(
-                    hidden_states[..., :1, :],
-                    hidden_states.shape[-2] - 1,
-                    dtype=torch.long,
-                )
-            else:
-                cls_index = cls_index.unsqueeze(-1).unsqueeze(-1)
-                cls_index = cls_index.expand((-1,) * (cls_index.dim() - 1) + (hidden_states.size(-1),))
-            # shape of cls_index: (bsz, XX, 1, hidden_size) where XX are optional leading dim of hidden_states
-            output = hidden_states.gather(-2, cls_index).squeeze(-2)  # shape (bsz, XX, hidden_size)
-        elif self.summary_type == "attn":
-            raise NotImplementedError
-
-        output = self.first_dropout(output)
-        output = self.summary(output)
-        output = self.activation(output)
-        output = self.last_dropout(output)
-
-        return output
 
 class CLVPTextTransformer(nn.Module):
     def __init__(self, config: CLVPTextConfig):
@@ -958,7 +840,6 @@ class CLVPTextTransformer(nn.Module):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         use_causal_attention_mask: Optional[bool] = False,
-        position_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -979,7 +860,7 @@ class CLVPTextTransformer(nn.Module):
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
 
-        hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
+        hidden_states = self.embeddings(input_ids=input_ids)
 
         # CLVP's text model uses causal mask, prepare it here.
         # https://github.com/openai/CLVP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clvp/model.py#L324
@@ -1042,7 +923,7 @@ class CLVPTextModel(CLVPPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        use_causal_attention_mask: Optional[bool] = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1053,12 +934,12 @@ class CLVPTextModel(CLVPPreTrainedModel):
         Examples:
 
         ```python
+        >>> import torch
         >>> from transformers import AutoTokenizer, CLVPTextModel
 
         >>> model = CLVPTextModel.from_pretrained("susnato/clvp_dev")
-        >>> tokenizer = AutoTokenizer.from_pretrained("susnato/clvp_dev")
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> inputs = {"input_ids": torch.tensor([[5, 62, 1, 5, 9, 10]]).long()}
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
@@ -1069,69 +950,38 @@ class CLVPTextModel(CLVPPreTrainedModel):
         return self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            position_ids=position_ids,
+            use_causal_attention_mask=use_causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
 
-class CLVPSpeechTransformer(nn.Module):
+class CLVPSpeechTransformer(CLVPTextTransformer):
     def __init__(self, config: CLVPSpeechConfig):
-        super().__init__()
-        self.config = config
-        embed_dim = config.hidden_size
+        super().__init__(config=config)
 
-        self.embeddings = CLVPSpeechEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.encoder = CLVPEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-
-    @add_start_docstrings_to_model_forward(CLVP_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLVP_SPEECH_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLVPSpeechConfig)
     def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            speech_ids: Optional[torch.Tensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            use_causal_attention_mask: Optional[bool] = False,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
 
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        hidden_states = self.embeddings(pixel_values)
-        hidden_states = self.pre_layrnorm(hidden_states)
-
-        encoder_outputs = self.encoder(
-            inputs_embeds=hidden_states,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        last_hidden_state = encoder_outputs[0]
-        pooled_output = last_hidden_state[:, 0, :]
-        pooled_output = self.post_layernorm(pooled_output)
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
+        return super().forward(input_ids=speech_ids,
+                        attention_mask=attention_mask,
+                        use_causal_attention_mask=use_causal_attention_mask,
+                        output_attentions=output_attentions,
+                        output_hidden_states=output_hidden_states,
+                        return_dict=return_dict)
 
 
 @add_start_docstrings(
@@ -1140,7 +990,7 @@ class CLVPSpeechTransformer(nn.Module):
 )
 class CLVPSpeechModel(CLVPPreTrainedModel):
     config_class = CLVPSpeechConfig
-    main_input_name = "pixel_values"
+    main_input_name = "speech_ids"
 
     def __init__(self, config: CLVPSpeechConfig):
         super().__init__(config)
@@ -1151,11 +1001,13 @@ class CLVPSpeechModel(CLVPPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.speech_model.embeddings.patch_embedding
 
-    @add_start_docstrings_to_model_forward(CLVP_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLVP_SPEECH_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLVPSpeechConfig)
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        speech_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        use_causal_attention_mask: Optional[bool] = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1163,29 +1015,14 @@ class CLVPSpeechModel(CLVPPreTrainedModel):
         r"""
         Returns:
 
-        Examples:
+        """
 
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, CLVPSpeechModel
-
-        >>> model = CLVPSpeechModel.from_pretrained("susnato/clvp_dev")
-        >>> processor = AutoProcessor.from_pretrained("susnato/clvp_dev")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled CLS states
-        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         return self.speech_model(
-            pixel_values=pixel_values,
+            speech_ids=speech_ids,
+            attention_mask=attention_mask,
+            use_causal_attention_mask=use_causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1219,8 +1056,7 @@ class CLVPModel(CLVPPreTrainedModel):
         self.speech_embed_dim = speech_config.hidden_size
 
         self.text_model = CLVPTextTransformer(text_config)
-        # self.speech_model = CLVPSpeechTransformer(speech_config)
-        self.speech_model = CLVPTextTransformer(speech_config)
+        self.speech_model = CLVPSpeechTransformer(speech_config)
 
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
         self.speech_projection = nn.Linear(self.speech_embed_dim, self.projection_dim, bias=False)
@@ -1234,27 +1070,16 @@ class CLVPModel(CLVPPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        use_causal_attention_mask: Optional[bool] = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`CLVPTextModel`].
 
-        Examples:
+        """
 
-        ```python
-        >>> from transformers import AutoTokenizer, CLVPModel
-
-        >>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
-        >>> tokenizer = AutoTokenizer.from_pretrained("susnato/clvp_dev")
-
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-        >>> text_features = model.get_text_features(**inputs)
-        ```"""
         # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1265,7 +1090,7 @@ class CLVPModel(CLVPPreTrainedModel):
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            position_ids=position_ids,
+            use_causal_attention_mask=use_causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1276,36 +1101,21 @@ class CLVPModel(CLVPPreTrainedModel):
 
         return text_features
 
-    @add_start_docstrings_to_model_forward(CLVP_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLVP_SPEECH_INPUTS_DOCSTRING)
     def get_speech_features(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        speech_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        use_causal_attention_mask: Optional[bool] = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`CLVPSpeechModel`].
 
-        Examples:
+        """
 
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, CLVPModel
-
-        >>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
-        >>> processor = AutoProcessor.from_pretrained("susnato/clvp_dev")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> image_features = model.get_speech_features(**inputs)
-        ```"""
         # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1314,7 +1124,9 @@ class CLVPModel(CLVPPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         speech_outputs = self.speech_model(
-            pixel_values=pixel_values,
+            speech_ids=speech_ids,
+            attention_mask=attention_mask,
+            use_causal_attention_mask=use_causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1330,9 +1142,10 @@ class CLVPModel(CLVPPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        speech_ids: Optional[torch.FloatTensor] = None,
+        text_attention_mask: Optional[torch.Tensor] = None,
+        speech_attention_mask: Optional[torch.Tensor] = None,
+        use_causal_attention_mask: Optional[bool] = False,
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1369,16 +1182,10 @@ class CLVPModel(CLVPPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # speech_outputs = self.speech_model(
-        #     pixel_values=pixel_values,
-        #     output_attentions=output_attentions,
-        #     output_hidden_states=output_hidden_states,
-        #     return_dict=return_dict,
-        # )
         speech_outputs = self.speech_model(
-            input_ids=pixel_values,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
+            speech_ids=speech_ids,
+            attention_mask=speech_attention_mask,
+            use_causal_attention_mask=use_causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1386,42 +1193,42 @@ class CLVPModel(CLVPPreTrainedModel):
 
         text_outputs = self.text_model(
             input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
+            attention_mask=text_attention_mask,
+            use_causal_attention_mask=use_causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        image_embeds = speech_outputs[1]
-        image_embeds = self.speech_projection(image_embeds)
+        speech_embeds = speech_outputs[1]
+        speech_embeds = self.speech_projection(speech_embeds)
 
         text_embeds = text_outputs[1]
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
-        image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
+        speech_embeds = speech_embeds / speech_embeds.norm(p=2, dim=-1, keepdim=True)
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
-        logits_per_image = logits_per_text.t()
+        logits_per_text = torch.matmul(text_embeds, speech_embeds.t()) * logit_scale
+        logits_per_speech = logits_per_text.t()
 
         loss = None
         if return_loss:
             loss = clvp_loss(logits_per_text)
 
         if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, speech_outputs)
+            output = (logits_per_speech, logits_per_text, text_embeds, speech_embeds, text_outputs, speech_outputs)
             return ((loss,) + output) if loss is not None else output
 
         return CLVPOutput(
             loss=loss,
-            logits_per_image=logits_per_image,
+            logits_per_speech=logits_per_speech,
             logits_per_text=logits_per_text,
             text_embeds=text_embeds,
-            image_embeds=image_embeds,
+            speech_embeds=speech_embeds,
             text_model_output=text_outputs,
             speech_model_output=speech_outputs,
         )
@@ -1460,7 +1267,7 @@ class CLVPTextModelWithProjection(CLVPPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        use_causal_attention_mask: Optional[bool] = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1486,7 +1293,7 @@ class CLVPTextModelWithProjection(CLVPPreTrainedModel):
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            position_ids=position_ids,
+            use_causal_attention_mask=use_causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1516,7 +1323,7 @@ class CLVPTextModelWithProjection(CLVPPreTrainedModel):
 )
 class CLVPSpeechModelWithProjection(CLVPPreTrainedModel):
     config_class = CLVPSpeechConfig
-    main_input_name = "pixel_values"
+    main_input_name = "speech_ids"
 
     def __init__(self, config: CLVPSpeechConfig):
         super().__init__(config)
@@ -1531,11 +1338,13 @@ class CLVPSpeechModelWithProjection(CLVPPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.speech_model.embeddings.patch_embedding
 
-    @add_start_docstrings_to_model_forward(CLVP_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLVP_SPEECH_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CLVPSpeechModelOutput, config_class=CLVPSpeechConfig)
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        speech_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        use_causal_attention_mask: Optional[bool] = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1564,7 +1373,9 @@ class CLVPSpeechModelWithProjection(CLVPPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         speech_outputs = self.speech_model(
-            pixel_values=pixel_values,
+            speech_ids=speech_ids,
+            use_causal_attention_mask=use_causal_attention_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

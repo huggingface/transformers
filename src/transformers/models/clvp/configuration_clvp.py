@@ -36,7 +36,6 @@ CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class CLVPTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CLVPTextModel`]. It is used to instantiate a CLVP
@@ -48,29 +47,53 @@ class CLVPTextConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 49408):
+        vocab_size (`int`, *optional*, defaults to 256):
             Vocabulary size of the CLVP text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`CLVPModel`].
-        hidden_size (`int`, *optional*, defaults to 512):
+            the `inputs_ids` passed when calling [`CLVPTextModel`].
+        hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 2048):
+        intermediate_size (`int`, *optional*, defaults to 1536):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        projection_dim (`int`, *optional*, defaults to 768):
+            Dimensionality of the text projection vector.
+        num_hidden_layers (`int`, *optional*, defaults to 20):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
+        num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 77):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
+        max_position_embeddings (`int`, *optional*, defaults to 350):
+            The maximum sequence length that this model might ever be used with.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio  for the feed forward layers in [`CLVPMLP`].
         use_attention_bias (`bool`, *optional*, defaults to `False`):
             Wheater to use bias in Query, Key and Value representations of self-attention layers.
+        use_glu_in_ff (`bool`, *optional*, defaults to `True`):
+            Whether to use [`CLVPGatedLinearUnit`] instead of a vanilla feed-forward layer in the first feedforward layer
+            in [`CLVPMLP`].
+        ff_post_act_layer_norm (`bool`, *optional*, defaults to `False`):
+            Whether to use norm after activation function of first feed-forward layer in [`CLVPMLP`].
+        use_pre_branch_norm (`bool`, *optional*, defaults to `True`):
+            Whether to apply norm to hidden_states before the [`CLVPAttention`] and [`CLVPMLP`] blocks in [`CLVPEncoderLayer`].
+        use_post_branch_norm (`bool`, *optional*, defaults to `False`):
+            Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks before the residual addition
+             in [`CLVPEncoderLayer`].
+        use_post_main_norm (`bool`, *optional*, defaults to `False`):
+            Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks after the residual addition
+             in [`CLVPEncoderLayer`].
+        norm_type (`str`, *optional*, defaults to `"rms_norm"`):
+            What type of norm to use in [`CLVPEncoder`]. `"rms_norm"`, `"scale_norm"`, `"rms_scale_shift_norm"` and
+            `"layer_norm"` are supported.
+        use_rotary_embedding (`bool`, *optional*, defaults to `True`):
+            Whether to use rotary_embedding or not.
+        summary_type (`str`, *optional*, defaults to `"mean"`):
+            What strategy to use to get pooler_output from the last_hidden_state. `"last"`, `"first"`, `"mean"` and
+            `"cls_index"` are supported.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_factor (`float`, *optional*, defaults to 1):
@@ -95,13 +118,13 @@ class CLVPTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=49408,
-        hidden_size=512,
-        intermediate_size=2048,
-        projection_dim=512,
-        num_hidden_layers=12,
-        num_attention_heads=8,
-        max_position_embeddings=77,
+        vocab_size=256,
+        hidden_size=768,
+        intermediate_size=1536,
+        projection_dim=768,
+        num_hidden_layers=20,
+        num_attention_heads=12,
+        max_position_embeddings=350,
         hidden_act="gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
@@ -115,7 +138,6 @@ class CLVPTextConfig(PretrainedConfig):
         norm_type="rms_norm",
         use_rotary_embedding=True,
         summary_type="mean",
-
         initializer_range=0.02,
         initializer_factor=1.0,
         pad_token_id=1,
@@ -179,27 +201,53 @@ class CLVPSpeechConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        vocab_size (`int`, *optional*, defaults to 8192):
+            Vocabulary size of the CLVP speech model. Defines the number of different tokens that can be represented by
+            the `inputs_ids` passed when calling [`CLVPSpeechModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 1536):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        projection_dim (`int`, *optional*, defaults to 768):
+            Dimensionality of the speech projection vector.
+        num_hidden_layers (`int`, *optional*, defaults to 20):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
+        max_position_embeddings (`int`, *optional*, defaults to 430):
+            The maximum sequence length that this model might ever be used with.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the layer normalization layers.
+            The epsilon used by the normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio  for the feed forward layers in [`CLVPMLP`].
         use_attention_bias (`bool`, *optional*, defaults to `False`):
             Wheater to use bias in Query, Key and Value representations of self-attention layers.
+        use_glu_in_ff (`bool`, *optional*, defaults to `True`):
+            Whether to use [`CLVPGatedLinearUnit`] instead of a vanilla feed-forward layer in the first feedforward layer
+            in [`CLVPMLP`].
+        ff_post_act_layer_norm (`bool`, *optional*, defaults to `False`):
+            Whether to use norm after activation function of first feed-forward layer in [`CLVPMLP`].
+        use_pre_branch_norm (`bool`, *optional*, defaults to `True`):
+            Whether to apply norm to hidden_states before the [`CLVPAttention`] and [`CLVPMLP`] blocks in [`CLVPEncoderLayer`].
+        use_post_branch_norm (`bool`, *optional*, defaults to `False`):
+            Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks before the residual addition
+             in [`CLVPEncoderLayer`].
+        use_post_main_norm (`bool`, *optional*, defaults to `False`):
+            Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks after the residual addition
+             in [`CLVPEncoderLayer`].
+        norm_type (`str`, *optional*, defaults to `"rms_norm"`):
+            What type of norm to use in [`CLVPEncoder`]. `"rms_norm"`, `"scale_norm"`, `"rms_scale_shift_norm"` and
+            `"layer_norm"` are supported.
+        use_rotary_embedding (`bool`, *optional*, defaults to `True`):
+            Whether to use rotary_embedding or not.
+        summary_type (`str`, *optional*, defaults to `"mean"`):
+            What strategy to use to get pooler_output from the last_hidden_state. `"last"`, `"first"`, `"mean"` and
+            `"cls_index"` are supported.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_factor (`float`, *optional*, defaults to 1):
@@ -225,14 +273,13 @@ class CLVPSpeechConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=768,
-        intermediate_size=3072,
-        projection_dim=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_channels=3,
         vocab_size=8192,
-        patch_size=32,
+        hidden_size=768,
+        intermediate_size=1536,
+        projection_dim=768,
+        num_hidden_layers=20,
+        num_attention_heads=12,
+        max_position_embeddings=430,
         hidden_act="gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
@@ -246,27 +293,28 @@ class CLVPSpeechConfig(PretrainedConfig):
         norm_type="rms_norm",
         use_rotary_embedding=True,
         summary_type="mean",
-
         initializer_range=0.02,
         initializer_factor=1.0,
+        pad_token_id=1,
+        bos_token_id=0,
+        eos_token_id=2,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
+        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.layer_norm_eps = layer_norm_eps
+        self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.dropout = dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
         self.use_attention_bias = use_attention_bias
         self.use_glu_in_ff = use_glu_in_ff
         self.ff_post_act_layer_norm = ff_post_act_layer_norm
@@ -346,7 +394,7 @@ class CLVPConfig(PretrainedConfig):
     is_composition = True
 
     def __init__(
-        self, text_config=None, speech_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
+        self, text_config=None, speech_config=None, projection_dim=768, logit_scale_init_value=2.6592, **kwargs
     ):
         # If `_config_dict` exist, we use them for the backward compatibility.
         # We pop out these 2 attributes before calling `super().__init__` to avoid them being saved (which causes a lot
