@@ -687,7 +687,9 @@ def compute_segments(
     overlap_mask_area_threshold: float = 0.8,
     label_ids_to_fuse: Optional[Set[int]] = None,
     target_size: Tuple[int, int] = None,
+    class_segment_id_map: Optional[Dict[int, int]] = None,
 ):
+    class_segment_id_map = class_segment_id_map if class_segment_id_map is not None else {}
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
 
@@ -699,14 +701,13 @@ def compute_segments(
             mask_probs.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
         )[0]
 
-    current_segment_id = 0
+    current_segment_id = max(class_segment_id_map.values(), default=0)
 
     # Weigh each mask by its prediction score
     mask_probs *= pred_scores.view(-1, 1, 1)
     mask_labels = mask_probs.argmax(0)  # [height, width]
 
     # Keep track of instances of each class
-    stuff_memory_list: Dict[str, int] = {}
     for k in range(pred_labels.shape[0]):
         pred_class = pred_labels[k].item()
         should_fuse = pred_class in label_ids_to_fuse
@@ -717,8 +718,8 @@ def compute_segments(
         )
 
         if mask_exists:
-            if pred_class in stuff_memory_list:
-                current_segment_id = stuff_memory_list[pred_class]
+            if pred_class in class_segment_id_map:
+                current_segment_id = class_segment_id_map[pred_class]
             else:
                 current_segment_id += 1
 
@@ -734,9 +735,9 @@ def compute_segments(
                 }
             )
             if should_fuse:
-                stuff_memory_list[pred_class] = current_segment_id
+                class_segment_id_map[pred_class] = current_segment_id
 
-    return segmentation, segments
+    return segmentation, segments, class_segment_id_map
 
 
 class DeformableDetrImageProcessor(BaseImageProcessor):
@@ -817,6 +818,10 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
+
+        # We use this to keep track of the segment id for each class. This ensure that once a segment id is assigned to a class,
+        # it remains consistent across batches
+        self._class_to_segment_id_map = {}
 
     @classmethod
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->DeformableDetr
