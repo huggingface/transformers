@@ -977,7 +977,9 @@ class CLVPTextModel(CLVPPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output
-        ```"""
+        ```
+        """
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         return self.text_model(
@@ -1055,7 +1057,8 @@ class CLVPSpeechModel(CLVPPreTrainedModel):
         r"""
         Returns:
 
-        Example:
+        Examples:
+
         ```python
         >>> import torch
         >>> from transformers import CLVPSpeechModel
@@ -1067,7 +1070,8 @@ class CLVPSpeechModel(CLVPPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output
-        ```"""
+        ```
+        """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1127,11 +1131,6 @@ class CLVPModel(CLVPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
-        r"""
-        Returns:
-
-        """
-
         # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1163,11 +1162,6 @@ class CLVPModel(CLVPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
-        r"""
-        Returns:
-
-        """
-
         # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1222,7 +1216,8 @@ class CLVPModel(CLVPPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> logits_per_speech = outputs.logits_per_speech  # this is the speech-text similarity score
         >>> probs = logits_per_speech.softmax(dim=1)  # we can take the softmax to get the label probabilities
-        ```"""
+        ```
+        """
 
         # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1336,7 +1331,9 @@ class CLVPTextModelWithProjection(CLVPPreTrainedModel):
 
         >>> outputs = model(**inputs)
         >>> text_embeds = outputs.text_embeds
-        ```"""
+        ```
+        """
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         text_outputs = self.text_model(
@@ -1418,7 +1415,9 @@ class CLVPSpeechModelWithProjection(CLVPPreTrainedModel):
 
         >>> outputs = model(**inputs)
         >>> speech_embeds = outputs.speech_embeds
-        ```"""
+        ```
+        """
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         speech_outputs = self.speech_model(
