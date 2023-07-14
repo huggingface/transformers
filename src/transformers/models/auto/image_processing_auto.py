@@ -98,7 +98,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("swinv2", "ViTImageProcessor"),
         ("table-transformer", "DetrImageProcessor"),
         ("timesformer", "VideoMAEImageProcessor"),
-        ("tinyvit", "ViTImageProcessor"),
+        ("tinyvit", "BitImageProcessor"),
         ("tvlt", "TvltImageProcessor"),
         ("upernet", "SegformerImageProcessor"),
         ("van", "ConvNextImageProcessor"),

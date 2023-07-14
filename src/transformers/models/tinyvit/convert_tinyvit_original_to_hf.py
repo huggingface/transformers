@@ -19,12 +19,14 @@ URL: https://github.com/microsoft/Cream/tree/main/TinyViT"""
 import argparse
 import json
 
+import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision.transforms import CenterCrop, Compose, InterpolationMode, Normalize, Resize, ToTensor
 
-from transformers import TinyVitConfig, TinyVitForImageClassification
+from transformers import BitImageProcessor, TinyVitConfig, TinyVitForImageClassification
+from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
 def get_tinyvit_config(model_name):
@@ -117,29 +119,38 @@ def convert_tinyvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     model.load_state_dict(state_dict)
     model.eval()
 
-    image = Image.open(
-        "/Users/nielsrogge/Documents/python_projecten/transformers/tests/fixtures/tests_samples/COCO/000000039769.png"
-    ).convert("RGB")
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
     transforms = Compose(
         [
             Resize(size=256, interpolation=InterpolationMode.BICUBIC),
             CenterCrop(size=224),
             ToTensor(),
-            Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD),
         ]
     )
 
-    pixel_values = transforms(image).unsqueeze(0)
+    original_pixel_values = transforms(image).unsqueeze(0)
 
-    print("Loading batch...")
-    pixel_values = torch.load("/Users/nielsrogge/Documents/TinyViT/batch.pth")
-    print("Shape of pixel_values:", pixel_values.shape)
+    # assert values
+    image_processor = BitImageProcessor(
+        do_resize=True,
+        size={"shortest_edge": 256},
+        do_center_crop=True,
+        crop_size={"height": 224, "width": 224},
+        do_normalize=True,
+        do_rescale=True,
+        image_mean=IMAGENET_DEFAULT_MEAN,
+        image_std=IMAGENET_DEFAULT_STD,
+    )
+    print(image_processor.resample)
+    pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
 
-    # TODO assert values
-    # image_processor = AutoImageProcessor.from_pretrained("microsoft/{}".format(tinyvit_name.replace("_", "-")))
-    # image = Image.open(requests.get(url, stream=True).raw)
-    # inputs = image_processor(images=image, return_tensors="pt")
+    print(pixel_values.mean())
+    print(original_pixel_values.mean())
+
+    assert torch.allclose(pixel_values, original_pixel_values)
 
     with torch.no_grad():
         logits = model(pixel_values).logits
@@ -149,19 +160,19 @@ def convert_tinyvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     predicted_class_idx = logits.argmax(-1).item()
     print("Predicted class:", model.config.id2label[predicted_class_idx])
 
-    expected_slice = torch.tensor([0.1848, -0.0826, -0.2939])
+    expected_slice = torch.tensor([-0.4772, 0.1134, -1.1261])
     assert torch.allclose(logits[0, :3], expected_slice, atol=1e-4)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and processor to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        # image_processor.save_pretrained(pytorch_dump_folder_path)
+        image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         print("Pushing model and processor to the 🤗 hub")
         model.push_to_hub(f"nielsr/{model_name}")
-        # image_processor.push_to_hub(f"nielsr/{model_name}")
+        image_processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
