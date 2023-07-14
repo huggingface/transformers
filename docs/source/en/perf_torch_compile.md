@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Optimize inference using torch.compile()
 
-This guide aims to provide a benchmark on the inference speed-ups introduced with [`torch.compile()`](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) for computer vision models in 🤗 Transformers.
+This guide aims to provide a benchmark on the inference speed-ups introduced with [`torch.compile()`](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) for [computer vision models in 🤗 Transformers](https://huggingface.co/models?pipeline_tag=image-classification&library=transformers&sort=trending).
 
 ## Benefits of `torch.compile` 
    
@@ -31,7 +31,7 @@ model = AutoModelForImageClassification.from_pretrained(MODEL_ID).to("cuda")
 + model = torch.compile(model)
 ```
 
-`compile()` comes with multiple modes for compiling, which essentially differ in compilation time and inference overhead. `max-autotune` takes longer than `reduce-overhead` but results in faster inference. Default mode is fastest for compilation but is not as efficient compared to `reduce-overhead` for inference time. In this guide, we used the default mode. 
+`compile()` comes with multiple modes for compiling, which essentially differ in compilation time and inference overhead. `max-autotune` takes longer than `reduce-overhead` but results in faster inference. Default mode is fastest for compilation but is not as efficient compared to `reduce-overhead` for inference time. In this guide, we used the default mode. You can learn more about it [here](https://pytorch.org/get-started/pytorch-2.0/#user-experience).
 
 We benchmarked `torch.compile` with different computer vision models, tasks, types of hardware, and batch sizes on `torch` version 2.0.1.
 
@@ -53,6 +53,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 
 processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 model = AutoModelForImageClassification.from_pretrained("google/vit-base-patch16-224").to("cuda")
+model = torch.compile(model)
 
 processed_input = processor(image, return_tensors='pt').to(device="cuda")
 
