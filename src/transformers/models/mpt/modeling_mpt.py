@@ -306,7 +306,10 @@ class MptBlock(nn.Module):
 
         # Self attention.
         attn_outputs, attn_weights, past_key_value = self.attn(
-            layernorm_output, position_bias=position_bias, attention_mask=attention_mask, past_key_value=layer_past
+            layernorm_output, 
+            position_bias=position_bias, 
+            attention_mask=attention_mask, 
+            past_key_value=layer_past
         )
 
         hidden_states = self.resid_attn_dropout(residual) + attn_outputs
