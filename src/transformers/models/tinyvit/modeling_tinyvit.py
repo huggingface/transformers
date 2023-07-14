@@ -321,17 +321,14 @@ class TinyVitAttention(torch.nn.Module):
         if mode and hasattr(self, "ab"):
             del self.ab
         else:
-            print("we are heeere")
             self.ab = self.attention_biases[:, self.attention_bias_idxs]
 
+    # TODO remove print_values
     def forward(self, hidden_state, print_values=False):
         batch_size, seq_length, _ = hidden_state.shape
 
         # Normalization
         hidden_state = self.norm(hidden_state)
-
-        if print_values:
-            print("Hidden states after layernorm:", hidden_state[0, :3, :3])
 
         qkv = self.qkv(hidden_state)
         # (batch_size, seq_length, num_heads, d)
@@ -404,7 +401,7 @@ class TinyViTLayer(nn.Module):
         pad = local_conv_size // 2
         self.local_conv = TinyVitConv2dBatchNorm(dim, dim, ks=local_conv_size, stride=1, pad=pad, groups=dim)
 
-    def forward(self, x, print_values=False):
+    def forward(self, x, output_attentions, print_values=False):
         height, width = self.input_resolution
         batch_size, seq_length, num_channels = x.shape
         if seq_length != height * width:
@@ -522,7 +519,7 @@ class TinyVitStage(nn.Module):
             # if self.gradient_checkpointing:
             #     hidden_state = torch.utils.checkpoint.checkpoint(layer, hidden_state)
             # else:
-            hidden_state = layer(hidden_state, print_values=print_values)
+            hidden_state = layer(hidden_state, output_attentions, print_values=print_values)
 
         hidden_state_before_downsampling = hidden_state
         if self.downsample is not None:
@@ -584,9 +581,8 @@ class TinyVitEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
 
         if output_hidden_states:
-            reshaped_hidden_state = hidden_states.flatten(2).transpose(1, 2)
-            all_hidden_states += (reshaped_hidden_state,)
-            all_reshaped_hidden_states += (reshaped_hidden_state,)
+            all_hidden_states += (hidden_states.flatten(2).transpose(1, 2),)
+            all_reshaped_hidden_states += (hidden_states,)
 
         for i, stage_module in enumerate(self.stages):
             layer_head_mask = head_mask[i] if head_mask is not None else None
@@ -769,9 +765,6 @@ class TinyVitModel(TinyVitPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, len(self.config.depths))
 
         embedding_output, input_dimensions = self.embeddings(pixel_values)
-
-        print("Shape of embeddings:", embedding_output.shape)
-        print("First values of embeddings:", embedding_output[0, 0, :3, :3])
 
         encoder_outputs = self.encoder(
             embedding_output,
