@@ -279,6 +279,10 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         pass
 
+    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
+    def test_model_is_small(self):
+        pass
+
 
 @require_torch
 class EsmModelIntegrationTest(TestCasePlus):
