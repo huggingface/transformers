@@ -2192,15 +2192,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         kwargs.pop("peft_adapter_name", None)
         peft_adapter_model_id = kwargs.pop("_peft_adapter_model_id", None)
 
-        is_adapter_file = False
+        has_adapter_file = False
         if is_peft_available():
-            is_adapter_file = peft_adapter_model_id is not None
+            has_adapter_file = peft_adapter_model_id is not None
 
-        if is_adapter_file:
+        if has_adapter_file:
             logger.info(
-                "Found adapter file at {}. Automatically loading adapter model using the base model from {}".format(
-                    peft_adapter_model_id, pretrained_model_name_or_path
-                )
+                f"Found adapter file at {peft_adapter_model_id}. Automatically loading adapter model using the base model from {pretrained_model_name_or_path}"
             )
 
         if use_auth_token is not None:
@@ -2972,7 +2970,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 kwargs["skip_keys"] = model._skip_keys_device_placement
             dispatch_model(model, **kwargs)
 
-        if is_peft_available() and is_adapter_file:
+        if is_peft_available() and has_adapter_file:
             from peft import PeftModel
 
             # TODO: handle correctly PeftModel kwargs here
