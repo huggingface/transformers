@@ -549,24 +549,26 @@ class _BaseAutoModelClass:
         revision: str = None,
         use_auth_token: Optional[str] = None,
         commit_hash: Optional[str] = None,
-    ) -> bool:
+    ) -> Optional[str]:
         r"""
         Simply checks if the model stored on the Hub or locally is an adapter model or not
         """
         adapter_cached_filename = None
-        try:
+        if os.path.isdir(model_id):
+            list_remote_files = os.listdir(model_id)
+            if ADAPTER_CONFIG_NAME in list_remote_files:
+                adapter_cached_filename = os.path.join(model_id, ADAPTER_CONFIG_NAME)
+        else:
             adapter_cached_filename = cached_file(
                 model_id,
                 ADAPTER_CONFIG_NAME,
                 revision=revision,
                 use_auth_token=use_auth_token,
                 _commit_hash=commit_hash,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
             )
-        except EnvironmentError:
-            if os.path.isdir(model_id):
-                list_remote_files = os.listdir(model_id)
-                if ADAPTER_CONFIG_NAME in list_remote_files:
-                    adapter_cached_filename = os.path.join(model_id, ADAPTER_CONFIG_NAME)
+
         return adapter_cached_filename
 
 
