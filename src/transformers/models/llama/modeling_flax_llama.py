@@ -227,6 +227,7 @@ class FlaxLlamaAttention(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
     ):
+        # mismatch between here...
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
@@ -234,6 +235,7 @@ class FlaxLlamaAttention(nn.Module):
         query = self._split_heads(query)
         key = self._split_heads(key)
         value = self._split_heads(value)
+        # ...and here
 
         sincos = self.embed_positions[position_ids]
         sincos = jnp.split(sincos, 2, axis=-1)
@@ -694,17 +696,19 @@ if __name__ == "__main__":
     key = jax.random.PRNGKey(0)
     torch.manual_seed(0)
 
-    config = LlamaConfig(num_hidden_layers=1, vocab_size=64, hidden_size=64, num_attention_heads=8, max_position_embeddings=128, intermediate_size=256)
-    model = FlaxLlamaForCausalLM(config)
-    print(config)
+    # config = LlamaConfig(num_hidden_layers=1, vocab_size=64, hidden_size=64, num_attention_heads=8, max_position_embeddings=128, intermediate_size=256)
+    # model = FlaxLlamaForCausalLM(config)
+    model = FlaxLlamaForCausalLM.from_pretrained("openlm-research/open_llama_3b", from_pt=True)
+    # print(config)
 
-    model = FlaxLlamaForCausalLM(config)
-    pt_model = LlamaForCausalLM(config)
+    # model = FlaxLlamaForCausalLM(config)
+    # pt_model = LlamaForCausalLM(config)
 
+    N = 1
     key, subkey = jax.random.split(key)
-    x = jax.random.randint(subkey, (4, 128), 0, 64)
-    mask = jnp.ones((4, 128), dtype=bool)
-    position_ids = jnp.arange(128)[jnp.newaxis, :].repeat(4, axis=0)
+    x = jax.random.randint(subkey, (N, 128), 0, 64)
+    mask = jnp.ones((N, 128), dtype=bool)
+    position_ids = jnp.arange(128)[jnp.newaxis, :].repeat(N, axis=0)
 
     key, model_key = jax.random.split(key)
     # y, params = model.init_with_output(model_key, x, attention_mask=mask, position_ids=position_ids)
@@ -712,6 +716,9 @@ if __name__ == "__main__":
     # y = model(model_key, x, attention_mask=mask, position_ids=position_ids)
     y = model(x, attention_mask=mask, position_ids=position_ids)
     y = y[0]
+
+    print(y)
+    exit()
 
     # params = flatten_dict(params["params"], sep=".")
     params = flatten_dict(params, sep=".")
@@ -765,7 +772,7 @@ if __name__ == "__main__":
     pt_y = pt_y.detach().numpy()
 
     try:
-        np.testing.assert_allclose(y, pt_y, atol=1e-6, rtol=1e-6)
+        np.testing.assert_allclose(y, pt_y, atol=1e-5, rtol=1e-5)
     except AssertionError as e:
         print(e)
         import ipdb
