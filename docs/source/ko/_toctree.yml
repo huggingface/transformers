@@ -174,8 +174,8 @@
     title: 🤗 Transformers로 작업을 해결하는 방법
   - local: model_summary
     title: Transformer 모델군
-  - local: in_translation
-    title: (번역중) Summary of the tokenizers
+  - local: tokenizer_summary
+    title: 토크나이저 요약
   - local: attention
     title: 어텐션 매커니즘
   - local: pad_truncation
