@@ -48,6 +48,7 @@ from .pytorch_utils import (  # noqa: F401
     prune_linear_layer,
 )
 from .utils import (
+    ADAPTER_CONFIG_NAME,
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
@@ -2333,6 +2334,31 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
+            # In case users load models without auto mapping
+            if is_peft_available() and peft_adapter_model_id is None:
+                raw_adapter_config_dict_path = cls._check_and_return_if_adapter_model(
+                    pretrained_model_name_or_path,
+                    revision=revision,
+                    use_auth_token=use_auth_token,
+                )
+
+                if raw_adapter_config_dict_path is not None:
+                    raw_adapter_config_dict = json.load(open(raw_adapter_config_dict_path, "r"))
+
+                    if "base_model_name_or_path" in raw_adapter_config_dict:
+                        has_adapter_file = True
+                        peft_adapter_model_id = pretrained_model_name_or_path
+
+                        logger.info(
+                            f"Found adapter file at {peft_adapter_model_id}. Automatically loading adapter model using the base model from {raw_adapter_config_dict['base_model_name_or_path']}"
+                        )
+                        pretrained_model_name_or_path = raw_adapter_config_dict["base_model_name_or_path"]
+                    else:
+                        raise ValueError(
+                            "Found an adapter file but no 'base_model_name_or_path' key in the adapter config. Make sure to use a "
+                            "correct adapter configuration file."
+                        )
+
             config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
                 config_path,
@@ -3431,6 +3457,37 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         state_dict = load_state_dict(resolved_archive_file)
         error_msgs = _load_state_dict_into_meta_model(model, state_dict, loaded_state_dict_keys, start_prefix)
         return error_msgs
+
+    @classmethod
+    # Copied from transformers.models.auto.auto_factory._BaseAutoModelClass._check_and_return_if_adapter_model
+    def _check_and_return_if_adapter_model(
+        cls,
+        model_id: str,
+        revision: str = None,
+        use_auth_token: Optional[str] = None,
+        commit_hash: Optional[str] = None,
+    ) -> Optional[str]:
+        r"""
+        Simply checks if the model stored on the Hub or locally is an adapter model or not, return the path the the
+        adapter config file if it is, None otherwise.
+        """
+        adapter_cached_filename = None
+        if os.path.isdir(model_id):
+            list_remote_files = os.listdir(model_id)
+            if ADAPTER_CONFIG_NAME in list_remote_files:
+                adapter_cached_filename = os.path.join(model_id, ADAPTER_CONFIG_NAME)
+        else:
+            adapter_cached_filename = cached_file(
+                model_id,
+                ADAPTER_CONFIG_NAME,
+                revision=revision,
+                use_auth_token=use_auth_token,
+                _commit_hash=commit_hash,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+            )
+
+        return adapter_cached_filename
 
     @classmethod
     def register_for_auto_class(cls, auto_class="AutoModel"):
