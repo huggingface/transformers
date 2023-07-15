@@ -19,6 +19,7 @@ from torch import nn
 from torch.utils.data import DistributedSampler, RandomSampler
 
 from transformers import PreTrainedModel, Trainer, logging
+from transformers.integrations import is_fairscale_available
 from transformers.models.fsmt.configuration_fsmt import FSMTConfig
 from transformers.optimization import (
     Adafactor,
@@ -33,6 +34,10 @@ from transformers.optimization import (
 from transformers.trainer_pt_utils import get_tpu_sampler
 from transformers.training_args import ParallelMode
 from transformers.utils import is_torch_tpu_available
+
+
+if is_fairscale_available():
+    from fairscale.optim import OSS
 
 
 logger = logging.get_logger(__name__)
@@ -113,7 +118,14 @@ class Seq2SeqTrainer(Trainer):
                     "eps": self.args.adam_epsilon,
                 }
             optimizer_kwargs["lr"] = self.args.learning_rate
-            self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+            if self.sharded_ddp:
+                self.optimizer = OSS(
+                    params=optimizer_grouped_parameters,
+                    optim=optimizer_cls,
+                    **optimizer_kwargs,
+                )
+            else:
+                self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
         if self.lr_scheduler is None:
             self.lr_scheduler = self._get_lr_scheduler(num_training_steps)
