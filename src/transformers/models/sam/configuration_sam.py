@@ -14,9 +14,12 @@
 # limitations under the License.
 """ SAM model configuration"""
 
+import copy
+from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -234,6 +237,36 @@ class SamVisionConfig(PretrainedConfig):
         self.mlp_dim = int(hidden_size * mlp_ratio) if mlp_dim is None else mlp_dim
 
 
+class SamVisionAutoBackboneConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`SamVisionModel`] with a custom backbone. It is
+    used to instantiate a SAM vision encoder according to the specified arguments, defining the model architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        backbone_config (`PretrainedConfig` or `dict`, *optional*):
+            The configuration of the backbone model. Can be used to provide any custom backbone.
+        output_channels (`int`, *optional*, defaults to 256):
+            Dimensionality of the output channels in the Patch Encoder.
+    """
+
+    def __init__(self, backbone_config: Optional[Dict] = None, output_channels=256, **kwargs):
+        super().__init__(**kwargs)
+
+        if backbone_config is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `TinyViT` backbone.")
+            backbone_config = CONFIG_MAPPING["tinyvit"](out_features=["stage4"])
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.get("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
+
+        self.backbone_config = backbone_config
+        self.output_channels = output_channels
+
+
 class SamConfig(PretrainedConfig):
     r"""
     [`SamConfig`] is the configuration class to store the configuration of a [`SamModel`]. It is used to instantiate a
@@ -245,7 +278,7 @@ class SamConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (Union[`dict`, `SamVisionConfig`], *optional*):
+        vision_config (Union[`dict`, `SamVisionConfig`, `SamVisionAutoBackboneConfig`], *optional*):
             Dictionary of configuration options used to initialize [`SamVisionConfig`].
         prompt_encoder_config (Union[`dict`, `SamPromptEncoderConfig`], *optional*):
             Dictionary of configuration options used to initialize [`SamPromptEncoderConfig`].
@@ -299,14 +332,18 @@ class SamConfig(PretrainedConfig):
         prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
         mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
 
-        if isinstance(vision_config, SamVisionConfig):
+        if isinstance(vision_config, (SamVisionConfig, SamVisionAutoBackboneConfig)):
             vision_config = vision_config.to_dict()
         if isinstance(prompt_encoder_config, SamPromptEncoderConfig):
             prompt_encoder_config = prompt_encoder_config.to_dict()
         if isinstance(mask_decoder_config, SamMaskDecoderConfig):
             mask_decoder_config = mask_decoder_config.to_dict()
 
-        self.vision_config = SamVisionConfig(**vision_config)
+        self.vision_config = (
+            SamVisionAutoBackboneConfig(**vision_config)
+            if "backbone_config" in vision_config
+            else SamVisionConfig(**vision_config)
+        )
         self.prompt_encoder_config = SamPromptEncoderConfig(**prompt_encoder_config)
         self.mask_decoder_config = SamMaskDecoderConfig(**mask_decoder_config)
         self.initializer_range = initializer_range
